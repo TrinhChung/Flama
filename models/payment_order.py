@@ -12,8 +12,8 @@ class PaymentOrder(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=uuid_str)
     user_id = db.Column(
         db.Integer,
-        db.ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     merchant_order_code = db.Column(db.String(64), nullable=False, unique=True)

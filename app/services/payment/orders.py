@@ -211,19 +211,35 @@ def serialize_order(order: PaymentOrder) -> dict[str, Any]:
 
 
 
+def sync_and_get_order(*, order_id: str) -> dict[str, Any]:
+    order = payment_repository.get_order_by_id(order_id)
+    if order is None:
+        raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
+    latest_attempt = _latest_attempt(order)
+    if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
+        resolution = _sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
+        if resolution in {"reuse", "completed", "block", "recreate"}:
+            db.session.commit()
+            order = payment_repository.get_order_by_id(order_id) or order
+    if _maybe_expire_order(order):
+        db.session.commit()
+        order = payment_repository.get_order_by_id(order_id) or order
+    return serialize_order(order)
+
+
 def get_order_detail_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
     order = payment_repository.get_order_for_user(order_id, user_id)
     if order is None:
         raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
-    if _maybe_expire_order(order):
-        db.session.commit()
-        order = payment_repository.get_order_for_user(order_id, user_id) or order
     latest_attempt = _latest_attempt(order)
     if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
         resolution = _sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
         if resolution in {"reuse", "completed", "block", "recreate"}:
             db.session.commit()
             order = payment_repository.get_order_for_user(order_id, user_id) or order
+    if _maybe_expire_order(order):
+        db.session.commit()
+        order = payment_repository.get_order_for_user(order_id, user_id) or order
     return serialize_order(order)
 
 
@@ -277,6 +293,65 @@ def expire_stale_orders(*, now: datetime | None = None) -> dict[str, int]:
         "expired_attempts": expired_attempts,
         "expired_orders": expired_orders,
     }
+
+
+def admin_update_order_status(*, order_id: str, new_status: str, note: str = "") -> dict[str, Any]:
+    from app.services.payment.fulfillment import _ensure_entitlements_for_confirmed_order
+    
+    order = payment_repository.get_order_by_id(order_id)
+    if order is None:
+        raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng cần cập nhật.", status=404)
+        
+    valid_statuses = {"paid", "pending_payment", "under_review", "canceled", "failed", "refunded"}
+    if new_status not in valid_statuses:
+        raise PaymentServiceError("VALIDATION_ERROR", f"Trạng thái '{new_status}' không hợp lệ.", status=400)
+        
+    now = _utcnow()
+    latest_attempt = _latest_attempt(order)
+    
+    if new_status == "paid":
+        order.status = "paid"
+        order.paid_at = order.paid_at or now
+        order.closed_at = now
+        if latest_attempt is not None:
+            latest_attempt.status = "confirmed"
+            latest_attempt.confirmed_at = latest_attempt.confirmed_at or now
+            if note:
+                meta = dict(latest_attempt.provider_metadata_json or {})
+                meta["admin_note"] = note
+                latest_attempt.provider_metadata_json = meta
+            _ensure_entitlements_for_confirmed_order(order, latest_attempt, now=now)
+            
+    elif new_status == "canceled":
+        order.status = "canceled"
+        order.closed_at = now
+        if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES.union({"manual_review"}):
+            latest_attempt.status = "canceled"
+            latest_attempt.failed_at = now
+            latest_attempt.failure_code = "admin_canceled"
+            latest_attempt.failure_message = note or "Quản trị viên đã chủ động hủy đơn hàng."
+            
+    elif new_status == "refunded":
+        order.status = "refunded"
+        order.closed_at = now
+        if latest_attempt is not None:
+            latest_attempt.status = "refunded"
+            
+    elif new_status == "under_review":
+        order.status = "under_review"
+        if latest_attempt is not None:
+            latest_attempt.status = "manual_review"
+            latest_attempt.manual_review_reason = note or "Quản trị viên chuyển sang trạng thái chờ kiểm duyệt."
+            
+    elif new_status == "pending_payment":
+        order.status = "pending_payment"
+        order.closed_at = None
+        order.paid_at = None
+        if latest_attempt is not None:
+            latest_attempt.status = "pending"
+            
+    db.session.commit()
+    return serialize_order(order)
 
 
 

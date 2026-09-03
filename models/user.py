@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from flask import current_app, has_app_context
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -73,7 +74,14 @@ class User(UserMixin, db.Model):
 
     def set_password(self, password: str) -> None:
         """Hash and store the provided password."""
-        self.password_hash = generate_password_hash(password)
+        method = ""
+        if has_app_context():
+            method = str(current_app.config.get("PASSWORD_HASH_METHOD") or "").strip()
+        self.password_hash = (
+            generate_password_hash(password, method=method)
+            if method
+            else generate_password_hash(password)
+        )
 
     def check_password(self, password: str) -> bool:
         """Validate a plaintext password against the stored hash."""

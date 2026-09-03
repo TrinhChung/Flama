@@ -13,15 +13,12 @@ WORKFLOW_PATH = (
 
 
 class DeployWorkflowTests(unittest.TestCase):
-    def test_frontend_only_push_does_not_trigger_vps_deployment(self):
+    def test_deploy_is_reusable_and_has_manual_recovery_only(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn(
-            "    paths-ignore:\n"
-            "      - 'frontend/**'\n",
-            workflow,
-        )
+        self.assertIn("  workflow_call:\n", workflow)
         self.assertIn("  workflow_dispatch:\n", workflow)
+        self.assertNotIn("  push:\n", workflow)
 
     def test_vps_release_does_not_build_or_package_frontend(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")

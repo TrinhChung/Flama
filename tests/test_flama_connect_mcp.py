@@ -40,14 +40,17 @@ def _make_test_png_b64_bytes(color=(200, 100, 50, 255)) -> bytes:
     return output.getvalue()
 
 class FlamaConnectMcpTests(unittest.TestCase):
-    def setUp(self):
-        self.app = create_connect_app(
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_connect_app(
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "CONNECT_CORS_ALLOWED_ORIGINS": (),
             }
         )
+
+    def setUp(self):
         self.client = self.app.test_client()
 
         with self.app.app_context():

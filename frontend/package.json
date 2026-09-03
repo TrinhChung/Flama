@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:ci": "vite build",
     "lint": "oxlint src",
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",

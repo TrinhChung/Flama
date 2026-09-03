@@ -1008,6 +1008,14 @@ def ensure_backward_compatible_schema() -> None:
             "ALTER TABLE deck_releases ADD COLUMN publish_mode VARCHAR(32) NOT NULL DEFAULT 'manual'",
         )
 
+    if "payment_orders" in table_names and is_mysql:
+        local_inspector = _refresh_inspector()
+        cols = {c["name"]: c for c in local_inspector.get_columns("payment_orders")}
+        user_id_col = cols.get("user_id")
+        if user_id_col and not user_id_col.get("nullable", True):
+            db.session.execute(sa.text("ALTER TABLE payment_orders MODIFY user_id INT NULL"))
+            schema_changed = True
+
     if schema_changed:
         db.session.commit()
 

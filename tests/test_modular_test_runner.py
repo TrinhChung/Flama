@@ -122,6 +122,64 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertEqual(backend_tests, set(run_tests.discover_all_backend_tests()))
         self.assertEqual(frontend_tests, set())
 
+    def test_ci_plan_skips_unrelated_layer_and_external_contracts(self):
+        plan = run_tests.build_ci_change_plan(
+            ["app/services/worksheets/worksheet_service.py"]
+        )
+
+        self.assertTrue(plan["backend"])
+        self.assertFalse(plan["frontend"])
+        self.assertFalse(plan["spa_contract"])
+        self.assertFalse(plan["redis_contract"])
+        self.assertFalse(plan["mysql_contract"])
+        self.assertTrue(plan["deploy"])
+
+    def test_ci_plan_marks_spa_change_as_cross_stack_contract(self):
+        plan = run_tests.build_ci_change_plan(["app/spa.py"])
+
+        self.assertTrue(plan["backend"])
+        self.assertTrue(plan["frontend"])
+        self.assertTrue(plan["spa_contract"])
+
+    def test_frontend_build_contract_does_not_start_full_backend(self):
+        plan = run_tests.build_ci_change_plan(["frontend/package.json"])
+
+        self.assertFalse(plan["backend"])
+        self.assertTrue(plan["frontend"])
+        self.assertTrue(plan["spa_contract"])
+
+    def test_ci_plan_keeps_test_only_master_validation_out_of_deploy(self):
+        plan = run_tests.build_ci_change_plan(
+            ["tests/test_ci_workflow.py"],
+            force_all_validation=True,
+        )
+
+        self.assertTrue(plan["backend"])
+        self.assertTrue(plan["frontend"])
+        self.assertTrue(plan["redis_contract"])
+        self.assertTrue(plan["mysql_contract"])
+        self.assertFalse(plan["deploy"])
+
+    def test_ci_plan_selects_external_contracts_by_source(self):
+        redis_plan = run_tests.build_ci_change_plan(
+            ["app/services/redis_state_service.py"]
+        )
+        mysql_plan = run_tests.build_ci_change_plan(["models/card.py"])
+
+        self.assertTrue(redis_plan["redis_contract"])
+        self.assertTrue(mysql_plan["mysql_contract"])
+
+    def test_cli_monolith_uses_broad_contract_set_without_full_backend(self):
+        _, backend_tests, frontend_tests = run_tests.map_files_to_modules(
+            ["app/cli.py"]
+        )
+
+        self.assertIn("tests/test_study_architecture_audit_cli.py", backend_tests)
+        self.assertIn("tests/test_vocab_seed_sharing.py", backend_tests)
+        self.assertIn("tests/test_api_strokes.py", backend_tests)
+        self.assertLess(len(backend_tests), len(run_tests.discover_all_backend_tests()))
+        self.assertEqual(frontend_tests, set())
+
     @mock.patch.dict(
         run_tests.os.environ,
         {"TEST_DIFF_BASE": "base-sha", "TEST_DIFF_HEAD": "head-sha"},

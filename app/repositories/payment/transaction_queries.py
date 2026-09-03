@@ -72,7 +72,7 @@ def _build_attempt_query(*, filters: TransactionFilterInput):
             selectinload(PaymentAttempt.entitlements),
         )
         .join(PaymentOrder, PaymentOrder.id == PaymentAttempt.order_id)
-        .join(User, User.id == PaymentOrder.user_id)
+        .outerjoin(User, User.id == PaymentOrder.user_id)
     )
 
     if filters.q:

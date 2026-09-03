@@ -71,8 +71,11 @@ def create_support_checkout():
 
 @support_bp.get("/status")
 def get_support_donation_status():
+    from app.repositories import payment_repository
     from app.services import payment_service, support_donation_service
+    from app.services.payment.base import _utcnow
     from app.services.payment.provider.payos_provider import PayOSProviderError
+    from models import db
 
     order_id = (request.args.get("payment_order_id") or request.args.get("order_id") or "").strip()
     provider_order_code = (
@@ -82,22 +85,49 @@ def get_support_donation_status():
     ).strip()
 
     if order_id:
-        if not current_user.is_authenticated:
-            return error_response(
-                "AUTHENTICATION_REQUIRED",
-                "Authentication is required to view saved donation order status.",
-                status=401,
-            )
-        try:
-            result = payment_service.get_order_detail_for_user(
-                order_id=order_id,
-                user_id=int(current_user.id),
-            )
-            return jsonify(result)
-        except payment_service.PaymentServiceError as exc:
-            return error_response(exc.error, exc.message, status=exc.status, field=exc.field)
+        order = payment_repository.get_order_by_id(order_id)
+        if order is None:
+            return error_response("NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
+        if order.user_id is not None:
+            if not current_user.is_authenticated or (
+                int(current_user.id) != int(order.user_id) and not getattr(current_user, "is_admin", False)
+            ):
+                return error_response(
+                    "AUTHENTICATION_REQUIRED",
+                    "Authentication is required to view saved donation order status.",
+                    status=401,
+                )
+        latest_attempt = payment_service._latest_attempt(order)
+        if latest_attempt is not None and latest_attempt.status in payment_service.ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
+            resolution = payment_service._sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
+            if resolution in {"reuse", "completed", "block", "recreate"}:
+                db.session.commit()
+                order = payment_repository.get_order_by_id(order_id) or order
+        return jsonify(payment_service.serialize_order(order))
 
     if provider_order_code:
+        attempt = payment_repository.get_attempt_by_provider_order_code(
+            provider_code=payment_service.PAYMENT_PROVIDER_CODE,
+            provider_order_code=provider_order_code,
+        )
+        if attempt is not None and attempt.order is not None:
+            order = attempt.order
+            if order.user_id is not None and (
+                not current_user.is_authenticated
+                or (int(current_user.id) != int(order.user_id) and not getattr(current_user, "is_admin", False))
+            ):
+                return error_response(
+                    "AUTHENTICATION_REQUIRED",
+                    "Authentication is required to view saved donation order status.",
+                    status=401,
+                )
+            if attempt.status in payment_service.ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
+                resolution = payment_service._sync_attempt_with_payos(order, attempt, now=_utcnow())
+                if resolution in {"reuse", "completed", "block", "recreate"}:
+                    db.session.commit()
+                    order = payment_repository.get_order_by_id(order.id) or order
+            return jsonify(payment_service.serialize_order(order))
+
         try:
             result = support_donation_service.get_anonymous_checkout_status(
                 provider_order_code=provider_order_code
@@ -105,7 +135,7 @@ def get_support_donation_status():
             return jsonify(result)
         except PayOSProviderError as exc:
             return error_response(exc.code, str(exc), status=exc.status)
-        except Exception as exc:
+        except Exception:
             return error_response(
                 "PAYMENT_LOOKUP_FAILED",
                 "Không thể kiểm tra trạng thái đóng góp lúc này.",

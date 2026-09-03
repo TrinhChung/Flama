@@ -2,14 +2,26 @@ name: Flama Audio CI
 
 on:
   push:
+    branches:
+      - master
     paths:
       - "flama-audio/**"
       - ".github/workflows/flama-audio-ci.yml"
   pull_request:
+    branches:
+      - master
+      - develop
     paths:
       - "flama-audio/**"
       - ".github/workflows/flama-audio-ci.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flama-audio-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:

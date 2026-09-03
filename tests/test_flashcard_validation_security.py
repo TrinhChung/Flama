@@ -38,17 +38,29 @@ _SAFE_SVG_BYTES = (
 
 
 class FlashcardValidationSecurityTests(unittest.TestCase):
-    def setUp(self):
-        self.upload_tmp = tempfile.TemporaryDirectory()
-        self.app = create_app(
+    @classmethod
+    def setUpClass(cls):
+        cls.upload_root = tempfile.TemporaryDirectory()
+        cls.app = create_app(
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "WTF_CSRF_ENABLED": False,
-                "FLASHCARD_MEDIA_UPLOAD_ROOT": self.upload_tmp.name,
+                "FLASHCARD_MEDIA_UPLOAD_ROOT": cls.upload_root.name,
                 "FLASHCARD_MEDIA_MAX_BYTES": 10 * 1024 * 1024,
+                "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False,
             }
         )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.upload_root.cleanup()
+
+    def setUp(self):
+        self.upload_tmp = tempfile.TemporaryDirectory(dir=self.upload_root.name)
+        self.app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = self.upload_tmp.name
+        self.app.config["FLASHCARD_MEDIA_MAX_BYTES"] = 10 * 1024 * 1024
         self.client = self.app.test_client()
 
         with self.app.app_context():

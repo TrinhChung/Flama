@@ -29,14 +29,19 @@ from models.user import User
 
 
 class StudySessionApiTests(unittest.TestCase):
-    def setUp(self):
-        self.app = create_app(
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app(
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "WTF_CSRF_ENABLED": False,
+                "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False,
             }
         )
+
+    def setUp(self):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()

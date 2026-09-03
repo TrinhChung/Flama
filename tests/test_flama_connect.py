@@ -46,9 +46,10 @@ _MIN_PNG_BYTES = (
 
 
 class FlamaConnectTests(unittest.TestCase):
-    def setUp(self):
-        self.upload_tmp = tempfile.TemporaryDirectory()
-        self.app = create_connect_app(
+    @classmethod
+    def setUpClass(cls):
+        cls.upload_root = tempfile.TemporaryDirectory()
+        cls.app = create_connect_app(
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
@@ -60,9 +61,17 @@ class FlamaConnectTests(unittest.TestCase):
                 "CONNECT_ADD_NOTE_RATE_LIMIT": 1000,
                 "CONNECT_MEDIA_RATE_LIMIT": 1000,
                 "CONNECT_MEDIA_MAX_BYTES": 1024,
-                "FLASHCARD_MEDIA_UPLOAD_ROOT": self.upload_tmp.name,
+                "FLASHCARD_MEDIA_UPLOAD_ROOT": cls.upload_root.name,
             }
         )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.upload_root.cleanup()
+
+    def setUp(self):
+        self.upload_tmp = tempfile.TemporaryDirectory(dir=self.upload_root.name)
+        self.app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = self.upload_tmp.name
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()

@@ -113,6 +113,10 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
 def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> None:
     existing_by_item_id = {row.payment_order_item_id: row for row in order.entitlements}
     for order_item in order.items:
+        if order.user_id is None:
+            if order_item.product_type == support_donation_service.DONATION_PRODUCT_TYPE:
+                continue
+            raise PaymentServiceError("VALIDATION_ERROR", "Đơn hàng này không gắn với người dùng hợp lệ để cấp quyền.")
         entitlement = existing_by_item_id.get(order_item.id)
         if entitlement is None:
             entitlement_type = "shared_note_type_install"

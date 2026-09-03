@@ -16,6 +16,8 @@
   ["GET", "/api/admin/payments"],
   ["GET", "/api/admin/payments/orders"],
   ["GET", "/api/admin/payments/orders/<order_id>"],
+  ["PATCH", "/api/admin/payments/orders/<order_id>/status"],
+  ["POST", "/api/admin/payments/orders/<order_id>/sync"],
   ["GET", "/api/admin/payments/transactions"],
   ["GET", "/api/admin/payments/transactions/<attempt_id>"],
   ["GET", "/api/admin/security-alerts"],

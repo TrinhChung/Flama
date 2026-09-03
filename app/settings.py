@@ -133,6 +133,17 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
 
     config: dict[str, Any] = {
         "SECRET_KEY": os.getenv("SECRET_KEY", "change-me"),
+        # Production keeps Werkzeug's current secure default. Test apps use a
+        # deliberately cheap but still valid hash so unrelated integration
+        # fixtures do not spend most of their runtime deriving passwords.
+        "PASSWORD_HASH_METHOD": (
+            os.getenv("PASSWORD_HASH_METHOD", "").strip()
+            or ("pbkdf2:sha256:1000" if is_testing else "")
+        ),
+        # Most backend tests exercise JSON APIs and only need an HTML response
+        # for incidental redirects. A dedicated SPA artifact contract disables
+        # this shell and verifies the real Vite build separately.
+        "SPA_TEST_SHELL_ENABLED": is_testing,
         "SQLALCHEMY_DATABASE_URI": database_uri,
         "SQLALCHEMY_TRACK_MODIFICATIONS": False,
         "SQLALCHEMY_ENGINE_OPTIONS": engine_options,

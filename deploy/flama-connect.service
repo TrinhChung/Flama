@@ -1,8 +1,7 @@
 [Unit]
 Description=Flama Connect API for Yomitan
 After=network-online.target mysql.service
-Wants=network-online.target
-Requires=mysql.service
+Wants=network-online.target mysql.service
 
 [Service]
 Type=simple
@@ -13,7 +12,7 @@ EnvironmentFile=/etc/flama/flama.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=CONNECT_TRUST_PROXY=1
 ExecStart=/opt/flama/venv/bin/gunicorn --workers 1 --timeout 30 --bind 127.0.0.1:4790 --error-logfile - connect_wsgi:app
-Restart=on-failure
+Restart=always
 RestartSec=5
 KillSignal=SIGQUIT
 TimeoutStopSec=30

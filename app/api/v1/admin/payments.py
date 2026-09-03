@@ -70,6 +70,52 @@ def get_order(order_id: str):
     return jsonify(payload)
 
 
+@admin_payments_bp.post("/orders/<order_id>/sync")
+@admin_required
+def sync_order(order_id: str):
+    from app.services import payment_service
+
+    try:
+        payment_service.sync_and_get_order(order_id=order_id)
+    except payment_service.PaymentServiceError as exc:
+        return error_response(exc.error, exc.message, status=exc.status, field=exc.field)
+    payload = order_query_service.get_admin_order_detail(order_id)
+    if payload is None:
+        return error_response("NOT_FOUND", "Order not found.", status=404)
+    return jsonify({
+        "order": payload,
+        "message": "Đồng bộ đơn hàng với cổng thanh toán thành công.",
+    })
+
+
+@admin_payments_bp.patch("/orders/<order_id>/status")
+@admin_required
+def update_order_status(order_id: str):
+    from app.services.payment.base import PaymentServiceError
+    from app.services.payment.orders import admin_update_order_status
+
+    body = request.get_json(silent=True) or {}
+    new_status = str(body.get("status") or "").strip().lower()
+    note = str(body.get("note") or "").strip()
+
+    if not new_status:
+        return error_response("VALIDATION_ERROR", "Vui lòng chỉ định trạng thái mới.", status=400)
+
+    try:
+        admin_update_order_status(order_id=order_id, new_status=new_status, note=note)
+    except PaymentServiceError as exc:
+        return error_response(exc.error, exc.message, status=exc.status, field=exc.field)
+
+    payload = order_query_service.get_admin_order_detail(order_id)
+    if payload is None:
+        return error_response("NOT_FOUND", "Order not found.", status=404)
+
+    return jsonify({
+        "order": payload,
+        "message": f"Đã cập nhật trạng thái đơn hàng sang '{new_status}' thành công.",
+    })
+
+
 @admin_payments_bp.get("/transactions")
 @admin_required
 def list_transactions():
