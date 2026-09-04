@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useRef } from 'react'
+import { resolveBackendUrl } from '@/config/env'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -27,11 +28,11 @@ export function resolveDisplayUrl(raw: string): string {
   const value = raw.trim()
   if (/^https:\/\/[^\s"'<>]+$/i.test(value)) return value
   if (/^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/[^\s"'<>]*$/i.test(value)) return value
-  if (/^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return value
-  if (/^\/media\/staged\/[A-Za-z0-9_-]{8,64}$/.test(value)) return value
-  if (/^\/media\/asset\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return value
-  if (/^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return value
-  if (/^\/static\/strokes\/[A-Za-z0-9_-]+\/[A-Fa-f0-9]+\.svg$/.test(value)) return value
+  if (/^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return resolveBackendUrl(value)
+  if (/^\/media\/staged\/[A-Za-z0-9_-]{8,64}$/.test(value)) return resolveBackendUrl(value)
+  if (/^\/media\/asset\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return resolveBackendUrl(value)
+  if (/^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value)) return resolveBackendUrl(value)
+  if (/^\/static\/strokes\/[A-Za-z0-9_-]+\/[A-Fa-f0-9]+\.svg$/.test(value)) return resolveBackendUrl(value)
   return ''
 }
 
@@ -167,11 +168,14 @@ export function MediaFieldPreview({
           const formData = new FormData()
           formData.append('file', imageFile)
 
-          const response = await fetch('/api/browse/media/stage-paste', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-          })
+          const response = await fetch(
+            resolveBackendUrl('/api/browse/media/stage-paste'),
+            {
+              method: 'POST',
+              body: formData,
+              credentials: 'include',
+            },
+          )
 
           const data = await response.json()
           if (!response.ok) {
@@ -289,7 +293,7 @@ export function MediaFieldPreview({
                 <audio
                   key={`${rawUrl}-${index}`}
                   controls
-                  src={rawUrl}
+                  src={resolveDisplayUrl(rawUrl)}
                   className="w-full h-8 rounded"
                   preload="metadata"
                 />
@@ -304,7 +308,7 @@ export function MediaFieldPreview({
                 {validUrls.map((rawUrl, index) => (
                   <img
                     key={`${rawUrl}-${index}`}
-                    src={rawUrl}
+                    src={resolveDisplayUrl(rawUrl)}
                     alt={`${fieldName} ${index + 1}`}
                     className="w-full rounded-lg object-contain max-h-40 bg-background border border-border/40"
                     loading="lazy"

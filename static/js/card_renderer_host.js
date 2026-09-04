@@ -68,19 +68,17 @@
     try {
       const parsed = new URL(trimmed, global.location.href);
       const normalizedPath = String(parsed.pathname || "").trim();
-      if (parsed.origin === global.location.origin) {
-        const absoluteMatch = normalizedPath.match(PROXY_MEDIA_RE);
-        if (absoluteMatch) {
-          return "/media/proxy/" + absoluteMatch[1];
-        }
-        const absoluteLibraryMatch = normalizedPath.match(LIBRARY_MEDIA_RE);
-        if (absoluteLibraryMatch) {
-          return "/media/library/" + absoluteLibraryMatch[1];
-        }
-        const absoluteStrokeMatch = normalizedPath.match(STATIC_STROKE_RE);
-        if (absoluteStrokeMatch) {
-          return "/static/strokes/" + absoluteStrokeMatch[1];
-        }
+      const absoluteMatch = normalizedPath.match(PROXY_MEDIA_RE);
+      if (absoluteMatch) {
+        return "/media/proxy/" + absoluteMatch[1];
+      }
+      const absoluteLibraryMatch = normalizedPath.match(LIBRARY_MEDIA_RE);
+      if (absoluteLibraryMatch) {
+        return "/media/library/" + absoluteLibraryMatch[1];
+      }
+      const absoluteStrokeMatch = normalizedPath.match(STATIC_STROKE_RE);
+      if (absoluteStrokeMatch) {
+        return "/static/strokes/" + absoluteStrokeMatch[1];
       }
       const localHttp = parsed.protocol === "http:" && ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
       if (parsed.protocol === "https:" || localHttp) {
@@ -155,7 +153,7 @@
       const attrName = node.hasAttribute("src") ? "src" : "href";
       const rawValue = String(node.getAttribute(attrName) || "").trim();
       const normalizedRef = normalizeProxyRef(rawValue);
-      if (!normalizedRef || PROXY_MEDIA_RE.test(normalizedRef)) {
+      if (!normalizedRef) {
         return;
       }
       allowedMediaUrls.add(normalizedRef);
@@ -185,9 +183,11 @@
         ? sidePayload
         : { html: typeof sidePayload === "string" ? sidePayload : "" };
     const html = typeof basePayload.html === "string" ? basePayload.html : "";
+    const hasExplicitMedia = Array.isArray(basePayload.allowed_media_urls);
+    const hasExplicitAudio = Array.isArray(basePayload.allowed_audio_urls);
     const derived = collectAllowedMediaFromHtml(html);
-    const allowedMediaUrls = new Set(derived.allowed_media_urls);
-    const allowedAudioUrls = new Set(derived.allowed_audio_urls);
+    const allowedMediaUrls = new Set(hasExplicitMedia ? [] : derived.allowed_media_urls);
+    const allowedAudioUrls = new Set(hasExplicitAudio ? [] : derived.allowed_audio_urls);
 
     normalizeStringList(basePayload.allowed_media_urls).forEach((value) => {
       const normalized = normalizeProxyRef(value);
