@@ -150,6 +150,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "frontend_tests": [
             "src/features/browse/components/MediaFieldPreview.test.tsx",
+            "src/features/browse/pages/BrowsePage.test.tsx",
             "src/features/browse/services/strokeStorage.test.ts",
             "src/features/browse/services/ttsSettingsStorage.test.ts",
         ],

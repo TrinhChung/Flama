@@ -1,12 +1,13 @@
 import {
   ArrowLeft,
   ChevronDown,
+  Home,
   Layers,
   PenTool,
   Printer,
   Volume2,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { LocalAudioDialog } from '@/features/audio/components/LocalAudioDialog'
 import { Button } from '@/components/ui/button'
@@ -63,22 +64,40 @@ export function BrowsePage() {
 
       {/* Top Navbar Header for Fullscreen Browse */}
       <header className="sticky top-0 z-30 flex h-12 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-2.5 sm:px-4 backdrop-blur-md">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+          <Brand compact size="sm" className="[&>span]:hidden sm:[&>span]:inline shrink-0" />
+
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs font-semibold px-2 sm:px-3 gap-1.5 bg-background hover:bg-muted border-border shrink-0"
+            title="Về trang chủ (Dashboard)"
+          >
+            <Link to="/dashboard">
+              <Home className="size-3.5 text-muted-foreground" />
+              <span className="hidden sm:inline">Trang chủ</span>
+            </Link>
+          </Button>
+
           {urlDeckId ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs font-bold text-primary border-primary/30 hover:bg-primary/10 bg-background rounded-full gap-1.5 px-3 shrink-0"
+              className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold text-primary border-primary/30 hover:bg-primary/10 bg-background rounded-full gap-1.5 px-2.5 sm:px-3 shrink-0"
               onClick={() => navigate(`/study?deck_id=${urlDeckId}`)}
+              title="Quay lại bài học"
             >
               <ArrowLeft className="size-3.5" />
-              <span>Quay lại bài học</span>
+              <span className="hidden sm:inline">Quay lại bài học</span>
+              <span className="sm:hidden">Bài học</span>
             </Button>
-          ) : (
-            <Brand compact size="sm" hideTextOnCollapse />
-          )}
-          <span className="hidden sm:inline text-xs sm:text-sm font-semibold text-foreground truncate">Duyệt thẻ</span>
+          ) : null}
+
+          <span className="hidden md:inline text-xs sm:text-sm font-semibold text-foreground truncate">
+            Duyệt thẻ
+          </span>
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
