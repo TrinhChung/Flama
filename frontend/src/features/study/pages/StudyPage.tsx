@@ -63,7 +63,7 @@ export function StudyPage() {
     setIsExiting(true)
     try {
       await study.commit({ reason: 'manual_exit' })
-      blocker.reset?.()
+      blocker.proceed?.()
     } catch (err) {
       console.error('Failed to commit study session before exit:', err)
       blocker.proceed?.()
@@ -175,7 +175,8 @@ export function StudyPage() {
   }, [study])
 
   const handleCommit = useCallback(() => {
-    void study.commit({ reason: 'manual_exit' }).catch(() => {})
+    const isComplete = study.view?.session_state === 'complete_today'
+    void study.commit({ reason: isComplete ? 'auto_finish' : 'manual_exit' }).catch(() => {})
   }, [study])
 
   const handleToggleFullscreen = useCallback(() => {
@@ -361,8 +362,10 @@ export function StudyPage() {
       || Boolean(study.error)
     )
   const counts = study.view?.counts ?? { new: 0, learning: 0, due: 0 }
+  const isSessionComplete = study.view?.session_state === 'complete_today'
+  const isLeaving = isExiting || blocker.state === 'proceeding'
 
-  if (study.receipt) {
+  if (study.receipt && isSessionComplete && !isLeaving) {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 bg-background text-foreground overflow-y-auto">
         <StudyCompletionCard
@@ -444,6 +447,10 @@ export function StudyPage() {
           <PageError
             error={new Error('Dữ liệu hiển thị thẻ không đầy đủ. Hãy tải lại phiên học.')}
           />
+        </div>
+      ) : isLeaving ? (
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
+          <PageLoading label="Đang lưu tiến độ và chuyển trang…" />
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto min-h-0">
