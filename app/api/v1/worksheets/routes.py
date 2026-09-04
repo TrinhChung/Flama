@@ -41,7 +41,7 @@ def get_standalone_worksheet_meta_route():
         "total_notes": 0,
         "note_types": [],
         "suggested_mappings": {},
-        "templates": [t.to_dict() for t in list_templates()],
+        "templates": list_templates(),
     })
 
 
