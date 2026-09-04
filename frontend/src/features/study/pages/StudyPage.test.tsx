@@ -19,6 +19,11 @@ const mocks = vi.hoisted(() => ({
   prepareDecision: vi.fn(),
   updateCardContent: vi.fn(),
   getBootstrap: vi.fn(),
+  blockerState: {
+    state: 'unblocked' as 'unblocked' | 'blocked' | 'proceeding',
+    proceed: vi.fn(),
+    reset: vi.fn(),
+  },
   sessionHookData: {
     session: null,
     view: null,
@@ -44,7 +49,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
     ...actual,
     useNavigate: () => mocks.navigate,
     useSearchParams: () => [new URLSearchParams('deck_id=12')],
-    useBlocker: () => ({ state: 'unblocked', proceed: vi.fn(), reset: vi.fn() }),
+    useBlocker: () => mocks.blockerState,
   }
 })
 
@@ -100,6 +105,11 @@ beforeEach(() => {
     isBusy: false,
     canUndo: false,
     updateCardContent: mocks.updateCardContent,
+  }
+  mocks.blockerState = {
+    state: 'unblocked',
+    proceed: vi.fn(),
+    reset: vi.fn(),
   }
   mocks.requestFullscreen.mockResolvedValue(undefined)
   Object.defineProperty(document.documentElement, 'requestFullscreen', {
@@ -425,4 +435,150 @@ describe('StudyPage error state rendering', () => {
     expect(dashboardLink?.getAttribute('href')).toBe('/dashboard')
   })
 })
+
+describe('StudyPage exit confirmation and completion card gating', () => {
+  function setupActiveStudyWithUncommittedEvents() {
+    mocks.sessionHookData = {
+      session: {
+        status: 'active',
+        snapshot: {
+          session_id: 'session-1',
+          scope: { name: 'Test Deck' },
+        },
+        events: [{ event_id: 'e1' }, { event_id: 'e2' }],
+      } as any,
+      view: {
+        card: { card_id: 'card-1', note_id: 10 },
+        template: { front_source: 'front', back_source: 'back' },
+        content: { field_values: {} },
+        counts: { new: 3, learning: 1, due: 2 },
+        session_state: 'active',
+      } as any,
+      receipt: null,
+      error: null,
+      leaseConflict: false,
+      takeoverState: 'idle',
+      isLoading: false,
+      isBusy: false,
+      canUndo: false,
+    }
+    mocks.commit.mockResolvedValue({
+      schema_version: 'study-commit-receipt.v1',
+      session_id: 'session-1',
+      commit_id: 'commit-1',
+      commit_reason: 'manual_exit',
+      applied_event_count: 2,
+      updated_cards: [],
+      rating_counts: { again: 0, hard: 0, good: 2, easy: 0 },
+      committed_at: '2026-09-05T00:00:00.000Z',
+    })
+  }
+
+  it('calls commit and blocker.proceed on Save & Exit without showing completion card', async () => {
+    setupActiveStudyWithUncommittedEvents()
+    mocks.blockerState = {
+      state: 'blocked',
+      proceed: vi.fn(),
+      reset: vi.fn(),
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    expect(document.body.textContent).toContain('Kết thúc phiên học?')
+    expect(document.body.textContent).toContain('2 thẻ')
+
+    const saveButton = Array.from(document.body.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Lưu & Thoát'),
+    )
+    expect(saveButton).toBeDefined()
+
+    await act(async () => {
+      saveButton?.click()
+    })
+
+    expect(mocks.commit).toHaveBeenCalledWith({ reason: 'manual_exit' })
+    expect(mocks.blockerState.proceed).toHaveBeenCalledOnce()
+    expect(document.body.textContent).not.toContain('Hoàn thành lượt học hôm nay')
+  })
+
+  it('calls blocker.proceed on Discard & Exit without calling commit', async () => {
+    setupActiveStudyWithUncommittedEvents()
+    mocks.blockerState = {
+      state: 'blocked',
+      proceed: vi.fn(),
+      reset: vi.fn(),
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    const discardButton = Array.from(document.body.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Thoát không lưu tiến độ này'),
+    )
+    expect(discardButton).toBeDefined()
+
+    await act(async () => {
+      discardButton?.click()
+    })
+
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.blockerState.proceed).toHaveBeenCalledOnce()
+  })
+
+  it('renders StudyCompletionCard only when session is complete for today', async () => {
+    mocks.sessionHookData = {
+      session: {
+        status: 'committed',
+        snapshot: {
+          session_id: 'session-1',
+          scope: { name: 'Test Deck' },
+        },
+        events: [],
+      } as any,
+      view: {
+        card: null,
+        template: null,
+        content: null,
+        counts: { new: 0, learning: 0, due: 0 },
+        session_state: 'complete_today',
+      } as any,
+      receipt: {
+        schema_version: 'study-commit-receipt.v1',
+        session_id: 'session-1',
+        commit_id: 'commit-finish',
+        commit_reason: 'auto_finish',
+        applied_event_count: 10,
+        updated_cards: [],
+        rating_counts: { again: 1, hard: 1, good: 6, easy: 2 },
+        committed_at: '2026-09-05T00:00:00.000Z',
+      },
+      error: null,
+      leaseConflict: false,
+      takeoverState: 'idle',
+      isLoading: false,
+      isBusy: false,
+      canUndo: false,
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    expect(container?.textContent).toContain('Đã đồng bộ phiên học')
+    expect(container?.textContent).toContain('Về Dashboard')
+  })
+})
+
 

@@ -393,7 +393,7 @@ export function AdminTicketDetailPage() {
 
       {/* Lightbox Modal */}
       <Dialog open={Boolean(previewImage)} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl p-2 bg-black/95 border-none flex flex-col items-center justify-center">
+        <DialogContent className="max-w-4xl sm:max-w-4xl p-2 bg-black/95 border-none flex flex-col items-center justify-center">
           {previewImage && (
             <img src={previewImage} alt="Full Screenshot Preview" className="max-h-[85vh] object-contain rounded-lg" />
           )}

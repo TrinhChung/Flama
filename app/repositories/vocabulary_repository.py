@@ -25,7 +25,7 @@ from app.repositories.study_repository import (
 from models import db
 from models.card_progress import CardProgress
 from models.deck import Deck
-from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
+from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note, NoteType
 
 
 def _utcnow() -> datetime:
@@ -760,9 +760,13 @@ def build_browse_deck_tree_payload(
         .distinct()
         .all()
     )
-    deck_note_type_map: dict[int, str] = {
-        int(row[0]): str(row[1]) for row in deck_note_type_rows if row[0] and row[1]
-    }
+    direct_deck_note_types: dict[int, set[str]] = {}
+    all_nt_ids: set[str] = set()
+    for row in deck_note_type_rows:
+        if row[0] and row[1]:
+            direct_deck_note_types.setdefault(int(row[0]), set()).add(str(row[1]))
+            all_nt_ids.add(str(row[1]))
+
     if logical_installs:
         for install in logical_installs:
             map_rows = (
@@ -778,8 +782,19 @@ def build_browse_deck_tree_payload(
                 and int(row.local_deck_id) in scoped_ids
             }
             if install.source_note_type_id:
+                snt_id = str(install.source_note_type_id)
+                all_nt_ids.add(snt_id)
                 for local_id in source_to_local.values():
-                    deck_note_type_map.setdefault(local_id, str(install.source_note_type_id))
+                    direct_deck_note_types.setdefault(local_id, set()).add(snt_id)
+
+    for d in scoped_decks:
+        if d.note_type_id:
+            all_nt_ids.add(str(d.note_type_id))
+
+    nt_name_lookup: dict[str, str] = {}
+    if all_nt_ids:
+        for nt in NoteType.query.filter(NoteType.id.in_(all_nt_ids)).all():
+            nt_name_lookup[str(nt.id)] = str(nt.name)
 
     def _build_node(deck_obj: Deck, prefix: str = "") -> dict[str, Any]:
         path = f"{prefix} :: {deck_obj.name}" if prefix else deck_obj.name
@@ -790,6 +805,10 @@ def build_browse_deck_tree_payload(
             "learn": int(direct["learn"]),
             "due": int(direct["due"]),
         }
+        subtree_nt_ids: set[str] = set(direct_deck_note_types.get(deck_obj.id, set()))
+        if deck_obj.note_type_id:
+            subtree_nt_ids.add(str(deck_obj.note_type_id))
+
         children_payload: list[dict[str, Any]] = []
         for child_obj in children_by_parent.get(deck_obj.id, []):
             child_payload = _build_node(child_obj, prefix=path)
@@ -799,13 +818,25 @@ def build_browse_deck_tree_payload(
             counts["new"] += int(child_counts["new"])
             counts["learn"] += int(child_counts["learn"])
             counts["due"] += int(child_counts["due"])
-        resolved_note_type_id = deck_obj.note_type_id or deck_note_type_map.get(deck_obj.id)
+            for child_nt_id in child_payload.get("note_type_ids", []):
+                subtree_nt_ids.add(child_nt_id)
+
+        sorted_nt_ids = sorted(list(subtree_nt_ids))
+        nt_names = [nt_name_lookup.get(nid, nid) for nid in sorted_nt_ids]
+        has_mixed = len(sorted_nt_ids) > 1
+        resolved_note_type_id = sorted_nt_ids[0] if len(sorted_nt_ids) == 1 else (str(deck_obj.note_type_id) if deck_obj.note_type_id else None)
+        resolved_note_type_name = nt_names[0] if len(nt_names) == 1 else None
+
         return {
             "id": deck_obj.id,
             "name": deck_obj.name,
             "path": path,
             "parent_id": deck_obj.parent_id,
             "note_type_id": str(resolved_note_type_id) if resolved_note_type_id else None,
+            "note_type_name": resolved_note_type_name,
+            "note_type_ids": sorted_nt_ids,
+            "note_type_names": nt_names,
+            "has_mixed_note_types": has_mixed,
             "counts": counts,
             "children": children_payload,
         }

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Folder, FolderOpen, RotateCcw, Search, ChevronRight, ChevronDown } from 'lucide-react'
+import { Folder, FolderOpen, RotateCcw, Search, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react'
 import type { useBrowseState, BrowseDeck } from '../hooks/useBrowseState'
 
 interface BrowseDeckSidebarProps {
@@ -179,6 +179,14 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
                 <Folder className={`size-3.5 shrink-0 ${isSelected ? 'text-primary-foreground' : 'text-muted-foreground/60'}`} />
               )}
               <span className="truncate text-xs">{node.deck.name}</span>
+              {node.deck.has_mixed_note_types && (
+                <span
+                  title={`Bộ deck chứa nhiều loại Note Type khác nhau: ${node.deck.note_type_names?.join(', ')}`}
+                  className="shrink-0 inline-flex items-center"
+                >
+                  <AlertTriangle className={`size-3 ${isSelected ? 'text-primary-foreground/90' : 'text-amber-500'}`} />
+                </span>
+              )}
             </div>
           </div>
 

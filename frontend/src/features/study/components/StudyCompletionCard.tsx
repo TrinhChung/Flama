@@ -13,13 +13,17 @@ import type {
   StudySessionCommitReceipt,
   StudySessionEvent,
 } from '../types'
-import type { PersistedStudySession } from '../session/sessionStore'
+import type {
+  PersistedStudySession,
+  StudySessionAccumulatedStats,
+} from '../session/sessionStore'
 
 type StudyCompletionCardProps = {
   deckName?: string | null
   deckId?: string | null
   session: PersistedStudySession | null
   receipt: StudySessionCommitReceipt | null
+  totalSessionStats?: StudySessionAccumulatedStats | null
   counts: { new: number; learning: number; due: number }
   isBusy: boolean
   onCommit: () => void
@@ -30,31 +34,92 @@ export function StudyCompletionCard({
   deckId,
   session,
   receipt,
+  totalSessionStats,
   counts,
   isBusy,
   onCommit,
 }: StudyCompletionCardProps) {
+  const isCommitted = Boolean(receipt)
   const events = useMemo(() => session?.events ?? [], [session?.events])
-  const appliedCount = receipt?.applied_event_count ?? events.length
 
   const stats = useMemo(() => {
-    let againCount = 0
-    let hardCount = 0
-    let goodCount = 0
-    let easyCount = 0
-    let totalDurationMs = 0
+    // If totalSessionStats was provided directly from hook:
+    if (totalSessionStats) {
+      const totalRatings = totalSessionStats.total_reviews
+      const againCount = totalSessionStats.again_count
+      const hardCount = totalSessionStats.hard_count
+      const goodCount = totalSessionStats.good_count
+      const easyCount = totalSessionStats.easy_count
+      const totalDurationMs = totalSessionStats.total_duration_ms
 
-    events.forEach((ev: StudySessionEvent) => {
-      totalDurationMs += ev.duration_ms || 0
-      if (ev.rating === 'again') againCount += 1
-      else if (ev.rating === 'hard') hardCount += 1
-      else if (ev.rating === 'good') goodCount += 1
-      else if (ev.rating === 'easy') easyCount += 1
-    })
+      const totalRatingsSafe = totalRatings || 1
+      const retentionRate = Math.round(
+        ((goodCount + easyCount) / totalRatingsSafe) * 100,
+      )
 
-    const totalRatings = events.length || 1
+      const totalSeconds = Math.round(totalDurationMs / 1000)
+      const minutes = Math.floor(totalSeconds / 60)
+      const seconds = totalSeconds % 60
+      const timeFormatted =
+        minutes > 0
+          ? `${minutes} phút ${seconds > 0 ? `${seconds}s` : ''}`
+          : `${seconds}s`
+
+      return {
+        againCount,
+        hardCount,
+        goodCount,
+        easyCount,
+        totalRatings,
+        retentionRate: totalRatings > 0 ? retentionRate : 100,
+        timeFormatted: totalRatings > 0 ? timeFormatted : '0s',
+      }
+    }
+
+    const acc = session?.accumulated_stats
+    let againCount = acc?.again_count ?? 0
+    let hardCount = acc?.hard_count ?? 0
+    let goodCount = acc?.good_count ?? 0
+    let easyCount = acc?.easy_count ?? 0
+    let totalDurationMs = acc?.total_duration_ms ?? 0
+    let totalRatings = acc?.total_reviews ?? 0
+
+    // When not yet committed, events in session.events have NOT been rolled into accumulated_stats yet.
+    // Add them to get the in-progress total:
+    if (!isCommitted && events.length > 0) {
+      events.forEach((ev: StudySessionEvent) => {
+        totalDurationMs += ev.duration_ms || 0
+        if (ev.rating === 'again') againCount += 1
+        else if (ev.rating === 'hard') hardCount += 1
+        else if (ev.rating === 'good') goodCount += 1
+        else if (ev.rating === 'easy') easyCount += 1
+      })
+      totalRatings += events.length
+    } else if (totalRatings === 0 && events.length > 0) {
+      events.forEach((ev: StudySessionEvent) => {
+        totalDurationMs += ev.duration_ms || 0
+        if (ev.rating === 'again') againCount += 1
+        else if (ev.rating === 'hard') hardCount += 1
+        else if (ev.rating === 'good') goodCount += 1
+        else if (ev.rating === 'easy') easyCount += 1
+      })
+      totalRatings += events.length
+    }
+
+    // Fallback if receipt has applied counts but events/accumulated were cleared
+    if (totalRatings === 0 && receipt?.applied_event_count) {
+      totalRatings = receipt.applied_event_count
+      if (receipt.rating_counts) {
+        againCount = receipt.rating_counts.again || 0
+        hardCount = receipt.rating_counts.hard || 0
+        goodCount = receipt.rating_counts.good || 0
+        easyCount = receipt.rating_counts.easy || 0
+      }
+    }
+
+    const totalRatingsSafe = totalRatings || 1
     const retentionRate = Math.round(
-      ((goodCount + easyCount) / totalRatings) * 100,
+      ((goodCount + easyCount) / totalRatingsSafe) * 100,
     )
 
     const totalSeconds = Math.round(totalDurationMs / 1000)
@@ -70,13 +135,13 @@ export function StudyCompletionCard({
       hardCount,
       goodCount,
       easyCount,
-      totalRatings: events.length,
-      retentionRate: events.length > 0 ? retentionRate : 100,
-      timeFormatted: events.length > 0 ? timeFormatted : '0s',
+      totalRatings,
+      retentionRate: totalRatings > 0 ? retentionRate : 100,
+      timeFormatted: totalRatings > 0 ? timeFormatted : '0s',
     }
-  }, [events])
+  }, [events, isCommitted, receipt, session?.accumulated_stats, totalSessionStats])
 
-  const isCommitted = Boolean(receipt)
+  const appliedCount = stats.totalRatings || (receipt?.applied_event_count ?? events.length)
 
   return (
     <div className="w-full max-w-2xl mx-auto py-6 px-4">
@@ -102,7 +167,7 @@ export function StudyCompletionCard({
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
               {isCommitted
-                ? `Hệ thống đã lưu thành công ${appliedCount} lượt trả lời thẻ.`
+                ? `Hệ thống đã lưu thành công tất cả ${appliedCount} lượt trả lời thẻ trong phiên này.`
                 : 'Tất cả các thẻ cần học hôm nay đã được ôn tập xong.'}
             </p>
           </div>

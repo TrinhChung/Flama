@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import { Search, Sliders, Trash2, Plus } from 'lucide-react'
+import { Search, Sliders, Trash2, Plus, AlertTriangle } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
 interface BrowseToolbarProps {
@@ -16,6 +16,7 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
     statusFilter,
     setStatusFilter,
     selectedCards,
+    selectedDeck,
     bulkDeleteMutation,
     handleStartCreateCard,
   } = browse
@@ -59,6 +60,35 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
             <option value="review">Đến hạn (Due)</option>
           </NativeSelect>
         </div>
+
+        {/* Selected Deck indicator when no individual cards are ticked */}
+        {selectedCards.length === 0 && selectedDeck && (
+          <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-3">
+            <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 rounded-lg gap-1.5 bg-muted/40 border-border/80 text-foreground">
+              <span className="text-muted-foreground font-normal">Đang chọn:</span>
+              <span className="font-bold text-foreground truncate max-w-36 sm:max-w-60">{selectedDeck.name}</span>
+              <span className="text-muted-foreground font-medium">({selectedDeck.counts?.total ?? 0} thẻ)</span>
+            </Badge>
+
+            {selectedDeck.has_mixed_note_types ? (
+              <Badge
+                variant="outline"
+                className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30 gap-1 px-2 py-0.5"
+                title={`Bộ deck chứa nhiều loại Note Type khác nhau: ${selectedDeck.note_type_names?.join(', ')}`}
+              >
+                <AlertTriangle className="size-3 shrink-0" />
+                <span>Nhiều Note Type ({selectedDeck.note_type_names?.length || selectedDeck.note_type_ids?.length || 2})</span>
+              </Badge>
+            ) : selectedDeck.note_type_name ? (
+              <Badge
+                variant="outline"
+                className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30 px-2 py-0.5"
+              >
+                <span>Mẫu: {selectedDeck.note_type_name}</span>
+              </Badge>
+            ) : null}
+          </div>
+        )}
 
         {/* Selected cards Bulk actions */}
         {selectedCards.length > 0 && (

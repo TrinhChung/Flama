@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  AlertTriangle,
   Check,
   Eye,
   EyeOff,
@@ -58,6 +59,10 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
     handleResetTtsDefaults,
     generateTtsMutation,
     targetTtsCardIds,
+    selectedCards,
+    selectedDeckId,
+    selectedDeck,
+    cards,
     isPreviewing,
     availableSourceFieldNames,
     availableAudioFieldNames,
@@ -65,9 +70,15 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
 
   const availableVoices = ttsVoicesQuery.data?.items || []
 
+  const isDeckScope = selectedCards.length === 0 && Boolean(selectedDeckId)
+  const isMixedNoteTypes = isDeckScope && Boolean(selectedDeck?.has_mixed_note_types)
+  const deckCardCount = selectedDeck?.counts?.total ?? cards.length
+  const effectiveCardCount = isDeckScope ? deckCardCount : targetTtsCardIds.length
+
   const handleGenerate = () => {
     generateTtsMutation.mutate({
-      card_ids: targetTtsCardIds,
+      card_ids: isDeckScope ? undefined : targetTtsCardIds,
+      deck_id: isDeckScope && selectedDeckId ? selectedDeckId : undefined,
       source_field: ttsSourceField,
       destination_field: ttsDestinationField,
       character_id: ttsCharacter || undefined,
@@ -104,13 +115,33 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
             <span className="font-semibold text-foreground">
               Phạm vi áp dụng:{' '}
               <strong className="text-primary font-bold ml-1">
-                {targetTtsCardIds.length} thẻ được chọn
+                {isDeckScope
+                  ? `Cả bộ deck "${selectedDeck?.name || 'này'}" (${deckCardCount} thẻ)`
+                  : `${targetTtsCardIds.length} thẻ được chọn`}
               </strong>
             </span>
             <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20 font-bold px-2.5 py-0.5 rounded-full shrink-0">
-              {targetTtsCardIds.length} thẻ
+              {effectiveCardCount} thẻ {isDeckScope ? '(Cả deck)' : ''}
             </Badge>
           </div>
+
+          {/* Mixed Note Types Warning Banner */}
+          {isMixedNoteTypes && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-0.5">
+                <p className="font-bold">
+                  Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.
+                </p>
+                <p className="text-[11px] text-amber-700/90 dark:text-amber-300/90">
+                  {selectedDeck?.note_type_names?.length
+                    ? `Các Note Type phát hiện: ${selectedDeck.note_type_names.join(', ')}.`
+                    : ''}{' '}
+                  Vui lòng chọn từng thẻ cụ thể hoặc chọn thư mục con có cùng một Note Type để tạo âm thanh đồng loạt.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Web Service API Key Configuration */}
           <div className="space-y-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
@@ -404,7 +435,8 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
               onClick={handleGenerate}
               disabled={
                 generateTtsMutation.isPending
-                || targetTtsCardIds.length === 0
+                || isMixedNoteTypes
+                || effectiveCardCount === 0
                 || availableSourceFieldNames.length === 0
                 || availableAudioFieldNames.length === 0
                 || !ttsSourceField
@@ -412,7 +444,7 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
               }
             >
               {generateTtsMutation.isPending ? <LoaderCircle className="size-3.5 mr-1 animate-spin" /> : null}
-              Bắt đầu tạo ({targetTtsCardIds.length} thẻ)
+              Bắt đầu tạo ({effectiveCardCount} thẻ)
             </Button>
           </div>
         </DialogFooter>

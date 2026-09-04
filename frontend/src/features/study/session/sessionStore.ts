@@ -1,5 +1,6 @@
 import type { SchedulerCardState } from '../scheduler/types'
 import type {
+  StudyMediaArtifact,
   StudySessionEvent,
   StudySessionSnapshot,
 } from '../types'
@@ -7,6 +8,7 @@ import {
   normalizePersistedStudySession,
 } from './sessionRestore'
 import type { StudySessionQuarantine } from './sessionRestore'
+import { patchRenderContext } from '../renderer/clientRenderer'
 
 const DB_NAME = 'flama-study'
 const DB_VERSION = 2
@@ -26,6 +28,15 @@ export type StudySessionUndoItem = {
   previous_state: SchedulerCardState
 }
 
+export type StudySessionAccumulatedStats = {
+  total_reviews: number
+  total_duration_ms: number
+  again_count: number
+  hard_count: number
+  good_count: number
+  easy_count: number
+}
+
 export type PersistedStudySession = {
   scope_key: string
   snapshot: StudySessionSnapshot
@@ -34,6 +45,8 @@ export type PersistedStudySession = {
   undo_history?: StudySessionUndoItem[]
   active_card_id?: string | null
   opened_client_at_ms: number
+  session_started_at_ms?: number
+  accumulated_stats?: StudySessionAccumulatedStats
   status: 'active' | 'pending_commit'
   commit_id: string | null
   commit_reason: StudyCommitReason | null
@@ -250,7 +263,7 @@ export async function removeStudySessionIfMatches(
 export async function updateCardFieldValuesInSessions(
   cardId: string,
   newFieldValues: Record<string, string>,
-  options?: { noteId?: string | null },
+  options?: { noteId?: string | null; media?: StudyMediaArtifact[] },
 ) {
   try {
     const keys: string[] = []
@@ -281,13 +294,52 @@ export async function updateCardFieldValuesInSessions(
       for (const card of snapshot.cards) {
         if (card.card_id === cardId || (options?.noteId && card.note_id === options.noteId)) {
           const contentKey = card.content_key
-          if (snapshot.contents[contentKey]) {
+          const template = snapshot.templates[card.template_key]
+          const existingContent = snapshot.contents[contentKey]
+          if (existingContent) {
+            const combinedMedia: StudyMediaArtifact[] = options?.media && options.media.length > 0
+              ? [...options.media]
+              : [...(existingContent.media || [])]
+
+            const existingProxyUrls = new Set(combinedMedia.map((m) => m.proxy_url))
+            for (const [fieldName, val] of Object.entries(newFieldValues)) {
+              if (typeof val === 'string') {
+                const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+                if (matches) {
+                  for (const pUrl of matches) {
+                    if (!existingProxyUrls.has(pUrl)) {
+                      const assetId = pUrl.replace('/media/proxy/', '')
+                      const lk = fieldName.toLowerCase()
+                      const isAudio = lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
+                      combinedMedia.push({
+                        id: assetId,
+                        field_name: fieldName,
+                        filename: `${assetId}`,
+                        mime_type: isAudio ? 'audio/mpeg' : 'image/jpeg',
+                        sha256: '',
+                        proxy_url: pUrl,
+                      })
+                      existingProxyUrls.add(pUrl)
+                    }
+                  }
+                }
+              }
+            }
+
+            const nextRenderContext = patchRenderContext(
+              existingContent.render_context || {},
+              newFieldValues,
+              template?.field_defs,
+              combinedMedia,
+            )
             snapshot.contents[contentKey] = {
-              ...snapshot.contents[contentKey],
+              ...existingContent,
               field_values: {
-                ...snapshot.contents[contentKey].field_values,
+                ...existingContent.field_values,
                 ...newFieldValues,
               },
+              render_context: nextRenderContext,
+              media: combinedMedia,
             }
             updated = true
           }
@@ -306,6 +358,7 @@ export async function updateCardFieldValuesInSessions(
             cardId,
             noteId: options?.noteId || null,
             fieldValues: newFieldValues,
+            media: options?.media,
           },
         }),
       )
@@ -316,6 +369,7 @@ export async function updateCardFieldValuesInSessions(
           cardId,
           noteId: options?.noteId || null,
           fieldValues: newFieldValues,
+          media: options?.media,
         })
         channel.close()
       } catch {
@@ -324,5 +378,121 @@ export async function updateCardFieldValuesInSessions(
     }
   } catch {
     // Ignore errors if storage is temporarily unaccessible
+  }
+}
+
+export type UpdatedTemplatePayload = {
+  front_html?: string
+  back_html?: string
+  shared_css?: string
+  front_source?: string
+  back_source?: string
+  front_inline_scripts?: string[]
+  back_inline_scripts?: string[]
+}
+
+export async function updateTemplateInSessions(
+  templateId: string,
+  updated: UpdatedTemplatePayload,
+) {
+  try {
+    const keys: string[] = []
+    try {
+      const db = await openDatabase()
+      const tx = db.transaction(STORE_NAME, 'readonly')
+      const store = tx.objectStore(STORE_NAME)
+      const allKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+        const req = store.getAllKeys()
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+      db.close()
+      for (const k of allKeys) {
+        if (typeof k === 'string') keys.push(k)
+      }
+    } catch {}
+
+    for (const key of memoryFallback.keys()) {
+      if (!keys.includes(key)) keys.push(key)
+    }
+
+    const versionNonce = Date.now().toString(36)
+
+    for (const key of keys) {
+      const session = await loadStudySession(key)
+      if (!session) continue
+      let sessionUpdated = false
+      const snapshot = session.snapshot
+
+      // Find all template entries in snapshot.templates matching templateId
+      const templateKeysToUpdate: string[] = []
+      for (const [tplKey, tpl] of Object.entries(snapshot.templates)) {
+        if (tpl && tpl.id === templateId) {
+          templateKeysToUpdate.push(tplKey)
+        }
+      }
+
+      for (const oldKey of templateKeysToUpdate) {
+        const existingTpl = snapshot.templates[oldKey]
+        if (!existingTpl) continue
+        const newVersion = `${existingTpl.version || 'v'}-${versionNonce}`
+        const newKey = `${templateId}:${newVersion}`
+
+        const newFrontSource = updated.front_source ?? updated.front_html ?? existingTpl.front_source
+        const newBackSource = updated.back_source ?? updated.back_html ?? existingTpl.back_source
+        const newSharedCss = updated.shared_css ?? existingTpl.shared_css
+
+        snapshot.templates[newKey] = {
+          ...existingTpl,
+          version: newVersion,
+          front_source: newFrontSource,
+          back_source: newBackSource,
+          shared_css: newSharedCss,
+          front_inline_scripts: updated.front_inline_scripts ?? existingTpl.front_inline_scripts,
+          back_inline_scripts: updated.back_inline_scripts ?? existingTpl.back_inline_scripts,
+        }
+
+        // Point matching cards to new template key
+        for (const card of snapshot.cards) {
+          if (card.template_id === templateId || card.template_key === oldKey) {
+            card.template_key = newKey
+          }
+        }
+
+        if (oldKey !== newKey) {
+          delete snapshot.templates[oldKey]
+        }
+        sessionUpdated = true
+      }
+
+      if (sessionUpdated) {
+        await saveStudySession(session)
+      }
+    }
+
+    // Broadcast synchronization event to any active study sessions (in current window & across tabs)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('flama_study_template_updated', {
+          detail: {
+            templateId,
+            updated,
+          },
+        }),
+      )
+      try {
+        const channel = new BroadcastChannel('flama_study_sync_channel')
+        channel.postMessage({
+          type: 'TEMPLATE_UPDATED',
+          templateId,
+          updated,
+        })
+        channel.close()
+      } catch {
+        // BroadcastChannel unavailable
+      }
+    }
+  } catch {
+    // Ignore storage errors
   }
 }

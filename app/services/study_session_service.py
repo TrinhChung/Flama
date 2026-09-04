@@ -54,10 +54,12 @@ from models.deck import Deck
 from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
+from models.note import Note
 from models.review_event import ReviewEvent
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.study_session_commit import StudySessionCommit
+from models.template import Template
 
 
 WIRE_SCHEMA_VERSION = "study-session.v2"
@@ -592,10 +594,47 @@ def get_study_session_status(
     status = str(session.status or "open")
     if status == "open" and (now or datetime.utcnow()) > session.expires_at:
         status = "expired"
+
+    is_stale = False
+    threshold = (
+        max(session.created_at, session.opened_at)
+        if session.created_at and session.opened_at
+        else (session.created_at or session.opened_at)
+    )
+    if status == "open" and threshold:
+        has_updated_template = (
+            db.session.query(Template.id)
+            .join(Card, Card.template_id == Template.id)
+            .join(StudySessionCard, StudySessionCard.card_id == Card.id)
+            .filter(
+                StudySessionCard.session_id == session.id,
+                Template.updated_at > threshold,
+            )
+            .first()
+            is not None
+        )
+        if has_updated_template:
+            is_stale = True
+        else:
+            has_updated_note = (
+                db.session.query(Note.id)
+                .join(Card, Card.note_id == Note.id)
+                .join(StudySessionCard, StudySessionCard.card_id == Card.id)
+                .filter(
+                    StudySessionCard.session_id == session.id,
+                    Note.updated_at > threshold,
+                )
+                .first()
+                is not None
+            )
+            if has_updated_note:
+                is_stale = True
+
     return {
         "schema_version": "study-session-status.v1",
         "session_id": session.id,
         "status": status,
+        "stale": is_stale,
         "expires_at": _utc_iso(session.expires_at),
         "committed_at": _utc_iso(session.committed_at),
     }

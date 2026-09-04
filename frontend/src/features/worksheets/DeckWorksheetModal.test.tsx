@@ -554,6 +554,39 @@ describe('DeckWorksheetModal Live Studio', () => {
       window.innerWidth = originalInnerWidth
     }
   })
+
+  it('renders desktop/laptop responsive dialog with sm:max-w-none to prevent phone frame constraint', async () => {
+    const originalInnerWidth = window.innerWidth
+    window.innerWidth = 1280
+
+    try {
+      await act(async () => {
+        root?.render(
+          <DeckWorksheetModal
+            open={true}
+            onOpenChange={vi.fn()}
+            deckId={1}
+            deckName="JLPT N5 Core"
+          />,
+        )
+      })
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 300))
+      })
+
+      const dialogContent = document.querySelector('[data-slot="dialog-content"]')
+      expect(dialogContent).toBeDefined()
+      expect(dialogContent?.className).toContain('sm:max-w-none')
+      expect(dialogContent?.className).not.toContain('sm:max-w-sm')
+
+      // Desktop header should be present with Live Studio badge
+      expect(document.body.textContent).toContain('Live Studio')
+      expect(document.body.textContent).toContain('Xuất bài tập in ấn / PDF (A4)')
+    } finally {
+      window.innerWidth = originalInnerWidth
+    }
+  })
 })
 
 

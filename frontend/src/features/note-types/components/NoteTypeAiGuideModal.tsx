@@ -83,7 +83,7 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+      <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl">
         <DialogHeader className="p-5 pb-3 border-b border-border/80 bg-muted/20">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">

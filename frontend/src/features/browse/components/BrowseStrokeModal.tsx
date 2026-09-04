@@ -361,12 +361,20 @@ export function BrowseStrokeModal({
     }
   }
 
+  const isDeckScope = mode === 'batch' && selectedCards.length === 0 && Boolean(selectedDeckId)
+  const selectedDeck = browse.selectedDeck
+  const isMixedNoteTypes =
+    isDeckScope &&
+    (Boolean(selectedDeck?.has_mixed_note_types) || Boolean(estimateQuery.data?.has_mixed_note_types))
+
   const targetCount =
     mode === 'single'
       ? 1
       : selectedCards.length > 0
         ? selectedCards.length
-        : 'Tất cả thẻ trong Deck'
+        : selectedDeck
+          ? `Cả bộ deck "${selectedDeck.name}" (${selectedDeck.counts?.total ?? 'tất cả'} thẻ)`
+          : 'Tất cả thẻ trong Deck'
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -394,6 +402,24 @@ export function BrowseStrokeModal({
               {typeof targetCount === 'number' ? `${targetCount} thẻ` : targetCount}
             </Badge>
           </div>
+
+          {/* Mixed Note Types Warning Banner */}
+          {isMixedNoteTypes && (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-0.5">
+                <p className="font-bold">
+                  Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.
+                </p>
+                <p className="text-[11px] text-amber-700/90 dark:text-amber-300/90">
+                  {selectedDeck?.note_type_names?.length
+                    ? `Các Note Type phát hiện: ${selectedDeck.note_type_names.join(', ')}.`
+                    : ''}{' '}
+                  Vui lòng chọn từng thẻ cụ thể hoặc chọn thư mục con có cùng một bộ Note Type để tạo sơ đồ nét đồng loạt.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Form grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -671,7 +697,7 @@ export function BrowseStrokeModal({
             <Button
               size="sm"
               onClick={() => batchMutation.mutate()}
-              disabled={!targetField || batchMutation.isPending}
+              disabled={!targetField || batchMutation.isPending || isMixedNoteTypes}
               className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
             >
               {batchMutation.isPending ? (

@@ -407,26 +407,26 @@ export function DeckWorksheetModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="fixed inset-0 z-50 flex flex-col w-full h-[100dvh] max-w-none translate-x-0 translate-y-0 top-0 left-0 p-0 gap-0 overflow-hidden rounded-none border-0 ring-0 bg-background sm:fixed sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[98vw] sm:h-[96vh] sm:rounded-2xl sm:border sm:border-border sm:shadow-2xl sm:ring-1 sm:ring-foreground/10"
+        className="fixed inset-0 z-50 flex flex-col w-full h-[100dvh] max-w-none translate-x-0 translate-y-0 top-0 left-0 p-0 gap-0 overflow-hidden rounded-none border-0 ring-0 bg-background sm:fixed sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[98vw] sm:max-w-none sm:h-[96vh] sm:rounded-2xl sm:border sm:border-border sm:shadow-2xl sm:ring-1 sm:ring-foreground/10"
       >
         {/* Desktop Header */}
-        <DialogHeader className="hidden sm:flex px-5 py-3 border-b border-border/80 bg-muted/40 shrink-0">
+        <DialogHeader className="hidden md:flex px-5 py-3 border-b border-border/80 bg-muted/40 shrink-0">
           <div className="flex items-center justify-between gap-4">
             {/* Left: Branding & Deck Metadata */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="size-10 rounded-xl bg-orange-500/15 text-orange-600 dark:text-orange-400 flex items-center justify-center shadow-xs shrink-0">
                 <Printer className="size-5" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <DialogTitle className="text-base font-bold text-foreground">
+                  <DialogTitle className="text-base font-bold text-foreground truncate">
                     {deckId ? 'Xuất bài tập in ấn / PDF (A4)' : 'Mẫu giấy luyện viết & In ấn (A4)'}
                   </DialogTitle>
-                  <Badge variant="outline" className="text-[10px] font-semibold bg-primary/5 text-primary border-primary/20">
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-primary/5 text-primary border-primary/20 shrink-0">
                     Live Studio
                   </Badge>
                 </div>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 truncate">
                   <span>{deckId ? (meta?.deck_name || deckName || 'Bộ thẻ') : 'Mẫu giấy độc lập (Không cần deck)'}</span>
                   {deckId ? (
                     <>
@@ -440,12 +440,12 @@ export function DeckWorksheetModal({
                     </>
                   )}
                   {isGenerating ? (
-                    <span className="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400 font-medium animate-pulse">
+                    <span className="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400 font-medium animate-pulse shrink-0">
                       <Loader2 className="size-3 animate-spin" />
                       <span>Đang cập nhật demo...</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
                       <Check className="size-3" />
                       <span>Bản demo sẵn sàng</span>
                     </span>
@@ -455,7 +455,7 @@ export function DeckWorksheetModal({
             </div>
 
             {/* Center / Right: Controls, Zoom, Actions & Desktop Close Button */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 shrink-0">
               {/* Zoom Controls */}
               <div className="flex items-center bg-background rounded-lg border border-border/80 px-1 py-0.5 shadow-2xs">
                 <Button
@@ -567,7 +567,7 @@ export function DeckWorksheetModal({
         </DialogHeader>
 
         {/* Mobile Header */}
-        <DialogHeader className="flex sm:hidden px-3.5 py-2.5 border-b border-border/80 bg-muted/40 shrink-0 gap-2">
+        <DialogHeader className="flex md:hidden px-3.5 py-2.5 border-b border-border/80 bg-muted/40 shrink-0 gap-2">
           {/* Row 1: Brand Icon + Title + Close Button */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">

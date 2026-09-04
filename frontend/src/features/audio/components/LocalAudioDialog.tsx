@@ -32,6 +32,8 @@ type LocalAudioDialogProps = {
   onClose: () => void
   selectedCardIds: string[]
   activeCardId?: string | null
+  deckId?: number | null
+  deckName?: string
   availableFieldNames?: string[]
   availableAudioFieldNames?: string[]
   noteTypeName?: string
@@ -41,12 +43,15 @@ type LocalAudioDialogProps = {
 }
 
 export function LocalAudioDialog(props: LocalAudioDialogProps) {
-  const { isOpen, onClose, selectedCardIds, activeCardId } = props
+  const { isOpen, onClose, selectedCardIds, activeCardId, deckId, deckName } = props
   const engine = useLocalAudioEngine(props)
   
   const {
     isKokoro,
     targetCardIds,
+    deckScanResult,
+    isScanningDeck,
+    hasMixedNoteTypes,
     serviceStatus,
     pairingChallengeId,
     isPairingApproved,
@@ -125,18 +130,31 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
               <strong className="text-primary font-bold ml-1">
                 {selectedCardIds.length > 0
                   ? `${selectedCardIds.length} thẻ đã tick chọn`
-                  : activeCardId
-                    ? '1 thẻ đang chọn trong bảng'
-                    : 'Chưa chọn thẻ nào trong bảng'}
+                  : deckId
+                    ? `Cả bộ deck "${deckName || deckScanResult?.deck?.name || 'này'}" (${targetCardIds.length} thẻ)`
+                    : activeCardId
+                      ? '1 thẻ đang chọn trong bảng'
+                      : 'Chưa chọn thẻ nào trong bảng'}
               </strong>
             </span>
             <Badge
               variant={targetCardIds.length > 0 ? 'default' : 'destructive'}
               className="text-[11px] px-2.5 py-0.5"
             >
-              {targetCardIds.length > 0 ? `${targetCardIds.length} thẻ` : 'Chưa chọn'}
+              {isScanningDeck ? 'Đang quét…' : targetCardIds.length > 0 ? `${targetCardIds.length} thẻ` : 'Chưa chọn'}
             </Badge>
           </div>
+
+          {/* Mixed Note Types Warning Banner */}
+          {hasMixedNoteTypes && (
+            <Alert variant="destructive" className="rounded-xl">
+              <AlertCircle className="size-4" />
+              <AlertTitle>Không thể tạo âm thanh đồng loạt trên cả deck</AlertTitle>
+              <AlertDescription className="text-xs mt-1">
+                Bộ deck đang chọn chứa nhiều loại Note Type khác nhau ({deckScanResult?.note_types?.map((nt) => nt.name).join(', ')}). Vui lòng chọn cụ thể từng thẻ trong bảng hoặc lọc theo từng subdeck có cùng loại Note Type để thực hiện.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Service Connection Status Banners */}
           {serviceStatus === 'checking' && (
@@ -365,9 +383,11 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                   onClick={handleStartBatch}
                   disabled={
                     isProcessing
+                    || isScanningDeck
                     || targetCardIds.length === 0
                     || !sourceField
                     || !destinationField
+                    || hasMixedNoteTypes
                   }
                 >
                   {isProcessing ? (

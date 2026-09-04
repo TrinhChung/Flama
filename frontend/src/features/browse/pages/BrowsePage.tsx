@@ -35,6 +35,8 @@ interface AudioDropdownMenuItemsProps {
   setLocalAudioTargetCardIds: (cards: string[]) => void
   setIsLocalAudioModalOpen: (val: boolean) => void
   selectedCards: string[]
+  selectedDeckId?: number | null
+  selectedDeck?: ReturnType<typeof useBrowseState>['selectedDeck']
 }
 
 function AudioDropdownMenuItems({
@@ -44,7 +46,40 @@ function AudioDropdownMenuItems({
   setLocalAudioTargetCardIds,
   setIsLocalAudioModalOpen,
   selectedCards,
+  selectedDeckId,
+  selectedDeck,
 }: AudioDropdownMenuItemsProps) {
+  const handleSelectWebVoiceVox = () => {
+    if (selectedCards.length === 0) {
+      if (!selectedDeckId) {
+        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+        return
+      }
+      if (selectedDeck?.has_mixed_note_types) {
+        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+        return
+      }
+    }
+    setIsTtsModalOpen(true)
+  }
+
+  const handleSelectLocalVoice = (engine: 'voicevox' | 'kokoro', voice: string | undefined) => {
+    if (selectedCards.length === 0) {
+      if (!selectedDeckId) {
+        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+        return
+      }
+      if (selectedDeck?.has_mixed_note_types) {
+        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+        return
+      }
+    }
+    setLocalAudioEngineId(engine)
+    setLocalAudioDefaultVoiceId(voice)
+    setLocalAudioTargetCardIds(selectedCards)
+    setIsLocalAudioModalOpen(true)
+  }
+
   return (
     <>
       <DropdownMenuSub>
@@ -52,16 +87,11 @@ function AudioDropdownMenuItems({
           <span className="font-medium">🇯🇵 Tiếng Nhật</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="w-48">
-          <DropdownMenuItem onClick={() => setIsTtsModalOpen(true)}>
+          <DropdownMenuItem onClick={handleSelectWebVoiceVox}>
             <span className="font-medium text-foreground">Web VoiceVox</span>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => {
-              setLocalAudioEngineId('voicevox')
-              setLocalAudioDefaultVoiceId('3')
-              setLocalAudioTargetCardIds(selectedCards)
-              setIsLocalAudioModalOpen(true)
-            }}
+            onClick={() => handleSelectLocalVoice('voicevox', '3')}
             className="flex items-center justify-between font-medium cursor-pointer"
           >
             <span>VoiceVox Local</span>
@@ -73,12 +103,7 @@ function AudioDropdownMenuItems({
       </DropdownMenuSub>
 
       <DropdownMenuItem
-        onClick={() => {
-          setLocalAudioEngineId('kokoro')
-          setLocalAudioDefaultVoiceId('af_bella')
-          setLocalAudioTargetCardIds(selectedCards)
-          setIsLocalAudioModalOpen(true)
-        }}
+        onClick={() => handleSelectLocalVoice('kokoro', 'af_bella')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
         <span>🇺🇸/🇬🇧 Tiếng Anh Local</span>
@@ -88,12 +113,7 @@ function AudioDropdownMenuItems({
       </DropdownMenuItem>
 
       <DropdownMenuItem
-        onClick={() => {
-          setLocalAudioEngineId('kokoro')
-          setLocalAudioDefaultVoiceId('zf_xiaobei')
-          setLocalAudioTargetCardIds(selectedCards)
-          setIsLocalAudioModalOpen(true)
-        }}
+        onClick={() => handleSelectLocalVoice('kokoro', 'zf_xiaobei')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
         <span>🇨🇳 Tiếng Trung Local</span>
@@ -103,12 +123,7 @@ function AudioDropdownMenuItems({
       </DropdownMenuItem>
 
       <DropdownMenuItem
-        onClick={() => {
-          setLocalAudioEngineId('kokoro')
-          setLocalAudioDefaultVoiceId('ef_dora')
-          setLocalAudioTargetCardIds(selectedCards)
-          setIsLocalAudioModalOpen(true)
-        }}
+        onClick={() => handleSelectLocalVoice('kokoro', 'ef_dora')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
         <span>🇪🇸 Tiếng Tây Ban Nha</span>
@@ -118,12 +133,7 @@ function AudioDropdownMenuItems({
       </DropdownMenuItem>
 
       <DropdownMenuItem
-        onClick={() => {
-          setLocalAudioEngineId('kokoro')
-          setLocalAudioDefaultVoiceId('ff_siwis')
-          setLocalAudioTargetCardIds(selectedCards)
-          setIsLocalAudioModalOpen(true)
-        }}
+        onClick={() => handleSelectLocalVoice('kokoro', 'ff_siwis')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
         <span>🇫🇷 Tiếng Pháp Local</span>
@@ -133,12 +143,7 @@ function AudioDropdownMenuItems({
       </DropdownMenuItem>
 
       <DropdownMenuItem
-        onClick={() => {
-          setLocalAudioEngineId('kokoro')
-          setLocalAudioDefaultVoiceId('if_sara')
-          setLocalAudioTargetCardIds(selectedCards)
-          setIsLocalAudioModalOpen(true)
-        }}
+        onClick={() => handleSelectLocalVoice('kokoro', 'if_sara')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
         <span>🇮🇹 Tiếng Ý Local</span>
@@ -148,12 +153,7 @@ function AudioDropdownMenuItems({
       </DropdownMenuItem>
 
       <DropdownMenuItem
-        onClick={() => {
-          setLocalAudioEngineId('kokoro')
-          setLocalAudioDefaultVoiceId('pf_dora')
-          setLocalAudioTargetCardIds(selectedCards)
-          setIsLocalAudioModalOpen(true)
-        }}
+        onClick={() => handleSelectLocalVoice('kokoro', 'pf_dora')}
         className="flex items-center justify-between font-medium cursor-pointer"
       >
         <span>🇧🇷 Tiếng Bồ Đào Nha</span>
@@ -202,6 +202,16 @@ export function BrowsePage() {
   } = browse
 
   const openWorksheetModal = () => {
+    if (selectedCards.length === 0) {
+      if (!browse.selectedDeckId && !browse.cardsQuery.data?.items[0]?.deck_id) {
+        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+        return
+      }
+      if (browse.selectedDeck?.has_mixed_note_types) {
+        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+        return
+      }
+    }
     const firstDeckId = browse.cardsQuery.data?.items[0]?.deck_id
     const targetDeckId = browse.selectedDeckId || firstDeckId || 1
     browse.setWorksheetTargetDeckId(targetDeckId)
@@ -210,6 +220,16 @@ export function BrowsePage() {
   }
 
   const openBatchStrokeModal = () => {
+    if (selectedCards.length === 0) {
+      if (!browse.selectedDeckId) {
+        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+        return
+      }
+      if (browse.selectedDeck?.has_mixed_note_types) {
+        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+        return
+      }
+    }
     browse.setStrokeModalMode('batch')
     browse.setIsStrokeModalOpen(true)
   }
@@ -253,20 +273,29 @@ export function BrowsePage() {
             onClick={openWorksheetModal}
             title={
               selectedCards.length === 0
-                ? 'In bài tập hoặc tạo trang trắng luyện viết cho bộ thẻ này'
+                ? browse.selectedDeck
+                  ? `In bài tập cho cả bộ deck "${browse.selectedDeck.name}" (${browse.selectedDeck.counts?.total ?? 0} thẻ)`
+                  : 'In bài tập hoặc tạo trang trắng luyện viết cho bộ thẻ này'
                 : `In bài tập cho ${selectedCards.length} thẻ đã chọn`
             }
           >
             <Printer className="size-3.5 text-primary" />
             <span>In bài tập</span>
-            {selectedCards.length > 0 && (
+            {selectedCards.length > 0 ? (
               <Badge
                 variant="secondary"
                 className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-bold bg-primary/15 text-primary rounded-full"
               >
                 {selectedCards.length}
               </Badge>
-            )}
+            ) : browse.selectedDeck ? (
+              <Badge
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-medium bg-muted text-muted-foreground rounded-full"
+              >
+                {browse.selectedDeck.counts?.total ?? 0}
+              </Badge>
+            ) : null}
           </Button>
 
           <Button
@@ -274,9 +303,22 @@ export function BrowsePage() {
             size="sm"
             className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1 bg-background hover:bg-muted border-border"
             onClick={openBatchStrokeModal}
+            title={
+              selectedCards.length === 0 && browse.selectedDeck
+                ? `Tạo nét SVG cho cả bộ deck "${browse.selectedDeck.name}" (${browse.selectedDeck.counts?.total ?? 0} thẻ)`
+                : undefined
+            }
           >
             <PenTool className="size-3.5 text-primary" />
             <span>Tạo nét SVG</span>
+            {selectedCards.length === 0 && browse.selectedDeck ? (
+              <Badge
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-medium bg-muted text-muted-foreground rounded-full"
+              >
+                {browse.selectedDeck.counts?.total ?? 0}
+              </Badge>
+            ) : null}
           </Button>
 
           <DropdownMenu>
@@ -299,6 +341,8 @@ export function BrowsePage() {
                 setLocalAudioTargetCardIds={setLocalAudioTargetCardIds}
                 setIsLocalAudioModalOpen={setIsLocalAudioModalOpen}
                 selectedCards={selectedCards}
+                selectedDeckId={browse.selectedDeckId}
+                selectedDeck={browse.selectedDeck}
               />
             </DropdownMenuContent>
           </DropdownMenu>
@@ -326,14 +370,21 @@ export function BrowsePage() {
               >
                 <MoreHorizontal className="size-4 text-foreground" />
                 <span>Tác vụ</span>
-                {selectedCards.length > 0 && (
+                {selectedCards.length > 0 ? (
                   <Badge
                     variant="secondary"
                     className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-bold bg-primary/15 text-primary rounded-full"
                   >
                     {selectedCards.length}
                   </Badge>
-                )}
+                ) : browse.selectedDeck ? (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-medium bg-muted text-muted-foreground rounded-full"
+                  >
+                    {browse.selectedDeck.counts?.total ?? 0}
+                  </Badge>
+                ) : null}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-xl shadow-lg border-border/80">
@@ -349,11 +400,15 @@ export function BrowsePage() {
                   <Printer className="size-4 text-primary" />
                   <span className="text-xs font-medium">In bài tập</span>
                 </div>
-                {selectedCards.length > 0 && (
+                {selectedCards.length > 0 ? (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-bold bg-primary/15 text-primary rounded-full">
                     {selectedCards.length}
                   </Badge>
-                )}
+                ) : browse.selectedDeck ? (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium bg-muted text-muted-foreground rounded-full">
+                    {browse.selectedDeck.counts?.total ?? 0}
+                  </Badge>
+                ) : null}
               </DropdownMenuItem>
 
               <DropdownMenuItem
@@ -365,7 +420,19 @@ export function BrowsePage() {
               </DropdownMenuItem>
 
               <DropdownMenuItem
-                onClick={() => setIsAudioSelectorOpen(true)}
+                onClick={() => {
+                  if (selectedCards.length === 0) {
+                    if (!browse.selectedDeckId) {
+                      toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+                      return
+                    }
+                    if (browse.selectedDeck?.has_mixed_note_types) {
+                      toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+                      return
+                    }
+                  }
+                  setIsAudioSelectorOpen(true)
+                }}
                 className="flex items-center gap-2 cursor-pointer py-2"
               >
                 <Volume2 className="size-4 text-primary" />
@@ -521,6 +588,8 @@ export function BrowsePage() {
           onClose={() => setIsLocalAudioModalOpen(false)}
           selectedCardIds={localAudioTargetCardIds}
           activeCardId={activeCardId}
+          deckId={browse.selectedDeckId || undefined}
+          deckName={browse.selectedDeck?.name}
           availableFieldNames={availableSourceFieldNames}
           availableAudioFieldNames={availableAudioFieldNames}
           engineId={localAudioEngineId}

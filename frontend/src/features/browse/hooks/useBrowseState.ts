@@ -38,7 +38,12 @@ export type BrowseDeck = {
   parent_id?: number | null
   path?: string
   note_type_id?: string | null
+  note_type_name?: string | null
+  note_type_ids?: string[]
+  note_type_names?: string[]
+  has_mixed_note_types?: boolean
   counts?: {
+    total?: number
     new?: number
     learn?: number
     due?: number
@@ -78,6 +83,13 @@ export type CardDetailResponse = {
     tags: string[]
   }
   fields: CardDetailField[]
+  media_assets?: Array<{
+    id: string
+    field_name: string
+    filename: string
+    mime_type: string
+    url: string
+  }>
   decks?: Array<{ id: number; name: string; path?: string }>
 }
 
@@ -365,6 +377,17 @@ export function useBrowseState() {
     enabled: Boolean(activeCardId),
   })
 
+  // Sample card detail query when no card is actively selected but modal is open
+  const sampleCardId = activeCardId || (cards.length > 0 ? String(cards[0].card_id) : null)
+  const deckSampleQuery = useQuery({
+    queryKey: ['browse', 'card-detail-sample', sampleCardId],
+    queryFn: () => appApi.get<CardDetailResponse>(`/browse/cards/${sampleCardId}`),
+    enabled: Boolean(!activeCardId && sampleCardId && (isTtsModalOpen || isLocalAudioModalOpen)),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const effectiveCardDetail = cardDetailQuery.data || deckSampleQuery.data
+
   // Populate editor state
   const ttsSourceFieldRef = useRef(ttsSourceField)
   ttsSourceFieldRef.current = ttsSourceField
@@ -384,44 +407,46 @@ export function useBrowseState() {
       setInitialFieldValues(fieldValues)
       setInitialDeckId(deckId)
       setInitialTags(tags)
-
-      if (cardDetailQuery.data.fields && cardDetailQuery.data.fields.length > 0) {
-        const fields = cardDetailQuery.data.fields
-        const sourceFieldNames = fields
-          .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
-          .map((field) => field.name)
-        const audioFieldNames = fields
-          .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
-          .map((field) => field.name)
-
-        if (sourceFieldNames.includes('Reading')) {
-          setTtsSourceField('Reading')
-        } else if (sourceFieldNames.includes('Word')) {
-          setTtsSourceField('Word')
-        } else if (sourceFieldNames.includes('Expression')) {
-          setTtsSourceField('Expression')
-        } else if (sourceFieldNames.includes('Kanji')) {
-          setTtsSourceField('Kanji')
-        } else if (sourceFieldNames.length > 0 && !sourceFieldNames.includes(ttsSourceFieldRef.current)) {
-          setTtsSourceField(sourceFieldNames[0])
-        } else if (sourceFieldNames.length === 0) {
-          setTtsSourceField('')
-        }
-
-        if (audioFieldNames.includes('Audio')) {
-          setTtsDestinationField('Audio')
-        } else if (audioFieldNames.includes('AudioReading')) {
-          setTtsDestinationField('AudioReading')
-        } else if (audioFieldNames.includes('Sound')) {
-          setTtsDestinationField('Sound')
-        } else if (audioFieldNames.length > 0 && !audioFieldNames.includes(ttsDestinationFieldRef.current)) {
-          setTtsDestinationField(audioFieldNames[0])
-        } else if (audioFieldNames.length === 0) {
-          setTtsDestinationField('')
-        }
-      }
     }
   }, [cardDetailQuery.data])
+
+  useEffect(() => {
+    if (effectiveCardDetail?.fields && effectiveCardDetail.fields.length > 0) {
+      const fields = effectiveCardDetail.fields
+      const sourceFieldNames = fields
+        .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+        .map((field) => field.name)
+      const audioFieldNames = fields
+        .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
+        .map((field) => field.name)
+
+      if (sourceFieldNames.includes('Reading')) {
+        setTtsSourceField('Reading')
+      } else if (sourceFieldNames.includes('Word')) {
+        setTtsSourceField('Word')
+      } else if (sourceFieldNames.includes('Expression')) {
+        setTtsSourceField('Expression')
+      } else if (sourceFieldNames.includes('Kanji')) {
+        setTtsSourceField('Kanji')
+      } else if (sourceFieldNames.length > 0 && !sourceFieldNames.includes(ttsSourceFieldRef.current)) {
+        setTtsSourceField(sourceFieldNames[0])
+      } else if (sourceFieldNames.length === 0) {
+        setTtsSourceField('')
+      }
+
+      if (audioFieldNames.includes('Audio')) {
+        setTtsDestinationField('Audio')
+      } else if (audioFieldNames.includes('AudioReading')) {
+        setTtsDestinationField('AudioReading')
+      } else if (audioFieldNames.includes('Sound')) {
+        setTtsDestinationField('Sound')
+      } else if (audioFieldNames.length > 0 && !audioFieldNames.includes(ttsDestinationFieldRef.current)) {
+        setTtsDestinationField(audioFieldNames[0])
+      } else if (audioFieldNames.length === 0) {
+        setTtsDestinationField('')
+      }
+    }
+  }, [effectiveCardDetail])
 
   const isDirty = (() => {
     if (!activeCardId || !cardDetailQuery.data) return false
@@ -528,7 +553,7 @@ export function useBrowseState() {
   const updateMutation = useMutation({
     mutationFn: (payload: { field_values: Record<string, string>; deck_id?: number; tags?: string[] }) =>
       appApi.mutate(`/browse/cards/${activeCardId}`, 'PATCH', payload),
-    onSuccess: () => {
+    onSuccess: async () => {
       if (urlDeckId) {
         toast.success('Đã lưu thay đổi thẻ.', {
           duration: 2000,
@@ -545,7 +570,7 @@ export function useBrowseState() {
       setInitialTags(editTags)
       if (activeCardId) {
         const noteId = cardDetailQuery.data?.note?.id ? String(cardDetailQuery.data.note.id) : null
-        void updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
+        await updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
       }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })
@@ -604,7 +629,8 @@ export function useBrowseState() {
   // VoiceVox TTS Generate Mutation
   const generateTtsMutation = useMutation({
     mutationFn: (payload: {
-      card_ids: string[]
+      card_ids?: string[]
+      deck_id?: number
       source_field: string
       destination_field: string
       character_id?: string
@@ -623,7 +649,7 @@ export function useBrowseState() {
       if (ttsApiKey.trim()) {
         void saveApiKeyIfValid(ttsApiKey, false)
       }
-      toast.success(`Đã tạo âm thanh VoiceVox cho ${targetTtsCardIds.length} thẻ!`, { id: 'generate-tts' })
+      toast.success('Đã tạo âm thanh VoiceVox thành công!', { id: 'generate-tts' })
       setIsTtsModalOpen(false)
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       if (activeCardId) {
@@ -764,6 +790,11 @@ export function useBrowseState() {
     deck.name.toLowerCase().includes(deckSearch.trim().toLowerCase()),
   )
 
+  const selectedDeck =
+    selectedDeckId !== null
+      ? (decksQuery.data?.decks || []).find((deck) => deck.id === selectedDeckId) || null
+      : null
+
   const handleAddTag = () => {
     const tag = newTagInput.trim()
     if (tag && !editTags.includes(tag)) {
@@ -784,7 +815,7 @@ export function useBrowseState() {
 
   const availableSourceFieldNames = Array.from(
     new Set(
-      (cardDetailQuery.data?.fields || [])
+      (effectiveCardDetail?.fields || [])
         .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
         .map((field) => field.name)
         .filter(Boolean),
@@ -792,7 +823,7 @@ export function useBrowseState() {
   )
   const availableAudioFieldNames = Array.from(
     new Set(
-      (cardDetailQuery.data?.fields || [])
+      (effectiveCardDetail?.fields || [])
         .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
         .map((field) => field.name)
         .filter(Boolean),
@@ -807,6 +838,7 @@ export function useBrowseState() {
     audioPlayerRef,
     isAdmin,
     selectedDeckId,
+    selectedDeck,
     setSelectedDeckId,
     deckSearch,
     setDeckSearch,

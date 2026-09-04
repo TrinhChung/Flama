@@ -11,6 +11,7 @@ import {
   BookOpen,
   MoreVertical,
   Pencil,
+  RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +31,7 @@ type StudyHeaderToolbarProps = {
   cardId?: string | null
   canEdit?: boolean
   onEdit?: () => void
+  onReload?: () => void
   newCount?: number
   learnCount?: number
   dueCount?: number
@@ -44,6 +46,7 @@ export function StudyHeaderToolbar({
   cardId,
   canEdit = false,
   onEdit,
+  onReload,
   newCount = 0,
   learnCount = 0,
   dueCount = 0,
@@ -157,6 +160,18 @@ export function StudyHeaderToolbar({
                   <span className="text-xs font-medium">Nhập dữ liệu (Import)</span>
                 </Link>
               </DropdownMenuItem>
+
+              {onReload ? (
+                <DropdownMenuItem
+                  onClick={onReload}
+                  className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary"
+                >
+                  <div className="flex items-center gap-2.5 w-full">
+                    <RotateCcw className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-medium">Tải lại phiên học</span>
+                  </div>
+                </DropdownMenuItem>
+              ) : null}
 
               <DropdownMenuSeparator className="my-1" />
 

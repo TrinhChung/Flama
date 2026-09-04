@@ -16,6 +16,7 @@ import {
 import type {
   PersistedStudySession,
   StudyCommitReason,
+  StudySessionAccumulatedStats,
   StudySessionUndoItem,
 } from './sessionStore'
 
@@ -169,6 +170,34 @@ function normalizeUndoHistory(
   })
 }
 
+function normalizeAccumulatedStats(value: unknown): StudySessionAccumulatedStats | undefined {
+  if (!isRecord(value)) return undefined
+  const totalReviews = Number(value.total_reviews)
+  const totalDurationMs = Number(value.total_duration_ms)
+  const againCount = Number(value.again_count)
+  const hardCount = Number(value.hard_count)
+  const goodCount = Number(value.good_count)
+  const easyCount = Number(value.easy_count)
+  if (
+    !Number.isFinite(totalReviews) || totalReviews < 0
+    || !Number.isFinite(totalDurationMs) || totalDurationMs < 0
+    || !Number.isFinite(againCount) || againCount < 0
+    || !Number.isFinite(hardCount) || hardCount < 0
+    || !Number.isFinite(goodCount) || goodCount < 0
+    || !Number.isFinite(easyCount) || easyCount < 0
+  ) {
+    return undefined
+  }
+  return {
+    total_reviews: Math.round(totalReviews),
+    total_duration_ms: Math.round(totalDurationMs),
+    again_count: Math.round(againCount),
+    hard_count: Math.round(hardCount),
+    good_count: Math.round(goodCount),
+    easy_count: Math.round(easyCount),
+  }
+}
+
 export function normalizePersistedStudySession(
   value: unknown,
 ): StudySessionRestoreResult {
@@ -296,6 +325,12 @@ export function normalizePersistedStudySession(
     )
   }
 
+  const accumulatedStats = normalizeAccumulatedStats(value.accumulated_stats)
+  const sessionStartedAtMs = typeof value.session_started_at_ms === 'number'
+    && Number.isFinite(value.session_started_at_ms)
+    ? value.session_started_at_ms
+    : undefined
+
   return {
     status: 'restored',
     migrated,
@@ -307,6 +342,8 @@ export function normalizePersistedStudySession(
       undo_history: undoHistory,
       active_card_id: activeCardId,
       opened_client_at_ms: value.opened_client_at_ms,
+      session_started_at_ms: sessionStartedAtMs,
+      accumulated_stats: accumulatedStats,
       status: value.status,
       commit_id: commitId,
       commit_reason: commitReason,
