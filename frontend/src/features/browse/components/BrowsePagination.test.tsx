@@ -67,7 +67,7 @@ describe('BrowsePagination', () => {
     expect(container.textContent).toContain('4 đã chọn')
   })
 
-  it('triggers handlePerPageChange when per-page selector changes', async () => {
+  it('triggers handlePerPageChange when per-page dropdown item is clicked', async () => {
     const setPage = vi.fn()
     const handlePerPageChange = vi.fn()
 
@@ -84,12 +84,25 @@ describe('BrowsePagination', () => {
       )
     })
 
-    const select = container.querySelector('select')
-    expect(select).not.toBeNull()
+    const trigger = container.querySelector(
+      'button[aria-label="Chọn số dòng trên một trang"]',
+    ) as HTMLButtonElement
+    expect(trigger).not.toBeNull()
+    expect(trigger.textContent).toContain('20 dòng')
 
     await act(async () => {
-      select!.value = '50'
-      select!.dispatchEvent(new Event('change', { bubbles: true }))
+      trigger.focus()
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const option50 = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+      (el) => el.textContent?.includes('50'),
+    ) as HTMLElement
+    expect(option50).toBeDefined()
+
+    await act(async () => {
+      option50.click()
     })
 
     expect(handlePerPageChange).toHaveBeenCalledWith(50)

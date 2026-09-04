@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import {
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -7,8 +9,15 @@ import {
   MoreHorizontal,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { NativeSelect } from '@/components/ui/native-select'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export interface BrowsePaginationProps {
   page: number
@@ -94,21 +103,44 @@ export function BrowsePagination({
           )}
         </div>
 
-        {/* Per-Page Selector */}
-        <div className="flex items-center gap-1 shrink-0 ml-auto sm:ml-2">
-          <span className="hidden md:inline text-[11px] text-muted-foreground">Mỗi trang:</span>
-          <NativeSelect
-            value={perPage}
-            onChange={(e) => handlePerPageChange(Number(e.target.value))}
-            aria-label="Số thẻ trên mỗi trang"
-            className="h-7 py-0 pl-2 pr-6 text-xs rounded-lg font-semibold border-border/70 bg-card hover:bg-muted/50 transition-colors shadow-2xs"
-          >
-            <option value={20}>20</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={200}>200</option>
-            <option value={500}>500</option>
-          </NativeSelect>
+        {/* Per-Page Dropdown Selector */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-2">
+          <span className="hidden md:inline text-[11px] text-muted-foreground font-medium">Mỗi trang:</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs font-semibold rounded-lg border-border/70 bg-card hover:bg-muted/60 text-foreground flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all"
+                aria-label="Chọn số dòng trên một trang"
+              >
+                <span>{perPage} dòng</span>
+                <ChevronDown className="size-3 text-muted-foreground opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-32 min-w-28 p-1 rounded-xl shadow-lg border-border/80">
+              <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">
+                Số dòng / trang
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="my-1" />
+              {[20, 50, 100, 200, 500].map((count) => {
+                const isSelected = perPage === count
+                return (
+                  <DropdownMenuItem
+                    key={count}
+                    onClick={() => handlePerPageChange(count)}
+                    className={`flex items-center justify-between text-xs font-medium cursor-pointer py-1.5 px-2 rounded-lg transition-colors ${
+                      isSelected ? 'bg-primary/10 text-primary font-bold' : 'text-foreground hover:bg-muted/60'
+                    }`}
+                  >
+                    <span>{count} dòng</span>
+                    {isSelected && <Check className="size-3.5 text-primary shrink-0" />}
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
