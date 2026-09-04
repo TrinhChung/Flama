@@ -61,9 +61,13 @@ vi.mock('../session/sessionStore', () => ({
   ),
 }))
 
-vi.mock('../session/studySessionLease', () => ({
-  holdStudyScopeLease: mocks.holdLease,
-}))
+vi.mock('../session/studySessionLease', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../session/studySessionLease')>()
+  return {
+    ...actual,
+    holdStudyScopeLease: mocks.holdLease,
+  }
+})
 
 import { useStudySession } from './useStudySession'
 

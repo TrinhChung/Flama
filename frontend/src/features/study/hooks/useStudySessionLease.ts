@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { holdStudyScopeLease } from '../session/studySessionLease'
+import {
+  getLeaseEpoch,
+  getStudyLockName,
+  holdStudyScopeLease,
+  incrementLeaseEpoch,
+  LEASE_EPOCH_PREFIX,
+} from '../session/studySessionLease'
 import type { PersistedStudySession } from '../session/sessionStore'
 
 export const HANDOFF_CHANNEL_PREFIX = 'flama-study-handoff:v1:'
@@ -24,7 +30,9 @@ export type HandoffMessage = {
     | 'handoff-accepted'
     | 'handoff-rejected'
     | 'handoff-request'
+    | 'handoff-forced'
   requester_id: string
+  epoch?: number
 }
 
 export function isHandoffMessage(value: unknown): value is HandoffMessage {
@@ -35,6 +43,7 @@ export function isHandoffMessage(value: unknown): value is HandoffMessage {
       message.type === 'handoff-accepted'
       || message.type === 'handoff-rejected'
       || message.type === 'handoff-request'
+      || message.type === 'handoff-forced'
     )
     && typeof message.requester_id === 'string'
   )
@@ -82,6 +91,7 @@ export function useStudySessionLease({
   const requestOnBlockedRef = useRef(false)
   const takeoverTimerRef = useRef<number | null>(null)
   const [leaseClientId] = useState(createLeaseClientId)
+  const myEpochRef = useRef<number>(1)
 
   const beginLeaseWork = useCallback((controller: AbortController) => {
     const counts = leaseWorkCountsRef.current
@@ -148,9 +158,12 @@ export function useStudySessionLease({
       status: 'checking',
       error: null,
     })
+    const epoch = getLeaseEpoch(currentScopeKey)
+    myEpochRef.current = epoch
+    const lockName = getStudyLockName(currentScopeKey, epoch)
     void holdStudyScopeLease(
       navigator.locks,
-      `flama-study:${currentScopeKey}`,
+      lockName,
       controller.signal,
       {
         onBlocked: () => {
@@ -307,6 +320,42 @@ export function useStudySessionLease({
         setTakeoverState('unavailable')
         return
       }
+      if (message.type === 'handoff-forced') {
+        const incomingEpoch = message.epoch ?? 0
+        if (incomingEpoch > myEpochRef.current || message.requester_id !== leaseClientId) {
+          clearTakeoverTimer()
+          const waitingController = leaseControllerRef.current
+          if (
+            !hasLeaseRef.current
+            && waitingController
+            && !waitingController.signal.aborted
+          ) {
+            waitingController.abort()
+            setLoading(false)
+            setLeaseState({
+              key: currentScopeKey,
+              status: 'transferred',
+              error: null,
+            })
+          } else if (hasLeaseRef.current) {
+            hasLeaseRef.current = false
+            const controller = leaseControllerRef.current
+            if (controller) {
+              ownedLeaseControllersRef.current.delete(controller)
+              controller.abort()
+            }
+            activateSession(null)
+            setLoading(false)
+            setTakeoverState('idle')
+            setLeaseState({
+              key: currentScopeKey,
+              status: 'transferred',
+              error: null,
+            })
+          }
+        }
+        return
+      }
       if (
         message.type !== 'handoff-request'
         || message.requester_id === leaseClientId
@@ -417,6 +466,41 @@ export function useStudySessionLease({
     setLoading,
   ])
 
+  useEffect(() => {
+    if (!currentScopeKey) return
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === `${LEASE_EPOCH_PREFIX}${currentScopeKey}`
+        && event.newValue
+      ) {
+        const incomingEpoch = parseInt(event.newValue, 10)
+        if (Number.isFinite(incomingEpoch) && incomingEpoch > myEpochRef.current) {
+          clearTakeoverTimer()
+          if (hasLeaseRef.current) {
+            hasLeaseRef.current = false
+            const controller = leaseControllerRef.current
+            if (controller) {
+              ownedLeaseControllersRef.current.delete(controller)
+              controller.abort()
+            }
+            activateSession(null)
+            setLoading(false)
+            setTakeoverState('idle')
+            setLeaseState({
+              key: currentScopeKey,
+              status: 'transferred',
+              error: null,
+            })
+          }
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [activateSession, clearTakeoverTimer, currentScopeKey, setLoading])
+
   const hasLease = Boolean(
     currentScopeKey
     && leaseState.key === currentScopeKey
@@ -464,6 +548,26 @@ export function useStudySessionLease({
     leaseState.status,
   ])
 
+  const forceTakeover = useCallback(() => {
+    if (!currentScopeKey) return
+    clearTakeoverTimer()
+    const nextEpoch = incrementLeaseEpoch(currentScopeKey)
+    myEpochRef.current = nextEpoch
+    try {
+      leaseChannelRef.current?.postMessage({
+        type: 'handoff-forced',
+        requester_id: leaseClientId,
+        epoch: nextEpoch,
+      } satisfies HandoffMessage)
+    } catch {}
+    const currentController = leaseControllerRef.current
+    if (currentController && !currentController.signal.aborted) {
+      currentController.abort()
+    }
+    setTakeoverState('idle')
+    setLeaseAttempt((current) => current + 1)
+  }, [clearTakeoverTimer, currentScopeKey, leaseClientId])
+
   const isCurrentLease = useCallback((controller: AbortController) => (
     leaseControllerRef.current === controller
     && !controller.signal.aborted
@@ -482,6 +586,7 @@ export function useStudySessionLease({
     hasLeaseWork,
     releaseLeaseWhenIdle,
     requestTakeover,
+    forceTakeover,
     isCurrentLease,
   }
 }

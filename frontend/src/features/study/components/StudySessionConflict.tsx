@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { ArrowRightLeft, LoaderCircle, LogOut, MonitorSmartphone } from 'lucide-react'
+import { ArrowRightLeft, LoaderCircle, LogOut, MonitorSmartphone, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 export type StudySessionTakeoverState =
   | 'idle'
@@ -13,6 +14,7 @@ type StudySessionConflictProps = {
   deckName?: string | null
   takeoverState: StudySessionTakeoverState
   onTakeover: () => void
+  onForceTakeover?: () => void
   onLeave: () => void
 }
 
@@ -20,6 +22,7 @@ export function StudySessionConflict({
   deckName,
   takeoverState,
   onTakeover,
+  onForceTakeover,
   onLeave,
 }: StudySessionConflictProps) {
   const titleRef = useRef<HTMLHeadingElement>(null)
@@ -84,7 +87,7 @@ export function StudySessionConflict({
           {statusMessage}
         </div>
 
-        <div className="flex flex-col-reverse justify-center gap-3 sm:flex-row">
+        <div className="flex flex-col-reverse justify-center gap-3 sm:flex-row flex-wrap">
           <Button
             type="button"
             variant="outline"
@@ -97,6 +100,7 @@ export function StudySessionConflict({
           </Button>
           <Button
             type="button"
+            variant={unavailable ? 'outline' : 'default'}
             disabled={pending}
             onClick={onTakeover}
             className="w-full sm:w-auto"
@@ -113,6 +117,23 @@ export function StudySessionConflict({
                 ? 'Gửi lại yêu cầu'
                 : 'Chuyển phiên sang tab này'}
           </Button>
+          {onForceTakeover && (unavailable || takeoverState === 'idle') ? (
+            <Button
+              type="button"
+              variant={unavailable ? 'default' : 'ghost'}
+              onClick={onForceTakeover}
+              className={cn(
+                'w-full sm:w-auto text-xs sm:text-sm font-semibold',
+                unavailable
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-700 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+              title="Buộc mở phiên học tại đây nếu tab cũ đã đóng hoặc thiết bị di động bị treo"
+            >
+              <Zap className="mr-2 size-4 text-amber-300" aria-hidden="true" />
+              Buộc mở phiên tại đây
+            </Button>
+          ) : null}
         </div>
       </div>
     </section>

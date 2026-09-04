@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
@@ -10,6 +10,7 @@ import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
 import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
+import { StudyExitConfirmDialog } from '../components/StudyExitConfirmDialog'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
 import type { Rating } from '../types'
@@ -31,6 +32,52 @@ export function StudyPage() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const startedAtRef = useRef(performance.now())
+
+  const uncommittedCount = study.session?.events?.length ?? 0
+  const isSessionActive = study.session?.status === 'active'
+  const hasUncommittedWork = Boolean(isSessionActive && uncommittedCount > 0)
+  const [isExiting, setIsExiting] = useState(false)
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasUncommittedWork && currentLocation.pathname !== nextLocation.pathname
+  )
+
+  useEffect(() => {
+    if (!hasUncommittedWork) return
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [hasUncommittedWork])
+
+  const handleSaveAndExit = useCallback(async () => {
+    if (!study.session) {
+      blocker.proceed?.()
+      return
+    }
+    setIsExiting(true)
+    try {
+      await study.commit({ reason: 'manual_exit' })
+      blocker.proceed?.()
+    } catch (err) {
+      console.error('Failed to commit study session before exit:', err)
+    } finally {
+      setIsExiting(false)
+    }
+  }, [blocker, study])
+
+  const handleDiscardAndExit = useCallback(() => {
+    blocker.proceed?.()
+  }, [blocker])
+
+  const handleContinueStudy = useCallback(() => {
+    blocker.reset?.()
+  }, [blocker])
 
   const compositionsList = useMemo(() => {
     const comps = study.session?.snapshot.compositions
@@ -287,6 +334,7 @@ export function StudyPage() {
           deckName={deckName}
           takeoverState={study.takeoverState}
           onTakeover={study.requestTakeover}
+          onForceTakeover={study.forceTakeover}
           onLeave={() => navigate('/dashboard', { replace: true })}
         />
       </div>
@@ -437,6 +485,15 @@ export function StudyPage() {
         template={template}
         content={content}
         onCardUpdated={study.updateCardContent}
+      />
+
+      <StudyExitConfirmDialog
+        open={blocker.state === 'blocked'}
+        eventsCount={uncommittedCount}
+        isCommitting={isExiting}
+        onSaveAndExit={handleSaveAndExit}
+        onContinueStudy={handleContinueStudy}
+        onDiscardAndExit={handleDiscardAndExit}
       />
     </div>
   )

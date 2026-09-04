@@ -44,6 +44,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
     ...actual,
     useNavigate: () => mocks.navigate,
     useSearchParams: () => [new URLSearchParams('deck_id=12')],
+    useBlocker: () => ({ state: 'unblocked', proceed: vi.fn(), reset: vi.fn() }),
   }
 })
 

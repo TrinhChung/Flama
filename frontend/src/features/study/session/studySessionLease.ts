@@ -1,3 +1,30 @@
+export const LEASE_EPOCH_PREFIX = 'flama-study-lease-epoch:'
+
+export function getLeaseEpoch(scopeKey: string): number {
+  try {
+    const raw = globalThis.localStorage?.getItem(`${LEASE_EPOCH_PREFIX}${scopeKey}`)
+    const parsed = raw ? parseInt(raw, 10) : 1
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+  } catch {
+    return 1
+  }
+}
+
+export function incrementLeaseEpoch(scopeKey: string): number {
+  const next = getLeaseEpoch(scopeKey) + 1
+  try {
+    globalThis.localStorage?.setItem(`${LEASE_EPOCH_PREFIX}${scopeKey}`, String(next))
+  } catch {}
+  return next
+}
+
+export function getStudyLockName(scopeKey: string, epoch: number = 1): string {
+  if (epoch <= 1) {
+    return `flama-study:${scopeKey}`
+  }
+  return `flama-study:${scopeKey}:epoch:${epoch}`
+}
+
 export type StudyLeaseHandlers = {
   onBlocked: () => void
   onAcquired: () => void

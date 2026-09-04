@@ -75,4 +75,33 @@ describe('StudySessionConflict', () => {
 
     await act(async () => root.unmount())
   })
+
+  it('renders force takeover button and triggers onForceTakeover when clicked', async () => {
+    const onTakeover = vi.fn()
+    const onForceTakeover = vi.fn()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <StudySessionConflict
+          takeoverState="unavailable"
+          onTakeover={onTakeover}
+          onForceTakeover={onForceTakeover}
+          onLeave={vi.fn()}
+        />,
+      )
+    })
+
+    const forceButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('Buộc mở phiên tại đây'),
+    )
+    expect(forceButton).toBeDefined()
+    await act(async () => forceButton?.click())
+
+    expect(onForceTakeover).toHaveBeenCalledOnce()
+
+    await act(async () => root.unmount())
+  })
 })
