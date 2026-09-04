@@ -2,7 +2,7 @@ import {
   AlertTriangle,
   BookOpen,
   HelpCircle,
-  LifeBuoy,
+  type LucideIcon,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ export interface ContextHelpButtonProps {
   variant?: 'button' | 'icon' | 'outline' | 'subtle'
   size?: 'sm' | 'default' | 'xs'
   className?: string
+  icon?: LucideIcon
 }
 
 export function ContextHelpButton({
@@ -43,7 +44,10 @@ export function ContextHelpButton({
   variant = 'outline',
   size = 'sm',
   className = '',
+  icon,
 }: ContextHelpButtonProps) {
+  const IconComponent = icon || HelpCircle
+
   // If there's no troubleshootPath, render a direct link or tooltip button
   if (!troubleshootPath) {
     if (variant === 'icon') {
@@ -58,7 +62,7 @@ export function ContextHelpButton({
                 className={`size-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all ${className}`}
               >
                 <Link to={guidePath} aria-label={tooltip}>
-                  <HelpCircle className="size-4" />
+                  <IconComponent className="size-4" />
                 </Link>
               </Button>
             </TooltipTrigger>
@@ -80,7 +84,7 @@ export function ContextHelpButton({
         } ${className}`}
       >
         <Link to={guidePath}>
-          <HelpCircle className="size-3.5" />
+          <IconComponent className="size-3.5" />
           <span>{label}</span>
         </Link>
       </Button>
@@ -98,7 +102,7 @@ export function ContextHelpButton({
             className={`size-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all ${className}`}
             aria-label="Menu Trợ giúp"
           >
-            <HelpCircle className="size-4" />
+            <IconComponent className="size-4" />
           </Button>
         ) : (
           <Button
@@ -108,7 +112,7 @@ export function ContextHelpButton({
               size === 'xs' ? 'h-7 text-xs px-2.5 rounded-lg' : 'rounded-xl'
             } ${className}`}
           >
-            <LifeBuoy className="size-3.5 text-primary" />
+            <IconComponent className="size-3.5 text-muted-foreground" />
             <span>{label}</span>
           </Button>
         )}

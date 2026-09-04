@@ -43,6 +43,15 @@ from models.template import Template
 
 logger = logging.getLogger(__name__)
 FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
+ALLOWED_TEMPLATE_HOTFIX_FIELDS = frozenset(
+    {"name", "front_html", "back_html", "shared_css"}
+)
+
+
+def _is_template_content_only_payload(payload: dict[str, Any]) -> bool:
+    if not payload:
+        return True
+    return bool(set(payload.keys()).issubset(ALLOWED_TEMPLATE_HOTFIX_FIELDS))
 
 
 class ContentApiError(ValueError):
@@ -632,11 +641,12 @@ def update_template(
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     template = _template(note_type_id=note_type.id, template_id=template_id)
-    if {"name", "front_html", "back_html", "shared_css"}.intersection(payload):
-        _ensure_version_safe_template_mutation(
-            note_type=note_type,
-            owner_user_id=user_id,
-        )
+    is_content_only = _is_template_content_only_payload(payload)
+    _ensure_version_safe_template_mutation(
+        note_type=note_type,
+        owner_user_id=user_id,
+        allow_released_template_content_hotfix=is_content_only,
+    )
     if "name" in payload:
         template.name = str(payload.get("name") or "").strip() or template.name
     if "front_html" in payload:
@@ -978,6 +988,15 @@ def create_note(
     )
     db.session.add(note)
     db.session.flush()
+    from app.services import media_staging_service
+    committed_values = media_staging_service.commit_all_staged_urls_in_field_values(
+        user_id=user_id,
+        note_id=note.id,
+        field_values=note.field_values,
+    )
+    if committed_values != note.field_values:
+        note.field_values = committed_values
+        db.session.flush()
     _create_cards(note)
     deck_working_tree_service.mark_note_fields_changed(
         note=note,
@@ -1055,6 +1074,12 @@ def update_note(
     if validated.field_updates:
         values = dict(note.field_values or {})
         values.update(validated.field_updates)
+        from app.services import media_staging_service
+        values = media_staging_service.commit_all_staged_urls_in_field_values(
+            user_id=user_id,
+            note_id=note.id,
+            field_values=values,
+        )
         note.field_values = values
     if validated.update_tags:
         note.tags = validated.tags
@@ -1144,6 +1169,7 @@ def _ensure_version_safe_template_mutation(
     *,
     note_type: NoteType,
     owner_user_id: int,
+    allow_released_template_content_hotfix: bool = False,
 ) -> None:
     """Prevent template/card changes from bypassing immutable deck releases.
 
@@ -1153,6 +1179,11 @@ def _ensure_version_safe_template_mutation(
     into installed decks and could destroy CardProgress history.  Keep the
     operation closed until template/card changes have their own release-safe
     representation.
+
+    TEMPORARY (#138 / P3 compatibility):
+    Allows the source author to hotfix existing template presentation content
+    (front_html, back_html, shared_css, name) in-place without deleting or
+    recreating physical Cards, pending full P3 presentation versioning (#137).
     """
 
     if not deck_working_tree_service.note_type_has_shared_release_dependents(
@@ -1160,6 +1191,13 @@ def _ensure_version_safe_template_mutation(
         owner_user_id=owner_user_id,
     ):
         return
+
+    is_source_author = int(note_type.user_id) == int(owner_user_id)
+    if is_source_author and allow_released_template_content_hotfix:
+        # TEMPORARY: P3/#137 compatibility hotfix path.
+        # Overwrites the live compatibility Template row in place.
+        return
+
     raise ContentApiError(
         "SHARED_SCHEMA_VERSIONING_REQUIRED",
         (

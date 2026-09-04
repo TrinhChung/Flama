@@ -136,6 +136,7 @@ class TestWorksheetService(unittest.TestCase):
         payload = {
             "template_id": "kanji_stroke",
             "deck_id": self.deck.id,
+            "note_type_id": self.note_type.id,
             "field_mapping": {
                 "kanji": "Expression",
                 "reading": "Reading",
@@ -321,6 +322,67 @@ class TestWorksheetService(unittest.TestCase):
         # Verify monochrome stroke class and styles
         self.assertIn("flama-stroke-monochrome", html_out)
 
+    def test_genkouyoushi_blank_and_text_modes(self):
+        # 1. Blank worksheet generation without any deck_id
+        blank_payload = {
+            "template_id": "genkouyoushi",
+            "options": {
+                "content_mode": "blank",
+                "grid_columns": 20,
+                "grid_rows": 20,
+                "header_student_style": "chinese",
+                "title_placement": "first_row",
+                "header_title": "如何离开手机",
+                "essay_page_count": 1,
+            },
+        }
+        res_blank = generate_worksheet_preview(user_id=self.user.id, payload=blank_payload)
+        self.assertEqual(res_blank["template"]["id"], "genkouyoushi")
+        self.assertEqual(res_blank["deck_id"], 0)
+        self.assertEqual(res_blank["total_pages"], 1)
+        self.assertEqual(len(res_blank["pages"][0]["items"]), 20)  # 20 rows
+        self.assertEqual(len(res_blank["pages"][0]["items"][0]["cells"]), 20)  # 20 cells per row
+
+        # Row 0 cells should be completely blank in blank mode
+        self.assertTrue(all(c["is_blank"] for c in res_blank["pages"][0]["items"][0]["cells"]))
+
+        html_blank = render_printable_html(res_blank)
+        self.assertIn("genkou-sheet-body", html_blank)
+        self.assertIn("班级", html_blank)
+        self.assertIn("姓名", html_blank)
+        self.assertIn("学号", html_blank)
+        self.assertIn("分数", html_blank)
+        self.assertIn("genkou-spacer-band", html_blank)
+        self.assertIn("400格", html_blank)
+
+        # 2. Text-filled worksheet generation
+        text_payload = {
+            "template_id": "genkouyoushi",
+            "deck_id": self.deck.id,
+            "options": {
+                "content_mode": "text",
+                "custom_text": "随着现代社会的发展，由于科技越来越发达，手机、电脑也走进了人们的生活。",
+                "grid_columns": 20,
+                "grid_rows": 20,
+                "header_student_style": "vietnamese",
+                "title_placement": "header",
+                "header_title": "Tập làm văn tiếng Trung",
+                "essay_page_count": 1,
+            },
+        }
+        res_text = generate_worksheet_preview(user_id=self.user.id, payload=text_payload)
+        self.assertEqual(res_text["template"]["id"], "genkouyoushi")
+        self.assertEqual(res_text["total_pages"], 1)
+        # Check that characters are placed in row 0
+        first_row_chars = "".join([c["char"] for c in res_text["pages"][0]["items"][0]["cells"]])
+        self.assertIn("随着现代社会的发展", first_row_chars)
+
+        html_text = render_printable_html(res_text)
+        self.assertIn("Lớp: ________________", html_text)
+        self.assertIn("Họ tên: ________________", html_text)
+        self.assertIn("Tập làm văn tiếng Trung", html_text)
+
 
 if __name__ == "__main__":
     unittest.main()
+

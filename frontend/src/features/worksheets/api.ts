@@ -11,8 +11,15 @@ export async function fetchWorksheetTemplates(): Promise<WorksheetTemplate[]> {
   return data.templates
 }
 
-export async function fetchDeckWorksheetMeta(deckId: number): Promise<DeckWorksheetMeta> {
-  return apiRequest<DeckWorksheetMeta>(`/api/decks/${deckId}/worksheets/meta`)
+export async function fetchWorksheetMeta(deckId?: number | null): Promise<DeckWorksheetMeta> {
+  if (deckId && deckId > 0) {
+    return apiRequest<DeckWorksheetMeta>(`/api/decks/${deckId}/worksheets/meta`)
+  }
+  return apiRequest<DeckWorksheetMeta>('/api/worksheets/meta')
+}
+
+export async function fetchDeckWorksheetMeta(deckId?: number | null): Promise<DeckWorksheetMeta> {
+  return fetchWorksheetMeta(deckId)
 }
 
 export async function generateWorksheetPreview(

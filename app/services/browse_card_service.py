@@ -1097,6 +1097,12 @@ def _update_owned_browse_card(
         next_values = dict(note_obj.field_values or {})
         for key_name, value in validated.field_updates.items():
             next_values[key_name] = value
+        from app.services import media_staging_service
+        next_values = media_staging_service.commit_all_staged_urls_in_field_values(
+            user_id=user_id,
+            note_id=note_obj.id,
+            field_values=next_values,
+        )
         note_obj.field_values = next_values
 
     deck_changed = validated.update_deck and original_deck_id != note_obj.deck_id

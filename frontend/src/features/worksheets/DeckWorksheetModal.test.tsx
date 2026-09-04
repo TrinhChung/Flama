@@ -99,6 +99,24 @@ describe('DeckWorksheetModal Live Studio', () => {
           rows_per_page: 15,
         },
       },
+      {
+        id: 'genkouyoushi',
+        name_vi: 'Giấy làm văn Genkō Yōshi / 作文纸 (400 ô)',
+        name_en: 'Genkō Yōshi Essay Sheet (400 Grids)',
+        description_vi: 'Mẫu giấy kẻ ô vuông chuẩn 400 ô hoặc 200 ô để luyện viết văn.',
+        description_en: 'Standard 400-grid or 200-grid essay paper.',
+        category: 'essay' as const,
+        supported_orientations: ['portrait' as const],
+        default_orientation: 'portrait' as const,
+        default_rows_per_page: 20,
+        field_slots: [],
+        default_options: {
+          grid_columns: 20,
+          grid_rows: 20,
+          box_style: 'square' as const,
+          content_mode: 'blank' as const,
+        },
+      },
     ],
   }
 
@@ -401,5 +419,141 @@ describe('DeckWorksheetModal Live Studio', () => {
     expect(document.body.textContent).toContain('+1 dòng')
     expect(document.body.textContent).toContain('Điền đầy trang cuối bằng dòng trống')
   })
+
+  it('switches to genkouyoushi template and renders essay controls', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Find and click Genkouyoushi template card
+    const genkouCard = Array.from(document.querySelectorAll('h4')).find((h) =>
+      h.textContent?.includes('Genkō Yōshi') || h.textContent?.includes('400 ô'),
+    )
+    expect(genkouCard).toBeDefined()
+
+    await act(async () => {
+      genkouCard?.parentElement?.parentElement?.parentElement?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    // Click Tab 3: Bố cục & Ô chữ
+    const layoutTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục & Ô chữ'),
+    )
+    await act(async () => {
+      layoutTabBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    expect(document.body.textContent).toContain('Tuỳ biến Lưới bài văn Genkō Yōshi')
+    expect(document.body.textContent).toContain('Trang trắng (Tập viết tay)')
+    expect(document.body.textContent).toContain('400 ô (20 × 20)')
+    expect(document.body.textContent).toContain('Dải đệm ngang giữa các hàng (Spacer Band)')
+  })
+
+  it('renders standalone mode without any deckId', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={null}
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    expect(document.body.textContent).toContain('Mẫu giấy luyện viết & In ấn (A4)')
+    expect(document.body.textContent).toContain('Mẫu giấy độc lập (Không cần deck)')
+    expect(document.body.textContent).toContain('Tự do luyện viết')
+
+    // Click Tab 2: Dữ liệu & Trường
+    const dataTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Dữ liệu & Trường'),
+    )
+    await act(async () => {
+      dataTabBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    expect(document.body.textContent).toContain('Mẫu giấy in độc lập')
+    expect(document.body.textContent).toContain('Không cần chọn Deck')
+  })
+
+  it('renders mobile view with segmented switcher and mobile action buttons', async () => {
+    // Set window.innerWidth to mobile size
+    const originalInnerWidth = window.innerWidth
+    window.innerWidth = 375
+
+    try {
+      await act(async () => {
+        root?.render(
+          <DeckWorksheetModal
+            open={true}
+            onOpenChange={vi.fn()}
+            deckId={1}
+            deckName="JLPT N5 Core"
+          />,
+        )
+      })
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 300))
+      })
+
+      // Check Mobile Header switcher
+      const buttons = Array.from(document.querySelectorAll('button'))
+      const mobileControlsBtn = buttons.find((b) => b.textContent?.includes('Cấu hình'))
+      const mobilePreviewBtn = buttons.find((b) => b.textContent?.includes('Xem bản in'))
+
+      expect(mobileControlsBtn).toBeDefined()
+      expect(mobilePreviewBtn).toBeDefined()
+
+      // Check mobile zoom / fit and download buttons
+      expect(document.body.textContent).toContain('Vừa trang')
+      expect(document.body.textContent).toContain('Tải file')
+
+      // Switch to controls
+      await act(async () => {
+        mobileControlsBtn?.click()
+      })
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 100))
+      })
+
+      // In controls mode, the bottom quick preview button should exist
+      const quickPreviewBtn = Array.from(document.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Xem bản in',
+      )
+      expect(quickPreviewBtn).toBeDefined()
+    } finally {
+      window.innerWidth = originalInnerWidth
+    }
+  })
 })
+
 

@@ -123,6 +123,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     endLeaseWork,
     releaseLeaseWhenIdle,
     requestTakeover,
+    forceTakeover,
     isCurrentLease,
   } = useStudySessionLease({
     currentScopeKey,
@@ -656,6 +657,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     answer,
     commit,
     requestTakeover,
+    forceTakeover,
     updateCardContent,
   }
 }

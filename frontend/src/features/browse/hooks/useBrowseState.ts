@@ -233,7 +233,7 @@ export function useBrowseState() {
   // Worksheet Generator Modal State
   const [isWorksheetModalOpen, setIsWorksheetModalOpen] = useState(false)
   const [worksheetTargetDeckId, setWorksheetTargetDeckId] = useState<number | null>(null)
-  const [worksheetTargetCardIds, setWorksheetTargetCardIds] = useState<string[]>([])
+  const [worksheetTargetCardIds, setWorksheetTargetCardIds] = useState<string[] | undefined>(undefined)
 
   // Right Pane: Active Card Selection & Editor State
   const [activeCardId, setActiveCardId] = useState<string | null>(

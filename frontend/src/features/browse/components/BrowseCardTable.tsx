@@ -1,18 +1,11 @@
+import { useRef, useEffect } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination'
-import { NativeSelect } from '@/components/ui/native-select'
 import { ArrowUpDown } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
 import { statusLabel, statusVariant } from '../utils/formatter'
+import { BrowsePagination } from './BrowsePagination'
 
 interface BrowseCardTableProps {
   browse: ReturnType<typeof useBrowseState>
@@ -39,6 +32,16 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
     sortDir,
     setSortDir,
   } = browse
+
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (typeof tableContainerRef.current?.scrollTo === 'function') {
+      tableContainerRef.current.scrollTo({ top: 0, behavior: 'instant' })
+    } else if (tableContainerRef.current) {
+      tableContainerRef.current.scrollTop = 0
+    }
+  }, [page])
 
   if (cardsQuery.isPending) {
     return (
@@ -79,7 +82,7 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background overflow-hidden relative">
       {/* Scrollable cards list table */}
-      <div className="flex-1 overflow-auto">
+      <div ref={tableContainerRef} className="flex-1 overflow-auto">
         <Table className="text-xs border-collapse">
           <TableHeader className="sticky top-0 bg-muted/65 z-10 backdrop-blur-sm border-b">
             <TableRow>
@@ -157,76 +160,15 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
       </div>
 
       {/* Pagination Footer */}
-      {total > 0 && (
-        <div className="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/60 bg-muted/10 p-3 mt-auto">
-          <div className="flex items-center gap-4 text-[11px] sm:text-xs text-muted-foreground font-semibold">
-            <span>
-              Tổng số: <strong>{total}</strong> thẻ
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span>Hiển thị:</span>
-              <NativeSelect
-                value={perPage}
-                onChange={(e) => handlePerPageChange(Number(e.target.value))}
-                className="h-7 py-0 pl-1.5 pr-5 text-[11px] rounded-md font-semibold border-muted/80 bg-background"
-              >
-                <option value={20}>20 thẻ</option>
-                <option value={50}>50 thẻ</option>
-                <option value={100}>100 thẻ</option>
-                <option value={200}>200 thẻ</option>
-                <option value={500}>500 thẻ</option>
-              </NativeSelect>
-            </div>
-          </div>
-
-          {pages > 1 && (
-            <Pagination className="w-auto select-none mx-0">
-              <PaginationContent className="gap-1 sm:gap-1.5">
-                <PaginationItem>
-                  <PaginationPrevious
-                    className={`h-8 px-2 sm:px-3 text-xs rounded-xl ${page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
-                    onClick={() => setPage(Math.max(1, page - 1))}
-                  />
-                </PaginationItem>
-
-                {Array.from({ length: Math.min(5, pages) }, (_, i) => {
-                  let pageNum = page
-                  if (page <= 3) {
-                    pageNum = i + 1
-                  } else if (page >= pages - 2) {
-                    pageNum = pages - 4 + i
-                  } else {
-                    pageNum = page - 2 + i
-                  }
-
-                  if (pageNum <= 0 || pageNum > pages) return null
-
-                  return (
-                    <PaginationItem key={pageNum}>
-                      <PaginationLink
-                        isActive={page === pageNum}
-                        onClick={() => setPage(pageNum)}
-                        className={`h-8 w-8 text-xs rounded-xl cursor-pointer ${
-                          page === pageNum ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'hover:bg-muted/50'
-                        }`}
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                  )
-                })}
-
-                <PaginationItem>
-                  <PaginationNext
-                    className={`h-8 px-2 sm:px-3 text-xs rounded-xl ${page === pages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
-                    onClick={() => setPage(Math.min(pages, page + 1))}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
-        </div>
-      )}
+      <BrowsePagination
+        page={page}
+        setPage={setPage}
+        perPage={perPage}
+        handlePerPageChange={handlePerPageChange}
+        total={total}
+        pages={pages}
+        selectedCount={selectedCards.length}
+      />
     </div>
   )
 }

@@ -229,6 +229,7 @@
   ["POST", "/api/tickets/upload-image"],
   ["GET", "/api/wallet"],
   ["GET", "/api/wallet/transactions"],
+  ["GET", "/api/worksheets/meta"],
   ["POST", "/api/worksheets/preview"],
   ["POST", "/api/worksheets/render-html"],
   ["GET", "/api/worksheets/templates"]

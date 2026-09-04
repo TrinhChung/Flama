@@ -31,10 +31,26 @@ def list_worksheet_templates_route():
     })
 
 
+@worksheets_bp.get("/worksheets/meta")
+@login_required
+def get_standalone_worksheet_meta_route():
+    """Retrieve standalone metadata with all templates (no deck required)."""
+    return jsonify({
+        "deck_id": 0,
+        "deck_name": "Mẫu giấy in & Luyện viết",
+        "total_notes": 0,
+        "note_types": [],
+        "suggested_mappings": {},
+        "templates": list_templates(),
+    })
+
+
 @worksheets_bp.get("/decks/<int:deck_id>/worksheets/meta")
 @login_required
 def get_deck_worksheet_meta_route(deck_id: int):
     """Retrieve metadata, note types, and fields for a deck to configure worksheet."""
+    if deck_id == 0:
+        return get_standalone_worksheet_meta_route()
     try:
         meta = get_deck_worksheet_meta(
             user_id=current_user.id,

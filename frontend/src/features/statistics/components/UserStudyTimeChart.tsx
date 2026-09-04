@@ -9,7 +9,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Clock, Layers, Timer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { UserStudyTimePreset, UserStudyTimeResponse } from '../types'
@@ -50,51 +49,43 @@ export function UserStudyTimeChart({
     passRate: d.retention_pass_rate,
   }))
 
-  const rangeOptions: Array<{ label: string; value: UserStudyTimePreset }> = [
-    { label: '7 ngày', value: '7d' },
-    { label: '30 ngày', value: '30d' },
-    { label: '90 ngày', value: '90d' },
-    { label: '1 năm', value: '12m' },
-    { label: 'Tất cả', value: 'all' },
+  const rangeOptions: Array<{ label: string; shortLabel: string; value: UserStudyTimePreset }> = [
+    { label: '7 ngày', shortLabel: '7N', value: '7d' },
+    { label: '30 ngày', shortLabel: '30N', value: '30d' },
+    { label: '90 ngày', shortLabel: '90N', value: '90d' },
+    { label: '1 năm', shortLabel: '1N', value: '12m' },
+    { label: 'Tất cả', shortLabel: 'Tất cả', value: 'all' },
   ]
 
   return (
     <Card className="border-border/80 bg-card shadow-xs">
-      <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+      <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Timer className="size-4 text-amber-500" />
-            Thời gian học tập trung bình & Tổng giờ học
+          <CardTitle className="text-base font-semibold">
+            Thời gian học & Tổng giờ học
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Theo dõi số phút học trung bình mỗi ngày và tổng thời gian ôn tập flashcard của bạn.
+            Theo dõi số phút học trung bình mỗi ngày và tổng thời gian ôn tập flashcard.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1 font-medium text-amber-700 dark:text-amber-300">
-            <Clock className="size-3.5" />
-            <span>
-              TB: <strong>{summary.avg_daily_minutes} phút/ngày</strong>
-              {summary.active_days_count > 0 && (
-                <span className="opacity-80 text-[11px] ml-1">
-                  ({summary.avg_study_minutes_active_day}p/ngày học)
-                </span>
-              )}
+        <div className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+          <div className="flex items-center rounded-lg bg-amber-500/10 px-2.5 py-1.5 font-medium text-amber-700 dark:text-amber-300">
+            <span className="truncate">
+              TB: <strong>{summary.avg_daily_minutes}p/ngày</strong>
             </span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-2.5 py-1 font-medium text-blue-700 dark:text-blue-300">
-            <Layers className="size-3.5" />
-            <span>
-              Tổng: <strong>{summary.total_study_hours} giờ</strong> ({summary.total_reviews.toLocaleString('vi-VN')} lượt)
+          <div className="flex items-center rounded-lg bg-blue-500/10 px-2.5 py-1.5 font-medium text-blue-700 dark:text-blue-300">
+            <span className="truncate">
+              Tổng: <strong>{summary.total_study_hours}h</strong>
             </span>
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4 pt-1">
-        {/* Preset Range Selector */}
-        <div className="flex items-center justify-between">
+        {/* Preset Range Selector & Date Range */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
           <Tabs
             value={range}
             onValueChange={(val) => onRangeChange(val as UserStudyTimePreset)}
@@ -105,120 +96,133 @@ export function UserStudyTimeChart({
                 <TabsTrigger
                   key={opt.value}
                   value={opt.value}
-                  className="text-xs px-3 font-medium"
+                  className="text-xs px-1 sm:px-3 font-medium min-h-[32px]"
                   disabled={isLoading}
                 >
-                  {opt.label}
+                  <span className="sm:hidden">{opt.shortLabel}</span>
+                  <span className="hidden sm:inline">{opt.label}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
 
-          <span className="hidden text-xs text-muted-foreground sm:inline-block">
+          <span className="text-[11px] sm:text-xs text-muted-foreground text-right">
             {data.start_date} → {data.end_date}
           </span>
         </div>
 
         {/* Chart View */}
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="userColorAvgMinutes" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
-              <XAxis
-                dataKey="dateLabel"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                minTickGap={20}
-              />
-              <YAxis
-                yAxisId="left"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                unit=" p"
-              />
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                unit=" h"
-              />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const item = payload[0].payload
-                    return (
-                      <div className="rounded-lg border border-border bg-popover/95 p-3 text-xs shadow-md backdrop-blur-xs">
-                        <div className="font-semibold text-foreground mb-1.5">{item.date}</div>
-                        <div className="space-y-1 text-muted-foreground">
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5">
-                              <span className="size-2 rounded-full bg-amber-500" />
-                              Thời gian học:
-                            </span>
-                            <span className="font-semibold text-foreground">{item.minutes} phút</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="flex items-center gap-1.5">
-                              <span className="size-2 rounded-full bg-blue-500" />
-                              Tổng giờ học:
-                            </span>
-                            <span className="font-semibold text-foreground">{item.hours} giờ</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span>Lượt lật thẻ:</span>
-                            <span className="font-semibold text-foreground">{item.reviewsCount} thẻ</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span>Tỷ lệ nhớ đúng:</span>
-                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                              {item.passRate}%
-                            </span>
+        {chartData.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center rounded-lg border border-dashed border-border/80 p-6 text-center text-xs text-muted-foreground">
+            <p className="font-semibold text-foreground text-sm">Chưa có dữ liệu thời gian học</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Hãy hoàn thành một phiên ôn tập để xem thống kê thời gian học.
+            </p>
+          </div>
+        ) : (
+          <div className="h-60 sm:h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="userColorAvgMinutes" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
+                <XAxis
+                  dataKey="dateLabel"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                  minTickGap={16}
+                />
+                <YAxis
+                  yAxisId="left"
+                  width={35}
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                  unit="p"
+                />
+                <YAxis
+                  yAxisId="right"
+                  width={30}
+                  orientation="right"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                  unit="h"
+                />
+                <Tooltip
+                  wrapperStyle={{ pointerEvents: 'none', zIndex: 50 }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const item = payload[0].payload
+                      return (
+                        <div className="rounded-lg border border-border bg-popover/95 p-2.5 sm:p-3 text-xs shadow-md backdrop-blur-xs max-w-[240px]">
+                          <div className="font-semibold text-foreground mb-1">{item.date}</div>
+                          <div className="space-y-1 text-muted-foreground">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-1.5">
+                                <span className="size-2 rounded-full bg-amber-500" />
+                                Thời gian:
+                              </span>
+                              <span className="font-semibold text-foreground">{item.minutes} phút</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-1.5">
+                                <span className="size-2 rounded-full bg-blue-500" />
+                                Tổng giờ:
+                              </span>
+                              <span className="font-semibold text-foreground">{item.hours} giờ</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Lượt lật thẻ:</span>
+                              <span className="font-semibold text-foreground">{item.reviewsCount} thẻ</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Tỷ lệ nhớ:</span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                {item.passRate}%
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )
-                  }
-                  return null
-                }}
-              />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                iconType="circle"
-                wrapperStyle={{ fontSize: '11px', paddingBottom: '10px' }}
-              />
-              <Area
-                yAxisId="left"
-                type="monotone"
-                dataKey="minutes"
-                name="Thời gian học (phút)"
-                stroke="#f59e0b"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#userColorAvgMinutes)"
-              />
-              <Bar
-                yAxisId="right"
-                dataKey="hours"
-                name="Tổng giờ học (h)"
-                fill="#3b82f6"
-                opacity={0.65}
-                radius={[4, 4, 0, 0]}
-                barSize={12}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                <Legend
+                  verticalAlign="top"
+                  align="right"
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: '11px', paddingBottom: '8px' }}
+                />
+                <Area
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="minutes"
+                  name="Thời gian học (phút)"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#userColorAvgMinutes)"
+                />
+                <Bar
+                  yAxisId="right"
+                  dataKey="hours"
+                  name="Tổng giờ học (h)"
+                  fill="#3b82f6"
+                  opacity={0.65}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={16}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

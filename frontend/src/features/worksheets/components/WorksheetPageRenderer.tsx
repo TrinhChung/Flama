@@ -8,6 +8,7 @@ import type {
   WorksheetTableRowItem,
   WorksheetTemplate,
   WorksheetVocabItem,
+  WorksheetEssayRowItem,
 } from '../types'
 import { KanjiGridBox } from './KanjiGridBox'
 
@@ -165,31 +166,73 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
       )}
 
       {/* Header Block */}
-      <header className="border-b-2 border-slate-900 pb-1.5 mb-2.5 flex justify-between items-end shrink-0 relative z-10">
-        <div>
-          <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight leading-tight">
-            {header.title || 'Flama Worksheet'}
-          </h1>
-          {header.subtitle && (
-            <p className="text-[10px] text-slate-500 mt-0.5">{header.subtitle}</p>
+      {template.id === 'genkouyoushi' ? (
+        <header className="mb-2 shrink-0 relative z-10 w-full">
+          {options.title_placement === 'header' && header.title && (
+            <h1 className="text-center font-bold text-slate-900 text-base sm:text-lg mb-1.5">
+              {header.title}
+            </h1>
           )}
-        </div>
-        <div className="flex items-center gap-3 text-[10px] text-slate-700 font-medium shrink-0">
           {header.show_student_info && (
-            <span>
-              <strong className="text-slate-900">Họ tên:</strong> _______________
-            </span>
+            <div className="flex justify-between items-center text-xs font-medium text-slate-800 px-1 py-0.5">
+              {options.header_student_style === 'chinese' || !options.header_student_style ? (
+                <>
+                  <span>班级 ____________</span>
+                  <span>姓名 ____________</span>
+                  <span>学号 ____________</span>
+                  <span>分数 ____________</span>
+                </>
+              ) : options.header_student_style === 'japanese' ? (
+                <>
+                  <span>クラス ____________</span>
+                  <span>氏名 ____________</span>
+                  <span>学籍番号 ____________</span>
+                  <span>得点 ____________</span>
+                </>
+              ) : options.header_student_style === 'vietnamese' ? (
+                <>
+                  <span>Lớp: ____________</span>
+                  <span>Họ tên: ____________</span>
+                  <span>Mã số: ____________</span>
+                  <span>Điểm: ____________</span>
+                </>
+              ) : (
+                <>
+                  <span>Lớp: ____________</span>
+                  <span>Họ tên: ____________</span>
+                  <span>Điểm: ____________</span>
+                </>
+              )}
+            </div>
           )}
-          {header.show_date && (
-            <span>
-              <strong className="text-slate-900">Ngày:</strong> ___/___/20___
+        </header>
+      ) : (
+        <header className="border-b-2 border-slate-900 pb-1.5 mb-2.5 flex justify-between items-end shrink-0 relative z-10">
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight leading-tight">
+              {header.title || 'Flama Worksheet'}
+            </h1>
+            {header.subtitle && (
+              <p className="text-[10px] text-slate-500 mt-0.5">{header.subtitle}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-[10px] text-slate-700 font-medium shrink-0">
+            {header.show_student_info && (
+              <span>
+                <strong className="text-slate-900">Họ tên:</strong> _______________
+              </span>
+            )}
+            {header.show_date && (
+              <span>
+                <strong className="text-slate-900">Ngày:</strong> ___/___/20___
+              </span>
+            )}
+            <span className="text-slate-500 font-normal">
+              Trang {page_number} / {total_pages}
             </span>
-          )}
-          <span className="text-slate-500 font-normal">
-            Trang {page_number} / {total_pages}
-          </span>
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col justify-start relative z-10">
@@ -765,15 +808,113 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
             })}
           </div>
         )}
+
+        {/* Category: Essay / Genkouyoushi Grid */}
+        {(template.category === 'essay' || template.id === 'genkouyoushi') && (
+          <div className="flex flex-col w-full my-auto">
+            {items.map((rawItem, rIdx) => {
+              const rowItem = rawItem as WorksheetEssayRowItem
+              const cells = rowItem.cells || []
+              const gridColor = options.grid_color || '#475569'
+              const boxStyle = options.box_style || 'square'
+              const hasSpacer = options.has_spacer_band !== false
+              const spacerHeight = Math.max(4, Math.min(24, Number(options.spacer_height || 10)))
+
+              return (
+                <div key={rowItem.note_id || `essay-row-${rIdx}`} className="flex flex-col w-full">
+                  {/* Row of square cells */}
+                  <div className="flex w-full -space-x-px">
+                    {cells.map((cell, cIdx) => {
+                      const char = cell.char || ''
+                      const isBlank = cell.is_blank || !char
+                      const isTrace = Boolean(cell.is_trace)
+                      const isTitle = Boolean(cell.is_title)
+
+                      return (
+                        <div
+                          key={`cell-${rIdx}-${cIdx}`}
+                          style={{
+                            borderColor: gridColor,
+                          }}
+                          className="flex-1 aspect-square border relative flex items-center justify-center select-none overflow-hidden bg-white -mt-px first:-mt-0"
+                        >
+                          {/* Optional guideline lines */}
+                          {boxStyle === 'cross' && (
+                            <svg className="absolute inset-0 size-full pointer-events-none stroke-slate-300 stroke-dasharray-[2,2]">
+                              <line x1="50%" y1="0" x2="50%" y2="100%" strokeWidth="0.75" />
+                              <line x1="0" y1="50%" x2="100%" y2="50%" strokeWidth="0.75" />
+                            </svg>
+                          )}
+                          {boxStyle === 'diagonal' && (
+                            <svg className="absolute inset-0 size-full pointer-events-none stroke-slate-200 stroke-dasharray-[2,2]">
+                              <line x1="50%" y1="0" x2="50%" y2="100%" strokeWidth="0.75" />
+                              <line x1="0" y1="50%" x2="100%" y2="50%" strokeWidth="0.75" />
+                              <line x1="0" y1="0" x2="100%" y2="100%" strokeWidth="0.5" stroke="#e2e8f0" />
+                              <line x1="0" y1="100%" x2="100%" y2="0" strokeWidth="0.5" stroke="#e2e8f0" />
+                            </svg>
+                          )}
+                          {/* Character content */}
+                          {!isBlank && char && (
+                            <span
+                              className={`z-10 font-serif leading-none select-none ${
+                                isTrace
+                                  ? 'text-slate-300 font-light'
+                                  : isTitle
+                                  ? 'text-slate-900 font-bold'
+                                  : 'text-slate-800 font-normal'
+                              }`}
+                              style={{
+                                fontSize: 'clamp(10px, 1.4vw, 15px)',
+                              }}
+                            >
+                              {char}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Spacer band between rows */}
+                  {hasSpacer && rIdx < items.length - 1 && (
+                    <div
+                      style={{
+                        height: `${spacerHeight}px`,
+                        borderColor: gridColor,
+                      }}
+                      className="w-full border-x border-b -mt-px bg-white"
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </main>
 
       {/* Footer Block */}
-      <footer className="border-t border-slate-200 pt-1 mt-2 flex justify-between items-center text-[9px] text-slate-400 shrink-0 relative z-10">
-        <span>Flama Worksheet Generator &bull; flama.app</span>
-        <span>
-          Trang {page_number} / {total_pages}
-        </span>
-      </footer>
+      {template.id === 'genkouyoushi' ? (
+        <footer className="pt-1 mt-2 flex justify-between items-center text-[10px] text-slate-500 shrink-0 relative z-10 px-1 font-serif">
+          <span className="font-semibold text-slate-600">
+            {options.footer_brand_label || 'Flama (400格)'}
+          </span>
+          <span className="text-[9px] text-slate-400 font-sans">
+            Trang {page_number} / {total_pages}
+          </span>
+          <span className="tracking-widest">
+            {options.footer_date_format === 'vietnamese'
+              ? 'Ngày ...... Tháng ...... Năm 20......'
+              : '年    月    日'}
+          </span>
+        </footer>
+      ) : (
+        <footer className="border-t border-slate-200 pt-1 mt-2 flex justify-between items-center text-[9px] text-slate-400 shrink-0 relative z-10">
+          <span>Flama Worksheet Generator &bull; flama.app</span>
+          <span>
+            Trang {page_number} / {total_pages}
+          </span>
+        </footer>
+      )}
     </div>
   )
 })

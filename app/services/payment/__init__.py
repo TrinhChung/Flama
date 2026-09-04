@@ -11,6 +11,7 @@ from app.services.payment.base import (
     PAYMENT_PROVIDER_CODE,
     PAYMENT_METHOD_CODE,
     PAYOS_PROVIDER_REUSABLE_STATUSES,
+    ACTIVE_ATTEMPT_STATUSES,
     PaymentServiceError,
     _utcnow,
     _iso,

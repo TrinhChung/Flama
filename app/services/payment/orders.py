@@ -44,6 +44,7 @@ PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
 
 
 from app.services.payment.base import (
+    ACTIVE_ATTEMPT_STATUSES,
     PaymentServiceError,
     _clean_text,
     _iso,
@@ -199,8 +200,8 @@ def serialize_order(order: PaymentOrder) -> dict[str, Any]:
         "closed_at": _iso(order.closed_at),
         "created_at": _iso(order.created_at),
         "updated_at": _iso(order.updated_at),
-        "message": status_display["description"],
-        "headline": status_display["headline"],
+        "message": status_display.get("description", ""),
+        "headline": status_display.get("headline", status_display.get("title", "")),
         "next_action": next_action,
         "instructions": instructions,
         "order_detail_lines": order_detail_lines,

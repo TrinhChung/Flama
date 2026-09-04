@@ -1,9 +1,16 @@
-import { useState } from 'react'
-import { Clock3, RefreshCw, ServerOff } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  ArrowLeft,
+  Clock3,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import {
   clearBackendUnavailable,
   getMaintenanceReturnPath,
@@ -11,12 +18,16 @@ import {
 import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 import { Brand } from '@/shared/components/Brand'
 
+const AUTO_RETRY_SECONDS = 30
+
 export function MaintenancePage() {
   const [isRetrying, setIsRetrying] = useState(false)
+  const [countdown, setCountdown] = useState(AUTO_RETRY_SECONDS)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
-  async function retryConnection() {
+  const retryConnection = useCallback(async () => {
+    if (isRetrying) return
     setIsRetrying(true)
     clearBackendUnavailable()
     await queryClient.resetQueries({
@@ -24,68 +35,159 @@ export function MaintenancePage() {
       exact: true,
     })
     navigate(getMaintenanceReturnPath(), { replace: true })
-  }
+    // Reset state in case navigation stays on maintenance (backend still unreachable)
+    setIsRetrying(false)
+    setCountdown(AUTO_RETRY_SECONDS)
+  }, [isRetrying, navigate, queryClient])
+
+  // Countdown timer for automatic reconnection attempt
+  useEffect(() => {
+    if (isRetrying) return
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          void retryConnection()
+          return AUTO_RETRY_SECONDS
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [isRetrying, retryConnection])
+
+  // Keyboard shortcut: Press 'R' to retry
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (
+        event.key.toLowerCase() === 'r' &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !(event.target instanceof HTMLInputElement) &&
+        !(event.target instanceof HTMLTextAreaElement)
+      ) {
+        event.preventDefault()
+        void retryConnection()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [retryConnection])
 
   return (
-    <main className="relative isolate flex min-h-svh items-center justify-center overflow-hidden px-5 py-12">
-      <AmbientBackground intensity="vibrant" />
+    <main className="relative isolate flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 py-12 sm:px-6">
+      <AmbientBackground intensity="subtle" />
 
-      <div
-        aria-hidden="true"
-        className="absolute top-[12%] left-[8%] size-48 rounded-full bg-primary/10 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute right-[6%] bottom-[10%] size-56 rounded-full bg-amber-400/10 blur-3xl"
-      />
+      {/* Main card container with clean hairline border & refined elevation */}
+      <section className="relative w-full max-w-xl rounded-2xl border border-border/80 bg-card/85 p-6 text-center shadow-xl shadow-black/[0.03] backdrop-blur-md sm:p-10 dark:border-border/50 dark:bg-card/75 dark:shadow-black/20">
+        {/* Brand header */}
+        <div className="mb-6 flex justify-center">
+          <Brand
+            size="md"
+            className="hover:scale-100"
+            to={getMaintenanceReturnPath()}
+          />
+        </div>
 
-      <section className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-border/70 bg-card/90 px-6 py-10 text-center shadow-2xl shadow-primary/10 backdrop-blur-xl sm:px-12 sm:py-14">
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent" />
+        {/* Live system status chip */}
+        <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+          <span className="relative flex size-2 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
+          </span>
+          <span>Bảo dưỡng máy chủ định kỳ</span>
+        </div>
 
-        <Brand
-          size="lg"
-          className="mb-9 justify-center hover:scale-100"
-        />
+        {/* Heading & description */}
+        <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          Flama đang được nâng cấp
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
+          Chúng tôi đang tối ưu hiệu năng cơ sở dữ liệu để trải nghiệm học thẻ
+          của bạn luôn mượt mà. Quá trình nâng cấp sẽ hoàn tất trong ít phút.
+        </p>
 
-        <div className="mx-auto mb-7 flex size-24 items-center justify-center rounded-full border border-primary/20 bg-primary/8 shadow-inner shadow-primary/10">
-          <div className="relative flex size-16 items-center justify-center rounded-2xl bg-background shadow-lg">
-            <span className="absolute top-1.5 right-1.5 size-2.5 rounded-full bg-amber-500">
-              <span className="absolute inset-0 animate-ping rounded-full bg-amber-500 opacity-60" />
-            </span>
-            <ServerOff className="size-8 text-primary" strokeWidth={1.8} />
+        {/* System reassurance micro-cards */}
+        <div className="my-7 grid grid-cols-1 gap-2.5 text-left sm:grid-cols-3">
+          <div className="rounded-xl border border-border/60 bg-muted/40 p-3.5 transition-colors">
+            <div className="flex items-center gap-2 text-foreground font-medium text-xs">
+              <ShieldCheck className="size-4 text-primary shrink-0" />
+              <span>Dữ liệu thẻ</span>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              Bảo lưu 100% an toàn trên hệ thống.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-muted/40 p-3.5 transition-colors">
+            <div className="flex items-center gap-2 text-foreground font-medium text-xs">
+              <Clock3 className="size-4 text-primary shrink-0" />
+              <span>Tiến độ SRS</span>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              Lịch lặp lại ngắt quãng giữ nguyên vẹn.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-muted/40 p-3.5 transition-colors">
+            <div className="flex items-center gap-2 text-foreground font-medium text-xs">
+              <Sparkles className="size-4 text-primary shrink-0" />
+              <span>Khôi phục</span>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              Tự đưa bạn về trang học dở khi xong.
+            </p>
           </div>
         </div>
 
-        <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/8 px-3 py-1 text-[11px] font-bold tracking-[0.14em] text-amber-700 uppercase dark:text-amber-300">
-          <Clock3 className="size-3.5" />
-          Kết nối tạm gián đoạn
+        {/* Action button & keyboard hint */}
+        <div className="flex flex-col items-center gap-3">
+          <Button
+            type="button"
+            size="lg"
+            className="h-10 cursor-pointer rounded-xl px-5 font-semibold transition-all hover:shadow-sm"
+            disabled={isRetrying}
+            onClick={retryConnection}
+          >
+            <RefreshCw
+              className={cn('size-4 shrink-0', isRetrying && 'animate-spin')}
+            />
+            <span>{isRetrying ? 'Đang kiểm tra lại…' : 'Thử kết nối lại'}</span>
+            <kbd className="ml-1.5 hidden h-5 select-none items-center rounded border border-primary-foreground/30 bg-primary-foreground/15 px-1.5 font-mono text-[10px] font-semibold text-primary-foreground sm:inline-flex">
+              R
+            </kbd>
+          </Button>
+
+          {/* Auto retry countdown indicator */}
+          <p className="text-xs text-muted-foreground">
+            {isRetrying ? (
+              'Đang gửi yêu cầu tới máy chủ…'
+            ) : (
+              <>
+                Tự động kiểm tra lại sau{' '}
+                <span className="font-semibold text-foreground">
+                  {countdown}s
+                </span>
+              </>
+            )}
+          </p>
         </div>
 
-        <h1 className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">
-          Máy chủ đang bảo trì
-        </h1>
-        <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
-          Flama hiện chưa thể kết nối tới máy chủ. Hệ thống có thể đang được
-          cập nhật hoặc tạm thời chưa sẵn sàng. Bạn vui lòng thử lại sau ít
-          phút.
-        </p>
-
-        <Button
-          type="button"
-          size="lg"
-          className="mt-8 h-11 rounded-xl px-6 font-bold shadow-lg shadow-primary/20"
-          disabled={isRetrying}
-          onClick={retryConnection}
-        >
-          <RefreshCw className={isRetrying ? 'animate-spin' : ''} />
-          {isRetrying ? 'Đang kết nối lại…' : 'Thử kết nối lại'}
-        </Button>
-
-        <p className="mt-6 text-xs leading-5 text-muted-foreground">
-          Khi máy chủ hoạt động trở lại, Flama sẽ đưa bạn về màn hình đang sử
-          dụng trước đó.
-        </p>
+        {/* Minimal return link */}
+        <div className="mt-8 border-t border-border/50 pt-5">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span>Trở về trang giới thiệu Flama</span>
+          </Link>
+        </div>
       </section>
     </main>
   )
 }
+

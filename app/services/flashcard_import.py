@@ -13,6 +13,11 @@ from typing import Any
 from uuid import uuid4
 
 from app.services.flashcard_renderer import is_field_empty
+from app.services.media_field_codec import (
+    MEDIA_FIELD_TYPES,
+    MediaFieldValueError,
+    normalize_media_field_for_write,
+)
 from models import db
 from models.flashcard import Card, Note, Template
 
@@ -443,6 +448,7 @@ def _normalize_mapping(
     raw_mapping: dict[str, Any] | None,
     column_count: int,
     uniqueness_fields: list[str],
+    user_id: int | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[str], list[dict[str, str]]]:
     mapping = raw_mapping or {}
     normalized: dict[str, dict[str, Any]] = {}
@@ -489,6 +495,19 @@ def _normalize_mapping(
 
         elif source_type == "constant":
             constant_value = "" if row.get("constant_value") is None else str(row.get("constant_value"))
+            field_type = str(field_def.field_type or "text").strip().lower()
+            if field_type in MEDIA_FIELD_TYPES and constant_value.strip():
+                try:
+                    constant_value = normalize_media_field_for_write(
+                        constant_value,
+                        field_type=field_type,
+                        user_id=user_id,
+                        reference_lookup=None,
+                    )
+                except MediaFieldValueError as exc:
+                    errors.append(
+                        f"Field '{field_name}' constant value is invalid: {exc}"
+                    )
 
         normalized[field_name] = {
             "source_type": source_type,
@@ -594,6 +613,7 @@ def run_import(
         raw_mapping=raw_mapping,
         column_count=max(column_count, int(session_meta.get("max_columns") or column_count)),
         uniqueness_fields=uniqueness,
+        user_id=user_id,
     )
     if mapping_errors:
         raise ImportValidationError("; ".join(mapping_errors))
@@ -798,6 +818,47 @@ def run_import(
                             row=data_row_index,
                             reason="required_field_missing",
                             message=f"Required field '{field_def.name}' is empty.",
+                        )
+                        row_failed = True
+                        break
+
+                if row_failed:
+                    continue
+
+                for field_def in field_defs:
+                    field_name = field_def.name
+                    field_type = str(field_def.field_type or "text").strip().lower()
+                    if field_type not in MEDIA_FIELD_TYPES:
+                        continue
+
+                    config = mapping.get(field_name, {"source_type": "ignore"})
+                    if config.get("source_type") == "ignore":
+                        continue
+
+                    raw_media_val = mapped_values.get(field_name, "")
+                    if is_field_empty(raw_media_val):
+                        mapped_values[field_name] = ""
+                        continue
+
+                    try:
+                        normalized_media_val = normalize_media_field_for_write(
+                            raw_media_val,
+                            field_type=field_type,
+                            user_id=user_id,
+                            reference_lookup=None,
+                        )
+                        mapped_values[field_name] = normalized_media_val
+                    except MediaFieldValueError as exc:
+                        display_val = str(raw_media_val).strip()
+                        if len(display_val) > 80:
+                            display_val = f"{display_val[:77]}..."
+                        push_issue(
+                            kind="error",
+                            row=data_row_index,
+                            reason=getattr(exc, "reason", None) or "invalid_media_reference",
+                            message=(
+                                f"Field '{field_name}' contains invalid {field_type} value '{display_val}': {exc}"
+                            ),
                         )
                         row_failed = True
                         break

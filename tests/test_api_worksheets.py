@@ -81,6 +81,21 @@ class TestWorksheetAPI(unittest.TestCase):
         self.assertEqual(data["total_notes"], 1)
         self.assertIn("suggested_mappings", data)
 
+    def test_get_standalone_meta(self):
+        resp = self.client.get("/api/worksheets/meta")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["deck_id"], 0)
+        self.assertIn("templates", data)
+        self.assertGreaterEqual(len(data["templates"]), 5)
+
+    def test_get_deck_zero_meta(self):
+        resp = self.client.get("/api/decks/0/worksheets/meta")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["deck_id"], 0)
+        self.assertIn("templates", data)
+
     def test_post_preview(self):
         payload = {
             "template_id": "kanji_stroke",
