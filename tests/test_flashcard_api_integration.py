@@ -316,7 +316,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             ),
             self.client.patch(
                 f"/api/note-types/{note_type_id}/templates/{template_id}",
-                json={"front_html": "blocked {{Word}}"},
+                json={"position": 2},
             ),
             self.client.post(
                 f"/api/note-types/{note_type_id}/templates/{template_id}/reset"
@@ -359,6 +359,216 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 ],
                 card_snapshot,
             )
+
+    def test_released_shared_note_type_allows_source_author_content_hotfix(self):
+        # 1. Create a note type with fields and a template
+        create_response = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Hotfix Shared Note Type",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                    {"name": "Meaning", "field_type": "richtext", "position": 1, "required": False},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>",
+                    "back_html": "<div>{{Meaning}}</div>",
+                    "shared_css": ".card { font-size: 14px; }",
+                },
+            },
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.get_json())
+        note_type_id = create_response.get_json()["id"]
+        template_id = create_response.get_json()["templates"][0]["id"]
+
+        # 2. Add a note to create physical Card row
+        note_response = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {"Word": "りんご", "Meaning": "apple"},
+            },
+        )
+        self.assertEqual(note_response.status_code, 201, note_response.get_json())
+        note_id = note_response.get_json()["id"]
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id, template_id=template_id).first()
+            self.assertIsNotNone(card)
+            card_id = str(card.id)
+
+            learner = User(
+                username="hotfix-learner",
+                email="hotfix-learner@example.com",
+            )
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+
+            local_deck = Deck(
+                name="Learner Deck",
+                owner_user_id=learner.id,
+                note_type_id=note_type_id,
+            )
+            db.session.add(local_deck)
+            db.session.flush()
+
+            item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Shared Deck for Hotfix",
+                publish_status="published",
+            )
+            db.session.add(item)
+            db.session.flush()
+
+            release = DeckRelease(
+                deck_item_id=item.id,
+                sequence_no=1,
+                version_label="1.0.0",
+                status="published",
+                created_by_user_id=self.user_id,
+            )
+            db.session.add(release)
+            db.session.flush()
+            item.current_release_id = release.id
+
+            install = DeckInstall(
+                deck_item_id=item.id,
+                user_id=learner.id,
+                local_deck_id=local_deck.id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                source_owner_user_id=self.user_id,
+                applied_release_id=release.id,
+                seen_release_id=release.id,
+                version_mode="release",
+                clone_mode="logical_overlay",
+            )
+            db.session.add(install)
+            db.session.flush()
+
+            progress = CardProgress(
+                user_id=learner.id,
+                card_id=card_id,
+                queue="review",
+                step_index=2,
+                reps=5,
+                lapses=1,
+            )
+            db.session.add(progress)
+            db.session.commit()
+            progress_id = progress.id
+
+        # 3. Non-owner / learner cannot hotfix or mutate source template
+        self.client.post("/logout", follow_redirects=True)
+        self.client.post(
+            "/login",
+            data={"email": "hotfix-learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        unauthorized_patch = self.client.patch(
+            f"/api/note-types/{note_type_id}/templates/{template_id}",
+            json={
+                "front_html": "<div>Hacked {{Word}}</div>",
+            },
+        )
+        self.assertEqual(unauthorized_patch.status_code, 404)
+
+        # 4. Author logs back in and executes content hotfix
+        self.client.post("/logout", follow_redirects=True)
+        self.client.post(
+            "/login",
+            data={"email": "admin@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        hotfix_response = self.client.patch(
+            f"/api/note-types/{note_type_id}/templates/{template_id}",
+            json={
+                "name": "Card 1 (Hotfixed)",
+                "front_html": "<div class=\"hotfix-front\">{{Word}}</div>",
+                "back_html": "<div class=\"hotfix-back\">{{Meaning}}</div>",
+                "shared_css": ".hotfix-front { color: #ff0000; font-weight: bold; }",
+            },
+        )
+        self.assertEqual(hotfix_response.status_code, 200, hotfix_response.get_json())
+        updated_data = hotfix_response.get_json()
+        self.assertEqual(updated_data["id"], template_id)
+        self.assertEqual(updated_data["name"], "Card 1 (Hotfixed)")
+        self.assertEqual(updated_data["front_html"], '<div class="hotfix-front">{{Word}}</div>')
+        self.assertEqual(updated_data["back_html"], '<div class="hotfix-back">{{Meaning}}</div>')
+        self.assertEqual(updated_data["shared_css"], '.hotfix-front { color: #ff0000; font-weight: bold; }')
+
+        # 5. Verify database invariants
+        with self.app.app_context():
+            db.session.expire_all()
+            reloaded_template = db.session.get(Template, template_id)
+            self.assertIsNotNone(reloaded_template)
+            self.assertEqual(reloaded_template.id, template_id)
+            self.assertEqual(reloaded_template.name, "Card 1 (Hotfixed)")
+            self.assertEqual(reloaded_template.front_html, '<div class="hotfix-front">{{Word}}</div>')
+            self.assertEqual(reloaded_template.back_html, '<div class="hotfix-back">{{Meaning}}</div>')
+            self.assertEqual(reloaded_template.shared_css, '.hotfix-front { color: #ff0000; font-weight: bold; }')
+
+            # Physical Card row is preserved with identical ID
+            reloaded_card = db.session.get(Card, card_id)
+            self.assertIsNotNone(reloaded_card)
+            self.assertEqual(reloaded_card.template_id, template_id)
+            self.assertEqual(Card.query.filter_by(note_id=note_id).count(), 1)
+
+            # CardProgress is preserved and attached to same Card row
+            reloaded_progress = db.session.get(CardProgress, progress_id)
+            self.assertIsNotNone(reloaded_progress)
+            self.assertEqual(reloaded_progress.card_id, card_id)
+            self.assertEqual(reloaded_progress.reps, 5)
+            self.assertEqual(reloaded_progress.queue, "review")
+
+            # Verify study artifact / render resolves updated live template
+            from app.services import study_artifact_service
+            effective_card = study_artifact_service.build_effective_study_card(
+                card=reloaded_card,
+                clone_scope=None,
+            )
+            template_artifact = study_artifact_service.build_template_artifact(effective_card)
+            self.assertIn('<div class="hotfix-front">', template_artifact["front_source"])
+            self.assertIn('<div class="hotfix-back">', template_artifact["back_source"])
+            self.assertIn('.hotfix-front { color: #ff0000', template_artifact["shared_css"])
+
+        # 6. Verify unreleased / private note type retains normal CRUD behavior
+        private_nt_res = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Private Note Type",
+                "field_defs": [
+                    {"name": "Front", "field_type": "text", "position": 0, "required": True},
+                ],
+                "template": {
+                    "name": "Private Card",
+                    "front_html": "{{Front}}",
+                    "back_html": "{{Front}}",
+                },
+            },
+        )
+        self.assertEqual(private_nt_res.status_code, 201)
+        private_nt_id = private_nt_res.get_json()["id"]
+        # Can create template on private note type
+        new_tmpl_res = self.client.post(
+            f"/api/note-types/{private_nt_id}/templates",
+            json={
+                "name": "Private Card 2",
+                "front_html": "<b>{{Front}}</b>",
+                "back_html": "<i>{{Front}}</i>",
+            },
+        )
+        self.assertEqual(new_tmpl_res.status_code, 201)
+        # Can delete template on private note type
+        del_tmpl_res = self.client.delete(
+            f"/api/note-types/{private_nt_id}/templates/{new_tmpl_res.get_json()['id']}"
+        )
+        self.assertEqual(del_tmpl_res.status_code, 200)
 
     def test_canonical_api_content_crud_and_media_contract(self):
         create_response = self.client.post(
