@@ -8,26 +8,133 @@ import type {
 
 export const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
 
-function extractMediaUrlsFromValue(value: string): string[] {
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+export function renderMediaHtml(
+  fieldKind: 'audio' | 'image' | 'diagram' | string,
+  fieldName: string,
+  rawValue: string,
+  mediaLookup?: Array<{ id: string; filename?: string; proxy_url?: string }> | Map<string, string>,
+): { html: string; urls: string[] } {
+  const trimmed = rawValue.trim()
+  if (!trimmed) {
+    return { html: '', urls: [] }
+  }
+
+  // If already HTML markup (e.g. from backend pre-rendered context), preserve and extract URLs
+  if (
+    trimmed.startsWith('<audio') ||
+    trimmed.startsWith('<img') ||
+    trimmed.startsWith('<div class="flama-media-gallery"')
+  ) {
+    const urls: string[] = []
+    const srcRegex = /\bsrc=["']([^"']+)["']/g
+    let match: RegExpExecArray | null
+    while ((match = srcRegex.exec(trimmed)) !== null) {
+      if (match[1]) urls.push(match[1])
+    }
+    return { html: trimmed, urls }
+  }
+
+  // Build asset lookup if provided
+  const filenameMap = new Map<string, { id: string; proxy_url: string }>()
+  if (Array.isArray(mediaLookup)) {
+    for (const item of mediaLookup) {
+      if (item && item.proxy_url) {
+        if (item.filename) {
+          filenameMap.set(item.filename.toLowerCase(), { id: item.id, proxy_url: item.proxy_url })
+        }
+        if (item.id) {
+          filenameMap.set(item.id.toLowerCase(), { id: item.id, proxy_url: item.proxy_url })
+        }
+      }
+    }
+  } else if (mediaLookup instanceof Map) {
+    for (const [key, val] of mediaLookup.entries()) {
+      filenameMap.set(key.toLowerCase(), { id: key, proxy_url: val })
+    }
+  }
+
+  const lines = trimmed
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+
   const urls: string[] = []
-  const soundMatch = value.match(/\[sound:(.*?)\]/)
-  if (soundMatch && soundMatch[1]) {
-    urls.push(soundMatch[1].trim())
+  const fragments: string[] = []
+  const escapedField = escapeHtml(fieldName)
+
+  for (const line of lines) {
+    let candidate = line
+    const soundMatch = candidate.match(/^\[sound:([^\]]+)\]$/)
+    if (soundMatch && soundMatch[1]) {
+      candidate = soundMatch[1].trim()
+    }
+    if (!candidate) continue
+
+    let resolvedUrl = candidate
+    let assetId: string | null = null
+
+    const matchedAsset = filenameMap.get(candidate.toLowerCase())
+    if (matchedAsset) {
+      resolvedUrl = matchedAsset.proxy_url
+      assetId = matchedAsset.id
+    } else {
+      const proxyMatch = candidate.match(/^\/media\/proxy\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/)
+      if (proxyMatch && proxyMatch[1]) {
+        assetId = proxyMatch[1]
+      }
+    }
+
+    urls.push(resolvedUrl)
+    const escapedUrl = escapeHtml(resolvedUrl)
+    const assetAttr = assetId ? ` data-flama-media-asset-id="${escapeHtml(assetId)}"` : ''
+
+    const isAudio = fieldKind === 'audio'
+    if (isAudio) {
+      fragments.push(
+        `<audio controls data-flama-media-field="${escapedField}" data-flama-media-kind="audio" class="flama-media-audio"${assetAttr} src="${escapedUrl}"></audio>`,
+      )
+    } else {
+      const isSvg = (
+        candidate.toLowerCase().endsWith('.svg')
+        || resolvedUrl.toLowerCase().endsWith('.svg')
+        || candidate.includes('image/svg+xml')
+        || resolvedUrl.includes('image/svg+xml')
+      )
+      const kindAttr = isSvg ? 'svg' : (fieldKind === 'diagram' ? 'diagram' : 'image')
+      const svgAttr = isSvg ? ' data-flama-is-svg="true"' : ''
+      const classAttr = isSvg ? 'flama-media-image flama-svg-image' : 'flama-media-image'
+      fragments.push(
+        `<img data-flama-media-field="${escapedField}" data-flama-media-kind="${kindAttr}"${svgAttr} class="${classAttr}"${assetAttr} src="${escapedUrl}" alt="${escapedField}">`,
+      )
+    }
   }
-  const imgMatch = value.match(/<img [^>]*src=["']([^"']+)["']/)
-  if (imgMatch && imgMatch[1]) {
-    urls.push(imgMatch[1].trim())
+
+  let html = ''
+  if (fragments.length === 1) {
+    html = fragments[0]
+  } else if (fragments.length > 1) {
+    html = `<div class="flama-media-gallery">${fragments.join('')}</div>`
   }
-  if (!urls.length && (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/media/'))) {
-    urls.push(value.trim())
-  }
-  return urls
+
+  return { html, urls }
 }
 
 export function patchRenderContext(
   existingRenderContext: Record<string, unknown>,
   newFieldValues: Record<string, string>,
   fieldDefs?: Array<{ name: string; field_type?: string }>,
+  mediaLookup?: Array<{ id: string; filename?: string; proxy_url?: string; mime_type?: string }>,
 ): Record<string, unknown> {
   const next: Record<string, unknown> = { ...existingRenderContext }
   const fieldTypeMap = new Map<string, string>()
@@ -42,22 +149,46 @@ export function patchRenderContext(
   for (const [key, rawValue] of Object.entries(newFieldValues)) {
     const stringValue = rawValue === null || rawValue === undefined ? '' : String(rawValue)
     const fieldType = fieldTypeMap.get(key) || 'text'
-    const isMedia = (
-      fieldType === 'image' ||
+    const lowerKey = key.toLowerCase()
+    const isAudio = (
       fieldType === 'audio' ||
-      fieldType === 'diagram' ||
-      key.toLowerCase().includes('audio') ||
-      key.toLowerCase().includes('image') ||
-      key.toLowerCase().includes('sound')
+      lowerKey === 'audio' ||
+      lowerKey === 'sound' ||
+      lowerKey === 'voice' ||
+      lowerKey.endsWith('_audio') ||
+      lowerKey.endsWith(' audio') ||
+      lowerKey.endsWith('_sound') ||
+      lowerKey.endsWith(' sound') ||
+      stringValue.trim().startsWith('[sound:')
     )
+    const isImage = (
+      fieldType === 'image' ||
+      fieldType === 'diagram' ||
+      lowerKey === 'image' ||
+      lowerKey === 'picture' ||
+      lowerKey === 'photo' ||
+      lowerKey === 'diagram' ||
+      lowerKey === 'illustration' ||
+      lowerKey.endsWith('_image') ||
+      lowerKey.endsWith(' image') ||
+      lowerKey.endsWith('_photo') ||
+      lowerKey.endsWith(' photo')
+    )
+    const isMedia = isAudio || isImage
 
     if (isMedia) {
       const trimmed = stringValue.trim()
-      const extractedUrls = extractMediaUrlsFromValue(trimmed)
-      const urlList = extractedUrls.length > 0 ? extractedUrls : (trimmed ? [trimmed] : [])
-      next[key] = trimmed
-      next[`${key}_url`] = urlList[0] || ''
-      next[`${key}_urls`] = urlList
+      if (!trimmed) {
+        next[key] = ''
+        next[`${key}_url`] = ''
+        next[`${key}_urls`] = []
+      } else {
+        const kind = isAudio ? 'audio' : (fieldType === 'diagram' ? 'diagram' : 'image')
+        const { html, urls } = renderMediaHtml(kind, key, trimmed, mediaLookup)
+        next[key] = html
+        next[`${key}_url`] = urls[0] || ''
+        next[`${key}_urls`] = urls
+      }
     } else {
       const normalized = stringValue
         .replace(/\r\n/g, '\n')
@@ -188,9 +319,33 @@ function collectTrustedMediaUrls(
 
   template.field_defs.forEach((field) => {
     const fieldType = String(field.field_type || '').toLowerCase()
-    if (!['image', 'audio', 'diagram'].includes(fieldType)) return
-    const isAudio = fieldType === 'audio'
     const fieldName = String(field.name || '')
+    const lowerName = fieldName.toLowerCase()
+    const isAudio = (
+      fieldType === 'audio' ||
+      lowerName === 'audio' ||
+      lowerName === 'sound' ||
+      lowerName === 'voice' ||
+      lowerName.endsWith('_audio') ||
+      lowerName.endsWith(' audio') ||
+      lowerName.endsWith('_sound') ||
+      lowerName.endsWith(' sound')
+    )
+    const isImage = (
+      fieldType === 'image' ||
+      fieldType === 'diagram' ||
+      lowerName === 'image' ||
+      lowerName === 'picture' ||
+      lowerName === 'photo' ||
+      lowerName === 'diagram' ||
+      lowerName === 'illustration' ||
+      lowerName.endsWith('_image') ||
+      lowerName.endsWith(' image') ||
+      lowerName.endsWith('_photo') ||
+      lowerName.endsWith(' photo')
+    )
+    if (!isAudio && !isImage) return
+
     const urlList = content.render_context[`${fieldName}_urls`]
     if (Array.isArray(urlList)) {
       urlList.forEach((value) => addUrl(value, isAudio))
@@ -319,11 +474,81 @@ export function renderStudySide(
       ? template.front_inline_scripts
       : template.back_inline_scripts
   )
-  const rendered = Mustache.render(source, content.render_context)
-  const trustedMedia = collectTrustedMediaUrls(template, content, source)
-  const managedMediaUrls = content.media
-    .map((item) => item.proxy_url)
-    .filter((url) => PROXY_MEDIA_RE.test(url))
+
+  // Auto-heal render_context if any media fields were stored as raw text/URLs
+  const renderContext = { ...content.render_context }
+  for (const field of template.field_defs) {
+    const fieldType = String(field.field_type || '').toLowerCase()
+    const fieldName = String(field.name || '')
+    const lowerName = fieldName.toLowerCase()
+    const isAudio = (
+      fieldType === 'audio' ||
+      lowerName === 'audio' ||
+      lowerName === 'sound' ||
+      lowerName === 'voice' ||
+      lowerName.endsWith('_audio') ||
+      lowerName.endsWith(' audio') ||
+      lowerName.endsWith('_sound') ||
+      lowerName.endsWith(' sound')
+    )
+    const isImage = (
+      fieldType === 'image' ||
+      fieldType === 'diagram' ||
+      lowerName === 'image' ||
+      lowerName === 'picture' ||
+      lowerName === 'photo' ||
+      lowerName === 'diagram' ||
+      lowerName === 'illustration' ||
+      lowerName.endsWith('_image') ||
+      lowerName.endsWith(' image') ||
+      lowerName.endsWith('_photo') ||
+      lowerName.endsWith(' photo')
+    )
+    if (isAudio || isImage) {
+      const val = renderContext[fieldName]
+      if (typeof val === 'string' && val.trim() !== '') {
+        const trimmed = val.trim()
+        if (
+          !trimmed.startsWith('<') &&
+          (
+            trimmed.startsWith('http://') ||
+            trimmed.startsWith('https://') ||
+            trimmed.startsWith('/media/') ||
+            trimmed.startsWith('[sound:') ||
+            /\.(mp3|wav|ogg|m4a|aac|opus|png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(trimmed)
+          )
+        ) {
+          const kind = isAudio ? 'audio' : (fieldType === 'diagram' ? 'diagram' : 'image')
+          const { html, urls } = renderMediaHtml(kind, fieldName, trimmed, content.media)
+          renderContext[fieldName] = html
+          if (!renderContext[`${fieldName}_url`] && urls[0]) {
+            renderContext[`${fieldName}_url`] = urls[0]
+          }
+          if (!renderContext[`${fieldName}_urls`] && urls.length > 0) {
+            renderContext[`${fieldName}_urls`] = urls
+          }
+        }
+      }
+    }
+  }
+
+  const rendered = Mustache.render(source, renderContext)
+  const trustedMedia = collectTrustedMediaUrls(template, { ...content, render_context: renderContext }, source)
+
+  const fieldValueProxyUrls: string[] = []
+  if (content.field_values) {
+    for (const val of Object.values(content.field_values)) {
+      if (typeof val === 'string') {
+        const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+        if (matches) fieldValueProxyUrls.push(...matches)
+      }
+    }
+  }
+
+  const managedMediaUrls = [
+    ...content.media.map((item) => item.proxy_url),
+    ...fieldValueProxyUrls,
+  ].filter((url) => PROXY_MEDIA_RE.test(url))
   const allowedMediaUrls = [...new Set([...managedMediaUrls, ...trustedMedia.media])]
   const markup = restoreLineBreaks(
     sanitizeRenderedMarkup(rendered, new Set(allowedMediaUrls)),
@@ -331,16 +556,25 @@ export function renderStudySide(
   const css = safeCss(template.shared_css)
   const scripts = inlineScripts.join('')
   const html = `${css ? `<style>${css}</style>` : ''}${markup}${scripts}`
-  const audio = content.media.filter((item) => item.mime_type.startsWith('audio/'))
+
+  const audioFromMedia = content.media
+    .filter((item) => item.mime_type.startsWith('audio/'))
+    .map((item) => item.proxy_url)
+  const audioFromFieldValues = Object.entries(content.field_values || {})
+    .filter(([key]) => {
+      const lk = key.toLowerCase()
+      return lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
+    })
+    .flatMap(([, val]) => (typeof val === 'string' ? val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g) || [] : []))
   const allowedAudioUrls = [
-    ...new Set([...audio.map((item) => item.proxy_url), ...trustedMedia.audio]),
+    ...new Set([...audioFromMedia, ...audioFromFieldValues, ...trustedMedia.audio]),
   ]
   const templateKey = `${template.version}:${side}`
   return {
     html,
     allowed_media_urls: allowedMediaUrls,
     allowed_audio_urls: allowedAudioUrls,
-    allowed_audio_asset_ids: audio.map((item) => item.id),
+    allowed_audio_asset_ids: content.media.filter((item) => item.mime_type.startsWith('audio/')).map((item) => item.id),
     template_key: templateKey,
     shell_key: templateKey,
     has_inline_script: inlineScripts.length > 0,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -17,8 +17,66 @@ import { Badge } from '@/components/ui/badge'
 import { NativeSelect } from '@/components/ui/native-select'
 import { LoaderCircle, Pencil, Plus, RotateCcw, Save, Tag, X } from 'lucide-react'
 import { appApi } from '@/app/api'
-import type { StudyContentArtifact, StudyTemplateArtifact } from '../types'
+import { resolveBackendUrl } from '@/config/env'
+import { MediaFieldPreview } from '@/features/browse/components/MediaFieldPreview'
+import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
+
+type UpdateCardResponse = {
+  success: boolean
+  row?: unknown
+  detail?: CardDetailResponse
+}
+
+function inferFieldType(
+  rawFieldType?: string | null,
+  fieldName?: string,
+  fieldValue?: string,
+): 'image' | 'audio' | 'diagram' | 'text' {
+  const ft = (rawFieldType || '').trim().toLowerCase()
+  if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
+    return ft
+  }
+
+  const name = (fieldName || '').trim().toLowerCase()
+  if (
+    name === 'audio' ||
+    name === 'sound' ||
+    name === 'voice' ||
+    name.endsWith('_audio') ||
+    name.endsWith(' audio') ||
+    name.endsWith('_sound') ||
+    name.endsWith(' sound')
+  ) {
+    return 'audio'
+  }
+
+  if (
+    name === 'image' ||
+    name === 'picture' ||
+    name === 'photo' ||
+    name === 'diagram' ||
+    name === 'illustration' ||
+    name.endsWith('_image') ||
+    name.endsWith(' image') ||
+    name.endsWith('_photo') ||
+    name.endsWith(' photo') ||
+    name.endsWith('_picture') ||
+    name.endsWith(' picture')
+  ) {
+    return 'image'
+  }
+
+  const val = (fieldValue || '').trim()
+  if (val.startsWith('[sound:') || /\.(mp3|wav|ogg|opus|m4a|aac|flac)(\?.*)?$/i.test(val)) {
+    return 'audio'
+  }
+  if (/\.(png|jpe?g|webp|gif|svg|avif)(\?.*)?$/i.test(val)) {
+    return 'image'
+  }
+
+  return 'text'
+}
 
 export type StudyQuickEditDialogProps = {
   open: boolean
@@ -28,7 +86,11 @@ export type StudyQuickEditDialogProps = {
   deckName?: string | null
   template?: StudyTemplateArtifact | null
   content?: StudyContentArtifact | null
-  onCardUpdated: (cardId: string, newFieldValues: Record<string, string>) => void | Promise<void>
+  onCardUpdated: (
+    cardId: string,
+    newFieldValues: Record<string, string>,
+    options?: { media?: StudyMediaArtifact[]; noteId?: string | null },
+  ) => void | Promise<void>
 }
 
 export function StudyQuickEditDialog({
@@ -123,21 +185,66 @@ export function StudyQuickEditDialog({
     return false
   })()
 
+  // Media resolver map: maps filename or relative reference to fully resolved proxy URL
+  const mediaMap = useMemo(() => {
+    const map = new Map<string, string>()
+    if (cardDetailQuery.data?.media_assets) {
+      for (const asset of cardDetailQuery.data.media_assets) {
+        if (asset.filename && asset.url) {
+          map.set(asset.filename.toLowerCase(), resolveBackendUrl(asset.url))
+        }
+      }
+    }
+    if (content?.media) {
+      for (const m of content.media) {
+        if (m.filename && m.proxy_url) {
+          map.set(m.filename.toLowerCase(), resolveBackendUrl(m.proxy_url))
+        }
+      }
+    }
+    return map
+  }, [cardDetailQuery.data?.media_assets, content?.media])
+
+  const mediaResolver = useCallback(
+    (rawRef: string) => {
+      return mediaMap.get(rawRef.toLowerCase())
+    },
+    [mediaMap],
+  )
+
   // Save Mutation
   const updateMutation = useMutation({
     mutationFn: (payload: {
       field_values: Record<string, string>
       deck_id?: number
       tags?: string[]
-    }) => appApi.mutate(`/browse/cards/${cardId}`, 'PATCH', payload),
-    onSuccess: async () => {
+    }) => appApi.mutate<UpdateCardResponse>(`/browse/cards/${cardId}`, 'PATCH', payload),
+    onSuccess: async (data) => {
       toast.success('Đã lưu thay đổi thẻ.')
-      setInitialFieldValues(fieldValues)
+      const committedFieldValues = data?.detail?.note?.field_values || fieldValues
+      setInitialFieldValues(committedFieldValues)
+      setFieldValues(committedFieldValues)
       setInitialTags(tags)
       setInitialDeckId(deckId)
 
       if (cardId) {
-        await onCardUpdated(cardId, fieldValues)
+        const mediaAssets: StudyMediaArtifact[] = (data?.detail?.media_assets || []).map((asset) => ({
+          id: asset.id,
+          field_name: asset.field_name || '',
+          filename: asset.filename || '',
+          mime_type: asset.mime_type || '',
+          sha256: '',
+          proxy_url: asset.url,
+        }))
+        const options = {
+          media: mediaAssets.length > 0 ? mediaAssets : undefined,
+          noteId: data?.detail?.note?.id != null ? String(data.detail.note.id) : undefined,
+        }
+        if (options.media || options.noteId) {
+          await onCardUpdated(cardId, committedFieldValues, options)
+        } else {
+          await onCardUpdated(cardId, committedFieldValues)
+        }
       }
 
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
@@ -169,22 +276,34 @@ export function StudyQuickEditDialog({
     [handleSubmit],
   )
 
-  // Resolve fields definition: template field_defs > query fields > keys of fieldValues
-  const fieldDefs = template?.field_defs && template.field_defs.length > 0
-    ? template.field_defs
-    : cardDetailQuery.data?.fields && cardDetailQuery.data.fields.length > 0
-    ? cardDetailQuery.data.fields.map((f) => ({
+  // Resolve fields definition:
+  // 1. Prefer cardDetailQuery.data.fields (authoritative backend definition with clone overlay & note type types)
+  // 2. Fallback to template?.field_defs (immediate 0ms study session cache)
+  // 3. Fallback to keys in fieldValues
+  const fieldDefs = useMemo(() => {
+    const rawDefs =
+      cardDetailQuery.data?.fields && cardDetailQuery.data.fields.length > 0
+        ? cardDetailQuery.data.fields
+        : template?.field_defs && template.field_defs.length > 0
+        ? template.field_defs
+        : Object.keys(fieldValues).map((name, index) => ({
+            name,
+            position: index,
+            required: false,
+            field_type: 'text',
+          }))
+
+    return rawDefs.map((f, index) => {
+      const val = initialFieldValues[f.name] || fieldValues[f.name] || ''
+      const detectedType = inferFieldType(f.field_type, f.name, val)
+      return {
         name: f.name,
-        position: f.position,
-        required: f.required,
-        field_type: 'text',
-      }))
-    : Object.keys(fieldValues).map((name, index) => ({
-        name,
-        position: index,
-        required: false,
-        field_type: 'text',
-      }))
+        position: f.position ?? index,
+        required: Boolean(f.required),
+        field_type: detectedType,
+      }
+    })
+  }, [cardDetailQuery.data?.fields, template?.field_defs, fieldValues, initialFieldValues])
 
   const deckList = cardDetailQuery.data?.decks || []
 
@@ -241,6 +360,24 @@ export function StudyQuickEditDialog({
           {/* Dynamic Note Fields */}
           {fieldDefs.map((field) => {
             const val = fieldValues[field.name] || ''
+            const ft = field.field_type
+
+            if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
+              return (
+                <MediaFieldPreview
+                  key={field.name}
+                  fieldName={field.name}
+                  fieldType={ft}
+                  value={val}
+                  onChange={(v) =>
+                    setFieldValues((prev) => ({ ...prev, [field.name]: v }))
+                  }
+                  required={field.required}
+                  resolveUrl={mediaResolver}
+                />
+              )
+            }
+
             const isMultiline =
               val.length > 60 ||
               val.includes('\n') ||

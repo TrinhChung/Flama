@@ -249,4 +249,199 @@ describe('StudyQuickEditDialog', () => {
 
     expect(wordInput.value).toBe('勉強')
   })
+
+  it('renders audio player and image preview for media fields in quick edit dialog', async () => {
+    const onOpenChange = vi.fn()
+    const onCardUpdated = vi.fn()
+
+    const mediaTemplate: StudyTemplateArtifact = {
+      ...mockTemplate,
+      field_defs: [
+        { name: 'Word', field_type: 'text', required: true, position: 0 },
+        { name: 'Word_Audio', field_type: 'audio', required: false, position: 1 },
+        { name: 'Illustration', field_type: 'image', required: false, position: 2 },
+      ],
+    }
+
+    const mediaContent: StudyContentArtifact = {
+      ...mockContent,
+      field_values: {
+        Word: '猫',
+        Word_Audio: 'https://example.com/neko.mp3',
+        Illustration: 'https://example.com/neko.png',
+      },
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(
+        renderWithClient(
+          <StudyQuickEditDialog
+            open={true}
+            onOpenChange={onOpenChange}
+            cardId="card-123"
+            deckName="N5 Deck"
+            template={mediaTemplate}
+            content={mediaContent}
+            onCardUpdated={onCardUpdated}
+          />,
+        ),
+      )
+    })
+
+    // Check Audio Player rendered
+    const audioElement = document.querySelector('audio')
+    expect(audioElement).not.toBeNull()
+    expect(audioElement?.src).toBe('https://example.com/neko.mp3')
+
+    // Check Image preview rendered
+    const imageElement = document.querySelector('img[alt="Illustration 1"]') as HTMLImageElement
+    expect(imageElement).not.toBeNull()
+    expect(imageElement?.src).toBe('https://example.com/neko.png')
+
+    // Check view mode buttons exist for each media field (Preview, URL, Code)
+    const previewButtons = document.querySelectorAll('button[title^="Xem trước"]')
+    expect(previewButtons.length).toBe(2)
+  })
+
+  it('infers audio and image fields by name and resolves assets from media list', async () => {
+    const onOpenChange = vi.fn()
+    const onCardUpdated = vi.fn()
+
+    // Template where field_type was omitted or defaulted to 'text', but field names indicate media
+    const implicitMediaTemplate: StudyTemplateArtifact = {
+      ...mockTemplate,
+      field_defs: [
+        { name: 'Word', field_type: 'text', required: true, position: 0 },
+        { name: 'Audio', field_type: 'text', required: false, position: 1 },
+      ],
+    }
+
+    const implicitMediaContent: StudyContentArtifact = {
+      ...mockContent,
+      field_values: {
+        Word: '犬',
+        Audio: '[sound:inu.mp3]',
+      },
+      media: [
+        {
+          id: 'asset-inu-1',
+          field_name: 'Audio',
+          filename: 'inu.mp3',
+          mime_type: 'audio/mpeg',
+          sha256: 'abc123hash',
+          proxy_url: '/media/proxy/asset-inu-1',
+        },
+      ],
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(
+        renderWithClient(
+          <StudyQuickEditDialog
+            open={true}
+            onOpenChange={onOpenChange}
+            cardId="card-123"
+            deckName="N5 Deck"
+            template={implicitMediaTemplate}
+            content={implicitMediaContent}
+            onCardUpdated={onCardUpdated}
+          />,
+        ),
+      )
+    })
+
+    // Audio element should be rendered because field is named 'Audio' and resolved via mediaResolver
+    const audioElement = document.querySelector('audio')
+    expect(audioElement).not.toBeNull()
+    expect(audioElement?.src).toContain('/media/proxy/asset-inu-1')
+  })
+
+  it('forwards media_assets from PATCH response to onCardUpdated options', async () => {
+    const onOpenChange = vi.fn()
+    const onCardUpdated = vi.fn()
+
+    mocks.mutate.mockResolvedValueOnce({
+      success: true,
+      detail: {
+        note: {
+          id: 789,
+          field_values: { Word: '猫', Audio: '/media/proxy/cat-audio-99' },
+          tags: ['n5'],
+          deck_id: 1,
+        },
+        media_assets: [
+          {
+            id: 'cat-audio-99',
+            field_name: 'Audio',
+            filename: 'cat.mp3',
+            mime_type: 'audio/mpeg',
+            url: '/media/proxy/cat-audio-99',
+          },
+        ],
+      },
+    })
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(
+        renderWithClient(
+          <StudyQuickEditDialog
+            open={true}
+            onOpenChange={onOpenChange}
+            cardId="card-cat-1"
+            deckName="N5 Deck"
+            template={mockTemplate}
+            content={mockContent}
+            onCardUpdated={onCardUpdated}
+          />,
+        ),
+      )
+    })
+
+    // Modify a field to dirty the form
+    const wordInput = document.querySelector('input[value="勉強"]') as HTMLInputElement
+    expect(wordInput).not.toBeNull()
+
+    await act(async () => {
+      setNativeValue(wordInput, '猫')
+    })
+
+    // Click Save
+    const saveBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Lưu thay đổi'),
+    )
+    expect(saveBtn).not.toBeNull()
+
+    await act(async () => {
+      saveBtn?.click()
+    })
+
+    expect(onCardUpdated).toHaveBeenCalledWith(
+      'card-cat-1',
+      expect.objectContaining({
+        Word: '猫',
+        Audio: '/media/proxy/cat-audio-99',
+      }),
+      expect.objectContaining({
+        noteId: '789',
+        media: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'cat-audio-99',
+            proxy_url: '/media/proxy/cat-audio-99',
+          }),
+        ]),
+      }),
+    )
+  })
 })

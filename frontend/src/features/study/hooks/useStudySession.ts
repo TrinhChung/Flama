@@ -3,8 +3,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { ApiError } from '@/shared/api/client'
-import type { Rating } from '../types'
 import type {
+  Rating,
+  StudyMediaArtifact,
   StudySessionCommitReceipt,
   StudySessionSnapshot,
   StudySessionStatus,
@@ -30,6 +31,7 @@ import {
 import type {
   PersistedStudySession,
   StudyCommitReason,
+  StudySessionAccumulatedStats,
   UpdatedTemplatePayload,
 } from '../session/sessionStore'
 import { patchRenderContext } from '../renderer/clientRenderer'
@@ -363,7 +365,34 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
         prepared.payload,
       )
       if (!isThisLease()) return result
-      const reconciled = applyCommitReceipt(prepared.session, result)
+      const batchReviews = prepared.session.events.length
+      const batchDurationMs = prepared.session.events.reduce(
+        (sum, ev) => sum + (ev.duration_ms || 0),
+        0,
+      )
+      const batchAgain = prepared.session.events.filter((ev) => ev.rating === 'again').length
+      const batchHard = prepared.session.events.filter((ev) => ev.rating === 'hard').length
+      const batchGood = prepared.session.events.filter((ev) => ev.rating === 'good').length
+      const batchEasy = prepared.session.events.filter((ev) => ev.rating === 'easy').length
+
+      const prevStats = prepared.session.accumulated_stats || {
+        total_reviews: 0,
+        total_duration_ms: 0,
+        again_count: 0,
+        hard_count: 0,
+        good_count: 0,
+        easy_count: 0,
+      }
+
+      const nextAccumulated: StudySessionAccumulatedStats = {
+        total_reviews: prevStats.total_reviews + batchReviews,
+        total_duration_ms: prevStats.total_duration_ms + batchDurationMs,
+        again_count: prevStats.again_count + batchAgain,
+        hard_count: prevStats.hard_count + batchHard,
+        good_count: prevStats.good_count + batchGood,
+        easy_count: prevStats.easy_count + batchEasy,
+      }
+
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
@@ -373,7 +402,10 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       if (prepared.session.resume_after_commit) {
         const opened = await openSnapshot(userId, deckId)
         if (!isThisLease()) return result
-        const next = createPersistedSession(opened)
+        const next = createPersistedSession(opened, {
+          accumulated_stats: nextAccumulated,
+          session_started_at_ms: prepared.session.session_started_at_ms ?? prepared.session.opened_client_at_ms,
+        })
         sessionDurableRef.current = await saveStudySession(next)
         if (!isThisLease()) return result
         activateSession(next)
@@ -384,6 +416,9 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
           prepared.session.snapshot.session_id,
         )
         if (!isThisLease()) return result
+        const reconciled = applyCommitReceipt(prepared.session, result, {
+          accumulated_stats: nextAccumulated,
+        })
         activateSession(reconciled)
         setReceipt(result)
       }
@@ -398,7 +433,34 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
         const pending = sessionRef.current
         if (pending) {
           const result = caught.details
-          const reconciled = applyCommitReceipt(pending, result)
+          const batchReviews = pending.events.length
+          const batchDurationMs = pending.events.reduce(
+            (sum, ev) => sum + (ev.duration_ms || 0),
+            0,
+          )
+          const batchAgain = pending.events.filter((ev) => ev.rating === 'again').length
+          const batchHard = pending.events.filter((ev) => ev.rating === 'hard').length
+          const batchGood = pending.events.filter((ev) => ev.rating === 'good').length
+          const batchEasy = pending.events.filter((ev) => ev.rating === 'easy').length
+
+          const prevStats = pending.accumulated_stats || {
+            total_reviews: 0,
+            total_duration_ms: 0,
+            again_count: 0,
+            hard_count: 0,
+            good_count: 0,
+            easy_count: 0,
+          }
+
+          const nextAccumulated: StudySessionAccumulatedStats = {
+            total_reviews: prevStats.total_reviews + batchReviews,
+            total_duration_ms: prevStats.total_duration_ms + batchDurationMs,
+            again_count: prevStats.again_count + batchAgain,
+            hard_count: prevStats.hard_count + batchHard,
+            good_count: prevStats.good_count + batchGood,
+            easy_count: prevStats.easy_count + batchEasy,
+          }
+
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
             queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
@@ -408,7 +470,10 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
           if (pending.resume_after_commit) {
             const opened = await openSnapshot(userId, deckId)
             if (!isThisLease()) return result
-            const next = createPersistedSession(opened)
+            const next = createPersistedSession(opened, {
+              accumulated_stats: nextAccumulated,
+              session_started_at_ms: pending.session_started_at_ms ?? pending.opened_client_at_ms,
+            })
             sessionDurableRef.current = await saveStudySession(next)
             if (!isThisLease()) return result
             activateSession(next)
@@ -419,6 +484,9 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
               pending.snapshot.session_id,
             )
             if (!isThisLease()) return result
+            const reconciled = applyCommitReceipt(pending, result, {
+              accumulated_stats: nextAccumulated,
+            })
             activateSession(reconciled)
             setReceipt(result)
           }
@@ -554,7 +622,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
   const updateCardContent = useCallback(async (
     cardId: string,
     updatedFieldValues: Record<string, string>,
-    options?: { noteId?: string | null; skipBroadcast?: boolean },
+    options?: { noteId?: string | null; skipBroadcast?: boolean; media?: StudyMediaArtifact[] },
   ) => {
     const current = sessionRef.current
     if (!current) return
@@ -569,10 +637,42 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       const template = current.snapshot.templates[card.template_key]
       const existingContent = updatedContents[contentKey]
       if (existingContent) {
+        // Merge media assets
+        const combinedMedia: StudyMediaArtifact[] = options?.media && options.media.length > 0
+          ? [...options.media]
+          : [...(existingContent.media || [])]
+
+        // Synthesize any proxy URLs found in updatedFieldValues not yet in combinedMedia
+        const existingProxyUrls = new Set(combinedMedia.map((m) => m.proxy_url))
+        for (const [fieldName, val] of Object.entries(updatedFieldValues)) {
+          if (typeof val === 'string') {
+            const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+            if (matches) {
+              for (const pUrl of matches) {
+                if (!existingProxyUrls.has(pUrl)) {
+                  const assetId = pUrl.replace('/media/proxy/', '')
+                  const lk = fieldName.toLowerCase()
+                  const isAudio = lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
+                  combinedMedia.push({
+                    id: assetId,
+                    field_name: fieldName,
+                    filename: `${assetId}`,
+                    mime_type: isAudio ? 'audio/mpeg' : 'image/jpeg',
+                    sha256: '',
+                    proxy_url: pUrl,
+                  })
+                  existingProxyUrls.add(pUrl)
+                }
+              }
+            }
+          }
+        }
+
         const nextRenderContext = patchRenderContext(
           existingContent.render_context || {},
           updatedFieldValues,
           template?.field_defs,
+          combinedMedia,
         )
         updatedContents[contentKey] = {
           ...existingContent,
@@ -581,6 +681,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
             ...updatedFieldValues,
           },
           render_context: nextRenderContext,
+          media: combinedMedia,
         }
       }
     }
@@ -601,7 +702,10 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       // Retain in-memory copy
     }
     if (!options?.skipBroadcast) {
-      await updateCardFieldValuesInSessions(cardId, updatedFieldValues, { noteId: options?.noteId })
+      await updateCardFieldValuesInSessions(cardId, updatedFieldValues, {
+        noteId: options?.noteId,
+        media: options?.media,
+      })
     }
   }, [activateSession])
 
@@ -704,10 +808,16 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
 
   // Synchronize card content and template updates in real-time (from Browse, Note Modal, or other tabs)
   useEffect(() => {
-    const handleCardSync = (detail: { cardId?: string; noteId?: string | null; fieldValues?: Record<string, string> }) => {
+    const handleCardSync = (detail: {
+      cardId?: string
+      noteId?: string | null
+      fieldValues?: Record<string, string>
+      media?: StudyMediaArtifact[]
+    }) => {
       if (!detail?.cardId || !detail?.fieldValues) return
       void updateCardContent(detail.cardId, detail.fieldValues, {
         noteId: detail.noteId,
+        media: detail.media,
         skipBroadcast: true,
       })
     }
@@ -758,10 +868,38 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     }
   }, [updateCardContent, updateTemplateContent])
 
+  const totalSessionStats: StudySessionAccumulatedStats = useMemo(() => {
+    const acc = session?.accumulated_stats || {
+      total_reviews: 0,
+      total_duration_ms: 0,
+      again_count: 0,
+      hard_count: 0,
+      good_count: 0,
+      easy_count: 0,
+    }
+    // If the session is active and has uncommitted events, combine with accumulated
+    const isUncommitted = session?.status === 'active' && Boolean(session?.events?.length)
+    if (!isUncommitted || !session) return acc
+    const batchDurationMs = session.events.reduce((sum, ev) => sum + (ev.duration_ms || 0), 0)
+    const batchAgain = session.events.filter((ev) => ev.rating === 'again').length
+    const batchHard = session.events.filter((ev) => ev.rating === 'hard').length
+    const batchGood = session.events.filter((ev) => ev.rating === 'good').length
+    const batchEasy = session.events.filter((ev) => ev.rating === 'easy').length
+    return {
+      total_reviews: acc.total_reviews + session.events.length,
+      total_duration_ms: acc.total_duration_ms + batchDurationMs,
+      again_count: acc.again_count + batchAgain,
+      hard_count: acc.hard_count + batchHard,
+      good_count: acc.good_count + batchGood,
+      easy_count: acc.easy_count + batchEasy,
+    }
+  }, [session])
+
   return {
     session,
     view,
     receipt,
+    totalSessionStats,
     error: leaseState.status === 'error' ? leaseState.error : error,
     leaseConflict: Boolean(
       currentScopeKey

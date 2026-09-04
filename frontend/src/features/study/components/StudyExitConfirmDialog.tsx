@@ -1,4 +1,4 @@
-﻿import { CheckCircle2, LoaderCircle, LogOut, Play } from 'lucide-react'
+import { CheckCircle2, LoaderCircle, LogOut, Play } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -27,17 +27,20 @@ export function StudyExitConfirmDialog({
   onDiscardAndExit,
 }: StudyExitConfirmDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!nextOpen && !isCommitting) {
-        onContinueStudy()
-      }
-    }}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !isCommitting) {
+          onContinueStudy()
+        }
+      }}
+    >
       <DialogContent
-        className="sm:max-w-md p-6"
+        className="sm:max-w-md p-6 rounded-2xl border-border/80"
         showCloseButton={!isCommitting}
       >
         <DialogHeader className="space-y-3">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border border-orange-500/20 shadow-xs">
             <LogOut className="size-6" aria-hidden="true" />
           </div>
           <DialogTitle className="text-center text-xl font-bold text-foreground">
@@ -58,55 +61,67 @@ export function StudyExitConfirmDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogFooter className="mt-4 flex flex-col-reverse gap-2 sm:flex-col sm:gap-2">
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isCommitting}
-              onClick={onContinueStudy}
-              className="w-full sm:w-auto"
-            >
-              <Play className="mr-2 size-4" aria-hidden="true" />
-              Tiếp tục học
-            </Button>
-            {eventsCount > 0 ? (
+        <DialogFooter className="mt-4 sm:mt-6 -mx-6 -mb-6 p-4 sm:p-5 flex flex-col gap-3 rounded-b-2xl border-t bg-muted/40 sm:flex-col">
+          {eventsCount > 0 ? (
+            <div className="flex flex-col sm:flex-row-reverse sm:items-center sm:justify-between gap-3 w-full">
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end w-full sm:w-auto">
+                <Button
+                  type="button"
+                  disabled={isCommitting}
+                  onClick={onSaveAndExit}
+                  className="w-full sm:w-auto h-11 sm:h-10 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs transition-all text-sm order-1 sm:order-2"
+                >
+                  {isCommitting ? (
+                    <LoaderCircle className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <CheckCircle2 className="mr-2 size-4" aria-hidden="true" />
+                  )}
+                  {isCommitting ? 'Đang lưu tiến độ…' : 'Lưu & Thoát'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isCommitting}
+                  onClick={onContinueStudy}
+                  className="w-full sm:w-auto h-11 sm:h-10 rounded-xl border-border/80 font-medium text-sm order-2 sm:order-1 hover:bg-muted"
+                >
+                  <Play className="mr-2 size-4" aria-hidden="true" />
+                  Tiếp tục học
+                </Button>
+              </div>
+
+              <div className="text-center sm:text-left pt-1 sm:pt-0">
+                <button
+                  type="button"
+                  disabled={isCommitting}
+                  onClick={onDiscardAndExit}
+                  className="min-h-[36px] inline-flex items-center justify-center text-xs text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50 px-1"
+                >
+                  Thoát không lưu tiến độ này
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:justify-end gap-2.5 w-full">
               <Button
                 type="button"
+                variant="outline"
                 disabled={isCommitting}
-                onClick={onSaveAndExit}
-                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-semibold dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                onClick={onContinueStudy}
+                className="w-full sm:w-auto h-11 sm:h-10 rounded-xl border-border/80 font-medium text-sm order-2 sm:order-1"
               >
-                {isCommitting ? (
-                  <LoaderCircle className="mr-2 size-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <CheckCircle2 className="mr-2 size-4" aria-hidden="true" />
-                )}
-                {isCommitting ? 'Đang lưu tiến độ…' : 'Lưu & Thoát'}
+                <Play className="mr-2 size-4" aria-hidden="true" />
+                Tiếp tục học
               </Button>
-            ) : (
               <Button
                 type="button"
                 disabled={isCommitting}
                 onClick={onDiscardAndExit}
-                variant="default"
-                className="w-full sm:w-auto"
+                variant="destructive"
+                className="w-full sm:w-auto h-11 sm:h-10 rounded-xl font-semibold text-sm order-1 sm:order-2"
               >
                 Thoát phiên
               </Button>
-            )}
-          </div>
-
-          {eventsCount > 0 && (
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                disabled={isCommitting}
-                onClick={onDiscardAndExit}
-                className="text-xs text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50"
-              >
-                Thoát không lưu tiến độ này
-              </button>
             </div>
           )}
         </DialogFooter>

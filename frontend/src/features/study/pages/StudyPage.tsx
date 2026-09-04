@@ -63,9 +63,10 @@ export function StudyPage() {
     setIsExiting(true)
     try {
       await study.commit({ reason: 'manual_exit' })
-      blocker.proceed?.()
+      blocker.reset?.()
     } catch (err) {
       console.error('Failed to commit study session before exit:', err)
+      blocker.proceed?.()
     } finally {
       setIsExiting(false)
     }
@@ -369,6 +370,7 @@ export function StudyPage() {
           deckId={deckIdRaw}
           session={study.session}
           receipt={study.receipt}
+          totalSessionStats={study.totalSessionStats}
           counts={counts}
           isBusy={study.isBusy}
           onCommit={handleCommit}
@@ -450,6 +452,7 @@ export function StudyPage() {
             deckId={deckIdRaw}
             session={study.session}
             receipt={study.receipt}
+            totalSessionStats={study.totalSessionStats}
             counts={counts}
             isBusy={study.isBusy}
             onCommit={handleCommit}

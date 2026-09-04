@@ -21,6 +21,7 @@ import { resolveReviewAction } from '../interactions/reviewInteraction'
 import type {
   PersistedStudySession,
   StudyCommitReason,
+  StudySessionAccumulatedStats,
 } from './sessionStore'
 
 export type StudySessionView = {
@@ -56,6 +57,10 @@ function cloneSnapshot(snapshot: StudySessionSnapshot): StudySessionSnapshot {
 
 export function createPersistedSession(
   snapshot: StudySessionSnapshot,
+  options?: {
+    accumulated_stats?: StudySessionAccumulatedStats
+    session_started_at_ms?: number
+  },
 ): PersistedStudySession {
   validateSnapshotAlgorithmContract(snapshot)
   const cloned = cloneSnapshot(snapshot)
@@ -72,6 +77,7 @@ export function createPersistedSession(
     snapshot.day_boundary_hour_local,
     snapshot.learn_ahead_seconds,
   )
+  const clientNow = Date.now()
   return {
     scope_key: `user:${snapshot.user_id}:${snapshot.scope.type}:${snapshot.scope.id}`,
     snapshot: cloned,
@@ -79,12 +85,14 @@ export function createPersistedSession(
     touched_card_ids: [],
     undo_history: [],
     active_card_id: initialSelected?.card_id ?? null,
-    opened_client_at_ms: Date.now(),
+    opened_client_at_ms: clientNow,
+    session_started_at_ms: options?.session_started_at_ms ?? clientNow,
+    accumulated_stats: options?.accumulated_stats,
     status: 'active',
     commit_id: null,
     commit_reason: null,
     resume_after_commit: false,
-    updated_at_ms: Date.now(),
+    updated_at_ms: clientNow,
   }
 }
 
@@ -367,12 +375,16 @@ export function prepareCommit(
 export function applyCommitReceipt(
   session: PersistedStudySession,
   receipt: StudySessionCommitReceipt,
+  options?: {
+    accumulated_stats?: StudySessionAccumulatedStats
+  },
 ) {
   const updates = new Map(
     receipt.updated_cards.map((row) => [row.card_id, row]),
   )
   return {
     ...session,
+    accumulated_stats: options?.accumulated_stats ?? session.accumulated_stats,
     snapshot: {
       ...session.snapshot,
       cards: session.snapshot.cards.map((card) => {

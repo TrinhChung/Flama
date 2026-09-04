@@ -133,4 +133,31 @@ describe('MediaFieldPreview', () => {
 
     expect(onChange).toHaveBeenCalledWith('https://example.com/pasted.png')
   })
+
+  it('unwraps [sound:...] syntax for audio and supports custom resolveUrl', async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const resolveUrl = vi.fn((raw: string) => {
+      if (raw === 'custom_sound.mp3') return 'https://example.com/custom_sound.mp3'
+      return undefined
+    })
+
+    await act(async () => {
+      root.render(
+        <MediaFieldPreview
+          fieldName="Audio"
+          fieldType="audio"
+          value="[sound:custom_sound.mp3]"
+          onChange={vi.fn()}
+          resolveUrl={resolveUrl}
+        />,
+      )
+    })
+
+    expect(resolveUrl).toHaveBeenCalledWith('custom_sound.mp3')
+    const audio = container.querySelector('audio')
+    expect(audio).not.toBeNull()
+    expect(audio?.src).toBe('https://example.com/custom_sound.mp3')
+  })
 })

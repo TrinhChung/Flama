@@ -22,10 +22,22 @@ interface MediaFieldPreviewProps {
   value: string
   onChange: (value: string) => void
   required?: boolean
+  resolveUrl?: (raw: string) => string | undefined
 }
 
-export function resolveDisplayUrl(raw: string): string {
-  const value = raw.trim()
+export function resolveDisplayUrl(
+  raw: string,
+  customResolver?: (raw: string) => string | undefined,
+): string {
+  let value = raw.trim()
+  const soundMatch = /^\[sound:(.+)\]$/i.exec(value)
+  if (soundMatch) {
+    value = soundMatch[1].trim()
+  }
+  if (customResolver) {
+    const resolved = customResolver(value)
+    if (resolved) return resolved
+  }
   if (/^https:\/\/[^\s"'<>]+$/i.test(value)) return value
   if (/^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/[^\s"'<>]*$/i.test(value)) return value
   if (/^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) return resolveBackendUrl(value)
@@ -59,8 +71,12 @@ function mediaFamilyFromUrl(raw: string): 'image' | 'audio' | null {
   return null
 }
 
-function isValidForField(raw: string, fieldType: MediaFieldPreviewProps['fieldType']): boolean {
-  const displayUrl = resolveDisplayUrl(raw)
+function isValidForField(
+  raw: string,
+  fieldType: MediaFieldPreviewProps['fieldType'],
+  customResolver?: (raw: string) => string | undefined,
+): boolean {
+  const displayUrl = resolveDisplayUrl(raw, customResolver)
   if (!displayUrl) return false
   const detectedFamily = mediaFamilyFromUrl(displayUrl)
   const expectedFamily = fieldType === 'audio' ? 'audio' : 'image'
@@ -79,9 +95,10 @@ function buildDerivedHtml(
   urls: string[],
   fieldType: MediaFieldPreviewProps['fieldType'],
   fieldName: string,
+  customResolver?: (raw: string) => string | undefined,
 ): string {
   const tags = urls
-    .map(resolveDisplayUrl)
+    .map((url) => resolveDisplayUrl(url, customResolver))
     .filter(Boolean)
     .map((url) =>
       fieldType === 'audio'
@@ -98,6 +115,7 @@ export function MediaFieldPreview({
   value,
   onChange,
   required,
+  resolveUrl,
 }: MediaFieldPreviewProps) {
   const [viewMode, setViewMode] = useState<'preview' | 'url' | 'code'>('preview')
   const [isUploading, setIsUploading] = useState(false)
@@ -106,13 +124,13 @@ export function MediaFieldPreview({
 
   const values = useMemo(() => parseMediaValues(value), [value])
   const validUrls = useMemo(
-    () => values.filter((item) => isValidForField(item, fieldType)),
-    [values, fieldType],
+    () => values.filter((item) => isValidForField(item, fieldType, resolveUrl)),
+    [values, fieldType, resolveUrl],
   )
   const invalidCount = values.length - validUrls.length
   const derivedHtml = useMemo(
-    () => buildDerivedHtml(validUrls, fieldType, fieldName),
-    [validUrls, fieldType, fieldName],
+    () => buildDerivedHtml(validUrls, fieldType, fieldName, resolveUrl),
+    [validUrls, fieldType, fieldName, resolveUrl],
   )
   const FieldIcon = fieldType === 'audio' ? Music : fieldType === 'diagram' ? FileImage : ImageIcon
 
@@ -293,7 +311,7 @@ export function MediaFieldPreview({
                 <audio
                   key={`${rawUrl}-${index}`}
                   controls
-                  src={resolveDisplayUrl(rawUrl)}
+                  src={resolveDisplayUrl(rawUrl, resolveUrl)}
                   className="w-full h-8 rounded"
                   preload="metadata"
                 />
@@ -308,7 +326,7 @@ export function MediaFieldPreview({
                 {validUrls.map((rawUrl, index) => (
                   <img
                     key={`${rawUrl}-${index}`}
-                    src={resolveDisplayUrl(rawUrl)}
+                    src={resolveDisplayUrl(rawUrl, resolveUrl)}
                     alt={`${fieldName} ${index + 1}`}
                     className="w-full rounded-lg object-contain max-h-40 bg-background border border-border/40"
                     loading="lazy"

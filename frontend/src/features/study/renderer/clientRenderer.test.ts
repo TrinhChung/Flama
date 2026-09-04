@@ -322,6 +322,46 @@ describe('renderStudySide', () => {
       expect(updated.Image_urls).toEqual(['http://example.com/cat.jpg'])
     })
 
+    it('generates rich media HTML tags for audio and image fields rather than plain strings', () => {
+      const updated = patchRenderContext({}, {
+        Audio: 'https://example.com/sound.mp3',
+        Image: 'https://example.com/cat.jpg',
+      })
+      expect(updated.Audio).toContain('<audio controls')
+      expect(updated.Audio).toContain('class="flama-media-audio"')
+      expect(updated.Audio).toContain('src="https://example.com/sound.mp3"')
+      expect(updated.Audio).not.toBe('https://example.com/sound.mp3')
+
+      expect(updated.Image).toContain('<img')
+      expect(updated.Image).toContain('class="flama-media-image"')
+      expect(updated.Image).toContain('src="https://example.com/cat.jpg"')
+      expect(updated.Image).not.toBe('https://example.com/cat.jpg')
+    })
+
+    it('renders multi-value media URLs into a gallery div', () => {
+      const updated = patchRenderContext({}, {
+        Image: 'https://example.com/1.png\nhttps://example.com/2.png',
+      }, [{ name: 'Image', field_type: 'image' }])
+      expect(updated.Image).toContain('<div class="flama-media-gallery">')
+      expect(updated.Image_urls).toEqual(['https://example.com/1.png', 'https://example.com/2.png'])
+    })
+
+    it('auto-heals corrupted raw media strings upon renderStudySide', () => {
+      const baseTemplate = template({
+        front_source: '<div>{{{Audio}}}</div>',
+        field_defs: [{ name: 'Audio', field_type: 'audio' }],
+      })
+      const baseContent = content({
+        render_context: {
+          Audio: 'https://example.com/voice.mp3', // Corrupted plain string in stored state
+        },
+      })
+      const result = renderStudySide(baseTemplate, baseContent, 'front')
+      expect(result.html).toContain('<audio controls')
+      expect(result.html).toContain('src="https://example.com/voice.mp3"')
+      expect(result.allowed_audio_urls).toContain('https://example.com/voice.mp3')
+    })
+
     it('supports alias mapping like han_viet and nested objects', () => {
       const updated = patchRenderContext({}, {
         han_viet: 'KHUYỂN',

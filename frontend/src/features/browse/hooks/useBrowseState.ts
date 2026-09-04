@@ -78,6 +78,13 @@ export type CardDetailResponse = {
     tags: string[]
   }
   fields: CardDetailField[]
+  media_assets?: Array<{
+    id: string
+    field_name: string
+    filename: string
+    mime_type: string
+    url: string
+  }>
   decks?: Array<{ id: number; name: string; path?: string }>
 }
 
