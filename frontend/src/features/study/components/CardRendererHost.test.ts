@@ -333,4 +333,72 @@ describe('card renderer host viewport modes', () => {
     expect(iframe.srcdoc).not.toContain(`${window.location.origin}/media/proxy/not-attached`)
     controller.destroy()
   })
+
+  it('derives proxy media from HTML when explicit allowed_media_urls is omitted and allows playback', async () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve())
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(
+      iframe,
+      { mediaBaseUrl: 'https://be-flama.stmtp.com/' },
+    )
+    controller.render({
+      html: '<img src="/media/proxy/derived-img-1"><audio src="/media/proxy/derived-audio-1"></audio>',
+    })
+
+    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/derived-img-1')
+    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/derived-audio-1')
+
+    const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
+    const frameWindow = iframe.contentWindow!
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frameWindow,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId,
+        action: 'play_audio',
+        payload: {
+          ref: '/media/proxy/derived-audio-1',
+          requestId: `${instanceId}:audio:1`,
+          elementToken: 'flama-audio-1',
+        },
+      },
+    }))
+    await Promise.resolve()
+
+    const sharedAudio = document.querySelector('body > audio[aria-hidden="true"]')
+    expect(sharedAudio?.getAttribute('src')).toBe(
+      'https://be-flama.stmtp.com/media/proxy/derived-audio-1',
+    )
+    controller.destroy()
+  })
+
+  it('normalizes full backend media URLs to proxy refs regardless of origin', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(
+      iframe,
+      { mediaBaseUrl: 'https://be-flama.stmtp.com/' },
+    )
+    controller.render({
+      html: '<audio src="https://be-flama.stmtp.com/media/proxy/audio-remote-1"></audio>',
+    })
+
+    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/audio-remote-1')
+    controller.destroy()
+  })
 })
