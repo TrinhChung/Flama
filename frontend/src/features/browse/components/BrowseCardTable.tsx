@@ -33,6 +33,16 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
     setSortDir,
   } = browse
 
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (typeof tableContainerRef.current?.scrollTo === 'function') {
+      tableContainerRef.current.scrollTo({ top: 0, behavior: 'instant' })
+    } else if (tableContainerRef.current) {
+      tableContainerRef.current.scrollTop = 0
+    }
+  }, [page])
+
   if (cardsQuery.isPending) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 bg-background">
@@ -68,12 +78,6 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
 
   const total = cardsQuery.data?.total || 0
   const pages = cardsQuery.data?.pages || 1
-
-  const tableContainerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    tableContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' })
-  }, [page])
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background overflow-hidden relative">
