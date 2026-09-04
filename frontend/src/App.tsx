@@ -174,6 +174,11 @@ const DeckAudioGeneratorPage = lazy(() =>
     default: module.DeckAudioGeneratorPage,
   })),
 )
+const WorksheetsPage = lazy(() =>
+  import('./features/worksheets/pages/WorksheetsPage').then((module) => ({
+    default: module.WorksheetsPage,
+  })),
+)
 const AdminImageLibraryPage = lazy(() =>
   import('./features/admin/pages/AdminImageLibraryPage').then((module) => ({
     default: module.AdminImageLibraryPage,
@@ -438,6 +443,10 @@ const router = createBrowserRouter([
           {
             path: 'flashcards/change-requests/:requestId',
             element: deferred(<ChangeRequestDetailPage />),
+          },
+          {
+            path: 'worksheets',
+            element: deferred(<WorksheetsPage />),
           },
           {
             path: 'audio/generate',

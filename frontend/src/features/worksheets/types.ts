@@ -13,7 +13,7 @@ export interface WorksheetTemplate {
   name_en: string
   description_vi: string
   description_en: string
-  category: 'kanji' | 'vocabulary' | 'table' | 'sentence' | 'grammar'
+  category: 'kanji' | 'vocabulary' | 'table' | 'sentence' | 'grammar' | 'essay'
   supported_orientations: ('portrait' | 'landscape')[]
   default_orientation: 'portrait' | 'landscape'
   default_rows_per_page: number
@@ -69,6 +69,19 @@ export interface WorksheetLayoutOptions {
   show_student_info?: boolean
   show_date?: boolean
   locale?: 'ja' | 'zh' | 'zh-hant'
+  grid_columns?: number
+  grid_rows?: number
+  box_style?: 'square' | 'cross' | 'diagonal'
+  grid_color?: string
+  has_spacer_band?: boolean
+  spacer_height?: number
+  content_mode?: 'blank' | 'text' | 'trace'
+  custom_text?: string
+  header_student_style?: 'chinese' | 'vietnamese' | 'japanese' | 'none'
+  title_placement?: 'first_row' | 'header' | 'none'
+  footer_date_format?: 'chinese' | 'vietnamese' | 'none'
+  footer_brand_label?: string
+  essay_page_count?: number
 }
 
 export type WorksheetFieldMapping = Record<string, string | string[]>
@@ -148,6 +161,21 @@ export interface WorksheetGrammarItem {
   is_blank_filler?: boolean
 }
 
+export interface WorksheetEssayCell {
+  col_index: number
+  char?: string
+  is_blank?: boolean
+  is_title?: boolean
+  is_trace?: boolean
+}
+
+export interface WorksheetEssayRowItem {
+  type: 'essay_row'
+  note_id: string
+  row_index: number
+  cells: WorksheetEssayCell[]
+}
+
 export type WorksheetItem =
   | WorksheetKanjiItem
   | WorksheetVocabItem
@@ -155,6 +183,7 @@ export type WorksheetItem =
   | WorksheetTableRowItem
   | WorksheetSentenceItem
   | WorksheetGrammarItem
+  | WorksheetEssayRowItem
 
 export interface WorksheetPageHeader {
   title: string
@@ -184,10 +213,10 @@ export interface WorksheetPreviewResponse {
 }
 
 export interface WorksheetGenerationRequest {
-  deck_id: number
+  deck_id?: number | null
   template_id: string
   note_type_id?: string | number
-  field_mapping: WorksheetFieldMapping
+  field_mapping?: WorksheetFieldMapping
   options?: WorksheetLayoutOptions
   scope?: 'all' | 'first_n' | 'random_n'
   limit?: number

@@ -157,6 +157,172 @@ def _get_stroke_svg_content(locale: str, hex_code: str) -> str | None:
     return None
 
 
+def _generate_genkouyoushi_pages(
+    deck: Deck,
+    template: WorksheetTemplate,
+    notes: list[Note],
+    field_mapping: dict[str, Any],
+    options: dict[str, Any],
+) -> dict[str, Any]:
+    """Generate pages for Japanese Genkouyoushi / Chinese essay writing paper."""
+    grid_cols = max(10, min(30, int(options.get("grid_columns") or 20)))
+    grid_rows = max(5, min(30, int(options.get("grid_rows") or 20)))
+    total_cells_per_page = grid_cols * grid_rows
+
+    content_mode = str(options.get("content_mode") or "blank").strip().lower()  # 'blank' | 'text' | 'trace'
+    title_placement = str(options.get("title_placement") or "none").strip().lower()
+    header_title = str(options.get("header_title") or "").strip()
+    custom_text = str(options.get("custom_text") or "").strip()
+    requested_pages = max(1, min(20, int(options.get("essay_page_count") or 1)))
+    is_trace = content_mode == "trace"
+
+    # If text/trace mode and no custom text provided, try to extract from deck notes
+    if content_mode in ("text", "trace") and not custom_text and notes:
+        text_field = str(
+            field_mapping.get("custom_text")
+            or field_mapping.get("sentence")
+            or field_mapping.get("kanji")
+            or field_mapping.get("word")
+            or ""
+        ).strip()
+        collected = []
+        for n in notes:
+            fvals = n.field_values or {}
+            val = ""
+            if text_field and text_field in fvals:
+                val = str(fvals[text_field] or "").strip()
+            elif "Sentence" in fvals:
+                val = str(fvals["Sentence"] or "").strip()
+            elif "Example" in fvals:
+                val = str(fvals["Example"] or "").strip()
+            elif "Expression" in fvals:
+                val = str(fvals["Expression"] or "").strip()
+            if val:
+                c_val = CjkExtractor.strip_html(val)
+                if c_val:
+                    collected.append(c_val)
+        custom_text = "\n".join(collected)
+
+    all_grid_pages: list[list[list[dict[str, Any]]]] = []
+
+    def create_empty_page(p_idx: int) -> list[list[dict[str, Any]]]:
+        page_rows = []
+        for r in range(grid_rows):
+            row_cells = []
+            for c in range(grid_cols):
+                is_title_cell = False
+                char = ""
+                if p_idx == 0 and r == 0 and title_placement == "first_row" and header_title and content_mode != "blank":
+                    clean_title = CjkExtractor.strip_html(header_title).strip()
+                    t_len = len(clean_title)
+                    if t_len <= grid_cols:
+                        start_c = (grid_cols - t_len) // 2
+                        if start_c <= c < start_c + t_len:
+                            char = clean_title[c - start_c]
+                            is_title_cell = True
+                row_cells.append({
+                    "col_index": c,
+                    "char": char,
+                    "is_blank": not bool(char),
+                    "is_title": is_title_cell,
+                    "is_trace": False,
+                })
+            page_rows.append(row_cells)
+        return page_rows
+
+    if content_mode == "blank" or not custom_text.strip():
+        for p_idx in range(requested_pages):
+            all_grid_pages.append(create_empty_page(p_idx))
+    else:
+        # Layout text into cells
+        current_page_idx = 0
+        current_row_idx = 0
+        current_col_idx = 0
+
+        curr_page = create_empty_page(0)
+        all_grid_pages.append(curr_page)
+
+        if title_placement == "first_row" and header_title:
+            current_row_idx = 1
+            current_col_idx = 0
+
+        paragraphs = [p.strip() for p in custom_text.split("\n") if p.strip()]
+        for p in paragraphs:
+            # Paragraph start: indent 2 spaces if standard CJK essay
+            current_col_idx = min(2, grid_cols - 1)
+            for ch in p:
+                if ch in ("\r", "\t"):
+                    continue
+                if current_col_idx >= grid_cols:
+                    current_col_idx = 0
+                    current_row_idx += 1
+                    if current_row_idx >= grid_rows:
+                        current_row_idx = 0
+                        current_page_idx += 1
+                        curr_page = create_empty_page(current_page_idx)
+                        all_grid_pages.append(curr_page)
+
+                curr_page[current_row_idx][current_col_idx] = {
+                    "col_index": current_col_idx,
+                    "char": ch,
+                    "is_blank": False,
+                    "is_title": False,
+                    "is_trace": is_trace,
+                }
+                current_col_idx += 1
+
+            # End of paragraph: newline
+            current_row_idx += 1
+            current_col_idx = 0
+            if current_row_idx >= grid_rows:
+                current_row_idx = 0
+                current_page_idx += 1
+                curr_page = create_empty_page(current_page_idx)
+                all_grid_pages.append(curr_page)
+
+    total_pages = len(all_grid_pages)
+    show_student_info = bool(options.get("show_student_info", True))
+    show_date = bool(options.get("show_date", True))
+    header_subtitle = str(options.get("header_subtitle") or "Luyện viết văn và tập làm văn mỗi ngày").strip()
+
+    pages: list[dict[str, Any]] = []
+    for p_idx, page_rows in enumerate(all_grid_pages):
+        page_items = [
+            {
+                "type": "essay_row",
+                "note_id": f"essay-row-{p_idx}-{r_idx}",
+                "row_index": r_idx,
+                "cells": row_cells,
+            }
+            for r_idx, row_cells in enumerate(page_rows)
+        ]
+        pages.append({
+            "page_number": p_idx + 1,
+            "total_pages": total_pages,
+            "header": {
+                "title": header_title,
+                "subtitle": header_subtitle,
+                "deck_name": deck.name,
+                "show_student_info": show_student_info,
+                "show_date": show_date,
+                "header_student_style": options.get("header_student_style", "chinese"),
+            },
+            "items": page_items,
+        })
+
+    return {
+        "template": template.to_dict(),
+        "deck_id": deck.id,
+        "deck_name": deck.name,
+        "options": options,
+        "field_mapping": field_mapping,
+        "total_items": total_pages * total_cells_per_page,
+        "total_pages": total_pages,
+        "pages": pages,
+        "warnings": [],
+    }
+
+
 def generate_worksheet_preview(
     user_id: int,
     payload: dict[str, Any],
@@ -169,11 +335,21 @@ def generate_worksheet_preview(
         raise WorksheetServiceError(f"Mẫu bài tập '{template_id}' không hợp lệ.", code="INVALID_TEMPLATE")
 
     deck_id = payload.get("deck_id")
-    if deck_id is None:
-        raise WorksheetServiceError("deck_id là bắt buộc.", code="MISSING_DECK_ID")
-    deck_id_int = int(deck_id)
+    deck = None
+    deck_id_int = 0
+    if deck_id is not None:
+        try:
+            deck_id_int = int(deck_id)
+            if deck_id_int > 0:
+                deck = _check_deck_access(user_id, deck_id_int, admin_mode)
+        except (ValueError, TypeError):
+            deck = None
 
-    deck = _check_deck_access(user_id, deck_id_int, admin_mode)
+    if deck is None:
+        if template.id == "genkouyoushi" or template.category == "essay" or str((payload.get("options") or {}).get("content_mode") or "").strip().lower() == "blank":
+            deck = type("VirtualDeck", (), {"id": 0, "name": "Mẫu giấy luyện viết"})()
+        else:
+            raise WorksheetServiceError("deck_id là bắt buộc để tạo bài tập từ thẻ học.", code="MISSING_DECK_ID")
 
     # Options and mappings
     field_mapping = payload.get("field_mapping") or {}
@@ -225,27 +401,31 @@ def generate_worksheet_preview(
 
     # 1. Query Notes
     notes: list[Note] = []
-    if card_ids and isinstance(card_ids, list):
-        cards = (
-            Card.query.filter(Card.id.in_([str(cid) for cid in card_ids]))
-            .options(selectinload(Card.note))
-            .all()
-        )
-        seen_nids = set()
-        for c in cards:
-            if c.note and c.note.id not in seen_nids:
-                seen_nids.add(c.note.id)
-                notes.append(c.note)
-    elif note_ids and isinstance(note_ids, list):
-        notes = (
-            Note.query.filter(Note.id.in_([str(nid) for nid in note_ids]))
-            .all()
-        )
-    else:
-        query = Note.query.filter(Note.deck_id == deck_id_int)
-        if note_type_id:
-            query = query.filter(Note.note_type_id == int(note_type_id))
-        notes = query.all()
+    if getattr(deck, "id", 0) > 0:
+        if card_ids and isinstance(card_ids, list):
+            cards = (
+                Card.query.filter(Card.id.in_([str(cid) for cid in card_ids]))
+                .options(selectinload(Card.note))
+                .all()
+            )
+            seen_nids = set()
+            for c in cards:
+                if c.note and c.note.id not in seen_nids:
+                    seen_nids.add(c.note.id)
+                    notes.append(c.note)
+        elif note_ids and isinstance(note_ids, list):
+            notes = (
+                Note.query.filter(Note.id.in_([str(nid) for nid in note_ids]))
+                .all()
+            )
+        else:
+            query = Note.query.filter(Note.deck_id == deck.id)
+            if note_type_id:
+                query = query.filter(Note.note_type_id == str(note_type_id).strip())
+            notes = query.all()
+
+    if template.id == "genkouyoushi":
+        return _generate_genkouyoushi_pages(deck, template, notes, field_mapping, options)
 
     if not notes:
         return {
@@ -607,19 +787,71 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
         items = page.get("items") or []
 
         # Header Block
-        header_html = f"""
-        <header class="sheet-header">
-            <div class="header-main">
-                <h1 class="sheet-title">{html.escape(hdr.get("title") or "")}</h1>
-                <p class="sheet-subtitle">{html.escape(hdr.get("subtitle") or "")}</p>
-            </div>
-            <div class="header-meta">
-                {f'<span class="meta-field"><strong>Họ tên:</strong> ____________________</span>' if hdr.get("show_student_info") else ''}
-                {f'<span class="meta-field"><strong>Ngày:</strong> ____/____/20___</span>' if hdr.get("show_date") else ''}
-                <span class="meta-page">Trang {page_num} / {total_p}</span>
-            </div>
-        </header>
-        """
+        if template_id == "genkouyoushi":
+            hdr_style = str(options.get("header_student_style") or "chinese").strip().lower()
+            title_placement = str(options.get("title_placement") or "first_row").strip().lower()
+            header_title_text = html.escape(hdr.get("title") or "")
+
+            title_html = f'<h1 class="genkou-header-title">{header_title_text}</h1>' if (title_placement == "header" and header_title_text) else ""
+
+            student_bar_html = ""
+            if hdr.get("show_student_info"):
+                if hdr_style == "chinese":
+                    student_bar_html = """
+                    <div class="genkou-student-row">
+                        <span>班级 ________________</span>
+                        <span>姓名 ________________</span>
+                        <span>学号 ________________</span>
+                        <span>分数 ________________</span>
+                    </div>
+                    """
+                elif hdr_style == "japanese":
+                    student_bar_html = """
+                    <div class="genkou-student-row">
+                        <span>クラス ________________</span>
+                        <span>氏名 ________________</span>
+                        <span>学籍番号 ________________</span>
+                        <span>得点 ________________</span>
+                    </div>
+                    """
+                elif hdr_style == "vietnamese":
+                    student_bar_html = """
+                    <div class="genkou-student-row">
+                        <span>Lớp: ________________</span>
+                        <span>Họ tên: ________________</span>
+                        <span>Mã số: ________________</span>
+                        <span>Điểm: ________________</span>
+                    </div>
+                    """
+                elif hdr_style != "none":
+                    student_bar_html = """
+                    <div class="genkou-student-row">
+                        <span>Lớp: ________________</span>
+                        <span>Họ tên: ________________</span>
+                        <span>Điểm: ________________</span>
+                    </div>
+                    """
+
+            header_html = f"""
+            <header class="genkou-header">
+                {title_html}
+                {student_bar_html}
+            </header>
+            """
+        else:
+            header_html = f"""
+            <header class="sheet-header">
+                <div class="header-main">
+                    <h1 class="sheet-title">{html.escape(hdr.get("title") or "")}</h1>
+                    <p class="sheet-subtitle">{html.escape(hdr.get("subtitle") or "")}</p>
+                </div>
+                <div class="header-meta">
+                    {f'<span class="meta-field"><strong>Họ tên:</strong> ____________________</span>' if hdr.get("show_student_info") else ''}
+                    {f'<span class="meta-field"><strong>Ngày:</strong> ____/____/20___</span>' if hdr.get("show_date") else ''}
+                    <span class="meta-page">Trang {page_num} / {total_p}</span>
+                </div>
+            </header>
+            """
 
         # Content Blocks based on template
         rows_html: list[str] = []
@@ -899,10 +1131,51 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
                 </div>
                 """)
 
+        elif template_id == "genkouyoushi":
+            grid_color = str(options.get("grid_color") or "#475569").strip()
+            box_style = str(options.get("box_style") or "square").strip().lower()
+            has_spacer = bool(options.get("has_spacer_band", True))
+            spacer_height = max(4, min(24, int(options.get("spacer_height") or 10)))
+
+            for r_idx, item in enumerate(items):
+                cells = item.get("cells") or []
+                cells_html = []
+                for cell in cells:
+                    char = str(cell.get("char") or "")
+                    is_trace = bool(cell.get("is_trace"))
+                    is_blank = bool(cell.get("is_blank")) or not char
+
+                    cell_svg = _render_kanji_grid_svg(
+                        char if not is_blank else "",
+                        grid_style=box_style,
+                        is_trace=is_trace,
+                        is_blank=is_blank,
+                        size=36,
+                        rounded=False,
+                        stroke_color=grid_color,
+                        char_color="#0f172a" if not is_trace else "#94a3b8",
+                    )
+                    cells_html.append(f'<div class="genkou-cell">{cell_svg}</div>')
+
+                spacer_html = (
+                    f'<div class="genkou-spacer-band" style="height: {spacer_height}px; border-color: {grid_color};"></div>'
+                    if (has_spacer and r_idx < len(items) - 1)
+                    else ""
+                )
+
+                rows_html.append(f"""
+                <div class="genkou-row-wrap">
+                    <div class="genkou-grid-row">{"".join(cells_html)}</div>
+                    {spacer_html}
+                </div>
+                """)
+
         # Combine page content
         body_content = ""
         if template_id in {"kanji_stroke", "kanji_compact"}:
             body_content = f'<div class="kanji-sheet-body">{"".join(rows_html)}</div>'
+        elif template_id == "genkouyoushi":
+            body_content = f'<div class="genkou-sheet-body">{"".join(rows_html)}</div>'
         elif template_id == "sentence_writing":
             body_content = f'<div class="sentences-sheet-body">{"".join(rows_html)}</div>'
         elif template_id == "grammar_practice":
@@ -1008,6 +1281,25 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
             </div>
             """
 
+        if template_id == "genkouyoushi":
+            brand_lbl = html.escape(str(options.get("footer_brand_label") or "Flama (400格)"))
+            date_style = str(options.get("footer_date_format") or "chinese").strip().lower()
+            date_lbl = "年 &nbsp;&nbsp;&nbsp;&nbsp; 月 &nbsp;&nbsp;&nbsp;&nbsp; 日" if date_style == "chinese" else ("Ngày ...... Tháng ...... Năm 20......" if date_style == "vietnamese" else "")
+            sheet_footer_html = f"""
+            <footer class="genkou-footer">
+                <span class="genkou-footer-left">{brand_lbl}</span>
+                <span class="genkou-footer-mid">Trang {page_num} / {total_p}</span>
+                <span class="genkou-footer-right">{date_lbl}</span>
+            </footer>
+            """
+        else:
+            sheet_footer_html = f"""
+            <footer class="sheet-footer">
+                <span>Flama Worksheet Generator &bull; flama.app</span>
+                <span>Trang {page_num} / {total_p}</span>
+            </footer>
+            """
+
         page_markup = f"""
         <div class="sheet-page">
             {watermark_html}
@@ -1015,10 +1307,7 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
                 {header_html}
                 {prompt_html}
                 <main class="sheet-main">{body_content}</main>
-                <footer class="sheet-footer">
-                    <span>Flama Worksheet Generator &bull; flama.app</span>
-                    <span>Trang {page_num} / {total_p}</span>
-                </footer>
+                {sheet_footer_html}
             </div>
         </div>
         """
@@ -1565,6 +1854,84 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
             font-weight: 600;
             color: #d97706;
             margin: 4px 0 2px 0;
+        }}
+
+        /* Genkouyoushi Styles */
+        .genkou-header {{
+            margin-bottom: 8px;
+            width: 100%;
+        }}
+        .genkou-header-title {{
+            font-size: 16px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 6px;
+            color: #0f172a;
+        }}
+        .genkou-student-row {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 500;
+            color: #334155;
+            padding: 0 4px;
+            margin-bottom: 4px;
+        }}
+        .genkou-sheet-body {{
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }}
+        .genkou-row-wrap {{
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }}
+        .genkou-grid-row {{
+            display: flex;
+            width: 100%;
+        }}
+        .genkou-grid-row > .genkou-cell {{
+            flex: 1 1 0%;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: -1px;
+            margin-top: -1px;
+            overflow: hidden;
+        }}
+        .genkou-grid-row > .genkou-cell:first-child {{
+            margin-left: 0;
+        }}
+        .genkou-grid-row > .genkou-cell svg {{
+            width: 100%;
+            height: 100%;
+            display: block;
+        }}
+        .genkou-spacer-band {{
+            width: 100%;
+            border-left: 1px solid;
+            border-right: 1px solid;
+            border-bottom: 1px solid;
+            margin-top: -1px;
+            box-sizing: border-box;
+        }}
+        .genkou-footer {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 8px;
+            padding: 0 4px;
+        }}
+        .genkou-footer-left {{
+            font-weight: 600;
+        }}
+        .genkou-footer-right {{
+            letter-spacing: 2px;
         }}
     </style>
 </head>

@@ -73,6 +73,9 @@ def calculate_optimal_rows_per_page(
         row_h = 50 + lines_cnt * 24
         return max(1, min(8, int(usable_height // row_h)))
 
+    elif template_id == "genkouyoushi":
+        return 20 if not is_landscape else 14
+
     return 6 if is_landscape else 8
 
 
@@ -432,6 +435,50 @@ GRAMMAR_PRACTICE_TEMPLATE = WorksheetTemplate(
     },
 )
 
+# 8. Genkouyoushi / Chinese Essay Writing Paper Template (400-grid / 200-grid / Blank practice)
+GENKOUYOUSHI_TEMPLATE = WorksheetTemplate(
+    id="genkouyoushi",
+    name_vi="Giấy luyện viết văn (Genkō Yōshi / 作文纸 400 ô)",
+    name_en="Manuscript Paper (Genkō Yōshi / 400-Grid Essay)",
+    description_vi="Giấy kẻ ô luyện viết văn chuẩn Nhật & Trung (400 ô / 200 ô) với các hàng ô vuông kèm dải đệm ghi chú và khung thông tin học sinh, hỗ trợ tạo trang trắng hoặc điền văn bản mẫu.",
+    description_en="Standard Japanese Genkō Yōshi and Chinese manuscript essay paper (400/200 squares) with student header and horizontal spacer bands, ideal for blank handwriting practice worksheets or reference text tracing.",
+    category="essay",
+    supported_orientations=("portrait", "landscape"),
+    default_orientation="portrait",
+    default_rows_per_page=20,
+    field_slots=(
+        FieldSlot(
+            key="custom_text",
+            label_vi="Đoạn văn bản / Câu mẫu cần chép (Nếu có)",
+            label_en="Reference Text / Sentences (Optional)",
+            required=False,
+            description_vi="Nhập đoạn văn bản để điền vào từng ô vuông (hoặc để trống nếu in trang trắng luyện viết).",
+            suggested_names=("Sentence", "Example", "Expression", "Text", "Content"),
+        ),
+    ),
+    default_options={
+        "grid_columns": 20,
+        "grid_rows": 20,
+        "box_style": "square",  # 'square' (plain) | 'cross' (+) | 'diagonal' (*)
+        "grid_color": "#475569",  # Charcoal grey (photocopy safe)
+        "has_spacer_band": True,
+        "spacer_height": 10,
+        "content_mode": "blank",  # 'blank' | 'text' | 'trace'
+        "custom_text": "",
+        "header_student_style": "chinese",  # 'chinese' (班级/姓名/学号/分数) | 'vietnamese' | 'japanese' | 'none'
+        "title_placement": "none",  # 'none' (all boxes blank) | 'header' | 'first_row'
+        "footer_date_format": "chinese",  # 'chinese' (年 月 日) | 'vietnamese' | 'none'
+        "footer_brand_label": "Flama (400格)",
+        "essay_page_count": 1,
+        "paper_size": "a4",
+        "orientation": "portrait",
+        "margin": "compact",
+        "watermark_enabled": True,
+        "watermark_text": "flama.app",
+        "watermark_opacity": 0.035,
+    },
+)
+
 TEMPLATE_CATALOG: dict[str, WorksheetTemplate] = {
     KANJI_STROKE_TEMPLATE.id: KANJI_STROKE_TEMPLATE,
     KANJI_COMPACT_TEMPLATE.id: KANJI_COMPACT_TEMPLATE,
@@ -440,6 +487,7 @@ TEMPLATE_CATALOG: dict[str, WorksheetTemplate] = {
     DECK_TABLE_TEMPLATE.id: DECK_TABLE_TEMPLATE,
     SENTENCE_WRITING_TEMPLATE.id: SENTENCE_WRITING_TEMPLATE,
     GRAMMAR_PRACTICE_TEMPLATE.id: GRAMMAR_PRACTICE_TEMPLATE,
+    GENKOUYOUSHI_TEMPLATE.id: GENKOUYOUSHI_TEMPLATE,
 }
 
 

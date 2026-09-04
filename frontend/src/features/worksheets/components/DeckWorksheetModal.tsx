@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Database,
   Eye,
+  FileEdit,
   FileText,
   HelpCircle,
   Layers,
@@ -51,7 +52,7 @@ import { WorksheetPageRenderer } from './WorksheetPageRenderer'
 export interface DeckWorksheetModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  deckId: number
+  deckId?: number | null
   deckName?: string
   initialCardIds?: (string | number)[]
 }
@@ -80,7 +81,9 @@ export function DeckWorksheetModal({
 
   // Meta state
   const [meta, setMeta] = useState<DeckWorksheetMeta | null>(null)
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('kanji_stroke')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+    deckId ? 'kanji_stroke' : 'genkouyoushi',
+  )
   const [selectedNoteTypeId, setSelectedNoteTypeId] = useState<string>('')
   const [scope, setScope] = useState<'all' | 'first_n' | 'random_n' | 'selected'>('all')
   const [limitCount, setLimitCount] = useState<number>(20)
@@ -119,6 +122,19 @@ export function DeckWorksheetModal({
     header_title: '',
     header_subtitle: 'Luyện viết từ vựng và chữ Hán mỗi ngày',
     locale: 'ja',
+    grid_columns: 20,
+    grid_rows: 20,
+    box_style: 'square',
+    grid_color: '#475569',
+    has_spacer_band: true,
+    spacer_height: 10,
+    content_mode: 'blank',
+    custom_text: '',
+    header_student_style: 'chinese',
+    title_placement: 'none',
+    footer_date_format: 'chinese',
+    footer_brand_label: 'Flama (400格)',
+    essay_page_count: 1,
   })
 
   // Live Preview state
@@ -130,7 +146,7 @@ export function DeckWorksheetModal({
 
   // Load deck worksheet meta on open
   useEffect(() => {
-    if (!open || !deckId) return
+    if (!open) return
 
     setIsLoadingMeta(true)
     setPreviewData(null)
@@ -167,10 +183,10 @@ export function DeckWorksheetModal({
         setFieldMapping(initMapping)
 
         // Initialize title
-        const defaultTitle = `${data.deck_name || deckName || 'Bộ thẻ'} - Bài tập`
+        const defaultTitle = data.deck_name || deckName || ''
         setLayoutOptions((prev) => ({
           ...prev,
-          header_title: defaultTitle,
+          header_title: prev.header_title || (selectedTemplateId === 'genkouyoushi' ? '' : defaultTitle),
         }))
       })
       .catch((err) => {
@@ -212,19 +228,32 @@ export function DeckWorksheetModal({
         practice_count: tpl.default_options?.practice_count ?? 5,
         reference_char_color: (tpl.default_options?.reference_char_color as string) || '#e11d48',
         stroke_color_mode: (tpl.default_options?.stroke_color_mode as any) || 'monochrome',
+        ...(templateId === 'genkouyoushi'
+          ? {
+              grid_columns: (tpl.default_options?.grid_columns as number) ?? 20,
+              grid_rows: (tpl.default_options?.grid_rows as number) ?? 20,
+              box_style: (tpl.default_options?.box_style as any) ?? 'square',
+              content_mode: (tpl.default_options?.content_mode as any) ?? 'blank',
+              header_student_style: (tpl.default_options?.header_student_style as any) ?? 'chinese',
+              title_placement: (tpl.default_options?.title_placement as any) ?? 'none',
+              footer_date_format: (tpl.default_options?.footer_date_format as any) ?? 'chinese',
+              footer_brand_label: (tpl.default_options?.footer_brand_label as string) ?? 'Flama (400格)',
+              essay_page_count: (tpl.default_options?.essay_page_count as number) ?? 1,
+            }
+          : {}),
       }))
     }
   }
 
   // Reactive Debounced Live Preview Generator
   useEffect(() => {
-    if (!open || !deckId || !meta || !currentTemplate) return
+    if (!open || !meta || !currentTemplate) return
 
     const timer = setTimeout(async () => {
       setIsGenerating(true)
       try {
         const response = await generateWorksheetPreview({
-          deck_id: deckId,
+          deck_id: deckId || undefined,
           template_id: currentTemplate.id,
           note_type_id: selectedNoteTypeId,
           field_mapping: fieldMapping,
@@ -288,6 +317,9 @@ export function DeckWorksheetModal({
     vocab_writing: BookOpen,
     vocab_recall: HelpCircle,
     deck_table: TableIcon,
+    sentence_writing: FileText,
+    grammar_practice: LayoutGrid,
+    genkouyoushi: FileEdit,
   }
 
   const isLandscape = layoutOptions.orientation === 'landscape'
@@ -311,16 +343,25 @@ export function DeckWorksheetModal({
               <div>
                 <div className="flex items-center gap-2">
                   <DialogTitle className="text-base font-bold text-foreground">
-                    Xuất bài tập in ấn / PDF (A4)
+                    {deckId ? 'Xuất bài tập in ấn / PDF (A4)' : 'Mẫu giấy luyện viết & In ấn (A4)'}
                   </DialogTitle>
                   <Badge variant="outline" className="hidden sm:inline-flex text-[10px] font-semibold bg-primary/5 text-primary border-primary/20">
                     Live Studio
                   </Badge>
                 </div>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
-                  <span>{meta?.deck_name || deckName || 'Bộ thẻ'}</span>
-                  <span>&bull;</span>
-                  <span className="font-semibold text-foreground">{meta?.total_notes || 0} ghi chú</span>
+                  <span>{deckId ? (meta?.deck_name || deckName || 'Bộ thẻ') : 'Mẫu giấy độc lập (Không cần deck)'}</span>
+                  {deckId ? (
+                    <>
+                      <span>&bull;</span>
+                      <span className="font-semibold text-foreground">{meta?.total_notes || 0} ghi chú</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>&bull;</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">Tự do luyện viết</span>
+                    </>
+                  )}
                   {isGenerating ? (
                     <span className="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400 font-medium animate-pulse">
                       <Loader2 className="size-3 animate-spin" />
@@ -496,6 +537,8 @@ export function DeckWorksheetModal({
                               ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                               : tpl.category === 'grammar'
                               ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                              : tpl.category === 'essay'
+                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
                               : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
 
                           return (
@@ -542,6 +585,8 @@ export function DeckWorksheetModal({
                                       ? 'Mẫu câu & Dịch'
                                       : tpl.category === 'grammar'
                                       ? 'Ngữ pháp'
+                                      : tpl.category === 'essay'
+                                      ? 'Bài luận'
                                       : 'Bảng dữ liệu'}
                                   </Badge>
                                   <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 mt-1">
@@ -568,7 +613,26 @@ export function DeckWorksheetModal({
                   {/* TAB 2: DATA & MAPPINGS */}
                   {activeTab === 'data' && currentTemplate && (
                     <div className="space-y-4">
-                      {/* Scope & Limit */}
+                      {!deckId ? (
+                        <div className="space-y-3 bg-card p-4 rounded-xl border border-border/70 shadow-xs">
+                          <div className="flex items-center gap-2 text-xs font-bold text-foreground uppercase tracking-wider">
+                            <span>📄 Mẫu giấy in độc lập</span>
+                            <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
+                              Không cần chọn Deck
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Bạn đang ở chế độ tạo mẫu giấy in tự do (ví dụ: giấy làm văn Genkō Yōshi 400 ô, ô kẻ chữ Hán, ô chữ thập). Toàn bộ trang giấy được tạo sẵn để in ra viết tay hoặc điền văn bản mẫu mà không cần kết nối tới bất kỳ bộ thẻ học nào.
+                          </p>
+                          <div className="text-[11px] text-muted-foreground bg-muted/40 p-3 rounded-lg border border-border/60 space-y-1">
+                            <div className="font-semibold text-foreground">💡 Mẹo tuỳ biến:</div>
+                            <div>• Chuyển sang tab <strong>Bố cục & Ô chữ</strong> để đổi khổ 400 ô / 200 ô, kiểu ô trơn / chữ thập, màu mực.</div>
+                            <div>• Chuyển sang tab <strong>Tiêu đề & Thông tin</strong> để đặt tiêu đề bài văn (sẽ tự động in vào dòng 1) hoặc đổi khung tên học sinh.</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Scope & Limit */}
                       <div className="space-y-2.5 bg-muted/30 p-3.5 rounded-xl border border-border/60">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs font-bold text-foreground uppercase tracking-wider">
@@ -662,7 +726,16 @@ export function DeckWorksheetModal({
                           </Badge>
                         </div>
 
-                        {currentTemplate.id === 'deck_table' ? (
+                        {currentTemplate.id === 'genkouyoushi' && layoutOptions.content_mode === 'blank' ? (
+                          <div className="text-xs text-rose-800 dark:text-rose-200 bg-rose-500/10 border border-rose-500/20 p-3.5 rounded-xl leading-relaxed space-y-2">
+                            <div className="font-bold flex items-center gap-1.5">
+                              <span>📝 Chế độ: Trang trắng luyện viết tay (400 ô)</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                              Trang giấy sẽ được tạo trống hoàn toàn theo chuẩn giấy làm văn Genkō Yōshi (作文纸) để in ra luyện viết tay bằng bút mực. Bạn không cần ánh xạ trường dữ liệu nào từ thẻ.
+                            </p>
+                          </div>
+                        ) : currentTemplate.id === 'deck_table' ? (
                           <div className="space-y-3">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-1.5">
@@ -890,8 +963,10 @@ export function DeckWorksheetModal({
                           </div>
                         )}
                       </div>
-                    </div>
+                    </>
                   )}
+                </div>
+              )}
 
                   {/* TAB 3: LAYOUT & DENSITY */}
                   {activeTab === 'layout' && currentTemplate && (
@@ -1953,6 +2028,258 @@ export function DeckWorksheetModal({
                           </div>
                         </div>
                       )}
+
+                      {/* Genkouyoushi Essay Grid Controls */}
+                      {currentTemplate.id === 'genkouyoushi' && (
+                        <div className="space-y-3 pt-3 border-t border-border/60">
+                          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                            Tuỳ biến Lưới bài văn Genkō Yōshi / 作文纸 (400 ô)
+                          </h4>
+
+                          {/* Content Mode Selection */}
+                          <div className="space-y-2 bg-muted/20 p-3 rounded-xl border border-border/80">
+                            <Label className="text-xs font-bold text-foreground">Chế độ nội dung trang:</Label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {[
+                                { id: 'blank', label: 'Trang trắng (Tập viết tay)' },
+                                { id: 'text', label: 'Điền văn bản mẫu' },
+                                { id: 'trace', label: 'Tô chữ nét mờ' },
+                              ].map((m) => (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setLayoutOptions((prev) => ({
+                                      ...prev,
+                                      content_mode: m.id as any,
+                                    }))
+                                  }
+                                  className={`py-2 px-1.5 rounded-lg border text-center text-xs font-medium transition-all ${
+                                    (layoutOptions.content_mode || 'blank') === m.id
+                                      ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                                      : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                  }`}
+                                >
+                                  {m.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Text Input when mode is text or trace */}
+                            {(layoutOptions.content_mode === 'text' || layoutOptions.content_mode === 'trace') && (
+                              <div className="space-y-1 pt-2">
+                                <Label className="text-xs font-semibold">Nhập nội dung bài văn mẫu:</Label>
+                                <textarea
+                                  rows={4}
+                                  value={layoutOptions.custom_text || ''}
+                                  onChange={(e) =>
+                                    setLayoutOptions((prev) => ({
+                                      ...prev,
+                                      custom_text: e.target.value,
+                                    }))
+                                  }
+                                  className="w-full text-xs p-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary font-sans leading-relaxed"
+                                  placeholder="Dán hoặc gõ đoạn văn bản tại đây (tự động phân bổ vào từng ô vuông 20x20)..."
+                                />
+                                <p className="text-[10px] text-muted-foreground">
+                                  Để trống nếu muốn hệ thống tự động lấy nội dung từ các thẻ học trong bộ.
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Page count for sheets */}
+                            <div className="space-y-1 pt-2 border-t border-border/50">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs font-semibold">Số trang in:</Label>
+                                <span className="text-xs font-bold text-primary">
+                                  {layoutOptions.essay_page_count ?? 1} trang
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {[1, 2, 3, 4, 5].map((cnt) => (
+                                  <Button
+                                    key={cnt}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setLayoutOptions((prev) => ({
+                                        ...prev,
+                                        essay_page_count: cnt,
+                                      }))
+                                    }
+                                    className={`flex-1 h-7.5 text-xs ${
+                                      (layoutOptions.essay_page_count ?? 1) === cnt
+                                        ? 'bg-primary text-primary-foreground font-bold border-primary shadow-2xs'
+                                        : 'bg-background hover:bg-muted text-muted-foreground'
+                                    }`}
+                                  >
+                                    {cnt} trang
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Grid Specifications */}
+                          <div className="space-y-2.5 bg-muted/20 p-3 rounded-xl border border-border/80">
+                            <Label className="text-xs font-bold text-foreground">Khổ ô & Quy cách:</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLayoutOptions((prev) => ({
+                                    ...prev,
+                                    grid_columns: 20,
+                                    grid_rows: 20,
+                                    footer_brand_label: 'Flama (400格)',
+                                  }))
+                                }
+                                className={`p-2 rounded-lg border text-left text-xs transition-all ${
+                                  (layoutOptions.grid_columns ?? 20) === 20 && (layoutOptions.grid_rows ?? 20) === 20
+                                    ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                }`}
+                              >
+                                <div className="font-bold">400 ô (20 × 20)</div>
+                                <div className="text-[10px] text-muted-foreground font-normal">Chuẩn giấy làm văn tiêu chuẩn</div>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLayoutOptions((prev) => ({
+                                    ...prev,
+                                    grid_columns: 20,
+                                    grid_rows: 10,
+                                    footer_brand_label: 'Flama (200格)',
+                                  }))
+                                }
+                                className={`p-2 rounded-lg border text-left text-xs transition-all ${
+                                  (layoutOptions.grid_rows ?? 20) === 10
+                                    ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                }`}
+                              >
+                                <div className="font-bold">200 ô (20 × 10)</div>
+                                <div className="text-[10px] text-muted-foreground font-normal">Khổ thưa thoáng cho người mới</div>
+                              </button>
+                            </div>
+
+                            {/* Box Style */}
+                            <div className="space-y-1 pt-1.5 border-t border-border/50">
+                              <Label className="text-xs font-semibold">Kiểu ô kẻ:</Label>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {[
+                                  { id: 'square', label: 'Ô trơn (Plain)' },
+                                  { id: 'cross', label: 'Chữ thập (+)' },
+                                  { id: 'diagonal', label: 'Hoa thị (*)' },
+                                ].map((bs) => (
+                                  <button
+                                    key={bs.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setLayoutOptions((prev) => ({
+                                        ...prev,
+                                        box_style: bs.id as any,
+                                      }))
+                                    }
+                                    className={`py-1.5 px-2 rounded-lg border text-center text-xs font-medium transition-all ${
+                                      (layoutOptions.box_style || 'square') === bs.id
+                                        ? 'border-primary bg-primary/5 text-foreground font-bold shadow-2xs'
+                                        : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                    }`}
+                                  >
+                                    {bs.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Grid Line Color */}
+                            <div className="space-y-1 pt-1.5 border-t border-border/50">
+                              <Label className="text-xs font-semibold">Màu mực đường kẻ:</Label>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {[
+                                  { color: '#475569', label: 'Xám than (Chuẩn)' },
+                                  { color: '#0d9488', label: 'Xanh ngọc' },
+                                  { color: '#e11d48', label: 'Đỏ đất' },
+                                ].map((c) => (
+                                  <button
+                                    key={c.color}
+                                    type="button"
+                                    onClick={() =>
+                                      setLayoutOptions((prev) => ({
+                                        ...prev,
+                                        grid_color: c.color,
+                                      }))
+                                    }
+                                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg border text-xs font-medium transition-all ${
+                                      (layoutOptions.grid_color || '#475569') === c.color
+                                        ? 'border-primary bg-primary/5 text-foreground font-bold shadow-2xs'
+                                        : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                    }`}
+                                  >
+                                    <span className="size-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                                    <span>{c.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Spacer Band Between Rows */}
+                            <div className="space-y-2 pt-1.5 border-t border-border/50">
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={layoutOptions.has_spacer_band !== false}
+                                  onChange={(e) =>
+                                    setLayoutOptions((prev) => ({
+                                      ...prev,
+                                      has_spacer_band: e.target.checked,
+                                    }))
+                                  }
+                                  className="rounded text-primary size-4"
+                                />
+                                <div>
+                                  <div className="text-xs font-bold text-foreground">
+                                    Dải đệm ngang giữa các hàng (Spacer Band)
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Đúng chuẩn giấy luyện văn 作文纸 (dải đệm trống không kẻ dọc giữa các dòng ô)
+                                  </p>
+                                </div>
+                              </label>
+
+                              {layoutOptions.has_spacer_band !== false && (
+                                <div className="flex items-center gap-1.5 pl-6">
+                                  <Label className="text-[11px] text-muted-foreground shrink-0">Độ cao đệm:</Label>
+                                  {[6, 8, 10, 12, 14].map((h) => (
+                                    <Button
+                                      key={h}
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        setLayoutOptions((prev) => ({
+                                          ...prev,
+                                          spacer_height: h,
+                                        }))
+                                      }
+                                      className={`flex-1 h-6 text-[10px] px-1 ${
+                                        (layoutOptions.spacer_height ?? 10) === h
+                                          ? 'bg-primary text-primary-foreground font-bold border-primary'
+                                          : 'bg-background hover:bg-muted text-muted-foreground'
+                                      }`}
+                                    >
+                                      {h}px
+                                    </Button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2029,41 +2356,152 @@ export function DeckWorksheetModal({
                             </p>
                           </div>
 
-                          <div className="space-y-1.5 pt-1 text-xs">
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={layoutOptions.show_student_info !== false}
-                                onChange={(e) =>
-                                  setLayoutOptions((prev) => ({
-                                    ...prev,
-                                    show_student_info: e.target.checked,
-                                  }))
-                                }
-                                className="rounded text-primary size-3.5"
-                              />
-                              <span>Hiện dòng Họ tên</span>
-                            </label>
+                          {/* Genkouyoushi specific header and footer controls */}
+                          {currentTemplate?.id === 'genkouyoushi' ? (
+                            <div className="space-y-3 pt-2 border-t border-border/60">
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold">Khung thông tin học sinh:</Label>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  {[
+                                    { id: 'chinese', label: '班级 / 姓名 / 学号 / 分数' },
+                                    { id: 'vietnamese', label: 'Lớp / Họ tên / Mã số / Điểm' },
+                                    { id: 'japanese', label: 'クラス / 氏名 / 学籍番号 / 得点' },
+                                    { id: 'none', label: 'Ẩn khung học sinh' },
+                                  ].map((st) => (
+                                    <button
+                                      key={st.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setLayoutOptions((prev) => ({
+                                          ...prev,
+                                          header_student_style: st.id as any,
+                                          show_student_info: st.id !== 'none',
+                                        }))
+                                      }
+                                      className={`p-2 rounded-lg border text-left text-xs transition-all ${
+                                        (layoutOptions.header_student_style || 'chinese') === st.id
+                                          ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                                          : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                      }`}
+                                    >
+                                      {st.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
 
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={layoutOptions.show_date !== false}
-                                onChange={(e) =>
-                                  setLayoutOptions((prev) => ({
-                                    ...prev,
-                                    show_date: e.target.checked,
-                                  }))
-                                }
-                                className="rounded text-primary size-3.5"
-                              />
-                              <span>Hiện dòng Ngày tháng</span>
-                            </label>
-                          </div>
+                              <div className="space-y-1 pt-1">
+                                <Label className="text-xs font-semibold">Vị trí in tiêu đề bài viết:</Label>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  {[
+                                    { id: 'first_row', label: 'Dòng 1 trong ô (Chuẩn)' },
+                                    { id: 'header', label: 'Đầu trang (Phía trên)' },
+                                    { id: 'none', label: 'Không in (Ô trống)' },
+                                  ].map((tp) => (
+                                    <button
+                                      key={tp.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setLayoutOptions((prev) => ({
+                                          ...prev,
+                                          title_placement: tp.id as any,
+                                        }))
+                                      }
+                                      className={`py-1.5 px-2 rounded-lg border text-center text-xs font-medium transition-all ${
+                                        (layoutOptions.title_placement || 'none') === tp.id
+                                          ? 'border-primary bg-primary/5 text-foreground font-bold shadow-2xs'
+                                          : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                      }`}
+                                    >
+                                      {tp.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="space-y-2 pt-2 border-t border-border/60">
+                                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                                  Chân trang & Định dạng ngày
+                                </h4>
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-semibold">Nhãn chân trang góc trái:</Label>
+                                  <Input
+                                    value={layoutOptions.footer_brand_label || 'Flama (400格)'}
+                                    onChange={(e) =>
+                                      setLayoutOptions((prev) => ({
+                                        ...prev,
+                                        footer_brand_label: e.target.value,
+                                      }))
+                                    }
+                                    className="h-8.5 text-xs"
+                                    placeholder="Ví dụ: Flama (400格), 书行文创出品 (400格)..."
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-semibold">Định dạng ngày góc phải:</Label>
+                                  <div className="grid grid-cols-3 gap-1.5">
+                                    {[
+                                      { id: 'chinese', label: '年  月  日' },
+                                      { id: 'vietnamese', label: 'Ngày ... Tháng ...' },
+                                      { id: 'none', label: 'Ẩn ngày' },
+                                    ].map((df) => (
+                                      <button
+                                        key={df.id}
+                                        type="button"
+                                        onClick={() =>
+                                          setLayoutOptions((prev) => ({
+                                            ...prev,
+                                            footer_date_format: df.id as any,
+                                          }))
+                                        }
+                                        className={`py-1.5 px-2 rounded-lg border text-center text-xs font-medium transition-all ${
+                                          (layoutOptions.footer_date_format || 'chinese') === df.id
+                                            ? 'border-primary bg-primary/5 text-foreground font-bold shadow-2xs'
+                                            : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                                        }`}
+                                      >
+                                        {df.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 pt-1 text-xs">
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={layoutOptions.show_student_info !== false}
+                                  onChange={(e) =>
+                                    setLayoutOptions((prev) => ({
+                                      ...prev,
+                                      show_student_info: e.target.checked,
+                                    }))
+                                  }
+                                  className="rounded text-primary size-3.5"
+                                />
+                                <span>Hiện dòng Họ tên</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={layoutOptions.show_date !== false}
+                                  onChange={(e) =>
+                                    setLayoutOptions((prev) => ({
+                                      ...prev,
+                                      show_date: e.target.checked,
+                                    }))
+                                  }
+                                  className="rounded text-primary size-3.5"
+                                />
+                                <span>Hiện dòng Ngày tháng</span>
+                              </label>
+                            </div>
+                          )}
                         </div>
                       </div>
-
-
                     </div>
                   )}
                 </>

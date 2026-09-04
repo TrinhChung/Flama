@@ -14,6 +14,7 @@ import {
   MessageSquareHeart,
   NotebookTabs,
   PackageCheck,
+  Printer,
   Search,
   Shapes,
   ShieldUser,
@@ -52,6 +53,7 @@ export function AppSidebar({
     { title: 'Tổng quan', url: '/dashboard', icon: LayoutDashboard },
     { title: 'Thống kê', url: '/statistics', icon: ChartNoAxesColumn },
     { title: 'Duyệt thẻ', url: bootstrap.links.browse, icon: Search },
+    { title: 'Mẫu giấy luyện viết (A4)', url: '/worksheets', icon: Printer },
   ]
   const library: AppNavigationItem[] = [
     { title: 'Loại thẻ', url: bootstrap.links.note_types, icon: NotebookTabs },

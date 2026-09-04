@@ -86,19 +86,17 @@ export function BrowsePage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={selectedCards.length === 0}
-            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1.5 bg-background hover:bg-muted border-border disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1.5 bg-background hover:bg-muted border-border"
             onClick={() => {
-              if (selectedCards.length === 0) return
               const firstDeckId = browse.cardsQuery.data?.items[0]?.deck_id
               const targetDeckId = browse.selectedDeckId || firstDeckId || 1
               browse.setWorksheetTargetDeckId(targetDeckId)
-              browse.setWorksheetTargetCardIds(selectedCards)
+              browse.setWorksheetTargetCardIds(selectedCards.length > 0 ? selectedCards : undefined)
               browse.setIsWorksheetModalOpen(true)
             }}
             title={
               selectedCards.length === 0
-                ? 'Vui lòng tích chọn ít nhất 1 thẻ để in bài tập'
+                ? 'In bài tập hoặc tạo trang trắng luyện viết cho bộ thẻ này'
                 : `In bài tập cho ${selectedCards.length} thẻ đã chọn`
             }
           >
