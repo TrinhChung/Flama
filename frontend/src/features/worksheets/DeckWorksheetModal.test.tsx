@@ -502,6 +502,58 @@ describe('DeckWorksheetModal Live Studio', () => {
     expect(document.body.textContent).toContain('Mẫu giấy in độc lập')
     expect(document.body.textContent).toContain('Không cần chọn Deck')
   })
+
+  it('renders mobile view with segmented switcher and mobile action buttons', async () => {
+    // Set window.innerWidth to mobile size
+    const originalInnerWidth = window.innerWidth
+    window.innerWidth = 375
+
+    try {
+      await act(async () => {
+        root?.render(
+          <DeckWorksheetModal
+            open={true}
+            onOpenChange={vi.fn()}
+            deckId={1}
+            deckName="JLPT N5 Core"
+          />,
+        )
+      })
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 300))
+      })
+
+      // Check Mobile Header switcher
+      const buttons = Array.from(document.querySelectorAll('button'))
+      const mobileControlsBtn = buttons.find((b) => b.textContent?.includes('Cấu hình'))
+      const mobilePreviewBtn = buttons.find((b) => b.textContent?.includes('Xem bản in'))
+
+      expect(mobileControlsBtn).toBeDefined()
+      expect(mobilePreviewBtn).toBeDefined()
+
+      // Check mobile zoom / fit and download buttons
+      expect(document.body.textContent).toContain('Vừa trang')
+      expect(document.body.textContent).toContain('Tải file')
+
+      // Switch to controls
+      await act(async () => {
+        mobileControlsBtn?.click()
+      })
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 100))
+      })
+
+      // In controls mode, the bottom quick preview button should exist
+      const quickPreviewBtn = Array.from(document.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Xem bản in',
+      )
+      expect(quickPreviewBtn).toBeDefined()
+    } finally {
+      window.innerWidth = originalInnerWidth
+    }
+  })
 })
 
 

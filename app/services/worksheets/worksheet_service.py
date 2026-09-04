@@ -1378,6 +1378,29 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
             .screen-btn:hover {{
                 background: #c2410c;
             }}
+            @media (max-width: 820px) {{
+                body {{
+                    padding: 12px 6px;
+                    gap: 16px;
+                    overflow-x: auto;
+                }}
+                .screen-toolbar {{
+                    width: calc(100% - 16px);
+                    max-width: 420px;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 8px 16px;
+                    font-size: 12px;
+                }}
+                .screen-btn {{
+                    padding: 6px 14px;
+                    font-size: 12px;
+                }}
+                .sheet-page {{
+                    max-width: 100%;
+                    overflow-x: auto;
+                }}
+            }}
         }}
         @media print {{
             html, body {{

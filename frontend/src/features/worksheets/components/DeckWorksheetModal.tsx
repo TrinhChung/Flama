@@ -17,6 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  Download,
+  ExternalLink,
   Eye,
   FileEdit,
   FileText,
@@ -46,7 +48,11 @@ import type {
   WorksheetLayoutOptions,
   WorksheetPreviewResponse,
 } from '../types'
-import { printWorksheetHtml } from '../utils/printEngine'
+import {
+  downloadWorksheetHtml,
+  openWorksheetInNewTab,
+  printWorksheetHtml,
+} from '../utils/printEngine'
 import { WorksheetPageRenderer } from './WorksheetPageRenderer'
 
 export interface DeckWorksheetModalProps {
@@ -59,12 +65,24 @@ export interface DeckWorksheetModalProps {
 
 type StudioTab = 'template' | 'data' | 'layout' | 'header'
 
-const STUDIO_TABS: { id: StudioTab; label: string; icon: any }[] = [
-  { id: 'template', label: 'Mẫu bài tập', icon: LayoutGrid },
-  { id: 'data', label: 'Dữ liệu & Trường', icon: Database },
-  { id: 'layout', label: 'Bố cục & Ô chữ', icon: Sliders },
-  { id: 'header', label: 'Tiêu đề & Thông tin', icon: FileText },
+const STUDIO_TABS: { id: StudioTab; label: string; shortLabel: string; icon: any }[] = [
+  { id: 'template', label: 'Mẫu bài tập', shortLabel: 'Mẫu', icon: LayoutGrid },
+  { id: 'data', label: 'Dữ liệu & Trường', shortLabel: 'Dữ liệu', icon: Database },
+  { id: 'layout', label: 'Bố cục & Ô chữ', shortLabel: 'Bố cục', icon: Sliders },
+  { id: 'header', label: 'Tiêu đề & Thông tin', shortLabel: 'Tiêu đề', icon: FileText },
 ]
+
+function getFitZoom(orientation?: 'portrait' | 'landscape', customWidth?: number): number {
+  const isLandscape = orientation === 'landscape'
+  const a4WidthPx = (isLandscape ? 297 : 210) * 3.7795
+  const winWidth = typeof window !== 'undefined' ? (customWidth || window.innerWidth) : 360
+  // On mobile (< 640px), safe margin of 24px (12px padding each side) + 4px scrollbar allowance
+  const padding = winWidth < 640 ? 24 : winWidth < 1024 ? 40 : 64
+  const availableWidth = Math.max(220, (winWidth < 768 ? winWidth : winWidth - 420) - padding)
+  // Use Math.floor to strictly prevent any 1px horizontal scrollbar overflow on narrow 360px screens
+  const fit = Math.floor((availableWidth / a4WidthPx) * 100) / 100
+  return Math.min(1.4, Math.max(0.25, fit))
+}
 
 export function DeckWorksheetModal({
   open,
@@ -78,6 +96,7 @@ export function DeckWorksheetModal({
   const [isLoadingMeta, setIsLoadingMeta] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   // Meta state
   const [meta, setMeta] = useState<DeckWorksheetMeta | null>(null)
@@ -140,9 +159,28 @@ export function DeckWorksheetModal({
   // Live Preview state
   const [previewData, setPreviewData] = useState<WorksheetPreviewResponse | null>(null)
   const [currentPageIdx, setCurrentPageIdx] = useState<number>(0)
-  const [zoomLevel, setZoomLevel] = useState<number>(0.8)
+  const [zoomLevel, setZoomLevel] = useState<number>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return getFitZoom('portrait', window.innerWidth)
+    }
+    return 0.8
+  })
 
   const isFirstLoadRef = useRef(true)
+  const lastTapRef = useRef<number>(0)
+
+  const handleCanvasTouchEnd = (e: React.TouchEvent) => {
+    const now = Date.now()
+    if (now - lastTapRef.current < 300) {
+      // Double-tap detected on mobile canvas: toggle fit zoom / 100% zoom
+      e.preventDefault()
+      setZoomLevel((curr) => {
+        const fit = getFitZoom(layoutOptions.orientation)
+        return curr <= fit + 0.05 ? 1 : fit
+      })
+    }
+    lastTapRef.current = now
+  }
 
   // Load deck worksheet meta on open
   useEffect(() => {
@@ -152,6 +190,10 @@ export function DeckWorksheetModal({
     setPreviewData(null)
     setCurrentPageIdx(0)
     isFirstLoadRef.current = true
+
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setZoomLevel(getFitZoom(layoutOptions.orientation, window.innerWidth))
+    }
 
     if (initialCardIds && initialCardIds.length > 0) {
       setScope('selected')
@@ -270,7 +312,9 @@ export function DeckWorksheetModal({
 
         if (isFirstLoadRef.current) {
           isFirstLoadRef.current = false
-          if (layoutOptions.orientation === 'landscape') {
+          if (typeof window !== 'undefined' && window.innerWidth < 768) {
+            setZoomLevel(getFitZoom(layoutOptions.orientation, window.innerWidth))
+          } else if (layoutOptions.orientation === 'landscape') {
             setZoomLevel(0.72)
           } else {
             setZoomLevel(0.8)
@@ -311,6 +355,36 @@ export function DeckWorksheetModal({
     }
   }
 
+  // Handle HTML download
+  const handleDownloadHtml = async () => {
+    if (!previewData) return
+    setIsDownloading(true)
+    try {
+      const html = await renderWorksheetHtml(previewData)
+      const filename = `flama_worksheet_${selectedTemplateId}_${layoutOptions.paper_size || 'a4'}.html`
+      downloadWorksheetHtml(html, filename)
+      toast.success('Đã tải file bản in A4 về máy.')
+    } catch (err: any) {
+      toast.error('Không thể tải file: ' + (err.message || err))
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  // Handle open standalone worksheet in new tab
+  const handleOpenNewTab = async () => {
+    if (!previewData) return
+    try {
+      const html = await renderWorksheetHtml(previewData)
+      const win = openWorksheetInNewTab(html)
+      if (win) {
+        toast.success('Đã mở bản in trong tab mới.')
+      }
+    } catch (err: any) {
+      toast.error('Không thể mở bản in: ' + (err.message || err))
+    }
+  }
+
   const templateIcons: Record<string, any> = {
     kanji_stroke: PenTool,
     kanji_compact: Layers,
@@ -331,9 +405,12 @@ export function DeckWorksheetModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-screen h-screen sm:w-[98vw] sm:h-[96vh] sm:max-w-none max-h-none flex flex-col p-0 gap-0 overflow-hidden rounded-none sm:rounded-2xl border-border bg-background shadow-2xl">
-        {/* Studio Top Header Bar */}
-        <DialogHeader className="px-5 py-3 border-b border-border/80 bg-muted/40 shrink-0">
+      <DialogContent
+        showCloseButton={false}
+        className="fixed inset-0 z-50 flex flex-col w-full h-[100dvh] max-w-none translate-x-0 translate-y-0 top-0 left-0 p-0 gap-0 overflow-hidden rounded-none border-0 ring-0 bg-background sm:fixed sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[98vw] sm:h-[96vh] sm:rounded-2xl sm:border sm:border-border sm:shadow-2xl sm:ring-1 sm:ring-foreground/10"
+      >
+        {/* Desktop Header */}
+        <DialogHeader className="hidden sm:flex px-5 py-3 border-b border-border/80 bg-muted/40 shrink-0">
           <div className="flex items-center justify-between gap-4">
             {/* Left: Branding & Deck Metadata */}
             <div className="flex items-center gap-3">
@@ -345,7 +422,7 @@ export function DeckWorksheetModal({
                   <DialogTitle className="text-base font-bold text-foreground">
                     {deckId ? 'Xuất bài tập in ấn / PDF (A4)' : 'Mẫu giấy luyện viết & In ấn (A4)'}
                   </DialogTitle>
-                  <Badge variant="outline" className="hidden sm:inline-flex text-[10px] font-semibold bg-primary/5 text-primary border-primary/20">
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-primary/5 text-primary border-primary/20">
                     Live Studio
                   </Badge>
                 </div>
@@ -368,7 +445,7 @@ export function DeckWorksheetModal({
                       <span>Đang cập nhật demo...</span>
                     </span>
                   ) : (
-                    <span className="hidden sm:inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
                       <Check className="size-3" />
                       <span>Bản demo sẵn sàng</span>
                     </span>
@@ -377,39 +454,15 @@ export function DeckWorksheetModal({
               </div>
             </div>
 
-            {/* Center / Right: Controls, Zoom, Actions & Mobile Toggle */}
+            {/* Center / Right: Controls, Zoom, Actions & Desktop Close Button */}
             <div className="flex items-center gap-2.5">
-              {/* Mobile View Switcher */}
-              <div className="flex md:hidden items-center bg-background rounded-lg border border-border/80 p-0.5">
-                <Button
-                  type="button"
-                  variant={mobileView === 'controls' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setMobileView('controls')}
-                  className="h-7 px-2.5 text-xs font-semibold"
-                >
-                  <Sliders className="size-3.5 mr-1" />
-                  Cấu hình
-                </Button>
-                <Button
-                  type="button"
-                  variant={mobileView === 'preview' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setMobileView('preview')}
-                  className="h-7 px-2.5 text-xs font-semibold"
-                >
-                  <Eye className="size-3.5 mr-1" />
-                  Bản in
-                </Button>
-              </div>
-
               {/* Zoom Controls */}
-              <div className="hidden sm:flex items-center bg-background rounded-lg border border-border/80 px-1 py-0.5 shadow-2xs">
+              <div className="flex items-center bg-background rounded-lg border border-border/80 px-1 py-0.5 shadow-2xs">
                 <Button
                   variant="ghost"
                   size="icon"
                   className="size-7"
-                  onClick={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.1).toFixed(2))))}
+                  onClick={() => setZoomLevel((z) => Math.max(0.25, Number((z - 0.1).toFixed(2))))}
                   title="Thu nhỏ"
                 >
                   <ZoomOut className="size-3.5" />
@@ -421,7 +474,7 @@ export function DeckWorksheetModal({
                   variant="ghost"
                   size="icon"
                   className="size-7"
-                  onClick={() => setZoomLevel((z) => Math.min(1.4, Number((z + 0.1).toFixed(2))))}
+                  onClick={() => setZoomLevel((z) => Math.min(1.5, Number((z + 0.1).toFixed(2))))}
                   title="Phóng to"
                 >
                   <ZoomIn className="size-3.5" />
@@ -433,7 +486,7 @@ export function DeckWorksheetModal({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setZoomLevel(isLandscape ? 0.72 : 0.8)}
+                  onClick={() => setZoomLevel(getFitZoom(layoutOptions.orientation))}
                   className="h-8 px-2.5 text-[11px] font-medium"
                 >
                   Vừa trang
@@ -447,6 +500,36 @@ export function DeckWorksheetModal({
                   100%
                 </Button>
               </div>
+
+              {/* Download HTML Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadHtml}
+                disabled={isDownloading || !previewData}
+                className="h-8.5 px-3 text-xs font-semibold gap-1.5"
+                title="Tải file HTML hoàn chỉnh về máy"
+              >
+                {isDownloading ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Download className="size-3.5" />
+                )}
+                <span>Tải file</span>
+              </Button>
+
+              {/* Open in New Tab Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenNewTab}
+                disabled={!previewData}
+                className="hidden xl:inline-flex h-8.5 px-3 text-xs font-semibold gap-1.5"
+                title="Mở tài liệu in trong tab mới"
+              >
+                <ExternalLink className="size-3.5" />
+                <span>Mở tab mới</span>
+              </Button>
 
               {/* Print Button */}
               <Button
@@ -467,7 +550,89 @@ export function DeckWorksheetModal({
                   </>
                 )}
               </Button>
+
+              {/* Desktop Close Button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-lg text-muted-foreground hover:text-foreground ml-1"
+                onClick={() => onOpenChange(false)}
+                title="Đóng"
+                aria-label="Đóng"
+              >
+                <X className="size-4" />
+              </Button>
             </div>
+          </div>
+        </DialogHeader>
+
+        {/* Mobile Header */}
+        <DialogHeader className="flex sm:hidden px-3.5 py-2.5 border-b border-border/80 bg-muted/40 shrink-0 gap-2">
+          {/* Row 1: Brand Icon + Title + Close Button */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="size-8 rounded-lg bg-orange-500/15 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
+                <Printer className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-sm font-bold text-foreground truncate">
+                  {deckId ? 'Xuất bài tập in ấn / PDF (A4)' : 'Mẫu giấy luyện viết & In ấn (A4)'}
+                </DialogTitle>
+                <div className="text-[10px] text-muted-foreground truncate flex items-center gap-1.5">
+                  <span>{deckId ? (meta?.deck_name || deckName || 'Bộ thẻ') : 'Mẫu tự do'}</span>
+                  <span>&bull;</span>
+                  {isGenerating ? (
+                    <span className="text-orange-600 dark:text-orange-400 font-medium inline-flex items-center gap-1">
+                      <Loader2 className="size-2.5 animate-spin" />
+                      <span>Cập nhật...</span>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                      {previewData?.total_pages || 1} trang A4
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
+              onClick={() => onOpenChange(false)}
+              aria-label="Đóng"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+
+          {/* Row 2: Full-width Segmented View Switcher */}
+          <div className="grid grid-cols-2 p-0.5 bg-background rounded-lg border border-border/80 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setMobileView('controls')}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md transition-all ${
+                mobileView === 'controls'
+                  ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Sliders className="size-3.5 shrink-0" />
+              <span>Cấu hình</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileView('preview')}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md transition-all ${
+                mobileView === 'preview'
+                  ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Eye className="size-3.5 shrink-0" />
+              <span>Xem bản in ({previewData?.total_pages || 1})</span>
+            </button>
           </div>
         </DialogHeader>
 
@@ -475,7 +640,7 @@ export function DeckWorksheetModal({
         <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Left Sidebar: Controls & Inspector (~380px) */}
           <aside
-            className={`w-full md:w-[380px] lg:w-[410px] flex flex-col border-r border-border/80 bg-card/60 backdrop-blur-xs shrink-0 ${
+            className={`w-full md:w-[380px] lg:w-[410px] min-w-0 max-w-full flex flex-col border-r border-border/80 bg-card/60 backdrop-blur-xs shrink-0 overflow-hidden ${
               mobileView === 'controls' ? 'flex' : 'hidden md:flex'
             }`}
           >
@@ -496,7 +661,8 @@ export function DeckWorksheetModal({
                     }`}
                   >
                     <Icon className="size-3.5 mb-0.5" />
-                    <span className="truncate">{tab.label}</span>
+                    <span className="hidden sm:inline truncate">{tab.label}</span>
+                    <span className="inline sm:hidden text-[11px] font-semibold">{tab.shortLabel}</span>
                   </button>
                 )
               })}
@@ -815,7 +981,7 @@ export function DeckWorksheetModal({
                                             <X className="size-3.5" />
                                           </button>
                                         </div>
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
                                           {['Auto', '15%', '20%', '25%', '30%', '40%'].map((wOpt) => {
                                             const isAuto = wOpt === 'Auto'
                                             const isSelected = isAuto
@@ -981,9 +1147,12 @@ export function DeckWorksheetModal({
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
                               setLayoutOptions((prev) => ({ ...prev, orientation: 'portrait' }))
-                            }
+                              if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                                setZoomLevel(getFitZoom('portrait'))
+                              }
+                            }}
                             className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs font-medium transition-all ${
                               layoutOptions.orientation === 'portrait'
                                 ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
@@ -995,9 +1164,12 @@ export function DeckWorksheetModal({
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
                               setLayoutOptions((prev) => ({ ...prev, orientation: 'landscape' }))
-                            }
+                              if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                                setZoomLevel(getFitZoom('landscape'))
+                              }
+                            }}
                             className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs font-medium transition-all ${
                               layoutOptions.orientation === 'landscape'
                                 ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
@@ -2513,32 +2685,44 @@ export function DeckWorksheetModal({
               <span className="truncate">
                 {currentTemplate?.name_vi || 'Mẫu'} &bull; {layoutOptions.rows_per_page || 5} dòng/trang
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs font-semibold text-primary px-2"
-                onClick={() => {
-                  const tabIdx = STUDIO_TABS.findIndex((t) => t.id === activeTab)
-                  const nextTab = STUDIO_TABS[(tabIdx + 1) % STUDIO_TABS.length]
-                  setActiveTab(nextTab.id)
-                }}
-              >
-                Tiếp tục &rarr;
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs font-semibold text-primary px-2"
+                  onClick={() => {
+                    const tabIdx = STUDIO_TABS.findIndex((t) => t.id === activeTab)
+                    const nextTab = STUDIO_TABS[(tabIdx + 1) % STUDIO_TABS.length]
+                    setActiveTab(nextTab.id)
+                  }}
+                >
+                  Tiếp tục &rarr;
+                </Button>
+                {/* Prominent Preview Button for Mobile */}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="flex md:hidden h-7 text-xs font-bold bg-primary text-primary-foreground px-2.5 shadow-xs"
+                  onClick={() => setMobileView('preview')}
+                >
+                  <Eye className="size-3 mr-1" />
+                  Xem bản in
+                </Button>
+              </div>
             </div>
           </aside>
 
           {/* Right Area: Live Workbench Preview Canvas (flex-1) */}
           <main
-            className={`flex-1 flex flex-col bg-slate-200/90 dark:bg-slate-950 min-h-0 relative ${
+            className={`flex-1 flex flex-col bg-slate-200/90 dark:bg-slate-950 min-h-0 min-w-0 w-full max-w-full overflow-hidden relative ${
               mobileView === 'preview' ? 'flex' : 'hidden md:flex'
             }`}
           >
-            {/* Workbench Top Bar (Page Navigation & Live Stats) */}
-            <div className="px-4 py-2 bg-background/80 backdrop-blur-xs border-b border-border/70 flex items-center justify-between gap-3 shrink-0 z-10">
+            {/* Workbench Top Bar (Page Navigation & Live Stats & Zoom Controls) */}
+            <div className="w-full max-w-full px-2.5 sm:px-4 py-2 bg-background/80 backdrop-blur-xs border-b border-border/70 flex items-center justify-between gap-1.5 sm:gap-3 shrink-0 z-10">
               {/* Page Navigator */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 sm:gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
@@ -2551,13 +2735,14 @@ export function DeckWorksheetModal({
                 </Button>
 
                 {/* Page Selector */}
-                <div className="flex items-center gap-1 px-2 text-xs font-bold text-foreground">
-                  <span>Trang</span>
+                <div className="flex items-center gap-1 px-1 text-xs font-bold text-foreground shrink-0">
+                  <span className="hidden sm:inline">Trang</span>
                   {previewData && previewData.total_pages > 1 ? (
                     <NativeSelect
+                      size="sm"
                       value={currentPageIdx}
                       onChange={(e) => setCurrentPageIdx(Number(e.target.value))}
-                      className="h-7 text-xs py-0 px-2 font-bold w-16"
+                      className="h-7 w-14 sm:w-16 [&_select]:pr-5 [&_select]:pl-2 [&_select]:text-xs [&_select]:text-center font-bold"
                     >
                       {Array.from({ length: previewData.total_pages }).map((_, idx) => (
                         <option key={idx} value={idx}>
@@ -2566,9 +2751,9 @@ export function DeckWorksheetModal({
                       ))}
                     </NativeSelect>
                   ) : (
-                    <span>1</span>
+                    <span className="px-1">1</span>
                   )}
-                  <span>/ {previewData?.total_pages || 1}</span>
+                  <span className="text-muted-foreground font-medium">/ {previewData?.total_pages || 1}</span>
                 </div>
 
                 <Button
@@ -2587,10 +2772,50 @@ export function DeckWorksheetModal({
                 </Button>
               </div>
 
-              {/* Total Stats Badge */}
-              <div className="flex items-center gap-2">
+              {/* Right: Mobile Zoom Toolbar & Stats */}
+              <div className="flex items-center gap-1.5">
+                {/* Mobile/Tablet Zoom Toolbar */}
+                <div className="flex md:hidden items-center bg-background rounded-lg border border-border/80 px-0.5 py-0.5 shadow-2xs">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={() => setZoomLevel((z) => Math.max(0.25, Number((z - 0.08).toFixed(2))))}
+                    title="Thu nhỏ"
+                  >
+                    <ZoomOut className="size-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-[11px] font-bold"
+                    onClick={() => setZoomLevel(getFitZoom(layoutOptions.orientation))}
+                    title="Căn vừa màn hình"
+                  >
+                    {Math.round(zoomLevel * 100)}%
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={() => setZoomLevel((z) => Math.min(1.5, Number((z + 0.08).toFixed(2))))}
+                    title="Phóng to"
+                  >
+                    <ZoomIn className="size-3" />
+                  </Button>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setZoomLevel(getFitZoom(layoutOptions.orientation))}
+                  className="flex md:hidden h-7 px-2 text-[11px] font-semibold"
+                >
+                  Vừa trang
+                </Button>
+
                 {previewData && (
-                  <Badge variant="secondary" className="text-xs font-semibold px-2.5 py-0.5">
+                  <Badge variant="secondary" className="hidden sm:inline-flex text-xs font-semibold px-2.5 py-0.5">
                     Tổng: {previewData.total_items} mục &bull; {previewData.total_pages} trang A4
                   </Badge>
                 )}
@@ -2598,7 +2823,10 @@ export function DeckWorksheetModal({
             </div>
 
             {/* Canvas Scrollable Viewport */}
-            <div className="flex-1 overflow-auto p-6 flex justify-center items-start min-h-0 select-none relative">
+            <div
+              onTouchEnd={handleCanvasTouchEnd}
+              className="flex-1 overflow-auto p-2 sm:p-6 min-h-0 select-none relative flex flex-col items-center"
+            >
               {isLoadingMeta ? (
                 <div className="m-auto flex flex-col items-center justify-center gap-3 text-muted-foreground">
                   <Loader2 className="size-8 animate-spin text-primary" />
@@ -2610,7 +2838,7 @@ export function DeckWorksheetModal({
                     width: `${containerWidthPx}px`,
                     height: `${containerHeightPx}px`,
                   }}
-                  className="relative shrink-0 transition-all duration-150"
+                  className="relative shrink-0 transition-all duration-150 my-auto sm:my-0 shadow-md"
                 >
                   <div
                     style={{
@@ -2636,6 +2864,60 @@ export function DeckWorksheetModal({
                   <p>Không có dữ liệu trang xem trước. Vui lòng kiểm tra lại ánh xạ trường dữ liệu.</p>
                 </div>
               )}
+            </div>
+
+            {/* Mobile Bottom Floating Action Bar for Preview */}
+            <div className="w-full max-w-full flex md:hidden items-center justify-between gap-2 p-2 border-t border-border/80 bg-background/95 backdrop-blur-md shrink-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadHtml}
+                  disabled={isDownloading || !previewData}
+                  className="h-9 px-2.5 text-xs font-semibold gap-1.5 shrink-0"
+                  title="Tải file HTML về máy"
+                >
+                  {isDownloading ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Download className="size-3.5" />
+                  )}
+                  <span>Tải file</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenNewTab}
+                  disabled={!previewData}
+                  className="h-9 px-2.5 text-xs font-semibold gap-1.5 shrink-0"
+                  title="Mở tài liệu in trong tab mới"
+                >
+                  <ExternalLink className="size-3.5" />
+                  <span>Tab mới</span>
+                </Button>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={handlePrint}
+                disabled={isPrinting || !previewData}
+                className="flex-1 max-w-[170px] h-9 px-3 text-xs font-bold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shrink-0"
+              >
+                {isPrinting ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Đang chuẩn bị...</span>
+                  </>
+                ) : (
+                  <>
+                    <Printer className="size-3.5" />
+                    <span>In ngay (A4)</span>
+                  </>
+                )}
+              </Button>
             </div>
           </main>
         </div>
