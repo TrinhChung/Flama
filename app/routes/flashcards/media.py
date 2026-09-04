@@ -198,3 +198,45 @@ def proxy_media(asset_id: str):
         f"inline; filename=\"{build_safe_download_filename(asset.filename)}\""
     )
     return response
+
+
+@flashcards_bp.route("/api/browse/media/stage-paste", methods=["POST"])
+@login_required
+def stage_pasted_media():
+    from app.services import media_staging_service
+
+    source_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    payload = request.get_json(silent=True) or {}
+    form = request.form or {}
+    uploaded_file = request.files.get("image") or request.files.get("file")
+    base64_data = payload.get("base64_data") or form.get("base64_data")
+
+    try:
+        result = media_staging_service.stage_pasted_image(
+            user_id=current_user.id,
+            file=uploaded_file,
+            base64_data=base64_data,
+            source_ip=source_ip,
+        )
+        return jsonify(result), 201
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
+    except Exception as exc:
+        return _api_error("STAGE_MEDIA_ERROR", str(exc), status=400)
+
+
+@flashcards_bp.route("/media/staged/<stage_id>", methods=["GET"])
+def serve_staged_media(stage_id: str):
+    from app.services import media_staging_service
+
+    staged = media_staging_service.get_staged_media(stage_id)
+    if staged is None:
+        return _api_error("NOT_FOUND", "Ảnh tạm không tồn tại hoặc đã hết hạn (30 phút).", status=404)
+
+    file_path, mime_type = staged
+    response = send_file(file_path, mimetype=mime_type, conditional=True, max_age=1800)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    response.headers["Content-Disposition"] = f'inline; filename="{stage_id}.webp"'
+    return response
+

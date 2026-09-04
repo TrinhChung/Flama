@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from typing import Any, Mapping
 from urllib.parse import urlsplit
@@ -13,10 +14,42 @@ MEDIA_FIELD_TYPES = frozenset({"image", "audio", "diagram"})
 _IMAGE_EXTENSIONS = frozenset({"avif", "bmp", "gif", "jpeg", "jpg", "png", "svg", "webp"})
 _AUDIO_EXTENSIONS = frozenset({"aac", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "webm"})
 _PROXY_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
+_STAGED_RE = re.compile(r"^/media/staged/([A-Za-z0-9_-]{8,64})$")
+_ASSET_RE = re.compile(r"^/media/asset/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
 _LIBRARY_RE = re.compile(r"^/media/library/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _STATIC_STROKE_RE = re.compile(r"^/static/strokes/[A-Za-z0-9_-]+/[A-Fa-f0-9]+\.svg$")
 _SOUND_RE = re.compile(r"^\[sound:(.+)\]$", re.IGNORECASE)
 _SAFE_LEGACY_RE = re.compile(r"^[\w][\w .@()+,\-]{0,254}$", re.UNICODE)
+_STROKE_KEY_RE = re.compile(r"^stroke_[a-z0-9_]+_[a-f0-9]{4,6}$", re.IGNORECASE)
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+class _MediaHtmlParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.sources: list[tuple[str, str, str]] = []
+        self.text_pieces: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        lowered_tag = str(tag or "").lower()
+        attr_map = {str(name or "").lower(): str(value or "") for name, value in attrs}
+        src = attr_map.get("src", "").strip()
+        if not src and lowered_tag == "a":
+            src = attr_map.get("href", "").strip()
+            if src:
+                fam = media_reference_family_from_url(src)
+                if fam is None and not any(src.lower().endswith(f".{ext}") for ext in _IMAGE_EXTENSIONS | _AUDIO_EXTENSIONS):
+                    src = ""
+        if src and lowered_tag in {"img", "audio", "video", "source", "a"}:
+            self.sources.append((lowered_tag, src, attr_map.get("type", "").strip().lower()))
+
+    def handle_data(self, data: str) -> None:
+        cleaned = data.strip()
+        if cleaned:
+            self.text_pieces.append(cleaned)
 
 
 class MediaFieldValueError(ValueError):
@@ -80,7 +113,7 @@ def is_canonical_media_url(raw_url: str, *, allow_local_http: bool = True) -> bo
         return False
     if _PROXY_RE.fullmatch(candidate) or _STATIC_STROKE_RE.fullmatch(candidate):
         return True
-    if _LIBRARY_RE.fullmatch(candidate):
+    if _LIBRARY_RE.fullmatch(candidate) or _STAGED_RE.fullmatch(candidate) or _ASSET_RE.fullmatch(candidate):
         return True
     try:
         parsed = urlsplit(candidate)
@@ -145,11 +178,95 @@ def _assert_family(candidate: str, *, field_type: str, resolved_family: str | No
             f"Media URL does not match the '{field_type}' field type.",
             reason="wrong_media_kind",
         )
-    if candidate.startswith(("/media/library/", "/static/strokes/")) and expected == "audio":
+    if candidate.startswith(("/media/library/", "/static/strokes/", "/media/staged/", "/media/asset/")) and expected == "audio":
         raise MediaFieldValueError(
             "Image-library URLs cannot be stored in an audio field.",
             reason="wrong_media_kind",
         )
+
+
+def resolve_media_file_target(
+    candidate: str,
+    *,
+    field_type: str,
+    user_id: int | None = None,
+) -> MediaReferenceTarget | None:
+    """Attempts to resolve a candidate filename or stroke key to an existing system asset."""
+    cleaned = str(candidate or "").strip()
+    if not cleaned:
+        return None
+
+    expected_family = media_family(field_type)
+
+    if _STROKE_KEY_RE.fullmatch(cleaned) and expected_family == "image":
+        return MediaReferenceTarget(f"/media/library/{cleaned}.svg", "image")
+
+    if cleaned.startswith("static/strokes/") or cleaned.startswith("/static/strokes/"):
+        canonical_stroke = cleaned if cleaned.startswith("/") else f"/{cleaned}"
+        if _STATIC_STROKE_RE.fullmatch(canonical_stroke):
+            return MediaReferenceTarget(canonical_stroke, "image")
+
+    basename = PurePosixPath(cleaned.replace("\\", "/")).name or cleaned
+
+    # Check SharedImageAsset (image library) for image/diagram fields
+    if expected_family == "image":
+        try:
+            from flask import has_app_context
+            if has_app_context():
+                from models.shared_image_asset import SharedImageAsset
+                from sqlalchemy import func, or_
+                stem = PurePosixPath(cleaned).stem
+                base_stem = PurePosixPath(basename).stem
+                shared = SharedImageAsset.query.filter(
+                    or_(
+                        func.lower(SharedImageAsset.image_key) == cleaned.lower(),
+                        func.lower(SharedImageAsset.image_key) == basename.lower(),
+                        func.lower(SharedImageAsset.image_key) == stem.lower(),
+                        func.lower(SharedImageAsset.image_key) == base_stem.lower(),
+                        func.lower(SharedImageAsset.filename) == cleaned.lower(),
+                        func.lower(SharedImageAsset.filename) == basename.lower(),
+                    ),
+                    SharedImageAsset.is_enabled.is_(True),
+                ).first()
+                if shared:
+                    return MediaReferenceTarget(f"/media/library/{shared.image_key}", "image")
+        except Exception:
+            pass
+
+    # Check MediaAsset (by UUID or filename)
+    try:
+        from flask import has_app_context
+        if has_app_context():
+            from models import db
+            from models.media_asset import MediaAsset
+            if _UUID_RE.fullmatch(cleaned):
+                asset = db.session.get(MediaAsset, cleaned)
+                if asset:
+                    family = "audio" if (asset.mime_type or "").startswith("audio/") else "image"
+                    return MediaReferenceTarget(f"/media/proxy/{asset.id}", family)
+
+            from models.note import Note
+            from sqlalchemy import func, or_
+            query = MediaAsset.query.filter(
+                or_(
+                    func.lower(MediaAsset.filename) == cleaned.lower(),
+                    func.lower(MediaAsset.filename) == basename.lower(),
+                )
+            )
+            if user_id is not None:
+                user_asset = query.join(Note, MediaAsset.note_id == Note.id).filter(Note.user_id == user_id).first()
+                if user_asset:
+                    family = "audio" if (user_asset.mime_type or "").startswith("audio/") else "image"
+                    return MediaReferenceTarget(f"/media/proxy/{user_asset.id}", family)
+
+            asset = query.first()
+            if asset:
+                family = "audio" if (asset.mime_type or "").startswith("audio/") else "image"
+                return MediaReferenceTarget(f"/media/proxy/{asset.id}", family)
+    except Exception:
+        pass
+
+    return None
 
 
 def normalize_media_reference_for_write(
@@ -157,20 +274,128 @@ def normalize_media_reference_for_write(
     *,
     field_type: str,
     reference_lookup: Mapping[str, Any] | set[str] | None = None,
+    user_id: int | None = None,
 ) -> str:
     original = "" if raw_reference is None else str(raw_reference).strip()
     if not original:
         return ""
     candidate = original
 
-    sound_match = _SOUND_RE.fullmatch(candidate)
-    if sound_match:
+    # Extract sources from HTML if tag/markup is present
+    if "<" in candidate and ">" in candidate:
+        parser = _MediaHtmlParser()
+        try:
+            parser.feed(candidate)
+        except Exception:
+            parser.sources = []
+            parser.text_pieces = []
+
+        expected = media_family(field_type)
+        extracted_urls: list[str] = []
+
+        if parser.sources:
+            for tag, src, type_attr in parser.sources:
+                if expected == "audio" and (tag == "img" or type_attr.startswith("image/")):
+                    raise MediaFieldValueError(
+                        "Image tags cannot be stored in an audio field.",
+                        reason="wrong_media_kind",
+                    )
+                if expected == "image" and (tag in {"audio", "video"} or type_attr.startswith(("audio/", "video/"))):
+                    raise MediaFieldValueError(
+                        "Audio tags cannot be stored in an image field.",
+                        reason="wrong_media_kind",
+                    )
+                try:
+                    normalized_src = normalize_media_reference_for_write(
+                        src,
+                        field_type=field_type,
+                        reference_lookup=reference_lookup,
+                        user_id=user_id,
+                    )
+                    if normalized_src:
+                        extracted_urls.append(normalized_src)
+                except MediaFieldValueError as exc:
+                    raise MediaFieldValueError(
+                        f"Media reference in HTML <{tag}> tag could not be resolved: {exc}",
+                        reason=getattr(exc, "reason", None) or "unresolved_legacy_reference",
+                    ) from exc
+
+            for piece in parser.text_pieces:
+                for token in piece.split():
+                    if is_canonical_media_url(token) or token.lower().startswith("[sound:"):
+                        try:
+                            norm = normalize_media_reference_for_write(
+                                token,
+                                field_type=field_type,
+                                reference_lookup=reference_lookup,
+                                user_id=user_id,
+                            )
+                            if norm:
+                                extracted_urls.append(norm)
+                        except Exception:
+                            pass
+        else:
+            inner_text = " ".join(parser.text_pieces).strip() if getattr(parser, "text_pieces", None) else ""
+            if not inner_text:
+                inner_text = re.sub(r"<[^>]+>", "", candidate).strip()
+
+            if inner_text:
+                if "[sound:" in inner_text.lower():
+                    if expected != "audio":
+                        raise MediaFieldValueError(
+                            "Anki sound syntax is only valid in audio fields.",
+                            reason="wrong_media_kind",
+                        )
+                    sound_matches = re.findall(r"\[sound:([^\]]+)\]", inner_text, flags=re.IGNORECASE)
+                    for sm in sound_matches:
+                        norm = normalize_media_reference_for_write(
+                            sm.strip(),
+                            field_type=field_type,
+                            reference_lookup=reference_lookup,
+                            user_id=user_id,
+                        )
+                        if norm:
+                            extracted_urls.append(norm)
+                else:
+                    try:
+                        normalized_inner = normalize_media_reference_for_write(
+                            inner_text,
+                            field_type=field_type,
+                            reference_lookup=reference_lookup,
+                            user_id=user_id,
+                        )
+                        if normalized_inner:
+                            extracted_urls.append(normalized_inner)
+                    except MediaFieldValueError:
+                        pass
+
+        if extracted_urls:
+            return join_media_field_urls(extracted_urls)
+        raise MediaFieldValueError(
+            "Media fields accept one HTTPS or managed-media URL per line.",
+            reason="legacy_html",
+        )
+
+    if "[sound:" in candidate.lower():
         if media_family(field_type) != "audio":
             raise MediaFieldValueError(
                 "Anki sound syntax is only valid in audio fields.",
                 reason="wrong_media_kind",
             )
-        candidate = sound_match.group(1).strip()
+        sound_matches = re.findall(r"\[sound:([^\]]+)\]", candidate, flags=re.IGNORECASE)
+        if sound_matches:
+            extracted_sounds: list[str] = []
+            for sm in sound_matches:
+                norm_sound = normalize_media_reference_for_write(
+                    sm.strip(),
+                    field_type=field_type,
+                    reference_lookup=reference_lookup,
+                    user_id=user_id,
+                )
+                if norm_sound:
+                    extracted_sounds.append(norm_sound)
+            if extracted_sounds:
+                return join_media_field_urls(extracted_sounds)
 
     if is_canonical_media_url(candidate):
         target = _lookup_target(candidate, reference_lookup)
@@ -188,6 +413,14 @@ def normalize_media_reference_for_write(
     if target is not None and is_canonical_media_url(target.url):
         _assert_family(target.url, field_type=field_type, resolved_family=target.family)
         return target.url
+
+    # Check if candidate resolves to a local system file (SharedImageAsset, MediaAsset, stroke)
+    file_target = resolve_media_file_target(candidate, field_type=field_type, user_id=user_id)
+    if file_target is None and candidate != original:
+        file_target = resolve_media_file_target(original, field_type=field_type, user_id=user_id)
+    if file_target is not None and is_canonical_media_url(file_target.url):
+        _assert_family(file_target.url, field_type=field_type, resolved_family=file_target.family)
+        return file_target.url
 
     # A Connect import may temporarily reference a filename that was resolved
     # and explicitly allowlisted by the staging service. Never use this escape
@@ -210,13 +443,27 @@ def normalize_media_field_for_write(
     *,
     field_type: str,
     reference_lookup: Mapping[str, Any] | set[str] | None = None,
+    user_id: int | None = None,
 ) -> str:
+    raw_str = "" if raw_value is None else str(raw_value).strip()
+    if not raw_str:
+        return ""
+
+    if "<" in raw_str and ">" in raw_str:
+        return normalize_media_reference_for_write(
+            raw_str,
+            field_type=field_type,
+            reference_lookup=reference_lookup,
+            user_id=user_id,
+        )
+
     normalized = [
         normalize_media_reference_for_write(
             item,
             field_type=field_type,
             reference_lookup=reference_lookup,
+            user_id=user_id,
         )
-        for item in split_media_field_value(raw_value)
+        for item in split_media_field_value(raw_str)
     ]
     return join_media_field_urls(normalized)

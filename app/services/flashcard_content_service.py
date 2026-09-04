@@ -988,6 +988,15 @@ def create_note(
     )
     db.session.add(note)
     db.session.flush()
+    from app.services import media_staging_service
+    committed_values = media_staging_service.commit_all_staged_urls_in_field_values(
+        user_id=user_id,
+        note_id=note.id,
+        field_values=note.field_values,
+    )
+    if committed_values != note.field_values:
+        note.field_values = committed_values
+        db.session.flush()
     _create_cards(note)
     deck_working_tree_service.mark_note_fields_changed(
         note=note,
@@ -1065,6 +1074,12 @@ def update_note(
     if validated.field_updates:
         values = dict(note.field_values or {})
         values.update(validated.field_updates)
+        from app.services import media_staging_service
+        values = media_staging_service.commit_all_staged_urls_in_field_values(
+            user_id=user_id,
+            note_id=note.id,
+            field_values=values,
+        )
         note.field_values = values
     if validated.update_tags:
         note.tags = validated.tags
