@@ -94,7 +94,7 @@ vi.mock('@/shared/api/bootstrap', () => ({
   }),
 }))
 
-describe('BrowsePage Header Navigation (Issue #135)', () => {
+describe('BrowsePage Header Navigation & Responsive Actions (Issue #135)', () => {
   let container: HTMLDivElement
   let root: Root
   let queryClient: QueryClient
@@ -117,7 +117,7 @@ describe('BrowsePage Header Navigation (Issue #135)', () => {
     container.remove()
   })
 
-  it('always renders the Home ("Trang chủ") button linking to /dashboard in standalone mode', async () => {
+  it('preserves the Brand logo link to /dashboard at all times without redundant Home button', async () => {
     mocks.mockUrlDeckId = null
 
     await act(async () => {
@@ -130,20 +130,24 @@ describe('BrowsePage Header Navigation (Issue #135)', () => {
       )
     })
 
-    // Find dedicated Home button linking to /dashboard
-    const allHomeLinks = Array.from(container.querySelectorAll('a[href="/dashboard"]'))
-    const dedicatedHomeBtn = allHomeLinks.find((el) => el.textContent?.includes('Trang chủ'))
-    expect(dedicatedHomeBtn).toBeDefined()
-    expect(dedicatedHomeBtn?.getAttribute('href')).toBe('/dashboard')
+    // Brand logo image links to /dashboard
+    const logoImg = container.querySelector('img[src="/logo.png"]')
+    expect(logoImg).not.toBeNull()
+    const brandLink = logoImg?.closest('a')
+    expect(brandLink?.getAttribute('href')).toBe('/dashboard')
+    expect(brandLink?.textContent).toContain('Flama')
+
+    // No separate redundant "Trang chủ" button
+    const allButtons = Array.from(container.querySelectorAll('button'))
+    const homeBtn = allButtons.find((btn) => btn.textContent?.includes('Trang chủ'))
+    expect(homeBtn).toBeUndefined()
 
     // Back to study button should NOT be present when urlDeckId is absent
-    const backToStudyBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Quay lại bài học'),
-    )
+    const backToStudyBtn = allButtons.find((btn) => btn.textContent?.includes('Quay lại bài học'))
     expect(backToStudyBtn).toBeUndefined()
   })
 
-  it('renders both Home and "Quay lại bài học" buttons when entered with urlDeckId', async () => {
+  it('renders "Quay lại bài học" button when entered with urlDeckId and navigates on click', async () => {
     mocks.mockUrlDeckId = '42'
 
     await act(async () => {
@@ -156,28 +160,20 @@ describe('BrowsePage Header Navigation (Issue #135)', () => {
       )
     })
 
-    // 1. Home link must be present and point directly to /dashboard
-    const allHomeLinks = Array.from(container.querySelectorAll('a[href="/dashboard"]'))
-    const dedicatedHomeBtn = allHomeLinks.find((el) => el.textContent?.includes('Trang chủ'))
-    expect(dedicatedHomeBtn).toBeDefined()
-    expect(dedicatedHomeBtn?.getAttribute('href')).toBe('/dashboard')
-
-    // 2. Back to study button must be present
+    // Back to study button must be present
     const backToStudyBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
       btn.textContent?.includes('Quay lại bài học') || btn.textContent?.includes('Bài học'),
     )
     expect(backToStudyBtn).toBeDefined()
 
-    // 3. Clicking "Quay lại bài học" navigates back to /study?deck_id=42
+    // Clicking "Quay lại bài học" navigates back to /study?deck_id=42
     await act(async () => {
       backToStudyBtn?.click()
     })
     expect(mocks.navigate).toHaveBeenCalledWith('/study?deck_id=42')
   })
 
-  it('preserves the Brand logo link to home at all times', async () => {
-    mocks.mockUrlDeckId = '42'
-
+  it('renders both desktop action toolbar and mobile consolidated action dropdown', async () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -188,11 +184,17 @@ describe('BrowsePage Header Navigation (Issue #135)', () => {
       )
     })
 
-    // Brand logo image should be present inside a link pointing to /dashboard
-    const logoImg = container.querySelector('img[src="/logo.png"]')
-    expect(logoImg).not.toBeNull()
-    const brandLink = logoImg?.closest('a')
-    expect(brandLink?.getAttribute('href')).toBe('/dashboard')
-    expect(brandLink?.textContent).toContain('Flama')
+    // Desktop action container exists (hidden on small screens)
+    const desktopContainer = container.querySelector('.hidden.sm\\:flex')
+    expect(desktopContainer).not.toBeNull()
+    expect(desktopContainer?.textContent).toContain('In bài tập')
+    expect(desktopContainer?.textContent).toContain('Tạo nét SVG')
+
+    // Mobile action dropdown trigger exists (visible on mobile only)
+    const mobileContainer = container.querySelector('.flex.sm\\:hidden')
+    expect(mobileContainer).not.toBeNull()
+    const mobileTrigger = mobileContainer?.querySelector('button[aria-label="Menu tác vụ"]')
+    expect(mobileTrigger).not.toBeNull()
+    expect(mobileTrigger?.textContent).toContain('Tác vụ')
   })
 })
