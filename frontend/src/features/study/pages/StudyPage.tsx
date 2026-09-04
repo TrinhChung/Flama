@@ -394,9 +394,11 @@ export function StudyPage() {
             selectedCompositionId={selectedCompositionId}
             onSelectComposition={setSelectedCompositionId}
           />
-          <div className="px-2 py-1 text-xs text-muted-foreground">
-            {study.session?.events.length || 0} trả lời chưa đồng bộ
-          </div>
+          {uncommittedCount > 0 ? (
+            <div className="px-1 py-0.5 text-[11px] text-muted-foreground">
+              {uncommittedCount} trả lời chưa đồng bộ
+            </div>
+          ) : null}
         </div>
       ) : null}
 

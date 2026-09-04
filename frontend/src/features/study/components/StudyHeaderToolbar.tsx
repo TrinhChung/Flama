@@ -6,9 +6,21 @@ import {
   Search,
   Upload,
 } from '@/shared/components/Icons'
-import { Pencil } from 'lucide-react'
+import {
+  AlertTriangle,
+  BookOpen,
+  MoreVertical,
+  Pencil,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ContextHelpButton } from '@/features/guide'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { StudyModeSelector } from './StudyModeSelector'
 import type { AppliedComposition } from '../types'
 
@@ -99,7 +111,7 @@ export function StudyHeaderToolbar({
               aria-label="Sửa nhanh thẻ hiện tại"
             >
               <Pencil className="size-3.5 text-orange-500 shrink-0" />
-              <span className="hidden xs:inline">Sửa thẻ</span>
+              <span className="hidden sm:inline">Sửa thẻ</span>
               <kbd className="hidden md:inline-block ml-0.5 rounded bg-muted-foreground/15 px-1 py-0.2 text-[9px] font-mono font-medium text-muted-foreground">
                 E
               </kbd>
@@ -113,69 +125,125 @@ export function StudyHeaderToolbar({
             <Search className="size-3.5 sm:size-4" /> Browse
           </Link>
 
-          <ContextHelpButton
-            guidePath="/guide/study/shortcuts"
-            guideTitle="Bảng phím tắt & Cách chấm điểm"
-            troubleshootPath="/guide/troubleshooting/dashboard-study"
-            troubleshootTitle="Sự cố trong phòng học"
-            label="Phím tắt"
-            variant="outline"
-            size="xs"
-          />
+          {/* Three-dot dropdown menu for shortcuts, troubleshooting, and mobile access */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="size-7 sm:size-8 p-0 rounded-md border-border/80 hover:bg-muted text-muted-foreground hover:text-foreground transition shrink-0"
+                aria-label="Thêm tùy chọn và trợ giúp"
+                title="Thêm tùy chọn và trợ giúp"
+              >
+                <MoreVertical className="size-3.5 sm:size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-xl shadow-lg border-border/80">
+              <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">
+                Tùy chọn & Trợ giúp
+              </DropdownMenuLabel>
+
+              <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary">
+                <Link to={browseUrl} className="flex items-center gap-2.5 w-full">
+                  <Search className="size-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-medium">Duyệt thẻ (Browse)</span>
+                </Link>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary">
+                <Link to={importUrl} className="flex items-center gap-2.5 w-full">
+                  <Upload className="size-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-medium">Nhập dữ liệu (Import)</span>
+                </Link>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator className="my-1" />
+
+              <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary">
+                <Link to="/guide/study/shortcuts" className="flex items-start gap-2.5 w-full">
+                  <BookOpen className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-foreground">Phím tắt & Hướng dẫn</div>
+                    <div className="text-[11px] text-muted-foreground line-clamp-1">Bảng phím tắt & cách chấm điểm</div>
+                  </div>
+                </Link>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-amber-500/10 focus:text-amber-600 dark:focus:text-amber-400">
+                <Link to="/guide/troubleshooting/dashboard-study" className="flex items-start gap-2.5 w-full">
+                  <AlertTriangle className="size-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-foreground">Khắc phục sự cố</div>
+                    <div className="text-[11px] text-muted-foreground line-clamp-1">Sự cố trong phòng học</div>
+                  </div>
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       {/* Deck context bar, Counters & Mode Selector */}
       {deckName || hasCounters || (compositions && compositions.length > 1) ? (
-        <div className="deck-context-bar flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-medium text-muted-foreground">
-          <div className="flex items-center gap-2.5 sm:gap-4 flex-wrap min-w-0">
+        <div className="deck-context-bar space-y-1.5 px-1 text-xs font-medium text-muted-foreground">
+          {/* Main Context Line: Deck Name (Left) & Queue Counters (Right) */}
+          <div className="flex items-center justify-between gap-2 min-w-0">
             {deckName ? (
-              <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <Collection className="size-3.5 text-orange-500 shrink-0" />
-                <span className="truncate max-w-[200px] sm:max-w-[360px] md:max-w-[480px] font-semibold text-foreground">
+                <span
+                  className="truncate font-semibold text-foreground text-xs sm:text-sm"
+                  title={deckName}
+                >
                   {deckName}
                 </span>
               </div>
-            ) : null}
+            ) : (
+              <div className="flex-1" />
+            )}
 
             {/* Persistent Soft Pill Badges - Visible on both faces, mobile & desktop */}
             {hasCounters ? (
               <div
-                className="study-counters-line flex items-center gap-1 sm:gap-1.5 text-xs whitespace-nowrap"
+                className="study-counters-line flex items-center gap-1 sm:gap-1.5 text-xs whitespace-nowrap shrink-0"
                 role="status"
                 aria-label={`Bộ đếm: Mới ${newCount}, Đang học ${learnCount}, Đến hạn ${dueCount}`}
               >
                 <span
-                  className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-emerald-500/10 px-2 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-emerald-600 dark:text-emerald-400"
+                  className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-emerald-500/10 px-1.5 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-emerald-600 dark:text-emerald-400"
                   title={`Thẻ mới: ${newCount}`}
                 >
-                  <span className="size-1.5 rounded-full bg-emerald-500" />
+                  <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
                   <span>Mới {newCount}</span>
                 </span>
                 <span
-                  className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-amber-500/10 px-2 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-amber-600 dark:text-amber-400"
+                  className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-amber-500/10 px-1.5 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-amber-600 dark:text-amber-400"
                   title={`Thẻ đang học: ${learnCount}`}
                 >
-                  <span className="size-1.5 rounded-full bg-amber-500" />
+                  <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />
                   <span>Học {learnCount}</span>
                 </span>
                 <span
-                  className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-rose-500/10 px-2 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-rose-600 dark:text-rose-400"
+                  className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-rose-500/10 px-1.5 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-rose-600 dark:text-rose-400"
                   title={`Thẻ đến hạn cần ôn: ${dueCount}`}
                 >
-                  <span className="size-1.5 rounded-full bg-rose-500" />
+                  <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
                   <span>Hạn {dueCount}</span>
                 </span>
               </div>
             ) : null}
           </div>
 
+          {/* Sub-row for StudyModeSelector (only if note type has multiple templates) */}
           {compositions && compositions.length > 1 && onSelectComposition ? (
-            <StudyModeSelector
-              compositions={compositions}
-              selectedCompositionId={selectedCompositionId}
-              onSelectComposition={onSelectComposition}
-            />
+            <div className="w-full overflow-x-auto pt-0.5">
+              <StudyModeSelector
+                compositions={compositions}
+                selectedCompositionId={selectedCompositionId}
+                onSelectComposition={onSelectComposition}
+              />
+            </div>
           ) : null}
         </div>
       ) : null}
