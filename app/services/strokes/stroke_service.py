@@ -255,8 +255,10 @@ def _collect_notes(
             note_query = note_query.filter(Note.user_id == user_id)
         notes = note_query.all()
     elif deck_id is not None:
+        from app.repositories.deck_tree_query import collect_subtree_ids
+        subtree_ids = collect_subtree_ids(deck_id) or [deck_id]
         note_query = (
-            Note.query.filter(Note.deck_id == deck_id)
+            Note.query.filter(Note.deck_id.in_(subtree_ids))
             .options(selectinload(Note.note_type).selectinload(NoteType.field_defs))
         )
         if not admin_mode:
@@ -331,6 +333,22 @@ def estimate_batch_strokes(
             "estimated_human": "0 giây",
             "is_heavy_task": False,
             "friendly_summary": "Không tìm thấy thẻ nào phù hợp.",
+        }
+
+    note_types = {str(note.note_type_id) for note in notes if note.note_type_id}
+    if len(note_types) > 1:
+        return {
+            "total_notes": len(notes),
+            "notes_to_update": 0,
+            "notes_skipped": len(notes),
+            "unique_characters": 0,
+            "cached_characters": 0,
+            "new_characters": 0,
+            "estimated_seconds": 0,
+            "estimated_human": "0 giây",
+            "is_heavy_task": False,
+            "has_mixed_note_types": True,
+            "friendly_summary": "Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.",
         }
 
     notes_to_update = 0
@@ -448,6 +466,10 @@ def batch_generate_strokes(
             "skipped": 0,
             "missing_characters": [],
         }
+
+    note_types = {str(note.note_type_id) for note in notes if note.note_type_id}
+    if len(note_types) > 1:
+        raise StrokeServiceError("Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.")
 
     invalid_targets: list[str] = []
     missing_sources: list[str] = []

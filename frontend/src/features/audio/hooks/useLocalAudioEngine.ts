@@ -12,7 +12,8 @@ import {
   loadStoredLocalAudioSettings,
   saveStoredLocalAudioSettings,
 } from '../services/localAudioStorage'
-import type { VoiceDescriptor } from '../types'
+import { scanDeckAudio } from '../services/audioScanService'
+import type { VoiceDescriptor, DeckScanResponse } from '../types'
 
 export type ProcessItemStatus = 'pending' | 'synthesizing' | 'uploading' | 'done' | 'failed' | 'skipped'
 
@@ -185,6 +186,8 @@ export function useLocalAudioEngine(options: {
   isOpen: boolean
   selectedCardIds: string[]
   activeCardId?: string | null
+  deckId?: number | null
+  deckName?: string
   availableFieldNames?: string[]
   availableAudioFieldNames?: string[]
   engineId?: 'voicevox' | 'kokoro'
@@ -195,6 +198,7 @@ export function useLocalAudioEngine(options: {
     isOpen,
     selectedCardIds,
     activeCardId,
+    deckId,
     availableFieldNames = ['Reading', 'Word', 'Meaning'],
     availableAudioFieldNames = ['Audio'],
     engineId = 'voicevox',
@@ -204,9 +208,54 @@ export function useLocalAudioEngine(options: {
 
   const isKokoro = engineId === 'kokoro'
 
+  const [deckScanResult, setDeckScanResult] = useState<DeckScanResponse | null>(null)
+  const [isScanningDeck, setIsScanningDeck] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (isOpen && selectedCardIds.length === 0 && deckId) {
+      setIsScanningDeck(true)
+      scanDeckAudio(deckId)
+        .then((res) => {
+          setDeckScanResult(res)
+          const allFields = res.note_types?.[0]?.fields || []
+          if (allFields.length > 0) {
+            const sourceNames = allFields
+              .filter((f) => !['audio', 'sound'].includes(String(f.field_type || '').toLowerCase()))
+              .map((f) => f.name)
+            const audioNames = allFields
+              .filter((f) => ['audio', 'sound'].includes(String(f.field_type || '').toLowerCase()))
+              .map((f) => f.name)
+            if (sourceNames.length > 0) setDynamicFields(sourceNames)
+            if (audioNames.length > 0) setDynamicAudioFields(audioNames)
+          }
+        })
+        .catch(() => {
+          setDeckScanResult(null)
+        })
+        .finally(() => {
+          setIsScanningDeck(false)
+        })
+    } else {
+      setDeckScanResult(null)
+    }
+  }, [isOpen, selectedCardIds.length, deckId])
+
+  const deckCardIds = useMemo(() => {
+    if (!deckScanResult?.notes) return []
+    return deckScanResult.notes.map((n) => n.card_id).filter(Boolean)
+  }, [deckScanResult])
+
+  const hasMixedNoteTypes = useMemo(() => {
+    if (selectedCardIds.length > 0) return false
+    if (!deckScanResult?.note_types) return false
+    return deckScanResult.note_types.length > 1
+  }, [selectedCardIds.length, deckScanResult])
+
   const targetCardIds = useMemo(() => {
-    return selectedCardIds.length > 0 ? selectedCardIds : activeCardId ? [activeCardId] : []
-  }, [selectedCardIds, activeCardId])
+    if (selectedCardIds.length > 0) return selectedCardIds
+    if (deckId && deckCardIds.length > 0) return deckCardIds
+    return activeCardId ? [activeCardId] : []
+  }, [selectedCardIds, deckId, deckCardIds, activeCardId])
 
   // Service & Pairing State
   const [serviceStatus, setServiceStatus] = useState<'checking' | 'offline' | 'online'>('checking')
@@ -633,6 +682,10 @@ export function useLocalAudioEngine(options: {
   }
 
   const handleStartBatch = async () => {
+    if (hasMixedNoteTypes) {
+      toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+      return
+    }
     if (targetCardIds.length === 0) {
       toast.error('Vui lòng chọn ít nhất 1 thẻ từ vựng.')
       return
@@ -866,6 +919,9 @@ export function useLocalAudioEngine(options: {
     isProcessing,
     progressPercent,
     items,
+    deckScanResult,
+    isScanningDeck,
+    hasMixedNoteTypes,
     engineOffline,
     engineActionState,
     voiceOptions,

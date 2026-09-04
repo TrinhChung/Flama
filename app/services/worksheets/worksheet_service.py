@@ -62,9 +62,11 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
     """Retrieve note types, fields, and stats for a deck to configure worksheet generation."""
     deck = _check_deck_access(user_id, deck_id, admin_mode)
 
-    # Query all notes in this deck to inspect note types and field definitions
+    # Query all notes in this deck and its subdecks to inspect note types and field definitions
+    from app.repositories.deck_tree_query import collect_subtree_ids
+    subtree_ids = collect_subtree_ids(deck_id) or [deck_id]
     notes_query = (
-        Note.query.filter(Note.deck_id == deck_id)
+        Note.query.filter(Note.deck_id.in_(subtree_ids))
         .options(selectinload(Note.note_type).selectinload(NoteType.field_defs))
     )
     if not admin_mode and deck.owner_user_id != user_id:
@@ -131,6 +133,7 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
         "deck_name": deck.name,
         "total_notes": total_notes,
         "note_types": note_types_list,
+        "has_mixed_note_types": len(note_types_list) > 1,
         "suggested_mappings": suggested_mappings,
         "templates": list_templates(),
     }
@@ -419,10 +422,20 @@ def generate_worksheet_preview(
                 .all()
             )
         else:
-            query = Note.query.filter(Note.deck_id == deck.id)
+            from app.repositories.deck_tree_query import collect_subtree_ids
+            subtree_ids = collect_subtree_ids(deck.id) or [deck.id]
+            query = Note.query.filter(Note.deck_id.in_(subtree_ids))
             if note_type_id:
                 query = query.filter(Note.note_type_id == str(note_type_id).strip())
             notes = query.all()
+
+    if scope == "all" and not note_type_id and not card_ids and not note_ids:
+        nt_ids = {n.note_type_id for n in notes if n.note_type_id}
+        if len(nt_ids) > 1:
+            raise WorksheetServiceError(
+                "Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác in bài tập.",
+                code="MIXED_NOTE_TYPES",
+            )
 
     if template.id == "genkouyoushi":
         return _generate_genkouyoushi_pages(deck, template, notes, field_mapping, options)

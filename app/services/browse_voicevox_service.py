@@ -192,10 +192,32 @@ def generate_voicevox(
     if not isinstance(payload, dict):
         raise BrowseVoiceVoxError("Payload phải là JSON object.")
     raw_card_ids = payload.get("card_ids")
-    if not isinstance(raw_card_ids, list):
-        raise BrowseVoiceVoxError("card_ids phải là mảng.")
-    card_ids = _unique_ids(raw_card_ids)
+    card_ids: list[str] = []
+    if isinstance(raw_card_ids, list):
+        card_ids = _unique_ids(raw_card_ids)
+
+    deck_id = payload.get("deck_id")
+    deck_id_int: int | None = None
+    if deck_id is not None:
+        try:
+            deck_id_int = int(deck_id)
+        except (TypeError, ValueError):
+            deck_id_int = None
+
+    if not card_ids and deck_id_int is not None:
+        from app.repositories.deck_tree_query import collect_subtree_ids
+        subtree_ids = collect_subtree_ids(deck_id_int) or [deck_id_int]
+        deck_cards_query = (
+            Card.query.join(Note, Card.note_id == Note.id)
+            .filter(Note.deck_id.in_(subtree_ids))
+        )
+        if not admin_mode:
+            deck_cards_query = deck_cards_query.filter(Note.user_id == user_id)
+        card_ids = [c.id for c in deck_cards_query.all()]
+
     if not card_ids:
+        if raw_card_ids is not None and not isinstance(raw_card_ids, list):
+            raise BrowseVoiceVoxError("card_ids phải là mảng.")
         raise BrowseVoiceVoxError(
             "Không có card nào được chọn để tạo audio."
         )
@@ -260,7 +282,7 @@ def generate_voicevox(
     }
     if len(selected_note_type_ids) > 1:
         raise BrowseVoiceVoxError(
-            "Các note được chọn không cùng note_type. Vui lòng chỉ chọn các từ cùng note_type.",
+            "Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác tạo âm thanh đồng loạt.",
             code="mixed_note_types",
         )
 

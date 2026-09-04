@@ -433,6 +433,10 @@ export type EstimateBatchStrokesResponse = {
   estimated_human: string
   is_heavy_task: boolean
   friendly_summary: string
+  has_mixed_note_types?: boolean
+  error?: string
+  code?: string
+  note_types?: string[]
 }
 
 export type BatchGenerateStrokesPayload = {

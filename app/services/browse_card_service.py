@@ -181,6 +181,10 @@ def build_browse_decks(
                     "path": node.get("path") or node["name"],
                     "parent_id": node["parent_id"],
                     "note_type_id": node.get("note_type_id"),
+                    "note_type_name": node.get("note_type_name"),
+                    "note_type_ids": node.get("note_type_ids", []),
+                    "note_type_names": node.get("note_type_names", []),
+                    "has_mixed_note_types": bool(node.get("has_mixed_note_types")),
                     "counts": node.get("counts", {}),
                 }
             )
