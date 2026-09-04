@@ -58,12 +58,12 @@ export function SectionCard({
   return (
     <Card className={className}>
       {title || description || actions ? (
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
           <div className="space-y-1">
             {title ? <CardTitle>{title}</CardTitle> : null}
             {description ? <CardDescription>{description}</CardDescription> : null}
           </div>
-          {actions}
+          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </CardHeader>
       ) : null}
       <CardContent className={cn(!title && !description && !actions && 'pt-6', contentClassName)}>

@@ -1,18 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import {
-  BarChart3,
-  CalendarCheck,
-  Flame,
-  Gauge,
-  Layers,
-} from 'lucide-react'
 import { appApi } from '@/app/api'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 import { StudyHeatmap } from '@/shared/components/StudyHeatmap'
 import { Page, PageHeader, SectionCard } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
@@ -32,9 +28,9 @@ function ChoiceTabs<T extends string>({
 }) {
   return (
     <Tabs value={value} onValueChange={(next) => onChange(next as T)}>
-      <TabsList className="w-full">
+      <TabsList className="w-full h-9">
         {items.map((item) => (
-          <TabsTrigger className="flex-1 text-xs font-medium" value={item.value} key={item.value}>
+          <TabsTrigger className="flex-1 text-xs font-medium min-h-[30px]" value={item.value} key={item.value}>
             {item.label}
           </TabsTrigger>
         ))}
@@ -44,23 +40,52 @@ function ChoiceTabs<T extends string>({
 }
 
 export function StatisticsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const configQuery = useStatisticsConfig()
   const [currentYear, setCurrentYear] = useState<number>(new Date().getFullYear())
-  const [filters, setFilters] = useState<StatisticsFilters>({
-    scope: 'deck',
-    deckId: null,
+
+  const urlDeckIdParam = searchParams.get('deck_id')
+  const urlScopeParam = searchParams.get('scope')
+
+  const [filters, setFilters] = useState<StatisticsFilters>(() => ({
+    scope: urlScopeParam === 'collection' ? 'collection' : 'deck',
+    deckId: urlDeckIdParam ? Number(urlDeckIdParam) : null,
     historyRange: '12m',
     futureRange: '30',
     backlog: true,
-  })
+  }))
 
   const [studyTimeRange, setStudyTimeRange] = useState<UserStudyTimePreset>('30d')
 
   useEffect(() => {
-    if (configQuery.data && filters.deckId === null) {
-      setFilters((current) => ({ ...current, deckId: configQuery.data.initial_deck_id }))
+    if (configQuery.data && filters.deckId === null && filters.scope === 'deck') {
+      const fallbackDeckId = urlDeckIdParam ? Number(urlDeckIdParam) : configQuery.data.initial_deck_id
+      setFilters((current) => ({ ...current, deckId: fallbackDeckId }))
     }
-  }, [configQuery.data, filters.deckId])
+  }, [configQuery.data, filters.deckId, filters.scope, urlDeckIdParam])
+
+  const updateFiltersAndUrl = useCallback(
+    (updater: (prev: StatisticsFilters) => StatisticsFilters) => {
+      setFilters((prev) => {
+        const next = updater(prev)
+        const nextParams = new URLSearchParams(searchParams)
+        if (next.scope === 'collection') {
+          nextParams.set('scope', 'collection')
+          nextParams.delete('deck_id')
+        } else {
+          nextParams.delete('scope')
+          if (next.deckId) {
+            nextParams.set('deck_id', String(next.deckId))
+          } else {
+            nextParams.delete('deck_id')
+          }
+        }
+        setSearchParams(nextParams, { replace: true })
+        return next
+      })
+    },
+    [searchParams, setSearchParams],
+  )
 
   const statsQuery = useTodayFutureStats(filters)
   const studyTimeQuery = useUserStudyTimeStats({
@@ -80,7 +105,7 @@ export function StatisticsPage() {
   const overview = overviewQuery.data
 
   return (
-    <Page>
+    <Page className="space-y-4 sm:space-y-6">
       <PageHeader
         title="Thống kê học tập"
         description="Theo dõi hiệu suất ghi nhớ, chuỗi ngày học và dự báo lịch ôn tập flashcard."
@@ -88,45 +113,79 @@ export function StatisticsPage() {
 
       {/* Filter Toolbar Card */}
       <Card className="shadow-xs border-border/80 bg-card">
-        <CardContent className="grid gap-5 p-4 md:grid-cols-3 md:p-5">
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-              <Layers className="size-3.5 text-orange-500" /> Phạm vi
+        <CardContent className="grid gap-3.5 p-3.5 sm:gap-4 sm:p-5 sm:grid-cols-2 md:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground">
+              Phạm vi
             </Label>
             <ChoiceTabs
               value={filters.scope}
-              items={[{ label: 'Theo deck', value: 'deck' }, { label: 'Toàn collection', value: 'collection' }]}
-              onChange={(scope) => setFilters((current) => ({ ...current, scope }))}
+              items={[{ label: 'Theo deck', value: 'deck' }, { label: 'Toàn bộ', value: 'collection' }]}
+              onChange={(scope) => updateFiltersAndUrl((current) => ({ ...current, scope }))}
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="statistics-deck" className="text-xs font-semibold text-muted-foreground">
-              Bộ thẻ (Deck)
+              Bộ thẻ
             </Label>
-            <NativeSelect
-              id="statistics-deck"
-              className="w-full h-9 text-sm"
-              disabled={filters.scope === 'collection'}
-              value={filters.deckId === null ? '' : String(filters.deckId)}
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  deckId: event.currentTarget.value ? Number(event.currentTarget.value) : null,
-                }))
-              }
-            >
-              <NativeSelectOption value="">Chọn deck</NativeSelectOption>
-              {configQuery.data.decks.map((deck) => (
-                <NativeSelectOption key={deck.id} value={String(deck.id)}>
-                  {deck.id}: {deck.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            <div className="flex items-center gap-2">
+              <NativeSelect
+                id="statistics-deck"
+                className={cn(
+                  "flex-1 h-9 text-xs sm:text-sm",
+                  filters.scope === 'collection' && "opacity-60 cursor-not-allowed"
+                )}
+                disabled={filters.scope === 'collection'}
+                value={filters.scope === 'collection' ? '' : (filters.deckId === null ? '' : String(filters.deckId))}
+                onChange={(event) => {
+                  const nextId = event.currentTarget.value ? Number(event.currentTarget.value) : null
+                  updateFiltersAndUrl((current) => ({ ...current, deckId: nextId }))
+                }}
+              >
+                {filters.scope === 'collection' ? (
+                  <NativeSelectOption value="">Toàn bộ collection</NativeSelectOption>
+                ) : (
+                  <>
+                    <NativeSelectOption value="">Chọn deck</NativeSelectOption>
+                    {configQuery.data.decks.map((deck) => (
+                      <NativeSelectOption key={deck.id} value={String(deck.id)}>
+                        {deck.name}
+                      </NativeSelectOption>
+                    ))}
+                  </>
+                )}
+              </NativeSelect>
+
+              {filters.scope === 'deck' && filters.deckId ? (
+                <Button
+                  asChild
+                  size="sm"
+                  className="h-9 shrink-0 px-3 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                >
+                  <Link to={`/study?deck_id=${filters.deckId}`}>
+                    Ôn tập →
+                  </Link>
+                </Button>
+              ) : filters.scope === 'collection' ? (
+                <Button
+                  asChild
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0 px-3 text-xs font-semibold hover:border-primary/50 hover:text-primary"
+                >
+                  <Link to="/study">
+                    Ôn tập →
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-muted-foreground">Lịch sử thống kê</Label>
+          <div className="space-y-1.5 sm:col-span-2 md:col-span-1">
+            <Label className="text-xs font-semibold text-muted-foreground">
+              Lịch sử
+            </Label>
             <ChoiceTabs
               value={filters.historyRange}
               items={[{ label: '12 tháng', value: '12m' }, { label: 'Tất cả', value: 'all' }]}
@@ -141,82 +200,123 @@ export function StatisticsPage() {
 
       {stats ? (
         <>
-          {/* KPI Stat Cards Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* KPI Stat Cards Grid - 2 columns on mobile, 4 columns on desktop */}
+          <div className={cn(
+            "grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 transition-opacity duration-200",
+            statsQuery.isFetching && "opacity-80"
+          )}>
             {/* Card 1: Today */}
-            <div className="relative overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-orange-500 to-amber-500" />
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600 dark:bg-orange-500/20">
-                  <Flame className="size-5" />
+            <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-card p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] hover:border-primary/30 hover:shadow-md transition-all duration-200 active:scale-[0.99]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-primary/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div>
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 truncate">
+                    Hôm nay
+                  </span>
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary tabular-nums">
+                    {stats.today.minutes.toFixed(1)} phút
+                  </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Hôm nay</span>
-                  <div className="mt-0.5 text-2xl font-bold tracking-tight text-foreground tabular-nums">
-                    {stats.today.cards.toLocaleString('vi-VN')} <span className="text-xs font-medium text-muted-foreground">thẻ</span>
+                <div className="mt-2 sm:mt-2.5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground tabular-nums">
+                      {stats.today.cards.toLocaleString('vi-VN')}
+                    </span>
+                    <span className="text-xs font-medium text-muted-foreground">thẻ</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
-                    {stats.today.minutes.toFixed(1)} phút ({stats.today.sec_per_card.toFixed(2)}s/thẻ)
-                  </p>
                 </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                <span>Tốc độ</span>
+                <span className="font-medium text-foreground/80">{stats.today.sec_per_card.toFixed(1)}s / thẻ</span>
               </div>
             </div>
 
             {/* Card 2: Streak */}
-            <div className="relative overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-emerald-500 to-teal-500" />
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20">
-                  <CalendarCheck className="size-5" />
+            <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-card p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] hover:border-amber-500/30 hover:shadow-md transition-all duration-200 active:scale-[0.99]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-amber-500/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div>
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 truncate">
+                    Chuỗi Streak
+                  </span>
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 tabular-nums">
+                    {overview?.metrics?.days_learned_percent ?? 0}% ngày
+                  </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Chuỗi Streak</span>
-                  <div className="mt-0.5 text-2xl font-bold tracking-tight text-foreground tabular-nums">
-                    {(overview?.metrics?.current_streak_days ?? 0).toLocaleString('vi-VN')}{' '}
+                <div className="mt-2 sm:mt-2.5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground tabular-nums">
+                      {(overview?.metrics?.current_streak_days ?? 0).toLocaleString('vi-VN')}
+                    </span>
                     <span className="text-xs font-medium text-muted-foreground">ngày</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
-                    Kỷ lục: {overview?.metrics?.longest_streak_days ?? 0}d · Học {overview?.metrics?.days_learned_percent ?? 0}% ngày
-                  </p>
                 </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                <span>Kỷ lục dài nhất</span>
+                <span className="font-medium text-foreground/80">{overview?.metrics?.longest_streak_days ?? 0} ngày</span>
               </div>
             </div>
 
             {/* Card 3: Forecast */}
-            <div className="relative overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-sky-500 to-blue-500" />
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-500/20">
-                  <BarChart3 className="size-5" />
+            <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-card p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] hover:border-blue-500/30 hover:shadow-md transition-all duration-200 active:scale-[0.99]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-500/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div>
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 truncate">
+                    Dự báo lượt ôn
+                  </span>
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 tabular-nums">
+                    Mai: {stats.totals.due_tomorrow}
+                  </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dự báo lượt ôn</span>
-                  <div className="mt-0.5 text-2xl font-bold tracking-tight text-foreground tabular-nums">
-                    {stats.totals.total_reviews.toLocaleString('vi-VN')}{' '}
+                <div className="mt-2 sm:mt-2.5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground tabular-nums">
+                      {stats.totals.total_reviews.toLocaleString('vi-VN')}
+                    </span>
                     <span className="text-xs font-medium text-muted-foreground">lượt</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
-                    Ngày mai: {stats.totals.due_tomorrow} · TB: {stats.totals.avg_reviews_per_day.toFixed(1)}/ngày
-                  </p>
                 </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                <span>Trung bình</span>
+                <span className="font-medium text-foreground/80">{stats.totals.avg_reviews_per_day.toFixed(1)} / ngày</span>
               </div>
             </div>
 
             {/* Card 4: Daily Workload */}
-            <div className="relative overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-teal-500 to-emerald-600" />
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600 dark:bg-teal-500/20">
-                  <Gauge className="size-5" />
+            <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-card p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] hover:border-emerald-500/30 hover:shadow-md transition-all duration-200 active:scale-[0.99]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-emerald-500/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div>
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 truncate">
+                    Tải lượng học
+                  </span>
+                  <span className={cn(
+                    "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                    stats.totals.daily_load < 15
+                      ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15"
+                      : stats.totals.daily_load < 35
+                      ? "text-teal-700 dark:text-teal-400 bg-teal-500/10 dark:bg-teal-500/15"
+                      : "text-amber-700 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-500/15"
+                  )}>
+                    {stats.totals.daily_load < 15 ? 'Nhẹ nhàng' : stats.totals.daily_load < 35 ? 'Tối ưu' : 'Cường độ cao'}
+                  </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tải lượng học tập</span>
-                  <div className="mt-0.5 text-2xl font-bold tracking-tight text-foreground tabular-nums">
-                    {stats.totals.daily_load.toFixed(1)}{' '}
+                <div className="mt-2 sm:mt-2.5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground tabular-nums">
+                      {stats.totals.daily_load.toFixed(1)}
+                    </span>
                     <span className="text-xs font-medium text-muted-foreground">bài/ngày</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">Mức tải ước tính duy trì ghi nhớ</p>
                 </div>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Mục tiêu</span>
+                <span className="font-medium text-foreground/80">Duy trì trí nhớ</span>
               </div>
             </div>
           </div>
@@ -256,7 +356,7 @@ export function StatisticsPage() {
               </div>
             }
           >
-            <div className="space-y-5">
+            <div className="space-y-4 sm:space-y-5">
               <ChoiceTabs
                 value={filters.futureRange}
                 items={[
@@ -268,7 +368,9 @@ export function StatisticsPage() {
                 onChange={(futureRange) => setFilters((current) => ({ ...current, futureRange }))}
               />
               <FutureDueChart series={stats.future_due.series} />
-              <p className="text-right text-xs text-muted-foreground">Múi giờ hệ thống: {stats.timezone}</p>
+              <p className="text-center sm:text-right text-[11px] sm:text-xs text-muted-foreground">
+                Múi giờ hệ thống: {stats.timezone}
+              </p>
             </div>
           </SectionCard>
         </>
