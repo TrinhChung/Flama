@@ -166,6 +166,34 @@ _SAFE_BUTTON_ONCLICK_RE = re.compile(
     r"""^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$"""
 )
 
+# ---------------------------------------------------------------------------
+# Safe onclick validation – whitelist of common DOM manipulation patterns
+# that are safe inside the sandboxed iframe (allow-scripts, no allow-same-origin).
+# Patterns MUST stay synchronised with frontend isSafeOnclickValue()
+# in clientRenderer.ts.
+# ---------------------------------------------------------------------------
+_SAFE_ID = r"[A-Za-z0-9_-]+"
+_TARGET = rf"(?:document\.getElementById\(\s*['\"]{ _SAFE_ID }['\"]\s*\)|this)"
+
+_SAFE_ONCLICK_PATTERNS = [
+    re.compile(rf"^{_TARGET}\.(?:play|pause|load|click|focus|blur|remove)\(\)$"),
+    re.compile(rf"^{_TARGET}\.style\.[a-zA-Z]+\s*=\s*'[^']{{0,50}}'$"),
+    re.compile(rf"^{_TARGET}\.classList\.(?:add|remove|toggle)\(\s*'[A-Za-z0-9_-]+'\s*\)$"),
+    re.compile(rf"^{_TARGET}\.hidden\s*=\s*(?:true|false)$"),
+    re.compile(rf"^{_TARGET}\.textContent\s*=\s*'[^']{{0,100}}'$"),
+]
+
+
+def _is_safe_button_onclick(value: str) -> bool:
+    """Return True if *value* is a safe onclick attribute for a <button>."""
+    statements = [s.strip() for s in value.split(";") if s.strip()]
+    if not statements or len(statements) > 10:
+        return False
+    return all(
+        any(pat.match(stmt) for pat in _SAFE_ONCLICK_PATTERNS)
+        for stmt in statements
+    )
+
 
 class TemplateCompileError(ValueError):
     """Mustache template compile/parse error."""
@@ -175,7 +203,7 @@ def _strict_allowed_attr(tag: str, name: str, value: str) -> bool:
     lowered = name.lower()
     if lowered.startswith("on"):
         if lowered == "onclick" and tag == "button":
-            return bool(_SAFE_BUTTON_ONCLICK_RE.match((value or "").strip()))
+            return _is_safe_button_onclick((value or "").strip())
         return False
     if lowered == "auto-split":
         return tag in {"div", "p", "span", "li", "td"}

@@ -300,6 +300,76 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertEqual(payload["allowed_audio_asset_ids"], ["audio-2"])
         self.assertIn("/media/proxy/audio-2", payload["allowed_media_urls"])
 
+    def test_onclick_style_display_assignment_is_preserved(self):
+        fields = [self._field("Word", "text")]
+        rendered = render_template_pair(
+            template=self._template(
+                "<button onclick=\"document.getElementById('hint').style.display='block'; "
+                "this.style.display='none'\">Show</button>"
+                "<div id='hint' style='display:none'>Hint</div>"
+            ),
+            field_defs=fields,
+            field_values={"Word": "犬"},
+            media_assets=[],
+            allow_inline_script=True,
+            defer_inline_script=True,
+        )
+        self.assertIn("onclick=", rendered["front_html"])
+
+    def test_onclick_classlist_toggle_is_preserved(self):
+        fields = [self._field("Word", "text")]
+        rendered = render_template_pair(
+            template=self._template(
+                "<button onclick=\"document.getElementById('answer').classList.toggle('hidden')\">Toggle</button>"
+            ),
+            field_defs=fields,
+            field_values={"Word": "犬"},
+            media_assets=[],
+            allow_inline_script=True,
+            defer_inline_script=True,
+        )
+        self.assertIn("onclick=", rendered["front_html"])
+
+    def test_onclick_pause_is_preserved(self):
+        fields = [self._field("Word", "text")]
+        rendered = render_template_pair(
+            template=self._template(
+                "<button onclick=\"document.getElementById('audio1').pause()\">⏸</button>"
+            ),
+            field_defs=fields,
+            field_values={"Word": "犬"},
+            media_assets=[],
+            allow_inline_script=True,
+            defer_inline_script=True,
+        )
+        self.assertIn("onclick=", rendered["front_html"])
+
+    def test_unsafe_onclick_is_rejected_by_validator(self):
+        from app.services.flashcard_renderer import _is_safe_button_onclick
+        safe_cases = [
+            "document.getElementById('audio1').play()",
+            "document.getElementById('hint').style.display='block'",
+            "this.style.display='none'",
+            "document.getElementById('x').classList.toggle('hidden')",
+            "document.getElementById('a').pause(); this.hidden=true",
+            "this.textContent='Done'",
+        ]
+        for case in safe_cases:
+            self.assertTrue(_is_safe_button_onclick(case),
+                            f"Expected safe: {case}")
+
+        unsafe_cases = [
+            'alert("xss")',
+            'fetch("https://evil.com")',
+            'eval("code")',
+            'window.location="https://evil.com"',
+            'document.cookie',
+            '',
+        ]
+        for case in unsafe_cases:
+            self.assertFalse(_is_safe_button_onclick(case),
+                             f"Expected unsafe: {case}")
+
     def test_auto_split_attribute_is_preserved(self):
         template = self._template('<div auto-split>{{Word}}</div>')
         fields = [self._field("Word")]

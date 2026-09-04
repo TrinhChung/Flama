@@ -210,6 +210,37 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(expired_status.status_code, 200)
         self.assertEqual(expired_status.get_json()["status"], "expired")
 
+    def test_status_reports_stale_when_note_or_template_updated(self):
+        snapshot = self._open_session()
+        status_res = self.client.get(
+            f"/api/study/sessions/{snapshot['session_id']}"
+        )
+        self.assertEqual(status_res.status_code, 200)
+        self.assertFalse(status_res.get_json()["stale"])
+
+        with self.app.app_context():
+            note = Note.query.first()
+            note.updated_at = datetime.utcnow() + timedelta(seconds=10)
+            db.session.commit()
+
+        status_res = self.client.get(
+            f"/api/study/sessions/{snapshot['session_id']}"
+        )
+        self.assertEqual(status_res.status_code, 200)
+        self.assertTrue(status_res.get_json()["stale"])
+
+        snapshot2 = self._open_session()
+        with self.app.app_context():
+            tmpl = Template.query.first()
+            tmpl.updated_at = datetime.utcnow() + timedelta(seconds=10)
+            db.session.commit()
+
+        status_res2 = self.client.get(
+            f"/api/study/sessions/{snapshot2['session_id']}"
+        )
+        self.assertEqual(status_res2.status_code, 200)
+        self.assertTrue(status_res2.get_json()["stale"])
+
     def test_auto_finish_rejects_actionable_learning_card(self):
         snapshot = self._open_session()
         payload = self._commit_payload(snapshot)

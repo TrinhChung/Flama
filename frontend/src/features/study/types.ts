@@ -197,6 +197,7 @@ export type StudySessionStatus = {
   schema_version: 'study-session-status.v1'
   session_id: string
   status: 'open' | 'committed' | 'expired'
+  stale?: boolean
   expires_at: string
   committed_at: string | null
 }

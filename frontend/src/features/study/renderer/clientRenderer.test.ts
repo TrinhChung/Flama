@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { renderStudySide } from './clientRenderer'
+import { renderStudySide, patchRenderContext, LINEBREAK_TOKEN } from './clientRenderer'
 import type {
   StudyContentArtifact,
   StudyTemplateArtifact,
@@ -153,6 +153,86 @@ describe('renderStudySide', () => {
     expect(result.html).toContain('id="custom-audio"')
     expect(result.html).toContain('src="/media/proxy/audio-1"')
     expect(result.html).toContain('>🔊</button>')
+    expect(result.html).toContain('onclick=')
+  })
+
+  it('preserves onclick with style.display assignment (show/hide hint)', () => {
+    const result = renderStudySide(
+      template({
+        back_source: (
+          '<button onclick="document.getElementById(\'hint\').style.display=\'block\'; this.style.display=\'none\'">Show</button>'
+          + '<div id="hint" style="display:none">Hint text</div>'
+        ),
+      }),
+      content({}),
+      'back',
+    )
+    expect(result.html).toContain('onclick=')
+    expect(result.html).toContain("style.display='block'")
+  })
+
+  it('preserves onclick with classList.toggle', () => {
+    const result = renderStudySide(
+      template({
+        back_source: '<button onclick="document.getElementById(\'answer\').classList.toggle(\'hidden\')">Toggle</button>',
+      }),
+      content({}),
+      'back',
+    )
+    expect(result.html).toContain('onclick=')
+    expect(result.html).toContain('classList.toggle')
+  })
+
+  it('preserves onclick with pause() and hidden assignment', () => {
+    const result = renderStudySide(
+      template({
+        back_source: '<button onclick="document.getElementById(\'audio1\').pause()">⏸</button>',
+      }),
+      content({}),
+      'back',
+    )
+    expect(result.html).toContain('onclick=')
+    expect(result.html).toContain('.pause()')
+  })
+
+  it('preserves onclick with this.textContent assignment', () => {
+    const result = renderStudySide(
+      template({
+        back_source: '<button onclick="this.textContent=\'Done\'">Click me</button>',
+      }),
+      content({}),
+      'back',
+    )
+    expect(result.html).toContain('onclick=')
+  })
+
+  it('strips unsafe onclick patterns (alert, fetch, eval)', () => {
+    const unsafePatterns = [
+      'alert("xss")',
+      'fetch("https://evil.com")',
+      'eval("code")',
+      'window.location="https://evil.com"',
+      'document.cookie',
+    ]
+    for (const pattern of unsafePatterns) {
+      const result = renderStudySide(
+        template({ back_source: `<button onclick="${pattern}">X</button>` }),
+        content({}),
+        'back',
+      )
+      expect(result.html).not.toContain('onclick=')
+    }
+  })
+
+  it('strips onclick on non-button elements', () => {
+    const result = renderStudySide(
+      template({
+        back_source: '<div onclick="document.getElementById(\'x\').play()">Click</div>',
+      }),
+      content({}),
+      'back',
+    )
+    expect(result.html).not.toContain('onclick=')
   })
 
   it('rejects a proxy-looking URL that is absent from the content media allowlist', () => {
@@ -221,6 +301,58 @@ describe('renderStudySide', () => {
     expect(result.html).toContain('<svg viewBox="0 0 100 100"')
     expect(result.html).toContain('<circle cx="50" cy="50" r="40"')
     expect(result.html).toContain('fill="yellow"')
+  })
+
+  describe('patchRenderContext', () => {
+    it('normalizes newlines to LINEBREAK_TOKEN and updates render_context', () => {
+      const prevContext = { Word: '犬', Meaning: 'Dog' }
+      const updated = patchRenderContext(prevContext, { Meaning: 'Line 1\nLine 2\r\nLine 3' })
+      expect(updated.Meaning).toBe(`Line 1${LINEBREAK_TOKEN}Line 2${LINEBREAK_TOKEN}Line 3`)
+      expect(updated.Word).toBe('犬')
+    })
+
+    it('extracts media urls for image and audio', () => {
+      const updated = patchRenderContext({}, {
+        Audio: '[sound:http://example.com/sound.mp3]',
+        Image: '<img src="http://example.com/cat.jpg">',
+      })
+      expect(updated.Audio_url).toBe('http://example.com/sound.mp3')
+      expect(updated.Audio_urls).toEqual(['http://example.com/sound.mp3'])
+      expect(updated.Image_url).toBe('http://example.com/cat.jpg')
+      expect(updated.Image_urls).toEqual(['http://example.com/cat.jpg'])
+    })
+
+    it('supports alias mapping like han_viet and nested objects', () => {
+      const updated = patchRenderContext({}, {
+        han_viet: 'KHUYỂN',
+        'meta.source': 'JMdict',
+      })
+      expect(updated.han_viet).toBe('KHUYỂN')
+      expect(updated.hanviet).toBe('KHUYỂN')
+      expect((updated as any).meta?.source).toBe('JMdict')
+    })
+
+    it('allows updated render_context to be immediately rendered with new content', () => {
+      const baseTemplate = template({ front_source: '<div>{{Word}}</div>', back_source: '<div>{{{Meaning}}}</div>' })
+      const baseContent = content({
+        field_values: { Word: '犬', Meaning: 'Original Dog' },
+        render_context: { Word: '犬', Meaning: 'Original Dog' },
+      })
+
+      const initialResult = renderStudySide(baseTemplate, baseContent, 'back')
+      expect(initialResult.html).toContain('Original Dog')
+
+      const newFieldValues = { Word: '猫', Meaning: 'Updated Cat\nNew line' }
+      const updatedContent = {
+        ...baseContent,
+        field_values: newFieldValues,
+        render_context: patchRenderContext(baseContent.render_context, newFieldValues),
+      }
+
+      const updatedResult = renderStudySide(baseTemplate, updatedContent, 'back')
+      expect(updatedResult.html).toContain('Updated Cat<br>New line')
+      expect(updatedResult.html).not.toContain('Original Dog')
+    })
   })
 })
 

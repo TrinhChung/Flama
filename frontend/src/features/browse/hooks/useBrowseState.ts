@@ -528,7 +528,7 @@ export function useBrowseState() {
   const updateMutation = useMutation({
     mutationFn: (payload: { field_values: Record<string, string>; deck_id?: number; tags?: string[] }) =>
       appApi.mutate(`/browse/cards/${activeCardId}`, 'PATCH', payload),
-    onSuccess: () => {
+    onSuccess: async () => {
       if (urlDeckId) {
         toast.success('Đã lưu thay đổi thẻ.', {
           duration: 2000,
@@ -545,7 +545,7 @@ export function useBrowseState() {
       setInitialTags(editTags)
       if (activeCardId) {
         const noteId = cardDetailQuery.data?.note?.id ? String(cardDetailQuery.data.note.id) : null
-        void updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
+        await updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
       }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })

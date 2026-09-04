@@ -6,12 +6,134 @@ import type {
   StudyTemplateArtifact,
 } from '../types'
 
-const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
+export const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
+
+function extractMediaUrlsFromValue(value: string): string[] {
+  const urls: string[] = []
+  const soundMatch = value.match(/\[sound:(.*?)\]/)
+  if (soundMatch && soundMatch[1]) {
+    urls.push(soundMatch[1].trim())
+  }
+  const imgMatch = value.match(/<img [^>]*src=["']([^"']+)["']/)
+  if (imgMatch && imgMatch[1]) {
+    urls.push(imgMatch[1].trim())
+  }
+  if (!urls.length && (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/media/'))) {
+    urls.push(value.trim())
+  }
+  return urls
+}
+
+export function patchRenderContext(
+  existingRenderContext: Record<string, unknown>,
+  newFieldValues: Record<string, string>,
+  fieldDefs?: Array<{ name: string; field_type?: string }>,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...existingRenderContext }
+  const fieldTypeMap = new Map<string, string>()
+  if (fieldDefs) {
+    for (const def of fieldDefs) {
+      if (def?.name) {
+        fieldTypeMap.set(def.name, String(def.field_type || '').toLowerCase())
+      }
+    }
+  }
+
+  for (const [key, rawValue] of Object.entries(newFieldValues)) {
+    const stringValue = rawValue === null || rawValue === undefined ? '' : String(rawValue)
+    const fieldType = fieldTypeMap.get(key) || 'text'
+    const isMedia = (
+      fieldType === 'image' ||
+      fieldType === 'audio' ||
+      fieldType === 'diagram' ||
+      key.toLowerCase().includes('audio') ||
+      key.toLowerCase().includes('image') ||
+      key.toLowerCase().includes('sound')
+    )
+
+    if (isMedia) {
+      const trimmed = stringValue.trim()
+      const extractedUrls = extractMediaUrlsFromValue(trimmed)
+      const urlList = extractedUrls.length > 0 ? extractedUrls : (trimmed ? [trimmed] : [])
+      next[key] = trimmed
+      next[`${key}_url`] = urlList[0] || ''
+      next[`${key}_urls`] = urlList
+    } else {
+      const normalized = stringValue
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\\n/g, LINEBREAK_TOKEN)
+        .replace(/\n/g, LINEBREAK_TOKEN)
+      next[key] = normalized
+      if (key === 'hanviet') {
+        next['han_viet'] = normalized
+      } else if (key === 'han_viet') {
+        next['hanviet'] = normalized
+      }
+    }
+
+    if (key.includes('.')) {
+      const parts = key.split('.')
+      let curr: Record<string, unknown> = next
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i]
+        if (!curr[part] || typeof curr[part] !== 'object' || Array.isArray(curr[part])) {
+          curr[part] = {}
+        }
+        curr = curr[part] as Record<string, unknown>
+      }
+      curr[parts[parts.length - 1]] = next[key]
+    }
+  }
+
+  return next
+}
+
 const PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/
 const LIBRARY_MEDIA_RE = /^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}(?:\.(?:svg|png|jpe?g|webp|gif|mp3|wav|ogg|webm))?$/i
 const STATIC_STROKE_RE = /^\/static\/strokes\/[a-zA-Z0-9_-]+\/[a-fA-F0-9]+\.svg$/
-const SAFE_BUTTON_ONCLICK_RE =
-  /^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$/
+// ---------------------------------------------------------------------------
+// Safe onclick validation – whitelist of common DOM manipulation patterns
+// that are safe inside the sandboxed iframe (allow-scripts, no allow-same-origin).
+// ---------------------------------------------------------------------------
+
+const SAFE_ID = String.raw`[A-Za-z0-9_-]+`
+const TARGET_RE_SRC = String.raw`(?:document\.getElementById\(\s*['"]${SAFE_ID}['"]\s*\)|this)`
+
+// target.method()  — media/DOM methods without arguments
+const SAFE_METHOD_RE = new RegExp(
+  String.raw`^${TARGET_RE_SRC}\.(?:play|pause|load|click|focus|blur|remove)\(\)$`,
+)
+// target.style.prop = 'value'
+const SAFE_STYLE_RE = new RegExp(
+  String.raw`^${TARGET_RE_SRC}\.style\.[a-zA-Z]+\s*=\s*'[^']{0,50}'$`,
+)
+// target.classList.add/remove/toggle('class')
+const SAFE_CLASSLIST_RE = new RegExp(
+  String.raw`^${TARGET_RE_SRC}\.classList\.(?:add|remove|toggle)\(\s*'[A-Za-z0-9_-]+'\s*\)$`,
+)
+// target.hidden = true/false
+const SAFE_HIDDEN_RE = new RegExp(
+  String.raw`^${TARGET_RE_SRC}\.hidden\s*=\s*(?:true|false)$`,
+)
+// target.textContent = 'text'  (safe string, no HTML injection)
+const SAFE_TEXTCONTENT_RE = new RegExp(
+  String.raw`^${TARGET_RE_SRC}\.textContent\s*=\s*'[^']{0,100}'$`,
+)
+
+const SAFE_ONCLICK_PATTERNS = [
+  SAFE_METHOD_RE,
+  SAFE_STYLE_RE,
+  SAFE_CLASSLIST_RE,
+  SAFE_HIDDEN_RE,
+  SAFE_TEXTCONTENT_RE,
+]
+
+function isSafeOnclickValue(value: string): boolean {
+  const statements = value.split(';').map((s) => s.trim()).filter(Boolean)
+  if (statements.length === 0 || statements.length > 10) return false
+  return statements.every((stmt) => SAFE_ONCLICK_PATTERNS.some((re) => re.test(stmt)))
+}
 
 function isApprovedMediaUrl(value: string): boolean {
   if (PROXY_MEDIA_RE.test(value) || LIBRARY_MEDIA_RE.test(value) || STATIC_STROKE_RE.test(value)) {
@@ -112,7 +234,7 @@ function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>):
       data.keepAttr = (
         attrName === 'onclick'
         && node.nodeName.toLowerCase() === 'button'
-        && SAFE_BUTTON_ONCLICK_RE.test(attrValue)
+        && isSafeOnclickValue(attrValue)
       )
       return
     }
@@ -140,6 +262,7 @@ function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>):
     return DOMPurify.sanitize(rawHtml, {
       ALLOWED_TAGS,
       ALLOWED_ATTR,
+      ADD_ATTR: ['onclick'],
       ALLOW_ARIA_ATTR: true,
       ALLOW_DATA_ATTR: true,
       USE_PROFILES: { html: true, svg: true, svgFilters: true },

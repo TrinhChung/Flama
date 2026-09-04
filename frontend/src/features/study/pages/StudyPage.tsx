@@ -387,6 +387,7 @@ export function StudyPage() {
             cardId={card?.card_id}
             canEdit={Boolean(card?.card_id && card?.can_edit_card !== false)}
             onEdit={handleOpenEdit}
+            onReload={study.reloadSession}
             newCount={counts.new}
             learnCount={counts.learning}
             dueCount={counts.due}

@@ -23,6 +23,7 @@ import { AmbientBackground } from '@/components/ambient-background'
 import { NoteTypeLivePreview } from '../components/NoteTypeLivePreview'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
+import { updateTemplateInSessions } from '@/features/study/session/sessionStore'
 
 type FieldDefItem = {
   id: string
@@ -108,8 +109,15 @@ export function NoteTypeDetailPage() {
   const saveMutation = useMutation({
     mutationFn: (payload: { front_html: string; back_html: string; shared_css: string }) =>
       appApi.mutate(`/note-types/${noteTypeId}/templates/${selectedTemplateId}`, 'PATCH', payload),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Đã lưu Template.')
+      if (selectedTemplateId) {
+        await updateTemplateInSessions(selectedTemplateId, {
+          front_html: frontHtml,
+          back_html: backHtml,
+          shared_css: sharedCss,
+        })
+      }
       void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
     },
     onError: (error: Error) => {
@@ -142,11 +150,18 @@ export function NoteTypeDetailPage() {
         `/note-types/${noteTypeId}/templates/${selectedTemplateId}/reset`,
         'POST',
       ),
-    onSuccess: (reset) => {
+    onSuccess: async (reset) => {
       toast.success('Đã đặt lại Template mặc định.')
       setFrontHtml(reset.front_html || '')
       setBackHtml(reset.back_html || '')
       setSharedCss(reset.shared_css || '')
+      if (selectedTemplateId) {
+        await updateTemplateInSessions(selectedTemplateId, {
+          front_html: reset.front_html || '',
+          back_html: reset.back_html || '',
+          shared_css: reset.shared_css || '',
+        })
+      }
       void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
     },
     onError: (error: Error) => {
