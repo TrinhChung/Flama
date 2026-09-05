@@ -10,6 +10,7 @@ import type {
   BatchParseResponse,
   BatchImportReport,
 } from '../api'
+import { buildSuggestedMapping } from '../utils/mapping'
 
 export type DeckOption = {
   id: number
@@ -193,6 +194,36 @@ export function useFileImportWizard() {
     }
   }, [selectedNoteTypeId, optionsQuery.data, fields])
 
+  const prevNoteTypeIdRef = useRef<string>(selectedNoteTypeId)
+
+  // Re-run suggested mapping when note type changes and columns exist
+  useEffect(() => {
+    if (prevNoteTypeIdRef.current !== selectedNoteTypeId) {
+      prevNoteTypeIdRef.current = selectedNoteTypeId
+      if (columns.length > 0 && fields.length > 0) {
+        const nextMapping = buildSuggestedMapping(fields, columns, hasHeader)
+        setMapping(nextMapping)
+        setReport(null)
+        setBatchReport(null)
+        setHasEstimated(false)
+        setExecutionDone(false)
+      }
+    }
+  }, [selectedNoteTypeId, fields, columns, hasHeader])
+
+  const applyAutoMapping = () => {
+    if (fields.length > 0 && columns.length > 0) {
+      const nextMapping = buildSuggestedMapping(fields, columns, hasHeader)
+      setMapping(nextMapping)
+      setReport(null)
+      setBatchReport(null)
+      setHasEstimated(false)
+      setExecutionDone(false)
+      return nextMapping
+    }
+    return {}
+  }
+
   // Infer note type from sibling decks
   const handleDeckChange = (newDeckId: string) => {
     setSelectedDeckId(newDeckId)
@@ -246,8 +277,10 @@ export function useFileImportWizard() {
       setHasEstimated(false)
       setExecutionDone(false)
 
-      if (data.suggested_mapping) {
+      if (data.suggested_mapping && Object.keys(data.suggested_mapping).length > 0) {
         setMapping(data.suggested_mapping)
+      } else if (fields.length > 0 && data.columns?.length > 0) {
+        setMapping(buildSuggestedMapping(fields, data.columns, data.has_header ?? hasHeader))
       }
 
       setParseMeta({
@@ -304,8 +337,10 @@ export function useFileImportWizard() {
       })
       setBatchFileConfigs(initialConfigs)
 
-      if (data.suggested_mapping) {
+      if (data.suggested_mapping && Object.keys(data.suggested_mapping).length > 0) {
         setMapping(data.suggested_mapping)
+      } else if (fields.length > 0 && data.sample_columns?.length > 0) {
+        setMapping(buildSuggestedMapping(fields, data.sample_columns, hasHeader))
       }
 
       const totalRows = data.files.reduce((acc, f) => acc + f.total_rows, 0)
@@ -599,6 +634,7 @@ export function useFileImportWizard() {
     setParseMeta,
     mapping,
     setMapping,
+    applyAutoMapping,
     importMode,
     setImportMode,
     dontOverwriteEmpty,

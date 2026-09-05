@@ -1,10 +1,12 @@
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ArrowRightLeft, Sliders } from 'lucide-react'
+import { ArrowRightLeft, Sliders, Wand2 } from 'lucide-react'
+import { toast } from 'sonner'
 import type { useFileImportWizard } from '../hooks/useFileImportWizard'
 
 interface ImportMappingStepProps {
@@ -16,6 +18,7 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
     fields,
     mapping,
     setMapping,
+    applyAutoMapping,
     columns,
     previewRows,
     importMode,
@@ -35,13 +38,31 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
     <div className="space-y-6">
       <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
         <CardHeader className="pb-3 border-b bg-card/50">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <ArrowRightLeft className="size-4 text-primary" />
-            Ánh xạ Cột -&gt; Trường Note
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Ghép các cột trong tệp vào từng trường tương ứng của loại thẻ.
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <ArrowRightLeft className="size-4 text-primary" />
+                Ánh xạ Cột -&gt; Trường Note
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Ghép các cột trong tệp vào từng trường tương ứng của loại thẻ.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                applyAutoMapping()
+                toast.info('Đã tự động ánh xạ lại các trường theo cột.')
+              }}
+              className="text-xs gap-1.5 h-8 font-medium shrink-0 self-start sm:self-auto"
+              title="Tự động khớp cột theo tên hoặc xếp lần lượt theo thứ tự"
+            >
+              <Wand2 className="size-3.5 text-primary" />
+              Tự động khớp lại
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="pt-4">
           <Table>

@@ -63,7 +63,6 @@ export function ImportOptionsStep({ wizard }: ImportOptionsStepProps) {
               value={selectedNoteTypeId}
               onChange={(e) => {
                 setSelectedNoteTypeId(e.target.value)
-                wizard.setSelectedNoteTypeId(e.target.value)
               }}
             >
               {noteTypeOptions.map((nt) => (
