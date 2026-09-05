@@ -199,38 +199,41 @@ class TemplateCompileError(ValueError):
     """Mustache template compile/parse error."""
 
 
+_CAPABILITY_ATTRS = {
+    "src", "href", "poster", "action", "formaction", "background",
+    "cite", "codebase", "manifest", "srcdoc",
+}
+_SAFE_INERT_ATTR_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_:-]*$")
+
+
 def _strict_allowed_attr(tag: str, name: str, value: str) -> bool:
     lowered = name.lower()
     if lowered.startswith("on"):
         if lowered == "onclick" and tag == "button":
             return _is_safe_button_onclick((value or "").strip())
         return False
-    if lowered == "auto-split":
-        return tag in {"div", "p", "span", "li", "td"}
-    if lowered in {"class", "id", "style", "alt", "title", "loading"}:
-        return True
-    if lowered in {
-        "viewbox", "xmlns", "d", "fill", "stroke", "stroke-width",
-        "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset",
-        "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2",
-        "transform", "points", "opacity", "text-anchor", "font-size", "font-family",
-    }:
-        return True
+    if lowered in _CAPABILITY_ATTRS:
+        if lowered in {"src", "href", "poster"}:
+            val = (value or "").strip()
+            if (
+                _PROXY_MEDIA_URL_RE.match(val)
+                or _LIBRARY_MEDIA_URL_RE.match(val)
+                or _STATIC_STROKE_URL_RE.match(val)
+            ):
+                return True
+            if lowered == "href" and val.startswith("https://"):
+                return True
+        return False
     if lowered == "controls":
         return tag in {"audio", "video"}
     if lowered == "autoplay":
         return tag == "audio"
-    if lowered in {"src", "href", "poster"}:
-        val = (value or "").strip()
-        if (
-            _PROXY_MEDIA_URL_RE.match(val)
-            or _LIBRARY_MEDIA_URL_RE.match(val)
-            or _STATIC_STROKE_URL_RE.match(val)
-        ):
-            return True
-        if lowered == "href" and val.startswith("https://"):
-            return True
-        return False
+    if lowered in {"width", "height"}:
+        return tag in {"img", "video", "source", "audio", "table", "th", "td", "svg", "rect", "circle", "line"}
+    if lowered in {"colspan", "rowspan"}:
+        return tag in {"th", "td"}
+    if _SAFE_INERT_ATTR_NAME_RE.match(lowered):
+        return True
     return False
 
 
@@ -238,38 +241,24 @@ def _template_allowed_attr(tag: str, name: str, value: str) -> bool:
     lowered = name.lower()
     if lowered.startswith("on"):
         return True
-    if lowered.startswith("data-") or lowered.startswith("aria-"):
-        return True
-    if lowered == "auto-split":
-        return tag in {"div", "p", "span", "li", "td"}
-    if lowered in {"class", "id", "style", "alt", "title", "role", "dir", "loading"}:
-        return True
-    if lowered in {
-        "viewbox", "xmlns", "d", "fill", "stroke", "stroke-width",
-        "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset",
-        "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2",
-        "transform", "points", "opacity", "text-anchor", "font-size", "font-family",
-    }:
-        return True
-    if lowered in {"controls", "loop", "muted", "playsinline"}:
-        return tag in {"audio", "video"}
-    if lowered == "autoplay":
-        return tag in {"audio", "video"}
-    if lowered in {"preload", "poster"}:
+    if lowered in _CAPABILITY_ATTRS:
+        if lowered in {"src", "href", "poster"}:
+            val = (value or "").strip()
+            if is_canonical_media_url(val):
+                return True
+            if lowered == "href" and val.startswith("https://"):
+                return True
+            if lowered in {"src", "poster"} and is_canonical_media_url(val):
+                return True
+        return False
+    if lowered in {"controls", "loop", "muted", "playsinline", "autoplay", "preload"}:
         return tag in {"audio", "video"}
     if lowered in {"width", "height"}:
         return tag in {"img", "video", "source", "audio", "table", "th", "td", "svg", "rect", "circle", "line"}
     if lowered in {"colspan", "rowspan"}:
         return tag in {"th", "td"}
-    if lowered in {"src", "href", "poster"}:
-        val = (value or "").strip()
-        if is_canonical_media_url(val):
-            return True
-        if lowered == "href" and val.startswith("https://"):
-            return True
-        if lowered in {"src", "poster"} and is_canonical_media_url(val):
-            return True
-        return False
+    if _SAFE_INERT_ATTR_NAME_RE.match(lowered):
+        return True
     return False
 
 

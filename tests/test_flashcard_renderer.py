@@ -370,8 +370,8 @@ class FlashcardRendererTests(unittest.TestCase):
             self.assertFalse(_is_safe_button_onclick(case),
                              f"Expected unsafe: {case}")
 
-    def test_auto_split_attribute_is_preserved(self):
-        template = self._template('<div auto-split>{{Word}}</div>')
+    def test_auto_split_and_arbitrary_inert_attributes_are_preserved(self):
+        template = self._template('<div auto-split data-auto-split my-marker="custom-1" foo="bar">{{Word}}</div>')
         fields = [self._field("Word")]
         rendered = render_template_pair(
             template=template,
@@ -380,6 +380,19 @@ class FlashcardRendererTests(unittest.TestCase):
             media_assets=[],
         )
         self.assertIn("auto-split", rendered["front_html"])
+        self.assertIn("data-auto-split", rendered["front_html"])
+        self.assertIn('my-marker="custom-1"', rendered["front_html"])
+        self.assertIn('foo="bar"', rendered["front_html"])
+
+    def test_dangerous_capability_attributes_are_stripped(self):
+        from app.services.flashcard_renderer import sanitize_html_fragment
+        cleaned = sanitize_html_fragment(
+            '<div my-marker="custom-1" onerror="alert(1)" onmouseover="evil()" action="http://evil.com">Hello</div>'
+        )
+        self.assertIn('my-marker="custom-1"', cleaned)
+        self.assertNotIn("onerror", cleaned)
+        self.assertNotIn("onmouseover", cleaned)
+        self.assertNotIn("action", cleaned)
 
     def test_literal_backslash_n_is_normalized_to_newline(self):
         template = self._template('<div auto-split>{{Word}}</div>')
