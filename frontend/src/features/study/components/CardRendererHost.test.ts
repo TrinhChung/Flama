@@ -3,6 +3,8 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+// @ts-ignore
+import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('card renderer host viewport modes', () => {
@@ -400,5 +402,68 @@ describe('card renderer host viewport modes', () => {
 
     expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/audio-remote-1')
     controller.destroy()
+  })
+
+  describe('template script autonomy and inert attribute preservation', () => {
+    function createSandbox(html: string) {
+      const source = readFileSync(
+        resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+        'utf8',
+      )
+      window.eval(source)
+      const iframe = document.createElement('iframe')
+      document.body.appendChild(iframe)
+      const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+      controller.render({ html })
+      const sandbox = new JSDOM(iframe.srcdoc, { runScripts: 'dangerously' })
+      const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
+      return { controller, iframe, sandbox, instanceId }
+    }
+
+    it('does NOT mutate content or split $ automatically when no user script is present', async () => {
+      const { controller, sandbox } = createSandbox(
+        '<div auto-split>A$B$C</div>',
+      )
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      const root = sandbox.window.document.getElementById('flama-card-root')
+      const target = root?.querySelector('[auto-split]')
+      expect(target?.innerHTML).toBe('A$B$C')
+      expect(target?.querySelectorAll('br').length).toBe(0)
+      controller.destroy()
+    })
+
+    it('preserves auto-split and arbitrary inert custom attributes in sandbox iframe srcdoc', async () => {
+      const { controller, iframe } = createSandbox(
+        '<div auto-split data-auto-split my-marker="xyz" foo="bar">A$B</div>',
+      )
+      expect(iframe.srcdoc).toContain('auto-split')
+      expect(iframe.srcdoc).toContain('data-auto-split')
+      expect(iframe.srcdoc).toContain('my-marker="xyz"')
+      expect(iframe.srcdoc).toContain('foo="bar"')
+      controller.destroy()
+    })
+
+    it('allows user script to execute in sandbox and own template presentation logic', async () => {
+      const { controller, sandbox } = createSandbox(`
+        <div auto-split>lại $ nữa $ tiếp tục</div>
+        <script>
+          document.querySelectorAll('[auto-split]').forEach(function(el) {
+            var raw = el.innerHTML;
+            if (raw.indexOf('$') === -1) return;
+            el.innerHTML = raw.split('$').map(function(s) {
+              return '<div>' + s.trim() + '</div>';
+            }).join('');
+          });
+        </script>
+      `)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+
+      const root = sandbox.window.document.getElementById('flama-card-root')
+      const target = root?.querySelector('[auto-split]')
+      expect(target?.innerHTML).toBe('<div>lại</div><div>nữa</div><div>tiếp tục</div>')
+      expect(target?.querySelectorAll('div').length).toBe(3)
+      controller.destroy()
+    })
   })
 })

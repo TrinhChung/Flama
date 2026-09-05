@@ -393,6 +393,50 @@ describe('renderStudySide', () => {
       expect(updatedResult.html).toContain('Updated Cat<br>New line')
       expect(updatedResult.html).not.toContain('Original Dog')
     })
+
+    it('preserves arbitrary inert custom attributes while stripping dangerous handlers and capabilities', () => {
+      const testTemplate = template({
+        front_source: '<div auto-split data-auto-split my-marker="custom-1" foo="bar" onerror="alert(1)" onmouseover="evil()" class="card-item">{{Word}}</div>',
+        back_source: '<div my-custom-attr="hello" action="http://evil.com" style="color: blue; background: url(http://evil.com)">{{Meaning}}</div>',
+      })
+      const testContent = content({
+        render_context: {
+          Word: 'A$B$C',
+          Meaning: 'X$Y',
+        },
+      })
+
+      const front = renderStudySide(testTemplate, testContent, 'front')
+      expect(front.html).toContain('auto-split')
+      expect(front.html).toContain('data-auto-split')
+      expect(front.html).toContain('my-marker="custom-1"')
+      expect(front.html).toContain('foo="bar"')
+      expect(front.html).toContain('class="card-item"')
+      expect(front.html).not.toContain('onerror')
+      expect(front.html).not.toContain('onmouseover')
+
+      const back = renderStudySide(testTemplate, testContent, 'back')
+      expect(back.html).toContain('my-custom-attr="hello"')
+      expect(back.html).not.toContain('action')
+      expect(back.html).not.toContain('background: url')
+    })
+
+    it('does not leak un-substituted Mustache media placeholders into allowed_media_urls or CSP', () => {
+      const testTemplate = template({
+        front_source: '<div><audio controls src="{{{word_audio_url}}}"></audio></div>',
+      })
+      const testContent = content({
+        render_context: {},
+      })
+
+      const result = renderStudySide(testTemplate, testContent, 'front')
+      expect(result.allowed_media_urls).not.toEqual(
+        expect.arrayContaining([expect.stringContaining('word_audio_url')]),
+      )
+      expect(result.allowed_audio_urls).not.toEqual(
+        expect.arrayContaining([expect.stringContaining('word_audio_url')]),
+      )
+    })
   })
 })
 

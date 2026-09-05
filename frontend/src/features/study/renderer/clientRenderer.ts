@@ -288,6 +288,7 @@ function collectMediaUrlsFromMarkup(rawHtml: string): { media: string[]; audio: 
   template.content.querySelectorAll('img[src], audio[src], video[src], video[poster], source[src]').forEach((node) => {
     const attr = node.hasAttribute('src') ? 'src' : 'poster'
     const value = String(node.getAttribute(attr) || '').trim()
+    if (!value || value.includes('{{') || value.includes('}}')) return
     // Managed proxy URLs must come from content.media; never authorize a
     // template-injected opaque asset id merely because it appears in HTML.
     if (PROXY_MEDIA_RE.test(value) || !isApprovedMediaUrl(value)) return
@@ -374,43 +375,68 @@ const ALLOWED_TAGS = [
 const ALLOWED_ATTR = [
   'class', 'id', 'style', 'alt', 'title', 'role', 'dir', 'controls', 'loop',
   'muted', 'playsinline', 'autoplay', 'preload', 'poster', 'width', 'height',
-  'colspan', 'rowspan', 'src', 'href', 'auto-split', 'onclick', 'loading',
+  'colspan', 'rowspan', 'src', 'href', 'onclick', 'loading',
   'viewBox', 'viewbox', 'xmlns', 'd', 'fill', 'stroke', 'stroke-width',
   'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset',
   'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
   'transform', 'points', 'opacity', 'font-size', 'font-family', 'text-anchor',
 ]
 
+const CAPABILITY_ATTRS = new Set([
+  'src', 'href', 'poster', 'action', 'formaction', 'background',
+  'cite', 'codebase', 'manifest', 'srcdoc',
+])
+
+const SAFE_INERT_ATTR_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_:-]*$/
+
 function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>): string {
   DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
     const attrName = data.attrName.toLowerCase()
     const attrValue = String(data.attrValue || '').trim()
     if (attrName.startsWith('on')) {
-      data.keepAttr = (
+      const isSafe = (
         attrName === 'onclick'
         && node.nodeName.toLowerCase() === 'button'
         && isSafeOnclickValue(attrValue)
       )
+      data.keepAttr = isSafe
+      if (!isSafe) {
+        data.forceKeepAttr = false
+      }
       return
     }
-    if (attrName === 'src' || attrName === 'href' || attrName === 'poster') {
-      const tag = node.nodeName.toLowerCase()
-      const isMediaTag = tag === 'img' || tag === 'audio' || tag === 'video' || tag === 'source'
-      data.keepAttr = (
-        (PROXY_MEDIA_RE.test(attrValue) && allowedMediaUrls.has(attrValue))
-        || LIBRARY_MEDIA_RE.test(attrValue)
-        || STATIC_STROKE_RE.test(attrValue)
-        || (attrName === 'href' && attrValue.startsWith('https://'))
-        || (isMediaTag && (attrName === 'src' || attrName === 'poster')
-            && allowedMediaUrls.has(attrValue) && isApprovedMediaUrl(attrValue))
-      )
+    if (attrName === 'style') {
+      if (/(?:@import|url\s*\(|expression\s*\()/i.test(attrValue)) {
+        data.keepAttr = false
+        data.forceKeepAttr = false
+      }
       return
     }
-    if (
-      attrName === 'style'
-      && /(?:@import|url\s*\(|expression\s*\()/i.test(attrValue)
-    ) {
-      data.keepAttr = false
+    if (CAPABILITY_ATTRS.has(attrName)) {
+      if (attrName === 'src' || attrName === 'href' || attrName === 'poster') {
+        const tag = node.nodeName.toLowerCase()
+        const isMediaTag = tag === 'img' || tag === 'audio' || tag === 'video' || tag === 'source'
+        const isAllowed = (
+          (PROXY_MEDIA_RE.test(attrValue) && allowedMediaUrls.has(attrValue))
+          || LIBRARY_MEDIA_RE.test(attrValue)
+          || STATIC_STROKE_RE.test(attrValue)
+          || (attrName === 'href' && attrValue.startsWith('https://'))
+          || (isMediaTag && (attrName === 'src' || attrName === 'poster')
+              && allowedMediaUrls.has(attrValue) && isApprovedMediaUrl(attrValue))
+        )
+        data.keepAttr = isAllowed
+        if (!isAllowed) {
+          data.forceKeepAttr = false
+        }
+      } else {
+        data.keepAttr = false
+        data.forceKeepAttr = false
+      }
+      return
+    }
+    if (SAFE_INERT_ATTR_NAME_RE.test(attrName)) {
+      data.forceKeepAttr = true
+      data.keepAttr = true
     }
   })
   try {

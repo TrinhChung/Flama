@@ -94,9 +94,7 @@
   - `FlamaCard.onReveal(callback)`
   - `FlamaCard.getConfig()`
   - `FlamaCard.getContext()`
-- Also preserves legacy behavior by:
-  - auto-applying `auto-split`
-  - leaving direct local DOM/audio logic intact inside the iframe
+- Leaves direct local DOM, custom inert attributes, and template scripts intact inside the iframe.
 
 ### Bridge protocol
 - Renderer to host:
