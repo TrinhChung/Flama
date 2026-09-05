@@ -379,6 +379,7 @@ def suggest_mapping(
 ) -> dict[str, dict[str, Any]]:
     suggestions: dict[str, dict[str, Any]] = {}
     header_map: dict[str, int] = {}
+    used_columns: set[int] = set()
 
     if has_header:
         for index, raw_name in enumerate(header):
@@ -386,28 +387,53 @@ def suggest_mapping(
             if normalized and normalized not in header_map:
                 header_map[normalized] = index
 
-    for position, field_def in enumerate(sorted(field_defs, key=lambda item: item.position)):
-        field_name = field_def.name
-        mapped_index: int | None = None
+    sorted_fields = sorted(field_defs, key=lambda item: item.position)
 
-        if has_header:
+    # Pass 1: exact normalized header name match
+    if has_header:
+        for position, field_def in enumerate(sorted_fields):
+            field_name = field_def.name
             mapped_index = header_map.get(_normalize_name(field_name))
-        if mapped_index is None and position < column_count:
-            mapped_index = position
+            if (
+                mapped_index is not None
+                and mapped_index < column_count
+                and mapped_index not in used_columns
+            ):
+                suggestions[field_name] = {
+                    "source_type": "column",
+                    "column_index": int(mapped_index),
+                    "constant_value": "",
+                }
+                used_columns.add(mapped_index)
 
-        if mapped_index is None:
+    # Pass 2: sequential fallback for unmapped fields
+    for position, field_def in enumerate(sorted_fields):
+        field_name = field_def.name
+        if field_name in suggestions:
+            continue
+
+        target_idx: int | None = None
+        if position < column_count and position not in used_columns:
+            target_idx = position
+        else:
+            for col_idx in range(column_count):
+                if col_idx not in used_columns:
+                    target_idx = col_idx
+                    break
+
+        if target_idx is not None:
+            suggestions[field_name] = {
+                "source_type": "column",
+                "column_index": int(target_idx),
+                "constant_value": "",
+            }
+            used_columns.add(target_idx)
+        else:
             suggestions[field_name] = {
                 "source_type": "ignore",
                 "column_index": None,
                 "constant_value": "",
             }
-            continue
-
-        suggestions[field_name] = {
-            "source_type": "column",
-            "column_index": int(mapped_index),
-            "constant_value": "",
-        }
 
     return suggestions
 
