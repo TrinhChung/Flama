@@ -3,6 +3,7 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+// @ts-ignore
 import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
