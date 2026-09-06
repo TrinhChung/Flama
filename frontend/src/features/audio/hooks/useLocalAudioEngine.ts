@@ -9,10 +9,13 @@ import {
   type BatchMediaItemInput,
 } from '@/shared/api/noteMedia'
 import {
+  getLanguageGroupFromVoiceId,
   loadStoredLocalAudioSettings,
   saveStoredLocalAudioSettings,
+  type LocalAudioSettings,
 } from '../services/localAudioStorage'
 import { scanDeckAudio } from '../services/audioScanService'
+import { cleanTextForTts } from '../services/ttsTextNormalizer'
 import type { VoiceDescriptor, DeckScanResponse } from '../types'
 
 export type ProcessItemStatus = 'pending' | 'synthesizing' | 'uploading' | 'done' | 'failed' | 'skipped'
@@ -68,6 +71,9 @@ const FALLBACK_KOKORO_SPEAKERS: VoiceOption[] = [
   { id: 'zm_yunjian', speakerName: 'Yunjian', styleName: 'Mandarin Chinese Male', label: 'Yunjian [Mandarin Chinese] - Male' },
   { id: 'ef_dora', speakerName: 'Dora', styleName: 'Spanish Female', label: 'Dora [Spanish] - Female' },
   { id: 'ff_siwis', speakerName: 'Siwis', styleName: 'French Female', label: 'Siwis [French] - Female' },
+  { id: 'if_sara', speakerName: 'Sara', styleName: 'Italian Female', label: 'Sara [Italian] - Female' },
+  { id: 'pf_dora', speakerName: 'Dora', styleName: 'Portuguese Female', label: 'Dora [Portuguese] - Female' },
+  { id: 'hf_alpha', speakerName: 'Alpha', styleName: 'Hindi Female', label: 'Alpha [Hindi] - Female' },
 ]
 
 function resolveLocaleFromVoiceId(voiceId: string): string {
@@ -137,9 +143,28 @@ function formatVoiceOption(v: Partial<VoiceDescriptor> & { id?: string; label?: 
   }
 }
 
-function autoSelectSourceField(fields: string[], currentSource?: string): string {
+function autoSelectSourceField(fields: string[], currentSource?: string, noteTypeName?: string): string {
   if (currentSource && fields.includes(currentSource)) return currentSource
-  const sourcePriority = ['Reading', 'reading', 'Word', 'word', 'Expression', 'expression', 'Kanji', 'kanji']
+  const stored = loadStoredLocalAudioSettings()
+  if (noteTypeName && stored.fieldMappingByNoteType?.[noteTypeName]?.sourceField) {
+    const mapped = stored.fieldMappingByNoteType[noteTypeName].sourceField
+    if (mapped && fields.includes(mapped)) return mapped
+  }
+  if (stored.sourceField && fields.includes(stored.sourceField)) return stored.sourceField
+  const sourcePriority = [
+    'Reading', 'reading',
+    'Word', 'word',
+    'Expression', 'expression',
+    'Kanji', 'kanji',
+    'Hanzi', 'hanzi',
+    'Simplified', 'simplified',
+    'Traditional', 'traditional',
+    'Front', 'front',
+    'Vocab', 'vocab',
+    'Vocabulary', 'vocabulary',
+    'Term', 'term',
+    'Text', 'text',
+  ]
   for (const p of sourcePriority) {
     const match = fields.find((f) => f.toLowerCase() === p.toLowerCase())
     if (match) return match
@@ -147,39 +172,27 @@ function autoSelectSourceField(fields: string[], currentSource?: string): string
   return fields[0] || ''
 }
 
-function autoSelectDestinationField(fields: string[], currentDest?: string): string {
+function autoSelectDestinationField(fields: string[], currentDest?: string, noteTypeName?: string): string {
   if (currentDest && fields.includes(currentDest)) return currentDest
-  const destPriority = ['Audio', 'audio', 'AudioReading', 'audioreading', 'Sound', 'sound', 'AudioWord', 'audioword']
+  const stored = loadStoredLocalAudioSettings()
+  if (noteTypeName && stored.fieldMappingByNoteType?.[noteTypeName]?.destinationField) {
+    const mapped = stored.fieldMappingByNoteType[noteTypeName].destinationField
+    if (mapped && fields.includes(mapped)) return mapped
+  }
+  if (stored.destinationField && fields.includes(stored.destinationField)) return stored.destinationField
+  const destPriority = [
+    'Audio', 'audio',
+    'AudioReading', 'audioreading',
+    'Sound', 'sound',
+    'AudioWord', 'audioword',
+    'Pronunciation', 'pronunciation',
+    'Voice', 'voice',
+  ]
   for (const p of destPriority) {
     const match = fields.find((f) => f.toLowerCase() === p.toLowerCase())
     if (match) return match
   }
   return fields[0] || ''
-}
-
-function cleanTextForVoiceVox(rawText: string): string {
-  if (!rawText) return ''
-  let text = rawText
-
-  // Strip HTML tags
-  text = text.replace(/<[^>]*>/g, ' ')
-
-  // Replace Japanese furigana brackets: 漢字[かんじ] -> かんじ or 漢字(かんじ) -> かんじ
-  text = text.replace(/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+\s*\[([^\]]+)\]/g, '$1')
-  text = text.replace(/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+\s*\(([^)]+)\)/g, '$1')
-
-  // Strip [sound:...] media tags
-  text = text.replace(/\[sound:[^\]]+\]/gi, '')
-
-  // Decode common HTML entities
-  text = text
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-
-  return text.replace(/\s+/g, ' ').trim()
 }
 
 export function useLocalAudioEngine(options: {
@@ -190,6 +203,7 @@ export function useLocalAudioEngine(options: {
   deckName?: string
   availableFieldNames?: string[]
   availableAudioFieldNames?: string[]
+  noteTypeName?: string
   engineId?: 'voicevox' | 'kokoro'
   defaultVoiceId?: string
   onSuccess?: () => void
@@ -210,6 +224,8 @@ export function useLocalAudioEngine(options: {
 
   const [deckScanResult, setDeckScanResult] = useState<DeckScanResponse | null>(null)
   const [isScanningDeck, setIsScanningDeck] = useState<boolean>(false)
+  const [discoveredNoteTypeName, setDiscoveredNoteTypeName] = useState<string | undefined>(options.noteTypeName)
+  const activeNoteTypeName = options.noteTypeName || discoveredNoteTypeName
 
   useEffect(() => {
     if (isOpen && selectedCardIds.length === 0 && deckId) {
@@ -217,6 +233,9 @@ export function useLocalAudioEngine(options: {
       scanDeckAudio(deckId)
         .then((res) => {
           setDeckScanResult(res)
+          if (res.note_types?.[0]?.name) {
+            setDiscoveredNoteTypeName(res.note_types[0].name)
+          }
           const allFields = res.note_types?.[0]?.fields || []
           if (allFields.length > 0) {
             const sourceNames = allFields
@@ -264,26 +283,55 @@ export function useLocalAudioEngine(options: {
 
   // Voice Selection State
   const initialLocalSettings = loadStoredLocalAudioSettings()
+
+  const resolveInitialVoiceId = useCallback((engine: 'voicevox' | 'kokoro', defaultId?: string) => {
+    const stored = loadStoredLocalAudioSettings()
+    if (engine === 'kokoro') {
+      const targetLang = defaultId ? getLanguageGroupFromVoiceId(defaultId) : undefined
+      if (targetLang && stored.lastVoiceIdKokoroByLang?.[targetLang]) {
+        return stored.lastVoiceIdKokoroByLang[targetLang]
+      }
+      if (defaultId && stored.lastVoiceIdKokoro) {
+        const targetPrefix = defaultId[0].toLowerCase()
+        const storedPrefix = stored.lastVoiceIdKokoro[0].toLowerCase()
+        const isTargetEn = targetPrefix === 'a' || targetPrefix === 'b'
+        const isStoredEn = storedPrefix === 'a' || storedPrefix === 'b'
+        if ((isTargetEn && isStoredEn) || targetPrefix === storedPrefix) {
+          return stored.lastVoiceIdKokoro
+        }
+      }
+      return defaultId || stored.lastVoiceIdKokoro || 'af_bella'
+    }
+    // For VoiceVox, ALWAYS preserve user's last chosen VoiceVox voice if available!
+    return stored.lastVoiceIdVoicevox || defaultId || '3'
+  }, [])
+
   const [voices, setVoices] = useState<VoiceDescriptor[]>([])
   const [selectedVoiceId, setSelectedVoiceIdState] = useState<string>(() => {
-    return defaultVoiceId || (isKokoro ? initialLocalSettings.lastVoiceIdKokoro : initialLocalSettings.lastVoiceIdVoicevox)
+    return resolveInitialVoiceId(engineId, defaultVoiceId)
   })
 
   const setSelectedVoiceId = useCallback((voiceId: string) => {
     setSelectedVoiceIdState(voiceId)
     if (isKokoro) {
-      saveStoredLocalAudioSettings({ lastVoiceIdKokoro: voiceId })
+      const lang = getLanguageGroupFromVoiceId(voiceId)
+      const currentByLang = loadStoredLocalAudioSettings().lastVoiceIdKokoroByLang || {}
+      saveStoredLocalAudioSettings({
+        lastVoiceIdKokoro: voiceId,
+        lastVoiceIdKokoroByLang: {
+          ...currentByLang,
+          [lang]: voiceId,
+        },
+      })
     } else {
       saveStoredLocalAudioSettings({ lastVoiceIdVoicevox: voiceId })
     }
   }, [isKokoro])
 
   useEffect(() => {
-    const stored = loadStoredLocalAudioSettings()
-    const fallbackId = isKokoro ? stored.lastVoiceIdKokoro : stored.lastVoiceIdVoicevox
-    setSelectedVoiceIdState(defaultVoiceId || fallbackId)
+    setSelectedVoiceIdState(resolveInitialVoiceId(engineId, defaultVoiceId))
     setVoices([])
-  }, [engineId, isKokoro, defaultVoiceId])
+  }, [engineId, defaultVoiceId, resolveInitialVoiceId])
 
   // Dynamic Fields Resolution State
   const [dynamicFields, setDynamicFields] = useState<string[]>(availableFieldNames)
@@ -306,9 +354,12 @@ export function useLocalAudioEngine(options: {
       apiRequest<{
         card: { word: string }
         fields?: Array<{ name: string; field_type?: string }>
-        note?: { field_values?: Record<string, string> }
+        note?: { note_type_name?: string; field_values?: Record<string, string> }
       }>(`/api/browse/cards/${encodeURIComponent(cardId)}`)
         .then((res) => {
+          if (res.note?.note_type_name) {
+            setDiscoveredNoteTypeName(res.note.note_type_name)
+          }
           if (res.fields && res.fields.length > 0) {
             const sourceNames = res.fields
               .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
@@ -332,57 +383,139 @@ export function useLocalAudioEngine(options: {
   }, [isOpen, targetCardIds])
 
   // Source & Destination Fields Sync
-  const [sourceField, setSourceField] = useState<string>('Reading')
-  const [destinationField, setDestinationField] = useState<string>('Audio')
+  const [sourceField, setSourceFieldState] = useState<string>(() => {
+    return initialLocalSettings.sourceField || 'Reading'
+  })
+  const setSourceField = useCallback((field: string) => {
+    setSourceFieldState(field)
+    const updates: Partial<LocalAudioSettings> = { sourceField: field }
+    if (activeNoteTypeName) {
+      const currentMapping = loadStoredLocalAudioSettings().fieldMappingByNoteType || {}
+      updates.fieldMappingByNoteType = {
+        ...currentMapping,
+        [activeNoteTypeName]: {
+          ...(currentMapping[activeNoteTypeName] || {}),
+          sourceField: field,
+        },
+      }
+    }
+    saveStoredLocalAudioSettings(updates)
+  }, [activeNoteTypeName])
+
+  const [destinationField, setDestinationFieldState] = useState<string>(() => {
+    return initialLocalSettings.destinationField || 'Audio'
+  })
+  const setDestinationField = useCallback((field: string) => {
+    setDestinationFieldState(field)
+    const updates: Partial<LocalAudioSettings> = { destinationField: field }
+    if (activeNoteTypeName) {
+      const currentMapping = loadStoredLocalAudioSettings().fieldMappingByNoteType || {}
+      updates.fieldMappingByNoteType = {
+        ...currentMapping,
+        [activeNoteTypeName]: {
+          ...(currentMapping[activeNoteTypeName] || {}),
+          destinationField: field,
+        },
+      }
+    }
+    saveStoredLocalAudioSettings(updates)
+  }, [activeNoteTypeName])
 
   useEffect(() => {
-    if (isOpen) {
-      setSourceField((prev) => autoSelectSourceField(dynamicFields, prev))
+    if (isOpen && dynamicFields.length > 0) {
+      setSourceFieldState((prev) => autoSelectSourceField(dynamicFields, prev, activeNoteTypeName))
     }
-  }, [isOpen, dynamicFields])
+  }, [isOpen, dynamicFields, activeNoteTypeName])
 
   useEffect(() => {
-    if (isOpen) {
-      setDestinationField((prev) => autoSelectDestinationField(dynamicAudioFields, prev))
+    if (isOpen && dynamicAudioFields.length > 0) {
+      setDestinationFieldState((prev) => autoSelectDestinationField(dynamicAudioFields, prev, activeNoteTypeName))
     }
-  }, [isOpen, dynamicAudioFields])
+  }, [isOpen, dynamicAudioFields, activeNoteTypeName])
 
-  // Advanced Sliders State
-  const [volumeScale, setVolumeScaleState] = useState<number>(initialLocalSettings.volumeScale)
+  // Advanced Sliders State - Isolated per engine
+  const [volumeScale, setVolumeScaleState] = useState<number>(() => {
+    return isKokoro
+      ? (initialLocalSettings.volumeScaleKokoro ?? initialLocalSettings.volumeScale)
+      : (initialLocalSettings.volumeScaleVoicevox ?? initialLocalSettings.volumeScale)
+  })
   const setVolumeScale = (val: number | ((prev: number) => number)) => {
     setVolumeScaleState((prev) => {
       const next = typeof val === 'function' ? val(prev) : val
-      saveStoredLocalAudioSettings({ volumeScale: next })
+      if (isKokoro) {
+        saveStoredLocalAudioSettings({ volumeScale: next, volumeScaleKokoro: next })
+      } else {
+        saveStoredLocalAudioSettings({ volumeScale: next, volumeScaleVoicevox: next })
+      }
       return next
     })
   }
 
-  const [pitch, setPitchState] = useState<number>(initialLocalSettings.pitch)
+  const [pitch, setPitchState] = useState<number>(() => {
+    return isKokoro
+      ? (initialLocalSettings.pitchKokoro ?? initialLocalSettings.pitch)
+      : (initialLocalSettings.pitchVoicevox ?? initialLocalSettings.pitch)
+  })
   const setPitch = (val: number | ((prev: number) => number)) => {
     setPitchState((prev) => {
       const next = typeof val === 'function' ? val(prev) : val
-      saveStoredLocalAudioSettings({ pitch: next })
+      if (isKokoro) {
+        saveStoredLocalAudioSettings({ pitch: next, pitchKokoro: next })
+      } else {
+        saveStoredLocalAudioSettings({ pitch: next, pitchVoicevox: next })
+      }
       return next
     })
   }
 
-  const [speed, setSpeedState] = useState<number>(initialLocalSettings.speed)
+  const [speed, setSpeedState] = useState<number>(() => {
+    return isKokoro
+      ? (initialLocalSettings.speedKokoro ?? initialLocalSettings.speed)
+      : (initialLocalSettings.speedVoicevox ?? initialLocalSettings.speed)
+  })
   const setSpeed = (val: number | ((prev: number) => number)) => {
     setSpeedState((prev) => {
       const next = typeof val === 'function' ? val(prev) : val
-      saveStoredLocalAudioSettings({ speed: next })
+      if (isKokoro) {
+        saveStoredLocalAudioSettings({ speed: next, speedKokoro: next })
+      } else {
+        saveStoredLocalAudioSettings({ speed: next, speedVoicevox: next })
+      }
       return next
     })
   }
 
-  const [intonationScale, setIntonationScaleState] = useState<number>(initialLocalSettings.intonationScale)
+  const [intonationScale, setIntonationScaleState] = useState<number>(() => {
+    return isKokoro
+      ? (initialLocalSettings.intonationScaleKokoro ?? initialLocalSettings.intonationScale)
+      : (initialLocalSettings.intonationScaleVoicevox ?? initialLocalSettings.intonationScale)
+  })
   const setIntonationScale = (val: number | ((prev: number) => number)) => {
     setIntonationScaleState((prev) => {
       const next = typeof val === 'function' ? val(prev) : val
-      saveStoredLocalAudioSettings({ intonationScale: next })
+      if (isKokoro) {
+        saveStoredLocalAudioSettings({ intonationScale: next, intonationScaleKokoro: next })
+      } else {
+        saveStoredLocalAudioSettings({ intonationScale: next, intonationScaleVoicevox: next })
+      }
       return next
     })
   }
+
+  useEffect(() => {
+    const s = loadStoredLocalAudioSettings()
+    if (isKokoro) {
+      setSpeedState(s.speedKokoro ?? s.speed ?? 1.0)
+      setPitchState(s.pitchKokoro ?? s.pitch ?? 0.0)
+      setVolumeScaleState(s.volumeScaleKokoro ?? s.volumeScale ?? 1.0)
+      setIntonationScaleState(s.intonationScaleKokoro ?? s.intonationScale ?? 1.0)
+    } else {
+      setSpeedState(s.speedVoicevox ?? s.speed ?? 1.0)
+      setPitchState(s.pitchVoicevox ?? s.pitch ?? 0.0)
+      setVolumeScaleState(s.volumeScaleVoicevox ?? s.volumeScale ?? 1.0)
+      setIntonationScaleState(s.intonationScaleVoicevox ?? s.intonationScale ?? 1.0)
+    }
+  }, [isKokoro, isOpen])
 
   // Audio Preview State
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false)
@@ -544,12 +677,21 @@ export function useLocalAudioEngine(options: {
   }
 
   const handleResetDefaults = () => {
-    saveStoredLocalAudioSettings({
-      volumeScale: 1.0,
-      pitch: 0.0,
-      speed: 1.0,
-      intonationScale: 1.0,
-    })
+    if (isKokoro) {
+      saveStoredLocalAudioSettings({
+        volumeScaleKokoro: 1.0,
+        pitchKokoro: 0.0,
+        speedKokoro: 1.0,
+        intonationScaleKokoro: 1.0,
+      })
+    } else {
+      saveStoredLocalAudioSettings({
+        volumeScaleVoicevox: 1.0,
+        pitchVoicevox: 0.0,
+        speedVoicevox: 1.0,
+        intonationScaleVoicevox: 1.0,
+      })
+    }
     setVolumeScaleState(1.0)
     setPitchState(0.0)
     setSpeedState(1.0)
@@ -647,7 +789,7 @@ export function useLocalAudioEngine(options: {
             note: { field_values?: Record<string, string> }
           }>(`/api/browse/cards/${encodeURIComponent(targetCardIds[0])}`)
           const raw = detail.note?.field_values?.[sourceField] || detail.card.word || sampleText
-          sampleText = cleanTextForVoiceVox(raw) || sampleText
+          sampleText = cleanTextForTts(raw, engineId) || sampleText
         } catch {}
       }
 
@@ -721,7 +863,7 @@ export function useLocalAudioEngine(options: {
               noteValues['reading'] ||
               detail.card.word ||
               ''
-            const wordText = cleanTextForVoiceVox(rawText)
+            const wordText = cleanTextForTts(rawText, engineId)
 
             if (detail.can_upload_media === false) {
               batchItems[globalIdx] = {

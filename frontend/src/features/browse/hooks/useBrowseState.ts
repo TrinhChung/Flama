@@ -6,10 +6,12 @@ import { appApi } from '@/app/api'
 import { apiBlob } from '@/shared/api/client'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
 import {
+  type BrowseTtsSettings,
   loadStoredBrowseTtsSettings,
   resetStoredBrowseTtsSettings,
   saveStoredBrowseTtsSettings,
 } from '../services/ttsSettingsStorage'
+import { cleanTextForTts } from '@/features/audio/services/ttsTextNormalizer'
 
 export type BrowseCardRow = {
   card_id: string
@@ -149,8 +151,53 @@ export function useBrowseState() {
   const [localAudioEngineId, setLocalAudioEngineId] = useState<'voicevox' | 'kokoro'>('voicevox')
   const [localAudioDefaultVoiceId, setLocalAudioDefaultVoiceId] = useState<string | undefined>(undefined)
   const [localAudioTargetCardIds, setLocalAudioTargetCardIds] = useState<string[]>([])
-  const [ttsSourceField, setTtsSourceField] = useState('Word')
-  const [ttsDestinationField, setTtsDestinationField] = useState('Audio')
+  const effectiveNoteTypeNameRef = useRef<string | undefined>(undefined)
+
+  const [ttsSourceField, setTtsSourceFieldState] = useState<string>(
+    initialTtsSettings.sourceField || 'Word'
+  )
+  const setTtsSourceField = (val: string | ((prev: string) => string)) => {
+    setTtsSourceFieldState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      const noteTypeName = effectiveNoteTypeNameRef.current
+      const updates: Partial<BrowseTtsSettings> = { sourceField: next }
+      if (noteTypeName) {
+        const currentMapping = loadStoredBrowseTtsSettings().fieldMappingByNoteType || {}
+        updates.fieldMappingByNoteType = {
+          ...currentMapping,
+          [noteTypeName]: {
+            ...(currentMapping[noteTypeName] || {}),
+            sourceField: next,
+          },
+        }
+      }
+      saveStoredBrowseTtsSettings(updates)
+      return next
+    })
+  }
+
+  const [ttsDestinationField, setTtsDestinationFieldState] = useState<string>(
+    initialTtsSettings.destinationField || 'Audio'
+  )
+  const setTtsDestinationField = (val: string | ((prev: string) => string)) => {
+    setTtsDestinationFieldState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      const noteTypeName = effectiveNoteTypeNameRef.current
+      const updates: Partial<BrowseTtsSettings> = { destinationField: next }
+      if (noteTypeName) {
+        const currentMapping = loadStoredBrowseTtsSettings().fieldMappingByNoteType || {}
+        updates.fieldMappingByNoteType = {
+          ...currentMapping,
+          [noteTypeName]: {
+            ...(currentMapping[noteTypeName] || {}),
+            destinationField: next,
+          },
+        }
+      }
+      saveStoredBrowseTtsSettings(updates)
+      return next
+    })
+  }
   
   const [ttsCharacter, setTtsCharacterState] = useState<string>(initialTtsSettings.character)
   const setTtsCharacter = (val: string | ((prev: string) => string)) => {
@@ -411,6 +458,7 @@ export function useBrowseState() {
   }, [cardDetailQuery.data])
 
   useEffect(() => {
+    effectiveNoteTypeNameRef.current = effectiveCardDetail?.note?.note_type_name || undefined
     if (effectiveCardDetail?.fields && effectiveCardDetail.fields.length > 0) {
       const fields = effectiveCardDetail.fields
       const sourceFieldNames = fields
@@ -420,30 +468,68 @@ export function useBrowseState() {
         .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
         .map((field) => field.name)
 
-      if (sourceFieldNames.includes('Reading')) {
-        setTtsSourceField('Reading')
-      } else if (sourceFieldNames.includes('Word')) {
-        setTtsSourceField('Word')
-      } else if (sourceFieldNames.includes('Expression')) {
-        setTtsSourceField('Expression')
-      } else if (sourceFieldNames.includes('Kanji')) {
-        setTtsSourceField('Kanji')
-      } else if (sourceFieldNames.length > 0 && !sourceFieldNames.includes(ttsSourceFieldRef.current)) {
-        setTtsSourceField(sourceFieldNames[0])
-      } else if (sourceFieldNames.length === 0) {
-        setTtsSourceField('')
+      const noteTypeName = effectiveCardDetail.note?.note_type_name || undefined
+      const storedSettings = loadStoredBrowseTtsSettings()
+      const noteTypeMapping = noteTypeName ? storedSettings.fieldMappingByNoteType?.[noteTypeName] : undefined
+
+      const currentSource = ttsSourceFieldRef.current
+      if (currentSource && sourceFieldNames.includes(currentSource)) {
+        // Keep current selected source field
+      } else if (noteTypeMapping?.sourceField && sourceFieldNames.includes(noteTypeMapping.sourceField)) {
+        setTtsSourceField(noteTypeMapping.sourceField)
+      } else if (storedSettings.sourceField && sourceFieldNames.includes(storedSettings.sourceField)) {
+        setTtsSourceField(storedSettings.sourceField)
+      } else {
+        const sourcePriority = [
+          'Reading', 'reading',
+          'Word', 'word',
+          'Expression', 'expression',
+          'Kanji', 'kanji',
+          'Hanzi', 'hanzi',
+          'Simplified', 'simplified',
+          'Traditional', 'traditional',
+          'Front', 'front',
+          'Vocab', 'vocab',
+          'Vocabulary', 'vocabulary',
+          'Term', 'term',
+          'Text', 'text',
+        ]
+        let foundSource = ''
+        for (const p of sourcePriority) {
+          const match = sourceFieldNames.find((f) => f.toLowerCase() === p.toLowerCase())
+          if (match) {
+            foundSource = match
+            break
+          }
+        }
+        setTtsSourceField(foundSource || (sourceFieldNames.length > 0 ? sourceFieldNames[0] : ''))
       }
 
-      if (audioFieldNames.includes('Audio')) {
-        setTtsDestinationField('Audio')
-      } else if (audioFieldNames.includes('AudioReading')) {
-        setTtsDestinationField('AudioReading')
-      } else if (audioFieldNames.includes('Sound')) {
-        setTtsDestinationField('Sound')
-      } else if (audioFieldNames.length > 0 && !audioFieldNames.includes(ttsDestinationFieldRef.current)) {
-        setTtsDestinationField(audioFieldNames[0])
-      } else if (audioFieldNames.length === 0) {
-        setTtsDestinationField('')
+      const currentDest = ttsDestinationFieldRef.current
+      if (currentDest && audioFieldNames.includes(currentDest)) {
+        // Keep current selected destination field
+      } else if (noteTypeMapping?.destinationField && audioFieldNames.includes(noteTypeMapping.destinationField)) {
+        setTtsDestinationField(noteTypeMapping.destinationField)
+      } else if (storedSettings.destinationField && audioFieldNames.includes(storedSettings.destinationField)) {
+        setTtsDestinationField(storedSettings.destinationField)
+      } else {
+        const destPriority = [
+          'Audio', 'audio',
+          'AudioReading', 'audioreading',
+          'Sound', 'sound',
+          'AudioWord', 'audioword',
+          'Pronunciation', 'pronunciation',
+          'Voice', 'voice',
+        ]
+        let foundDest = ''
+        for (const p of destPriority) {
+          const match = audioFieldNames.find((f) => f.toLowerCase() === p.toLowerCase())
+          if (match) {
+            foundDest = match
+            break
+          }
+        }
+        setTtsDestinationField(foundDest || (audioFieldNames.length > 0 ? audioFieldNames[0] : ''))
       }
     }
   }, [effectiveCardDetail])
@@ -719,7 +805,12 @@ export function useBrowseState() {
 
   // Preview VoiceVox
   const handlePreviewVoiceVox = async () => {
-    const previewText = cards[0]?.word || cards[0]?.reading || 'こんにちは'
+    const rawPreview =
+      effectiveCardDetail?.note?.field_values?.[ttsSourceField] ||
+      cards[0]?.word ||
+      cards[0]?.reading ||
+      'こんにちは'
+    const previewText = cleanTextForTts(rawPreview, 'voicevox') || 'こんにちは'
     setIsPreviewing(true)
     try {
       const blob = await apiBlob('/api/browse/voicevox/preview', {

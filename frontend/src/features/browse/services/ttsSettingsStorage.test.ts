@@ -29,6 +29,8 @@ describe('ttsSettingsStorage', () => {
       finalSilence: 0.3,
       appendAudio: true,
       useOpus: true,
+      sourceField: 'Expression',
+      destinationField: 'AudioReading',
     })
 
     const loaded = loadStoredBrowseTtsSettings()
@@ -41,6 +43,31 @@ describe('ttsSettingsStorage', () => {
     expect(loaded.finalSilence).toBe(0.3)
     expect(loaded.appendAudio).toBe(true)
     expect(loaded.useOpus).toBe(true)
+    expect(loaded.sourceField).toBe('Expression')
+    expect(loaded.destinationField).toBe('AudioReading')
+  })
+
+  it('saves and preserves fieldMappingByNoteType', () => {
+    saveStoredBrowseTtsSettings({
+      fieldMappingByNoteType: {
+        'HSK Chinese': { sourceField: 'Hanzi', destinationField: 'Audio' },
+      },
+    })
+    saveStoredBrowseTtsSettings({
+      fieldMappingByNoteType: {
+        'Nihongo Vocab': { sourceField: 'Reading', destinationField: 'AudioReading' },
+      },
+    })
+
+    const loaded = loadStoredBrowseTtsSettings()
+    expect(loaded.fieldMappingByNoteType?.['HSK Chinese']).toEqual({
+      sourceField: 'Hanzi',
+      destinationField: 'Audio',
+    })
+    expect(loaded.fieldMappingByNoteType?.['Nihongo Vocab']).toEqual({
+      sourceField: 'Reading',
+      destinationField: 'AudioReading',
+    })
   })
 
   it('clamps out of range numbers', () => {
