@@ -30,6 +30,13 @@ public class KokoroEngineAdapter : ITtsEngineAdapter
         return Task.FromResult(new EngineHealth(status, "1.0.0", statusMessage));
     }
 
+    public bool IsChineseHighPrecisionMode => _onnxEngine.IsChineseHighPrecisionMode;
+
+    public void ReloadChinesePack()
+    {
+        _onnxEngine.ReloadChineseG2p();
+    }
+
     public Task StartAsync(CancellationToken ct = default)
     {
         try

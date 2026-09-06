@@ -121,6 +121,41 @@ public static class ApiEndpoints
             return Results.Problem("Kokoro-82M Engine chưa được cài đặt.");
         });
 
+        // GET /v1/languages/zh/status
+        endpoints.MapGet("/v1/languages/zh/status", (Flama.Audio.Infrastructure.Services.ChinesePackInstaller installer) =>
+        {
+            bool installed = installer.IsPackInstalled();
+            return Results.Ok(new
+            {
+                language = "zh-CN",
+                name = "Mandarin Chinese Precision Language Pack",
+                status = installed ? "installed" : "not_installed",
+                precision_mode = installed ? "high_precision" : "basic_fallback",
+                pack_path = installer.GetInstalledPackPath()
+            });
+        });
+
+        // POST /v1/languages/zh/install
+        endpoints.MapPost("/v1/languages/zh/install", async (Flama.Audio.Infrastructure.Services.ChinesePackInstaller installer) =>
+        {
+            bool success = await installer.InstallPackAsync();
+            if (success)
+            {
+                return Results.Ok(new
+                {
+                    status = "installed",
+                    message = "Tải và cài đặt Gói Tiếng Trung Độ Chính Xác Cao thành công!"
+                });
+            }
+            return Results.Problem("Không thể tải hoặc cài đặt Gói Tiếng Trung.");
+        });
+
+        // DELETE /v1/languages/zh
+        endpoints.MapDelete("/v1/languages/zh", (Flama.Audio.Infrastructure.Services.ChinesePackInstaller installer) =>
+        {
+            bool deleted = installer.DeletePack();
+            return Results.Ok(new { status = deleted ? "deleted" : "failed" });
+        });
 
         // GET /v1/voices
         endpoints.MapGet("/v1/voices", async (string? engine_id, IEngineRouter router) =>

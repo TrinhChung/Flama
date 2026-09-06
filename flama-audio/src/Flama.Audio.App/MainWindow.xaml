@@ -357,6 +357,26 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Chinese Language Pack Card -->
+                    <Border x:Name="ChinesePackCard" Background="#FFFFFF" CornerRadius="12" Padding="16" Margin="0,0,0,14" BorderBrush="#E9DDD4" BorderThickness="1" Visibility="Visible">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="🇨🇳 Gói Dữ liệu Ngôn ngữ Tiếng Trung (Độ chính xác cao)" FontWeight="Bold" FontSize="14" Foreground="#1F1A17"/>
+                                <Border Background="#FEF3C7" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="#F59E0B" BorderThickness="1">
+                                    <TextBlock Text="Lexicon ~15MB" FontSize="10" FontWeight="Bold" Foreground="#B45309"/>
+                                </Border>
+                                <Border x:Name="ChinesePackStatusBadge" Background="#F1F5F9" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" BorderBrush="#CBD5E1" BorderThickness="1">
+                                    <TextBlock x:Name="ChinesePackStatusText" Text="⚪ Chưa cài đặt" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="Nâng cấp độ chính xác phát âm tiếng Trung: Bổ sung từ điển ~100k từ đa âm (Misaki/pypinyin), nhận diện ngày giờ, số thập phân, phần trăm và quy tắc biến điệu thanh nhẹ chuyên sâu." FontSize="11" Foreground="#6B625C" Margin="0,4,0,10"/>
+
+                            <ProgressBar x:Name="ChinesePackInstallProgressBar" Height="4" Margin="0,0,0,10" Visibility="Collapsed" Foreground="{StaticResource FlamaBrandGradient}"/>
+
+                            <Button x:Name="BtnInstallChinesePack" Content="⚡ Tải &amp; Cài đặt Gói Tiếng Trung (~15MB)" Click="OnInstallChinesePackClicked" Style="{StaticResource FlamaPrimaryButtonStyle}" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </Border>
+
                 </StackPanel>
             </ScrollViewer>
 
