@@ -43,7 +43,7 @@ describe('Worksheet API Client', () => {
       pages: [],
       warnings: [],
     }
-    const spy = vi.spyOn(client, 'apiJson').mockResolvedValueOnce(mockPreview)
+    const spy = vi.spyOn(client, 'apiJson').mockResolvedValue(mockPreview)
 
     const payload = {
       deck_id: 123,
@@ -53,6 +53,10 @@ describe('Worksheet API Client', () => {
     const res = await generateWorksheetPreview(payload as any)
     expect(spy).toHaveBeenCalledWith('/api/worksheets/preview', 'POST', payload)
     expect(res.total_items).toBe(10)
+
+    const controller = new AbortController()
+    await generateWorksheetPreview({ ...(payload as any), signal: controller.signal })
+    expect(spy).toHaveBeenCalledWith('/api/worksheets/preview', 'POST', payload, { signal: controller.signal })
   })
 
   it('renders printable HTML', async () => {

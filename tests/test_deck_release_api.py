@@ -338,6 +338,22 @@ class DeckReleaseApiTests(unittest.TestCase):
                 db.session.get(Note, self.first_note_id).field_values["Word"],
             )
 
+    def test_publish_accepts_idempotency_key_in_payload_fallback(self):
+        with self.client.session_transaction() as sess:
+            sess["_user_id"] = str(self.owner_id)
+            sess["_fresh"] = True
+
+        response = self.client.post(
+            f"/api/marketplace/decks/{self.deck_item_id}/releases",
+            json={
+                "version_label": "1.0.0",
+                "expected_current_release_id": None,
+                "idempotency_key": "release-payload-fallback-key",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["release"]["version_label"], "1.0.0")
+
     def test_initial_release_preserves_atomic_baseline_for_legacy_install(self):
         with self.app.app_context():
             item = db.session.get(DeckMarketplaceItem, self.deck_item_id)

@@ -23,9 +23,14 @@ export async function fetchDeckWorksheetMeta(deckId?: number | null): Promise<De
 }
 
 export async function generateWorksheetPreview(
-  request: WorksheetGenerationRequest,
+  request: WorksheetGenerationRequest & { signal?: AbortSignal },
+  optionalSignal?: AbortSignal,
 ): Promise<WorksheetPreviewResponse> {
-  return apiJson<WorksheetPreviewResponse>('/api/worksheets/preview', 'POST', request)
+  const { signal: requestSignal, ...payload } = request
+  const activeSignal = optionalSignal || requestSignal
+  return activeSignal
+    ? apiJson<WorksheetPreviewResponse>('/api/worksheets/preview', 'POST', payload, { signal: activeSignal })
+    : apiJson<WorksheetPreviewResponse>('/api/worksheets/preview', 'POST', payload)
 }
 
 export async function renderWorksheetHtml(

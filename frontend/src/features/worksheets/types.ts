@@ -29,6 +29,7 @@ export interface WorksheetLayoutOptions {
   margin?: 'minimal' | 'ultra_compact' | 'compact' | 'standard' | 'wide'
   rows_per_page?: number
   auto_fit_page?: boolean
+  page_fill_mode?: 'max_density' | 'balanced_stretch'
   box_size?: number
   extra_blank_rows?: number
   fill_blank_rows?: boolean
@@ -38,12 +39,17 @@ export interface WorksheetLayoutOptions {
   practice_type?: 'boxes' | 'lines' | 'grid'
   practice_boxes_count?: number
   show_stroke_diagram?: boolean
+  show_stroke_numbers?: boolean
+  step_highlight_color?: string
+  show_step_numbers?: boolean
   reference_char_color?: string
   stroke_color_mode?: 'monochrome' | 'multicolor' | 'same_as_reference'
   show_reading?: boolean
   show_meaning?: boolean
+  show_source_word?: boolean
   show_reading_hint?: boolean
   show_word_length_hint?: boolean
+  recall_answer_style?: 'line' | 'boxes'
   include_practice_column?: boolean
   practice_column_label?: string
   column_widths?: Record<string, string | number>
@@ -64,6 +70,7 @@ export interface WorksheetLayoutOptions {
   watermark_text?: string
   watermark_opacity?: number
   watermark_layout?: 'diagonal_grid' | 'margin_bounds'
+  current_url?: string
   header_title?: string
   header_subtitle?: string
   show_student_info?: boolean
@@ -100,6 +107,7 @@ export interface DeckWorksheetMeta {
   note_types: NoteTypeMeta[]
   suggested_mappings: Record<string, string>
   templates: WorksheetTemplate[]
+  detected_locale?: 'ja' | 'zh' | 'zh-hant'
 }
 
 export interface WorksheetKanjiItem {
@@ -161,6 +169,43 @@ export interface WorksheetGrammarItem {
   is_blank_filler?: boolean
 }
 
+export interface WorksheetCompoundCharacter {
+  char: string
+  hex?: string
+  has_stroke?: boolean
+  stroke_svg?: string | null
+  stroke_url?: string | null
+}
+
+export interface WorksheetKanjiCompoundItem {
+  type: 'kanji_compound'
+  note_id: string
+  word: string
+  characters: WorksheetCompoundCharacter[]
+  reading?: string
+  meaning?: string
+  extra_blank_rows?: number
+  is_blank_filler?: boolean
+}
+
+export interface WorksheetKanjiStepItem {
+  type: 'kanji_step_by_step'
+  note_id: string
+  char: string
+  hex?: string
+  total_strokes?: number
+  step_svgs: string[]
+  stroke_svg?: string | null
+  static_svg?: string | null
+  trace_svg?: string | null
+  stroke_url?: string | null
+  reading?: string
+  meaning?: string
+  source_word?: string
+  extra_blank_rows?: number
+  is_blank_filler?: boolean
+}
+
 export interface WorksheetEssayCell {
   col_index: number
   char?: string
@@ -178,6 +223,8 @@ export interface WorksheetEssayRowItem {
 
 export type WorksheetItem =
   | WorksheetKanjiItem
+  | WorksheetKanjiCompoundItem
+  | WorksheetKanjiStepItem
   | WorksheetVocabItem
   | WorksheetRecallItem
   | WorksheetTableRowItem

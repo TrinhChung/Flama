@@ -212,6 +212,11 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
                 className="h-9 text-xs"
               >
                 <option value="">Giọng mặc định (Zundamon Normal)</option>
+                {ttsCharacter && !availableVoices.some((item) => String(item.id) === String(ttsCharacter)) && (
+                  <option value={ttsCharacter}>
+                    {ttsCharacter === '3' ? 'Zundamon Normal' : `Giọng đã chọn (#${ttsCharacter})`}
+                  </option>
+                )}
                 {availableVoices.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.label}
@@ -233,11 +238,18 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
                 >
                   {availableSourceFieldNames.length === 0 ? (
                     <option value="">Note Type chưa có trường văn bản</option>
-                  ) : availableSourceFieldNames.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
+                  ) : (
+                    <>
+                      {ttsSourceField && !availableSourceFieldNames.includes(ttsSourceField) && (
+                        <option value={ttsSourceField}>{ttsSourceField}</option>
+                      )}
+                      {availableSourceFieldNames.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </NativeSelect>
               </div>
 
@@ -252,11 +264,18 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
                 >
                   {availableAudioFieldNames.length === 0 ? (
                     <option value="">Note Type chưa có trường audio</option>
-                  ) : availableAudioFieldNames.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
+                  ) : (
+                    <>
+                      {ttsDestinationField && !availableAudioFieldNames.includes(ttsDestinationField) && (
+                        <option value={ttsDestinationField}>{ttsDestinationField}</option>
+                      )}
+                      {availableAudioFieldNames.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </NativeSelect>
               </div>
             </div>

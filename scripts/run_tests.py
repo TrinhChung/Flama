@@ -491,6 +491,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "scripts/seed_flama_template.py",
             "scripts/seed_production_strokes.py",
+            "scripts/reseed_local_strokes.py",
             "scripts/reseed_db.*",
             "static/seed_data/**",
             "app/services/seeding_service.py",
@@ -501,6 +502,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_bootstrap_admin_credentials.py",
             "tests/test_tts_provider_seed.py",
             "tests/test_vocab_seed_sharing.py",
+            "tests/test_stroke_service.py",
         ],
         "frontend_tests": [],
     },

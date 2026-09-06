@@ -88,7 +88,7 @@ def ensure_stroke_shared_asset(image_key: str, upload_root: Path | None = None) 
         if static_file.exists():
             svg_content = static_file.read_text(encoding="utf-8")
         else:
-            svg_content = fetch_authentic_stroke_svg(char, locale=locale_norm) or generate_kanji_placeholder_svg(char)
+            svg_content = fetch_authentic_stroke_svg(char, locale=locale_norm) or generate_kanji_placeholder_svg(char, locale=locale_norm)
             try:
                 static_file.parent.mkdir(parents=True, exist_ok=True)
                 static_file.write_text(svg_content, encoding="utf-8")

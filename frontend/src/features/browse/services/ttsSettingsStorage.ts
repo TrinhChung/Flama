@@ -8,6 +8,9 @@ export interface BrowseTtsSettings {
   finalSilence: number
   appendAudio: boolean
   useOpus: boolean
+  sourceField?: string
+  destinationField?: string
+  fieldMappingByNoteType?: Record<string, { sourceField?: string; destinationField?: string }>
 }
 
 export const DEFAULT_BROWSE_TTS_SETTINGS: BrowseTtsSettings = {
@@ -20,9 +23,30 @@ export const DEFAULT_BROWSE_TTS_SETTINGS: BrowseTtsSettings = {
   finalSilence: 0.1,
   appendAudio: false,
   useOpus: false,
+  sourceField: 'Word',
+  destinationField: 'Audio',
+  fieldMappingByNoteType: {},
 }
 
 const BROWSE_TTS_STORAGE_KEY = 'flama_voicevox_tts_settings_v1'
+
+function sanitizeFieldMappingRecord(obj: unknown): Record<string, { sourceField?: string; destinationField?: string }> {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {}
+  const res: Record<string, { sourceField?: string; destinationField?: string }> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const entry: { sourceField?: string; destinationField?: string } = {}
+      if (typeof (v as { sourceField?: unknown }).sourceField === 'string') {
+        entry.sourceField = ((v as { sourceField: string }).sourceField || '').trim()
+      }
+      if (typeof (v as { destinationField?: unknown }).destinationField === 'string') {
+        entry.destinationField = ((v as { destinationField: string }).destinationField || '').trim()
+      }
+      res[k] = entry
+    }
+  }
+  return res
+}
 
 export function loadStoredBrowseTtsSettings(): BrowseTtsSettings {
   try {
@@ -56,6 +80,13 @@ export function loadStoredBrowseTtsSettings(): BrowseTtsSettings {
         : DEFAULT_BROWSE_TTS_SETTINGS.finalSilence,
       appendAudio: typeof parsed.appendAudio === 'boolean' ? parsed.appendAudio : DEFAULT_BROWSE_TTS_SETTINGS.appendAudio,
       useOpus: typeof parsed.useOpus === 'boolean' ? parsed.useOpus : DEFAULT_BROWSE_TTS_SETTINGS.useOpus,
+      sourceField: typeof parsed.sourceField === 'string' && parsed.sourceField.trim()
+        ? parsed.sourceField.trim()
+        : DEFAULT_BROWSE_TTS_SETTINGS.sourceField,
+      destinationField: typeof parsed.destinationField === 'string' && parsed.destinationField.trim()
+        ? parsed.destinationField.trim()
+        : DEFAULT_BROWSE_TTS_SETTINGS.destinationField,
+      fieldMappingByNoteType: sanitizeFieldMappingRecord(parsed.fieldMappingByNoteType),
     }
   } catch {
     return { ...DEFAULT_BROWSE_TTS_SETTINGS }
@@ -68,6 +99,10 @@ export function saveStoredBrowseTtsSettings(settings: Partial<BrowseTtsSettings>
     const updated: BrowseTtsSettings = {
       ...current,
       ...settings,
+      fieldMappingByNoteType: {
+        ...(current.fieldMappingByNoteType || {}),
+        ...(settings.fieldMappingByNoteType || {}),
+      },
     }
     localStorage.setItem(BROWSE_TTS_STORAGE_KEY, JSON.stringify(updated))
   } catch (err) {

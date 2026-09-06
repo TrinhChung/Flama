@@ -17,6 +17,9 @@ import {
   Volume2,
 } from 'lucide-react'
 
+import { loadStoredLocalAudioSettings } from '@/features/audio/services/localAudioStorage'
+import { loadStoredBrowseTtsSettings } from '../services/ttsSettingsStorage'
+
 interface BrowseAudioSelectorModalProps {
   isOpen: boolean
   onClose: () => void
@@ -25,13 +28,14 @@ interface BrowseAudioSelectorModalProps {
   selectedCardCount?: number
 }
 
-const KOKORO_VOICES = [
-  { id: 'af_bella', flag: '🇺🇸/🇬🇧', label: 'Tiếng Anh Local', desc: 'Kokoro · af_bella' },
-  { id: 'zf_xiaobei', flag: '🇨🇳', label: 'Tiếng Trung Local', desc: 'Kokoro · zf_xiaobei' },
-  { id: 'ef_dora', flag: '🇪🇸', label: 'Tiếng Tây Ban Nha', desc: 'Kokoro · ef_dora' },
-  { id: 'ff_siwis', flag: '🇫🇷', label: 'Tiếng Pháp Local', desc: 'Kokoro · ff_siwis' },
-  { id: 'if_sara', flag: '🇮🇹', label: 'Tiếng Ý Local', desc: 'Kokoro · if_sara' },
-  { id: 'pf_dora', flag: '🇧🇷', label: 'Tiếng Bồ Đào Nha', desc: 'Kokoro · pf_dora' },
+const KOKORO_VOICE_CONFIGS = [
+  { id: 'af_bella', lang: 'en', flag: '🇺🇸/🇬🇧', label: 'Tiếng Anh Local' },
+  { id: 'zf_xiaobei', lang: 'zh', flag: '🇨🇳', label: 'Tiếng Trung Local' },
+  { id: 'ef_dora', lang: 'es', flag: '🇪🇸', label: 'Tiếng Tây Ban Nha' },
+  { id: 'ff_siwis', lang: 'fr', flag: '🇫🇷', label: 'Tiếng Pháp Local' },
+  { id: 'if_sara', lang: 'it', flag: '🇮🇹', label: 'Tiếng Ý Local' },
+  { id: 'pf_dora', lang: 'pt', flag: '🇧🇷', label: 'Tiếng Bồ Đào Nha' },
+  { id: 'hf_alpha', lang: 'hi', flag: '🇮🇳', label: 'Tiếng Hindi Local' },
 ]
 
 export function BrowseAudioSelectorModal({
@@ -41,6 +45,10 @@ export function BrowseAudioSelectorModal({
   onSelectLocalVoice,
   selectedCardCount = 0,
 }: BrowseAudioSelectorModalProps) {
+  const localSettings = loadStoredLocalAudioSettings()
+  const webTtsSettings = loadStoredBrowseTtsSettings()
+  const targetVoicevoxId = localSettings.lastVoiceIdVoicevox || '3'
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="w-[94vw] sm:max-w-lg max-h-[88vh] flex flex-col p-0 rounded-2xl overflow-hidden border-border/60 shadow-2xl bg-card">
@@ -106,7 +114,7 @@ export function BrowseAudioSelectorModal({
                       <span>Web VoiceVox</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground line-clamp-2">
-                      API trực tuyến đám mây (Cloud TTS)
+                      API đám mây · {webTtsSettings.character ? `Giọng #${webTtsSettings.character}` : 'Mặc định'}
                     </div>
                   </div>
                 </div>
@@ -124,7 +132,7 @@ export function BrowseAudioSelectorModal({
               {/* Option 2: VoiceVox Local */}
               <button
                 type="button"
-                onClick={() => onSelectLocalVoice('voicevox', '3')}
+                onClick={() => onSelectLocalVoice('voicevox', targetVoicevoxId)}
                 className="flex items-start justify-between p-3 rounded-xl border border-border/60 bg-card hover:bg-primary/5 hover:border-primary/40 active:scale-[0.99] transition-all duration-200 text-left group shadow-2xs cursor-pointer"
               >
                 <div className="flex items-start gap-2.5 min-w-0 pr-1">
@@ -136,7 +144,7 @@ export function BrowseAudioSelectorModal({
                       <span>VoiceVox Local</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground line-clamp-2">
-                      Phát âm máy tính qua Flama Audio
+                      Flama Audio · Giọng #{targetVoicevoxId}
                     </div>
                   </div>
                 </div>
@@ -169,29 +177,32 @@ export function BrowseAudioSelectorModal({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {KOKORO_VOICES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectLocalVoice('kokoro', item.id)}
-                  className="flex items-center justify-between p-2.5 rounded-xl border border-border/60 bg-card hover:bg-primary/5 hover:border-primary/40 active:scale-[0.99] transition-all duration-200 text-left group shadow-2xs cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0 pr-1">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-muted/60 text-sm shrink-0 group-hover:scale-105 transition-transform">
-                      {item.flag}
-                    </div>
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                        {item.label}
+              {KOKORO_VOICE_CONFIGS.map((item) => {
+                const activeVoiceId = localSettings.lastVoiceIdKokoroByLang?.[item.lang] || item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onSelectLocalVoice('kokoro', activeVoiceId)}
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-border/60 bg-card hover:bg-primary/5 hover:border-primary/40 active:scale-[0.99] transition-all duration-200 text-left group shadow-2xs cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 pr-1">
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-muted/60 text-sm shrink-0 group-hover:scale-105 transition-transform">
+                        {item.flag}
                       </div>
-                      <div className="text-[10px] text-muted-foreground font-mono truncate">
-                        {item.desc}
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                          {item.label}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono truncate">
+                          Kokoro · {activeVoiceId}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <ChevronRight className="size-3.5 text-muted-foreground/60 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
-                </button>
-              ))}
+                    <ChevronRight className="size-3.5 text-muted-foreground/60 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>

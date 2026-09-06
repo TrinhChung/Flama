@@ -219,8 +219,10 @@ export async function apiJson<T>(
   url: string,
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
+  init?: RequestInit,
 ) {
   return apiRequest<T>(url, {
+    ...init,
     method,
     body: body === undefined ? undefined : JSON.stringify(body),
   })

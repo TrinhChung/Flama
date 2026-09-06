@@ -103,7 +103,7 @@ export const KanjiGridBox = memo(function KanjiGridBox({
         <text
           x={half}
           y={yPos}
-          fontFamily="'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', sans-serif"
+          fontFamily="'PingFang SC', 'Microsoft YaHei', 'PingFang TC', 'Microsoft JhengHei', 'SimHei', 'Noto Sans SC', 'Noto Sans TC', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', sans-serif"
           fontSize={fontSize}
           textAnchor="middle"
           fill="#cbd5e1"
@@ -117,7 +117,7 @@ export const KanjiGridBox = memo(function KanjiGridBox({
         <text
           x={half}
           y={yPos}
-          fontFamily="'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', sans-serif"
+          fontFamily="'PingFang SC', 'Microsoft YaHei', 'PingFang TC', 'Microsoft JhengHei', 'SimHei', 'Noto Sans SC', 'Noto Sans TC', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', sans-serif"
           fontSize={fontSize}
           textAnchor="middle"
           fill={charColor}

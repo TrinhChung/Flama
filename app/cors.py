@@ -8,7 +8,8 @@ from flask import request
 
 _ALLOWED_HEADERS = (
     "Authorization, Content-Type, Content-Encoding, X-CSRF-Token, "
-    "X-CSRFToken, X-Package-SHA256, X-Timezone, Accept, X-Requested-With"
+    "X-CSRFToken, X-Package-SHA256, X-Timezone, Accept, X-Requested-With, "
+    "Idempotency-Key"
 )
 _ALLOWED_METHODS = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
 _EXPOSED_HEADERS = "Content-Disposition, X-VoiceVox-Warnings"

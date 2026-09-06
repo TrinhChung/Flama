@@ -19,16 +19,36 @@ public class KokoroTokenizer
         }
     }
 
+    public static string NormalizePhonemes(string phonemes)
+    {
+        if (string.IsNullOrEmpty(phonemes)) return string.Empty;
+
+        return phonemes
+            .Replace("aʊ", "W")
+            .Replace("aɪ", "I")
+            .Replace("eɪ", "A")
+            .Replace("oʊ", "O")
+            .Replace("əʊ", "Q")
+            .Replace("ɔɪ", "Y")
+            .Replace("dʒ", "ʤ")
+            .Replace("tʃ", "ʧ")
+            .Replace("ɝ", "ɜɹ")
+            .Replace("ɚ", "əɹ")
+            .Replace("ʔ", "t");
+    }
+
     public long[] Tokenize(string phonemes)
     {
         var tokens = new List<long> { 0 }; // Start PAD token
 
         if (!string.IsNullOrEmpty(phonemes))
         {
+            phonemes = NormalizePhonemes(phonemes);
+
             int i = 0;
             while (i < phonemes.Length)
             {
-                // Try 2-char graphemes first (e.g. "aʊ", "aɪ", "eɪ", "oʊ", "ɔɪ", "dʒ", "tʃ")
+                // Try 2-char graphemes first
                 if (i + 1 < phonemes.Length)
                 {
                     string pair = phonemes.Substring(i, 2);
@@ -53,7 +73,7 @@ public class KokoroTokenizer
                 }
                 else
                 {
-                    // Fallback to space token (16) or period (4)
+                    // Fallback to space token (16)
                     tokens.Add(16);
                 }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Flama.G2P;
 using Flama.G2P.English;
 using Flama.G2P.Chinese;
@@ -107,30 +108,129 @@ public class KokoroOnnxEngine : IDisposable
             throw new InvalidOperationException("Kokoro engine components failed to initialize.");
         }
 
-        IG2P g2p = ResolveG2P(language, voiceId);
-
-        // 1. Text -> IPA Phonemes
-        string phonemes = g2p.Phonemize(text);
-
-        // 2. IPA Phonemes -> Token IDs
-        long[] tokenIds = _tokenizer.Tokenize(phonemes);
-
-        // 3. Get style embedding vector
-        float[] styleVector = _voiceManager.GetStyleVector(voiceId, tokenIds.Length);
-
-        // 4. ONNX Inference or Fallback
-        float[] pcmSamples;
-        if (_session != null)
-        {
-            pcmSamples = RunOnnxInference(tokenIds, styleVector, (float)speed);
-        }
-        else
+        if (_session == null)
         {
             throw new FileNotFoundException($"Kokoro ONNX model file not found at '{_modelPath}'. Please install the Kokoro engine.");
         }
 
-        // 5. Package PCM to 24kHz WAV
-        return PackageWav24kHz(pcmSamples);
+        IG2P g2p = ResolveG2P(language, voiceId);
+
+        var chunks = SplitIntoChunks(text);
+        if (chunks.Count <= 1)
+        {
+            float[] samples = SynthesizeSingleChunk(chunks.Count == 1 ? chunks[0] : text, voiceId, speed, g2p);
+            return PackageWav24kHz(samples);
+        }
+
+        var allSamples = new List<float>();
+        const int silenceSamples = (int)(24000 * 0.12); // ~120ms natural pause between sentences
+        var silence = new float[silenceSamples];
+
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            float[] chunkSamples = SynthesizeSingleChunk(chunks[i], voiceId, speed, g2p);
+            if (chunkSamples.Length > 0)
+            {
+                allSamples.AddRange(chunkSamples);
+                if (i < chunks.Count - 1)
+                {
+                    allSamples.AddRange(silence);
+                }
+            }
+        }
+
+        return PackageWav24kHz(allSamples.ToArray());
+    }
+
+    private float[] SynthesizeSingleChunk(string chunkText, string voiceId, double speed, IG2P g2p)
+    {
+        // 1. Text -> IPA Phonemes
+        string phonemes = g2p.Phonemize(chunkText);
+        if (string.IsNullOrWhiteSpace(phonemes))
+        {
+            return Array.Empty<float>();
+        }
+
+        // 2. IPA Phonemes -> Token IDs
+        long[] tokenIds = _tokenizer!.Tokenize(phonemes);
+        if (tokenIds.Length <= 2)
+        {
+            return Array.Empty<float>();
+        }
+
+        // 3. Get style embedding vector
+        float[] styleVector = _voiceManager!.GetStyleVector(voiceId, tokenIds.Length);
+
+        // 4. ONNX Inference
+        return RunOnnxInference(tokenIds, styleVector, (float)speed);
+    }
+
+    private static List<string> SplitIntoChunks(string text, int maxChunkChars = 100)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return new List<string>();
+        string trimmed = text.Trim();
+        if (trimmed.Length <= maxChunkChars) return new List<string> { trimmed };
+
+        // 1. Split on sentence terminators: 。！？!?\n and English period followed by whitespace
+        string sentencePattern = @"(?<=[。！？!?\n])(?![。！？!?\n])\s*|(?<=\.)(?!\.)\s+";
+        var rawSentences = Regex.Split(trimmed, sentencePattern)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s))
+            .ToList();
+
+        var chunks = new List<string>();
+        foreach (var sentence in rawSentences)
+        {
+            if (sentence.Length <= maxChunkChars)
+            {
+                chunks.Add(sentence);
+            }
+            else
+            {
+                // Sub-split by clause punctuation: ，, ；; ：:
+                string clausePattern = @"(?<=[，,；;：:])(?![，,；;：:])\s*";
+                var rawClauses = Regex.Split(sentence, clausePattern)
+                    .Select(s => s.Trim())
+                    .Where(s => !string.IsNullOrEmpty(s))
+                    .ToList();
+
+                var currentChunk = new StringBuilder();
+                foreach (var clause in rawClauses)
+                {
+                    if (currentChunk.Length + clause.Length <= maxChunkChars)
+                    {
+                        currentChunk.Append(clause);
+                    }
+                    else
+                    {
+                        if (currentChunk.Length > 0)
+                        {
+                            chunks.Add(currentChunk.ToString().Trim());
+                            currentChunk.Clear();
+                        }
+
+                        if (clause.Length <= maxChunkChars)
+                        {
+                            currentChunk.Append(clause);
+                        }
+                        else
+                        {
+                            for (int k = 0; k < clause.Length; k += maxChunkChars)
+                            {
+                                int len = Math.Min(maxChunkChars, clause.Length - k);
+                                chunks.Add(clause.Substring(k, len).Trim());
+                            }
+                        }
+                    }
+                }
+                if (currentChunk.Length > 0)
+                {
+                    chunks.Add(currentChunk.ToString().Trim());
+                }
+            }
+        }
+
+        return chunks.Count > 0 ? chunks : new List<string> { trimmed };
     }
 
     private IG2P ResolveG2P(string? language, string voiceId)
@@ -141,6 +241,23 @@ public class KokoroOnnxEngine : IDisposable
             return _chineseG2p!;
         }
         return _g2p!;
+    }
+
+    public bool IsChineseHighPrecisionMode => _chineseG2p?.IsHighPrecisionMode ?? false;
+
+    public void ReloadChineseG2p()
+    {
+        lock (_initLock)
+        {
+            if (_chineseG2p != null)
+            {
+                _chineseG2p.InitializeLexicon();
+            }
+            else if (_g2p != null)
+            {
+                _chineseG2p = new ChineseG2P(_g2p);
+            }
+        }
     }
 
     public IReadOnlyList<string> GetAvailableVoiceIds()

@@ -76,19 +76,21 @@ public partial class App : Application
             builder.Services.AddSingleton<IEngineRouter, EngineRouter>();
             builder.Services.AddSingleton<VoicevoxEngineInstaller>();
             builder.Services.AddSingleton<KokoroEngineInstaller>();
+            builder.Services.AddSingleton<ChinesePackInstaller>();
 
             _webApp = builder.Build();
             _pairingManager = _webApp.Services.GetService<IPairingManager>();
             var engineRouter = _webApp.Services.GetRequiredService<IEngineRouter>();
             var voicevoxInstaller = _webApp.Services.GetRequiredService<VoicevoxEngineInstaller>();
             var kokoroInstaller = _webApp.Services.GetRequiredService<KokoroEngineInstaller>();
+            var chinesePackInstaller = _webApp.Services.GetRequiredService<ChinesePackInstaller>();
             _webApp.UseMiddleware<CorsAndPnaMiddleware>();
             _webApp.UseMiddleware<PairingAuthMiddleware>();
             _webApp.MapFlamaAudioEndpoints();
 
             _ = _webApp.RunAsync();
 
-            var mainWindow = new MainWindow(_pairingManager!, engineRouter, voicevoxInstaller, kokoroInstaller);
+            var mainWindow = new MainWindow(_pairingManager!, engineRouter, voicevoxInstaller, kokoroInstaller, chinesePackInstaller);
 
             _ = Task.Run(async () =>
             {

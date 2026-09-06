@@ -93,3 +93,42 @@ class CjkExtractor:
         if zero_pad > 0 and len(hex_str) < zero_pad:
             hex_str = hex_str.zfill(zero_pad)
         return hex_str
+
+
+_T2S_MAP: dict[str, str] | None = None
+
+
+def get_traditional_to_simplified_map() -> dict[str, str]:
+    """Return in-memory cached mapping of Traditional Chinese characters to Simplified counterparts."""
+    global _T2S_MAP
+    if _T2S_MAP is not None:
+        return _T2S_MAP
+
+    import json
+    from pathlib import Path
+
+    candidates = [
+        Path("static/seed_data/strokes/traditional_to_simplified.json"),
+        Path(__file__).resolve().parent.parent.parent.parent / "static" / "seed_data" / "strokes" / "traditional_to_simplified.json",
+    ]
+    for p in candidates:
+        if p.exists():
+            try:
+                _T2S_MAP = json.loads(p.read_text(encoding="utf-8"))
+                return _T2S_MAP
+            except Exception:
+                pass
+
+    _T2S_MAP = {}
+    return _T2S_MAP
+
+
+def to_simplified_chinese(text: str) -> str:
+    """Convert traditional Chinese characters in text/character to their Simplified Chinese counterparts."""
+    if not text:
+        return ""
+    t2s = get_traditional_to_simplified_map()
+    if not t2s:
+        return text
+    return "".join(t2s.get(ch, ch) for ch in text)
+

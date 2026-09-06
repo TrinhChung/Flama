@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Flama.Audio.Core.Interfaces;
 using Flama.Audio.Core.Models;
+using Flama.Audio.Engine.Kokoro;
 using Flama.Audio.Infrastructure.Services;
 
 namespace Flama.Audio.App;
@@ -19,6 +20,7 @@ public partial class MainWindow : Window
     private readonly IEngineRouter? _engineRouter;
     private readonly VoicevoxEngineInstaller? _voicevoxInstaller;
     private readonly KokoroEngineInstaller? _kokoroInstaller;
+    private readonly ChinesePackInstaller? _chinesePackInstaller;
 
     private string _currentDetailEngineId = "voicevox";
     private bool _isPopulatingLanguages = false;
@@ -32,12 +34,14 @@ public partial class MainWindow : Window
         IPairingManager pairingManager,
         IEngineRouter engineRouter,
         VoicevoxEngineInstaller voicevoxInstaller,
-        KokoroEngineInstaller kokoroInstaller) : this()
+        KokoroEngineInstaller kokoroInstaller,
+        ChinesePackInstaller? chinesePackInstaller = null) : this()
     {
         _pairingManager = pairingManager;
         _engineRouter = engineRouter;
         _voicevoxInstaller = voicevoxInstaller;
         _kokoroInstaller = kokoroInstaller;
+        _chinesePackInstaller = chinesePackInstaller;
 
         if (_pairingManager != null)
         {
@@ -605,6 +609,49 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnInstallChinesePackClicked(object sender, RoutedEventArgs e)
+    {
+        if (_chinesePackInstaller == null) return;
+
+        BtnInstallChinesePack.IsEnabled = false;
+        ChinesePackInstallProgressBar.Visibility = Visibility.Visible;
+        ChinesePackInstallProgressBar.IsIndeterminate = false;
+        ChinesePackInstallProgressBar.Value = 0;
+
+        var progress = new Progress<double>(p =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                ChinesePackInstallProgressBar.Value = p;
+            });
+        });
+
+        try
+        {
+            var success = await _chinesePackInstaller.InstallPackAsync(progress);
+            if (success)
+            {
+                if (_engineRouter?.GetAdapter("kokoro") is KokoroEngineAdapter kokoroExt)
+                {
+                    kokoroExt.ReloadChinesePack();
+                }
+
+                RefreshData();
+                MessageBox.Show("Đã tải và kích hoạt Gói Tiếng Trung Độ Chính Xác Cao thành công!\nTừ điển ~100.000 cụm từ và quy tắc biến điệu chuyên sâu đã sẵn sàng.", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowInstalledView();
+            }
+            else
+            {
+                MessageBox.Show("Tải Gói Tiếng Trung thất bại. Vui lòng kiểm tra kết nối mạng.", "Lỗi cài đặt", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        finally
+        {
+            BtnInstallChinesePack.IsEnabled = true;
+            ChinesePackInstallProgressBar.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private async void OnLaunchVoicevoxClicked(object sender, RoutedEventArgs e)
     {
         if (_voicevoxInstaller == null) return;
@@ -697,7 +744,10 @@ public partial class MainWindow : Window
                 KokoroStatusBadge.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#86EFAC"));
                 KokoroStatusBadgeText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#15803D"));
 
-                KokoroDetailTextBlock.Text = "Neural Engine Kokoro-82M Active (C# Native + ONNX Runtime CPU)";
+                bool hasZhPack = _chinesePackInstaller?.IsPackInstalled() ?? false;
+                KokoroDetailTextBlock.Text = hasZhPack
+                    ? "Neural Engine Kokoro-82M Active (C# Native) • 🇨🇳 Tiếng Trung: Độ Chính Xác Cao (~100k từ)"
+                    : "Neural Engine Kokoro-82M Active (C# Native) • 🇨🇳 Tiếng Trung: Cơ bản (Chưa tải gói dữ liệu)";
                 KokoroInstallCard.Visibility = Visibility.Collapsed;
             }
             else
@@ -712,14 +762,37 @@ public partial class MainWindow : Window
             }
         }
 
-        // 4. Update Uninstalled Tab Empty State
+        // 4. Check Chinese Language Pack Status
+        bool isChinesePackInstalled = _chinesePackInstaller?.IsPackInstalled() ?? false;
+        if (isChinesePackInstalled)
+        {
+            ChinesePackStatusText.Text = "🟢 Đã cài đặt";
+            ChinesePackStatusBadge.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#DCFCE7"));
+            ChinesePackStatusBadge.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#86EFAC"));
+            ChinesePackStatusText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#15803D"));
+            BtnInstallChinesePack.Content = "✅ Đã kích hoạt Độ chính xác cao";
+            BtnInstallChinesePack.IsEnabled = false;
+            ChinesePackCard.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            ChinesePackStatusText.Text = "⚪ Chưa cài đặt";
+            ChinesePackStatusBadge.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F1F5F9"));
+            ChinesePackStatusBadge.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CBD5E1"));
+            ChinesePackStatusText.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#64748B"));
+            BtnInstallChinesePack.Content = "⚡ Tải & Cài đặt Gói Tiếng Trung (~15MB)";
+            BtnInstallChinesePack.IsEnabled = true;
+            ChinesePackCard.Visibility = Visibility.Visible;
+        }
+
+        // 5. Update Uninstalled Tab Empty State
         bool isVoicevoxInstalled = _voicevoxInstaller?.IsEngineInstalled() ?? false;
         bool isKokoroInstalled = _kokoroInstaller?.IsEngineInstalled() ?? false;
 
         VoicevoxInstallCard.Visibility = isVoicevoxInstalled ? Visibility.Collapsed : Visibility.Visible;
         KokoroInstallCard.Visibility = isKokoroInstalled ? Visibility.Collapsed : Visibility.Visible;
 
-        UninstalledEmptyText.Visibility = (isVoicevoxInstalled && isKokoroInstalled)
+        UninstalledEmptyText.Visibility = (isVoicevoxInstalled && isKokoroInstalled && isChinesePackInstalled)
             ? Visibility.Visible
             : Visibility.Collapsed;
     }

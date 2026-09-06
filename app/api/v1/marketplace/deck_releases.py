@@ -114,7 +114,10 @@ def publish_deck_release(deck_item_id: str):
             expected_working_revision=request_payload.get(
                 "expected_working_revision"
             ),
-            idempotency_key=request.headers.get("Idempotency-Key"),
+            idempotency_key=(
+                request.headers.get("Idempotency-Key")
+                or request_payload.get("idempotency_key")
+            ),
         )
         db.session.commit()
     except DeckReleaseError as exc:
