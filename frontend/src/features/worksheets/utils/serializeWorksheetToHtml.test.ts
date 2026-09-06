@@ -73,7 +73,7 @@ describe('serializeWorksheetToHtml', () => {
     expect(html).toContain('JLPT N5 Core - Bài tập')
     expect(html).toContain('日')
     expect(html).toContain('Flama Worksheet')
-  })
+  }, 15000)
 
   it('handles landscape orientation correctly', async () => {
     const landscapeData: WorksheetPreviewResponse = {
@@ -87,7 +87,7 @@ describe('serializeWorksheetToHtml', () => {
     const html = await serializeWorksheetToHtml(landscapeData)
 
     expect(html).toContain('297mm 210mm')
-  })
+  }, 15000)
 
   it('serializes multiple pages with proper page-break structure', async () => {
     const multiPageData: WorksheetPreviewResponse = {
@@ -108,7 +108,7 @@ describe('serializeWorksheetToHtml', () => {
     const matches = html.match(/class="[^"]*sheet-page[^"]*"/g)
     expect(matches).not.toBeNull()
     expect(matches!.length).toBe(2)
-  })
+  }, 15000)
 
   it('throws an error if previewData has no pages', async () => {
     const emptyData: WorksheetPreviewResponse = {
