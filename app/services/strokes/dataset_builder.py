@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -10,7 +11,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from app.services.strokes.cjk_extractor import CjkExtractor, is_cjk_ideograph
+from app.services.strokes.cjk_extractor import CjkExtractor, is_cjk_ideograph, to_simplified_chinese
 
 _FORBIDDEN_TAGS = {"script", "foreignobject", "iframe", "object", "embed", "applet"}
 _FORBIDDEN_ATTR_PREFIXES = ("on", "javascript:", "data:")
@@ -30,7 +31,7 @@ STROKE_COLORS = [
 ]
 
 
-def sanitize_stroke_svg(raw_svg: str) -> str:
+def sanitize_stroke_svg(raw_svg: str, char_hex: str = "") -> str:
     """Sanitize, standardize, and animate an SVG string for stroke order rendering.
 
     - Strips dangerous tags (<script>, <foreignObject>, etc.).
@@ -97,8 +98,34 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
             is_makemeahanzi = True
             break
 
-    # If it's MakeMeAHanzi (Chinese), add crisp practice box grid and stroke order numbers
+    # If it's MakeMeAHanzi (Chinese), add crisp practice box grid, stroke order numbers,
+    # and scope all clipPath and animation IDs with character's hex code to prevent ID collisions
     if is_makemeahanzi:
+        # Determine unique prefix per character (e.g. mmah-4e0d) to prevent
+        # cross-contamination of clip-paths when multiple SVGs exist on the same HTML page
+        clean_hex = (char_hex or "").strip().lower()
+        if not clean_hex:
+            m_hex = re.search(r'data-hex="([a-f0-9]+)"', raw_svg, re.IGNORECASE)
+            clean_hex = m_hex.group(1).lower() if m_hex else hashlib.md5(raw_svg.encode("utf-8")).hexdigest()[:6]
+        prefix = f"mmah-{clean_hex}"
+
+        # Scope IDs and clip-path URLs throughout the DOM
+        for elem in root.iter():
+            elem_id = elem.get("id", "")
+            if elem_id.startswith("make-me-a-hanzi-"):
+                elem.set("id", elem_id.replace("make-me-a-hanzi-", f"{prefix}-"))
+            clip_attr = elem.get("clip-path", "")
+            if "make-me-a-hanzi-" in clip_attr:
+                elem.set("clip-path", clip_attr.replace("make-me-a-hanzi-", f"{prefix}-"))
+
+        # Scope <style> keyframes and selectors inside SVG
+        for style_node in root.iter():
+            if style_node.tag.split("}")[-1].lower() == "style" and style_node.text:
+                txt = style_node.text
+                txt = txt.replace("make-me-a-hanzi-", f"{prefix}-")
+                txt = re.sub(r"\bkeyframes(\d+)\b", rf"{prefix}-kf-\1", txt)
+                style_node.text = txt
+
         # Remove old faint grid elements and previous number groups if present
         for child in list(root):
             if child.get("stroke") == "lightgray" or child.get("class") in {"flama-grid-box", "flama-mmah-numbers"}:
@@ -107,11 +134,11 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
         grid_group = ET.Element("{http://www.w3.org/2000/svg}g", {"class": "flama-grid-box", "fill": "none"})
         border_rect = ET.Element("{http://www.w3.org/2000/svg}rect", {
             "x": "8", "y": "8", "width": "1008", "height": "1008",
-            "stroke": "#cbd5e1", "stroke-width": "6", "stroke-opacity": "0.7", "rx": "24",
+            "stroke": "#cbd5e1", "stroke-width": "3", "stroke-opacity": "0.7", "rx": "24",
         })
         grid_lines = ET.Element("{http://www.w3.org/2000/svg}path", {
             "d": "M 0 512 L 1024 512 M 512 0 L 512 1024 M 0 0 L 1024 1024 M 1024 0 L 0 1024",
-            "stroke": "#e2e8f0", "stroke-width": "5", "stroke-dasharray": "16,16", "stroke-opacity": "0.8",
+            "stroke": "#e2e8f0", "stroke-width": "2.5", "stroke-dasharray": "10,10", "stroke-opacity": "0.8",
         })
         grid_group.append(border_rect)
         grid_group.append(grid_lines)
@@ -124,7 +151,7 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
             if tag == "path":
                 elem_id = elem.get("id", "")
                 d_attr = elem.get("d", "")
-                m_id = re.search(r"make-me-a-hanzi-animation-(\d+)", elem_id)
+                m_id = re.search(rf"{prefix}-animation-(\d+)", elem_id) or re.search(r"make-me-a-hanzi-animation-(\d+)", elem_id)
                 if m_id and d_attr.strip().startswith("M"):
                     coords = re.findall(r"^M\s*([0-9.-]+)\s+([0-9.-]+)", d_attr.strip())
                     if coords:
@@ -136,7 +163,7 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
             stroke_points.sort(key=lambda item: item[0])
             numbers_group = ET.Element("{http://www.w3.org/2000/svg}g", {
                 "class": "flama-mmah-numbers",
-                "style": "font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; font-size: 52px;",
+                "style": "font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 900; font-size: 56px; paint-order: stroke fill; stroke: #ffffff; stroke-width: 10px; stroke-linejoin: round;",
             })
             for stroke_idx, x0, y0 in stroke_points:
                 num_x = max(24, min(980, x0 - 18))
@@ -192,7 +219,7 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
                 "}",
                 ".flama-kvg-bg { stroke: var(--flama-ghost-color, #e2e8f0); stroke-width: var(--flama-stroke-width, 3.2px); fill: none; stroke-linecap: round; stroke-linejoin: round; }",
                 ".flama-kvg-stroke { fill: none; stroke-linecap: round; stroke-linejoin: round; }",
-                ".flama-kvg-num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; font-weight: 700; }",
+                ".flama-kvg-num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; paint-order: stroke fill; stroke: #ffffff; stroke-width: 2px; stroke-linejoin: round; }",
             ])
 
             # Create background guide layer with rounded border, grid & ghost paths
@@ -233,7 +260,7 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
             for idx, txt in enumerate(texts):
                 color_var = f"var(--flama-stroke-c{(idx % len(STROKE_COLORS)) + 1}, {STROKE_COLORS[idx % len(STROKE_COLORS)]})"
                 txt.set("class", f"flama-kvg-num flama-kvg-n{idx+1}")
-                txt.set("style", f"fill: {color_var}; fill-opacity: 0.95;")
+                txt.set("style", f"fill: {color_var}; fill-opacity: 0.95; paint-order: stroke fill; stroke: #ffffff; stroke-width: 2px;")
 
             style_elem = ET.Element("{http://www.w3.org/2000/svg}style", {"type": "text/css"})
             style_elem.text = "\n" + "\n".join(css_rules) + "\n"
@@ -256,9 +283,10 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
         except ValueError:
             root.set("viewBox", "0 0 109 109")
 
-    # Remove hardcoded pixel width/height so SVG is 100% responsive and fills its parent container
-    root.attrib.pop("width", None)
-    root.attrib.pop("height", None)
+    # Ensure SVG has explicit 100% width and height so it scales to its parent container and never expands to 300px
+    root.set("width", "100%")
+    root.set("height", "100%")
+    root.set("preserveAspectRatio", "xMidYMid meet")
 
     # Pop any manual xmlns attribute from root to prevent duplicate xmlns in XML output
     root.attrib.pop("xmlns", None)
@@ -275,7 +303,11 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
 
 
 def fetch_authentic_stroke_svg(char: str, locale: str = "ja") -> str | None:
-    """Fetch authentic stroke diagram SVG (KanjiVG or MakeMeAHanzi) with stroke paths & stroke numbers."""
+    """Fetch authentic stroke diagram SVG (KanjiVG or MakeMeAHanzi) with stroke paths & stroke numbers.
+    
+    Preserves traditional vs simplified characters based on the character itself, as MakeMeAHanzi
+    contains dedicated authentic stroke diagrams for both traditional (e.g. 國, 學) and simplified (e.g. 国, 学).
+    """
     if not is_cjk_ideograph(char):
         return None
 
@@ -306,22 +338,30 @@ def fetch_authentic_stroke_svg(char: str, locale: str = "ja") -> str | None:
                 if resp.status == 200:
                     raw_data = resp.read().decode("utf-8", errors="ignore")
                     if "<path" in raw_data:
-                        return sanitize_stroke_svg(raw_data)
+                        return sanitize_stroke_svg(raw_data, char_hex=hex_code)
         except Exception:
             continue
 
     return None
 
 
-def generate_kanji_placeholder_svg(char: str) -> str:
+def generate_kanji_placeholder_svg(char: str, locale: str = "ja") -> str:
     """Generate a clean vector SVG for a Kanji/Hanzi when high-detail stroke data is not yet downloaded."""
     hex_code = CjkExtractor.char_to_hex(char)
+    norm_locale = str(locale or "ja").strip().lower()
+    if "zh-hant" in norm_locale or "tw" in norm_locale:
+        font_stack = "'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif"
+    elif "zh" in norm_locale:
+        font_stack = "'PingFang SC', 'Microsoft YaHei', 'SimHei', 'Noto Sans SC', sans-serif"
+    else:
+        font_stack = "'Noto Sans CJK JP', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif"
+
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 109 109" class="flama-stroke-char" data-char="{char}" data-hex="{hex_code}">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 109 109" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" class="flama-stroke-char" data-char="{char}" data-hex="{hex_code}">'
         f'<rect width="107" height="107" x="1" y="1" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="3 3" rx="8" />'
         f'<line x1="54.5" y1="1" x2="54.5" y2="108" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="2 2" />'
         f'<line x1="1" y1="54.5" x2="108" y2="54.5" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="2 2" />'
-        f'<text x="54.5" y="78" font-family="\'Noto Sans CJK JP\', \'Hiragino Sans\', \'PingFang SC\', sans-serif" '
+        f'<text x="54.5" y="78" font-family="{font_stack}" '
         f'font-size="64" text-anchor="middle" fill="#1e293b" font-weight="500">{char}</text>'
         f'</svg>'
     )
@@ -358,7 +398,7 @@ def build_dataset_from_directory(
         raw_hex = hex_match.group(1)
         try:
             content = svg_path.read_text(encoding="utf-8", errors="ignore")
-            sanitized = sanitize_stroke_svg(content)
+            sanitized = sanitize_stroke_svg(content, char_hex=raw_hex)
             # Write both unpadded and padded forms for maximum compatibility
             (dest / f"{raw_hex}.svg").write_text(sanitized, encoding="utf-8")
             if len(raw_hex) < 5:
@@ -435,7 +475,7 @@ def populate_starter_strokes(static_root: str | Path) -> dict[str, int]:
         hex_unpadded = CjkExtractor.char_to_hex(char)
         hex_padded = CjkExtractor.char_to_hex(char, zero_pad=5)
         ja_file = ja_dir / f"{hex_unpadded}.svg"
-        ja_content = fetch_authentic_stroke_svg(char, locale="ja") or generate_kanji_placeholder_svg(char)
+        ja_content = fetch_authentic_stroke_svg(char, locale="ja") or generate_kanji_placeholder_svg(char, locale="ja")
         ja_file.write_text(ja_content, encoding="utf-8")
         (ja_dir / f"{hex_padded}.svg").write_text(ja_content, encoding="utf-8")
         total_created += 1
@@ -447,7 +487,7 @@ def populate_starter_strokes(static_root: str | Path) -> dict[str, int]:
         hex_unpadded = CjkExtractor.char_to_hex(char)
         hex_padded = CjkExtractor.char_to_hex(char, zero_pad=5)
         zh_file = zh_dir / f"{hex_unpadded}.svg"
-        zh_content = fetch_authentic_stroke_svg(char, locale="zh") or generate_kanji_placeholder_svg(char)
+        zh_content = fetch_authentic_stroke_svg(char, locale="zh") or generate_kanji_placeholder_svg(char, locale="zh")
         zh_file.write_text(zh_content, encoding="utf-8")
         (zh_dir / f"{hex_padded}.svg").write_text(zh_content, encoding="utf-8")
         total_created += 1
@@ -459,7 +499,7 @@ def populate_starter_strokes(static_root: str | Path) -> dict[str, int]:
         hex_unpadded = CjkExtractor.char_to_hex(char)
         hex_padded = CjkExtractor.char_to_hex(char, zero_pad=5)
         zh_hant_file = zh_hant_dir / f"{hex_unpadded}.svg"
-        zh_hant_content = fetch_authentic_stroke_svg(char, locale="zh-hant") or generate_kanji_placeholder_svg(char)
+        zh_hant_content = fetch_authentic_stroke_svg(char, locale="zh-hant") or generate_kanji_placeholder_svg(char, locale="zh-hant")
         zh_hant_file.write_text(zh_hant_content, encoding="utf-8")
         (zh_hant_dir / f"{hex_padded}.svg").write_text(zh_hant_content, encoding="utf-8")
         total_created += 1

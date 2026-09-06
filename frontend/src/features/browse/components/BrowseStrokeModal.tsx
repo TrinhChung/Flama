@@ -215,7 +215,7 @@ export function BrowseStrokeModal({
     if (/[汉语话书买卖时间门关开钱鸡车电习爱国难易简单红蓝绿颜]/i.test(resolvedSourceValue)) {
       return 'zh-CN'
     }
-    if (/[漢語話書買賣門關開錢雞車電習愛國]/i.test(resolvedSourceValue)) {
+    if (/[漢語話書買賣門關開錢雞車電習愛國學問題幫讓歲還過難練結發經動歡館銀飛機紅藍綠認識邊遠進鐘點課運遊體會讀寫聽說對應當從義號樣這裡頭視後廣風傳節圖與計劃網東長變報選請導備準確龍鳳華歷歸業農種標環構營製質達議組務調設實際處積極績術複雜職]/.test(resolvedSourceValue)) {
       return 'zh-TW'
     }
     return 'ja'
@@ -225,10 +225,10 @@ export function BrowseStrokeModal({
     return loadStoredStrokeSettings().locale
   })
 
-  // Auto-detect initial locale if user hasn't explicitly customized yet or if card has strong match
+  // Always auto-detect locale based on current deck/card content when modal opens
+  // This ensures Chinese decks use Chinese SVGs even if user previously used Japanese locale
   useEffect(() => {
-    const raw = localStorage.getItem('flama_browse_stroke_settings_v1')
-    if (!raw && detectedLocale) {
+    if (detectedLocale) {
       setLocale(detectedLocale as 'ja' | 'zh-CN' | 'zh-TW')
     }
   }, [detectedLocale])

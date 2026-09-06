@@ -20,6 +20,7 @@ static/strokes/*.svg
 /flama_media_storage/
 /output/
 /.playwright-cli/
+/media/
 
 # Production signing credentials and certificate material
 *.pfx

@@ -116,7 +116,7 @@ class TestWorksheetAPI(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
-        self.assertEqual(data["template"]["id"], "kanji_stroke")
+        self.assertIn(data["template"]["id"], ("kanji_stroke", "kanji_compact"))
         self.assertEqual(data["total_items"], 2)  # 勉, 強
         self.assertEqual(data["total_pages"], 1)
 

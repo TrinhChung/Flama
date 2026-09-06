@@ -32,7 +32,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     },
     templates: [
       {
-        id: 'kanji_stroke',
+        id: 'kanji_compact',
         name_vi: 'Luyện viết Kanji chuẩn',
         name_en: 'Kanji Stroke Practice',
         description_vi: 'Mẫu chữ Hán chuẩn với sơ đồ nét.',
@@ -201,9 +201,9 @@ describe('DeckWorksheetModal Live Studio', () => {
     expect(document.body.textContent).toContain('Luyện viết từ vựng')
     expect(document.body.textContent).toContain('In ngay (A4)')
 
-    // Live preview canvas content
+    // Live preview canvas content (reading and meaning hidden by default)
     expect(document.body.textContent).toContain('日')
-    expect(document.body.textContent).toContain('Mặt trời, ngày')
+    expect(document.body.textContent).not.toContain('Mặt trời, ngày')
   })
 
   it('switches sidebar tabs between template, data, layout, and header', async () => {
@@ -587,6 +587,461 @@ describe('DeckWorksheetModal Live Studio', () => {
       window.innerWidth = originalInnerWidth
     }
   })
+
+  it('handles detected Chinese deck locale and allows changing stroke language / dataset', async () => {
+    const chineseMeta = {
+      ...mockMeta,
+      deck_id: 1619,
+      deck_name: 'HSK 1 Bài 4',
+      detected_locale: 'zh' as const,
+    }
+    vi.spyOn(worksheetApi, 'fetchDeckWorksheetMeta').mockResolvedValue(chineseMeta)
+
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1619}
+          deckName="HSK 1 Bài 4"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Switch to Layout tab (Tab 3: Bố cục & Ô chữ)
+    const layoutTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục & Ô chữ'),
+    )
+    expect(layoutTabBtn).toBeDefined()
+    await act(async () => {
+      layoutTabBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    // Verify auto-detected badge
+    expect(document.body.textContent).toContain('Tự động: Tiếng Trung')
+
+    // Verify select element has zh selected
+    const selectEl = Array.from(document.querySelectorAll('select')).find((s) =>
+      Array.from(s.options).some((opt) => opt.value === 'zh'),
+    ) as HTMLSelectElement | undefined
+    expect(selectEl).toBeDefined()
+    expect(selectEl?.value).toBe('zh')
+
+    // Change select to Japanese (ja)
+    await act(async () => {
+      if (selectEl) {
+        selectEl.value = 'ja'
+        selectEl.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          locale: 'ja',
+        }),
+      }),
+    )
+  })
+
+  it('supports toggling stroke numbers on and off in layout tab', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Switch to Layout tab
+    const layoutTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục & Ô chữ'),
+    )
+    await act(async () => {
+      layoutTabBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    // Find stroke numbers toggle checkbox
+    const strokeNumLabel = Array.from(document.querySelectorAll('label')).find((l) =>
+      l.textContent?.includes('Hiện số thứ tự nét 1, 2, 3...'),
+    )
+    expect(strokeNumLabel).toBeDefined()
+    const checkbox = strokeNumLabel?.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+    expect(checkbox).toBeDefined()
+    expect(checkbox?.checked).toBe(true)
+
+    // Uncheck it
+    await act(async () => {
+      checkbox?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          show_stroke_numbers: false,
+        }),
+      }),
+    )
+  })
+
+  it('switches between Chinese and Japanese via the prominent sidebar top switcher', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Find the Chinese button in the prominent top switcher
+    const zhButton = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiếng Trung (Giản thể)'),
+    )
+    expect(zhButton).toBeDefined()
+
+    // Click Chinese button
+    await act(async () => {
+      zhButton?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          locale: 'zh',
+        }),
+      }),
+    )
+
+    // Click Japanese button
+    const jaButton = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiếng Nhật') && b.textContent?.includes('🇯🇵'),
+    )
+    expect(jaButton).toBeDefined()
+
+    await act(async () => {
+      jaButton?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          locale: 'ja',
+        }),
+      }),
+    )
+  })
+
+  it('preserves layout parameter isolation when switching between templates and renders vocab controls', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={() => {}}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+
+    // Switch to layout tab
+    const layoutTabBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Bố cục') || b.textContent?.includes('Bố cục & Ô chữ'),
+    )
+    expect(layoutTabBtn).toBeDefined()
+
+    await act(async () => {
+      layoutTabBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    // Verify Quick Presets section is visible
+    expect(document.body.textContent).toContain('Bố cục mẫu 1-chạm')
+    expect(document.body.textContent).toContain('Mặc định tối ưu')
+
+    // Click "Tiết kiệm giấy" preset for kanji
+    const ecoPresetBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiết kiệm giấy'),
+    )
+    expect(ecoPresetBtn).toBeDefined()
+
+    await act(async () => {
+      ecoPresetBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template_id: 'kanji_compact',
+        options: expect.objectContaining({
+          box_size: 28,
+          trace_count: 1,
+          practice_count: 8,
+        }),
+      }),
+    )
+
+    // Switch to Template tab and select Vocab Writing
+    const templateTabBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Mẫu') || b.textContent?.includes('Mẫu bài tập'),
+    )
+    expect(templateTabBtn).toBeDefined()
+
+    await act(async () => {
+      templateTabBtn?.click()
+    })
+
+    const vocabTplCard = Array.from(document.querySelectorAll('h4')).find((h) =>
+      h.textContent?.includes('Luyện viết từ vựng'),
+    )
+    expect(vocabTplCard).toBeDefined()
+
+    await act(async () => {
+      vocabTplCard?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+
+    // Switch to layout tab again
+    await act(async () => {
+      layoutTabBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    // Verify vocab writing controls are rendered
+    expect(document.body.textContent).toContain('Tuỳ biến Bảng Luyện viết Từ vựng')
+    expect(document.body.textContent).toContain('Kiểu vùng luyện viết')
+    expect(document.body.textContent).toContain('Ô vuông liền')
+    expect(document.body.textContent).toContain('Dòng kẻ viết')
+    expect(document.body.textContent).toContain('Cột Cách đọc')
+
+    // Switch back to kanji_stroke template
+    await act(async () => {
+      templateTabBtn?.click()
+    })
+
+    const kanjiTplCard = Array.from(document.querySelectorAll('h4')).find((h) =>
+      h.textContent?.includes('Luyện viết Kanji chuẩn'),
+    )
+    expect(kanjiTplCard).toBeDefined()
+
+    await act(async () => {
+      kanjiTplCard?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Verify kanji_compact retained its 28px box_size and 8 practice boxes from earlier
+    expect(worksheetApi.generateWorksheetPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template_id: 'kanji_compact',
+        options: expect.objectContaining({
+          box_size: 28,
+          practice_count: 8,
+        }),
+      }),
+    )
+  })
+
+  it('defaults show_reading, show_meaning, and show_source_word to off for kanji practice and allows toggling them', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Click Tab 3: Bố cục & Ô chữ
+    const layoutTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục & Ô chữ'),
+    )
+    await act(async () => {
+      layoutTabBtn?.click()
+    })
+
+    // Verify checkboxes exist
+    expect(document.body.textContent).toContain('Hiện Âm đọc')
+    expect(document.body.textContent).toContain('Hiện Ý nghĩa')
+    expect(document.body.textContent).toContain('Hiện Từ ví dụ')
+
+    // Find the checkboxes
+    const labels = Array.from(document.querySelectorAll('label'))
+    const readLabel = labels.find((l) => l.textContent?.includes('Hiện Âm đọc'))
+    const meanLabel = labels.find((l) => l.textContent?.includes('Hiện Ý nghĩa'))
+    const exampleLabel = labels.find((l) => l.textContent?.includes('Hiện Từ ví dụ'))
+
+    const readInput = readLabel?.querySelector('input[type="checkbox"]') as HTMLInputElement
+    const meanInput = meanLabel?.querySelector('input[type="checkbox"]') as HTMLInputElement
+    const exampleInput = exampleLabel?.querySelector('input[type="checkbox"]') as HTMLInputElement
+
+    expect(readInput.checked).toBe(false)
+    expect(meanInput.checked).toBe(false)
+    expect(exampleInput.checked).toBe(false)
+
+    // Toggle Hiện Ý nghĩa ON
+    await act(async () => {
+      meanInput.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Now meaning should be visible in preview
+    expect(document.body.textContent).toContain('Mặt trời, ngày')
+  })
+
+  it('supports toggling page_fill_mode between balanced_stretch and max_density in layout tab', async () => {
+    await act(async () => {
+      root!.render(<DeckWorksheetModal open={true} onOpenChange={() => {}} deckId={1} />)
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400))
+    })
+
+    // Click on Layout tab
+    const layoutTab = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục'),
+    )
+    expect(layoutTab).toBeDefined()
+
+    await act(async () => {
+      layoutTab!.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+
+    // Find and click "Tiết kiệm giấy" button in Page Fill Mode
+    const maxDensityBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('⚡ Tiết kiệm giấy') && b.textContent?.includes('phủ kín tối đa số từ'),
+    )
+    expect(maxDensityBtn).toBeDefined()
+
+    await act(async () => {
+      maxDensityBtn!.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Verify generateWorksheetPreview was called with page_fill_mode: 'max_density'
+    const lastCall = vi.mocked(worksheetApi.generateWorksheetPreview).mock.calls.at(-1)?.[0]
+    expect(lastCall?.options?.page_fill_mode).toBe('max_density')
+  })
+
+  it('highlights quick preset button as selected with active styling when clicked', async () => {
+    await act(async () => {
+      root!.render(<DeckWorksheetModal open={true} onOpenChange={() => {}} deckId={1} />)
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400))
+    })
+
+    // Click on Layout tab
+    const layoutTab = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục'),
+    )
+    expect(layoutTab).toBeDefined()
+
+    await act(async () => {
+      layoutTab!.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+
+    // Find the quick preset "⚡ Tiết kiệm giấy" in "Bố cục mẫu 1-chạm"
+    const presetBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('⚡ Tiết kiệm giấy') && b.textContent?.includes('Ô 28px, 1 mờ, 8 viết'),
+    )
+    expect(presetBtn).toBeDefined()
+
+    // Click the preset
+    await act(async () => {
+      presetBtn!.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Verify button has active primary styling (border-primary and bg-primary/10)
+    expect(presetBtn?.className).toContain('border-primary')
+    expect(presetBtn?.className).toContain('bg-primary/10')
+  })
 })
+
 
 
