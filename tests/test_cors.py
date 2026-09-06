@@ -67,6 +67,10 @@ class CorsTests(unittest.TestCase):
             "X-Timezone",
             response.headers.get("Access-Control-Allow-Headers", ""),
         )
+        self.assertIn(
+            "Idempotency-Key",
+            response.headers.get("Access-Control-Allow-Headers", ""),
+        )
 
     def test_unconfigured_origin_receives_no_cors_permission(self):
         response = self.client.get(
