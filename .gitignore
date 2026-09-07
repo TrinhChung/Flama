@@ -21,6 +21,7 @@ static/strokes/*.svg
 /output/
 /.playwright-cli/
 /media/
+engines/
 
 # Production signing credentials and certificate material
 *.pfx
