@@ -12,9 +12,32 @@ SESSION_TOKEN_KEY = "_csrf_token"
 OAUTH_EXEMPT_PATHS = frozenset({"/oauth/token", "/oauth/revoke", "/api/mcp", "/v1/mcp"})
 
 
+COOKIE_TOKEN_KEY = "csrf_token"
+
+
 def init_csrf_protection(app) -> None:
     """Register CSRF helpers on the Flask app."""
     app.before_request(protect_from_csrf)
+    app.after_request(inject_csrf_cookie)
+
+
+def inject_csrf_cookie(response):
+    """Set the csrf_token cookie so client-side JavaScript can read it."""
+    if not csrf_enabled():
+        return response
+    session_token = session.get(SESSION_TOKEN_KEY)
+    if session_token:
+        existing = request.cookies.get(COOKIE_TOKEN_KEY)
+        if existing != session_token:
+            response.set_cookie(
+                COOKIE_TOKEN_KEY,
+                session_token,
+                samesite="Lax",
+                secure=request.is_secure,
+                httponly=False,
+                path="/",
+            )
+    return response
 
 
 def csrf_enabled() -> bool:

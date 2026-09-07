@@ -44,11 +44,24 @@ export function setCsrfToken(token: string) {
   }
 }
 
+function getCookie(name: string): string {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
 export function getCsrfToken(): string {
   if (csrfToken) return csrfToken
   if (typeof document !== 'undefined') {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-    return meta?.getAttribute('content') || ''
+    const metaToken = meta?.getAttribute('content')?.trim()
+    if (metaToken) return metaToken
+
+    const cookieToken =
+      getCookie('csrf_token') ||
+      getCookie('XSRF-TOKEN') ||
+      getCookie('_csrf_token')
+    if (cookieToken) return cookieToken
   }
   return ''
 }
@@ -121,8 +134,10 @@ async function apiFetch(
     headers.set('Content-Type', 'application/json')
   }
   if (init.body instanceof FormData && effectiveCsrfToken) {
-    if (!init.body.has('_csrf_token') && !init.body.has('csrf_token')) {
-      init.body.append('csrf_token', effectiveCsrfToken)
+    if (init.body.has('_csrf_token')) {
+      init.body.set('_csrf_token', effectiveCsrfToken)
+    } else {
+      init.body.set('csrf_token', effectiveCsrfToken)
     }
   }
 

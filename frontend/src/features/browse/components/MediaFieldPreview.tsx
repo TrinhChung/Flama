@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback, useRef } from 'react'
 import { resolveBackendUrl } from '@/config/env'
+import { apiRequest } from '@/shared/api/client'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -186,21 +187,15 @@ export function MediaFieldPreview({
           const formData = new FormData()
           formData.append('file', imageFile)
 
-          const response = await fetch(
-            resolveBackendUrl('/api/browse/media/stage-paste'),
+          const data = await apiRequest<{ url: string }>(
+            '/api/browse/media/stage-paste',
             {
               method: 'POST',
               body: formData,
-              credentials: 'include',
             },
           )
 
-          const data = await response.json()
-          if (!response.ok) {
-            throw new Error(data.message || data.error || 'Lỗi khi tải ảnh lên')
-          }
-
-          const newUrl = data.url as string
+          const newUrl = data.url
           if (newUrl) {
             const trimmedVal = value.trim()
             const updated = trimmedVal ? `${trimmedVal}\n${newUrl}` : newUrl
