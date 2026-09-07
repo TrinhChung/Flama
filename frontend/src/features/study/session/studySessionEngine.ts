@@ -1,7 +1,6 @@
 import type { Rating } from '../types'
 import type {
   StudyBatchPayload,
-  StudyBatchReceipt,
   StudyContentArtifact,
   StudySessionCard,
   StudySessionCommitReceipt,
