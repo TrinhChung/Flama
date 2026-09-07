@@ -799,6 +799,39 @@ def study_session_status(session_id: str):
 
 
 @flashcards_bp.route(
+    "/api/study/sessions/<session_id>/batch",
+    methods=["POST"],
+)
+@login_required
+def study_session_batch(session_id: str):
+    if (
+        request.content_length is not None
+        and request.content_length > study_session_service.MAX_COMMIT_BYTES
+    ):
+        return _no_store_json(
+            {
+                "error": "COMMIT_TOO_LARGE",
+                "message": "Study batch payload exceeds the 5 MiB limit.",
+            },
+            413,
+        )
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = study_session_service.enqueue_study_session_batch(
+            user=current_user,
+            session_id=session_id,
+            payload=payload,
+        )
+    except study_session_service.StudySessionError as exc:
+        db.session.rollback()
+        error_payload = {"error": exc.code, "message": str(exc)}
+        if exc.details is not None:
+            error_payload["details"] = exc.details
+        return _no_store_json(error_payload, exc.status)
+    return _no_store_json(result, 202)
+
+
+@flashcards_bp.route(
     "/api/study/sessions/<session_id>/commit",
     methods=["POST"],
 )
@@ -816,7 +849,18 @@ def study_session_commit(session_id: str):
             413,
         )
     payload = request.get_json(silent=True) or {}
+    is_async = (
+        str(request.args.get("async") or "").strip().lower() in {"1", "true", "yes"}
+        or bool(payload.get("async"))
+    )
     try:
+        if is_async:
+            result = study_session_service.enqueue_study_session_batch(
+                user=current_user,
+                session_id=session_id,
+                payload=payload,
+            )
+            return _no_store_json(result, 202)
         result = study_session_service.commit_study_session(
             user=current_user,
             session_id=session_id,

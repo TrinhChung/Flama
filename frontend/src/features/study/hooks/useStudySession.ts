@@ -5,6 +5,7 @@ import { useBootstrap } from '@/shared/api/bootstrap'
 import { ApiError } from '@/shared/api/client'
 import type {
   Rating,
+  StudyBatchReceipt,
   StudyMediaArtifact,
   StudySessionCommitReceipt,
   StudySessionSnapshot,
@@ -12,12 +13,14 @@ import type {
 } from '../types'
 import type { SchedulerDecision } from '../scheduler/types'
 import {
+  acknowledgeBatchReceipt,
   applyCommitReceipt,
   applyLocalAnswer,
   automaticCommitMode,
   buildSessionView,
   createPersistedSession,
   decisionForCard,
+  extractPendingBatch,
   prepareCommit,
   undoLocalAnswer,
 } from '../session/studySessionEngine'
@@ -512,6 +515,80 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     userId,
   ])
 
+  const submitAsyncBatch = useCallback(async () => {
+    const active = sessionRef.current
+    const controller = leaseControllerRef.current
+    if (
+      !active
+      || !controller
+      || controller.signal.aborted
+      || !hasLeaseRef.current
+      || userId === null
+      || !deckId
+    ) return
+
+    const extracted = extractPendingBatch(active, 50, { reason: 'rollover', isFinal: false })
+    if (!extracted) return
+
+    const isThisLease = () => isCurrentLease(controller)
+    if (isThisLease()) activateSession(extracted.session)
+    sessionDurableRef.current = await saveStudySession(extracted.session)
+
+    void (async () => {
+      try {
+        await appApi.mutate<StudyBatchReceipt>(
+          `/api/study/sessions/${extracted.session.snapshot.session_id}/batch`,
+          'POST',
+          extracted.batch,
+        )
+        const current = sessionRef.current
+        if (!current || !isThisLease()) return
+
+        const batchReviews = extracted.batch.events.length
+        const batchDurationMs = extracted.batch.events.reduce(
+          (sum, ev) => sum + (ev.duration_ms || 0),
+          0,
+        )
+        const batchAgain = extracted.batch.events.filter((ev) => ev.rating === 'again').length
+        const batchHard = extracted.batch.events.filter((ev) => ev.rating === 'hard').length
+        const batchGood = extracted.batch.events.filter((ev) => ev.rating === 'good').length
+        const batchEasy = extracted.batch.events.filter((ev) => ev.rating === 'easy').length
+
+        const prevStats = current.accumulated_stats || {
+          total_reviews: 0,
+          total_duration_ms: 0,
+          again_count: 0,
+          hard_count: 0,
+          good_count: 0,
+          easy_count: 0,
+        }
+
+        const nextAccumulated: StudySessionAccumulatedStats = {
+          total_reviews: prevStats.total_reviews + batchReviews,
+          total_duration_ms: prevStats.total_duration_ms + batchDurationMs,
+          again_count: prevStats.again_count + batchAgain,
+          hard_count: prevStats.hard_count + batchHard,
+          good_count: prevStats.good_count + batchGood,
+          easy_count: prevStats.easy_count + batchEasy,
+        }
+
+        const reconciled = acknowledgeBatchReceipt(current, extracted.batch.batch_id)
+        reconciled.accumulated_stats = nextAccumulated
+
+        if (isThisLease()) activateSession(reconciled)
+        sessionDurableRef.current = await saveStudySession(reconciled)
+
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
+          queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
+          queryClient.invalidateQueries({ queryKey: ['stats'] }),
+        ])
+      } catch (err) {
+        console.warn('Asynchronous study batch submission delayed:', err)
+      }
+    })()
+  }, [activateSession, deckId, isCurrentLease, queryClient, userId])
+
   useEffect(() => {
     if (!session || !view || busy || receipt || !hasLease) return
     if (session.status === 'pending_commit') {
@@ -526,11 +603,15 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     }
     const mode = automaticCommitMode(session, view)
     if (!mode) return
-    void commit({
-      reason: mode === 'rollover' ? 'rollover' : 'auto_finish',
-      resumeAfterCommit: mode === 'rollover',
-    }).catch(() => {})
-  }, [busy, commit, hasLease, receipt, session, view])
+    if (mode === 'rollover') {
+      void submitAsyncBatch()
+    } else {
+      void commit({
+        reason: 'auto_finish',
+        resumeAfterCommit: false,
+      }).catch(() => {})
+    }
+  }, [busy, commit, hasLease, receipt, session, submitAsyncBatch, view])
 
   const flushOnExit = useCallback(() => {
     const active = sessionRef.current

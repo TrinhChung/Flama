@@ -5,11 +5,13 @@ import {
   ClientAlgorithmUnavailableError,
 } from '../scheduler/algorithmRegistry'
 import {
+  acknowledgeBatchReceipt,
   applyLocalAnswer,
   automaticCommitMode,
   buildSessionView,
   createPersistedSession,
   decisionForCard,
+  extractPendingBatch,
   isBackgroundRolloverCommit,
   prepareCommit,
   undoLocalAnswer,
@@ -463,5 +465,127 @@ describe('local study session engine', () => {
 
     const viewAfterAnswer = buildSessionView(answered, now + 70_000)
     expect(viewAfterAnswer.card?.card_id).toBe('card-2')
+  })
+
+  it('extracts exactly 50 cards into a batch without blocking active session status', () => {
+    const snap = snapshot()
+    const session = createPersistedSession(snap)
+    const baseEvent = {
+      event_id: 'event-0',
+      sequence: 1,
+      card_id: 'card-1',
+      rating: 'good' as const,
+      action_key: 'review.good' as const,
+      trigger_key: 'scheduler.review.good' as const,
+      trigger_contract_version: '1' as const,
+      policy_key: 'policy',
+      scheduler_offset_ms: 1000,
+      duration_ms: 500,
+    }
+    const session50 = {
+      ...session,
+      touched_card_ids: ['card-1'],
+      events: Array.from({ length: 50 }, (_, i) => ({
+        ...baseEvent,
+        event_id: `event-${i + 1}`,
+        sequence: i + 1,
+      })),
+    }
+
+    expect(session50.events).toHaveLength(50)
+    const extracted = extractPendingBatch(session50, 50, { reason: 'rollover', isFinal: false })
+    expect(extracted).not.toBeNull()
+    if (!extracted) return
+
+    expect(extracted.batch.events).toHaveLength(50)
+    expect(extracted.batch.batch_sequence).toBe(1)
+    expect(extracted.batch.schema_version).toBe('study-batch.v1')
+    expect(extracted.batch.commit_reason).toBe('rollover')
+    expect(extracted.batch.is_final).toBe(false)
+
+    // Session remains active and unblocked!
+    expect(extracted.session.status).toBe('active')
+    expect(extracted.session.events).toHaveLength(0)
+    expect(extracted.session.in_flight_batches).toHaveLength(1)
+
+    // Acknowledge receipt
+    const reconciled = acknowledgeBatchReceipt(extracted.session, extracted.batch.batch_id)
+    expect(reconciled.in_flight_batches).toHaveLength(0)
+  })
+
+  it('extracts two batches sequentially for 100 completed cards', () => {
+    const snap = snapshot()
+    const session = createPersistedSession(snap)
+    const baseEvent = {
+      event_id: 'event-0',
+      sequence: 1,
+      card_id: 'card-1',
+      rating: 'good' as const,
+      action_key: 'review.good' as const,
+      trigger_key: 'scheduler.review.good' as const,
+      trigger_contract_version: '1' as const,
+      policy_key: 'policy',
+      scheduler_offset_ms: 1000,
+      duration_ms: 500,
+    }
+    const session100 = {
+      ...session,
+      touched_card_ids: ['card-1'],
+      events: Array.from({ length: 100 }, (_, i) => ({
+        ...baseEvent,
+        event_id: `event-${i + 1}`,
+        sequence: i + 1,
+      })),
+    }
+
+    // Batch 1 (1..50)
+    const batch1 = extractPendingBatch(session100, 50)
+    expect(batch1).not.toBeNull()
+    if (!batch1) return
+    expect(batch1.batch.events).toHaveLength(50)
+    expect(batch1.batch.events[0].sequence).toBe(1)
+    expect(batch1.batch.events[49].sequence).toBe(50)
+    expect(batch1.session.events).toHaveLength(50)
+    expect(batch1.session.status).toBe('active')
+
+    // Batch 2 (51..100)
+    const batch2 = extractPendingBatch(batch1.session, 50)
+    expect(batch2).not.toBeNull()
+    if (!batch2) return
+    expect(batch2.batch.events).toHaveLength(50)
+    expect(batch2.batch.events[0].sequence).toBe(51)
+    expect(batch2.batch.events[49].sequence).toBe(100)
+    expect(batch2.session.events).toHaveLength(0)
+    expect(batch2.session.status).toBe('active')
+    expect(batch2.session.in_flight_batches).toHaveLength(2)
+  })
+
+  it('flushes remaining cards below 50 as a final batch', () => {
+    const snap = snapshot()
+    const session = createPersistedSession(snap)
+    const session20 = {
+      ...session,
+      touched_card_ids: ['card-1'],
+      events: Array.from({ length: 20 }, (_, i) => ({
+        event_id: `event-${i + 1}`,
+        sequence: i + 1,
+        card_id: 'card-1',
+        rating: 'good' as const,
+        action_key: 'review.good' as const,
+        trigger_key: 'scheduler.review.good' as const,
+        trigger_contract_version: '1' as const,
+        policy_key: 'policy',
+        scheduler_offset_ms: 1000 * (i + 1),
+        duration_ms: 500,
+      })),
+    }
+
+    const finalBatch = extractPendingBatch(session20, 50, { reason: 'auto_finish', isFinal: true })
+    expect(finalBatch).not.toBeNull()
+    if (!finalBatch) return
+    expect(finalBatch.batch.events).toHaveLength(20)
+    expect(finalBatch.batch.is_final).toBe(true)
+    expect(finalBatch.batch.commit_reason).toBe('auto_finish')
+    expect(finalBatch.session.events).toHaveLength(0)
   })
 })

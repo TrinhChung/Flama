@@ -1,5 +1,7 @@
 import type { Rating } from '../types'
 import type {
+  StudyBatchPayload,
+  StudyBatchReceipt,
   StudyContentArtifact,
   StudySessionCard,
   StudySessionCommitReceipt,
@@ -326,6 +328,92 @@ export function isBackgroundRolloverCommit(
 ) {
   return session?.status === 'pending_commit'
     && session.resume_after_commit
+}
+
+export type ExtractedBatchResult = {
+  session: PersistedStudySession
+  batch: StudyBatchPayload
+}
+
+export function extractPendingBatch(
+  session: PersistedStudySession,
+  limit = DEFAULT_STUDY_BATCH_EVENT_LIMIT,
+  options: {
+    reason?: StudyCommitReason
+    isFinal?: boolean
+  } = {},
+): ExtractedBatchResult | null {
+  if (session.events.length === 0) return null
+
+  const batchCount = Math.min(session.events.length, Math.max(1, limit))
+  const batchEvents = session.events.slice(0, batchCount)
+  const remainingEvents = session.events.slice(batchCount)
+
+  const batchId = crypto.randomUUID()
+  const nextSeq = (session.batch_sequence ?? 0) + 1
+  const isFinal = Boolean(options.isFinal)
+  const commitReason = options.reason ?? (isFinal ? 'auto_finish' : 'rollover')
+
+  const batchTouchedCardIds = Array.from(new Set(batchEvents.map((e) => e.card_id)))
+  const finalStates = batchTouchedCardIds.map((cardId) => {
+    const card = session.snapshot.cards.find((row) => row.card_id === cardId)
+    if (!card) throw new Error(`Missing touched card ${cardId}.`)
+    return {
+      card_id: card.card_id,
+      base_revision: card.base_revision,
+      state: card.state,
+    }
+  })
+
+  const batchPayload: StudyBatchPayload = {
+    schema_version: 'study-batch.v1',
+    batch_id: batchId,
+    batch_sequence: nextSeq,
+    session_token: session.snapshot.session_token,
+    snapshot_hash: session.snapshot.snapshot_hash,
+    commit_reason: commitReason,
+    is_final: isFinal,
+    events: batchEvents,
+    final_states: finalStates,
+  }
+
+  const remainingTouchedSet = new Set(remainingEvents.map((e) => e.card_id))
+  const remainingTouchedCardIds = session.touched_card_ids.filter((id) =>
+    remainingTouchedSet.has(id),
+  )
+
+  const nextInFlight = [
+    ...(session.in_flight_batches ?? []),
+    batchPayload,
+  ]
+
+  const nextSession: PersistedStudySession = {
+    ...session,
+    events: remainingEvents,
+    touched_card_ids: remainingTouchedCardIds,
+    batch_sequence: nextSeq,
+    in_flight_batches: nextInFlight,
+    updated_at_ms: Date.now(),
+  }
+
+  return {
+    session: nextSession,
+    batch: batchPayload,
+  }
+}
+
+export function acknowledgeBatchReceipt(
+  session: PersistedStudySession,
+  batchId: string,
+): PersistedStudySession {
+  const remainingInFlight = (session.in_flight_batches ?? []).filter(
+    (b) => b.batch_id !== batchId,
+  )
+  return {
+    ...session,
+    in_flight_batches: remainingInFlight,
+    updated_at_ms: Date.now(),
+  }
 }
 
 export function prepareCommit(

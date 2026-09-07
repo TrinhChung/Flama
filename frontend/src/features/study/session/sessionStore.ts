@@ -1,5 +1,6 @@
 import type { SchedulerCardState } from '../scheduler/types'
 import type {
+  StudyBatchPayload,
   StudyMediaArtifact,
   StudySessionEvent,
   StudySessionSnapshot,
@@ -51,6 +52,8 @@ export type PersistedStudySession = {
   commit_id: string | null
   commit_reason: StudyCommitReason | null
   resume_after_commit: boolean
+  batch_sequence?: number
+  in_flight_batches?: StudyBatchPayload[]
   updated_at_ms: number
 }
 

@@ -59,11 +59,13 @@ from models.review_event import ReviewEvent
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.study_session_commit import StudySessionCommit
+from models.study_session_batch import StudySessionBatch
 from models.template import Template
 
 
 WIRE_SCHEMA_VERSION = "study-session.v2"
 COMMIT_SCHEMA_VERSION = "study-commit.v1"
+BATCH_SCHEMA_VERSION = "study-batch.v1"
 SCHEDULER_ALGORITHM = DEFAULT_ALGORITHM_IDENTITY.key
 ALGORITHM_VERSION = DEFAULT_ALGORITHM_IDENTITY.version
 MAX_SESSION_CARDS = 5000
@@ -672,6 +674,146 @@ def _idempotent_response(
             status=409,
         )
     return json.loads(row.response_json)
+
+
+def enqueue_study_session_batch(
+    *,
+    user: Any,
+    session_id: str,
+    payload: Any,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Validate and enqueue a study review batch into Redis for asynchronous processing."""
+    if not isinstance(payload, dict):
+        raise StudySessionError(
+            "INVALID_BATCH",
+            "Batch payload must be an object.",
+            status=400,
+        )
+    schema_version = str(payload.get("schema_version") or "")
+    if schema_version not in {BATCH_SCHEMA_VERSION, COMMIT_SCHEMA_VERSION}:
+        raise StudySessionError(
+            "UNSUPPORTED_BATCH_SCHEMA",
+            f"schema_version must be {BATCH_SCHEMA_VERSION} or {COMMIT_SCHEMA_VERSION}.",
+            status=422,
+        )
+    batch_id = str(payload.get("batch_id") or payload.get("commit_id") or uuid4()).strip()
+    if not batch_id or len(batch_id) > 64:
+        raise StudySessionError(
+            "INVALID_BATCH_ID",
+            "batch_id is required.",
+            status=400,
+        )
+    commit_reason = str(
+        payload.get("commit_reason") or "rollover"
+    ).strip().lower()
+    if commit_reason not in VALID_COMMIT_REASONS:
+        raise StudySessionError(
+            "INVALID_COMMIT_REASON",
+            "commit_reason must be auto_finish, manual_exit, page_exit, or rollover.",
+            status=422,
+        )
+    session = StudySession.query.filter_by(id=session_id, user_id=int(user.id)).first()
+    if session is None:
+        raise StudySessionError(
+            "SESSION_NOT_FOUND",
+            "Study session was not found.",
+            status=404,
+        )
+    _validate_session_token(session, payload.get("session_token"))
+    snapshot_hash = str(payload.get("snapshot_hash") or "").strip()
+    if snapshot_hash and snapshot_hash != session.snapshot_hash:
+        raise StudySessionError(
+            "SNAPSHOT_MISMATCH",
+            "Study snapshot no longer matches this session.",
+            status=409,
+        )
+
+    raw_events = payload.get("events")
+    if not isinstance(raw_events, list):
+        raise StudySessionError(
+            "INVALID_EVENTS",
+            "events must be an array.",
+            status=400,
+        )
+
+    from app.services.study_queue_service import (
+        enqueue_study_batch,
+        is_batch_processed,
+    )
+
+    payload_hash = _request_hash(payload)
+    enqueued_at = now or datetime.utcnow()
+
+    # Idempotency check: if batch was already completed, return receipt immediately
+    existing_batch = StudySessionBatch.query.filter_by(
+        session_id=session.id,
+        batch_id=batch_id,
+    ).first()
+    if existing_batch and existing_batch.status == "completed":
+        return {
+            "schema_version": "study-batch-receipt.v1",
+            "status": "already_processed",
+            "session_id": session.id,
+            "batch_id": batch_id,
+            "event_count": existing_batch.event_count,
+            "enqueued_at": _utc_iso(existing_batch.enqueued_at),
+        }
+
+    is_final = bool(payload.get("is_final", False)) or commit_reason in {
+        "auto_finish",
+        "manual_exit",
+        "page_exit",
+    }
+
+    if existing_batch is None:
+        batch_row = StudySessionBatch(
+            session_id=session.id,
+            user_id=int(user.id),
+            batch_id=batch_id,
+            batch_sequence=int(payload.get("batch_sequence", 1) or 1),
+            event_count=len(raw_events),
+            status="enqueued",
+            commit_reason=commit_reason,
+            is_final=is_final,
+            request_hash=payload_hash,
+            payload_json=_json_dumps(payload),
+            enqueued_at=enqueued_at,
+        )
+        db.session.add(batch_row)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+
+    job_payload = {
+        "schema_version": "study-batch-job.v1",
+        "batch_id": batch_id,
+        "batch_sequence": int(payload.get("batch_sequence", 1) or 1),
+        "session_id": session.id,
+        "user_id": int(user.id),
+        "session_token": payload.get("session_token"),
+        "snapshot_hash": session.snapshot_hash,
+        "commit_reason": commit_reason,
+        "is_final": is_final,
+        "events": raw_events,
+        "final_states": payload.get("final_states"),
+        "enqueued_at": _utc_iso(enqueued_at),
+        "request_hash": payload_hash,
+        "attempts": 0,
+        "max_retries": 3,
+    }
+
+    enqueue_study_batch(job_payload)
+
+    return {
+        "schema_version": "study-batch-receipt.v1",
+        "status": "enqueued",
+        "session_id": session.id,
+        "batch_id": batch_id,
+        "event_count": len(raw_events),
+        "enqueued_at": _utc_iso(enqueued_at),
+    }
 
 
 def commit_study_session(
