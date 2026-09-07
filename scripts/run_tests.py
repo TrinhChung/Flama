@@ -449,6 +449,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/tts_*.py",
             "models/tts_*.py",
             "frontend/src/features/audio/**",
+            "scripts/compare_tts_kokoro_vs_cosyvoice.py",
+            "scripts/test_cosyvoice_synthesis.py",
         ],
         "backend_tests": [
             "tests/test_flama_audio_release_workflow.py",

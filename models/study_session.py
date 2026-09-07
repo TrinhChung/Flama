@@ -69,6 +69,11 @@ class StudySession(db.Model):
         back_populates="session",
         cascade="all, delete-orphan",
     )
+    batches = db.relationship(
+        "StudySessionBatch",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         db.Index(

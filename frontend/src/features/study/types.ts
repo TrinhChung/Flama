@@ -177,6 +177,31 @@ export type StudySessionEvent = {
   duration_ms: number
 }
 
+export type StudyBatchPayload = {
+  schema_version: 'study-batch.v1'
+  batch_id: string
+  batch_sequence: number
+  session_token: string
+  snapshot_hash: string
+  commit_reason?: 'auto_finish' | 'manual_exit' | 'page_exit' | 'rollover'
+  is_final?: boolean
+  events: StudySessionEvent[]
+  final_states?: Array<{
+    card_id: string
+    base_revision: number
+    state: SchedulerCardState
+  }>
+}
+
+export type StudyBatchReceipt = {
+  schema_version: 'study-batch-receipt.v1'
+  status: 'enqueued' | 'already_processed'
+  session_id: string
+  batch_id: string
+  event_count: number
+  enqueued_at: string
+}
+
 export type StudySessionCommitReceipt = {
   schema_version: 'study-commit-receipt.v1'
   success: boolean

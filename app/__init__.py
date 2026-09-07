@@ -94,6 +94,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.study_session import StudySession  # noqa: F401  # register model
     from models.study_session_card import StudySessionCard  # noqa: F401
     from models.study_session_commit import StudySessionCommit  # noqa: F401
+    from models.study_session_batch import StudySessionBatch  # noqa: F401
     from models.payment_order import PaymentOrder  # noqa: F401  # register model
     from models.payment_order_item import PaymentOrderItem  # noqa: F401  # register model
     from models.payment_webhook_event import PaymentWebhookEvent  # noqa: F401  # register model

@@ -272,6 +272,19 @@ describe('StudyQuickEditDialog', () => {
       },
     }
 
+    mocks.get.mockResolvedValueOnce({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: {
+        id: '101',
+        deck_id: 5,
+        deck_name: 'N5 Deck',
+        field_values: mediaContent.field_values,
+        tags: ['jlpt-n5'],
+      },
+      fields: mediaTemplate.field_defs,
+      decks: [{ id: 5, name: 'N5 Deck' }],
+    })
+
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -337,6 +350,19 @@ describe('StudyQuickEditDialog', () => {
         },
       ],
     }
+
+    mocks.get.mockResolvedValueOnce({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: {
+        id: '101',
+        deck_id: 5,
+        deck_name: 'N5 Deck',
+        field_values: implicitMediaContent.field_values,
+        tags: ['jlpt-n5'],
+      },
+      fields: implicitMediaTemplate.field_defs,
+      decks: [{ id: 5, name: 'N5 Deck' }],
+    })
 
     container = document.createElement('div')
     document.body.appendChild(container)
