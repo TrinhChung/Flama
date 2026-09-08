@@ -1,16 +1,18 @@
 # Phase 0–3 Decoupling Task Backlog
 
-> Status: ACTIVE backlog; Phase 0 and P1-01–P1-02 closed; P1-03 is next but has not started
+> Status: ACTIVE backlog; Phase 0, Phase 1 and Phase 2 are closed. Phase 3 and INT-01 remain.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
-> Progress review: `docs/architecture/decoupling-progress-review-2026-08-29.md`
+> Latest P1/P2 closeout: [2026-09-08 execution closeout](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) — 8 tasks completed; async admission and v3 issuance remain flag-off by default.
+>
+> Latest completed-task evidence review: [2026-08-30 review and P1-02 closeout](../../architecture/decoupling-progress-review-2026-08-30.md)
 >
 > Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **GO; P0-01 through P0-04 COMPLETED**.
 >
-> Next execution plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — P1-02 completed on 2026-08-30; P1-03 remains queued.
+> Cross-phase dependency plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — Phase 0–2 are closed; use it for the remaining Phase 3/INT-01 dependency order.
 >
-> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 16 remaining parent tasks with execution slices, required outputs and gates.
+> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 8 remaining parent tasks with execution slices, required outputs and gates.
 >
 > Scope boundary: chỉ đóng các phần còn thiếu của Phase 0–3. Không tạo model, migration, progress store hoặc physical Template/NoteType schema mới.
 
@@ -71,7 +73,7 @@ P1/P2 correctness gates + P3-05/P3-07 decisions
 All tasks --> INT-01 integration and tracker closeout
 ```
 
-Historical dependency note: `P2-01` has been merged, but the current reviewed execution gate requires P0-03 to close before any remaining Phase 1–3 runtime change. After that gate, use the wave ordering in `REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`; tasks touching the same files must remain sequential.
+Historical dependency note: `P2-01` and P0-03 were the gates for the now-completed Phase 1/2 work. For current work, use the Phase 3 wave ordering in `REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`; tasks touching the same files must remain sequential.
 
 ## 4. Danh sách task
 
@@ -90,20 +92,20 @@ Historical dependency note: `P2-01` has been merged, but the current reviewed ex
 |---|---|---|---|
 | P1-01 | [Canonical native review transaction](./completed/P1-01_CANONICAL_REVIEW_TRANSACTION.md) | P0-04 | `COMPLETED`; one typed transition/mutation core for REST, MCP and batch |
 | P1-02 | [External progress revision/conflict contract](./completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md) | P1-01 | `COMPLETED`; typed Anki/import/reset/cutover revision and conflict contract |
-| P1-03 | [ReviewEvent provenance and payload hardening](./P1-03_REVIEW_EVENT_PROVENANCE.md) | P1-01 | canonical native/external provenance, bounded payloads |
-| P1-04 | [Algorithm executable and decoder retirement lifecycle](./P1-04_ALGORITHM_VERSION_RETIREMENT.md) | P1-01 | support matrix, fail-closed retention policy, tests |
+| P1-03 | [ReviewEvent provenance and payload hardening](./completed/P1-03_REVIEW_EVENT_PROVENANCE.md) | P1-01 | `COMPLETED`; canonical native/external provenance, bounded payloads |
+| P1-04 | [Algorithm executable and decoder retirement lifecycle](./completed/P1-04_ALGORITHM_VERSION_RETIREMENT.md) | P1-01 | `COMPLETED`; support matrix, fail-closed retention policy, tests |
 
 ### Phase 2 — Built-in Interaction and Trigger compatibility
 
 | ID | Task | Dependency | Output chính |
 |---|---|---|---|
 | P2-01 | [Iframe `host_command` containment](./completed/P2-01_IFRAME_HOST_COMMAND_CONTAINMENT.md) | none | đóng progress side channel và forged-message tests |
-| P2-02 | [Frontend session mutation mutex](./P2-02_FRONTEND_SESSION_MUTEX.md) | P2-01 | atomic operation guard và same-tick tests |
-| P2-03 | [Restore validation and quarantine](./P2-03_RESTORE_VALIDATION_QUARANTINE.md) | P2-01 | strict validator, stable quarantine reasons, tests |
-| P2-04 | [Semantic ReviewInteraction contract](./P2-04_SEMANTIC_INTERACTION_CONTRACT.md) | P2-01 | một semantic callback, raw rating confined to adapter |
-| P2-05 | [Trusted keyboard UX and threat model](./P2-05_TRUSTED_KEYBOARD_UX.md) | P2-01 + P2-04 | threat model, safe implementation hoặc documented no-bridge |
-| P2-06 | [Built-in Trigger Runtime design checkpoint](./P2-06_TRIGGER_RUNTIME_DESIGN.md) | P1-03 + P2-04 | approved responsibility/transaction/idempotency design |
-| P2-07 | [Wire v3 and legacy v2 lease policy](./P2-07_WIRE_V3_LEGACY_V2_POLICY.md) | P1-04 + P2-03 + P2-06 | versioned contract plan/implementation và compatibility tests |
+| P2-02 | [Frontend session mutation mutex](./completed/P2-02_FRONTEND_SESSION_MUTEX.md) | P2-01 | `COMPLETED`; owner-token guard và same-tick tests |
+| P2-03 | [Restore validation and quarantine](./completed/P2-03_RESTORE_VALIDATION_QUARANTINE.md) | P2-01 | `COMPLETED`; strict validator, bounded quarantine và recovery |
+| P2-04 | [Semantic ReviewInteraction contract](./completed/P2-04_SEMANTIC_INTERACTION_CONTRACT.md) | P2-01 | `COMPLETED`; một semantic callback, raw rating confined to adapter |
+| P2-05 | [Trusted keyboard UX and threat model](./completed/P2-05_TRUSTED_KEYBOARD_UX.md) | P2-01 + P2-04 | `COMPLETED`; accepted no-bridge ADR và browser evidence |
+| P2-06 | [Built-in Trigger Runtime design checkpoint](./completed/P2-06_TRIGGER_RUNTIME_DESIGN.md) | P1-03 + P2-04 | `COMPLETED`; accepted exact built-in dispatcher contract |
+| P2-07 | [Wire v3 and legacy v2 lease policy](./completed/P2-07_WIRE_V3_LEGACY_V2_POLICY.md) | P1-04 + P2-03 + P2-06 | `COMPLETED`; dual reader, negotiation và compatibility tests |
 
 ### Phase 3 — Composition/StudyMode compatibility responsibility
 

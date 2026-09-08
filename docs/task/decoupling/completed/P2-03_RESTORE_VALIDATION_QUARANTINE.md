@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: COMPLETED 2026-09-08
 >
 > Dependency: P2-01
 >
@@ -75,3 +75,20 @@ IndexedDB upgrade phải additive. Reader cũ không được ghi đè quarantin
 - Không đổi server schema.
 - Không rewrite old event IDs.
 - Không implement wire v3.
+
+## Completion handoff — 2026-09-08
+
+- Primary outcome: persisted v2/v3 session data is validated before hydration;
+  UUIDs, exact identities, scope/card membership, numeric bounds, event/batch
+  sequence and lease timing fail closed.
+- Storage behavior: IndexedDB schema v2 adds an atomic active-to-quarantine
+  store, bounded to 20 rows and 256,000 serialized characters per evidence
+  record, with one row per scope. Repeated loads remain blocked.
+- Recovery: “Thử lại” explicitly acknowledges the quarantine marker while
+  retaining bounded evidence, then opens a new session. No invalid row is
+  silently repaired or recommitted.
+- Tests: valid legacy/current/v3, pending-batch round trip, malformed matrix,
+  storage failure, repeated quarantine and explicit recovery are covered.
+- Verification: Study frontend module and TypeScript typecheck passed.
+- Rollback: preserve the additive quarantine store and evidence; do not copy a
+  quarantined row back into the active store.

@@ -128,8 +128,33 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
         self.assertGreater(len(report["template_gates"]["cross_note_type_cards_samples"]), 0)
         self.assertEqual(report["card_gates"]["notes_with_multiple_cards"], 1)
         self.assertEqual(report["progress_gates"]["learner_note_fan_in_groups"], 1)
+        self.assertEqual(
+            report["algorithm_gates"]["algorithm_support"][0]["lifecycle_state"],
+            "active",
+        )
+        self.assertTrue(
+            report["algorithm_gates"]["algorithm_support"][0][
+                "existing_lease_allowed"
+            ]
+        )
         self.assertEqual(report["progress_gates"]["equivalent_fan_in_groups"], 1)
         self.assertEqual(report["session_gates"]["expired_open_sessions"], 1)
+        self.assertEqual(
+            report["session_gates"]["wire_version_session_inventory"],
+            [
+                {
+                    "wire_schema_version": "study-session.v2",
+                    "status": "open",
+                    "algorithm_key": "legacy-anki",
+                    "algorithm_version": "1.0.0",
+                    "count": 1,
+                }
+            ],
+        )
+        self.assertEqual(
+            report["session_gates"]["active_wire_version_counts"],
+            {},
+        )
 
         # v3: revision_gates exists
         self.assertIn("revision_gates", report)
@@ -494,6 +519,91 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
             self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
             self.assertEqual(report["verdicts"]["exit_code"], 2)
 
+    def test_audit_uses_lifecycle_capability_for_active_lease(self):
+        with self.app.app_context():
+            user = User.query.first()
+            now = datetime(2026, 8, 29, 12, 0, 0)
+            lease_only = StudySession(
+                user_id=user.id,
+                scope_type="deck",
+                scope_id="1",
+                status="open",
+                scheduler_algorithm="draining-algorithm",
+                algorithm_version="1.0.0",
+                snapshot_hash="lease-only",
+                token_hash="lease-only",
+                config_snapshot_json="{}",
+                opened_at=now,
+                expires_at=now + timedelta(hours=1),
+            )
+            retired = StudySession(
+                user_id=user.id,
+                scope_type="deck",
+                scope_id="1",
+                status="open",
+                scheduler_algorithm="retired-algorithm",
+                algorithm_version="1.0.0",
+                snapshot_hash="retired",
+                token_hash="retired",
+                config_snapshot_json="{}",
+                opened_at=now,
+                expires_at=now + timedelta(hours=1),
+            )
+            db.session.add_all([lease_only, retired])
+            db.session.commit()
+            lease_only_id = lease_only.id
+            retired_id = retired.id
+
+            active = {
+                "key": "legacy-anki",
+                "version": "1.0.0",
+                "state_schema_version": "anki-card-state.v1",
+                "lifecycle_state": "active",
+                "server_executable": True,
+                "new_session_allowed": True,
+                "existing_lease_allowed": True,
+                "accepted_job_allowed": True,
+                "history_read_allowed": True,
+                "artifacts": {},
+            }
+            support = [
+                active,
+                {
+                    **active,
+                    "key": "draining-algorithm",
+                    "lifecycle_state": "lease-only",
+                    "new_session_allowed": False,
+                },
+                {
+                    **active,
+                    "key": "retired-algorithm",
+                    "lifecycle_state": "retired",
+                    "server_executable": False,
+                    "new_session_allowed": False,
+                    "existing_lease_allowed": False,
+                    "accepted_job_allowed": False,
+                },
+            ]
+            with patch(
+                "app.services.study_architecture_audit_service."
+                "list_study_algorithm_support",
+                return_value=tuple(support),
+            ):
+                report = build_study_architecture_audit(now=now)
+
+        unavailable = report["session_gates"][
+            "active_session_unavailable_algo_samples"
+        ]
+        self.assertIn(retired_id, unavailable)
+        self.assertNotIn(lease_only_id, unavailable)
+        self.assertEqual(
+            {
+                item["lifecycle_state"]
+                for item in report["algorithm_gates"]["algorithm_support"]
+            },
+            {"active", "lease-only", "retired"},
+        )
+
     def test_real_entrypoint_provenance_and_audit_classification(self):
         """Invoke real review entrypoints (MCP, native direct command, session, import) and verify audit classification."""
         with self.app.app_context():
@@ -614,6 +724,12 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
                 },
             )
             self.assertEqual(status, "imported")
+            imported_payload = json.loads(ref.review_event.payload_json)
+            self.assertEqual(
+                imported_payload["provenance"]["source_path"],
+                "external.anki.revlog",
+            )
+            self.assertNotIn("_study_runtime", imported_payload)
 
             # 5. Legacy unprovenanced review event without channel evidence -> unknown_provenance_events
             rev_legacy = ReviewEvent(
@@ -633,7 +749,16 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
             self.assertGreaterEqual(rg["native_session_events"], 1)
             self.assertGreaterEqual(rg["anki_import_events"], 1)
             self.assertGreaterEqual(rg["unknown_provenance_events"], 1)
+            self.assertGreaterEqual(rg["canonical_payload_complete_events"], 4)
+            self.assertGreaterEqual(rg["legacy_payload_unknown_events"], 1)
+            self.assertEqual(rg["canonical_payload_missing_expected_field_events"], 0)
+            self.assertEqual(rg["canonical_payload_conflicting_events"], 0)
             self.assertTrue(report["reconciliation"]["formula_checks"]["review_events_provenance_accounting"])
+            self.assertTrue(
+                report["reconciliation"]["formula_checks"][
+                    "review_events_payload_provenance_accounting"
+                ]
+            )
 
     def test_session_config_snapshot_deep_validation(self):
         """Test deep schema validation and per-card scheduler_config_hash linkage for session config snapshots."""

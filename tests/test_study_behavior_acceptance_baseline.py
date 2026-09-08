@@ -500,7 +500,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 self.assertEqual(event_b.card_id, str(self.card_b_id))
                 self.assertIsNone(event_a.client_event_id)
                 self.assertIsNotNone(event_b.client_event_id)
-                self.assertTrue(str(event_b.client_event_id).startswith("mcp-review-"))
+                self.assertEqual(len(str(event_b.client_event_id)), 36)
                 self.assertEqual(event_c.study_session_id, snapshot["session_id"])
                 self.assertEqual(event_c.client_event_id, session_event_id)
                 self.assertEqual(event_c.sequence_no, 1)
@@ -512,6 +512,15 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 payload_a = json.loads(event_a.payload_json)
                 payload_b = json.loads(event_b.payload_json)
                 payload_c = json.loads(event_c.payload_json)
+                self.assertEqual(payload_a["schema_version"], "review-event-payload.v1")
+                self.assertEqual(payload_b["schema_version"], "review-event-payload.v1")
+                self.assertEqual(payload_c["schema_version"], "review-event-payload.v1")
+                self.assertEqual(payload_a["provenance"]["source_path"], "native.rest")
+                self.assertEqual(payload_b["provenance"]["source_path"], "native.mcp")
+                self.assertEqual(
+                    payload_c["provenance"]["source_path"],
+                    "native.session.commit",
+                )
                 self.assertNotIn("source", payload_a)
                 self.assertEqual(payload_b.get("source"), "mcp")
                 self.assertEqual(payload_b.get("client_event_id"), str(event_b.client_event_id))
@@ -526,6 +535,8 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 self.assertEqual(runtime_b["trigger_key"], "scheduler.review.good")
                 self.assertEqual(runtime_a["trigger_contract_version"], "1")
                 self.assertEqual(runtime_b["trigger_contract_version"], "1")
+                self.assertEqual(runtime_a["action_contract_version"], "1")
+                self.assertEqual(runtime_b["action_contract_version"], "1")
                 self.assertEqual(runtime_a["algorithm_key"], "legacy-anki")
                 self.assertEqual(runtime_b["algorithm_key"], "legacy-anki")
                 self.assertEqual(runtime_a["algorithm_version"], "1.0.0")

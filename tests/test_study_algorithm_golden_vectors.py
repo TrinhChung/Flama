@@ -196,6 +196,7 @@ class StudyAlgorithmGoldenVectorTests(unittest.TestCase):
                         transition.metadata(),
                         {
                             **contract["ratings"][rating],
+                            "action_contract_version": contract["version"],
                             "trigger_contract_version": contract["version"],
                             "algorithm_key": self.fixture["algorithm"]["key"],
                             "algorithm_version": self.fixture["algorithm"]["version"],

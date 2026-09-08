@@ -1,9 +1,8 @@
 import { Eye, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { Rating } from '../types'
 import { resolveReviewAction, type ReviewAction, type ReviewRating } from './reviewInteraction'
 
-export type IntervalsPreview = Record<Rating, { label?: string }>
+export type IntervalsPreview = Record<ReviewRating, { label?: string }>
 
 export type ReviewInteractionControlsProps = {
   revealed: boolean
@@ -13,8 +12,7 @@ export type ReviewInteractionControlsProps = {
   dueCount?: number
   intervalsPreview?: IntervalsPreview
   onReveal: () => void
-  onAnswer?: (rating: Rating) => void
-  onReviewAction?: (action: ReviewAction) => void
+  onReviewAction: (action: ReviewAction) => void
 }
 
 export function ReviewInteractionControls({
@@ -25,17 +23,11 @@ export function ReviewInteractionControls({
   dueCount: _dueCount = 0,
   intervalsPreview,
   onReveal,
-  onAnswer,
   onReviewAction,
 }: ReviewInteractionControlsProps) {
   const handleRatingClick = (rating: ReviewRating) => {
     if (submitting) return
-    if (onReviewAction) {
-      onReviewAction(resolveReviewAction(rating))
-    }
-    if (onAnswer) {
-      onAnswer(rating)
-    }
+    onReviewAction(resolveReviewAction(rating))
   }
 
   if (!revealed) {

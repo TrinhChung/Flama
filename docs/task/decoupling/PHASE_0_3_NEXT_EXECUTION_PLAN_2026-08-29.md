@@ -1,8 +1,10 @@
 # Phase 0–3 next execution plan — after independent review round 5
 
-> Status: PHASE 0 AND P1-01–P1-02 CLOSED; P1-03 is queued and has not started
+> P1/P2 closeout — 2026-09-08: [execution evidence](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) closes Phase 1 and Phase 2. The sequence below is retained as historical context; current work starts with P3-05/P3-07.
+
+> Status: PHASE 0–2 CLOSED; PHASE 3 AND INT-01 REMAIN
 >
-> Current gate: `P0-01..P0-04 COMPLETED`, Phase 0 `GO`, `P1-01 COMPLETED`, `P1-02 COMPLETED`
+> Current gate: `P0-01..P0-04`, `P1-01..P1-04` and `P2-01..P2-07` COMPLETED
 >
 > Scope: close P0-03, then sequence the remaining runtime-correctness and composition-contract tasks through INT-01
 >
@@ -10,7 +12,7 @@
 
 ## 1. Outcome and ordering rule
 
-The replacement P0-03 evidence bundle and P1-01 canonical native review transaction passed their gates. P1-02 then completed its inventory, conflict matrix, runtime closeout and MySQL 8.0.40 acceptance proof on 2026-08-30. P1-03 is next in the dependency chain but was not started during this closeout. Phase 4 remains outside this plan. See the [2026-08-30 evidence review](../../architecture/decoupling-progress-review-2026-08-30.md) and the [completed P1-02 handoff](./completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md).
+The replacement P0-03 evidence bundle and P1-01/P1-02 gates remain the historical baseline. P1-03/P1-04 and all remaining Phase 2 tasks completed on 2026-09-08. Phase 4 remains outside this plan. See the [P1/P2 closeout](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) and the [completed P1-02 handoff](./completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md).
 
 After Phase 0 closes, use this order:
 

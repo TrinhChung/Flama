@@ -14,6 +14,10 @@ from sqlalchemy.exc import IntegrityError
 from app.repositories.review_event_repository import create_review_event_record
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
+from app.validators.review_event import (
+    ReviewEventPayloadError,
+    build_anki_revlog_review_event_payload,
+)
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -369,7 +373,17 @@ def _import_review(
         "factor": factor,
         "time": duration,
     }
-    payload_hash, payload_json = _canonical_hash(canonical)
+    payload_hash, _legacy_payload_json = _canonical_hash(canonical)
+    try:
+        payload_json = build_anki_revlog_review_event_payload(
+            source_key=str(session.source_key),
+            import_session_id=str(session.id),
+            external_review_id=external_review_id,
+            external_card_id=external_card_id,
+            record=canonical,
+        )
+    except ReviewEventPayloadError as exc:
+        raise AnkiSyncError(str(exc)) from exc
     existing = ConnectReviewEventRef.query.filter_by(
         user_id=session.user_id,
         source_key=session.source_key,

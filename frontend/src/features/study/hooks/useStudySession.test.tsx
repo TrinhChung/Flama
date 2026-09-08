@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
+  StudySessionEvent,
   StudySessionCommitReceipt,
   StudySessionSnapshot,
 } from '../types'
@@ -21,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   loadSession: vi.fn(),
   loadQuarantine: null as null | { reason: string; message: string },
+  acknowledgeQuarantine: vi.fn(),
   saveSession: vi.fn(),
   removeSession: vi.fn(),
   removeSessionIfMatches: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock('@/shared/api/bootstrap', () => ({
 }))
 
 vi.mock('../session/sessionStore', () => ({
+  acknowledgeStudySessionQuarantine: mocks.acknowledgeQuarantine,
   loadStudySessionWithDurability: async (key: string) => ({
     session: await mocks.loadSession(key),
     durable: true,
@@ -323,6 +326,7 @@ beforeEach(() => {
   mocks.invalidateQueries.mockReset().mockResolvedValue(undefined)
   mocks.loadSession.mockReset().mockResolvedValue(null)
   mocks.loadQuarantine = null
+  mocks.acknowledgeQuarantine.mockReset().mockResolvedValue(undefined)
   mocks.saveSession.mockReset().mockResolvedValue(true)
   mocks.removeSession.mockReset().mockResolvedValue(undefined)
   mocks.removeSessionIfMatches.mockReset().mockResolvedValue(undefined)
@@ -382,6 +386,29 @@ describe('useStudySession cross-tab ownership', () => {
     expect(mocks.saveSession).not.toHaveBeenCalled()
   })
 
+  it('opens a replacement only after explicit quarantine recovery', async () => {
+    mocks.loadQuarantine = {
+      reason: 'EVENT_CONTRACT_MISMATCH',
+      message: 'Stored event mismatch.',
+    }
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+
+    await renderHarness()
+    await waitFor(() => expect(latest.error).toBeInstanceOf(Error))
+
+    await act(async () => {
+      await latest.reloadSession(true)
+    })
+
+    expect(mocks.acknowledgeQuarantine).toHaveBeenCalledWith('user:7:deck:12')
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      '/api/study/sessions',
+      'POST',
+      expect.any(Object),
+    )
+    expect(latest.session?.snapshot.session_id).toBe('session-1')
+  })
+
   it('waits for bootstrap identity before acquiring or opening a session', async () => {
     await renderHarness()
 
@@ -404,7 +431,14 @@ describe('useStudySession cross-tab ownership', () => {
     expect(mocks.mutate).toHaveBeenCalledWith(
       '/api/study/sessions',
       'POST',
-      { scope: 'deck', scope_id: '12' },
+      {
+        scope: 'deck',
+        scope_id: '12',
+        accepted_session_schema_versions: [
+          'study-session.v3',
+          'study-session.v2',
+        ],
+      },
     )
   })
 
@@ -667,5 +701,210 @@ describe('useStudySession cross-tab ownership', () => {
     expect(latest.canUndo).toBe(false)
     expect(latest.view?.card?.card_id).toBe('card-1')
     expect(mocks.saveSession).toHaveBeenCalled()
+  })
+
+  it('admits only one same-tick answer while the owner is becoming durable', async () => {
+    await openReadySession()
+    const pendingSave = deferred<boolean>()
+    mocks.saveSession.mockClear().mockImplementationOnce(() => pendingSave.promise)
+    const decision = latest.prepareDecision('card-1')
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    await act(async () => {
+      first = latest.answer('card-1', 'good', decision, 250)
+      duplicate = latest.answer('card-1', 'good', decision, 250)
+      await Promise.resolve()
+    })
+
+    expect(latest.session?.events).toHaveLength(1)
+    expect(mocks.saveSession).toHaveBeenCalledTimes(1)
+    pendingSave.resolve(true)
+    await act(async () => {
+      await Promise.all([first, duplicate])
+    })
+    expect(latest.session?.events).toHaveLength(1)
+  })
+
+  it('does not run undo inside a same-tick answer transition', async () => {
+    await openReadySession()
+    const pendingSave = deferred<boolean>()
+    mocks.saveSession.mockImplementationOnce(() => pendingSave.promise)
+    const decision = latest.prepareDecision('card-1')
+
+    let answerPromise!: Promise<void>
+    let undoPromise!: Promise<string | null>
+    await act(async () => {
+      answerPromise = latest.answer('card-1', 'good', decision, 250)
+      undoPromise = latest.undo()
+      await Promise.resolve()
+    })
+
+    expect(await undoPromise).toBeNull()
+    expect(latest.session?.events).toHaveLength(1)
+    pendingSave.resolve(true)
+    await act(async () => {
+      await answerPromise
+    })
+  })
+
+  it('does not answer while a synchronous commit owns the session', async () => {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => {
+      await latest.answer('card-1', 'good', decision, 250)
+    })
+    mocks.saveSession.mockClear()
+    const pendingCommit = deferred<StudySessionCommitReceipt>()
+    mocks.mutate.mockImplementation((path: string) => {
+      if (path === '/api/study/sessions/session-1/commit') return pendingCommit.promise
+      if (path === '/api/study/sessions') return Promise.resolve(snapshot())
+      throw new Error(`Unexpected mutation: ${path}`)
+    })
+
+    let commitPromise!: Promise<StudySessionCommitReceipt | null>
+    let answerPromise!: Promise<void>
+    await act(async () => {
+      commitPromise = latest.commit({ reason: 'manual_exit' })
+      answerPromise = latest.answer('card-1', 'easy', decision, 250)
+      await Promise.resolve()
+    })
+
+    expect(latest.session?.events).toHaveLength(1)
+    expect(mocks.saveSession).toHaveBeenCalledTimes(1)
+    pendingCommit.resolve(receipt())
+    await act(async () => {
+      await Promise.all([commitPromise, answerPromise])
+    })
+  })
+
+  it('does not run undo while a retrying commit owns the session', async () => {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => {
+      await latest.answer('card-1', 'good', decision, 250)
+    })
+    const pendingCommit = deferred<StudySessionCommitReceipt>()
+    mocks.mutate.mockImplementation((path: string) => {
+      if (path === '/api/study/sessions/session-1/commit') return pendingCommit.promise
+      if (path === '/api/study/sessions') return Promise.resolve(snapshot())
+      throw new Error(`Unexpected mutation: ${path}`)
+    })
+
+    let commitPromise!: Promise<StudySessionCommitReceipt | null>
+    let undoPromise!: Promise<string | null>
+    await act(async () => {
+      commitPromise = latest.commit({ reason: 'manual_exit' })
+      undoPromise = latest.undo()
+      await Promise.resolve()
+    })
+
+    expect(await undoPromise).toBeNull()
+    expect(latest.session?.events).toHaveLength(1)
+    pendingCommit.resolve(receipt())
+    await act(async () => {
+      await commitPromise
+    })
+  })
+
+  it('pagehide waits for the answer owner and flushes the latest durable state', async () => {
+    await openReadySession()
+    const pendingSave = deferred<boolean>()
+    mocks.saveSession.mockImplementationOnce(() => pendingSave.promise)
+    const decision = latest.prepareDecision('card-1')
+
+    let answerPromise!: Promise<void>
+    await act(async () => {
+      answerPromise = latest.answer('card-1', 'good', decision, 250)
+      window.dispatchEvent(new Event('pagehide'))
+      await Promise.resolve()
+    })
+
+    expect(mocks.mutateKeepalive).not.toHaveBeenCalled()
+    pendingSave.resolve(true)
+    await act(async () => {
+      await answerPromise
+    })
+    await waitFor(() => expect(mocks.mutateKeepalive).toHaveBeenCalledWith(
+      '/api/study/sessions/session-1/commit',
+      'POST',
+      expect.objectContaining({
+        events: [expect.objectContaining({
+          card_id: 'card-1',
+          rating: 'good',
+        })],
+      }),
+    ))
+  })
+
+  it('keeps bootstrap as the mutation owner before a restored session is live', async () => {
+    const pendingLoad = deferred<null>()
+    mocks.loadSession.mockReturnValueOnce(pendingLoad.promise)
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness()
+    await waitFor(() => expect(mocks.loadSession).toHaveBeenCalledOnce())
+
+    await expect(latest.answer(
+      'card-1',
+      'good',
+      {} as ReturnType<typeof latest.prepareDecision>,
+      250,
+    )).resolves.toBeUndefined()
+    expect(mocks.saveSession).not.toHaveBeenCalled()
+
+    pendingLoad.resolve(null)
+    await waitFor(() => expect(latest.session).not.toBeNull())
+  })
+
+  it('contains automatic rollover to the synchronous commit path', async () => {
+    const events: StudySessionEvent[] = Array.from({ length: 50 }, (_, index) => ({
+      event_id: `00000000-0000-4000-8000-${(index + 1).toString().padStart(12, '0')}`,
+      sequence: index + 1,
+      card_id: 'card-1',
+      rating: 'good',
+      action_key: 'review.good',
+      trigger_key: 'scheduler.review.good',
+      trigger_contract_version: '1',
+      policy_key: 'policy',
+      scheduler_offset_ms: index * 1000,
+      duration_ms: 250,
+    }))
+    mocks.loadSession.mockResolvedValueOnce({
+      scope_key: 'user:7:deck:12',
+      snapshot: snapshot(),
+      events,
+      touched_card_ids: ['card-1'],
+      undo_history: [],
+      active_card_id: 'card-1',
+      opened_client_at_ms: Date.now(),
+      status: 'active',
+      commit_id: null,
+      commit_reason: null,
+      resume_after_commit: false,
+      batch_sequence: 0,
+      event_sequence: 50,
+      in_flight_batches: [],
+      updated_at_ms: Date.now(),
+    })
+    mocks.mutate.mockImplementation((path: string) => {
+      if (path === '/api/study/sessions/session-1/commit') {
+        return Promise.resolve({ ...receipt(), commit_reason: 'rollover' })
+      }
+      if (path === '/api/study/sessions') return Promise.resolve(snapshot())
+      throw new Error(`Unexpected mutation: ${path}`)
+    })
+
+    await openReadySession()
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledWith(
+      '/api/study/sessions/session-1/commit',
+      'POST',
+      expect.objectContaining({
+        schema_version: 'study-commit.v1',
+        commit_reason: 'rollover',
+      }),
+    ))
+
+    expect(mocks.mutate.mock.calls.some(([path]) => String(path).endsWith('/batch')))
+      .toBe(false)
   })
 })

@@ -4,7 +4,7 @@
 >
 > Priority: P1
 >
-> Status: TODO
+> Status: COMPLETED 2026-09-08 — ADR accepted and bounded runtime implemented
 >
 > Dependency: P1-03 and P2-04
 >
@@ -75,3 +75,18 @@ Không có runtime rollback. Nếu ADR bị bác bỏ, compatibility runtime gi�
 - Không thêm multiple trigger chains runtime.
 - Không tạo migration.
 - Không implement new Algorithm/Interaction.
+
+## Completion handoff — 2026-09-08
+
+- Decision: use a minimal exact-version dispatcher for the four built-in
+  scheduler Triggers; no generic plugin, arbitrary handler or Template
+  automation runtime is introduced.
+- Runtime slice: the action runtime exposes an introspectable allowlist, typed
+  Trigger command and pure dispatcher. Sync commit and worker pass the exact
+  validated Trigger identity before the Algorithm transition.
+- Transaction authority: REST/MCP/session services remain the only owners of
+  progress, ReviewEvent, required effects and commit/rollback.
+- Tests: unknown version, mismatched Action/Trigger and four-action parity pass
+  in the Study backend gate.
+- Rollback: keep published Trigger identities stable even if calculation is
+  temporarily routed through the compatibility adapter.

@@ -5,7 +5,6 @@ import { useBootstrap } from '@/shared/api/bootstrap'
 import { ApiError } from '@/shared/api/client'
 import type {
   Rating,
-  StudyBatchReceipt,
   StudyMediaArtifact,
   StudySessionCommitReceipt,
   StudySessionSnapshot,
@@ -13,18 +12,17 @@ import type {
 } from '../types'
 import type { SchedulerDecision } from '../scheduler/types'
 import {
-  acknowledgeBatchReceipt,
   applyCommitReceipt,
   applyLocalAnswer,
   automaticCommitMode,
   buildSessionView,
   createPersistedSession,
   decisionForCard,
-  extractPendingBatch,
   prepareCommit,
   undoLocalAnswer,
 } from '../session/studySessionEngine'
 import {
+  acknowledgeStudySessionQuarantine,
   loadStudySessionWithDurability,
   removeStudySessionIfMatches,
   saveStudySession,
@@ -45,6 +43,25 @@ import {
 
 const openingRequests = new Map<string, Promise<StudySessionSnapshot>>()
 
+type SessionMutationKind =
+  | 'answer'
+  | 'bootstrap'
+  | 'commit'
+  | 'content-update'
+  | 'page-exit'
+  | 'reload'
+  | 'selection-persist'
+  | 'template-update'
+  | 'undo'
+
+type SessionMutationOwner = Readonly<{
+  token: symbol
+  kind: SessionMutationKind
+  controller: AbortController
+  scopeKey: string | null
+  sessionId: string | null
+}>
+
 function isCommitReceipt(value: unknown): value is StudySessionCommitReceipt {
   if (!value || typeof value !== 'object') return false
   const receipt = value as Partial<StudySessionCommitReceipt>
@@ -62,7 +79,14 @@ function openSnapshot(userId: number, deckId: string) {
   const request = appApi.mutate<StudySessionSnapshot>(
     '/api/study/sessions',
     'POST',
-    { scope: 'deck', scope_id: deckId },
+    {
+      scope: 'deck',
+      scope_id: deckId,
+      accepted_session_schema_versions: [
+        'study-session.v3',
+        'study-session.v2',
+      ],
+    },
   ).finally(() => {
     openingRequests.delete(key)
   })
@@ -85,7 +109,8 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     serverAtMs: number
     performanceAtMs: number
   } | null>(null)
-  const operationRef = useRef(false)
+  const mutationOwnerRef = useRef<SessionMutationOwner | null>(null)
+  const mountedRef = useRef(true)
   const sessionRef = useRef<PersistedStudySession | null>(null)
   const sessionDurableRef = useRef(true)
   const exitFlushRef = useRef<string | null>(null)
@@ -94,6 +119,13 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
   const currentScopeKey = useMemo(() => (
     deckId && userId !== null ? scopeKey(userId, 'deck', deckId) : null
   ), [deckId, userId])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const activateSession = useCallback((next: PersistedStudySession | null) => {
     sessionRef.current = next
@@ -140,6 +172,41 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     setLoading,
   })
 
+  const acquireMutation = useCallback((
+    kind: SessionMutationKind,
+    controller: AbortController,
+  ): SessionMutationOwner | null => {
+    if (mutationOwnerRef.current || controller.signal.aborted) return null
+    const owner: SessionMutationOwner = {
+      token: Symbol(kind),
+      kind,
+      controller,
+      scopeKey: currentScopeKey,
+      sessionId: sessionRef.current?.snapshot.session_id ?? null,
+    }
+    mutationOwnerRef.current = owner
+    if (mountedRef.current) setBusy(true)
+    return owner
+  }, [currentScopeKey])
+
+  const releaseMutation = useCallback((owner: SessionMutationOwner) => {
+    if (mutationOwnerRef.current?.token !== owner.token) return
+    mutationOwnerRef.current = null
+    if (mountedRef.current) setBusy(false)
+  }, [])
+
+  const waitForMutation = useCallback(async (
+    kind: SessionMutationKind,
+    controller: AbortController,
+  ) => {
+    while (!controller.signal.aborted) {
+      const owner = acquireMutation(kind, controller)
+      if (owner) return owner
+      await waitForNextOperationCheck()
+    }
+    return null
+  }, [acquireMutation])
+
   // Bootstrap session data
   useEffect(() => {
     if (!deckId || userId === null) {
@@ -171,6 +238,11 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       setReceipt(null)
     }
     void (async () => {
+      const mutationOwner = await waitForMutation('bootstrap', controller)
+      if (!mutationOwner) {
+        endLeaseWork(controller)
+        return
+      }
       try {
         const loaded = await loadStudySessionWithDurability(key)
         const restored = loaded.session
@@ -178,7 +250,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
         if (!isThisLease()) return
         if (loaded.quarantine) {
           throw new Error(
-            `Phiên học đã lưu không tương thích (${loaded.quarantine.reason}) và đã được cách ly. Tải lại trang để mở một phiên mới; dữ liệu cũ vẫn được giữ để chẩn đoán.`,
+            `Phiên học đã lưu không tương thích (${loaded.quarantine.reason}) và đã được cách ly. Chọn Thử lại để mở phiên mới; dữ liệu cũ vẫn được giữ để chẩn đoán.`,
           )
         }
         const expiresAt = restored
@@ -236,6 +308,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       } catch (caught) {
         if (isThisLease() && hasLeaseRef.current) setError(caught)
       } finally {
+        releaseMutation(mutationOwner)
         endLeaseWork(controller)
         if (isThisLease() && hasLeaseRef.current) setLoading(false)
       }
@@ -251,7 +324,9 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     leaseControllerRef,
     leaseState.key,
     leaseState.status,
+    releaseMutation,
     userId,
+    waitForMutation,
   ])
 
   useEffect(() => {
@@ -268,16 +343,49 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
 
   useEffect(() => {
     if (!session || !view?.card?.card_id) return
-    if (session.active_card_id !== view.card.card_id) {
-      const nextSession: PersistedStudySession = {
-        ...session,
-        active_card_id: view.card.card_id,
-        updated_at_ms: Date.now(),
+    if (session.active_card_id === view.card.card_id) return
+    const controller = leaseControllerRef.current
+    if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
+    void (async () => {
+      const owner = await waitForMutation('selection-persist', controller)
+      if (!owner) return
+      beginLeaseWork(controller)
+      try {
+        if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+        const active = sessionRef.current
+        if (!active) return
+        const selectedCardId = buildSessionView(
+          active,
+          now(),
+          compositionFilter,
+        ).card?.card_id
+        if (!selectedCardId || active.active_card_id === selectedCardId) return
+        const nextSession: PersistedStudySession = {
+          ...active,
+          active_card_id: selectedCardId,
+          updated_at_ms: Date.now(),
+        }
+        activateSession(nextSession)
+        sessionDurableRef.current = await saveStudySession(nextSession)
+      } finally {
+        endLeaseWork(controller)
+        releaseMutation(owner)
       }
-      activateSession(nextSession)
-      void saveStudySession(nextSession)
-    }
-  }, [activateSession, session, view?.card?.card_id])
+    })()
+  }, [
+    activateSession,
+    beginLeaseWork,
+    compositionFilter,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    now,
+    releaseMutation,
+    session,
+    view?.card?.card_id,
+    waitForMutation,
+  ])
 
   const prepareDecision = useCallback((cardId: string) => {
     const active = sessionRef.current
@@ -291,15 +399,18 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     decision: SchedulerDecision,
     durationMs: number,
   ) => {
-    const active = sessionRef.current
     const controller = leaseControllerRef.current
-    if (!active || !controller || controller.signal.aborted || !hasLeaseRef.current) {
+    if (!controller || controller.signal.aborted || !hasLeaseRef.current) {
       throw new Error('Study session lease is not held by this window.')
     }
-    setBusy(true)
-    operationRef.current = true
+    const owner = acquireMutation('answer', controller)
+    if (!owner) return
     beginLeaseWork(controller)
     try {
+      const active = sessionRef.current
+      if (!active || !isCurrentLease(controller) || !hasLeaseRef.current) {
+        throw new Error('Study session lease is not held by this window.')
+      }
       const next = applyLocalAnswer(
         active,
         cardId,
@@ -310,43 +421,60 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       activateSession(next)
       sessionDurableRef.current = await saveStudySession(next)
     } finally {
-      operationRef.current = false
       endLeaseWork(controller)
-      setBusy(false)
+      releaseMutation(owner)
     }
-  }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef])
+  }, [
+    acquireMutation,
+    activateSession,
+    beginLeaseWork,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    releaseMutation,
+  ])
 
   const undo = useCallback(async (): Promise<string | null> => {
-    const active = sessionRef.current
     const controller = leaseControllerRef.current
-    if (!active || !controller || controller.signal.aborted || !hasLeaseRef.current) {
+    if (!controller || controller.signal.aborted || !hasLeaseRef.current) {
       throw new Error('Study session lease is not held by this window.')
     }
-    setBusy(true)
-    operationRef.current = true
+    const owner = acquireMutation('undo', controller)
+    if (!owner) return null
     beginLeaseWork(controller)
     try {
+      const active = sessionRef.current
+      if (!active || !isCurrentLease(controller) || !hasLeaseRef.current) {
+        throw new Error('Study session lease is not held by this window.')
+      }
       const undoResult = undoLocalAnswer(active)
       if (!undoResult) return null
       activateSession(undoResult.session)
       sessionDurableRef.current = await saveStudySession(undoResult.session)
       return undoResult.undoneCardId
     } finally {
-      operationRef.current = false
       endLeaseWork(controller)
-      setBusy(false)
+      releaseMutation(owner)
     }
-  }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef])
+  }, [
+    acquireMutation,
+    activateSession,
+    beginLeaseWork,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    releaseMutation,
+  ])
 
   const commit = useCallback(async (options?: {
     reason?: StudyCommitReason
     resumeAfterCommit?: boolean
   }) => {
-    const active = sessionRef.current
     const controller = leaseControllerRef.current
     if (
-      !active
-      || !controller
+      !controller
       || controller.signal.aborted
       || !hasLeaseRef.current
       || userId === null
@@ -354,11 +482,15 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     ) {
       throw new Error('Study session lease is not held by this window.')
     }
+    const owner = acquireMutation('commit', controller)
+    if (!owner) return null
     const isThisLease = () => isCurrentLease(controller)
-    setBusy(true)
-    operationRef.current = true
     beginLeaseWork(controller)
     try {
+      const active = sessionRef.current
+      if (!active || !isThisLease() || !hasLeaseRef.current) {
+        throw new Error('Study session lease is not held by this window.')
+      }
       const prepared = prepareCommit(active, options)
       if (isThisLease()) activateSession(prepared.session)
       sessionDurableRef.current = await saveStudySession(prepared.session)
@@ -499,11 +631,11 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       if (isThisLease() && hasLeaseRef.current) setError(caught)
       throw caught
     } finally {
-      operationRef.current = false
       endLeaseWork(controller)
-      setBusy(false)
+      releaseMutation(owner)
     }
   }, [
+    acquireMutation,
     activateSession,
     beginLeaseWork,
     deckId,
@@ -512,82 +644,9 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     isCurrentLease,
     leaseControllerRef,
     queryClient,
+    releaseMutation,
     userId,
   ])
-
-  const submitAsyncBatch = useCallback(async () => {
-    const active = sessionRef.current
-    const controller = leaseControllerRef.current
-    if (
-      !active
-      || !controller
-      || controller.signal.aborted
-      || !hasLeaseRef.current
-      || userId === null
-      || !deckId
-    ) return
-
-    const extracted = extractPendingBatch(active, 50, { reason: 'rollover', isFinal: false })
-    if (!extracted) return
-
-    const isThisLease = () => isCurrentLease(controller)
-    if (isThisLease()) activateSession(extracted.session)
-    sessionDurableRef.current = await saveStudySession(extracted.session)
-
-    void (async () => {
-      try {
-        await appApi.mutate<StudyBatchReceipt>(
-          `/api/study/sessions/${extracted.session.snapshot.session_id}/batch`,
-          'POST',
-          extracted.batch,
-        )
-        const current = sessionRef.current
-        if (!current || !isThisLease()) return
-
-        const batchReviews = extracted.batch.events.length
-        const batchDurationMs = extracted.batch.events.reduce(
-          (sum, ev) => sum + (ev.duration_ms || 0),
-          0,
-        )
-        const batchAgain = extracted.batch.events.filter((ev) => ev.rating === 'again').length
-        const batchHard = extracted.batch.events.filter((ev) => ev.rating === 'hard').length
-        const batchGood = extracted.batch.events.filter((ev) => ev.rating === 'good').length
-        const batchEasy = extracted.batch.events.filter((ev) => ev.rating === 'easy').length
-
-        const prevStats = current.accumulated_stats || {
-          total_reviews: 0,
-          total_duration_ms: 0,
-          again_count: 0,
-          hard_count: 0,
-          good_count: 0,
-          easy_count: 0,
-        }
-
-        const nextAccumulated: StudySessionAccumulatedStats = {
-          total_reviews: prevStats.total_reviews + batchReviews,
-          total_duration_ms: prevStats.total_duration_ms + batchDurationMs,
-          again_count: prevStats.again_count + batchAgain,
-          hard_count: prevStats.hard_count + batchHard,
-          good_count: prevStats.good_count + batchGood,
-          easy_count: prevStats.easy_count + batchEasy,
-        }
-
-        const reconciled = acknowledgeBatchReceipt(current, extracted.batch.batch_id)
-        reconciled.accumulated_stats = nextAccumulated
-
-        if (isThisLease()) activateSession(reconciled)
-        sessionDurableRef.current = await saveStudySession(reconciled)
-
-        void Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
-          queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
-          queryClient.invalidateQueries({ queryKey: ['stats'] }),
-        ])
-      } catch (err) {
-        console.warn('Asynchronous study batch submission delayed:', err)
-      }
-    })()
-  }, [activateSession, deckId, isCurrentLease, queryClient, userId])
 
   useEffect(() => {
     if (!session || !view || busy || receipt || !hasLease) return
@@ -604,47 +663,47 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     const mode = automaticCommitMode(session, view)
     if (!mode) return
     if (mode === 'rollover') {
-      void submitAsyncBatch()
+      void commit({
+        reason: 'rollover',
+        resumeAfterCommit: true,
+      }).catch(() => {})
     } else {
       void commit({
         reason: 'auto_finish',
         resumeAfterCommit: false,
       }).catch(() => {})
     }
-  }, [busy, commit, hasLease, receipt, session, submitAsyncBatch, view])
+  }, [busy, commit, hasLease, receipt, session, view])
 
   const flushOnExit = useCallback(() => {
-    const active = sessionRef.current
     const controller = leaseControllerRef.current
     if (
-      !active
-      || active.events.length === 0
-      || !controller
+      !controller
       || controller.signal.aborted
       || !ownedLeaseControllersRef.current.has(controller)
     ) return null
-    const prepared = prepareCommit(active, {
-      reason: active.status === 'pending_commit'
-        ? active.commit_reason ?? undefined
-        : 'page_exit',
-      resumeAfterCommit: active.status === 'pending_commit'
-        ? active.resume_after_commit
-        : false,
-    })
-    const flushKey = [
-      prepared.session.snapshot.session_id,
-      prepared.session.commit_id,
-    ].join(':')
-    if (exitFlushRef.current === flushKey) return null
-    exitFlushRef.current = flushKey
     beginLeaseWork(controller)
     return (async () => {
+      let owner: SessionMutationOwner | null = null
       try {
-        // Do not race an answer/regular commit that already owns this lease.
-        while (operationRef.current && !controller.signal.aborted) {
-          await waitForNextOperationCheck()
-        }
-        if (controller.signal.aborted) return
+        owner = await waitForMutation('page-exit', controller)
+        if (!owner || controller.signal.aborted) return
+        const active = sessionRef.current
+        if (!active || active.events.length === 0) return
+        const prepared = prepareCommit(active, {
+          reason: active.status === 'pending_commit'
+            ? active.commit_reason ?? undefined
+            : 'page_exit',
+          resumeAfterCommit: active.status === 'pending_commit'
+            ? active.resume_after_commit
+            : false,
+        })
+        const flushKey = [
+          prepared.session.snapshot.session_id,
+          prepared.session.commit_id,
+        ].join(':')
+        if (exitFlushRef.current === flushKey) return
+        exitFlushRef.current = flushKey
         if (leaseControllerRef.current === controller) {
           sessionRef.current = prepared.session
         }
@@ -666,10 +725,19 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       } catch {
         // The pending batch remains durable in IndexedDB and can be retried.
       } finally {
+        if (owner) releaseMutation(owner)
         endLeaseWork(controller)
       }
     })()
-  }, [beginLeaseWork, endLeaseWork, leaseControllerRef, ownedLeaseControllersRef, queryClient])
+  }, [
+    beginLeaseWork,
+    endLeaseWork,
+    leaseControllerRef,
+    ownedLeaseControllersRef,
+    queryClient,
+    releaseMutation,
+    waitForMutation,
+  ])
 
   useEffect(() => {
     const handlePageHide = (event: PageTransitionEvent) => {
@@ -705,19 +773,26 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     updatedFieldValues: Record<string, string>,
     options?: { noteId?: string | null; skipBroadcast?: boolean; media?: StudyMediaArtifact[] },
   ) => {
-    const current = sessionRef.current
-    if (!current) return
-    const targetCards = current.snapshot.cards.filter(
-      (c) => c.card_id === cardId || (options?.noteId && c.note_id === options.noteId),
-    )
-    if (targetCards.length === 0) return
+    const controller = leaseControllerRef.current
+    if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
+    const owner = await waitForMutation('content-update', controller)
+    if (!owner) return
+    beginLeaseWork(controller)
+    try {
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+      const current = sessionRef.current
+      if (!current) return
+      const targetCards = current.snapshot.cards.filter(
+        (c) => c.card_id === cardId || (options?.noteId && c.note_id === options.noteId),
+      )
+      if (targetCards.length === 0) return
 
-    const updatedContents = { ...current.snapshot.contents }
-    for (const card of targetCards) {
-      const contentKey = card.content_key
-      const template = current.snapshot.templates[card.template_key]
-      const existingContent = updatedContents[contentKey]
-      if (existingContent) {
+      const updatedContents = { ...current.snapshot.contents }
+      for (const card of targetCards) {
+        const contentKey = card.content_key
+        const template = current.snapshot.templates[card.template_key]
+        const existingContent = updatedContents[contentKey]
+        if (existingContent) {
         // Merge media assets
         const combinedMedia: StudyMediaArtifact[] = options?.media && options.media.length > 0
           ? [...options.media]
@@ -755,56 +830,74 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
           template?.field_defs,
           combinedMedia,
         )
-        updatedContents[contentKey] = {
-          ...existingContent,
-          field_values: {
-            ...existingContent.field_values,
-            ...updatedFieldValues,
-          },
-          render_context: nextRenderContext,
-          media: combinedMedia,
+          updatedContents[contentKey] = {
+            ...existingContent,
+            field_values: {
+              ...existingContent.field_values,
+              ...updatedFieldValues,
+            },
+            render_context: nextRenderContext,
+            media: combinedMedia,
+          }
         }
       }
-    }
 
-    const nextSession: PersistedStudySession = {
-      ...current,
-      snapshot: {
-        ...current.snapshot,
-        contents: updatedContents,
-      },
-      updated_at_ms: Date.now(),
-    }
+      const nextSession: PersistedStudySession = {
+        ...current,
+        snapshot: {
+          ...current.snapshot,
+          contents: updatedContents,
+        },
+        updated_at_ms: Date.now(),
+      }
 
-    activateSession(nextSession)
-    try {
+      activateSession(nextSession)
       sessionDurableRef.current = await saveStudySession(nextSession)
+      if (!options?.skipBroadcast) {
+        await updateCardFieldValuesInSessions(cardId, updatedFieldValues, {
+          noteId: options?.noteId,
+          media: options?.media,
+        })
+      }
     } catch {
-      // Retain in-memory copy
+      // Retain in-memory copy when storage is temporarily unavailable.
+    } finally {
+      endLeaseWork(controller)
+      releaseMutation(owner)
     }
-    if (!options?.skipBroadcast) {
-      await updateCardFieldValuesInSessions(cardId, updatedFieldValues, {
-        noteId: options?.noteId,
-        media: options?.media,
-      })
-    }
-  }, [activateSession])
+  }, [
+    activateSession,
+    beginLeaseWork,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    releaseMutation,
+    waitForMutation,
+  ])
 
   const updateTemplateContent = useCallback(async (
     templateId: string,
     updated: UpdatedTemplatePayload,
   ) => {
-    const current = sessionRef.current
-    if (!current) return
+    const controller = leaseControllerRef.current
+    if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
+    const owner = await waitForMutation('template-update', controller)
+    if (!owner) return
+    beginLeaseWork(controller)
+    try {
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+      const current = sessionRef.current
+      if (!current) return
 
-    const snapshot = current.snapshot
-    const templateKeysToUpdate: string[] = []
-    for (const [tplKey, tpl] of Object.entries(snapshot.templates)) {
-      if (tpl && tpl.id === templateId) {
-        templateKeysToUpdate.push(tplKey)
+      const snapshot = current.snapshot
+      const templateKeysToUpdate: string[] = []
+      for (const [tplKey, tpl] of Object.entries(snapshot.templates)) {
+        if (tpl && tpl.id === templateId) {
+          templateKeysToUpdate.push(tplKey)
+        }
       }
-    }
-    if (templateKeysToUpdate.length === 0) return
+      if (templateKeysToUpdate.length === 0) return
 
     const versionNonce = Date.now().toString(36)
     const updatedTemplates = { ...snapshot.templates }
@@ -854,38 +947,79 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       updated_at_ms: Date.now(),
     }
 
-    activateSession(nextSession)
-    try {
+      activateSession(nextSession)
       sessionDurableRef.current = await saveStudySession(nextSession)
     } catch {
-      // Retain in-memory copy
+      // Retain in-memory copy when storage is temporarily unavailable.
+    } finally {
+      endLeaseWork(controller)
+      releaseMutation(owner)
     }
-  }, [activateSession])
+  }, [
+    activateSession,
+    beginLeaseWork,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    releaseMutation,
+    waitForMutation,
+  ])
 
   const reloadSession = useCallback(async (force = false) => {
     if (!deckId || userId === null) return
     const key = currentScopeKey
     if (!key) return
-    const active = sessionRef.current
-    if (!force && active && active.events.length > 0) {
-      await commit({ reason: 'manual_exit' })
+    const controller = leaseControllerRef.current
+    if (
+      !controller
+      || controller.signal.aborted
+      || !hasLeaseRef.current
+      || mutationOwnerRef.current
+    ) return
+    if (!force && (sessionRef.current?.events.length ?? 0) > 0) {
+      const committed = await commit({ reason: 'manual_exit' })
+      if (!committed) return
     }
-    if (active) {
-      await removeStudySessionIfMatches(key, active.snapshot.session_id)
-    }
-    setLoading(true)
-    setError(null)
+    const owner = await waitForMutation('reload', controller)
+    if (!owner) return
+    beginLeaseWork(controller)
     try {
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+      const active = sessionRef.current
+      if (force) await acknowledgeStudySessionQuarantine(key)
+      if (active) {
+        await removeStudySessionIfMatches(key, active.snapshot.session_id)
+      }
+      setLoading(true)
+      setError(null)
       const opened = await openSnapshot(userId, deckId)
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
       const next = createPersistedSession(opened)
       sessionDurableRef.current = await saveStudySession(next)
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
       activateSession(next)
     } catch (err) {
-      setError(err)
+      if (isCurrentLease(controller) && hasLeaseRef.current) setError(err)
     } finally {
       setLoading(false)
+      endLeaseWork(controller)
+      releaseMutation(owner)
     }
-  }, [activateSession, commit, currentScopeKey, deckId, userId])
+  }, [
+    activateSession,
+    beginLeaseWork,
+    commit,
+    currentScopeKey,
+    deckId,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    releaseMutation,
+    userId,
+    waitForMutation,
+  ])
 
   // Synchronize card content and template updates in real-time (from Browse, Note Modal, or other tabs)
   useEffect(() => {

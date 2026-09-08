@@ -760,6 +760,12 @@ def study_session_open():
             if isinstance(cid, str) and cid.strip()
         ] or None
     try:
+        wire_schema_version = study_session_service.negotiate_session_wire_schema(
+            payload.get("accepted_session_schema_versions"),
+            v3_enabled=bool(
+                current_app.config.get("STUDY_WIRE_V3_ENABLED", False)
+            ),
+        )
         result = study_session_service.open_study_session(
             user=current_user,
             query=query,
@@ -768,6 +774,7 @@ def study_session_open():
             scope_id=validated_query.scope_id_raw,
             timezone_name=timezone_name,
             composition_ids=composition_ids,
+            wire_schema_version=wire_schema_version,
         )
     except study_session_service.StudySessionError as exc:
         db.session.rollback()
@@ -804,6 +811,17 @@ def study_session_status(session_id: str):
 )
 @login_required
 def study_session_batch(session_id: str):
+    if not bool(current_app.config.get("STUDY_ASYNC_BATCH_ENABLED", False)):
+        return _no_store_json(
+            {
+                "error": "ASYNC_BATCH_DISABLED",
+                "message": (
+                    "Asynchronous Study batches are disabled; use the "
+                    "synchronous commit endpoint."
+                ),
+            },
+            503,
+        )
     if (
         request.content_length is not None
         and request.content_length > study_session_service.MAX_COMMIT_BYTES
@@ -853,6 +871,19 @@ def study_session_commit(session_id: str):
         str(request.args.get("async") or "").strip().lower() in {"1", "true", "yes"}
         or bool(payload.get("async"))
     )
+    if is_async and not bool(
+        current_app.config.get("STUDY_ASYNC_BATCH_ENABLED", False)
+    ):
+        return _no_store_json(
+            {
+                "error": "ASYNC_BATCH_DISABLED",
+                "message": (
+                    "Asynchronous Study batches are disabled; retry as a "
+                    "synchronous commit."
+                ),
+            },
+            503,
+        )
     try:
         if is_async:
             result = study_session_service.enqueue_study_session_batch(

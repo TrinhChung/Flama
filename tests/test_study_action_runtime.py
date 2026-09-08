@@ -3,11 +3,15 @@ import unittest
 
 from app.services.anki_scheduler import CardState, default_deck_options
 from app.services.study_action_runtime import (
+    BuiltInReviewTriggerCommand,
+    BuiltInTriggerIdentity,
     REVIEW_RATINGS,
     StudyActionValidationError,
     StudyTriggerValidationError,
     compute_review_previews,
+    dispatch_builtin_review_trigger,
     execute_review_action,
+    list_builtin_review_triggers,
     resolve_review_action,
 )
 from app.services.study_algorithm_registry import (
@@ -101,6 +105,60 @@ class StudyActionRuntimeTests(unittest.TestCase):
                 timezone_name="UTC",
                 trigger_contract_version="999",
             )
+
+    def test_builtin_trigger_inventory_is_exact_and_bounded(self):
+        identities = list_builtin_review_triggers()
+
+        self.assertEqual(len(identities), 4)
+        self.assertEqual(
+            {(item.key, item.version) for item in identities},
+            {
+                (f"scheduler.review.{rating}", "1")
+                for rating in REVIEW_RATINGS
+            },
+        )
+
+    def test_dispatcher_rejects_action_trigger_cross_mapping(self):
+        state = CardState(type="new")
+        with self.assertRaises(StudyTriggerValidationError) as caught:
+            dispatch_builtin_review_trigger(
+                state=state,
+                options=self.options,
+                now=self.now,
+                timezone_name="UTC",
+                command=BuiltInReviewTriggerCommand(
+                    action=resolve_review_action("good"),
+                    trigger=BuiltInTriggerIdentity(
+                        key="scheduler.review.again",
+                        version="1",
+                    ),
+                    algorithm_key=DEFAULT_ALGORITHM_IDENTITY.key,
+                    algorithm_version=DEFAULT_ALGORITHM_IDENTITY.version,
+                ),
+            )
+
+        self.assertEqual(caught.exception.code, "TRIGGER_CONTRACT_MISMATCH")
+
+    def test_dispatcher_rejects_unknown_trigger_version(self):
+        state = CardState(type="new")
+        with self.assertRaises(StudyTriggerValidationError) as caught:
+            dispatch_builtin_review_trigger(
+                state=state,
+                options=self.options,
+                now=self.now,
+                timezone_name="UTC",
+                command=BuiltInReviewTriggerCommand(
+                    action=resolve_review_action("good"),
+                    trigger=BuiltInTriggerIdentity(
+                        key="scheduler.review.good",
+                        version="2",
+                    ),
+                    algorithm_key=DEFAULT_ALGORITHM_IDENTITY.key,
+                    algorithm_version=DEFAULT_ALGORITHM_IDENTITY.version,
+                ),
+            )
+
+        self.assertEqual(caught.exception.code, "TRIGGER_UNAVAILABLE")
 
 
 if __name__ == "__main__":

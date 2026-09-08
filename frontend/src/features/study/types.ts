@@ -142,8 +142,7 @@ export type StudySessionCard = {
   can_edit_card: boolean
 }
 
-export type StudySessionSnapshot = {
-  schema_version: 'study-session.v2'
+type StudySessionSnapshotBase = {
   session_id: string
   user_id: number
   session_token: string
@@ -164,34 +163,70 @@ export type StudySessionSnapshot = {
   compositions: Record<string, AppliedComposition>
 }
 
-export type StudySessionEvent = {
+export type StudySessionSnapshot = StudySessionSnapshotBase & (
+  | { schema_version: 'study-session.v2' }
+  | { schema_version: 'study-session.v3' }
+)
+
+type StudySessionEventBase = {
   event_id: string
   sequence: number
   card_id: string
   rating: Rating
   action_key: `review.${Rating}`
-  trigger_key: `scheduler.review.${Rating}`
-  trigger_contract_version: '1'
   policy_key: string
   scheduler_offset_ms: number
   duration_ms: number
 }
 
-export type StudyBatchPayload = {
-  schema_version: 'study-batch.v1'
+export type StudySessionEventV2 = StudySessionEventBase & {
+  trigger_key: `scheduler.review.${Rating}`
+  trigger_contract_version: '1'
+  action_contract_version?: never
+  algorithm_key?: never
+  algorithm_version?: never
+  config_schema_version?: never
+  config_hash?: never
+  study_session_id?: never
+}
+
+export type StudySessionEventV3 = StudySessionEventBase & {
+  action_contract_version: '1'
+  trigger_key: `scheduler.review.${Rating}`
+  trigger_contract_version: '1'
+  algorithm_key: string
+  algorithm_version: string
+  config_schema_version: string
+  config_hash: string
+  study_session_id: string
+}
+
+export type StudySessionEvent = StudySessionEventV2 | StudySessionEventV3
+
+type StudyBatchPayloadBase = {
   batch_id: string
   batch_sequence: number
   session_token: string
   snapshot_hash: string
   commit_reason?: 'auto_finish' | 'manual_exit' | 'page_exit' | 'rollover'
   is_final?: boolean
-  events: StudySessionEvent[]
   final_states?: Array<{
     card_id: string
     base_revision: number
     state: SchedulerCardState
   }>
 }
+
+export type StudyBatchPayload = StudyBatchPayloadBase & (
+  | {
+      schema_version: 'study-batch.v1'
+      events: StudySessionEventV2[]
+    }
+  | {
+      schema_version: 'study-batch.v2'
+      events: StudySessionEventV3[]
+    }
+)
 
 export type StudyBatchReceipt = {
   schema_version: 'study-batch-receipt.v1'

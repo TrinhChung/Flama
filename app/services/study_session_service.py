@@ -34,11 +34,12 @@ from app.services.anki_scheduler import (
 from app.services.study_action_runtime import (
     REVIEW_RATINGS,
     ReviewTransitionResult,
-    resolve_review_action,
 )
 from app.services.study_algorithm_registry import (
+    AlgorithmResolutionPurpose,
     DEFAULT_ALGORITHM_IDENTITY,
     StudyAlgorithmNotFoundError,
+    resolve_study_algorithm,
 )
 from app.services.study_composition_service import build_compatibility_composition
 from app.services.scheduler_config_service import (
@@ -46,6 +47,19 @@ from app.services.scheduler_config_service import (
     resolve_scheduler_runtime_settings,
 )
 from app.services.study_policy_service import build_scheduler_policy
+from app.validators.review_event import (
+    ReviewEventPayloadError,
+    validate_session_event_payload,
+)
+from app.validators.study_session_wire import (
+    BATCH_SCHEMA_V1,
+    COMMIT_SCHEMA_V1,
+    SESSION_SCHEMA_V2,
+    StudyWireContractError,
+    resolve_wire_envelope_contract,
+    select_session_schema,
+    validate_review_event_wire_contract,
+)
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -63,9 +77,10 @@ from models.study_session_batch import StudySessionBatch
 from models.template import Template
 
 
-WIRE_SCHEMA_VERSION = "study-session.v2"
-COMMIT_SCHEMA_VERSION = "study-commit.v1"
-BATCH_SCHEMA_VERSION = "study-batch.v1"
+# Compatibility aliases retained for callers/tests that explicitly target v2.
+WIRE_SCHEMA_VERSION = SESSION_SCHEMA_V2
+COMMIT_SCHEMA_VERSION = COMMIT_SCHEMA_V1
+BATCH_SCHEMA_VERSION = BATCH_SCHEMA_V1
 SCHEDULER_ALGORITHM = DEFAULT_ALGORITHM_IDENTITY.key
 ALGORITHM_VERSION = DEFAULT_ALGORITHM_IDENTITY.version
 MAX_SESSION_CARDS = 5000
@@ -94,6 +109,53 @@ class StudySessionError(ValueError):
         self.code = code
         self.status = status
         self.details = details
+
+
+def _require_session_algorithm(
+    *,
+    key: str,
+    version: str,
+    purpose: AlgorithmResolutionPurpose,
+) -> None:
+    try:
+        resolve_study_algorithm(key, version, purpose=purpose)
+    except StudyAlgorithmNotFoundError as exc:
+        raise StudySessionError(
+            exc.code,
+            str(exc),
+            status=409,
+            details={
+                "algorithm_key": exc.key,
+                "algorithm_version": exc.version,
+                "purpose": exc.purpose.value,
+                "lifecycle_state": (
+                    exc.lifecycle_state.value
+                    if exc.lifecycle_state is not None
+                    else None
+                ),
+                "reason": exc.reason,
+            },
+        ) from exc
+
+
+def _wire_contract_or_session_error(
+    session_schema: Any,
+):
+    try:
+        return resolve_wire_envelope_contract(session_schema)
+    except StudyWireContractError as exc:
+        raise StudySessionError(exc.code, str(exc), status=exc.status) from exc
+
+
+def negotiate_session_wire_schema(
+    accepted_versions: Any,
+    *,
+    v3_enabled: bool,
+) -> str:
+    try:
+        return select_session_schema(accepted_versions, v3_enabled=v3_enabled)
+    except StudyWireContractError as exc:
+        raise StudySessionError(exc.code, str(exc), status=exc.status) from exc
 
 
 def _utc_iso(moment: datetime | None) -> str | None:
@@ -374,7 +436,14 @@ def open_study_session(
     timezone_name: str,
     now: datetime | None = None,
     composition_ids: list[str] | None = None,
+    wire_schema_version: str = WIRE_SCHEMA_VERSION,
 ) -> dict[str, Any]:
+    wire_contract = _wire_contract_or_session_error(wire_schema_version)
+    _require_session_algorithm(
+        key=DEFAULT_ALGORITHM_IDENTITY.key,
+        version=DEFAULT_ALGORITHM_IDENTITY.version,
+        purpose=AlgorithmResolutionPurpose.NEW_SESSION,
+    )
     # MySQL DATETIME (without an explicit fsp) truncates sub-second precision.
     # Use the same durable anchor in the snapshot and during commit replay.
     opened_at = (now or datetime.utcnow()).replace(microsecond=0)
@@ -518,7 +587,7 @@ def open_study_session(
         else None
     )
     snapshot_material = {
-        "schema_version": WIRE_SCHEMA_VERSION,
+        "schema_version": wire_contract.session_schema,
         "session_id": session_id,
         "user_id": int(user.id),
         "scope": {
@@ -555,7 +624,7 @@ def open_study_session(
         status="open",
         scheduler_algorithm=SCHEDULER_ALGORITHM,
         algorithm_version=ALGORITHM_VERSION,
-        wire_schema_version=WIRE_SCHEMA_VERSION,
+        wire_schema_version=wire_contract.session_schema,
         timezone=timezone_name,
         day_boundary_hour_local=int(runtime.day_boundary_hour_local),
         learn_ahead_seconds=int(runtime.learn_ahead_seconds),
@@ -596,6 +665,12 @@ def get_study_session_status(
     status = str(session.status or "open")
     if status == "open" and (now or datetime.utcnow()) > session.expires_at:
         status = "expired"
+    if status == "open":
+        _require_session_algorithm(
+            key=session.scheduler_algorithm,
+            version=session.algorithm_version,
+            purpose=AlgorithmResolutionPurpose.EXISTING_LEASE,
+        )
 
     is_stale = False
     threshold = (
@@ -690,13 +765,6 @@ def enqueue_study_session_batch(
             "Batch payload must be an object.",
             status=400,
         )
-    schema_version = str(payload.get("schema_version") or "")
-    if schema_version not in {BATCH_SCHEMA_VERSION, COMMIT_SCHEMA_VERSION}:
-        raise StudySessionError(
-            "UNSUPPORTED_BATCH_SCHEMA",
-            f"schema_version must be {BATCH_SCHEMA_VERSION} or {COMMIT_SCHEMA_VERSION}.",
-            status=422,
-        )
     batch_id = str(payload.get("batch_id") or payload.get("commit_id") or uuid4()).strip()
     if not batch_id or len(batch_id) > 64:
         raise StudySessionError(
@@ -721,6 +789,19 @@ def enqueue_study_session_batch(
             status=404,
         )
     _validate_session_token(session, payload.get("session_token"))
+    wire_contract = _wire_contract_or_session_error(session.wire_schema_version)
+    schema_version = str(payload.get("schema_version") or "")
+    accepted_envelopes = {
+        wire_contract.batch_schema,
+        wire_contract.commit_schema,
+    }
+    if schema_version not in accepted_envelopes:
+        expected = " or ".join(sorted(accepted_envelopes))
+        raise StudySessionError(
+            "UNSUPPORTED_BATCH_SCHEMA",
+            f"schema_version must be {expected} for this session.",
+            status=422,
+        )
     snapshot_hash = str(payload.get("snapshot_hash") or "").strip()
     if snapshot_hash and snapshot_hash != session.snapshot_hash:
         raise StudySessionError(
@@ -788,6 +869,8 @@ def enqueue_study_session_batch(
 
     job_payload = {
         "schema_version": "study-batch-job.v1",
+        "source_schema_version": schema_version,
+        "session_wire_schema_version": wire_contract.session_schema,
         "batch_id": batch_id,
         "batch_sequence": int(payload.get("batch_sequence", 1) or 1),
         "session_id": session.id,
@@ -829,12 +912,6 @@ def commit_study_session(
             "Commit payload must be an object.",
             status=400,
         )
-    if str(payload.get("schema_version") or "") != COMMIT_SCHEMA_VERSION:
-        raise StudySessionError(
-            "UNSUPPORTED_COMMIT_SCHEMA",
-            f"schema_version must be {COMMIT_SCHEMA_VERSION}.",
-            status=422,
-        )
     commit_key = str(payload.get("commit_id") or "").strip()
     if not commit_key or len(commit_key) > 64:
         raise StudySessionError(
@@ -865,6 +942,16 @@ def commit_study_session(
             status=404,
         )
     _validate_session_token(session, payload.get("session_token"))
+    wire_contract = _wire_contract_or_session_error(session.wire_schema_version)
+    if str(payload.get("schema_version") or "") != wire_contract.commit_schema:
+        raise StudySessionError(
+            "UNSUPPORTED_COMMIT_SCHEMA",
+            (
+                "schema_version must be "
+                f"{wire_contract.commit_schema} for this session."
+            ),
+            status=422,
+        )
     replayed = _idempotent_response(
         session_id=session_id,
         idempotency_key=commit_key,
@@ -895,6 +982,11 @@ def commit_study_session(
             "Study session has expired.",
             status=410,
         )
+    _require_session_algorithm(
+        key=session.scheduler_algorithm,
+        version=session.algorithm_version,
+        purpose=AlgorithmResolutionPurpose.EXISTING_LEASE,
+    )
     if str(payload.get("snapshot_hash") or "") != session.snapshot_hash:
         raise StudySessionError(
             "SNAPSHOT_MISMATCH",
@@ -956,6 +1048,15 @@ def commit_study_session(
                 f"Event {index} must be an object.",
                 status=422,
             )
+        try:
+            raw_event = validate_session_event_payload(raw_event)
+        except ReviewEventPayloadError as exc:
+            raise StudySessionError(
+                exc.code,
+                str(exc),
+                status=exc.status,
+                details={"event_index": index, "field": exc.field},
+            ) from exc
         sequence = int(raw_event.get("sequence") or 0)
         if sequence != index:
             raise StudySessionError(
@@ -994,25 +1095,6 @@ def commit_study_session(
                 f"Event {index} has an invalid rating.",
                 status=422,
             )
-        action_contract = resolve_review_action(rating)
-        supplied_contract = {
-            "action_key": action_contract.action_key,
-            "trigger_key": action_contract.trigger_key,
-            "trigger_contract_version": (
-                action_contract.trigger_contract_version
-            ),
-        }
-        for contract_key, expected_value in supplied_contract.items():
-            if (
-                contract_key in raw_event
-                and str(raw_event.get(contract_key) or "").strip()
-                != expected_value
-            ):
-                raise StudySessionError(
-                    "ACTION_CONTRACT_MISMATCH",
-                    f"Event {index} has inconsistent {contract_key}.",
-                    status=422,
-                )
         try:
             offset_ms = int(raw_event.get("scheduler_offset_ms") or 0)
         except (TypeError, ValueError) as exc:
@@ -1053,6 +1135,23 @@ def commit_study_session(
                 "Scheduler config snapshot is missing.",
                 status=409,
             )
+        try:
+            action_contract = validate_review_event_wire_contract(
+                raw_event,
+                session_schema=session.wire_schema_version,
+                session_id=session.id,
+                algorithm_key=session.scheduler_algorithm,
+                algorithm_version=session.algorithm_version,
+                policy=policy,
+                event_index=index,
+            )
+        except StudyWireContractError as exc:
+            raise StudySessionError(
+                exc.code,
+                str(exc),
+                status=exc.status,
+                details={"event_index": index},
+            ) from exc
         options = deserialize_deck_options(policy.get("config"))
         answer_at = session.opened_at + timedelta(milliseconds=offset_ms)
         before = states[card_id]
@@ -1074,10 +1173,14 @@ def commit_study_session(
                     state=before,
                     deck_options=options,
                     reviewed_at=answer_at,
-                    action=rating,
+                    action=action_contract.rating,
                     timezone_name=session.timezone,
                     algorithm_key=session.scheduler_algorithm,
                     algorithm_version=session.algorithm_version,
+                    trigger_key=action_contract.trigger_key,
+                    trigger_contract_version=(
+                        action_contract.trigger_contract_version
+                    ),
                 )
             )
         except StudyAlgorithmNotFoundError as exc:
@@ -1358,31 +1461,42 @@ def commit_study_session(
                         int(session_card.base_progress_revision or 0) + 1
                     ),
                 )
-            mutation_result = study_service.apply_native_review_mutation(
-                study_service.NativeReviewMutationInput(
-                    user_id=int(user.id),
-                    card=card,
-                    current_state=before,
-                    transition=transition,
-                    reviewed_at=answer_at,
-                    duration_ms=study_service.normalize_review_duration(
-                        raw_event.get("duration_ms")
-                    ),
-                    payload=dict(raw_event),
-                    local_deck_id=session_card.local_deck_id,
-                    scheduler_preset_id=session_card.scheduler_preset_id,
-                    scheduler_config_hash=session_card.scheduler_config_hash,
-                    timezone_name=session.timezone,
-                    deck_options=options,
-                    note_type_id=session_card.note_type_id,
-                    provenance=study_service.NativeReviewProvenance(
-                        study_session_id=session.id,
-                        client_event_id=str(raw_event["event_id"]),
-                        sequence_no=int(raw_event["sequence"]),
-                    ),
-                    progress_input=progress_input,
+            try:
+                mutation_result = study_service.apply_native_review_mutation(
+                    study_service.NativeReviewMutationInput(
+                        user_id=int(user.id),
+                        card=card,
+                        current_state=before,
+                        transition=transition,
+                        reviewed_at=answer_at,
+                        duration_ms=study_service.normalize_review_duration(
+                            raw_event.get("duration_ms")
+                        ),
+                        payload=None,
+                        local_deck_id=session_card.local_deck_id,
+                        scheduler_preset_id=session_card.scheduler_preset_id,
+                        scheduler_config_hash=session_card.scheduler_config_hash,
+                        timezone_name=session.timezone,
+                        deck_options=options,
+                        note_type_id=session_card.note_type_id,
+                        provenance=study_service.NativeReviewProvenance(
+                            source_path="native.session.commit",
+                            study_session_id=session.id,
+                            client_event_id=str(raw_event["event_id"]),
+                            sequence_no=int(raw_event["sequence"]),
+                            request_id=commit_key,
+                            wire_schema_version=session.wire_schema_version,
+                        ),
+                        progress_input=progress_input,
+                    )
                 )
-            )
+            except ReviewEventPayloadError as exc:
+                raise StudySessionError(
+                    exc.code,
+                    str(exc),
+                    status=exc.status,
+                    details={"event_index": replay_index + 1, "field": exc.field},
+                ) from exc
             review_event = mutation_result.review_event
             last_review_event_by_card[session_card.card_id] = review_event
 
