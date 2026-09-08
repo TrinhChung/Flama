@@ -4,7 +4,7 @@
 >
 > Priority: P1
 >
-> Status: TODO
+> Status: COMPLETED 2026-09-08 — dual readers deployed in code; v3 issuance off by default
 >
 > Dependency: P1-04, P2-03 and P2-06
 >
@@ -72,3 +72,21 @@ Feature flag client creation về v2 trong compatibility window và giữ v3 rea
 - Không contract v2 ngay sau deploy.
 - Không thêm arbitrary Trigger payload.
 - Không thay retention 30 ngày.
+
+## Completion handoff — 2026-09-08
+
+- Primary outcome: Python and TypeScript implement paired, discriminated wire
+  contracts: `study-session.v2` → commit/batch v1 and
+  `study-session.v3` → commit/batch v2.
+- Rollout: clients advertise supported snapshot versions; the server issues v3
+  only when `STUDY_WIRE_V3_ENABLED` is enabled. Existing v2 leases remain exact
+  and are never heuristically upgraded.
+- Validation: v3 requires exact Action, Trigger, Algorithm, config, session,
+  event and sequence identity. Commit and worker select the decoder from the
+  server-pinned session and fail before mutation on mismatch.
+- Telemetry: the architecture audit reports metadata-only session counts and
+  expiry bounds by wire/status/Algorithm version.
+- Tests: old/new client negotiation, paired envelopes, missing/mismatched
+  identity, restore, commit and worker paths pass in both Study module gates.
+- Rollback: disable v3 issuance but retain the v3 reader and exact artifacts
+  until measured leases/jobs drain.

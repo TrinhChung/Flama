@@ -4,7 +4,7 @@
 >
 > Priority: P1
 >
-> Status: TODO
+> Status: COMPLETED 2026-09-08 — accepted no-bridge decision
 >
 > Dependency: P2-01 and P2-04
 >
@@ -78,3 +78,17 @@ Rollback luôn quay về no-bridge baseline; không quay về `host_command` cũ
 - Không thay sandbox/CSP theo hướng nới quyền.
 - Không đưa arbitrary Template automation vào parent.
 - Không yêu cầu Phase 4/schema.
+
+## Completion handoff — 2026-09-08
+
+- Decision: parent-document shortcuts remain enabled; iframe-focused keyboard
+  events are not bridged to a progress-affecting Action.
+- Runtime hardening: parent shortcuts ignore editable targets, IME composition
+  and repeated keydown; forged renderer commands remain rejected.
+- Evidence: the accepted ADR records unit coverage and an isolated Playwright
+  session (`flama-p205`) proving parent focus works, iframe focus stays local
+  and a forged `host_command` cannot affect the parent.
+- Verification: Study frontend module passed; browser testing used an isolated
+  profile/session as required by `AGENTS.md`.
+- Rollback: always return to this no-bridge baseline; never restore the former
+  child-authored `host_command` path.

@@ -4,7 +4,7 @@
 >
 > Priority: P1
 >
-> Status: TODO
+> Status: COMPLETED 2026-09-08
 >
 > Dependency: P2-01
 >
@@ -78,3 +78,16 @@ Adapter cho phép revert call sites mà không đổi backend/wire. Không giữ
 - Không sửa iframe shortcut.
 - Không thêm new Interaction type.
 - Không đổi scheduler algorithm.
+
+## Completion handoff — 2026-09-08
+
+- Primary outcome: controls and bottom bar expose only `onReviewAction`; the
+  four Actions are a discriminated exact mapping with contract version `1`.
+- Compatibility: one named adapter at `StudyPage` converts the semantic Action
+  to the legacy rating accepted by the session hook.
+- Visual contract: no stylesheet, spacing, color, gradient, icon, font, shadow
+  or layout changes were made.
+- Tests: all four mappings, single emission, disabled/reveal/keyboard behavior
+  and page integration are covered by the Study frontend gate.
+- Rollback: change the types, controls and caller together; never keep two
+  authoritative callbacks.

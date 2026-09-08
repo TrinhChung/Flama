@@ -258,12 +258,10 @@ def submit_review(
 
     user = db.session.get(User, user_id)
     timezone_name = stats_overview.get_effective_timezone_name(getattr(user, "timezone", "UTC"))
-    mcp_event_id = f"mcp-review-{uuid4()}"
+    mcp_event_id = str(uuid4())
     service_payload = {
         "duration_ms": duration_ms,
         "timezone": timezone_name,
-        "source": "mcp",
-        "client_event_id": mcp_event_id,
     }
     try:
         command_result = execute_native_review_command(
@@ -275,6 +273,7 @@ def submit_review(
             requested_scope_id=card.note.deck_id,
             timezone_name=timezone_name,
             client_event_id=mcp_event_id,
+            source_path="native.mcp",
         )
     except StudyReviewError as exc:
         raise RequestValidationError(

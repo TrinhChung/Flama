@@ -13,9 +13,13 @@ import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { StudyExitConfirmDialog } from '../components/StudyExitConfirmDialog'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
-import type { Rating } from '../types'
 import type { SchedulerDecision } from '../scheduler/types'
-import { resolveReviewAction, type ReviewRating } from '../interactions/reviewInteraction'
+import {
+  resolveReviewAction,
+  reviewActionToLegacyRating,
+  type ReviewAction,
+  type ReviewRating,
+} from '../interactions/reviewInteraction'
 
 export function StudyPage() {
   const [searchParams] = useSearchParams()
@@ -125,7 +129,7 @@ export function StudyPage() {
     }
   }, [activeCardKey, card?.card_id, study])
 
-  const handleAnswer = useCallback(async (rating: Rating) => {
+  const handleReviewAction = useCallback(async (action: ReviewAction) => {
     if (
       study.isBusy
       || !card?.card_id
@@ -137,7 +141,7 @@ export function StudyPage() {
     const answeredCardKey = activeCardKey
     const answerPromise = study.answer(
       answeredCardId,
-      rating,
+      reviewActionToLegacyRating(action),
       decision,
       Math.max(0, performance.now() - startedAtRef.current),
     )
@@ -210,6 +214,7 @@ export function StudyPage() {
       if (
         event.defaultPrevented
         || event.isComposing
+        || event.repeat
         || activeTag === 'input'
         || activeTag === 'textarea'
         || activeTag === 'select'
@@ -253,7 +258,7 @@ export function StudyPage() {
         event.preventDefault()
         if (!card?.card_id) return
         if (!revealed) handleReveal()
-        else void handleAnswer('good')
+        else void handleReviewAction(resolveReviewAction('good'))
       } else if (revealed) {
         const ratingByKey: Record<string, ReviewRating> = {
           '1': 'again', '2': 'hard', '3': 'good', '4': 'easy',
@@ -268,8 +273,7 @@ export function StudyPage() {
         const rating = ratingByKey[mappedKey]
         if (rating) {
           event.preventDefault()
-          resolveReviewAction(rating) // validate action identity
-          void handleAnswer(rating)
+          void handleReviewAction(resolveReviewAction(rating))
         } else if (isFullscreenKey) {
           event.preventDefault()
           handleToggleFullscreen()
@@ -297,7 +301,7 @@ export function StudyPage() {
     }
   }, [
     card?.card_id,
-    handleAnswer,
+    handleReviewAction,
     handleOpenEdit,
     handleReveal,
     handleToggleFullscreen,
@@ -350,6 +354,7 @@ export function StudyPage() {
           error={study.error}
           deckName={deckName}
           deckId={deckIdRaw}
+          onRetry={() => { void study.reloadSession(true) }}
         />
       </div>
     )
@@ -479,8 +484,8 @@ export function StudyPage() {
           isFullscreen={isFullscreen}
           submitting={study.isBusy}
           onReveal={handleReveal}
-          onAnswer={(rating) => {
-            void handleAnswer(rating)
+          onReviewAction={(action) => {
+            void handleReviewAction(action)
           }}
           onUndo={() => {
             void handleUndo()

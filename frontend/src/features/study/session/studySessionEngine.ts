@@ -24,6 +24,10 @@ import type {
   StudyCommitReason,
   StudySessionAccumulatedStats,
 } from './sessionStore'
+import {
+  reviewEventWireIdentity,
+  wireEnvelopeForSession,
+} from './wireContract'
 
 export type StudySessionView = {
   card: StudySessionCard | null
@@ -93,6 +97,9 @@ export function createPersistedSession(
     commit_id: null,
     commit_reason: null,
     resume_after_commit: false,
+    batch_sequence: 0,
+    event_sequence: 0,
+    in_flight_batches: [],
     updated_at_ms: clientNow,
   }
 }
@@ -206,14 +213,21 @@ export function applyLocalAnswer(
     Math.round(decision.scheduler_at_ms - serverAnchor),
   )
   const action = resolveReviewAction(rating)
+  const wireIdentity = reviewEventWireIdentity(
+    session.snapshot.schema_version,
+    session.snapshot.session_id,
+    action,
+    policy,
+  )
+  const eventSequence = (session.event_sequence
+    ?? session.events.at(-1)?.sequence
+    ?? 0) + 1
   const event: StudySessionEvent = {
     event_id: crypto.randomUUID(),
-    sequence: session.events.length + 1,
+    sequence: eventSequence,
     card_id: card.card_id,
     rating,
-    action_key: action.actionKey,
-    trigger_key: action.triggerKey,
-    trigger_contract_version: action.triggerContractVersion,
+    ...wireIdentity,
     policy_key: card.policy_key,
     scheduler_offset_ms: schedulerOffset,
     duration_ms: Math.max(0, Math.min(3_600_000, Math.round(durationMs))),
@@ -258,6 +272,7 @@ export function applyLocalAnswer(
       cards: nextSnapshotCards,
     },
     events: [...session.events, event],
+    event_sequence: eventSequence,
     touched_card_ids: touched,
     undo_history: undoHistory,
     active_card_id: nextSelected?.card_id ?? null,
@@ -299,6 +314,10 @@ export function undoLocalAnswer(
       cards: restoredCards,
     },
     events: remainingEvents,
+    event_sequence: Math.max(
+      0,
+      (session.event_sequence ?? session.events.at(-1)?.sequence ?? 0) - 1,
+    ),
     touched_card_ids: touchedCardIds,
     undo_history: remainingUndoHistory,
     active_card_id: cardId,
@@ -347,6 +366,7 @@ export function extractPendingBatch(
   const batchCount = Math.min(session.events.length, Math.max(1, limit))
   const batchEvents = session.events.slice(0, batchCount)
   const remainingEvents = session.events.slice(batchCount)
+  const remainingUndoHistory = (session.undo_history ?? []).slice(batchCount)
 
   const batchId = crypto.randomUUID()
   const nextSeq = (session.batch_sequence ?? 0) + 1
@@ -364,8 +384,9 @@ export function extractPendingBatch(
     }
   })
 
-  const batchPayload: StudyBatchPayload = {
-    schema_version: 'study-batch.v1',
+  const wireEnvelope = wireEnvelopeForSession(session.snapshot.schema_version)
+  const batchPayload = {
+    schema_version: wireEnvelope.batchSchema,
     batch_id: batchId,
     batch_sequence: nextSeq,
     session_token: session.snapshot.session_token,
@@ -374,7 +395,7 @@ export function extractPendingBatch(
     is_final: isFinal,
     events: batchEvents,
     final_states: finalStates,
-  }
+  } as StudyBatchPayload
 
   const remainingTouchedSet = new Set(remainingEvents.map((e) => e.card_id))
   const remainingTouchedCardIds = session.touched_card_ids.filter((id) =>
@@ -390,6 +411,7 @@ export function extractPendingBatch(
     ...session,
     events: remainingEvents,
     touched_card_ids: remainingTouchedCardIds,
+    undo_history: remainingUndoHistory,
     batch_sequence: nextSeq,
     in_flight_batches: nextInFlight,
     updated_at_ms: Date.now(),
@@ -448,7 +470,9 @@ export function prepareCommit(
   return {
     session: prepared,
     payload: {
-      schema_version: 'study-commit.v1',
+      schema_version: wireEnvelopeForSession(
+        prepared.snapshot.schema_version,
+      ).commitSchema,
       commit_id: commitId,
       commit_reason: commitReason,
       session_token: prepared.snapshot.session_token,

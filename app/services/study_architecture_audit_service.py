@@ -7,7 +7,8 @@ import json
 from typing import Any
 
 from app.services import study_artifact_service
-from app.services.study_algorithm_registry import _REGISTRY
+from app.services.study_algorithm_registry import list_study_algorithm_support
+from app.validators.review_event import classify_review_event_payload
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -89,6 +90,52 @@ def _sample_scalars(query, limit: int = MAX_SAMPLE_IDS) -> list[Any]:
         else:
             results.append(r)
     return results
+
+
+def _review_event_payload_contract_metrics() -> dict[str, Any]:
+    """Classify immutable payloads without changing or inferring history."""
+
+    categories = {
+        "complete": "canonical_payload_complete",
+        "missing_expected_field": "canonical_payload_missing_expected_field",
+        "conflicting": "canonical_payload_conflicting",
+        "legacy_unknown": "legacy_payload_unknown",
+    }
+    counts = {prefix: 0 for prefix in categories.values()}
+    samples: dict[str, list[int]] = {prefix: [] for prefix in categories.values()}
+    rows = (
+        db.session.query(
+            ReviewEvent.id,
+            ReviewEvent.payload_json,
+            ReviewEvent.scheduler_algorithm,
+            ReviewEvent.algorithm_version,
+            ReviewEvent.scheduler_config_hash,
+            ReviewEvent.study_session_id,
+            ReviewEvent.client_event_id,
+            ReviewEvent.sequence_no,
+        )
+        .order_by(ReviewEvent.id.asc())
+        .yield_per(1000)
+    )
+    for row in rows:
+        disposition = classify_review_event_payload(
+            row.payload_json,
+            scheduler_algorithm=row.scheduler_algorithm,
+            algorithm_version=row.algorithm_version,
+            scheduler_config_hash=row.scheduler_config_hash,
+            study_session_id=row.study_session_id,
+            client_event_id=row.client_event_id,
+            sequence_no=row.sequence_no,
+        )
+        prefix = categories[disposition.category]
+        counts[prefix] += 1
+        if len(samples[prefix]) < MAX_SAMPLE_IDS:
+            samples[prefix].append(int(row.id))
+    result: dict[str, Any] = {}
+    for prefix in categories.values():
+        result[f"{prefix}_events"] = counts[prefix]
+        result[f"{prefix}_samples"] = samples[prefix]
+    return result
 
 
 def _build_disposition_inventory(metrics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -579,6 +626,46 @@ def _build_disposition_inventory(metrics: dict[str, Any]) -> list[dict[str, Any]
         "warn" if rg.get("unknown_provenance_events", 0) > 0 else "pass",
         "needs_verification_provenance",
         "ReviewEvents with unclassifiable or ambiguous provenance markers.",
+    )
+    add_item(
+        "canonical_payload_complete_events",
+        "review_event",
+        rg.get("canonical_payload_complete_events", 0),
+        rg.get("canonical_payload_complete_samples", []),
+        "pass",
+        "canonical_review_event_payload",
+        "ReviewEvents with a complete versioned provenance payload.",
+    )
+    add_item(
+        "canonical_payload_missing_expected_field_events",
+        "review_event",
+        rg.get("canonical_payload_missing_expected_field_events", 0),
+        rg.get("canonical_payload_missing_expected_field_samples", []),
+        (
+            "warn"
+            if rg.get("canonical_payload_missing_expected_field_events", 0) > 0
+            else "pass"
+        ),
+        "inspect_incomplete_canonical_provenance",
+        "Versioned ReviewEvents missing a required provenance field.",
+    )
+    add_item(
+        "canonical_payload_conflicting_events",
+        "review_event",
+        rg.get("canonical_payload_conflicting_events", 0),
+        rg.get("canonical_payload_conflicting_samples", []),
+        "block" if rg.get("canonical_payload_conflicting_events", 0) > 0 else "pass",
+        "quarantine_conflicting_canonical_provenance",
+        "Versioned ReviewEvents whose payload contradicts immutable columns.",
+    )
+    add_item(
+        "legacy_payload_unknown_events",
+        "review_event",
+        rg.get("legacy_payload_unknown_events", 0),
+        rg.get("legacy_payload_unknown_samples", []),
+        "pass",
+        "retain_readable_legacy_history",
+        "Readable legacy ReviewEvents without invented canonical provenance.",
     )
 
     # 7. Session gates
@@ -1271,14 +1358,20 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
     # -------------------------------------------------------------------------
     # 5. Algorithm & Executable Registry Partitioning
     # -------------------------------------------------------------------------
-    registered_pairs = set(_REGISTRY.keys())
+    algorithm_support_inventory = list(list_study_algorithm_support())
+    support_by_pair = {
+        (str(item["key"]), str(item["version"])): item
+        for item in algorithm_support_inventory
+    }
+    registered_pairs = {
+        pair
+        for pair, item in support_by_pair.items()
+        if bool(item["server_executable"])
+    }
     registered_algorithms_inventory = [
-        {
-            "key": k,
-            "version": v,
-            "state_schema_version": adapter.identity.state_schema_version,
-        }
-        for (k, v), adapter in sorted(_REGISTRY.items())
+        item
+        for item in algorithm_support_inventory
+        if bool(item["server_executable"])
     ]
 
     # Build SQL condition matching registered algorithm/version pairs
@@ -1608,6 +1701,7 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         db.session.query(db.func.count()).select_from(unknown_prov_q.subquery()).scalar() or 0
     )
     unknown_prov_samples = _sample_scalars(unknown_prov_q)
+    payload_contract_metrics = _review_event_payload_contract_metrics()
 
     # -------------------------------------------------------------------------
     # 7. Session Gates, Active Leases & Config Integrity
@@ -1728,18 +1822,59 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         StudySession.expires_at,
         StudySession.scheduler_algorithm,
         StudySession.algorithm_version,
+        StudySession.wire_schema_version,
         StudySession.timezone,
         StudySession.config_snapshot_json,
     ).order_by(StudySession.id.asc()).all()
 
-    for s_id, s_status, s_expires, s_algo, s_ver, s_timezone, s_json in all_sessions:
-        is_algo_registered = (str(s_algo or ""), str(s_ver or "")) in registered_pairs
+    wire_session_groups: dict[tuple[str, str, str, str], int] = {}
+    active_wire_versions: dict[str, int] = {}
+    wire_expiry_bounds: dict[str, dict[str, datetime]] = {}
+
+    for (
+        s_id,
+        s_status,
+        s_expires,
+        s_algo,
+        s_ver,
+        s_wire,
+        s_timezone,
+        s_json,
+    ) in all_sessions:
+        wire_key = str(s_wire or "<missing>")
+        group_key = (
+            wire_key,
+            str(s_status or "<missing>"),
+            str(s_algo or "<missing>"),
+            str(s_ver or "<missing>"),
+        )
+        wire_session_groups[group_key] = wire_session_groups.get(group_key, 0) + 1
+        if s_status == "open" and (s_expires is None or s_expires >= observed_at):
+            active_wire_versions[wire_key] = active_wire_versions.get(wire_key, 0) + 1
+        if s_expires is not None:
+            bounds = wire_expiry_bounds.setdefault(
+                wire_key,
+                {"oldest": s_expires, "latest": s_expires},
+            )
+            bounds["oldest"] = min(bounds["oldest"], s_expires)
+            bounds["latest"] = max(bounds["latest"], s_expires)
+        algorithm_support = support_by_pair.get(
+            (str(s_algo or ""), str(s_ver or ""))
+        )
+        is_algo_registered = bool(
+            algorithm_support
+            and algorithm_support["server_executable"]
+        )
+        is_lease_executable = bool(
+            algorithm_support
+            and algorithm_support["existing_lease_allowed"]
+        )
         is_active_lease = (s_status == "open" and (s_expires is None or s_expires >= observed_at))
 
-        if not is_algo_registered:
+        if not is_lease_executable:
             if is_active_lease:
                 active_unavailable_algo_sessions.append(s_id)
-            else:
+            elif not is_algo_registered:
                 historical_retired_algo_sessions.append(s_id)
 
         if s_json is not None:
@@ -1770,6 +1905,26 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
     invalid_config_snapshot_count = len(invalid_config_sessions)
     active_unavailable_algo_count = len(active_unavailable_algo_sessions)
     historical_retired_algo_count = len(historical_retired_algo_sessions)
+    wire_version_session_inventory = [
+        {
+            "wire_schema_version": wire,
+            "status": status,
+            "algorithm_key": algorithm,
+            "algorithm_version": version,
+            "count": count,
+        }
+        for (wire, status, algorithm, version), count in sorted(
+            wire_session_groups.items()
+        )
+    ]
+    wire_version_expiry_inventory = [
+        {
+            "wire_schema_version": wire,
+            "oldest_expires_at": bounds["oldest"].isoformat(),
+            "latest_expires_at": bounds["latest"].isoformat(),
+        }
+        for wire, bounds in sorted(wire_expiry_bounds.items())
+    ]
 
     # -------------------------------------------------------------------------
     # 8. Clone Overlay Gates & Detailed Card Breakdown
@@ -1973,6 +2128,7 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         "algorithm_gates": {
             "registered_algorithm_count": len(registered_pairs),
             "active_registry_executables": registered_algorithms_inventory,
+            "algorithm_support": algorithm_support_inventory,
             "registered_algorithm_events": registered_algorithm_events,
             "historical_imported_algorithm_events": historical_imported_algorithm_events,
             "historical_imported_algo_samples": historical_imported_algo_samples,
@@ -2012,6 +2168,7 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
             "conflicting_provenance_samples": conflicting_prov_samples,
             "unknown_provenance_events": unknown_provenance_events,
             "unknown_provenance_samples": unknown_prov_samples,
+            **payload_contract_metrics,
         },
         "session_gates": {
             "open_sessions": open_sessions_count,
@@ -2033,6 +2190,9 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
             "historical_session_retired_algorithm_sessions": historical_retired_algo_count,
             "historical_session_retired_algo_samples": historical_retired_algo_sessions[:MAX_SAMPLE_IDS],
             "unavailable_session_algorithm_sessions": active_unavailable_algo_count,
+            "wire_version_session_inventory": wire_version_session_inventory,
+            "active_wire_version_counts": dict(sorted(active_wire_versions.items())),
+            "wire_version_expiry_inventory": wire_version_expiry_inventory,
         },
         "clone_overlay_gates": {
             "deck_installs_count": deck_installs_count,
@@ -2092,6 +2252,17 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
     )
     review_events_provenance = (provenance_sum == total_rev)
 
+    payload_provenance_sum = sum(
+        int(payload_contract_metrics[f"{prefix}_events"])
+        for prefix in (
+            "canonical_payload_complete",
+            "canonical_payload_missing_expected_field",
+            "canonical_payload_conflicting",
+            "legacy_payload_unknown",
+        )
+    )
+    review_events_payload_provenance = payload_provenance_sum == total_rev
+
     # 6. ReviewEvents algorithm accounting: registered + historical_imported + unregistered_native + missing_version + null_algo == total_rev
     algorithm_events_sum = (
         registered_algorithm_events
@@ -2145,6 +2316,7 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         "card_progress_revision_accounting": revision_accounting,
         "review_events_attached_accounting": review_events_attached,
         "review_events_provenance_accounting": review_events_provenance,
+        "review_events_payload_provenance_accounting": review_events_payload_provenance,
         "review_events_algorithm_accounting": review_events_algorithm,
         "study_sessions_status_accounting": sessions_accounting,
         "study_sessions_open_accounting": open_sessions_accounting,

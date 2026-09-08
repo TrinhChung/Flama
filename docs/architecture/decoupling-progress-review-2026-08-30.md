@@ -1,5 +1,8 @@
 # Decoupling progress review and detailed continuation plan — 2026-08-30
 
+> Historical snapshot. Phase 1 and Phase 2 were subsequently closed on
+> 2026-09-08; see the [P1/P2 execution closeout](../task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md).
+
 > Date: 2026-08-30
 >
 > Mode: INVESTIGATE + execution planning inside the approved Phase 0–3 contracts

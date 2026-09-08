@@ -15,7 +15,11 @@ from app.repositories.study_repository import is_progress_suspended
 from app.services import study_artifact_service, study_service
 from app.services.anki_scheduler import DeckOptions
 from app.services.study_action_runtime import ReviewTransitionResult, resolve_review_action
-from app.services.study_algorithm_registry import StudyAlgorithmNotFoundError
+from app.services.study_algorithm_registry import (
+    AlgorithmResolutionPurpose,
+    StudyAlgorithmNotFoundError,
+    resolve_study_algorithm,
+)
 from app.services.study_queue_service import (
     acquire_batch_lock,
     acquire_session_lock,
@@ -32,6 +36,16 @@ from app.services.study_session_service import (
     deserialize_card_state,
     deserialize_deck_options,
     serialize_card_state,
+)
+from app.validators.review_event import (
+    ReviewEventPayloadError,
+    validate_session_event_payload,
+)
+from app.validators.study_session_wire import (
+    SESSION_SCHEMA_V2,
+    StudyWireContractError,
+    resolve_wire_envelope_contract,
+    validate_review_event_wire_contract,
 )
 from models import db
 from models.audit_log import AuditLog
@@ -61,7 +75,7 @@ def process_single_study_batch(
         return {"status": "invalid_payload", "error": "Missing required job identifiers."}
 
     user_id = int(user_id)
-    raw_events = job_payload.get("events") or []
+    raw_events = job_payload.get("events")
     is_final = bool(job_payload.get("is_final", False))
     commit_reason = str(job_payload.get("commit_reason") or "rollover").strip()
 
@@ -104,6 +118,36 @@ def process_single_study_batch(
             push_to_dlq(job_payload, err_msg)
             return {"status": "session_not_found", "error": err_msg}
 
+        try:
+            resolve_study_algorithm(
+                session.scheduler_algorithm,
+                session.algorithm_version,
+                purpose=AlgorithmResolutionPurpose.ACCEPTED_JOB,
+            )
+        except StudyAlgorithmNotFoundError as exc:
+            db.session.rollback()
+            err_msg = str(exc)
+            logger.error(
+                "Rejecting study batch %s because its pinned Algorithm is unavailable: %s",
+                batch_id,
+                err_msg,
+            )
+            push_to_dlq(job_payload, err_msg)
+            return {
+                "status": "algorithm_unavailable",
+                "error": err_msg,
+                "error_code": exc.code,
+                "reason": exc.reason,
+                "algorithm_key": exc.key,
+                "algorithm_version": exc.version,
+                "purpose": exc.purpose.value,
+                "lifecycle_state": (
+                    exc.lifecycle_state.value
+                    if exc.lifecycle_state is not None
+                    else None
+                ),
+            }
+
         session_cards = (
             StudySessionCard.query.filter_by(session_id=session.id)
             .order_by(StudySessionCard.ordinal.asc())
@@ -114,6 +158,135 @@ def process_single_study_batch(
             policies = json.loads(session.config_snapshot_json or "{}")
         except json.JSONDecodeError:
             policies = {}
+
+        def reject_wire_contract(code: str, message: str) -> dict[str, Any]:
+            db.session.rollback()
+            logger.error("Rejecting study batch %s: %s", batch_id, message)
+            push_to_dlq(job_payload, message)
+            return {
+                "status": "wire_contract_invalid",
+                "error_code": code,
+                "error": message,
+                "batch_id": batch_id,
+            }
+
+        try:
+            wire_contract = resolve_wire_envelope_contract(
+                session.wire_schema_version
+            )
+        except StudyWireContractError as exc:
+            return reject_wire_contract(exc.code, str(exc))
+        supplied_session_schema = job_payload.get("session_wire_schema_version")
+        if (
+            supplied_session_schema is not None
+            and supplied_session_schema != wire_contract.session_schema
+        ):
+            return reject_wire_contract(
+                "WIRE_CONTRACT_MISMATCH",
+                "Queued batch session schema differs from the pinned session.",
+            )
+        source_schema = job_payload.get("source_schema_version")
+        if source_schema is None and wire_contract.session_schema == SESSION_SCHEMA_V2:
+            # Jobs admitted before source-schema pinning were necessarily v2.
+            source_schema = wire_contract.batch_schema
+        if source_schema not in {
+            wire_contract.batch_schema,
+            wire_contract.commit_schema,
+        }:
+            return reject_wire_contract(
+                "UNSUPPORTED_BATCH_SCHEMA",
+                "Queued batch envelope is incompatible with the pinned session.",
+            )
+        if not isinstance(raw_events, list):
+            return reject_wire_contract(
+                "INVALID_EVENTS",
+                "Queued batch events must be an array.",
+            )
+
+        validated_events: list[dict[str, Any]] = []
+        previous_sequence: int | None = None
+        previous_offset: int | None = None
+        validated_event_ids: set[str] = set()
+        for event_index, candidate in enumerate(raw_events, start=1):
+            try:
+                event = validate_session_event_payload(candidate)
+            except ReviewEventPayloadError as exc:
+                return reject_wire_contract(exc.code, str(exc))
+            card_id = str(event.get("card_id") or "").strip()
+            session_card = membership.get(card_id)
+            if session_card is None:
+                return reject_wire_contract(
+                    "CARD_OUTSIDE_SESSION",
+                    f"Queued event {event_index} references a card outside the session.",
+                )
+            event_id = str(event.get("event_id") or "").strip()
+            try:
+                UUID(event_id)
+            except (TypeError, ValueError, AttributeError):
+                return reject_wire_contract(
+                    "INVALID_EVENT_ID",
+                    f"Queued event {event_index} has an invalid event id.",
+                )
+            if event_id in validated_event_ids:
+                return reject_wire_contract(
+                    "DUPLICATE_EVENT_ID",
+                    f"Queued event {event_index} reuses an event id.",
+                )
+            sequence = event.get("sequence")
+            offset_ms = event.get("scheduler_offset_ms")
+            if (
+                not isinstance(sequence, int)
+                or isinstance(sequence, bool)
+                or sequence < 1
+                or (
+                    previous_sequence is not None
+                    and sequence != previous_sequence + 1
+                )
+            ):
+                return reject_wire_contract(
+                    "INVALID_EVENT_SEQUENCE",
+                    "Queued event sequence must be positive and contiguous.",
+                )
+            if (
+                not isinstance(offset_ms, int)
+                or isinstance(offset_ms, bool)
+                or offset_ms < 0
+                or offset_ms > int(SESSION_TTL.total_seconds() * 1000)
+                or (previous_offset is not None and offset_ms < previous_offset)
+            ):
+                return reject_wire_contract(
+                    "INVALID_EVENT_TIME",
+                    "Queued scheduler offsets must be monotonic and within the lease.",
+                )
+            policy_key = str(event.get("policy_key") or "")
+            if policy_key != session_card.scheduler_config_hash:
+                return reject_wire_contract(
+                    "CONFIG_MISMATCH",
+                    f"Queued event {event_index} uses the wrong scheduler config.",
+                )
+            policy = policies.get(policy_key)
+            if not isinstance(policy, dict):
+                return reject_wire_contract(
+                    "CONFIG_MISMATCH",
+                    "Queued scheduler config snapshot is missing.",
+                )
+            try:
+                validate_review_event_wire_contract(
+                    event,
+                    session_schema=session.wire_schema_version,
+                    session_id=session.id,
+                    algorithm_key=session.scheduler_algorithm,
+                    algorithm_version=session.algorithm_version,
+                    policy=policy,
+                    event_index=event_index,
+                )
+            except StudyWireContractError as exc:
+                return reject_wire_contract(exc.code, str(exc))
+            validated_event_ids.add(event_id)
+            previous_sequence = sequence
+            previous_offset = offset_ms
+            validated_events.append(event)
+        raw_events = validated_events
 
         # Fetch current states of cards
         touched_ids = {str(ev.get("card_id")) for ev in raw_events if ev.get("card_id")}
@@ -176,6 +349,7 @@ def process_single_study_batch(
             rating = str(raw_event.get("rating") or "").strip().lower()
             if rating not in VALID_RATINGS:
                 continue
+            action_contract = resolve_review_action(rating)
 
             offset_ms = int(raw_event.get("scheduler_offset_ms") or 0)
             answer_at = session.opened_at + timedelta(milliseconds=max(0, offset_ms))
@@ -197,6 +371,10 @@ def process_single_study_batch(
                     timezone_name=session.timezone,
                     algorithm_key=session.scheduler_algorithm,
                     algorithm_version=session.algorithm_version,
+                    trigger_key=action_contract.trigger_key,
+                    trigger_contract_version=(
+                        action_contract.trigger_contract_version
+                    ),
                 )
             )
             after = transition.state
@@ -290,7 +468,7 @@ def process_single_study_batch(
                     transition=transition,
                     reviewed_at=answer_at,
                     duration_ms=study_service.normalize_review_duration(raw_event.get("duration_ms")),
-                    payload=dict(raw_event),
+                    payload=None,
                     local_deck_id=session_card.local_deck_id,
                     scheduler_preset_id=session_card.scheduler_preset_id,
                     scheduler_config_hash=session_card.scheduler_config_hash,
@@ -298,9 +476,12 @@ def process_single_study_batch(
                     deck_options=options,
                     note_type_id=session_card.note_type_id,
                     provenance=study_service.NativeReviewProvenance(
+                        source_path="native.session.worker",
                         study_session_id=session.id,
                         client_event_id=str(raw_event.get("event_id")),
                         sequence_no=int(raw_event.get("sequence") or 0),
+                        request_id=batch_id,
+                        wire_schema_version=session.wire_schema_version,
                     ),
                     progress_input=progress_input,
                 )

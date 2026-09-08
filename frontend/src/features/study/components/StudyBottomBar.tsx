@@ -1,10 +1,10 @@
 import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { Rating } from '../types'
 import {
   ReviewInteractionControls,
   type IntervalsPreview,
 } from '../interactions/ReviewInteractionControls'
+import type { ReviewAction } from '../interactions/reviewInteraction'
 
 type StudyBottomBarProps = {
   cardId?: string | null
@@ -17,7 +17,7 @@ type StudyBottomBarProps = {
   isFullscreen?: boolean
   submitting?: boolean
   onReveal: () => void
-  onAnswer: (rating: Rating) => void
+  onReviewAction: (action: ReviewAction) => void
   onUndo?: () => void
   onToggleFullscreen: () => void
 }
@@ -33,7 +33,7 @@ export function StudyBottomBar({
   isFullscreen = false,
   submitting = false,
   onReveal,
-  onAnswer,
+  onReviewAction,
   onUndo,
   onToggleFullscreen,
 }: StudyBottomBarProps) {
@@ -88,7 +88,7 @@ export function StudyBottomBar({
                   dueCount={dueCount}
                   intervalsPreview={intervalsPreview}
                   onReveal={onReveal}
-                  onAnswer={onAnswer}
+                  onReviewAction={onReviewAction}
                 />
               </div>
             </div>
@@ -101,7 +101,7 @@ export function StudyBottomBar({
               dueCount={dueCount}
               intervalsPreview={intervalsPreview}
               onReveal={onReveal}
-              onAnswer={onAnswer}
+              onReviewAction={onReviewAction}
             />
           )}
         </div>

@@ -21,6 +21,7 @@ describe('ReviewInteractionControls', () => {
         <ReviewInteractionControls
           revealed={false}
           onReveal={onReveal}
+          onReviewAction={vi.fn()}
         />,
       )
     })
@@ -37,12 +38,11 @@ describe('ReviewInteractionControls', () => {
     await act(async () => root.unmount())
   })
 
-  it('renders 4 rating buttons with preview labels and emits both onAnswer and onReviewAction', async () => {
+  it('renders 4 rating buttons with preview labels and emits one semantic action', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
     const onReveal = vi.fn()
-    const onAnswer = vi.fn()
     const onReviewAction = vi.fn()
 
     const intervalsPreview = {
@@ -58,7 +58,6 @@ describe('ReviewInteractionControls', () => {
           revealed={true}
           intervalsPreview={intervalsPreview}
           onReveal={onReveal}
-          onAnswer={onAnswer}
           onReviewAction={onReviewAction}
         />,
       )
@@ -81,10 +80,11 @@ describe('ReviewInteractionControls', () => {
       buttons[2]?.click()
     })
 
-    expect(onAnswer).toHaveBeenCalledWith('good')
+    expect(onReviewAction).toHaveBeenCalledTimes(1)
     expect(onReviewAction).toHaveBeenCalledWith({
       rating: 'good',
       actionKey: 'review.good',
+      actionContractVersion: '1',
       triggerKey: 'scheduler.review.good',
       triggerContractVersion: '1',
     })

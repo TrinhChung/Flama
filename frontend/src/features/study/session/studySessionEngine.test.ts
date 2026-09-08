@@ -513,6 +513,84 @@ describe('local study session engine', () => {
     expect(reconciled.in_flight_batches).toHaveLength(0)
   })
 
+  it('emits exact v3 event identity and paired commit/batch envelopes', () => {
+    let id = 0
+    vi.stubGlobal('crypto', {
+      randomUUID: () => `00000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
+    })
+    const v3Snapshot: StudySessionSnapshot = {
+      ...snapshot(),
+      schema_version: 'study-session.v3',
+    }
+    const local = createPersistedSession(v3Snapshot)
+    const now = Date.parse(local.snapshot.server_now_utc)
+    const answered = applyLocalAnswer(
+      local,
+      'card-1',
+      'good',
+      decisionForCard(local, 'card-1', now + 1000),
+      500,
+    )
+
+    expect(answered.events[0]).toMatchObject({
+      action_key: 'review.good',
+      action_contract_version: '1',
+      trigger_key: 'scheduler.review.good',
+      trigger_contract_version: '1',
+      algorithm_key: 'legacy-anki',
+      algorithm_version: '1.0.0',
+      config_schema_version: 'scheduler-config.v1',
+      config_hash: 'policy',
+      study_session_id: 'session-1',
+    })
+    expect(prepareCommit(answered).payload.schema_version).toBe('study-commit.v2')
+    expect(extractPendingBatch(answered)?.batch.schema_version).toBe('study-batch.v2')
+  })
+
+  it('keeps the event checkpoint after extraction and excludes accepted work from undo', () => {
+    let uuidSequence = 0
+    vi.stubGlobal('crypto', {
+      randomUUID: () => `00000000-0000-4000-8000-${(++uuidSequence).toString().padStart(12, '0')}`,
+    })
+    const local = createPersistedSession(snapshot())
+    const openedAt = Date.parse(local.snapshot.server_now_utc)
+    const firstDecision = decisionForCard(local, 'card-1', openedAt + 1000)
+    const answered = applyLocalAnswer(
+      local,
+      'card-1',
+      'good',
+      firstDecision,
+      500,
+    )
+    const extracted = extractPendingBatch(answered, 1)
+    expect(extracted).not.toBeNull()
+    if (!extracted) return
+
+    expect(extracted.session.event_sequence).toBe(1)
+    expect(extracted.session.events).toEqual([])
+    expect(extracted.session.undo_history).toEqual([])
+    expect(undoLocalAnswer(extracted.session)).toBeNull()
+
+    const acknowledged = acknowledgeBatchReceipt(
+      extracted.session,
+      extracted.batch.batch_id,
+    )
+    const secondDecision = decisionForCard(
+      acknowledged,
+      'card-1',
+      openedAt + 2000,
+    )
+    const answeredAgain = applyLocalAnswer(
+      acknowledged,
+      'card-1',
+      'hard',
+      secondDecision,
+      500,
+    )
+    expect(answeredAgain.events[0].sequence).toBe(2)
+    expect(answeredAgain.event_sequence).toBe(2)
+  })
+
   it('extracts two batches sequentially for 100 completed cards', () => {
     const snap = snapshot()
     const session = createPersistedSession(snap)

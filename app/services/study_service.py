@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +13,7 @@ from app.repositories.study_repository import (
     card_state_from_progress,
     is_progress_suspended,
 )
+from app.repositories.review_event_repository import create_review_event_record
 from app.services import (
     deck_working_tree_service,
     flashcards_share_service,
@@ -21,7 +21,7 @@ from app.services import (
 )
 from app.services.anki_scheduler import CardState, DeckOptions, _day_index
 from app.services.scheduler_config_service import resolve_deck_options
-from app.services.stats_overview import normalize_review_mode, record_review_event
+from app.services.stats_overview import normalize_review_mode
 from app.services.study_action_runtime import (
     ReviewTransitionResult,
     compute_review_previews,
@@ -29,6 +29,12 @@ from app.services.study_action_runtime import (
 )
 from app.services.study_algorithm_registry import DEFAULT_ALGORITHM_IDENTITY
 from app.services.study_policy_service import build_scheduler_policy
+from app.validators.review_event import (
+    ReviewEventPayloadError,
+    build_native_review_event_payload,
+    validate_native_client_payload,
+    validate_review_duration,
+)
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -60,9 +66,12 @@ class NativeReviewCommandResult:
 class NativeReviewProvenance:
     """Transport provenance attached to a canonical native review event."""
 
+    source_path: str = "native.rest"
     study_session_id: str | None = None
     client_event_id: str | None = None
     sequence_no: int | None = None
+    request_id: str | None = None
+    wire_schema_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +95,8 @@ class NativeReviewTransitionInput:
     timezone_name: str
     algorithm_key: str = DEFAULT_ALGORITHM_IDENTITY.key
     algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version
+    trigger_key: str | None = None
+    trigger_contract_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,27 +132,10 @@ class NativeReviewMutationResult:
     progress_revision: int | None
 
 
-def _serialize_review_payload(payload: dict[str, Any] | None) -> str:
-    try:
-        return json.dumps(
-            payload or {},
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        )
-    except (TypeError, ValueError):
-        return "{}"
-
-
 def normalize_review_duration(value: Any) -> int | None:
-    """Normalize native duration consistently across REST, MCP and sessions."""
+    """Validate native duration consistently across REST, MCP and sessions."""
 
-    if value is None:
-        return None
-    try:
-        return max(0, min(60 * 60 * 1000, int(value)))
-    except (TypeError, ValueError):
-        return None
+    return validate_review_duration(value)
 
 
 def execute_native_review_transition(
@@ -157,6 +151,8 @@ def execute_native_review_transition(
         timezone_name=command.timezone_name,
         algorithm_key=command.algorithm_key,
         algorithm_version=command.algorithm_version,
+        trigger_key=command.trigger_key,
+        trigger_contract_version=command.trigger_contract_version,
     )
 
 
@@ -275,31 +271,27 @@ def _record_native_review_transition(
     reviewed_at: datetime,
     duration_ms: int | None,
     review_mode: str,
-    payload: dict[str, Any] | None,
     local_deck_id: int | None,
     scheduler_preset_id: int | None,
     scheduler_config_hash: str,
     timezone_name: str,
     deck_options: DeckOptions,
     note_type_id: str | None = None,
-    study_session_id: str | None = None,
-    client_event_id: str | None = None,
-    sequence_no: int | None = None,
+    provenance: NativeReviewProvenance,
+    payload_json: str,
 ) -> Any:
     """Append one canonical native ReviewEvent and its in-transaction effects."""
 
     updated_state = transition.state
-    event_payload = dict(payload or {})
-    event_payload["_study_runtime"] = {
-        **transition.metadata(),
-        "scheduler_config_hash": str(scheduler_config_hash),
-    }
-    review_event = record_review_event(
+    review_event = create_review_event_record(
         user_id=int(user_id),
         card_id=str(card.id),
         deck_id=local_deck_id,
         note_type_id=str(note_type_id or card.note.note_type_id),
         scheduler_preset_id=scheduler_preset_id,
+        study_session_id=provenance.study_session_id,
+        client_event_id=provenance.client_event_id,
+        sequence_no=provenance.sequence_no,
         scheduler_algorithm=transition.algorithm.key,
         algorithm_version=transition.algorithm.version,
         scheduler_config_hash=str(scheduler_config_hash),
@@ -345,11 +337,8 @@ def _record_native_review_transition(
         ),
         leeched_after=bool(updated_state.leeched),
         suspended_after=bool(updated_state.suspended),
-        payload_json=_serialize_review_payload(event_payload),
+        payload_json=payload_json,
     )
-    review_event.study_session_id = study_session_id
-    review_event.client_event_id = client_event_id
-    review_event.sequence_no = sequence_no
     _apply_review_side_effects(
         user_id=user_id,
         card=card,
@@ -371,6 +360,19 @@ def apply_native_review_mutation(
     one-revision-per-batch contract.
     """
 
+    normalized_duration_ms = normalize_review_duration(command.duration_ms)
+    payload_json = build_native_review_event_payload(
+        source_path=command.provenance.source_path,
+        runtime=command.transition.metadata(),
+        scheduler_config_hash=command.scheduler_config_hash,
+        client_payload=command.payload,
+        study_session_id=command.provenance.study_session_id,
+        client_event_id=command.provenance.client_event_id,
+        sequence_no=command.provenance.sequence_no,
+        request_id=command.provenance.request_id,
+        wire_schema_version=command.provenance.wire_schema_version,
+    )
+
     progress = None
     progress_revision = None
     if command.progress_input is not None:
@@ -391,21 +393,19 @@ def apply_native_review_mutation(
         current_state=command.current_state,
         transition=command.transition,
         reviewed_at=command.reviewed_at,
-        duration_ms=normalize_review_duration(command.duration_ms),
+        duration_ms=normalized_duration_ms,
         review_mode=(
             command.review_mode
             or normalize_review_mode(command.current_state.type)
         ),
-        payload=command.payload,
         local_deck_id=command.local_deck_id,
         scheduler_preset_id=command.scheduler_preset_id,
         scheduler_config_hash=command.scheduler_config_hash,
         timezone_name=command.timezone_name,
         deck_options=command.deck_options,
         note_type_id=command.note_type_id,
-        study_session_id=command.provenance.study_session_id,
-        client_event_id=command.provenance.client_event_id,
-        sequence_no=command.provenance.sequence_no,
+        provenance=command.provenance,
+        payload_json=payload_json,
     )
     return NativeReviewMutationResult(
         review_event=review_event,
@@ -432,8 +432,17 @@ def execute_native_review_command(
     study_session_id: str | None = None,
     sequence_no: int | None = None,
     review_mode: str | None = None,
+    source_path: str = "native.rest",
 ) -> NativeReviewCommandResult:
     """Execute and commit one native review under one locked transaction."""
+
+    try:
+        validated_payload = validate_native_client_payload(
+            payload,
+            source_path=source_path,
+        )
+    except ReviewEventPayloadError as exc:
+        raise StudyReviewError(exc.code, str(exc), status=exc.status) from exc
 
     reviewed_at = now or datetime.utcnow()
     local_deck_id = resolve_effective_study_deck_id(
@@ -536,45 +545,46 @@ def execute_native_review_command(
             algorithm=transition.algorithm,
         )
 
-        effective_client_event_id = client_event_id or (payload or {}).get("client_event_id")
-        effective_study_session_id = study_session_id or (payload or {}).get("study_session_id")
-        effective_sequence_no = sequence_no if sequence_no is not None else (payload or {}).get("sequence_no")
         effective_review_mode = review_mode or normalize_review_mode(current_state.type)
-        mutation_result = apply_native_review_mutation(
-            NativeReviewMutationInput(
-                user_id=int(user.id),
-                card=card,
-                current_state=current_state,
-                transition=transition,
-                reviewed_at=reviewed_at,
-                duration_ms=normalize_review_duration(
-                    (payload or {}).get("duration_ms")
-                ),
-                review_mode=effective_review_mode,
-                payload=payload,
-                local_deck_id=local_deck_id,
-                scheduler_preset_id=(
-                    int(local_deck.scheduler_preset_id)
-                    if local_deck is not None
-                    and local_deck.scheduler_preset_id is not None
-                    else None
-                ),
-                scheduler_config_hash=policy["config_hash"],
-                timezone_name=timezone_name,
-                deck_options=options,
-                provenance=NativeReviewProvenance(
-                    study_session_id=effective_study_session_id,
-                    client_event_id=effective_client_event_id,
-                    sequence_no=effective_sequence_no,
-                ),
-                progress_input=NativeReviewProgressInput(
-                    progress=progress,
-                    state=transition.state,
-                    last_reviewed_at=reviewed_at,
-                    revision=int(progress.revision or 0) + 1,
-                ),
+        try:
+            mutation_result = apply_native_review_mutation(
+                NativeReviewMutationInput(
+                    user_id=int(user.id),
+                    card=card,
+                    current_state=current_state,
+                    transition=transition,
+                    reviewed_at=reviewed_at,
+                    duration_ms=validate_review_duration(
+                        validated_payload.get("duration_ms")
+                    ),
+                    review_mode=effective_review_mode,
+                    payload=validated_payload,
+                    local_deck_id=local_deck_id,
+                    scheduler_preset_id=(
+                        int(local_deck.scheduler_preset_id)
+                        if local_deck is not None
+                        and local_deck.scheduler_preset_id is not None
+                        else None
+                    ),
+                    scheduler_config_hash=policy["config_hash"],
+                    timezone_name=timezone_name,
+                    deck_options=options,
+                    provenance=NativeReviewProvenance(
+                        source_path=source_path,
+                        study_session_id=study_session_id,
+                        client_event_id=client_event_id,
+                        sequence_no=sequence_no,
+                    ),
+                    progress_input=NativeReviewProgressInput(
+                        progress=progress,
+                        state=transition.state,
+                        last_reviewed_at=reviewed_at,
+                        revision=int(progress.revision or 0) + 1,
+                    ),
+                )
             )
-        )
+        except ReviewEventPayloadError as exc:
+            raise StudyReviewError(exc.code, str(exc), status=exc.status) from exc
         review_event = mutation_result.review_event
         db.session.flush()
         if review_event.id is not None:

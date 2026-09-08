@@ -664,7 +664,7 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
     def test_legacy_study_keeps_leech_state_without_mutating_released_tags(self):
         with self.app.app_context(), patch.object(
             study_service,
-            "record_review_event",
+            "create_review_event_record",
             return_value=SimpleNamespace(id=None),
         ), patch.object(
             study_service.flashcards_share_service,

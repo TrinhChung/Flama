@@ -295,6 +295,92 @@ describe('StudyPage undo interactions', () => {
   })
 })
 
+describe('StudyPage trusted keyboard boundary', () => {
+  function setupActiveStudy() {
+    mocks.sessionHookData = {
+      session: {
+        snapshot: {
+          session_id: 'session-keyboard',
+          scope: { name: 'Keyboard Deck' },
+        },
+        events: [],
+      } as any,
+      view: {
+        card: { card_id: 'card-keyboard', note_id: 'note-keyboard' },
+        template: { front_source: 'front', back_source: 'back' },
+        content: { field_values: {} },
+        counts: { new: 1, learning: 0, due: 0 },
+        session_state: 'active',
+      } as any,
+      receipt: null,
+      error: null,
+      leaseConflict: false,
+      takeoverState: 'idle',
+      isLoading: false,
+      isBusy: false,
+      canUndo: false,
+    }
+    mocks.prepareDecision.mockReturnValue({ previews: {} })
+  }
+
+  async function renderActiveStudy() {
+    setupActiveStudy()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+  }
+
+  it('does not capture shortcuts from editable parent controls', async () => {
+    await renderActiveStudy()
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+
+    const event = new KeyboardEvent('keydown', {
+      key: ' ',
+      code: 'Space',
+      bubbles: true,
+      cancelable: true,
+    })
+    await act(async () => window.dispatchEvent(event))
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(mocks.prepareDecision).not.toHaveBeenCalled()
+    expect(mocks.answer).not.toHaveBeenCalled()
+  })
+
+  it('does not capture IME composition or repeated keydown events', async () => {
+    await renderActiveStudy()
+    const composing = new KeyboardEvent('keydown', {
+      key: ' ',
+      code: 'Space',
+      bubbles: true,
+      cancelable: true,
+      isComposing: true,
+    })
+    const repeated = new KeyboardEvent('keydown', {
+      key: ' ',
+      code: 'Space',
+      bubbles: true,
+      cancelable: true,
+      repeat: true,
+    })
+
+    await act(async () => {
+      window.dispatchEvent(composing)
+      window.dispatchEvent(repeated)
+    })
+
+    expect(composing.defaultPrevented).toBe(false)
+    expect(repeated.defaultPrevented).toBe(false)
+    expect(mocks.prepareDecision).not.toHaveBeenCalled()
+    expect(mocks.answer).not.toHaveBeenCalled()
+  })
+})
+
 describe('StudyPage quick edit interactions', () => {
   function setupActiveStudy() {
     mocks.sessionHookData = {

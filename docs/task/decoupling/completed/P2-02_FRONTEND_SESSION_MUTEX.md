@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: COMPLETED 2026-09-08
 >
 > Dependency: P2-01
 >
@@ -79,3 +79,21 @@ Không đổi storage schema. Revert guard và tests cùng nhau nếu cần, nh�
 - Không đổi backend event validation.
 - Không redesign Study UI.
 - Không thay Algorithm logic.
+
+## Completion handoff — 2026-09-08
+
+- Primary outcome: `useStudySession` now uses one synchronous owner-token mutex
+  across bootstrap, answer, undo, commit/retry, page exit, selection persistence,
+  reload and content/template mutations. A stale `finally` cannot release a
+  newer owner.
+- Contract/API behavior: same-tick duplicate actions are busy/no-op; automatic
+  rollover uses the synchronous commit endpoint. New async batch admission is
+  disabled by default by the G0 containment flag.
+- Tests: deferred-promise matrices cover answer+answer, answer+undo,
+  commit+answer, retry+undo, bootstrap+answer and pagehide using latest state.
+- Verification: Study frontend module, typecheck and lint gates passed.
+- Rollback: revert the hook and tests together; do not restore the boolean
+  operation marker or automatic async rollover.
+- Known limitation/follow-up: pre-existing accepted async batches remain
+  durable evidence and require operational reconciliation before async can be
+  re-enabled. Phase 3/INT-01 must continue using the same mutation boundary.

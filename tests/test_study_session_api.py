@@ -3,10 +3,17 @@
 import json
 import unittest
 from datetime import datetime, timedelta
+from unittest.mock import patch
 from uuid import uuid4
 
 from app import create_app
 from app.services.anki_scheduler import _day_index, applyAnswer
+from app.services.study_algorithm_registry import (
+    AlgorithmLifecycleState,
+    AlgorithmResolutionPurpose,
+    StudyAlgorithmNotFoundError,
+    resolve_study_algorithm,
+)
 from app.services.study_session_service import (
     deserialize_card_state,
     deserialize_deck_options,
@@ -105,25 +112,60 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
 
+    def _open_session_v3(self):
+        previous = self.app.config["STUDY_WIRE_V3_ENABLED"]
+        self.app.config["STUDY_WIRE_V3_ENABLED"] = True
+        try:
+            response = self.client.post(
+                "/api/study/sessions",
+                json={
+                    "scope": "deck",
+                    "scope_id": self.deck_id,
+                    "accepted_session_schema_versions": [
+                        "study-session.v3",
+                        "study-session.v2",
+                    ],
+                },
+            )
+        finally:
+            self.app.config["STUDY_WIRE_V3_ENABLED"] = previous
+        self.assertEqual(response.status_code, 201, response.get_json())
+        return response.get_json()
+
     @staticmethod
     def _commit_payload(snapshot, *, commit_id=None):
         card = snapshot["cards"][0]
+        is_v3 = snapshot["schema_version"] == "study-session.v3"
+        event = {
+            "event_id": str(uuid4()),
+            "sequence": 1,
+            "card_id": card["card_id"],
+            "rating": "good",
+            "policy_key": card["policy_key"],
+            "scheduler_offset_ms": 1000,
+            "duration_ms": 500,
+        }
+        if is_v3:
+            policy = snapshot["policies"][card["policy_key"]]
+            event.update(
+                {
+                    "action_key": "review.good",
+                    "action_contract_version": "1",
+                    "trigger_key": "scheduler.review.good",
+                    "trigger_contract_version": "1",
+                    "algorithm_key": snapshot["scheduler_algorithm"],
+                    "algorithm_version": snapshot["algorithm_version"],
+                    "config_schema_version": policy["config_schema_version"],
+                    "config_hash": policy["config_hash"],
+                    "study_session_id": snapshot["session_id"],
+                }
+            )
         return {
-            "schema_version": "study-commit.v1",
+            "schema_version": "study-commit.v2" if is_v3 else "study-commit.v1",
             "commit_id": commit_id or str(uuid4()),
             "session_token": snapshot["session_token"],
             "snapshot_hash": snapshot["snapshot_hash"],
-            "events": [
-                {
-                    "event_id": str(uuid4()),
-                    "sequence": 1,
-                    "card_id": card["card_id"],
-                    "rating": "good",
-                    "policy_key": card["policy_key"],
-                    "scheduler_offset_ms": 1000,
-                    "duration_ms": 500,
-                }
-            ],
+            "events": [event],
             "final_states": [],
         }
 
@@ -148,6 +190,185 @@ class StudySessionApiTests(unittest.TestCase):
             session = db.session.get(StudySession, snapshot["session_id"])
             self.assertIsNotNone(session)
             self.assertEqual(session.status, "open")
+
+    def test_wire_v3_is_capability_negotiated_and_flag_gated(self):
+        previous = self.app.config["STUDY_WIRE_V3_ENABLED"]
+        self.app.config["STUDY_WIRE_V3_ENABLED"] = True
+        try:
+            old_client = self._open_session()
+        finally:
+            self.app.config["STUDY_WIRE_V3_ENABLED"] = previous
+        self.assertEqual(old_client["schema_version"], "study-session.v2")
+
+        flag_off = self.client.post(
+            "/api/study/sessions",
+            json={
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "accepted_session_schema_versions": [
+                    "study-session.v3",
+                    "study-session.v2",
+                ],
+            },
+        )
+        self.assertEqual(flag_off.status_code, 201, flag_off.get_json())
+        self.assertEqual(flag_off.get_json()["schema_version"], "study-session.v2")
+
+        v3 = self._open_session_v3()
+        self.assertEqual(v3["schema_version"], "study-session.v3")
+        with self.app.app_context():
+            row = db.session.get(StudySession, v3["session_id"])
+            self.assertEqual(row.wire_schema_version, "study-session.v3")
+
+    def test_v3_commit_requires_exact_identity_and_paired_envelope(self):
+        wrong_envelope_snapshot = self._open_session_v3()
+        wrong_envelope = self._commit_payload(wrong_envelope_snapshot)
+        wrong_envelope["schema_version"] = "study-commit.v1"
+        response = self.client.post(
+            f"/api/study/sessions/{wrong_envelope_snapshot['session_id']}/commit",
+            json=wrong_envelope,
+        )
+        self.assertEqual(response.status_code, 422, response.get_json())
+        self.assertEqual(response.get_json()["error"], "UNSUPPORTED_COMMIT_SCHEMA")
+
+        missing_snapshot = self._open_session_v3()
+        missing = self._commit_payload(missing_snapshot)
+        del missing["events"][0]["action_contract_version"]
+        response = self.client.post(
+            f"/api/study/sessions/{missing_snapshot['session_id']}/commit",
+            json=missing,
+        )
+        self.assertEqual(response.status_code, 422, response.get_json())
+        self.assertEqual(response.get_json()["error"], "WIRE_CONTRACT_MISMATCH")
+
+        mismatch_snapshot = self._open_session_v3()
+        mismatch = self._commit_payload(mismatch_snapshot)
+        mismatch["events"][0]["algorithm_version"] = "latest"
+        response = self.client.post(
+            f"/api/study/sessions/{mismatch_snapshot['session_id']}/commit",
+            json=mismatch,
+        )
+        self.assertEqual(response.status_code, 422, response.get_json())
+        self.assertEqual(response.get_json()["error"], "WIRE_CONTRACT_MISMATCH")
+
+        valid_snapshot = self._open_session_v3()
+        response = self.client.post(
+            f"/api/study/sessions/{valid_snapshot['session_id']}/commit",
+            json=self._commit_payload(valid_snapshot),
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        with self.app.app_context():
+            event = ReviewEvent.query.filter_by(
+                study_session_id=valid_snapshot["session_id"]
+            ).one()
+            payload = json.loads(event.payload_json)
+            self.assertEqual(
+                payload["provenance"]["wire_schema_version"],
+                "study-session.v3",
+            )
+            self.assertEqual(
+                payload["_study_runtime"]["action_contract_version"],
+                "1",
+            )
+
+    def test_session_boundaries_resolve_algorithm_for_the_exact_purpose(self):
+        with patch(
+            "app.services.study_session_service.resolve_study_algorithm",
+            wraps=resolve_study_algorithm,
+        ) as resolver:
+            snapshot = self._open_session()
+        resolver.assert_called_once_with(
+            "legacy-anki",
+            "1.0.0",
+            purpose=AlgorithmResolutionPurpose.NEW_SESSION,
+        )
+
+        with patch(
+            "app.services.study_session_service.resolve_study_algorithm",
+            wraps=resolve_study_algorithm,
+        ) as resolver:
+            status = self.client.get(
+                f"/api/study/sessions/{snapshot['session_id']}"
+            )
+        self.assertEqual(status.status_code, 200, status.get_json())
+        resolver.assert_called_once_with(
+            "legacy-anki",
+            "1.0.0",
+            purpose=AlgorithmResolutionPurpose.EXISTING_LEASE,
+        )
+
+        with patch(
+            "app.services.study_session_service.resolve_study_algorithm",
+            wraps=resolve_study_algorithm,
+        ) as resolver:
+            committed = self.client.post(
+                f"/api/study/sessions/{snapshot['session_id']}/commit",
+                json=self._commit_payload(snapshot),
+            )
+        self.assertEqual(committed.status_code, 200, committed.get_json())
+        resolver.assert_called_once_with(
+            "legacy-anki",
+            "1.0.0",
+            purpose=AlgorithmResolutionPurpose.EXISTING_LEASE,
+        )
+
+    def test_retired_algorithm_commit_fails_before_any_review_write(self):
+        snapshot = self._open_session()
+        unavailable = StudyAlgorithmNotFoundError(
+            "legacy-anki",
+            "1.0.0",
+            purpose=AlgorithmResolutionPurpose.EXISTING_LEASE,
+            lifecycle_state=AlgorithmLifecycleState.RETIRED,
+            reason="RETIRED",
+        )
+
+        with patch(
+            "app.services.study_session_service.resolve_study_algorithm",
+            side_effect=unavailable,
+        ):
+            response = self.client.post(
+                f"/api/study/sessions/{snapshot['session_id']}/commit",
+                json=self._commit_payload(snapshot),
+            )
+
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "ALGORITHM_UNAVAILABLE")
+        self.assertEqual(response.get_json()["details"]["reason"], "RETIRED")
+        with self.app.app_context():
+            session = db.session.get(StudySession, snapshot["session_id"])
+            self.assertEqual(session.status, "open")
+            self.assertEqual(
+                ReviewEvent.query.filter_by(
+                    study_session_id=snapshot["session_id"],
+                ).count(),
+                0,
+            )
+
+    def test_retired_algorithm_status_fails_restore_closed(self):
+        snapshot = self._open_session()
+        unavailable = StudyAlgorithmNotFoundError(
+            "legacy-anki",
+            "1.0.0",
+            purpose=AlgorithmResolutionPurpose.EXISTING_LEASE,
+            lifecycle_state=AlgorithmLifecycleState.RETIRED,
+            reason="RETIRED",
+        )
+
+        with patch(
+            "app.services.study_session_service.resolve_study_algorithm",
+            side_effect=unavailable,
+        ):
+            response = self.client.get(
+                f"/api/study/sessions/{snapshot['session_id']}"
+            )
+
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "ALGORITHM_UNAVAILABLE")
+        self.assertEqual(response.get_json()["details"]["reason"], "RETIRED")
+        self.assertEqual(
+            response.get_json()["details"]["purpose"],
+            "existing-lease",
+        )
 
     def test_commit_accepts_action_contract_and_rejects_mismatch(self):
         snapshot = self._open_session()
@@ -178,6 +399,56 @@ class StudySessionApiTests(unittest.TestCase):
             mismatch.get_json()["error"],
             "ACTION_CONTRACT_MISMATCH",
         )
+
+    def test_review_payload_spoof_and_oversize_fail_without_partial_write(self):
+        with self.app.app_context():
+            card_id = Card.query.join(Note, Card.note_id == Note.id).one().id
+
+        base_payload = {
+            "rating": "good",
+            "scope": "deck",
+            "scope_id": self.deck_id,
+        }
+        spoofed = self.client.post(
+            f"/api/study/{card_id}/answer",
+            json={**base_payload, "source": "mcp"},
+        )
+        self.assertEqual(spoofed.status_code, 422, spoofed.get_json())
+        self.assertEqual(
+            spoofed.get_json()["error"],
+            "REVIEW_EVENT_PAYLOAD_FIELD_NOT_ALLOWED",
+        )
+
+        oversized = self.client.post(
+            f"/api/study/{card_id}/answer",
+            json={**base_payload, "selection_id": "x" * 513},
+        )
+        self.assertEqual(oversized.status_code, 413, oversized.get_json())
+        self.assertEqual(
+            oversized.get_json()["error"],
+            "REVIEW_EVENT_PAYLOAD_STRING_TOO_LONG",
+        )
+
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(CardProgress.query.count(), 0)
+
+    def test_session_event_allowlist_failure_has_no_partial_write(self):
+        snapshot = self._open_session()
+        payload = self._commit_payload(snapshot)
+        payload["events"][0]["source_path"] = "native.mcp"
+        response = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 422, response.get_json())
+        self.assertEqual(
+            response.get_json()["error"],
+            "REVIEW_EVENT_PAYLOAD_FIELD_NOT_ALLOWED",
+        )
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(CardProgress.query.count(), 0)
 
     def test_status_reports_open_committed_and_expired_sessions(self):
         committed_snapshot = self._open_session()
