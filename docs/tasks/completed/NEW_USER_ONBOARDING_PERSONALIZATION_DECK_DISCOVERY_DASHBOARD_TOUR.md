@@ -1,5 +1,10 @@
 # Task: Thiết kế onboarding người dùng mới — auto session, khảo sát sở thích, gợi ý Deck và Dashboard Tour
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-30  
+> **Target branch:** `develop`  
+> **Commits:** `12a8db2`, `d28b078`
+
 ## Mục tiêu
 
 Thiết kế lại toàn bộ luồng **người dùng mới sau khi đăng ký tài khoản** để giảm ma sát, giúp người dùng nhìn thấy giá trị của Flama ngay trong phiên đầu tiên và hiểu cách sử dụng Dashboard.
@@ -880,27 +885,27 @@ Không dựa vào fragile CSS selector như `div:nth-child(...)`.
 
 # 23. Acceptance criteria
 
-- Đăng ký thành công không còn bắt người dùng đăng nhập lại.
-- Sau registration, request authenticated tiếp theo nhận đúng user/session.
-- User mới được đưa vào onboarding đúng một lần theo onboarding version/state.
-- OAuth-created new user cũng đi qua onboarding tương ứng.
-- User có thể chọn nhiều lĩnh vực quan tâm.
-- Có thể lưu current level và target level theo domain khi phù hợp.
-- Preference sử dụng taxonomy/metadata có nguồn rõ ràng, không tạo hệ category song song không cần thiết.
-- Sau onboarding, Marketplace hiển thị Deck được filter/rank dựa trên preference.
-- User có thể bỏ filter hoặc xem toàn bộ Marketplace.
-- User có thể cài Deck từ recommendation flow.
-- User có thể Skip mà không bị khóa khỏi Flama.
-- Sau bước Deck discovery, user được dẫn tới Dashboard.
-- Dashboard tour giải thích tối thiểu Deck list, Study, Stats và navigation chính.
-- Tour không crash nếu target element không tồn tại hoặc bị ẩn trên mobile.
-- Tour không hiển thị chức năng user không có permission.
-- User có thể Skip tour.
-- User có thể chạy lại tour từ Help/Guide/Settings phù hợp.
-- Refresh/login lại giữa onboarding có thể resume hợp lý.
-- Onboarding không tự bật lại mỗi lần vào Dashboard sau khi đã completed/skipped.
-- Có analytics để đo registration → first deck install → first study activation.
-- Có test cho session-after-register, onboarding state, preference persistence, recommendation mapping và tour completion state.
+- [x] Đăng ký thành công không còn bắt người dùng đăng nhập lại.
+- [x] Sau registration, request authenticated tiếp theo nhận đúng user/session.
+- [x] User mới được đưa vào onboarding đúng một lần theo onboarding version/state.
+- [x] OAuth-created new user cũng đi qua onboarding tương ứng.
+- [x] User có thể chọn nhiều lĩnh vực quan tâm.
+- [x] Có thể lưu current level và target level theo domain khi phù hợp.
+- [x] Preference sử dụng taxonomy/metadata có nguồn rõ ràng, không tạo hệ category song song không cần thiết.
+- [x] Sau onboarding, Marketplace hiển thị Deck được filter/rank dựa trên preference.
+- [x] User có thể bỏ filter hoặc xem toàn bộ Marketplace.
+- [x] User có thể cài Deck từ recommendation flow.
+- [x] User có thể Skip mà không bị khóa khỏi Flama.
+- [x] Sau bước Deck discovery, user được dẫn tới Dashboard.
+- [x] Dashboard tour giải thích tối thiểu Deck list, Study, Stats và navigation chính.
+- [x] Tour không crash nếu target element không tồn tại hoặc bị ẩn trên mobile.
+- [x] Tour không hiển thị chức năng user không có permission.
+- [x] User có thể Skip tour.
+- [x] User có thể chạy lại tour từ Help/Guide/Settings phù hợp.
+- [x] Refresh/login lại giữa onboarding có thể resume hợp lý.
+- [x] Onboarding không tự bật lại mỗi lần vào Dashboard sau khi đã completed/skipped.
+- [x] Có analytics để đo registration → first deck install → first study activation.
+- [x] Có test cho session-after-register, onboarding state, preference persistence, recommendation mapping và tour completion state.
 
 ---
 

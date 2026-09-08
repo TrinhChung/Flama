@@ -1,6 +1,9 @@
 # Task: Generate printable PDF worksheets from Decks
 
-**Target branch:** `develop`
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-09-05  
+> **Target branch:** `develop`  
+> **Commits:** `222577f`, `36ee34a`, `7737f42`, `c4a8f7a`
 
 ## Goal
 
@@ -472,17 +475,17 @@ Where possible, test the generated document structure or rendered output determi
 
 ## Acceptance criteria
 
-- User can start PDF worksheet generation from a Deck.
-- User can select a worksheet template.
-- User can map Note fields to template inputs.
-- Kanji template can extract Kanji from the selected field and render stroke-order practice content where data exists.
-- Vocabulary templates support user-selected columns/fields.
-- At least the initial first-party templates are available.
-- Output is printable A4 PDF with correct Japanese/CJK rendering.
-- User can preview/configure before final generation.
-- Mixed Note Types and unsupported characters are handled safely.
-- PDF generation is reusable/extensible for future worksheet templates.
-- Tests cover field mapping, rendering, pagination and permission boundaries.
+- [x] User can start PDF worksheet generation from a Deck.
+- [x] User can select a worksheet template.
+- [x] User can map Note fields to template inputs.
+- [x] Kanji template can extract Kanji from the selected field and render stroke-order practice content where data exists.
+- [x] Vocabulary templates support user-selected columns/fields.
+- [x] At least the initial first-party templates are available.
+- [x] Output is printable A4 PDF with correct Japanese/CJK rendering.
+- [x] User can preview/configure before final generation.
+- [x] Mixed Note Types and unsupported characters are handled safely.
+- [x] PDF generation is reusable/extensible for future worksheet templates.
+- [x] Tests cover field mapping, rendering, pagination and permission boundaries.
 
 ## Dependency / related task
 
