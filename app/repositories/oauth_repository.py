@@ -28,24 +28,61 @@ def list_clients(*, limit: int = 50) -> list[OAuthClient]:
     return OAuthClient.query.order_by(OAuthClient.created_at.desc()).limit(limit).all()
 
 
+def get_default_client() -> OAuthClient | None:
+    """Return the designated default client for users, falling back to chatgpt_flama or first active."""
+    # 1. Explicitly designated default
+    client = OAuthClient.query.filter_by(is_default=True, is_active=True).order_by(OAuthClient.id.asc()).first()
+    if client:
+        return client
+    # 2. Pre-seeded or standard chatgpt_flama
+    client = OAuthClient.query.filter_by(client_id="chatgpt_flama", is_active=True).first()
+    if client:
+        return client
+    # 3. Any active client
+    return OAuthClient.query.filter_by(is_active=True).order_by(OAuthClient.id.asc()).first()
+
+
+def set_default_client(client_pk: int) -> OAuthClient:
+    """Designate an OAuth client as the default preset for all users."""
+    target = get_client_by_id(client_pk)
+    if not target:
+        from app.services.oauth_service import OAuthError
+        raise OAuthError("invalid_client", "OAuth Client không tồn tại.", status=404)
+    OAuthClient.query.filter(OAuthClient.id != target.id).update({OAuthClient.is_default: False})
+    target.is_default = True
+    db.session.add(target)
+    db.session.commit()
+    return target
+
+
 def create_client(
     *,
     client_id: str,
     client_name: str,
+    client_secret: str | None = None,
     client_secret_hash: str | None = None,
     client_uri: str | None = None,
     redirect_uris: Iterable[str] | None = None,
     is_confidential: bool = True,
+    is_default: bool = False,
     is_active: bool = True,
 ) -> OAuthClient:
     uris = [str(u).strip() for u in (redirect_uris or []) if str(u).strip()]
+    if is_default:
+        OAuthClient.query.update({OAuthClient.is_default: False})
+    elif not OAuthClient.query.filter_by(is_default=True, is_active=True).first():
+        # First registered client becomes default automatically
+        is_default = True
+
     client = OAuthClient(
         client_id=client_id.strip(),
         client_name=client_name.strip(),
+        client_secret=client_secret.strip() if client_secret else None,
         client_secret_hash=client_secret_hash,
         client_uri=client_uri.strip() if client_uri else None,
         redirect_uris=json.dumps(uris, ensure_ascii=False),
         is_confidential=is_confidential,
+        is_default=is_default,
         is_active=is_active,
     )
     db.session.add(client)
@@ -56,14 +93,18 @@ def update_client(
     client: OAuthClient,
     *,
     client_name: str | None = None,
+    client_secret: object = ...,
     client_secret_hash: object = ...,
     client_uri: object = ...,
     redirect_uris: Iterable[str] | None = None,
     is_confidential: bool | None = None,
+    is_default: bool | None = None,
     is_active: bool | None = None,
 ) -> OAuthClient:
     if client_name is not None:
         client.client_name = client_name.strip()
+    if client_secret is not ...:
+        client.client_secret = str(client_secret).strip() if client_secret else None
     if client_secret_hash is not ...:
         client.client_secret_hash = client_secret_hash
     if client_uri is not ...:
@@ -73,6 +114,10 @@ def update_client(
         client.redirect_uris = json.dumps(uris, ensure_ascii=False)
     if is_confidential is not None:
         client.is_confidential = is_confidential
+    if is_default is not None:
+        if is_default:
+            OAuthClient.query.filter(OAuthClient.id != client.id).update({OAuthClient.is_default: False})
+        client.is_default = is_default
     if is_active is not None:
         client.is_active = is_active
     db.session.add(client)

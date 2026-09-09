@@ -69,6 +69,7 @@ const links: FrontendLinks = {
   admin_fees: '/admin/fees',
   admin_payments: '/admin/payments',
   admin_tts: '/admin/tts',
+  admin_mcp_tokens: '/admin/mcp-tokens',
 }
 
 type SessionResponse = {
@@ -134,6 +135,7 @@ function toBootstrap(payload: SessionResponse): FrontendBootstrap {
       admin_users: isAdmin ? links.admin_users : null,
       admin_payments: isAdmin ? links.admin_payments : null,
       admin_tts: isAdmin ? links.admin_tts : null,
+      admin_mcp_tokens: isAdmin ? links.admin_mcp_tokens : null,
     },
   }
 }

@@ -149,6 +149,11 @@ const AdminTtsPage = lazy(() =>
     default: module.AdminTtsPage,
   })),
 )
+const AdminMcpTokensPage = lazy(() =>
+  import('./features/admin/pages/AdminMcpTokensPage').then((module) => ({
+    default: module.AdminMcpTokensPage,
+  })),
+)
 const StudyGoalsPage = lazy(() =>
   import('./features/settings/pages/StudyGoalsPage').then((module) => ({
     default: module.StudyGoalsPage,
@@ -579,6 +584,10 @@ const router = createBrowserRouter([
           {
             path: 'admin/permissions',
             element: deferred(<AdminPermissionsPage />),
+          },
+          {
+            path: 'admin/mcp-tokens',
+            element: deferred(<AdminMcpTokensPage />),
           },
           {
             path: 'admin/support',

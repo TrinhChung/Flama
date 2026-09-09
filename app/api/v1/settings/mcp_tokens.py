@@ -12,6 +12,13 @@ from app.services import mcp_access_token_service
 mcp_tokens_bp = Blueprint("api_v1_mcp_tokens", __name__)
 
 
+def _can_manage_tokens(user) -> bool:
+    return bool(
+        getattr(user, "is_admin", False)
+        or getattr(user, "can_manage_mcp_tokens", False)
+    )
+
+
 @mcp_tokens_bp.get("")
 @login_required
 def list_tokens():
@@ -28,6 +35,12 @@ def list_tokens():
 @mcp_tokens_bp.post("")
 @login_required
 def create_token():
+    if not _can_manage_tokens(current_user):
+        return error_response(
+            "MCP_MANAGEMENT_DENIED",
+            "Bạn không có quyền tự tạo token MCP. Vui lòng sử dụng thông tin kết nối do Quản trị viên thiết lập hoặc liên hệ Quản trị viên để được cấp quyền.",
+            status=403,
+        )
     payload = request.get_json(silent=True) or {}
     name = payload.get("name") if isinstance(payload, dict) else None
     expires_in_days = payload.get("expires_in_days", 180) if isinstance(payload, dict) else 180
@@ -52,6 +65,12 @@ def create_token():
 @mcp_tokens_bp.patch("/<int:token_id>")
 @login_required
 def update_token(token_id: int):
+    if not _can_manage_tokens(current_user):
+        return error_response(
+            "MCP_MANAGEMENT_DENIED",
+            "Bạn không có quyền chỉnh sửa token MCP. Vui lòng liên hệ Quản trị viên.",
+            status=403,
+        )
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         return error_response("INVALID_JSON", "A JSON object is required.", status=400)
@@ -80,6 +99,12 @@ def update_token(token_id: int):
 @mcp_tokens_bp.post("/<int:token_id>/rotate")
 @login_required
 def rotate_token(token_id: int):
+    if not _can_manage_tokens(current_user):
+        return error_response(
+            "MCP_MANAGEMENT_DENIED",
+            "Bạn không có quyền xoay vòng secret MCP. Vui lòng liên hệ Quản trị viên.",
+            status=403,
+        )
     payload = request.get_json(silent=True) or {}
     expires_in_days = payload.get("expires_in_days", ...) if isinstance(payload, dict) else ...
     scopes = payload.get("scopes") if isinstance(payload, dict) else None
@@ -103,6 +128,12 @@ def rotate_token(token_id: int):
 @mcp_tokens_bp.delete("/<int:token_id>")
 @login_required
 def delete_token(token_id: int):
+    if not _can_manage_tokens(current_user):
+        return error_response(
+            "MCP_MANAGEMENT_DENIED",
+            "Bạn không có quyền thu hồi token MCP. Vui lòng liên hệ Quản trị viên.",
+            status=403,
+        )
     try:
         revoked = mcp_access_token_service.revoke_token_and_commit(
             user_id=current_user.id,
@@ -126,6 +157,12 @@ def delete_token(token_id: int):
 @mcp_tokens_bp.delete("/<int:token_id>/purge")
 @login_required
 def purge_token(token_id: int):
+    if not _can_manage_tokens(current_user):
+        return error_response(
+            "MCP_MANAGEMENT_DENIED",
+            "Bạn không có quyền xóa token MCP. Vui lòng liên hệ Quản trị viên.",
+            status=403,
+        )
     try:
         purged = mcp_access_token_service.purge_token_and_commit(
             user_id=current_user.id,
@@ -143,6 +180,12 @@ def purge_token(token_id: int):
 @mcp_tokens_bp.post("/cleanup")
 @login_required
 def cleanup_tokens():
+    if not _can_manage_tokens(current_user):
+        return error_response(
+            "MCP_MANAGEMENT_DENIED",
+            "Bạn không có quyền dọn dẹp token MCP. Vui lòng liên hệ Quản trị viên.",
+            status=403,
+        )
     try:
         count = mcp_access_token_service.cleanup_tokens_and_commit(
             user_id=current_user.id,
@@ -151,4 +194,5 @@ def cleanup_tokens():
         return error_response("DB_ERROR", str(exc), status=500)
 
     return jsonify({"success": True, "purged_count": count}), 200
+
 

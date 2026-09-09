@@ -211,7 +211,16 @@ def issue_token(
     name: str | None = None,
     expires_in_days: int | None = 180,
     scopes: Iterable[str] | None = None,
+    custom_token: str | None = None,
 ) -> IssuedMcpAccessToken:
+    user = mcp_access_token_repository.get_user_by_id(user_id)
+    if user is not None and not bool(getattr(user, "is_active", True)):
+        raise McpAccessTokenError(
+            "User account is disabled.",
+            status=403,
+            code="USER_DISABLED",
+        )
+
     normalized_name = str(name or "").strip() or "MCP Token"
     if len(normalized_name) > 120:
         normalized_name = normalized_name[:120]
@@ -230,7 +239,10 @@ def issue_token(
     if not token_scopes:
         token_scopes = DEFAULT_SCOPES
 
-    raw_token = f"flama_mcp_{secrets.token_urlsafe(32)}"
+    if custom_token and str(custom_token).strip():
+        raw_token = str(custom_token).strip()
+    else:
+        raw_token = f"flama_mcp_{secrets.token_urlsafe(32)}"
     now = datetime.utcnow()
     expires_at = (now + timedelta(days=expires_in_days)) if expires_in_days is not None else None
     max_requests = 1_000_000
@@ -280,6 +292,7 @@ def issue_token_and_commit(
     name: str | None = None,
     expires_in_days: int | None = 180,
     scopes: Iterable[str] | None = None,
+    custom_token: str | None = None,
 ) -> IssuedMcpAccessToken:
     try:
         issued = issue_token(
@@ -287,6 +300,7 @@ def issue_token_and_commit(
             name=name,
             expires_in_days=expires_in_days,
             scopes=scopes,
+            custom_token=custom_token,
         )
         db.session.commit()
         return issued

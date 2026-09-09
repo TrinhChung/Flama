@@ -63,6 +63,7 @@ const pageTitles: Record<string, string> = {
   '/support/feedback': 'Đóng góp ý kiến',
   '/admin/users': 'Quản lý người dùng',
   '/admin/permissions': 'Phân quyền người dùng',
+  '/admin/mcp-tokens': 'Quản lý Token & AI (MCP)',
   '/admin/payments': 'Quản lý thanh toán',
   '/admin/tts': 'TTS Provider',
   '/admin/image-library': 'Thư viện ảnh Admin',

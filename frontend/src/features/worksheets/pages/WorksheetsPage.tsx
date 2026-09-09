@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Printer, ArrowLeft, Sparkles, FileEdit, LayoutGrid, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,6 +8,14 @@ import { DeckWorksheetModal } from '../components/DeckWorksheetModal'
 
 export function WorksheetsPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const paramDeckId = searchParams.get('deckId') || searchParams.get('deck_id')
+  const paramDeckName = searchParams.get('deckName') || searchParams.get('deck_name')
+  const initialDeckId = useMemo(() => {
+    if (!paramDeckId) return null
+    const parsed = Number(paramDeckId)
+    return Number.isFinite(parsed) ? parsed : null
+  }, [paramDeckId])
   const [isStudioOpen, setIsStudioOpen] = useState<boolean>(true)
 
   return (
@@ -153,8 +161,8 @@ export function WorksheetsPage() {
       <DeckWorksheetModal
         open={isStudioOpen}
         onOpenChange={setIsStudioOpen}
-        deckId={null}
-        deckName={undefined}
+        deckId={initialDeckId}
+        deckName={paramDeckName || undefined}
       />
     </div>
   )

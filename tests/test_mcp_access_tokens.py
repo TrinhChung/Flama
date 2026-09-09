@@ -153,12 +153,34 @@ class McpAccessTokenTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<div id="root"></div>', response.data)
 
-    def test_regular_user_can_generate_and_list_tokens(self):
+    def test_regular_user_can_list_but_not_create_tokens_without_permission(self):
+        self._login_regular()
+
+        # Regular user can view their tokens (returns empty list)
+        list_response = self.client.get("/api/mcp-tokens")
+        self.assertEqual(list_response.status_code, 200)
+        items = (list_response.get_json() or {}).get("items", [])
+        self.assertEqual(len(items), 0)
+
+        # But cannot self-create tokens
+        create_response = self.client.post(
+            "/api/mcp-tokens",
+            json={"name": "Regular User Token", "expires_in_days": 30},
+        )
+        self.assertEqual(create_response.status_code, 403)
+        self.assertEqual((create_response.get_json() or {}).get("error"), "MCP_MANAGEMENT_DENIED")
+
+    def test_permitted_user_can_generate_and_list_tokens(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.other_user_id)
+            user.can_manage_mcp_tokens = True
+            db.session.commit()
+
         self._login_regular()
 
         create_response = self.client.post(
             "/api/mcp-tokens",
-            json={"name": "Regular User Token", "expires_in_days": 30},
+            json={"name": "Permitted User Token", "expires_in_days": 30},
         )
         self.assertEqual(create_response.status_code, 201)
 
@@ -166,7 +188,105 @@ class McpAccessTokenTests(unittest.TestCase):
         self.assertEqual(list_response.status_code, 200)
         items = (list_response.get_json() or {}).get("items", [])
         self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["name"], "Regular User Token")
+        self.assertEqual(items[0]["name"], "Permitted User Token")
+
+    def test_regular_user_can_use_mcp_api_with_issued_token(self):
+        # Admin issues token for regular user
+        with self.app.app_context():
+            issued = mcp_access_token_service.issue_token_and_commit(
+                user_id=self.other_user_id,
+                name="Admin Assigned Token",
+                expires_in_days=90,
+            )
+            token = issued.token
+
+        # Regular user can call MCP API with this token
+        external_client = self.app.test_client()
+        response = external_client.post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers=self._mcp_headers(token),
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIn("result", payload)
+
+    def test_token_rejected_when_revoked(self):
+        with self.app.app_context():
+            issued = mcp_access_token_service.issue_token_and_commit(
+                user_id=self.other_user_id,
+                name="Revocable Token",
+            )
+            token = issued.token
+            row = McpAccessToken.query.filter_by(user_id=self.other_user_id, name="Revocable Token").first()
+            token_id = row.id
+
+        # Revoke the token
+        with self.app.app_context():
+            mcp_access_token_service.revoke_token_and_commit(
+                user_id=self.other_user_id,
+                token_id=token_id,
+            )
+
+        external_client = self.app.test_client()
+        response = external_client.post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers=self._mcp_headers(token),
+        )
+        self.assertEqual(response.status_code, 401)
+        payload = response.get_json()
+        self.assertEqual(payload["error"]["data"]["code"], "MCP_TOKEN_REVOKED")
+
+    def test_admin_mcp_management_endpoints(self):
+        self._login()
+
+        # 1. Summary
+        res = self.client.get("/api/admin/mcp-tokens/summary")
+        self.assertEqual(res.status_code, 200)
+        summary = res.get_json()
+        self.assertIn("total_tokens", summary)
+        self.assertIn("permitted_users", summary)
+
+        # 2. List users
+        res = self.client.get("/api/admin/mcp-tokens/users")
+        self.assertEqual(res.status_code, 200)
+        users = res.get_json().get("items", [])
+        self.assertTrue(len(users) >= 2)
+
+        # 3. Grant permission to regular user
+        res = self.client.post(
+            f"/api/admin/mcp-tokens/users/{self.other_user_id}/permission",
+            json={"can_manage_mcp_tokens": True},
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.get_json().get("can_manage_mcp_tokens"))
+
+        # Verify in DB
+        with self.app.app_context():
+            u = db.session.get(User, self.other_user_id)
+            self.assertTrue(u.can_manage_mcp_tokens)
+
+        # 4. Issue token for user via Admin
+        res = self.client.post(
+            "/api/admin/mcp-tokens/tokens",
+            json={"user_id": self.other_user_id, "name": "Admin Issued Token"},
+        )
+        self.assertEqual(res.status_code, 201)
+
+        # 5. List system tokens
+        res = self.client.get("/api/admin/mcp-tokens/tokens")
+        self.assertEqual(res.status_code, 200)
+        tokens = res.get_json().get("items", [])
+        self.assertTrue(any(t["name"] == "Admin Issued Token" for t in tokens))
+
+        # 6. Revoke permission
+        res = self.client.post(
+            f"/api/admin/mcp-tokens/users/{self.other_user_id}/permission",
+            json={"can_manage_mcp_tokens": False},
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.get_json().get("can_manage_mcp_tokens"))
 
     def test_bearer_token_can_call_mcp_without_session(self):
         token = self._generate_token()

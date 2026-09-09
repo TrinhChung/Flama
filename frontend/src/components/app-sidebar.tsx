@@ -7,8 +7,9 @@ import {
   Download,
   Heart,
   HelpCircle,
-  Image as ImageIcon,
+  ImageIcon,
   Key,
+  KeyRound,
   Layers,
   LayoutDashboard,
   MessageSquareHeart,
@@ -83,6 +84,9 @@ export function AppSidebar({
           { title: 'Người dùng', url: bootstrap.links.admin_users, icon: Users },
           { title: 'Phân quyền', url: '/admin/permissions', icon: ShieldUser },
         ]
+      : []),
+    ...(bootstrap.links.admin_mcp_tokens
+      ? [{ title: 'Quản lý Token & AI (MCP)', url: bootstrap.links.admin_mcp_tokens, icon: KeyRound }]
       : []),
     ...(bootstrap.links.admin_payments
       ? [

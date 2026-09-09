@@ -270,6 +270,7 @@ def register_oauth_client(
     client_uri: str | None = None,
     redirect_uris: Iterable[str] | None = None,
     is_confidential: bool = True,
+    is_default: bool = False,
 ) -> OAuthClient:
     sanitized_uris = validate_client_metadata(
         client_id=client_id,
@@ -278,15 +279,20 @@ def register_oauth_client(
         client_secret=client_secret,
         client_uri=client_uri,
     )
-    secret_hash = generate_password_hash(client_secret) if client_secret else None
+    secret_val = client_secret.strip() if client_secret else None
+    secret_hash = generate_password_hash(secret_val) if secret_val else None
     existing = oauth_repository.get_client_by_client_id(client_id.strip())
     if existing:
         existing.client_name = client_name.strip()
-        if secret_hash:
+        if secret_val:
+            existing.client_secret = secret_val
             existing.client_secret_hash = secret_hash
         existing.client_uri = client_uri.strip() if client_uri else None
         existing.redirect_uris = json.dumps(sanitized_uris, ensure_ascii=False)
         existing.is_confidential = is_confidential
+        if is_default:
+            OAuthClient.query.filter(OAuthClient.id != existing.id).update({OAuthClient.is_default: False})
+            existing.is_default = True
         db.session.add(existing)
         db.session.commit()
         return existing
@@ -294,10 +300,12 @@ def register_oauth_client(
     client = oauth_repository.create_client(
         client_id=client_id.strip(),
         client_name=client_name.strip(),
+        client_secret=secret_val,
         client_secret_hash=secret_hash,
         client_uri=client_uri.strip() if client_uri else None,
         redirect_uris=sanitized_uris,
         is_confidential=is_confidential,
+        is_default=is_default,
     )
     db.session.commit()
     return client
@@ -311,6 +319,7 @@ def update_oauth_client(
     client_uri: str | None = None,
     redirect_uris: Iterable[str] | None = None,
     is_confidential: bool | None = None,
+    is_default: bool | None = None,
 ) -> OAuthClient:
     client = oauth_repository.get_client_by_id(client_pk)
     if not client:
@@ -328,17 +337,25 @@ def update_oauth_client(
         client_uri=target_uri,
     )
 
+    secret_val = ...
     secret_hash = ...
-    if client_secret is not None:
-        secret_hash = generate_password_hash(client_secret) if client_secret.strip() else None
+    target_confidential = is_confidential
+    # Only update secret if explicitly provided with a non-empty string
+    if client_secret is not None and str(client_secret).strip():
+        clean_sec = str(client_secret).strip()
+        secret_val = clean_sec
+        secret_hash = generate_password_hash(clean_sec)
+        target_confidential = True
 
     oauth_repository.update_client(
         client,
         client_name=target_name,
+        client_secret=secret_val,
         client_secret_hash=secret_hash,
         client_uri=target_uri,
         redirect_uris=sanitized_uris,
-        is_confidential=is_confidential,
+        is_confidential=target_confidential,
+        is_default=is_default,
     )
     db.session.commit()
     return client
@@ -363,11 +380,16 @@ def rotate_client_secret(
     secret_hash = generate_password_hash(secret_value)
     oauth_repository.update_client(
         client,
+        client_secret=secret_value,
         client_secret_hash=secret_hash,
         is_confidential=True,
     )
     db.session.commit()
     return client, secret_value
+
+
+def set_default_client(client_pk: int) -> OAuthClient:
+    return oauth_repository.set_default_client(client_pk)
 
 
 def validate_authorize_request(
@@ -472,9 +494,17 @@ def authenticate_client_credentials(
         raise OAuthError("invalid_client", "Invalid or inactive client.", status=401)
 
     if client.is_confidential:
-        if not client_secret or not client.client_secret_hash:
+        if not client_secret or (not client.client_secret_hash and not client.client_secret):
             raise OAuthError("invalid_client", "Client secret is required.", status=401)
-        if not check_password_hash(client.client_secret_hash, client_secret):
+        valid_secret = False
+        if client.client_secret_hash:
+            try:
+                valid_secret = check_password_hash(client.client_secret_hash, client_secret)
+            except Exception:
+                valid_secret = False
+        if not valid_secret and client.client_secret:
+            valid_secret = secrets.compare_digest(client.client_secret, client_secret)
+        if not valid_secret:
             raise OAuthError("invalid_client", "Invalid client secret.", status=401)
 
     return client
@@ -528,6 +558,10 @@ def exchange_code_for_token(
         raise OAuthError("invalid_grant", "PKCE verification failed.")
 
     oauth_repository.mark_authorization_code_used(auth_code)
+
+    user = auth_code.user
+    if user is None or not bool(getattr(user, "is_active", True)):
+        raise OAuthError("invalid_grant", "User account is inactive or not found.")
 
     raw_access_token = f"flama_mcp_oa_{secrets.token_urlsafe(32)}"
     raw_refresh_token = f"flama_mcp_rt_{secrets.token_urlsafe(32)}"
@@ -588,6 +622,10 @@ def refresh_access_token(
     now = datetime.utcnow()
     if token_row.refresh_token_expires_at is not None and token_row.refresh_token_expires_at <= now:
         raise OAuthError("invalid_grant", "Refresh token has expired.")
+
+    user = token_row.user
+    if user is None or not bool(getattr(user, "is_active", True)):
+        raise OAuthError("invalid_grant", "User account is inactive or not found.")
 
     # Generate new access token and rotate refresh token
     new_access_token = f"flama_mcp_oa_{secrets.token_urlsafe(32)}"

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { FLAMA_MCP_URL } from '@/config/env'
+import { useBootstrap } from '@/shared/api/bootstrap'
 
 export type McpTokenItem = {
   id: number
@@ -171,9 +172,16 @@ export function useMcpTokenCRUD() {
     ? `${FLAMA_MCP_URL.replace(/\/+$/, '')}/${encodeURIComponent(issued.token)}`
     : null
 
+  const { data: bootstrap } = useBootstrap()
+  const canUseMcp = Boolean(bootstrap?.user)
+  const canManageTokens = Boolean(
+    bootstrap?.user?.is_admin || bootstrap?.user?.can_manage_mcp_tokens
+  )
+
   const query = useQuery({
     queryKey,
     queryFn: () => appApi.get<McpTokensResponse>('/mcp-tokens'),
+    enabled: canUseMcp,
   })
 
   const refresh = async () => {
@@ -400,6 +408,7 @@ export function useMcpTokenCRUD() {
     revokeMutation,
     purgeMutation,
     cleanupMutation,
+    canManageTokens,
   }
 }
 

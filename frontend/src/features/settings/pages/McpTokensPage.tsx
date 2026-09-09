@@ -24,6 +24,8 @@ export function McpTokensPage() {
   const hookResult = useMcpTokenCRUD()
   const { query } = hookResult
 
+
+
   if (query.isPending) return <PageLoading label="Đang tải MCP tokens…" />
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
