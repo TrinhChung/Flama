@@ -1,12 +1,12 @@
 # Study, Interaction, Trigger, Algorithm, and Progress Architecture Plan
 
-Status: active staged refactor. Product decisions were approved on 2026-08-24. Phases 0–2 are complete as of 2026-09-08; Phase 3 has a partial compatibility scaffold but has not met its exit gate. Phases 4–9 have not started. See the [P1/P2 closeout](../task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md).
+Status: active staged refactor. Product decisions were approved on 2026-08-24. Phases 0–3 and INT-01 are complete as of 2026-09-09. Phases 4–9 have not started and require separate authorization for schema or authority changes. See the [P1/P2 closeout](../task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) and [Phase 3/INT-01 closeout](../task/decoupling/completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md).
 
 Detailed Phase 0-3 work items, dependencies, required outputs, and acceptance gates are maintained in [`docs/task/decoupling/`](../task/decoupling/README.md).
 
 Last investigated: 2026-08-24
 
-Last implementation review: 2026-09-08
+Last implementation review: 2026-09-09
 
 ## Scope and evidence discipline
 
@@ -29,7 +29,7 @@ Statements are labelled as follows:
 
 This plan intentionally stops before detailed SQL. It follows the requested order: responsibility, identity, ownership, runtime flow, state ownership, lifecycle, extensibility, compatibility, migration, then physical storage.
 
-## Implementation progress snapshot — 2026-09-08
+## Implementation progress snapshot — 2026-09-09
 
 `Partial` means that reviewed code exists and its focused tests pass, but every exit condition written for the phase has not yet been satisfied. This avoids treating an adapter seam as the completed target architecture.
 
@@ -38,7 +38,7 @@ This plan intentionally stops before detailed SQL. It follows the requested orde
 | Phase 0 — evidence and invariants | **Complete** | Read-only audit entrypoint/contract, expanded anomaly inventory, MySQL evidence bundle and immutable behavior baseline are closed in P0-01..P0-04 | none for Phase 0 |
 | Phase 1 — runtime boundaries | **Complete** | canonical native transaction, external revision/conflict contract, bounded versioned ReviewEvent provenance and exact Algorithm retirement lifecycle | async production enablement remains a separately contained transport prerequisite, not an active writer |
 | Phase 2 — built-in Interaction/Trigger compatibility | **Complete** | owner-token mutex, strict restore/quarantine, one semantic callback, accepted no-bridge keyboard boundary, exact built-in Trigger dispatcher and dual v2/v3 readers | v3 issuance is deliberately flag-off until rollout; async admission is flag-off until its independent readiness gates pass |
-| Phase 3 — composition/StudyMode | **Partial scaffold; exit gate not met** | compatibility composition service/API, optional server filtering, snapshot metadata, and selector UI | selection does not precede or control session open; exactly-one scope authorization and query-first filtering; immutable selected mode; mixed-NoteType rule; real overlay-only clone proof; Field/Template binding prerequisites |
+| Phase 3 — composition/StudyMode | **Complete** | exactly-one authorized selection, grouped mixed-NoteType discovery, query-first effective-scope filtering, pre-session selector, frozen composition/binding snapshot, and real `DeckInstall` overlay proof | physical reusable definition/application storage remains explicitly deferred to Phase 4+ |
 | Phase 4 — learner/Note progress and Algorithm State | **Not started** | none; `CardProgress` remains authoritative | approved state/availability/history contracts, additive schema, backfill and shadow reconciliation |
 | Phases 5-9 — authority cutover through contract cleanup | **Not started** | none | all earlier exit gates plus explicit production migration approval |
 
@@ -50,14 +50,17 @@ This plan intentionally stops before detailed SQL. It follows the requested orde
 - The client resolves the same exact Algorithm key/version before answering a session. It upgrades valid legacy v2 events with canonical Action metadata and moves incompatible persisted rows from the active IndexedDB store to a bounded one-row-per-scope quarantine store with explicit evidence-preserving recovery.
 - Direct REST and MCP reviews now run through one locked command and stamp Algorithm/version plus the same canonical scheduler-config hash used by batch sessions. They intentionally have no StudySession identity because they are immediate commits rather than leased batches.
 - The forged iframe `host_command` path is contained. Keyboard input inside the untrusted renderer remains local; only the parent document maps trusted shortcuts to semantic Actions.
+- New sessions resolve exactly one context-qualified composition before opening. Discovery and authorization share effective owned/installed-source/installed-local card semantics, and ambiguous legacy requests fail closed.
+- The selected composition and binding fingerprint are frozen in the existing session JSON. Restore does not rediscover an active lease, and commit/batch requests cannot switch its composition.
 
 ### Verification evidence
 
-- Study backend: 144 tests across 17 files passed.
-- Study frontend: 167 tests across 22 files passed.
+- Phase 3 focused backend: 46 composition/session/exit-gate tests passed; the broader Study backend module passed 151 tests.
+- Phase 3 focused frontend: 44 hook/restore tests passed; the pre-session selector is also covered by the full frontend run.
 - Connect/MCP backend: 161 tests across 13 files passed.
 - Decks/Flashcards backend: 361 tests across 31 files passed.
 - Frontend TypeScript typecheck passed; lint completed with pre-existing unrelated warnings and no errors.
+- Final Phase 0–3 integration run: all 119 backend suites passed (1,094 tests, 2 skipped) and all 62 frontend files passed (384 tests).
 - Isolated-browser evidence confirms the accepted no-bridge keyboard boundary.
 - Shared fixture `tests/fixtures/study/legacy-anki-1.0.0-golden-vectors.json` is consumed independently by `tests/test_study_algorithm_golden_vectors.py` and `legacyEngine.golden.test.ts`; expected results are not calculated by the implementation under test at test runtime.
 - Read-only production follow-up through `chung_hostinger_vps`: Alembic `20260826_000021`; zero cross-NoteType Cards, zero missing/multiple Cards per Note, zero Template default/name/position anomalies, zero NULL/orphan progress rows, and zero learner/Note progress/history fan-in groups. Forty-one `open` sessions were expired by timestamp; no session row was older than 30 days. No production mutation was performed.
@@ -1299,7 +1302,7 @@ Orders 2-6 remain open. Only after all six orders pass should Phase 0-2 be marke
 
 ### Phase 3 — Establish the composition responsibility
 
-**Implementation status (reviewed 2026-08-29): Partial compatibility scaffold; exit gate not met.** The composition service/API, optional session filtering, snapshot metadata, and selector UI exist. The frontend still opens the session before selection and does not send the selected composition, the backend accepts ambiguous optional lists and filters after limiting the candidate set, and the current exit test simulates a physical clone Card instead of exercising the overlay-only DeckInstall path. FieldDef-based bindings remain deferred pending the Field normalization plan.
+**Implementation status (reviewed 2026-09-09): Complete.** The accepted mixed-NoteType policy groups eligible compositions by NoteType but authorizes exactly one selected application. The React flow discovers before opening; the backend validates context-qualified owned/installed selections and filters before the session limit; the selected composition and FieldDef-based compatibility binding material are frozen for restore and commit. A real publish/install `DeckInstall` test covers source plus local-added Cards and proves that ordinary source Cards are neither copied nor mutated. Physical reusable definition/application tables remain deferred.
 
 **Work:**
 

@@ -141,33 +141,37 @@ class CompositionExitGateTests(unittest.TestCase):
         self.assertNotEqual(comp_a.composition_id, comp_b.composition_id)
 
     # ------------------------------------------------------------------
-    # Gate 2: Clone/install cards resolve with context
+    # Gate 2: Owned cards retain the legacy compatibility projection
     # ------------------------------------------------------------------
 
-    def test_clone_install_cards_resolve_with_context(self):
-        """Cards from clone/install contexts resolve composition based on
-        the source Template, producing a behaviorally equivalent result."""
+    def test_owned_cards_in_different_decks_share_legacy_projection(self):
+        """Owned cards with the same Template share one legacy projection.
+
+        Real overlay context coverage lives in
+        test_shared_deck_logical_overlay_via_real_service_path; this test is
+        intentionally limited to the non-installed compatibility grammar.
+        """
         nt, (tpl,) = self._make_note_type(templates=[("Primary", True)])
         source_deck = self._make_deck("Source", note_type=nt)
-        clone_deck = self._make_deck("Clone", note_type=nt)
+        second_deck = self._make_deck("Second owned deck", note_type=nt)
 
-        # Same NoteType/Template, different decks — simulates clone overlay
+        # Same owned NoteType/Template, different owned decks.
         source_card = self._make_card(source_deck, nt, tpl)
-        clone_card = self._make_card(clone_deck, nt, tpl)
+        second_card = self._make_card(second_deck, nt, tpl)
 
         comp_source = resolve_compatibility_composition_for_card(source_card)
-        comp_clone = resolve_compatibility_composition_for_card(clone_card)
+        comp_second = resolve_compatibility_composition_for_card(second_card)
 
         # Both resolve to the same composition identity (same Template)
-        self.assertEqual(comp_source.composition_id, comp_clone.composition_id)
-        self.assertEqual(comp_source.template_id, comp_clone.template_id)
-        self.assertEqual(comp_source.note_type_id, comp_clone.note_type_id)
+        self.assertEqual(comp_source.composition_id, comp_second.composition_id)
+        self.assertEqual(comp_source.template_id, comp_second.template_id)
+        self.assertEqual(comp_source.note_type_id, comp_second.note_type_id)
 
         # Behaviorally equivalent — all runtime fields match
-        self.assertEqual(comp_source.interaction_key, comp_clone.interaction_key)
-        self.assertEqual(comp_source.trigger_key, comp_clone.trigger_key)
-        self.assertEqual(comp_source.algorithm_key, comp_clone.algorithm_key)
-        self.assertEqual(comp_source.algorithm_version, comp_clone.algorithm_version)
+        self.assertEqual(comp_source.interaction_key, comp_second.interaction_key)
+        self.assertEqual(comp_source.trigger_key, comp_second.trigger_key)
+        self.assertEqual(comp_source.algorithm_key, comp_second.algorithm_key)
+        self.assertEqual(comp_source.algorithm_version, comp_second.algorithm_version)
 
     # ------------------------------------------------------------------
     # Gate 3: Mixed-NoteType deck compositions are distinct and complete
@@ -197,7 +201,6 @@ class CompositionExitGateTests(unittest.TestCase):
         expected_ids = {
             make_compatibility_composition_id(nt_jp.id, tpl_jp.id),
             make_compatibility_composition_id(nt_en.id, tpl_en_a.id),
-            make_compatibility_composition_id(nt_en.id, tpl_en_b.id),
         }
         self.assertEqual(comp_ids, expected_ids)
 
@@ -268,6 +271,9 @@ class CompositionExitGateTests(unittest.TestCase):
         nt, (tpl_a, tpl_b) = self._make_note_type(
             templates=[("Forward", True), ("Reverse", False)]
         )
+        deck = self._make_deck("NoteType scope", note_type=nt)
+        self._make_card(deck, nt, tpl_a)
+        self._make_card(deck, nt, tpl_b)
 
         comps = list_available_compositions_for_scope(
             "note_type", nt.id, self.user.id
@@ -280,21 +286,18 @@ class CompositionExitGateTests(unittest.TestCase):
         self.assertEqual(comp_ids, expected)
 
     # ------------------------------------------------------------------
-    # Gate 7: Empty deck falls back to deck.note_type_id
+    # Gate 7: Empty deck does not advertise an unusable composition
     # ------------------------------------------------------------------
 
-    def test_empty_deck_fallback_to_note_type(self):
-        """A deck with no notes falls back to deck.note_type_id for
-        composition resolution."""
-        nt, (tpl,) = self._make_note_type(templates=[("Solo", True)])
+    def test_empty_deck_has_no_eligible_composition(self):
+        """An empty deck does not advertise a Template without a Card."""
+        nt, (_tpl,) = self._make_note_type(templates=[("Solo", True)])
         deck = self._make_deck("EmptyDeck", note_type=nt)
 
         comps = list_available_compositions_for_scope(
             "deck", deck.id, self.user.id
         )
-        self.assertEqual(len(comps), 1)
-        self.assertEqual(comps[0].template_id, str(tpl.id))
-        self.assertEqual(comps[0].note_type_id, str(nt.id))
+        self.assertEqual(comps, [])
 
     # ------------------------------------------------------------------
     # Gate 8: Permission check rejects foreign NoteType

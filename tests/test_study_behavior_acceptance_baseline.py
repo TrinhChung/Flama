@@ -16,6 +16,7 @@ from app.services import (
     anki_import_service,
     flama_connect_package_service,
     flashcards_share_service,
+    study_composition_service,
     study_service,
     study_session_service,
 )
@@ -1402,6 +1403,52 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             # Scope query now includes source cards + learner's added card (3 cards)
             all_scope_cards = flashcards_share_service.query_clone_scope_cards(scope).all()
             self.assertEqual(len(all_scope_cards), 3)
+
+            # Composition discovery and session opening use this exact real
+            # overlay query. Source and learner-local cards must remain
+            # distinguishable without materializing a physical clone.
+            effective_query = flashcards_share_service.query_clone_scope_cards(scope)
+            compositions = study_composition_service.list_available_compositions_for_query(
+                effective_query,
+                clone_scope=scope,
+            )
+            self.assertEqual(
+                {item.context_kind for item in compositions},
+                {"installed_source", "installed_local"},
+            )
+            self.assertTrue(
+                all(item.composition_id.startswith(f"comp:install:{scope.install.id}:") for item in compositions)
+            )
+
+            for composition in compositions:
+                selection = study_composition_service.resolve_composition_selection(
+                    effective_query,
+                    clone_scope=scope,
+                    requested_composition_id=composition.composition_id,
+                    request_source="acceptance-real-overlay",
+                )
+                composition_snapshot = study_session_service.open_study_session(
+                    user=learner_user,
+                    query=effective_query,
+                    clone_scope=scope,
+                    scope_type="deck",
+                    scope_id=str(local_deck_id),
+                    timezone_name="Asia/Ho_Chi_Minh",
+                    composition_selection=selection,
+                    now=now,
+                )
+                self.assertEqual(
+                    composition_snapshot["selected_composition_id"],
+                    composition.composition_id,
+                )
+                self.assertTrue(composition_snapshot["cards"])
+                self.assertEqual(
+                    {card["composition_id"] for card in composition_snapshot["cards"]},
+                    {composition.composition_id},
+                )
+
+            self.assertEqual(Note.query.count(), initial_notes + 1)
+            self.assertEqual(Card.query.count(), initial_cards + 1)
 
             # 7. Learner reviews local-added card through clone scope
             custom_card = Card.query.filter_by(note_id=actual_note_id).first()

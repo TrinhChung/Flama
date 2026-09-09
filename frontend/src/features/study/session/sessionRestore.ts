@@ -32,6 +32,7 @@ export type StudySessionQuarantineReason =
   | 'ALGORITHM_UNAVAILABLE'
   | 'ALGORITHM_CONTRACT_MISMATCH'
   | 'BATCH_CONTRACT_MISMATCH'
+  | 'COMPOSITION_CONTRACT_MISMATCH'
   | 'EVENT_CONTRACT_MISMATCH'
   | 'EVENT_ID_INVALID'
   | 'EVENT_SEQUENCE_INVALID'
@@ -435,6 +436,47 @@ export function normalizePersistedStudySession(
     )
   })) {
     return quarantine('MALFORMED_SESSION', 'Stored study cards are malformed.')
+  }
+
+  const compositionFields = [
+    snapshotValue.composition_contract_version,
+    snapshotValue.selected_composition_id,
+    snapshotValue.selected_composition,
+    snapshotValue.composition_binding,
+  ]
+  const hasCompositionContract = compositionFields.some(
+    (item) => item !== undefined,
+  )
+  if (hasCompositionContract) {
+    const selectedId = snapshotValue.selected_composition_id
+    const selected = snapshotValue.selected_composition
+    const binding = snapshotValue.composition_binding
+    const selectedFromDictionary = typeof selectedId === 'string'
+      ? (compositions as Record<string, unknown>)[selectedId]
+      : undefined
+    if (
+      snapshotValue.composition_contract_version !== 'applied-composition.compat.v1'
+      || typeof selectedId !== 'string'
+      || selectedId.length === 0
+      || !isRecord(selected)
+      || selected.composition_id !== selectedId
+      || !isRecord(selectedFromDictionary)
+      || selectedFromDictionary.composition_id !== selectedId
+      || !isRecord(binding)
+      || binding.schema_version !== 'study-composition-binding.v1'
+      || binding.composition_id !== selectedId
+      || typeof binding.binding_fingerprint !== 'string'
+      || !binding.binding_fingerprint.startsWith('sha256-')
+      || !Array.isArray(binding.field_bindings)
+      || snapshotValue.cards.some((card) => (
+        !isRecord(card) || card.composition_id !== selectedId
+      ))
+    ) {
+      return quarantine(
+        'COMPOSITION_CONTRACT_MISMATCH',
+        'Stored study composition does not match its frozen session material.',
+      )
+    }
   }
 
   if (

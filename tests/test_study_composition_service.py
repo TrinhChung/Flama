@@ -11,6 +11,7 @@ from models.user import User
 from app.services.study_composition_service import (
     AppliedComposition,
     build_compatibility_composition,
+    group_available_compositions,
     list_available_compositions_for_scope,
     make_compatibility_composition_id,
     resolve_compatibility_composition_for_card,
@@ -114,10 +115,21 @@ class StudyCompositionServiceTests(unittest.TestCase):
 
     def test_list_available_compositions_for_deck_scope(self):
         comps = list_available_compositions_for_scope("deck", self.deck.id, self.user.id)
-        self.assertEqual(len(comps), 2)
+        self.assertEqual(len(comps), 1)
         comp_names = [c.template_name for c in comps]
         self.assertIn("Forward (Front -> Back)", comp_names)
-        self.assertIn("Reverse (Back -> Front)", comp_names)
+        self.assertNotIn("Reverse (Back -> Front)", comp_names)
+
+    def test_groups_only_card_backed_compositions(self):
+        comps = list_available_compositions_for_scope("deck", self.deck.id, self.user.id)
+        groups = group_available_compositions(comps)
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].note_type_id, str(self.note_type.id))
+        self.assertEqual(groups[0].note_type_name, "Test NoteType")
+        self.assertEqual(
+            [item.template_id for item in groups[0].compositions],
+            [str(self.template_1.id)],
+        )
 
 
 if __name__ == "__main__":

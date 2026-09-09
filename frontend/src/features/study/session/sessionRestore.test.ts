@@ -159,6 +159,42 @@ function persistedSession() {
   }
 }
 
+function addFrozenCompositionContract(stored: ReturnType<typeof persistedSession>) {
+  const composition = {
+    composition_id: 'comp:notetype:type-1:template:template-1',
+    mode_key: 'flashcard',
+    note_type_id: 'type-1',
+    note_type_name: 'Basic',
+    template_id: 'template-1',
+    template_name: 'Front -> Back',
+    is_default: true,
+    context_kind: 'owned' as const,
+    interaction_key: 'review.four-rating',
+    trigger_key: 'scheduler.review',
+    trigger_contract_version: '1',
+    algorithm_key: 'legacy-anki',
+    algorithm_version: '1.0.0',
+  }
+  stored.snapshot.composition_contract_version = 'applied-composition.compat.v1'
+  stored.snapshot.selected_composition_id = composition.composition_id
+  stored.snapshot.selected_composition = composition
+  stored.snapshot.composition_selection_resolution = 'explicit'
+  stored.snapshot.composition_binding = {
+    schema_version: 'study-composition-binding.v1',
+    composition_id: composition.composition_id,
+    definition_id: 'legacy-template:template-1',
+    definition_version: 'v1',
+    application_id: 'application:owned:type-1',
+    application_occurrence_id: 'application:owned:type-1',
+    binding_kind: 'legacy-fielddef-direct',
+    binding_fingerprint: 'sha256-test-binding-hash',
+    field_bindings: [],
+  }
+  stored.snapshot.cards[0].composition_id = composition.composition_id
+  stored.snapshot.compositions = { [composition.composition_id]: composition }
+  return stored
+}
+
 describe('client Algorithm registry', () => {
   it('resolves only the exact retained Algorithm version', () => {
     expect(resolveClientAlgorithm('legacy-anki', '1.0.0')).toMatchObject({
@@ -178,6 +214,37 @@ describe('client Algorithm registry', () => {
 })
 
 describe('persisted study session normalization', () => {
+  it('restores a complete frozen composition contract without rewriting it', () => {
+    const stored = addFrozenCompositionContract(persistedSession())
+
+    const result = normalizePersistedStudySession(stored)
+
+    expect(result.status).toBe('restored')
+    if (result.status !== 'restored') return
+    expect(result.session.snapshot.selected_composition_id).toBe(
+      'comp:notetype:type-1:template:template-1',
+    )
+    expect(result.session.snapshot.composition_binding?.binding_fingerprint).toBe(
+      'sha256-test-binding-hash',
+    )
+  })
+
+  it('quarantines partial or contradictory frozen composition material', () => {
+    const partial = persistedSession()
+    partial.snapshot.selected_composition_id = 'comp:notetype:type-1:template:template-1'
+    expect(normalizePersistedStudySession(partial)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+    })
+
+    const contradictory = addFrozenCompositionContract(persistedSession())
+    contradictory.snapshot.cards[0].composition_id = 'different-composition'
+    expect(normalizePersistedStudySession(contradictory)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+    })
+  })
+
   it('upgrades valid legacy v2 events to canonical Action metadata', () => {
     const result = normalizePersistedStudySession(persistedSession())
 

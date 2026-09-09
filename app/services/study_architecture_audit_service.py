@@ -1879,25 +1879,27 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
 
         if s_json is not None:
             try:
-                parsed = json.loads(s_json)
-                if not isinstance(parsed, dict):
+                from app.services.study_session_config import (
+                    decode_study_session_config,
+                )
+
+                parsed_config = decode_study_session_config(s_json)
+                policies = parsed_config.policies
+                required_hashes = hashes_by_session.get(s_id, set())
+                missing_hashes = [h for h in required_hashes if h not in policies]
+                if missing_hashes:
                     invalid_config_sessions.add(s_id)
                 else:
-                    required_hashes = hashes_by_session.get(s_id, set())
-                    missing_hashes = [h for h in required_hashes if h not in parsed]
-                    if missing_hashes:
-                        invalid_config_sessions.add(s_id)
-                    else:
-                        for policy_key, policy in parsed.items():
-                            if not _is_valid_session_policy_snapshot(
-                                policy_key=str(policy_key),
-                                policy=policy,
-                                session_algorithm=str(s_algo or ""),
-                                session_algorithm_version=str(s_ver or ""),
-                                session_timezone=str(s_timezone or ""),
-                            ):
-                                invalid_config_sessions.add(s_id)
-                                break
+                    for policy_key, policy in policies.items():
+                        if not _is_valid_session_policy_snapshot(
+                            policy_key=str(policy_key),
+                            policy=policy,
+                            session_algorithm=str(s_algo or ""),
+                            session_algorithm_version=str(s_ver or ""),
+                            session_timezone=str(s_timezone or ""),
+                        ):
+                            invalid_config_sessions.add(s_id)
+                            break
             except (ValueError, TypeError):
                 invalid_config_sessions.add(s_id)
 

@@ -89,6 +89,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/repositories/review_event_repository.py",
             "app/repositories/study_card_editor_repository.py",
             "app/validators/review_event.py",
+            "app/validators/study_composition.py",
             "app/validators/study_session_wire.py",
             "app/routes/flashcards/study.py",
             "models/study_session*.py",

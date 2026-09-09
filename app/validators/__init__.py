@@ -49,6 +49,10 @@ from .mcp import (
     validate_mcp_jsonrpc_request,
     validate_mcp_tool_call_params,
 )
+from .study_composition import (
+    StudyCompositionSelectionInput,
+    validate_study_composition_selection_request,
+)
 
 __all__ = [
     "ALLOWED_MEDIA_EXTENSIONS_BY_FAMILY",
@@ -64,6 +68,7 @@ __all__ = [
     "RequestValidationError",
     "StudyAnswerInput",
     "StudyNextInput",
+    "StudyCompositionSelectionInput",
     "ValidatedCreatePayoutBatchInput",
     "ValidatedPayoutBatchItemInput",
     "build_safe_download_filename",
@@ -90,4 +95,5 @@ __all__ = [
     "validate_study_answer_request",
     "validate_study_card_edit_request",
     "validate_study_next_query",
+    "validate_study_composition_selection_request",
 ]

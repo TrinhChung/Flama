@@ -137,6 +137,35 @@ function snapshot(): StudySessionSnapshot {
     scheduler_algorithm: 'legacy-anki',
     algorithm_version: '1.0.0',
     queue_contract_version: 'flama-queue.v1',
+    composition_contract_version: 'applied-composition.compat.v1',
+    selected_composition_id: 'comp:notetype:type-1:template:template-1',
+    selected_composition: {
+      composition_id: 'comp:notetype:type-1:template:template-1',
+      mode_key: 'flashcard',
+      note_type_id: 'type-1',
+      note_type_name: 'Basic',
+      template_id: 'template-1',
+      template_name: 'Front -> Back',
+      is_default: true,
+      context_kind: 'owned',
+      interaction_key: 'review.four-rating',
+      trigger_key: 'scheduler.review',
+      trigger_contract_version: '1',
+      algorithm_key: 'legacy-anki',
+      algorithm_version: '1.0.0',
+    },
+    composition_selection_resolution: 'explicit',
+    composition_binding: {
+      schema_version: 'study-composition-binding.v1',
+      composition_id: 'comp:notetype:type-1:template:template-1',
+      definition_id: 'legacy-template:template-1',
+      definition_version: 'v1',
+      application_id: 'application:owned:type-1',
+      application_occurrence_id: 'application:owned:type-1',
+      binding_kind: 'legacy-fielddef-direct',
+      binding_fingerprint: 'sha256-test-binding-hash',
+      field_bindings: [],
+    },
     policies: {
       policy: {
         algorithm_key: 'legacy-anki',
@@ -245,6 +274,23 @@ function snapshot(): StudySessionSnapshot {
   }
 }
 
+function compositionAvailability() {
+  const composition = snapshot().selected_composition!
+  return {
+    schema_version: 'study-scope-compositions.v2',
+    scope_type: 'deck',
+    scope_id: '12',
+    cardinality: 'one',
+    default_composition_id: composition.composition_id,
+    groups: [{
+      note_type_id: composition.note_type_id,
+      note_type_name: composition.note_type_name,
+      compositions: [composition],
+    }],
+    compositions: [composition],
+  }
+}
+
 function receipt(): StudySessionCommitReceipt {
   return {
     schema_version: 'study-commit-receipt.v1',
@@ -311,12 +357,15 @@ async function openReadySession() {
 
 beforeEach(() => {
   mocks.bootstrap = { data: undefined }
-  mocks.get.mockReset().mockResolvedValue({
-    schema_version: 'study-session-status.v1',
-    session_id: 'session-1',
-    status: 'open',
-    expires_at: '2099-02-23T09:00:00.000Z',
-    committed_at: null,
+  mocks.get.mockReset().mockImplementation((path: string) => {
+    if (path.endsWith('/compositions')) return Promise.resolve(compositionAvailability())
+    return Promise.resolve({
+      schema_version: 'study-session-status.v1',
+      session_id: 'session-1',
+      status: 'open',
+      expires_at: '2099-02-23T09:00:00.000Z',
+      committed_at: null,
+    })
   })
   mocks.mutate.mockReset().mockImplementation((path: string) => {
     if (path === '/api/study/sessions') return Promise.resolve(snapshot())
@@ -434,12 +483,135 @@ describe('useStudySession cross-tab ownership', () => {
       {
         scope: 'deck',
         scope_id: '12',
+        composition_id: 'comp:notetype:type-1:template:template-1',
         accepted_session_schema_versions: [
           'study-session.v3',
           'study-session.v2',
         ],
       },
     )
+  })
+
+  it('does not open a session until one composition is selected from an ambiguous scope', async () => {
+    const first = snapshot().selected_composition!
+    const second = {
+      ...first,
+      composition_id: 'comp:notetype:type-1:template:template-2',
+      template_id: 'template-2',
+      template_name: 'Back -> Front',
+      is_default: false,
+    }
+    mocks.get.mockImplementation((path: string) => {
+      if (path.endsWith('/compositions')) {
+        return Promise.resolve({
+          ...compositionAvailability(),
+          cardinality: 'many',
+          default_composition_id: null,
+          groups: [{
+            note_type_id: 'type-1',
+            note_type_name: 'Basic',
+            compositions: [first, second],
+          }],
+          compositions: [first, second],
+        })
+      }
+      return Promise.resolve({ status: 'open' })
+    })
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+
+    await renderHarness()
+    await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+    expect(latest.session).toBeNull()
+    expect(mocks.mutate).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await latest.selectComposition(first.composition_id)
+    })
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      '/api/study/sessions',
+      'POST',
+      expect.objectContaining({ composition_id: first.composition_id }),
+    )
+    expect(latest.session?.snapshot.session_id).toBe('session-1')
+    expect(latest.awaitingCompositionSelection).toBe(false)
+  })
+
+  it('keeps an empty scope sessionless', async () => {
+    mocks.get.mockImplementation((path: string) => {
+      if (path.endsWith('/compositions')) {
+        return Promise.resolve({
+          ...compositionAvailability(),
+          cardinality: 'zero',
+          default_composition_id: null,
+          groups: [],
+          compositions: [],
+        })
+      }
+      return Promise.resolve({ status: 'open' })
+    })
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+
+    await renderHarness()
+    await waitFor(() => expect(latest.error).not.toBeNull())
+
+    expect(latest.session).toBeNull()
+    expect(latest.awaitingCompositionSelection).toBe(false)
+    expect(mocks.mutate).not.toHaveBeenCalled()
+  })
+
+  it('recovers a failed selection without allowing duplicate open requests', async () => {
+    const first = snapshot().selected_composition!
+    const second = {
+      ...first,
+      composition_id: 'comp:notetype:type-1:template:template-2',
+      template_id: 'template-2',
+      template_name: 'Back -> Front',
+      is_default: false,
+    }
+    mocks.get.mockImplementation((path: string) => {
+      if (path.endsWith('/compositions')) {
+        return Promise.resolve({
+          ...compositionAvailability(),
+          cardinality: 'many',
+          default_composition_id: null,
+          groups: [{
+            note_type_id: 'type-1',
+            note_type_name: 'Basic',
+            compositions: [first, second],
+          }],
+          compositions: [first, second],
+        })
+      }
+      return Promise.resolve({ status: 'open' })
+    })
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness()
+    await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+
+    mocks.mutate.mockRejectedValueOnce(new Error('open failed'))
+    await act(async () => {
+      await latest.selectComposition(first.composition_id)
+    })
+    expect(latest.awaitingCompositionSelection).toBe(true)
+    expect(latest.error).toBeInstanceOf(Error)
+
+    const pendingOpen = deferred<StudySessionSnapshot>()
+    mocks.mutate.mockReturnValueOnce(pendingOpen.promise)
+    let firstRetry!: Promise<void>
+    let duplicateRetry!: Promise<void>
+    await act(async () => {
+      firstRetry = latest.selectComposition(first.composition_id)
+      duplicateRetry = latest.selectComposition(first.composition_id)
+      await Promise.resolve()
+    })
+    expect(mocks.mutate).toHaveBeenCalledTimes(2)
+    pendingOpen.resolve(snapshot())
+    await act(async () => {
+      await Promise.all([firstRetry, duplicateRetry])
+    })
+    expect(latest.session?.snapshot.session_id).toBe('session-1')
+    expect(mocks.mutate).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the lease through bootstrap before handing it to another tab', async () => {

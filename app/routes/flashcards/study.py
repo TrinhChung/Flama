@@ -44,6 +44,7 @@ from app.routes.flashcards import (
 )
 from app.validators import (
     RequestValidationError,
+    validate_study_composition_selection_request,
     validate_study_answer_request,
     validate_study_next_query,
 )
@@ -482,10 +483,13 @@ def _study_error(
     *,
     status: int = 400,
     field: str | None = None,
+    details: dict | None = None,
 ):
     payload = {"error": error, "message": message}
     if field is not None:
         payload["field"] = field
+    if details is not None:
+        payload["details"] = details
     return _no_store_json(payload, status)
 
 
@@ -682,20 +686,46 @@ def study_intervals_preview(card_id: str):
 @flashcards_bp.route("/api/study/scopes/<scope_type>/<scope_id>/compositions", methods=["GET"])
 @login_required
 def study_scope_compositions(scope_type: str, scope_id: str):
-    from app.services.study_composition_service import list_available_compositions_for_scope
+    from app.services.study_composition_service import (
+        COMPOSITION_SCOPE_SCHEMA_VERSION,
+        group_available_compositions,
+        list_available_compositions_for_query,
+    )
     normalized_scope = scope_type.strip().lower()
     if normalized_scope not in ("deck", "note_type"):
         return _study_error("INVALID_SCOPE", "Scope must be deck or note_type.", status=400)
 
-    compositions = list_available_compositions_for_scope(
-        scope_type=normalized_scope,
-        scope_id=scope_id,
-        user_id=int(current_user.id),
+    query, clone_scope, empty_payload = _build_study_scope_query(
+        scope=normalized_scope,
+        scope_id_raw=scope_id,
+        allow_empty=True,
     )
+    if empty_payload is not None or query is None:
+        error_code = empty_payload.get("error", "NO_STUDY_CARDS") if empty_payload else "NO_STUDY_CARDS"
+        message = empty_payload.get("message", "Không tìm thấy phạm vi học.") if empty_payload else "Không tìm thấy phạm vi học."
+        details = empty_payload.get("details") if empty_payload else None
+        return _study_error(
+            error_code,
+            message,
+            status=int(empty_payload.get("status", 404)) if empty_payload else 404,
+            details=details,
+        )
+    compositions = list_available_compositions_for_query(
+        query,
+        clone_scope=clone_scope,
+    )
+    groups = group_available_compositions(compositions)
     return jsonify({
-        "schema_version": "study-scope-compositions.v1",
+        "schema_version": COMPOSITION_SCOPE_SCHEMA_VERSION,
         "scope_type": normalized_scope,
         "scope_id": scope_id,
+        "cardinality": (
+            "zero" if not compositions else "one" if len(compositions) == 1 else "many"
+        ),
+        "default_composition_id": (
+            compositions[0].composition_id if len(compositions) == 1 else None
+        ),
+        "groups": [group.to_dict() for group in groups],
         "compositions": [c.to_dict() for c in compositions],
     })
 
@@ -711,6 +741,7 @@ def study_session_open():
                 "scope_id": str(payload.get("scope_id") or ""),
             }
         )
+        validated_composition = validate_study_composition_selection_request(payload)
     except RequestValidationError as exc:
         return _study_error(
             exc.code,
@@ -751,15 +782,18 @@ def study_session_open():
     timezone_name = get_effective_timezone_name(
         getattr(current_user, "timezone", "UTC")
     )
-    raw_composition_ids = payload.get("composition_ids")
-    composition_ids = None
-    if isinstance(raw_composition_ids, list) and raw_composition_ids:
-        composition_ids = [
-            str(cid).strip()
-            for cid in raw_composition_ids[:100]
-            if isinstance(cid, str) and cid.strip()
-        ] or None
     try:
+        from app.services.study_composition_service import (
+            StudyCompositionError,
+            resolve_composition_selection,
+        )
+
+        composition_selection = resolve_composition_selection(
+            query,
+            clone_scope=clone_scope,
+            requested_composition_id=validated_composition.composition_id,
+            request_source=validated_composition.source,
+        )
         wire_schema_version = study_session_service.negotiate_session_wire_schema(
             payload.get("accepted_session_schema_versions"),
             v3_enabled=bool(
@@ -773,8 +807,16 @@ def study_session_open():
             scope_type=validated_query.scope,
             scope_id=validated_query.scope_id_raw,
             timezone_name=timezone_name,
-            composition_ids=composition_ids,
+            composition_selection=composition_selection,
             wire_schema_version=wire_schema_version,
+        )
+    except StudyCompositionError as exc:
+        db.session.rollback()
+        return _study_error(
+            exc.code,
+            str(exc),
+            status=exc.status,
+            details=exc.details,
         )
     except study_session_service.StudySessionError as exc:
         db.session.rollback()

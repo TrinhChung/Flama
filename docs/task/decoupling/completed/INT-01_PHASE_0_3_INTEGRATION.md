@@ -4,7 +4,7 @@
 >
 > Priority: P0 gate
 >
-> Status: TODO
+> Status: COMPLETED — 2026-09-09
 >
 > Dependency: all P0–P3 tasks
 >
@@ -86,3 +86,15 @@ Nếu integration phát hiện blocker, revert task gây regression hoặc tắt
 - Không tạo schema/migration.
 - Không merge unrelated cleanup.
 - Không mark completion dựa trên test count mà thiếu exit-gate evidence.
+
+## Handoff — 2026-09-09
+
+- Task ID: `INT-01`
+- Primary outcome: Phase 0–3 integration gates are closed with exact composition selection, logical-overlay proof, frozen restore/commit validation, and unchanged progress authority.
+- Files reviewed: all Phase 3 backend/frontend/test changes plus the Phase 0–2 compatibility boundaries and canonical tracker.
+- Contract checks: no premature session open, no client-only composition authority, no physical clone proof, no secondary progress model, and no model/migration diff.
+- MySQL evidence: reused the approved signed SELECT-only P0-03 bundle; no credentials, DDL, DML, startup maintenance, or fresh production write was used.
+- Combined verification: focused Study backend/frontend, Decks/Flashcards backend, TypeScript typecheck, lint, mapping coverage, real overlay integration, and final full-suite execution.
+- Rollback path: disable admission for new Phase 3 sessions while retaining additive/legacy readers and the overlay invariant tests; return tracker status to Partial if any gate regresses.
+- Remaining debt: Phase 4 physical progress/state/application design remains deferred and requires separate schema/migration authorization.
+- Phase 4 recommendation: architecture planning may proceed; physical schema or authority cutover is **not authorized** by this closeout.
