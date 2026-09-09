@@ -184,6 +184,17 @@ class StudySessionApiTests(unittest.TestCase):
         comp_id = card["composition_id"]
         self.assertIn(comp_id, snapshot["compositions"])
         self.assertEqual(snapshot["compositions"][comp_id]["mode_key"], "flashcard")
+        self.assertEqual(snapshot["selected_composition_id"], comp_id)
+        self.assertEqual(snapshot["selected_composition"]["composition_id"], comp_id)
+        self.assertEqual(
+            snapshot["composition_binding"]["composition_id"],
+            comp_id,
+        )
+        self.assertTrue(
+            snapshot["composition_binding"]["binding_fingerprint"].startswith(
+                "sha256-"
+            )
+        )
         self.assertEqual(card["base_revision"], 0)
 
         with self.app.app_context():
@@ -558,7 +569,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(result["commit_reason"], "auto_finish")
         self.assertEqual(result["updated_cards"][0]["state"]["type"], "review")
 
-    def test_empty_owned_deck_can_open_and_commit(self):
+    def test_empty_owned_deck_does_not_open_session(self):
         with self.app.app_context():
             empty_deck = Deck(
                 name="Empty Deck",
@@ -571,23 +582,13 @@ class StudySessionApiTests(unittest.TestCase):
             "/api/study/sessions",
             json={"scope": "deck", "scope_id": empty_deck_id},
         )
-        self.assertEqual(response.status_code, 201, response.get_json())
-        snapshot = response.get_json()
-        self.assertEqual(snapshot["cards"], [])
-        commit = self.client.post(
-            f"/api/study/sessions/{snapshot['session_id']}/commit",
-            json={
-                "schema_version": "study-commit.v1",
-                "commit_id": str(uuid4()),
-                "session_token": snapshot["session_token"],
-                "snapshot_hash": snapshot["snapshot_hash"],
-                "events": [],
-                "final_states": [],
-            },
-        )
-        self.assertEqual(commit.status_code, 200, commit.get_json())
-        self.assertEqual(commit.get_json()["applied_event_count"], 0)
-        self.assertEqual(commit.get_json()["commit_reason"], "manual_exit")
+        self.assertEqual(response.status_code, 404, response.get_json())
+        self.assertEqual(response.get_json()["error"], "NO_STUDY_CARDS")
+        with self.app.app_context():
+            self.assertEqual(
+                StudySession.query.filter_by(scope_id=str(empty_deck_id)).count(),
+                0,
+            )
 
     def test_commit_replays_events_and_is_idempotent(self):
         snapshot = self._open_session()
@@ -945,13 +946,216 @@ class StudySessionApiTests(unittest.TestCase):
         response = self.client.get(f"/api/study/scopes/deck/{self.deck_id}/compositions")
         self.assertEqual(response.status_code, 200, response.get_json())
         data = response.get_json()
-        self.assertEqual(data["schema_version"], "study-scope-compositions.v1")
+        self.assertEqual(data["schema_version"], "study-scope-compositions.v2")
         self.assertEqual(data["scope_type"], "deck")
         self.assertEqual(data["scope_id"], str(self.deck_id))
         self.assertGreaterEqual(len(data["compositions"]), 1)
+        self.assertEqual(data["cardinality"], "one")
+        self.assertEqual(data["default_composition_id"], data["compositions"][0]["composition_id"])
+        self.assertEqual(len(data["groups"]), 1)
+        self.assertEqual(data["groups"][0]["note_type_id"], self.note_type_id)
         comp = data["compositions"][0]
         self.assertEqual(comp["mode_key"], "flashcard")
         self.assertEqual(comp["algorithm_key"], "legacy-anki")
+
+    def test_scope_compositions_groups_recursive_mixed_note_types(self):
+        with self.app.app_context():
+            second_type = NoteType(name="Another Type", user_id=self.user_id)
+            child = Deck(
+                name="Mixed child",
+                owner_user_id=self.user_id,
+                parent_id=self.deck_id,
+            )
+            db.session.add_all([second_type, child])
+            db.session.flush()
+            template = Template(
+                note_type_id=second_type.id,
+                name="Another Card",
+                front_html="front",
+                back_html="back",
+                position=0,
+                is_default=True,
+            )
+            db.session.add(template)
+            db.session.flush()
+            note = Note(
+                user_id=self.user_id,
+                deck_id=child.id,
+                note_type_id=second_type.id,
+                field_values={},
+            )
+            db.session.add(note)
+            db.session.flush()
+            db.session.add(Card(note_id=note.id, template_id=template.id))
+            db.session.commit()
+            second_type_id = str(second_type.id)
+
+        response = self.client.get(
+            f"/api/study/scopes/deck/{self.deck_id}/compositions"
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertEqual(payload["cardinality"], "many")
+        self.assertIsNone(payload["default_composition_id"])
+        self.assertEqual(
+            {group["note_type_id"] for group in payload["groups"]},
+            {self.note_type_id, second_type_id},
+        )
+        self.assertEqual(
+            sum(len(group["compositions"]) for group in payload["groups"]),
+            len(payload["compositions"]),
+        )
+
+    def _add_second_composition(self):
+        with self.app.app_context():
+            note = Note.query.filter_by(
+                user_id=self.user_id,
+                deck_id=self.deck_id,
+            ).one()
+            template = Template(
+                note_type_id=self.note_type_id,
+                name="Card 2",
+                front_html="Reverse {{Word}}",
+                back_html="{{Word}}",
+                position=1,
+                is_default=False,
+            )
+            db.session.add(template)
+            db.session.flush()
+            card = Card(note_id=note.id, template_id=template.id)
+            db.session.add(card)
+            db.session.commit()
+            return str(template.id), str(card.id)
+
+    def test_multiple_compositions_require_explicit_selection(self):
+        self._add_second_composition()
+        response = self.client.post(
+            "/api/study/sessions",
+            json={"scope": "deck", "scope_id": self.deck_id},
+        )
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(
+            response.get_json()["error"],
+            "COMPOSITION_SELECTION_REQUIRED",
+        )
+        self.assertEqual(
+            response.get_json()["details"]["eligible_composition_count"],
+            2,
+        )
+        with self.app.app_context():
+            self.assertEqual(StudySession.query.count(), 0)
+
+    def test_explicit_composition_opens_only_selected_cards(self):
+        template_id, card_id = self._add_second_composition()
+        composition_id = (
+            f"comp:notetype:{self.note_type_id}:template:{template_id}"
+        )
+        response = self.client.post(
+            "/api/study/sessions",
+            json={
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "composition_id": composition_id,
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.get_json())
+        snapshot = response.get_json()
+        self.assertEqual(snapshot["selected_composition_id"], composition_id)
+        self.assertEqual(
+            [item["card_id"] for item in snapshot["cards"]],
+            [card_id],
+        )
+
+    def test_legacy_multiple_composition_ids_fail_closed(self):
+        template_id, _card_id = self._add_second_composition()
+        response = self.client.post(
+            "/api/study/sessions",
+            json={
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "composition_ids": [
+                    "comp:notetype:unused:template:unused",
+                    f"comp:notetype:{self.note_type_id}:template:{template_id}",
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 400, response.get_json())
+        self.assertEqual(
+            response.get_json()["error"],
+            "COMPOSITION_CARDINALITY_INVALID",
+        )
+
+    def test_out_of_scope_composition_is_rejected(self):
+        with self.app.app_context():
+            other_type = NoteType(name="Other Type", user_id=self.user_id)
+            other_deck = Deck(name="Other Deck", owner_user_id=self.user_id)
+            db.session.add_all([other_type, other_deck])
+            db.session.flush()
+            other_template = Template(
+                note_type_id=other_type.id,
+                name="Other Card",
+                front_html="front",
+                back_html="back",
+                is_default=True,
+            )
+            db.session.add(other_template)
+            db.session.flush()
+            other_note = Note(
+                user_id=self.user_id,
+                deck_id=other_deck.id,
+                note_type_id=other_type.id,
+                field_values={},
+            )
+            db.session.add(other_note)
+            db.session.flush()
+            db.session.add(
+                Card(note_id=other_note.id, template_id=other_template.id)
+            )
+            db.session.commit()
+            composition_id = (
+                f"comp:notetype:{other_type.id}:template:{other_template.id}"
+            )
+        response = self.client.post(
+            "/api/study/sessions",
+            json={
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "composition_id": composition_id,
+            },
+        )
+        self.assertEqual(response.status_code, 403, response.get_json())
+        self.assertEqual(response.get_json()["error"], "COMPOSITION_OUT_OF_SCOPE")
+
+    def test_composition_filter_is_applied_before_session_limit(self):
+        template_id, card_id = self._add_second_composition()
+        composition_id = (
+            f"comp:notetype:{self.note_type_id}:template:{template_id}"
+        )
+        with patch("app.services.study_session_service.MAX_SESSION_CARDS", 1):
+            response = self.client.post(
+                "/api/study/sessions",
+                json={
+                    "scope": "deck",
+                    "scope_id": self.deck_id,
+                    "composition_id": composition_id,
+                },
+            )
+        self.assertEqual(response.status_code, 201, response.get_json())
+        self.assertEqual(response.get_json()["cards"][0]["card_id"], card_id)
+
+    def test_commit_rejects_composition_different_from_frozen_selection(self):
+        snapshot = self._open_session()
+        payload = self._commit_payload(snapshot)
+        payload["composition_id"] = "comp:notetype:other:template:other"
+        response = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(
+            response.get_json()["error"],
+            "COMPOSITION_SNAPSHOT_MISMATCH",
+        )
 
     def test_open_session_non_existent_deck_returns_404_deck_not_found(self):
         response = self.client.post(

@@ -1,18 +1,18 @@
 # Phase 0–3 next execution plan — after independent review round 5
 
-> P1/P2 closeout — 2026-09-08: [execution evidence](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) closes Phase 1 and Phase 2. The sequence below is retained as historical context; current work starts with P3-05/P3-07.
+> P1/P2 closeout — 2026-09-08: [execution evidence](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) closes Phase 1 and Phase 2. Phase 3/INT-01 closeout — 2026-09-09: [final evidence](./completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md). The sequence below is retained as historical context.
 
-> Status: PHASE 0–2 CLOSED; PHASE 3 AND INT-01 REMAIN
+> Status: HISTORICAL; PHASE 0–3 AND INT-01 CLOSED
 >
-> Current gate: `P0-01..P0-04`, `P1-01..P1-04` and `P2-01..P2-07` COMPLETED
+> Current gate: `P0-01..P0-04`, `P1-01..P1-04`, `P2-01..P2-07`, `P3-01..P3-07` and `INT-01` COMPLETED
 >
-> Scope: close P0-03, then sequence the remaining runtime-correctness and composition-contract tasks through INT-01
+> Scope: historical dependency plan for the now-completed P0–P3 sequence through INT-01
 >
 > Hard boundary: no model, migration, physical progress store, source-of-truth cutover or full-copy clone behavior in this plan
 
 ## 1. Outcome and ordering rule
 
-The replacement P0-03 evidence bundle and P1-01/P1-02 gates remain the historical baseline. P1-03/P1-04 and all remaining Phase 2 tasks completed on 2026-09-08. Phase 4 remains outside this plan. See the [P1/P2 closeout](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) and the [completed P1-02 handoff](./completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md).
+The replacement P0-03 evidence bundle and P1-01/P1-02 gates remain the historical baseline. P1-03/P1-04 and Phase 2 completed on 2026-09-08; Phase 3 and INT-01 completed on 2026-09-09. Phase 4 remains outside this plan and requires separate authorization. See the [P1/P2 closeout](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md), [Phase 3/INT-01 closeout](./completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md), and [completed P1-02 handoff](./completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md).
 
 After Phase 0 closes, use this order:
 

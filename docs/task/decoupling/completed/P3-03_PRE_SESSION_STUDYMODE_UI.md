@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: COMPLETED — 2026-09-09
 >
 > Dependency: P3-01 and P3-05
 >
@@ -76,3 +76,14 @@ Feature flag có thể quay về legacy launch cho old API trong compatibility w
 - Không implement backend clone resolution.
 - Không tạo persistent StudyMode model.
 - Không đổi scheduler behavior.
+
+## Handoff — 2026-09-09
+
+- Task ID: `P3-03`
+- Primary outcome: the React launch flow discovers compositions before session creation and waits for an explicit selection whenever more than one option is eligible.
+- Files changed: Study API/types, `useStudySession`, `StudyPage`, `StudyModeSelector`, session engine, and frontend tests.
+- Contract/API behavior changed: one option opens once with an explicit ID; many options wait; zero options show a recoverable pre-session state; the active queue is no longer filtered client-side by composition.
+- Tests added or updated: zero/one/many, no premature POST, explicit selection, retry/deduplication, open failure, and grouped selector behavior.
+- Rollback path: gate new-session launch while preserving active-session restore compatibility.
+- Known limitations: this is a pre-session control, not a redesign of the active Study screen.
+- Follow-up task IDs: `P3-04`, `P3-06`, `INT-01` — completed.

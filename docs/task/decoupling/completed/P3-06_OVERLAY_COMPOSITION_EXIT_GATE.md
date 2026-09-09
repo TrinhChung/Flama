@@ -4,7 +4,7 @@
 >
 > Priority: P0 gate
 >
-> Status: TODO
+> Status: COMPLETED — 2026-09-09
 >
 > Dependency: P3-01 through P3-05 and P3-07
 >
@@ -78,3 +78,14 @@ Tests phản ánh invariant production không được xóa để hợp thức h
 - Không seed production data.
 - Không tạo Phase 4 progress tables.
 - Không mark Phase 3 complete nếu chỉ một happy path pass.
+
+## Handoff — 2026-09-09
+
+- Task ID: `P3-06`
+- Primary outcome: a real publish/install `DeckInstall` logical-overlay path proves source and local-added composition discovery/open behavior without physical source Card copies.
+- Files changed: `tests/test_study_behavior_acceptance_baseline.py`, composition/session exit-gate tests, and frontend selection/restore tests.
+- Contract verified: discovery, authorization, query, snapshot, restore, and commit use the same context-qualified selection contract.
+- Assertions: ordinary source Notes/Cards are not copied or mutated; installed source and local-added Cards resolve through their respective effective contexts.
+- Rollback path: if runtime is rolled back, keep this production-invariant test and return Phase 3 to Partial.
+- Known limitations: no production data was seeded or mutated; MySQL evidence remains the signed read-only Phase 0 bundle.
+- Follow-up task IDs: `INT-01` — completed.

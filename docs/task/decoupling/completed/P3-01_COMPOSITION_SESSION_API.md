@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: COMPLETED — 2026-09-09
 >
 > Dependency: Phase 1/2 correctness gates, P3-05 and P3-07
 >
@@ -79,3 +79,14 @@ Feature flag có thể quay về documented legacy default trong compatibility w
 - Không giải quyết clone query chi tiết; thuộc P3-02.
 - Không thêm FieldDef binding schema.
 - Không thay Card IDs.
+
+## Handoff — 2026-09-09
+
+- Task ID: `P3-01`
+- Primary outcome: session open now resolves exactly one authorized composition before any session row is created.
+- Files changed: `app/routes/flashcards/study.py`, `app/services/study_session_service.py`, `app/services/study_composition_service.py`, `app/validators/study_composition.py`, and focused Study tests.
+- Contract/API behavior changed: canonical `composition_id`; legacy `composition_ids` is accepted only when it contains exactly one value. Zero eligible cards, ambiguous omission, malformed/stale IDs, and out-of-scope IDs fail with stable typed errors.
+- Tests added or updated: owned, zero/one/many cardinality, malformed legacy input, stale/out-of-scope selection, and no-session-on-failure cases.
+- Rollback path: remove admission of the new launch flow while retaining the additive request reader and frozen-session reader.
+- Known limitations: the compatibility identity remains derived from current `Template`/`Card` rows; no physical application entity exists in Phase 3.
+- Follow-up task IDs: `P3-02`, `P3-04`, `P3-06`, `INT-01` — completed in the same integration closeout.

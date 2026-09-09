@@ -41,7 +41,20 @@ from app.services.study_algorithm_registry import (
     StudyAlgorithmNotFoundError,
     resolve_study_algorithm,
 )
-from app.services.study_composition_service import build_compatibility_composition
+from app.services.study_composition_service import (
+    COMPOSITION_CONTRACT_VERSION,
+    ResolvedCompositionSelection,
+    StudyCompositionError,
+    apply_composition_selection_to_query,
+    resolve_composition_selection,
+    resolve_compatibility_composition_for_card,
+)
+from app.services.study_session_config import (
+    StudySessionConfigError,
+    decode_study_session_config,
+    encode_study_session_config,
+    validate_payload_composition,
+)
 from app.services.scheduler_config_service import (
     resolve_deck_options,
     resolve_scheduler_runtime_settings,
@@ -435,7 +448,7 @@ def open_study_session(
     scope_id: str,
     timezone_name: str,
     now: datetime | None = None,
-    composition_ids: list[str] | None = None,
+    composition_selection: ResolvedCompositionSelection | None = None,
     wire_schema_version: str = WIRE_SCHEMA_VERSION,
 ) -> dict[str, Any]:
     wire_contract = _wire_contract_or_session_error(wire_schema_version)
@@ -447,8 +460,36 @@ def open_study_session(
     # MySQL DATETIME (without an explicit fsp) truncates sub-second precision.
     # Use the same durable anchor in the snapshot and during commit replay.
     opened_at = (now or datetime.utcnow()).replace(microsecond=0)
+    if composition_selection is None:
+        try:
+            composition_selection = resolve_composition_selection(
+                query,
+                clone_scope=clone_scope,
+                requested_composition_id=None,
+                request_source="internal_legacy",
+            )
+        except StudyCompositionError as exc:
+            raise StudySessionError(
+                exc.code,
+                str(exc),
+                status=exc.status,
+                details=exc.details,
+            ) from exc
+    try:
+        selected_query = apply_composition_selection_to_query(
+            query,
+            clone_scope=clone_scope,
+            selection=composition_selection,
+        )
+    except StudyCompositionError as exc:
+        raise StudySessionError(
+            exc.code,
+            str(exc),
+            status=exc.status,
+            details=exc.details,
+        ) from exc
     cards = (
-        query.order_by(Card.created_at.asc(), Card.id.asc())
+        selected_query.order_by(Card.created_at.asc(), Card.id.asc())
         .limit(MAX_SESSION_CARDS + 1)
         .all()
     )
@@ -459,12 +500,12 @@ def open_study_session(
             status=413,
         )
 
-    if composition_ids is not None:
-        allowed = set(composition_ids)
-        cards = [
-            card for card in cards
-            if build_compatibility_composition(card.template).composition_id in allowed
-        ]
+    if not cards:
+        raise StudySessionError(
+            "NO_STUDY_CARDS",
+            "Bộ thẻ này chưa có thẻ học phù hợp với chế độ đã chọn.",
+            status=404,
+        )
 
     progress_map = load_card_progress_map(
         user_id=int(user.id),
@@ -479,6 +520,7 @@ def open_study_session(
     compositions: dict[str, Any] = {}
     card_payloads: list[dict[str, Any]] = []
     session_card_rows: list[StudySessionCard] = []
+    frozen_binding: dict[str, Any] | None = None
 
     for ordinal, card in enumerate(cards):
         note = card.note
@@ -532,8 +574,44 @@ def open_study_session(
         content_key = f"{content['id']}:{content['version']}"
         templates.setdefault(template_key, template)
         contents.setdefault(content_key, content)
-        composition = build_compatibility_composition(card.template)
+        composition = resolve_compatibility_composition_for_card(card, clone_scope)
+        if composition.composition_id != composition_selection.composition.composition_id:
+            raise StudySessionError(
+                "COMPOSITION_RESOLUTION_CONFLICT",
+                "A selected session card resolved to a different composition.",
+                status=409,
+            )
         compositions.setdefault(composition.composition_id, composition.to_dict())
+        binding_material = {
+            "schema_version": "study-composition-binding.v1",
+            "composition_id": composition.composition_id,
+            "definition_id": composition.definition_id,
+            "definition_version": template["version"],
+            "application_id": composition.application_id,
+            "application_occurrence_id": composition.application_id,
+            "binding_kind": "legacy-fielddef-direct",
+            "field_bindings": [
+                {
+                    "input_id": f"legacy-field:{field_def['id']}",
+                    "field_def_id": field_def["id"],
+                    "field_name": field_def["name"],
+                    "field_type": field_def["field_type"],
+                    "required": field_def["required"],
+                }
+                for field_def in template.get("field_defs", [])
+            ],
+        }
+        binding_material["binding_fingerprint"] = (
+            study_artifact_service.canonical_digest(binding_material)
+        )
+        if frozen_binding is None:
+            frozen_binding = binding_material
+        elif frozen_binding != binding_material:
+            raise StudySessionError(
+                "COMPOSITION_BINDING_CONFLICT",
+                "Cards in the selected composition resolved different bindings.",
+                status=409,
+            )
         base_revision = int(getattr(progress, "revision", 0) or 0)
         created_at = getattr(card, "created_at", None) or opened_at
 
@@ -586,6 +664,13 @@ def open_study_session(
         if scope_type == "deck" and str(scope_id).isdigit()
         else None
     )
+    if frozen_binding is None:
+        raise StudySessionError(
+            "COMPOSITION_BINDING_UNAVAILABLE",
+            "The selected composition has no executable binding material.",
+            status=409,
+        )
+    selected_composition_payload = composition_selection.composition.to_dict()
     snapshot_material = {
         "schema_version": wire_contract.session_schema,
         "session_id": session_id,
@@ -602,6 +687,11 @@ def open_study_session(
         "scheduler_algorithm": SCHEDULER_ALGORITHM,
         "algorithm_version": ALGORITHM_VERSION,
         "queue_contract_version": "flama-queue.v1",
+        "composition_contract_version": COMPOSITION_CONTRACT_VERSION,
+        "selected_composition_id": composition_selection.composition.composition_id,
+        "selected_composition": selected_composition_payload,
+        "composition_selection_resolution": composition_selection.resolution,
+        "composition_binding": frozen_binding,
         "policies": policies,
         "cards": card_payloads,
         "templates": templates,
@@ -630,7 +720,11 @@ def open_study_session(
         learn_ahead_seconds=int(runtime.learn_ahead_seconds),
         snapshot_hash=snapshot_hash,
         token_hash=_token_hash(token),
-        config_snapshot_json=_json_dumps(policies),
+        config_snapshot_json=encode_study_session_config(
+            policies=policies,
+            selected_composition=selected_composition_payload,
+            composition_binding=frozen_binding,
+        ),
         opened_at=opened_at,
         expires_at=expires_at,
     )
@@ -751,6 +845,29 @@ def _idempotent_response(
     return json.loads(row.response_json)
 
 
+def _decode_and_validate_session_config(
+    session: StudySession,
+    payload: dict[str, Any],
+):
+    try:
+        config = decode_study_session_config(session.config_snapshot_json)
+    except StudySessionConfigError as exc:
+        raise StudySessionError(
+            "INVALID_CONFIG_SNAPSHOT",
+            "Stored study session config is invalid.",
+            status=500,
+        ) from exc
+    try:
+        validate_payload_composition(config, payload)
+    except StudySessionConfigError as exc:
+        raise StudySessionError(
+            "COMPOSITION_SNAPSHOT_MISMATCH",
+            str(exc),
+            status=409,
+        ) from exc
+    return config
+
+
 def enqueue_study_session_batch(
     *,
     user: Any,
@@ -809,6 +926,7 @@ def enqueue_study_session_batch(
             "Study snapshot no longer matches this session.",
             status=409,
         )
+    session_config = _decode_and_validate_session_config(session, payload)
 
     raw_events = payload.get("events")
     if not isinstance(raw_events, list):
@@ -877,6 +995,7 @@ def enqueue_study_session_batch(
         "user_id": int(user.id),
         "session_token": payload.get("session_token"),
         "snapshot_hash": session.snapshot_hash,
+        "composition_id": session_config.selected_composition_id,
         "commit_reason": commit_reason,
         "is_final": is_final,
         "events": raw_events,
@@ -1014,14 +1133,8 @@ def commit_study_session(
         .all()
     )
     membership = {row.card_id: row for row in session_cards}
-    try:
-        policies = json.loads(session.config_snapshot_json or "{}")
-    except json.JSONDecodeError as exc:
-        raise StudySessionError(
-            "INVALID_CONFIG_SNAPSHOT",
-            "Stored scheduler config is invalid.",
-            status=500,
-        ) from exc
+    session_config = _decode_and_validate_session_config(session, payload)
+    policies = session_config.policies
     states = {
         row.card_id: deserialize_card_state(json.loads(row.initial_state_json))
         for row in session_cards

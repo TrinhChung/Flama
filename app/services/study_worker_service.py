@@ -37,6 +37,11 @@ from app.services.study_session_service import (
     deserialize_deck_options,
     serialize_card_state,
 )
+from app.services.study_session_config import (
+    StudySessionConfigError,
+    decode_study_session_config,
+    validate_payload_composition,
+)
 from app.validators.review_event import (
     ReviewEventPayloadError,
     validate_session_event_payload,
@@ -155,9 +160,26 @@ def process_single_study_batch(
         )
         membership = {row.card_id: row for row in session_cards}
         try:
-            policies = json.loads(session.config_snapshot_json or "{}")
-        except json.JSONDecodeError:
-            policies = {}
+            session_config = decode_study_session_config(
+                session.config_snapshot_json
+            )
+            validate_payload_composition(session_config, job_payload)
+            policies = session_config.policies
+        except StudySessionConfigError as exc:
+            db.session.rollback()
+            err_msg = str(exc)
+            logger.error(
+                "Rejecting study batch %s because its frozen composition/config is invalid: %s",
+                batch_id,
+                err_msg,
+            )
+            push_to_dlq(job_payload, err_msg)
+            return {
+                "status": "wire_contract_invalid",
+                "error_code": "COMPOSITION_SNAPSHOT_MISMATCH",
+                "error": err_msg,
+                "batch_id": batch_id,
+            }
 
         def reject_wire_contract(code: str, message: str) -> dict[str, Any]:
             db.session.rollback()

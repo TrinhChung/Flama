@@ -22,8 +22,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { StudyModeSelector } from './StudyModeSelector'
-import type { AppliedComposition } from '../types'
 
 type StudyHeaderToolbarProps = {
   deckName?: string | null
@@ -35,9 +33,6 @@ type StudyHeaderToolbarProps = {
   newCount?: number
   learnCount?: number
   dueCount?: number
-  compositions?: AppliedComposition[]
-  selectedCompositionId?: string | null
-  onSelectComposition?: (compositionId: string | null) => void
 }
 
 export function StudyHeaderToolbar({
@@ -50,9 +45,6 @@ export function StudyHeaderToolbar({
   newCount = 0,
   learnCount = 0,
   dueCount = 0,
-  compositions,
-  selectedCompositionId,
-  onSelectComposition,
 }: StudyHeaderToolbarProps) {
 
   const statsUrl = deckId ? `/statistics?deck_id=${deckId}` : '/statistics'
@@ -199,8 +191,8 @@ export function StudyHeaderToolbar({
         </div>
       </div>
 
-      {/* Deck context bar, Counters & Mode Selector */}
-      {deckName || hasCounters || (compositions && compositions.length > 1) ? (
+      {/* Deck context bar and counters */}
+      {deckName || hasCounters ? (
         <div className="deck-context-bar space-y-1.5 px-1 text-xs font-medium text-muted-foreground">
           {/* Main Context Line: Deck Name (Left) & Queue Counters (Right) */}
           <div className="flex items-center justify-between gap-2 min-w-0">
@@ -249,17 +241,6 @@ export function StudyHeaderToolbar({
               </div>
             ) : null}
           </div>
-
-          {/* Sub-row for StudyModeSelector (only if note type has multiple templates) */}
-          {compositions && compositions.length > 1 && onSelectComposition ? (
-            <div className="w-full overflow-x-auto pt-0.5">
-              <StudyModeSelector
-                compositions={compositions}
-                selectedCompositionId={selectedCompositionId}
-                onSelectComposition={onSelectComposition}
-              />
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>

@@ -1,16 +1,20 @@
 # Phase 0–3 Decoupling Task Backlog
 
-> Status: ACTIVE backlog; Phase 0, Phase 1 and Phase 2 are closed. Phase 3 and INT-01 remain.
+> Status: Phase 0, Phase 1, Phase 2, Phase 3 and INT-01 are closed as of 2026-09-09. Phase 4 remains separately gated and unimplemented.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
 > Latest P1/P2 closeout: [2026-09-08 execution closeout](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) — 8 tasks completed; async admission and v3 issuance remain flag-off by default.
 >
+> Latest Phase 3 execution plan: [2026-09-09 Phase 3 plan](./P3_EXECUTION_PLAN_2026-09-09.md) — completed through INT-01.
+>
+> Latest Phase 3 closeout: [2026-09-09 Phase 3 and INT-01 closeout](./completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md) — exact selection, query-first logical-overlay resolution, frozen restore, and the real install exit gate are complete.
+>
 > Latest completed-task evidence review: [2026-08-30 review and P1-02 closeout](../../architecture/decoupling-progress-review-2026-08-30.md)
 >
 > Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **GO; P0-01 through P0-04 COMPLETED**.
 >
-> Cross-phase dependency plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — Phase 0–2 are closed; use it for the remaining Phase 3/INT-01 dependency order.
+> Historical cross-phase dependency plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — retained as planning history; Phase 0–3 and INT-01 are now closed.
 >
 > Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 8 remaining parent tasks with execution slices, required outputs and gates.
 >
@@ -73,7 +77,7 @@ P1/P2 correctness gates + P3-05/P3-07 decisions
 All tasks --> INT-01 integration and tracker closeout
 ```
 
-Historical dependency note: `P2-01` and P0-03 were the gates for the now-completed Phase 1/2 work. For current work, use the Phase 3 wave ordering in `REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`; tasks touching the same files must remain sequential.
+Historical dependency note: `P2-01` and P0-03 gated the completed Phase 1/2 work; P3-05 and P3-07 then gated the completed Phase 3 runtime sequence. The diagram is retained to explain delivery order, not as an active queue.
 
 ## 4. Danh sách task
 
@@ -111,19 +115,19 @@ Historical dependency note: `P2-01` and P0-03 were the gates for the now-complet
 
 | ID | Task | Dependency | Output chính |
 |---|---|---|---|
-| P3-01 | [Exactly-one composition session API](./P3-01_COMPOSITION_SESSION_API.md) | P1/P2 correctness + P3-05 + P3-07 | authorized single selection và compatibility fallback |
-| P3-02 | [Clone-aware composition discovery and query-first filtering](./P3-02_CLONE_AWARE_COMPOSITION_QUERY.md) | P3-01 | một resolver cho owned/overlay/local-added contexts |
-| P3-03 | [Pre-session StudyMode selection UI](./P3-03_PRE_SESSION_STUDYMODE_UI.md) | P3-01 + P3-05 | selector trước session và request mang selection |
-| P3-04 | [Frozen composition restore and stale handling](./P3-04_COMPOSITION_FREEZE_RESTORE.md) | P3-01 + P3-03 | immutable snapshot, reload/recovery behavior |
-| P3-05 | [Mixed-NoteType scope policy](./P3-05_MIXED_NOTETYPE_SCOPE_POLICY.md) | Phase 0 evidence | approved ADR và API/UI rule |
-| P3-06 | [Real overlay-only composition exit gate](./P3-06_OVERLAY_COMPOSITION_EXIT_GATE.md) | P3-01..P3-05 + P3-07 | integration proof dùng `DeckInstall` thật, không clone giả |
-| P3-07 | [Applied composition and binding contract](./P3-07_APPLIED_COMPOSITION_BINDING_CONTRACT.md) | Phase 0 evidence | approved responsibility/identity/lifecycle contract, no schema |
+| P3-01 | [Exactly-one composition session API](./completed/P3-01_COMPOSITION_SESSION_API.md) | P1/P2 correctness + P3-05 + P3-07 | `COMPLETED`; authorized single selection và compatibility fallback |
+| P3-02 | [Clone-aware composition discovery and query-first filtering](./completed/P3-02_CLONE_AWARE_COMPOSITION_QUERY.md) | P3-01 | `COMPLETED`; một resolver cho owned/overlay/local-added contexts |
+| P3-03 | [Pre-session StudyMode selection UI](./completed/P3-03_PRE_SESSION_STUDYMODE_UI.md) | P3-01 + P3-05 | `COMPLETED`; selector trước session và request mang selection |
+| P3-04 | [Frozen composition restore and stale handling](./completed/P3-04_COMPOSITION_FREEZE_RESTORE.md) | P3-01 + P3-03 | `COMPLETED`; immutable snapshot, reload/recovery behavior |
+| P3-05 | [Mixed-NoteType scope policy](./completed/P3-05_MIXED_NOTETYPE_SCOPE_POLICY.md) | Phase 0 evidence | `COMPLETED`; accepted ADR và API/UI rule |
+| P3-06 | [Real overlay-only composition exit gate](./completed/P3-06_OVERLAY_COMPOSITION_EXIT_GATE.md) | P3-01..P3-05 + P3-07 | `COMPLETED`; integration proof dùng `DeckInstall` thật, không clone giả |
+| P3-07 | [Applied composition and binding contract](./completed/P3-07_APPLIED_COMPOSITION_BINDING_CONTRACT.md) | Phase 0 evidence | `COMPLETED`; accepted responsibility/identity/lifecycle contract, no schema |
 
 ### Cross-phase integration
 
 | ID | Task | Dependency | Output chính |
 |---|---|---|---|
-| INT-01 | [Phase 0–3 integration and closeout](./INT-01_PHASE_0_3_INTEGRATION.md) | toàn bộ task trên | combined verification, duplicate-boundary audit, tracker update |
+| INT-01 | [Phase 0–3 integration and closeout](./completed/INT-01_PHASE_0_3_INTEGRATION.md) | toàn bộ task trên | `COMPLETED`; combined verification, duplicate-boundary audit, tracker update |
 
 ## 5. Output bàn giao bắt buộc cho mọi task
 

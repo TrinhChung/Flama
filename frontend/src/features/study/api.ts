@@ -1,5 +1,7 @@
 import { resolveBackendUrl } from '@/config/env'
 import type { StudyArtifactRef } from './types'
+import type { StudyScopeCompositionsResponse } from './types'
+import { appApi } from '@/app/api'
 
 export async function fetchStudyArtifact<T>(ref: StudyArtifactRef): Promise<T> {
   const response = await fetch(resolveBackendUrl(ref.url), {
@@ -17,4 +19,10 @@ export async function fetchStudyArtifact<T>(ref: StudyArtifactRef): Promise<T> {
     )
   }
   return response.json() as Promise<T>
+}
+
+export function fetchStudyScopeCompositions(deckId: string) {
+  return appApi.get<StudyScopeCompositionsResponse>(
+    `/api/study/scopes/deck/${encodeURIComponent(deckId)}/compositions`,
+  )
 }

@@ -1,5 +1,10 @@
 # Đặc tả Kiến trúc Thông tin Hệ thống Hướng dẫn Người dùng (Flama Help Center & User Guide)
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-30  
+> **Target branch:** `develop`  
+> **Commits:** `12a8db2`, `41c1c26`, `060a87d`, `a0c3dc3`, `a1d904d`
+
 ## 1. Mục tiêu & Định hướng Biên soạn
 
 ### 1.1. Mục tiêu Dự án

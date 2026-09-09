@@ -114,14 +114,53 @@ export type AppliedComposition = {
   composition_id: string
   mode_key: string
   note_type_id: string
+  note_type_name?: string
   template_id: string
   template_name: string
   is_default: boolean
+  context_kind?: 'owned' | 'installed_source' | 'installed_local'
+  install_id?: string | null
+  definition_id?: string
+  application_id?: string
   interaction_key: string
   trigger_key: string
   trigger_contract_version: string
   algorithm_key: string
   algorithm_version: string
+}
+
+export type StudyCompositionGroup = {
+  note_type_id: string
+  note_type_name: string
+  compositions: AppliedComposition[]
+}
+
+export type StudyScopeCompositionsResponse = {
+  schema_version: 'study-scope-compositions.v2'
+  scope_type: 'deck' | 'note_type'
+  scope_id: string
+  cardinality: 'zero' | 'one' | 'many'
+  default_composition_id: string | null
+  groups: StudyCompositionGroup[]
+  compositions: AppliedComposition[]
+}
+
+export type StudyCompositionBinding = {
+  schema_version: 'study-composition-binding.v1'
+  composition_id: string
+  definition_id: string
+  definition_version: string
+  application_id: string
+  application_occurrence_id: string
+  binding_kind: 'legacy-fielddef-direct'
+  binding_fingerprint: string
+  field_bindings: Array<{
+    input_id: string
+    field_def_id: string
+    field_name: string
+    field_type: string
+    required: boolean
+  }>
 }
 
 export type StudySessionCard = {
@@ -156,6 +195,11 @@ type StudySessionSnapshotBase = {
   scheduler_algorithm: string
   algorithm_version: string
   queue_contract_version: string
+  composition_contract_version?: 'applied-composition.compat.v1'
+  selected_composition_id?: string
+  selected_composition?: AppliedComposition
+  composition_selection_resolution?: string
+  composition_binding?: StudyCompositionBinding
   policies: Record<string, StudySessionPolicy>
   cards: StudySessionCard[]
   templates: Record<string, StudyTemplateArtifact>
@@ -208,6 +252,7 @@ type StudyBatchPayloadBase = {
   batch_sequence: number
   session_token: string
   snapshot_hash: string
+  composition_id?: string
   commit_reason?: 'auto_finish' | 'manual_exit' | 'page_exit' | 'rollover'
   is_final?: boolean
   final_states?: Array<{

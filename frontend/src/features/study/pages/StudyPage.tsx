@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
@@ -11,6 +11,7 @@ import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
 import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { StudyExitConfirmDialog } from '../components/StudyExitConfirmDialog'
+import { StudyModeSelector } from '../components/StudyModeSelector'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
 import type { SchedulerDecision } from '../scheduler/types'
@@ -25,8 +26,7 @@ export function StudyPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const deckIdRaw = searchParams.get('deck_id')
-  const [selectedCompositionId, setSelectedCompositionId] = useState<string | null>(null)
-  const study = useStudySession(deckIdRaw, selectedCompositionId)
+  const study = useStudySession(deckIdRaw)
 
   const [revealedCardKey, setRevealedCardKey] = useState<string | null>(null)
   const [decisionState, setDecisionState] = useState<{
@@ -84,11 +84,6 @@ export function StudyPage() {
     blocker.reset?.()
   }, [blocker])
 
-  const compositionsList = useMemo(() => {
-    const comps = study.session?.snapshot.compositions
-    return comps ? Object.values(comps) : []
-  }, [study.session?.snapshot.compositions])
-
   const card = study.view?.card ?? null
   const template = study.view?.template ?? null
   const content = study.view?.content ?? null
@@ -113,6 +108,7 @@ export function StudyPage() {
   }, [activeCardKey])
 
   const deckName = study.session?.snapshot.scope.name
+    || study.scopeName
     || (deckIdRaw ? `Deck #${deckIdRaw}` : null)
 
   const handleReveal = useCallback(() => {
@@ -347,6 +343,45 @@ export function StudyPage() {
     )
   }
 
+  if (study.awaitingCompositionSelection) {
+    return (
+      <div className="flex h-screen h-[100dvh] w-full items-center justify-center overflow-y-auto bg-background p-4 text-foreground sm:p-6">
+        <main className="w-full max-w-2xl rounded-2xl border border-border/80 bg-card p-5 shadow-sm sm:p-7">
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">
+              Chuẩn bị phiên học
+            </p>
+            <h1 className="text-2xl font-bold tracking-tight">Chọn kiểu thẻ</h1>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {deckName ? `${deckName} có nhiều kiểu thẻ.` : 'Phạm vi này có nhiều kiểu thẻ.'}{' '}
+              Chọn đúng một kiểu; lựa chọn sẽ được khóa cho toàn bộ phiên học.
+            </p>
+          </div>
+
+          {study.error ? (
+            <div className="mt-4">
+              <PageError error={study.error} />
+            </div>
+          ) : null}
+
+          <StudyModeSelector
+            groups={study.compositionGroups}
+            selectedCompositionId={study.selectedCompositionId}
+            onSelectComposition={(compositionId) => { void study.selectComposition(compositionId) }}
+            disabled={study.isBusy}
+            className="mt-6"
+          />
+
+          <div className="mt-6 border-t border-border/70 pt-4">
+            <Button asChild variant="outline">
+              <Link to="/dashboard">Về dashboard</Link>
+            </Button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   if (study.error && !study.session) {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-background text-foreground">
@@ -401,9 +436,6 @@ export function StudyPage() {
             newCount={counts.new}
             learnCount={counts.learning}
             dueCount={counts.due}
-            compositions={compositionsList}
-            selectedCompositionId={selectedCompositionId}
-            onSelectComposition={setSelectedCompositionId}
           />
           {uncommittedCount > 0 ? (
             <div className="px-1 py-0.5 text-[11px] text-muted-foreground">

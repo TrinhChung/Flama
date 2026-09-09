@@ -115,20 +115,12 @@ function queueCards(session: PersistedStudySession) {
 export function buildSessionView(
   session: PersistedStudySession,
   nowMs: number,
-  compositionFilter?: string | null,
 ): StudySessionView {
   const snapshot = session.snapshot
-  const allCards = queueCards(session)
-  const cards = compositionFilter
-    ? allCards.filter((c) => {
-        const full = snapshot.cards.find((row) => row.card_id === c.card_id)
-        return full?.composition_id === compositionFilter
-      })
-    : allCards
+  const cards = queueCards(session)
   const activeCard = session.active_card_id
     ? snapshot.cards.find(
-        (row) => row.card_id === session.active_card_id && !row.state.suspended
-          && (!compositionFilter || row.composition_id === compositionFilter),
+        (row) => row.card_id === session.active_card_id && !row.state.suspended,
       ) ?? null
     : null
 
@@ -391,6 +383,9 @@ export function extractPendingBatch(
     batch_sequence: nextSeq,
     session_token: session.snapshot.session_token,
     snapshot_hash: session.snapshot.snapshot_hash,
+    ...(session.snapshot.selected_composition_id
+      ? { composition_id: session.snapshot.selected_composition_id }
+      : {}),
     commit_reason: commitReason,
     is_final: isFinal,
     events: batchEvents,
@@ -477,6 +472,9 @@ export function prepareCommit(
       commit_reason: commitReason,
       session_token: prepared.snapshot.session_token,
       snapshot_hash: prepared.snapshot.snapshot_hash,
+      ...(prepared.snapshot.selected_composition_id
+        ? { composition_id: prepared.snapshot.selected_composition_id }
+        : {}),
       events: prepared.events,
       final_states: finalStates,
     },

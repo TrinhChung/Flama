@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: TODO
+> Status: COMPLETED — decision accepted 2026-09-09
 >
 > Dependency: Phase 0 evidence
 >
@@ -112,3 +112,15 @@ ADR có thể được supersede trước implementation. Sau rollout, behavior 
 - Không implement UI/backend ngoài prototype cần chứng minh contract.
 - Không thêm Deck-owned StudyMode table.
 - Không thay deck tree model.
+
+## Handoff — 2026-09-09
+
+- Task ID: `P3-05`
+- Primary outcome: accepted grouped-one-screen, exactly-one composition policy for heterogeneous recursive scopes.
+- Evidence sources and confidence: repository/test evidence plus the accepted signed SELECT-only P0-03 bundle; the known mixed recursive scope count remains historical evidence rather than a fresh production claim.
+- Decision and rejected alternatives: group by NoteType and select one composition; rejected two-step NoteType-first navigation and forced scope narrowing for Phase 3.
+- API/default rule: zero returns no eligible options, one auto-resolves but is sent explicitly, many require learner selection, and omitted legacy selection succeeds only when unambiguous.
+- Runtime change: none in this decision task; implementation was delivered by `P3-01` through `P3-04`.
+- Decision artifact: `docs/architecture/mixed-notetype-study-scope-policy-2026-09-09.md`.
+- Rollback/supersession path: supersede the ADR before changing runtime; active frozen sessions retain their selected contract.
+- Follow-up task IDs: `P3-07`, `P3-01`, `P3-03` — completed.

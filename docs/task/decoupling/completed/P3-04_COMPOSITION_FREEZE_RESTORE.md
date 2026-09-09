@@ -4,7 +4,7 @@
 >
 > Priority: P1
 >
-> Status: TODO
+> Status: COMPLETED — 2026-09-09
 >
 > Dependency: P3-01 and P3-03
 >
@@ -74,3 +74,14 @@ Snapshot fields mới additive trong JSON. Old readers bỏ qua fields; new read
 - Không implement long-term Template version storage.
 - Không kéo lease vượt approved maximum.
 - Không change progress authority.
+
+## Handoff — 2026-09-09
+
+- Task ID: `P3-04`
+- Primary outcome: the selected composition and effective binding material are frozen in the existing session JSON for the full lease and reused on restore/reload.
+- Files changed: `app/services/study_session_config.py`, session/worker/audit services, frontend restore/engine/hook code, and cross-language tests.
+- Contract/API behavior changed: `study-session-config.v2` wraps the legacy policy with selected composition and binding data; readers accept supported legacy flat policies; contradictory client commit/batch composition IDs fail closed.
+- Tests added or updated: frozen restore without discovery, partial/contradictory snapshot quarantine, definition drift, and commit mismatch.
+- Rollback path: stop issuing new v2 config wrappers while retaining the dual reader for already-open leases.
+- Known limitations: immutable physical Template versions remain a Phase 4+ concern; Phase 3 freezes the executable compatibility material available today.
+- Follow-up task IDs: `P3-06`, `INT-01` — completed.

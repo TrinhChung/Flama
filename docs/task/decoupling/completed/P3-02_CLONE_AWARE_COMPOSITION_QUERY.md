@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: COMPLETED — 2026-09-09
 >
 > Dependency: P3-01
 >
@@ -82,3 +82,14 @@ Có thể route query về compatibility resolver cũ sau feature flag, nhưng g
 - Không tạo applied binding table.
 - Không rewrite scheduler/due logic.
 - Không implement frontend flow.
+
+## Handoff — 2026-09-09
+
+- Task ID: `P3-02`
+- Primary outcome: discovery and session authorization now derive from the same effective card query, including owned, installed-source overlay, and installed-local contexts.
+- Files changed: `app/services/study_composition_service.py`, `app/services/study_session_service.py`, route wiring, and composition/session/overlay tests.
+- Contract/API behavior changed: context-qualified installed composition IDs distinguish source and local applications; the composition predicate is applied before `MAX_SESSION_CARDS`.
+- Tests added or updated: recursive mixed scope, overlay source/local discovery, out-of-scope rejection, query-limit fairness, and real install coverage.
+- Rollback path: disable new-session admission; do not materialize or copy overlay Cards.
+- Known limitations: due ordering remains owned by the existing study query/scheduler, and Phase 3 does not add a reusable definition store.
+- Follow-up task IDs: `P3-03`, `P3-06`, `INT-01` — completed.

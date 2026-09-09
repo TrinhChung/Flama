@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: TODO
+> Status: COMPLETED — decision accepted 2026-09-09
 >
 > Dependency: Phase 0 evidence
 >
@@ -148,3 +148,15 @@ ADR có thể supersede trước Phase 4. Compatibility scaffold tiếp tục d�
 - Không đổi Card uniqueness/cascade.
 - Không implement marketplace Template product.
 - Không hỗ trợ arbitrary executable Template dependencies.
+
+## Handoff — 2026-09-09
+
+- Task ID: `P3-07`
+- Primary outcome: accepted logical responsibility, identity, binding, lifecycle, compatibility-projection, and session-freeze contract without physical schema work.
+- Evidence: current Template/Card/FieldDef, renderer, import/Connect, marketplace install, logical-overlay, and session artifact paths.
+- Decision artifact: `docs/architecture/applied-composition-binding-contract-2026-09-09.md`.
+- Compatibility rule: current Template rows project to compatibility applications; durable bindings use `FieldDef.id`; context-qualified installed IDs distinguish source and local applications.
+- Runtime change: none in this decision task; the Phase 3 compatibility snapshot implements only the material available from existing rows.
+- Rollback/supersession path: supersede the contract before Phase 4 physical design; do not rewrite historical sessions or regenerate Cards.
+- Known limitations: table layout, definition-version storage, repeated physical application occurrence, retention, and migration remain explicitly deferred.
+- Follow-up task IDs: Phase 4 design authorization — not started and not authorized by this closeout.

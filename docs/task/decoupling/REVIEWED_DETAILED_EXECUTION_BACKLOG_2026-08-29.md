@@ -2,11 +2,13 @@
 
 > P1/P2 closeout — 2026-09-08: [the execution report](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) closes P1-03/P1-04 and P2-02..P2-07. This backlog retains the original cross-phase dependencies and historical records.
 
+> Phase 3/INT-01 closeout — 2026-09-09: [the final execution report](./completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md) closes P3-01..P3-07 and INT-01. The remaining detail below is historical planning context.
+
 > Review date: 2026-08-29
 >
-> Status: ACTIVE; Phase 0–2 closed; Phase 3 and INT-01 remain
+> Status: HISTORICAL; Phase 0–3 and INT-01 closed
 >
-> Scope: 8 remaining parent tasks, P3-01 through P3-07 and INT-01
+> Scope: historical execution breakdown for P3-01 through P3-07 and INT-01
 
 > Latest evidence review: [`docs/architecture/decoupling-progress-review-2026-08-30.md`](../../architecture/decoupling-progress-review-2026-08-30.md)
 >
@@ -17,8 +19,8 @@
 | State | Tasks | Evidence/next action |
 |---|---|---|
 | Completed and moved to `completed/` | P0-01..P0-04, P1-01..P1-04, P2-01..P2-07 | Code, handoffs and combined gates passed; async admission remains disabled by default and is not certified for production Redis/MySQL. |
-| Pre-decision inventory complete; ADR not approved | P3-05, P3-07 | Repository evidence/open questions are documented; the accepted P0-03 distribution is now available for decision review. |
-| Queued | P3-01–P3-06, INT-01 | Resolve P3-05/P3-07 decisions first, then execute the remaining Phase 3 dependency chain. |
+| Completed 2026-09-09 | P3-05, P3-07 | Decisions accepted; see the architecture ADRs and final closeout. |
+| Completed 2026-09-09 | P3-01–P3-06, INT-01 | Runtime, UI, real-overlay gate, and integration closeout passed. |
 
 Latest local gate verification:
 

@@ -5,11 +5,13 @@ import { useBootstrap } from '@/shared/api/bootstrap'
 import { ApiError } from '@/shared/api/client'
 import type {
   Rating,
+  StudyCompositionGroup,
   StudyMediaArtifact,
   StudySessionCommitReceipt,
   StudySessionSnapshot,
   StudySessionStatus,
 } from '../types'
+import { fetchStudyScopeCompositions } from '../api'
 import type { SchedulerDecision } from '../scheduler/types'
 import {
   applyCommitReceipt,
@@ -47,6 +49,7 @@ type SessionMutationKind =
   | 'answer'
   | 'bootstrap'
   | 'commit'
+  | 'composition-open'
   | 'content-update'
   | 'page-exit'
   | 'reload'
@@ -72,8 +75,8 @@ function isCommitReceipt(value: unknown): value is StudySessionCommitReceipt {
     && Array.isArray(receipt.updated_cards)
 }
 
-function openSnapshot(userId: number, deckId: string) {
-  const key = scopeKey(userId, 'deck', deckId)
+function openSnapshot(userId: number, deckId: string, compositionId: string) {
+  const key = `${scopeKey(userId, 'deck', deckId)}:composition:${compositionId}`
   const existing = openingRequests.get(key)
   if (existing) return existing
   const request = appApi.mutate<StudySessionSnapshot>(
@@ -82,6 +85,7 @@ function openSnapshot(userId: number, deckId: string) {
     {
       scope: 'deck',
       scope_id: deckId,
+      composition_id: compositionId,
       accepted_session_schema_versions: [
         'study-session.v3',
         'study-session.v2',
@@ -94,7 +98,7 @@ function openSnapshot(userId: number, deckId: string) {
   return request
 }
 
-export function useStudySession(deckId: string | null, compositionFilter?: string | null) {
+export function useStudySession(deckId: string | null) {
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const userId = bootstrapQuery.data?.user?.id ?? null
@@ -102,6 +106,10 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
   const [error, setError] = useState<unknown>(null)
   const [loading, setLoading] = useState(Boolean(deckId))
   const [busy, setBusy] = useState(false)
+  const [compositionGroups, setCompositionGroups] = useState<StudyCompositionGroup[]>([])
+  const [selectedCompositionId, setSelectedCompositionId] = useState<string | null>(null)
+  const [awaitingCompositionSelection, setAwaitingCompositionSelection] = useState(false)
+  const [scopeName, setScopeName] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<StudySessionCommitReceipt | null>(null)
   const [tick, setTick] = useState(0)
 
@@ -211,6 +219,10 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
   useEffect(() => {
     if (!deckId || userId === null) {
       activateSession(null)
+      setCompositionGroups([])
+      setSelectedCompositionId(null)
+      setAwaitingCompositionSelection(false)
+      setScopeName(null)
       setLoading(Boolean(deckId))
       return
     }
@@ -236,6 +248,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       setLoading(true)
       setError(null)
       setReceipt(null)
+      setAwaitingCompositionSelection(false)
     }
     void (async () => {
       const mutationOwner = await waitForMutation('bootstrap', controller)
@@ -297,8 +310,33 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
             }
           }
         }
-        if (!active) {
-          const opened = await openSnapshot(userId, deckId)
+        if (active) {
+          setSelectedCompositionId(
+            active.snapshot.selected_composition_id ?? null,
+          )
+          setScopeName(active.snapshot.scope.name || null)
+          setCompositionGroups([])
+          setAwaitingCompositionSelection(false)
+        } else {
+          const availability = await fetchStudyScopeCompositions(deckId)
+          if (!isThisLease()) return
+          setCompositionGroups(availability.groups)
+          setScopeName(null)
+          if (availability.compositions.length === 0) {
+            throw new ApiError(
+              'Bộ thẻ này hiện chưa có thẻ nào để bắt đầu phiên ôn tập.',
+              404,
+              'NO_STUDY_CARDS',
+            )
+          }
+          if (availability.compositions.length > 1) {
+            setSelectedCompositionId(null)
+            setAwaitingCompositionSelection(true)
+            return
+          }
+          const compositionId = availability.compositions[0].composition_id
+          setSelectedCompositionId(compositionId)
+          const opened = await openSnapshot(userId, deckId, compositionId)
           if (!isThisLease()) return
           active = createPersistedSession(opened)
           sessionDurableRef.current = await saveStudySession(active)
@@ -338,8 +376,8 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
   const view = useMemo(() => {
     // `tick` advances waiting learning cards without a network request.
     void tick
-    return session ? buildSessionView(session, now(), compositionFilter) : null
-  }, [compositionFilter, now, session, tick])
+    return session ? buildSessionView(session, now()) : null
+  }, [now, session, tick])
 
   useEffect(() => {
     if (!session || !view?.card?.card_id) return
@@ -354,11 +392,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
         if (!isCurrentLease(controller) || !hasLeaseRef.current) return
         const active = sessionRef.current
         if (!active) return
-        const selectedCardId = buildSessionView(
-          active,
-          now(),
-          compositionFilter,
-        ).card?.card_id
+        const selectedCardId = buildSessionView(active, now()).card?.card_id
         if (!selectedCardId || active.active_card_id === selectedCardId) return
         const nextSession: PersistedStudySession = {
           ...active,
@@ -375,7 +409,6 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
   }, [
     activateSession,
     beginLeaseWork,
-    compositionFilter,
     endLeaseWork,
     hasLeaseRef,
     isCurrentLease,
@@ -535,7 +568,11 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       ])
       if (!isThisLease()) return result
       if (prepared.session.resume_after_commit) {
-        const opened = await openSnapshot(userId, deckId)
+        const compositionId = prepared.session.snapshot.selected_composition_id
+        if (!compositionId) {
+          throw new Error('Phiên học cũ không có composition đã khóa để tiếp tục an toàn.')
+        }
+        const opened = await openSnapshot(userId, deckId, compositionId)
         if (!isThisLease()) return result
         const next = createPersistedSession(opened, {
           accumulated_stats: nextAccumulated,
@@ -603,7 +640,11 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
           ])
           if (!isThisLease()) return result
           if (pending.resume_after_commit) {
-            const opened = await openSnapshot(userId, deckId)
+            const compositionId = pending.snapshot.selected_composition_id
+            if (!compositionId) {
+              throw new Error('Phiên học cũ không có composition đã khóa để tiếp tục an toàn.')
+            }
+            const opened = await openSnapshot(userId, deckId, compositionId)
             if (!isThisLease()) return result
             const next = createPersistedSession(opened, {
               accumulated_stats: nextAccumulated,
@@ -736,6 +777,66 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     ownedLeaseControllersRef,
     queryClient,
     releaseMutation,
+    waitForMutation,
+  ])
+
+  const selectComposition = useCallback(async (compositionId: string) => {
+    if (!deckId || userId === null || !currentScopeKey) return
+    const selected = compositionGroups
+      .flatMap((group) => group.compositions)
+      .find((composition) => composition.composition_id === compositionId)
+    if (!selected) {
+      setError(new ApiError(
+        'Composition đã chọn không còn thuộc phạm vi học hiện tại.',
+        409,
+        'COMPOSITION_STALE',
+      ))
+      return
+    }
+    const controller = leaseControllerRef.current
+    if (
+      !controller
+      || controller.signal.aborted
+      || !hasLeaseRef.current
+      || mutationOwnerRef.current
+    ) return
+    const owner = await waitForMutation('composition-open', controller)
+    if (!owner) return
+    beginLeaseWork(controller)
+    setLoading(true)
+    setError(null)
+    setSelectedCompositionId(compositionId)
+    setAwaitingCompositionSelection(false)
+    try {
+      const opened = await openSnapshot(userId, deckId, compositionId)
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+      const next = createPersistedSession(opened)
+      sessionDurableRef.current = await saveStudySession(next)
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+      setScopeName(next.snapshot.scope.name || null)
+      activateSession(next)
+    } catch (caught) {
+      if (isCurrentLease(controller) && hasLeaseRef.current) {
+        setAwaitingCompositionSelection(true)
+        setError(caught)
+      }
+    } finally {
+      if (isCurrentLease(controller) && hasLeaseRef.current) setLoading(false)
+      endLeaseWork(controller)
+      releaseMutation(owner)
+    }
+  }, [
+    activateSession,
+    beginLeaseWork,
+    compositionGroups,
+    currentScopeKey,
+    deckId,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    releaseMutation,
+    userId,
     waitForMutation,
   ])
 
@@ -993,11 +1094,35 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
       }
       setLoading(true)
       setError(null)
-      const opened = await openSnapshot(userId, deckId)
+      let compositionId = active?.snapshot.selected_composition_id
+        ?? selectedCompositionId
+      if (!compositionId) {
+        const availability = await fetchStudyScopeCompositions(deckId)
+        if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+        setCompositionGroups(availability.groups)
+        if (availability.compositions.length === 0) {
+          throw new ApiError(
+            'Bộ thẻ này hiện chưa có thẻ nào để bắt đầu phiên ôn tập.',
+            404,
+            'NO_STUDY_CARDS',
+          )
+        }
+        if (availability.compositions.length > 1) {
+          setSelectedCompositionId(null)
+          setAwaitingCompositionSelection(true)
+          activateSession(null)
+          return
+        }
+        compositionId = availability.compositions[0].composition_id
+      }
+      setSelectedCompositionId(compositionId)
+      setAwaitingCompositionSelection(false)
+      const opened = await openSnapshot(userId, deckId, compositionId)
       if (!isCurrentLease(controller) || !hasLeaseRef.current) return
       const next = createPersistedSession(opened)
       sessionDurableRef.current = await saveStudySession(next)
       if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+      setScopeName(next.snapshot.scope.name || null)
       activateSession(next)
     } catch (err) {
       if (isCurrentLease(controller) && hasLeaseRef.current) setError(err)
@@ -1017,6 +1142,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     isCurrentLease,
     leaseControllerRef,
     releaseMutation,
+    selectedCompositionId,
     userId,
     waitForMutation,
   ])
@@ -1127,6 +1253,10 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     takeoverState,
     isLoading: loading,
     isBusy: busy,
+    compositionGroups,
+    selectedCompositionId,
+    awaitingCompositionSelection,
+    scopeName,
     canUndo,
     undo,
     prepareDecision,
@@ -1136,6 +1266,7 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     forceTakeover,
     updateCardContent,
     updateTemplateContent,
+    selectComposition,
     reloadSession,
   }
 }
