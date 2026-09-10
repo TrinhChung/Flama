@@ -12,12 +12,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   get: vi.fn(),
+  generateStrokes: vi.fn(),
 }))
 
 vi.mock('@/app/api', () => ({
   appApi: {
     mutate: mocks.mutate,
     get: mocks.get,
+    generateStrokes: mocks.generateStrokes,
   },
 }))
 
@@ -74,6 +76,12 @@ beforeEach(() => {
   })
   mocks.mutate.mockReset()
   mocks.get.mockReset()
+  mocks.generateStrokes.mockReset()
+  mocks.generateStrokes.mockResolvedValue({
+    characters: ['勉', '強'],
+    items: [],
+    output: '',
+  })
   mocks.get.mockResolvedValue({
     card: { card_id: 'card-123', status: 'learning' },
     note: {
@@ -467,6 +475,158 @@ describe('StudyQuickEditDialog', () => {
             proxy_url: '/media/proxy/cat-audio-99',
           }),
         ]),
+      }),
+    )
+  })
+
+  it('renders "Tạo nét" button and opens stroke generation modal on click', async () => {
+    const onOpenChange = vi.fn()
+    const onCardUpdated = vi.fn()
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(
+        renderWithClient(
+          <StudyQuickEditDialog
+            open={true}
+            onOpenChange={onOpenChange}
+            cardId="card-123"
+            deckName="N5 Deck"
+            template={mockTemplate}
+            content={mockContent}
+            onCardUpdated={onCardUpdated}
+          />,
+        ),
+      )
+    })
+
+    const taoNetButton = Array.from(document.querySelectorAll('button')).find(
+      (btn) =>
+        btn.textContent?.includes('Tạo nét') ||
+        btn.getAttribute('title')?.includes('Tạo sơ đồ thứ tự nét'),
+    )
+    expect(taoNetButton).toBeDefined()
+
+    await act(async () => {
+      taoNetButton?.click()
+    })
+
+    expect(document.body.textContent).toContain('Tạo sơ đồ thứ tự nét Kanji & Hanzi')
+  })
+
+  it('allows generating strokes and applying them into the card fields', async () => {
+    mocks.get.mockResolvedValue({
+      card: { card_id: 'card-123', status: 'learning' },
+      note: {
+        id: '101',
+        deck_id: 5,
+        deck_name: 'N5 Deck',
+        field_values: { Word: '勉強', Meaning: 'Học tập', StrokeDiagram: '' },
+        tags: ['jlpt-n5'],
+      },
+      fields: [
+        { name: 'Word', position: 0, required: true },
+        { name: 'Meaning', position: 1, required: false },
+        { name: 'StrokeDiagram', position: 2, required: false, field_type: 'diagram' },
+      ],
+      decks: [{ id: 5, name: 'N5 Deck' }],
+    })
+
+    mocks.generateStrokes.mockResolvedValue({
+      characters: ['勉', '強'],
+      items: [
+        { char: '勉', hex: '52c9', url: '/static/strokes/ja/52c9.svg' },
+        { char: '強', hex: '5f37', url: '/static/strokes/ja/5f37.svg' },
+      ],
+      output: '/static/strokes/ja/52c9.svg\n/static/strokes/ja/5f37.svg',
+    })
+
+    const onOpenChange = vi.fn()
+    const onCardUpdated = vi.fn()
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(
+        renderWithClient(
+          <StudyQuickEditDialog
+            open={true}
+            onOpenChange={onOpenChange}
+            cardId="card-123"
+            deckName="N5 Deck"
+            template={{
+              ...mockTemplate,
+              field_defs: [
+                ...mockTemplate.field_defs,
+                { name: 'StrokeDiagram', field_type: 'diagram', required: false, position: 2 },
+              ],
+            }}
+            content={{
+              ...mockContent,
+              field_values: {
+                ...mockContent.field_values,
+                StrokeDiagram: '',
+              },
+            }}
+            onCardUpdated={onCardUpdated}
+          />,
+        ),
+      )
+    })
+
+    // Click "Tạo nét"
+    const taoNetButton = Array.from(document.querySelectorAll('button')).find(
+      (btn) =>
+        btn.textContent?.includes('Tạo nét') ||
+        btn.getAttribute('title')?.includes('Tạo sơ đồ thứ tự nét'),
+    )
+    expect(taoNetButton).toBeDefined()
+
+    await act(async () => {
+      taoNetButton?.click()
+    })
+
+    // Allow stroke modal and preview query to resolve
+    await act(async () => {
+      await Promise.resolve()
+      await new Promise((r) => setTimeout(r, 10))
+    })
+
+    expect(document.body.textContent).toContain('Tạo sơ đồ thứ tự nét Kanji & Hanzi')
+
+    // Find "Thêm vào thẻ" button inside the stroke modal
+    const applyButton = Array.from(document.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Thêm vào thẻ'),
+    )
+    expect(applyButton).toBeDefined()
+
+    await act(async () => {
+      applyButton?.click()
+    })
+
+    // Now save button in Quick Edit Dialog should be enabled (dirty form)
+    const saveButton = Array.from(document.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Lưu thay đổi'),
+    )
+    expect(saveButton).toBeDefined()
+    expect(saveButton?.hasAttribute('disabled')).toBe(false)
+
+    await act(async () => {
+      saveButton?.click()
+    })
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      '/browse/cards/card-123',
+      'PATCH',
+      expect.objectContaining({
+        field_values: expect.objectContaining({
+          StrokeDiagram: '/static/strokes/ja/52c9.svg\n/static/strokes/ja/5f37.svg',
+        }),
       }),
     )
   })

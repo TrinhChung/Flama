@@ -135,6 +135,49 @@ class TestWorksheetService(unittest.TestCase):
         self.assertEqual(meta["suggested_mappings"]["kanji"], "Expression")
         self.assertEqual(meta["suggested_mappings"]["reading"], "Reading")
         self.assertEqual(meta["suggested_mappings"]["meaning"], "Meaning")
+        self.assertIn("sample_values", meta["note_types"][0])
+        self.assertEqual(meta["note_types"][0]["sample_values"].get("Expression"), "日本語を勉強する")
+
+    def test_get_deck_worksheet_meta_audio_fields_not_mapped(self):
+        # Create deck with NoteType where first field is Audio and second is WordAudio
+        custom_nt = NoteType(user_id=self.user.id, name="Anki Audio Note")
+        db.session.add(custom_nt)
+        db.session.flush()
+
+        f_audio = FieldDef(note_type_id=custom_nt.id, name="Audio", position=0)
+        f_word_audio = FieldDef(note_type_id=custom_nt.id, name="WordAudio", position=1)
+        f_kanji = FieldDef(note_type_id=custom_nt.id, name="Kanji", position=2)
+        f_reading = FieldDef(note_type_id=custom_nt.id, name="Reading", position=3)
+        f_meaning = FieldDef(note_type_id=custom_nt.id, name="Meaning", position=4)
+        db.session.add_all([f_audio, f_word_audio, f_kanji, f_reading, f_meaning])
+        db.session.flush()
+
+        custom_deck = Deck(name="Custom Yomitan Deck", owner_user_id=self.user.id)
+        db.session.add(custom_deck)
+        db.session.flush()
+
+        note = Note(
+            user_id=self.user.id,
+            note_type_id=custom_nt.id,
+            deck_id=custom_deck.id,
+            field_values={
+                "Audio": "[sound:test.mp3]",
+                "WordAudio": "[sound:word.mp3]",
+                "Kanji": "勉強",
+                "Reading": "べんきょう",
+                "Meaning": "Học tập",
+            },
+        )
+        db.session.add(note)
+        db.session.commit()
+
+        meta = get_deck_worksheet_meta(user_id=self.user.id, deck_id=custom_deck.id)
+        # Audio and WordAudio must NEVER be mapped as kanji/reading/meaning
+        self.assertEqual(meta["suggested_mappings"]["kanji"], "Kanji")
+        self.assertEqual(meta["suggested_mappings"]["reading"], "Reading")
+        self.assertEqual(meta["suggested_mappings"]["meaning"], "Meaning")
+        self.assertNotEqual(meta["suggested_mappings"]["kanji"], "Audio")
+        self.assertNotEqual(meta["suggested_mappings"]["kanji"], "WordAudio")
 
     def test_get_deck_worksheet_meta_unauthorized(self):
         with self.assertRaises(WorksheetServiceError) as ctx:

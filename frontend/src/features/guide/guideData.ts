@@ -763,7 +763,7 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
         detailedSections: [
           {
             title: '1. Các AI Client Phổ Biến Tương Thích MCP',
-            content: '• Claude Desktop: Trợ lý AI chính thức của Anthropic trên macOS và Windows.\n• Cursor IDE: Trình soạn thảo mã thông minh, hỗ trợ gọi MCP Tool trực tiếp trong Composer / Chat.\n• Antigravity / Roo Code / Cline: Các AI Agent trên VS Code và môi trường lập trình độc lập.\n• ChatGPT & GPTs: Kết nối thông qua giao thức bảo mật OAuth 2.1 PKCE trên tab "ChatGPT & OAuth 2.1".',
+            content: '• ChatGPT: Kết nối nhanh thông qua giao thức bảo mật OAuth 2.1 trên tab "1. Kết nối ChatGPT" (Khuyên dùng cho người học).\n• Cursor IDE & Antigravity / Cline: Kết nối qua Personal Access Token trên tab "2. Quản lý Quyền & Token API".\n• Claude Desktop: Tính năng kết nối Claude Desktop hiện đang trong giai đoạn thử nghiệm nội bộ.',
           },
           {
             title: '2. Lưu Ý Về Dịch Vụ Flama Connect (Cổng 4790)',

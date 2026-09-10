@@ -1,19 +1,24 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Bot,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Copy,
+  ExternalLink,
   Eye,
   EyeOff,
+  Globe,
+  Info,
   KeyRound,
   Pencil,
   Plus,
   RefreshCw,
+  Settings2,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   Star,
   Trash2,
 } from 'lucide-react'
@@ -42,9 +47,12 @@ import { Textarea } from '@/components/ui/textarea'
 
 import { FLAMA_MCP_URL, BACKEND_ORIGIN } from '@/config/env'
 import { useMcpOAuth, type OAuthEndpointsInfo } from '../hooks/useMcpOAuth'
-import { useState } from 'react'
 
-export function McpOAuthTab() {
+interface McpOAuthTabProps {
+  tabValue?: string
+}
+
+export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
   const {
     endpointsQuery,
     clientsQuery,
@@ -120,7 +128,7 @@ export function McpOAuthTab() {
   const activeClientSecret = activeClient?.client_secret || ''
 
   return (
-    <TabsContent value="oauth" className="space-y-6">
+    <TabsContent value={tabValue} className="space-y-6">
       {/* 1. Header Card with Quick Action */}
       <Card className="shadow-2xs border-primary/20 bg-linear-to-r from-primary/5 via-card to-card">
         <CardHeader className="p-4 sm:p-6 pb-3">
@@ -128,20 +136,20 @@ export function McpOAuthTab() {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2.5 py-0.5">
-                  OAuth 2.1 PKCE
+                  OAuth 2.1 An Toàn
                 </Badge>
                 <Badge variant="secondary" className="text-xs">
-                  ChatGPT & AI Connectors
+                  ChatGPT Connector
                 </Badge>
               </div>
               <CardTitle className="text-lg sm:text-xl font-bold flex items-center gap-2 pt-1">
                 <Bot className="size-5 text-primary shrink-0" />
-                Tích hợp ChatGPT qua OAuth 2.1
+                Kết Nối ChatGPT Với Kho Flashcard Flama
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Cung cấp mã xác thực chuẩn để ChatGPT Actions & MCP Client kết nối trực tiếp, tự động đăng nhập và thao tác kho thẻ thay mặt bạn an toàn.{' '}
+                Trợ lý ChatGPT có thể tự động tra từ vựng, phân tích ngữ pháp tiếng Nhật và ghi thẻ nhớ trực tiếp vào Flama thay mặt bạn một cách an toàn.{' '}
                 <Link to="/guide/integrations/mcp-ai" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">
-                  Xem hướng dẫn kết nối &rarr;
+                  Xem tài liệu chi tiết &rarr;
                 </Link>
               </CardDescription>
             </div>
@@ -149,9 +157,9 @@ export function McpOAuthTab() {
             {isAdmin ? (
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
-                  <Button className="shrink-0 gap-1.5 shadow-xs">
-                    <Plus className="size-4" />
-                    Đăng ký ChatGPT Connector
+                  <Button variant="outline" size="sm" className="shrink-0 gap-1.5 shadow-xs border-primary/30 hover:bg-primary/5 text-xs self-start sm:self-auto">
+                    <Plus className="size-3.5" />
+                    Đăng ký Connector mới (Admin)
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
@@ -284,22 +292,47 @@ export function McpOAuthTab() {
         </Card>
       )}
 
-      {/* 2. Primary Card: 4 Thông số Cần Điền Vào ChatGPT */}
-      <Card className="shadow-xs border-primary/30 bg-card">
-        <CardHeader className="p-4 sm:p-6 pb-3">
+      {/* Notice Banner: Plugin in Developer Preview */}
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5 space-y-2.5 shadow-2xs">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+            <Info className="size-5" />
+          </div>
+          <div className="space-y-1.5 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-sm sm:text-base font-bold text-foreground">
+                Lưu ý quan trọng: Flama Plugin đang trong giai đoạn thử nghiệm
+              </h4>
+              <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-800 dark:text-amber-200 border-amber-500/30 font-semibold">
+                Cần bật Chế độ nhà phát triển
+              </Badge>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Do Flama Plugin chưa được OpenAI đưa lên kho Store chung của ChatGPT, bạn chỉ cần <strong>bật Chế độ Nhà phát triển (Developer Mode)</strong> trên ChatGPT một lần duy nhất và làm theo <strong>5 bước đơn giản bên dưới</strong> để hoàn tất kết nối.
+            </p>
+            <p className="text-[11px] sm:text-xs text-amber-800 dark:text-amber-300 font-medium">
+              • Yêu cầu: Tài khoản ChatGPT Plus, Team, Edu hoặc Pro (chính sách của OpenAI để kích hoạt Developer Mode).
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Primary Feature: 5-Step Visual Walkthrough for Non-Tech Users */}
+      <Card className="shadow-xs border-primary/25 bg-card overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-4 border-b bg-muted/20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2 py-0.5">
-                  Thiết lập chính
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/25 text-xs font-semibold px-2 py-0.5">
+                  Dành cho người dùng
                 </Badge>
                 <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-                  <Sparkles className="size-5 text-amber-500 shrink-0" />
-                  Thông số Cần Điền Vào ChatGPT
+                  <Bot className="size-5 text-primary shrink-0" />
+                  Hướng Dẫn 5 Bước Kết Nối ChatGPT
                 </CardTitle>
               </div>
               <CardDescription className="text-xs sm:text-sm mt-1">
-                Khi tạo Custom GPT hoặc Action mới trên ChatGPT, bạn chỉ cần điền <strong>4 thông số</strong> dưới đây vào form cài đặt:
+                Thực hiện lần lượt các bước dưới đây trên giao diện ChatGPT để kích hoạt kết nối Flashcard:
               </CardDescription>
             </div>
             <Button
@@ -309,228 +342,322 @@ export function McpOAuthTab() {
               className="gap-1.5 text-xs self-start sm:self-auto text-muted-foreground hover:text-foreground shrink-0"
             >
               <RefreshCw className="size-3.5" />
-              Làm mới
+              Làm mới thông số
             </Button>
           </div>
         </CardHeader>
 
-        <CardContent className="p-4 sm:p-6 pt-0 space-y-3.5">
-          {/* Row 1: 1. Tên Plugin & 2. Mô tả */}
-          <div className="grid sm:grid-cols-2 gap-3">
-            {/* Item 1: Tên Plugin */}
-            <div className="p-3.5 rounded-xl border bg-muted/30 flex flex-col justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    1. Tên Plugin (Name)
-                  </span>
-                  <Badge variant="secondary" className="text-[10px]">Tên hiển thị</Badge>
-                </div>
-                <div className="text-sm font-bold text-foreground truncate select-all">
-                  {activeClient?.client_name || 'Flama Flashcard'}
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Tên định danh hiển thị của công cụ trong giao diện ChatGPT.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5 self-start"
-                onClick={() => copy('plugin_name', activeClient?.client_name || 'Flama Flashcard')}
-              >
-                {copiedKey === 'plugin_name' ? (
-                  <>
-                    <Check className="size-3.5 text-emerald-500" />
-                    Đã chép Tên
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-3.5" />
-                    Sao chép Tên
-                  </>
-                )}
-              </Button>
+        <CardContent className="p-3.5 sm:p-6 space-y-4 sm:space-y-6">
+          {/* Bước 1 */}
+          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
+            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
+              1
             </div>
-
-            {/* Item 2: Mô tả */}
-            <div className="p-3.5 rounded-xl border bg-muted/30 flex flex-col justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    2. Mô tả (Description)
-                  </span>
-                  <Badge variant="secondary" className="text-[10px]">Mục đích</Badge>
-                </div>
-                <div className="text-xs font-medium text-foreground line-clamp-2 select-all">
-                  Tra cứu từ vựng, kiểm tra ngữ nghĩa và tự động tạo flashcard vào kho Flama cá nhân qua giao thức MCP.
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Giúp ChatGPT tự động nhận biết khi nào cần kích hoạt công cụ Flama.
-                </p>
+            <div className="space-y-2 flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
+                  <Settings2 className="size-4 text-primary shrink-0" />
+                  <span>Bật Chế độ Nhà phát triển (Developer Mode) trên ChatGPT</span>
+                </h4>
+                <Badge variant="secondary" className="text-[10px] shrink-0">Chỉ làm 1 lần duy nhất</Badge>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5 self-start"
-                onClick={() =>
-                  copy(
-                    'plugin_desc',
-                    'Tra cứu từ vựng, kiểm tra ngữ nghĩa và tự động tạo flashcard vào kho Flama cá nhân qua giao thức MCP.'
-                  )
-                }
-              >
-                {copiedKey === 'plugin_desc' ? (
-                  <>
-                    <Check className="size-3.5 text-emerald-500" />
-                    Đã chép Mô tả
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-3.5" />
-                    Sao chép Mô tả
-                  </>
-                )}
-              </Button>
+              <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
+                <li>Truy cập <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">chatgpt.com <ExternalLink className="size-3" /></a> và đăng nhập tài khoản của bạn.</li>
+                <li>Bấm vào tên tài khoản hoặc ảnh đại diện ở góc dưới cùng bên trái màn hình ➔ Chọn <strong>Cài đặt (Settings ⚙️)</strong>.</li>
+                <li>Trong hộp thoại cài đặt, bấm chọn mục <strong>Bảo mật &amp; Đăng nhập (Security &amp; login)</strong> (hoặc một số phiên bản là <em>Apps &amp; Connectors ➔ Advanced settings</em>).</li>
+                <li>Gạt công tắc dòng <strong>Chế độ nhà phát triển (Developer mode)</strong> sang trạng thái <strong>Bật (On)</strong>.</li>
+              </ol>
             </div>
           </div>
 
-          {/* Row 2: Item 3: Connection / Server URL */}
-          <div className="p-3.5 rounded-xl border bg-muted/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  3. Connection / Server URL
-                </span>
-                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
-                  Endpoint MCP
-                </Badge>
+          {/* Bước 2 */}
+          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
+            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
+              2
+            </div>
+            <div className="space-y-2 flex-1 min-w-0">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
+                <ExternalLink className="size-4 text-primary shrink-0" />
+                <span>Mở kho Plugin và chọn "Tự tạo plugin của bạn"</span>
+              </h4>
+              <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
+                <li>Quay lại màn hình chat mới trên ChatGPT.</li>
+                <li>Bấm vào biểu tượng Plugin / Công cụ trên thanh chat (hoặc menu dấu <strong>+</strong> chọn <em>Apps / Plugins</em>) ➔ Chọn <strong>Duyệt Plugin (Browse Plugins)</strong>.</li>
+                <li>Cuộn xuống dưới cùng của danh sách và bấm chọn <strong>"Tự tạo plugin của bạn" (Develop your own plugin)</strong> (hoặc <em>Create an app / Create connector</em>).</li>
+              </ol>
+            </div>
+          </div>
+
+          {/* Bước 3 */}
+          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
+            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
+              3
+            </div>
+            <div className="space-y-3 flex-1 min-w-0">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
+                <Globe className="size-4 text-primary shrink-0" />
+                <span>Dán Đường dẫn Máy chủ Flama (Server URL)</span>
+              </h4>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                Tại ô yêu cầu nhập URL máy chủ của plugin trên ChatGPT, hãy dán đường dẫn máy chủ MCP của Flama dưới đây:
+              </p>
+              
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border bg-background/90 p-2.5 sm:p-3 text-xs font-mono">
+                <span className="text-muted-foreground font-sans text-[11px] font-semibold shrink-0">Server URL:</span>
+                <span className="flex-1 break-all select-all font-semibold text-primary text-xs sm:text-sm">{ep.resource_url}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-8 gap-1.5 text-xs w-full sm:w-auto justify-center"
+                  onClick={() => copy('resource_url', ep.resource_url)}
+                >
+                  {copiedKey === 'resource_url' ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                  <span>{copiedKey === 'resource_url' ? 'Đã chép URL' : 'Sao chép URL'}</span>
+                </Button>
               </div>
-              <div className="text-xs font-mono font-bold text-primary truncate select-all">
-                {ep.resource_url}
-              </div>
+
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                URL gốc của máy chủ MCP Flama để ChatGPT gửi các lệnh tra cứu và tạo thẻ.
+                Sau khi dán URL, bấm <strong>Tiếp tục (Find manifest / Next)</strong>. ChatGPT sẽ tự động quét và nhận diện Flama Flashcard.
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5 shrink-0 self-end sm:self-auto"
-              onClick={() => copy('resource_url', ep.resource_url)}
-            >
-              {copiedKey === 'resource_url' ? (
-                <>
-                  <Check className="size-3.5 text-emerald-500" />
-                  Đã chép URL
-                </>
-              ) : (
-                <>
-                  <Copy className="size-3.5" />
-                  Sao chép Server URL
-                </>
-              )}
-            </Button>
           </div>
 
-          {/* Row 3: Item 4: Authentication (OAuth) - Client ID & Client Secret */}
-          <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <KeyRound className="size-4 text-primary" />
-                    4. Client ID & Client Secret (Authentication: OAuth)
-                  </span>
-                  <Badge
+          {/* Bước 4 */}
+          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border border-primary/25 bg-primary/5 transition-all">
+            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
+              4
+            </div>
+            <div className="space-y-3 flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
+                  <KeyRound className="size-4 text-primary shrink-0" />
+                  <span>Cấu hình Nâng cao (Authentication: OAuth)</span>
+                </h4>
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold">
+                  {isAdmin ? 'Quản lý bởi Admin' : 'Cấp sẵn cho bạn'}
+                </Badge>
+              </div>
+
+              <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
+                <li>Khi màn hình xác thực xuất hiện trên ChatGPT, nhấp vào mục <strong>Nâng cao (Advanced)</strong>.</li>
+                <li>Tại mục <strong>Phương thức xác thực (Authentication)</strong>, chọn kiểu <strong>OAuth</strong>.</li>
+                <li>Dán 2 thông số định danh bên dưới vào các ô tương ứng:</li>
+              </ol>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 pt-1">
+                {/* Client ID */}
+                <div className="p-2.5 sm:p-3 rounded-xl border bg-background/90 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Client ID</div>
+                    <div className="font-mono text-xs font-bold text-foreground truncate select-all">
+                      {activeClientId}
+                    </div>
+                  </div>
+                  <Button
                     variant="outline"
-                    className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1 shrink-0 text-foreground"
+                    onClick={() => copy('client_id', activeClientId)}
                   >
-                    {isAdmin ? 'Quản lý bởi Admin' : 'Cấp sẵn bởi Admin'}
-                  </Badge>
+                    {copiedKey === 'client_id' ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+                    <span>{copiedKey === 'client_id' ? 'Đã chép' : 'Chép ID'}</span>
+                  </Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Tại ô <strong>Authentication</strong> trên ChatGPT, chọn phương thức <strong>OAuth</strong> và dán 2 thông số sau:
-                </p>
+
+                {/* Client Secret */}
+                <div className="p-2.5 sm:p-3 rounded-xl border bg-background/90 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Client Secret</div>
+                      <button
+                        type="button"
+                        onClick={() => setShowUserSecret((prev) => !prev)}
+                        className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        {showUserSecret ? <EyeOff className="size-2.5" /> : <Eye className="size-2.5" />}
+                        <span>{showUserSecret ? 'Ẩn' : 'Hiện'}</span>
+                      </button>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate select-all">
+                      {activeClientSecret
+                        ? showUserSecret
+                          ? activeClientSecret
+                          : '••••••••••••••••••••••••••••••••'
+                        : isAdmin
+                        ? '[Chưa có Secret - Hãy bấm Đổi Secret]'
+                        : '[Chờ Admin thiết lập]'}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1 shrink-0 text-foreground"
+                    disabled={!activeClientSecret}
+                    onClick={() => activeClientSecret && copy('client_secret', activeClientSecret)}
+                  >
+                    {copiedKey === 'client_secret' ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+                    <span>{copiedKey === 'client_secret' ? 'Đã chép' : 'Chép Secret'}</span>
+                  </Button>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div className="grid sm:grid-cols-2 gap-3 pt-1">
-              {/* Client ID */}
-              <div className="p-3 rounded-lg border bg-background/80 flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Client ID</div>
-                  <div className="font-mono text-xs font-bold text-foreground truncate select-all">
-                    {activeClientId}
+          {/* Bước 5 */}
+          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
+            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-emerald-600 text-white font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
+              5
+            </div>
+            <div className="space-y-3 flex-1 min-w-0">
+              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
+                <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                <span>Bấm Lưu &amp; Đồng ý Điều Khoản Cấp Quyền (Hoàn tất)</span>
+              </h4>
+              <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
+                <li>Bấm nút <strong>Lưu (Save) / Tiếp tục (Continue)</strong> trên ChatGPT.</li>
+                <li>Trình duyệt sẽ tự động mở một cửa sổ đăng nhập Flama: Hãy bấm <strong>"Đồng ý điều khoản &amp; Cấp quyền" (Authorize / Consent)</strong> để xác nhận.</li>
+                <li>Quay lại màn hình chat ChatGPT và bắt đầu trải nghiệm!</li>
+              </ol>
+
+              {/* Sample Prompts Box with 1-click Tap to Copy */}
+              <div className="p-3 sm:p-3.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20 space-y-2 text-xs">
+                <div className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                  <Bot className="size-4 text-emerald-600 shrink-0" />
+                  <span>Mẫu câu lệnh thử nghiệm (Chạm vào để chép):</span>
+                </div>
+                <div className="space-y-1.5 font-mono text-[11px] text-foreground">
+                  <div
+                    onClick={() => copy('prompt1', 'Hãy giải thích ngữ nghĩa từ 桜 (hoa anh đào) và tự động tạo 1 thẻ flashcard vào Flama cho tôi')}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background/90 border border-emerald-500/20 hover:border-emerald-500/50 cursor-pointer active:scale-[0.99] transition-all"
+                  >
+                    <span className="line-clamp-2 select-all">"Hãy giải thích ngữ nghĩa từ 桜 (hoa anh đào) và tự động tạo 1 thẻ flashcard vào Flama cho tôi"</span>
+                    <Button variant="ghost" size="xs" className="h-6 px-1.5 shrink-0 text-muted-foreground hover:text-emerald-600">
+                      {copiedKey === 'prompt1' ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                      <span className="text-[10px] ml-1">{copiedKey === 'prompt1' ? 'Đã chép' : 'Chép'}</span>
+                    </Button>
+                  </div>
+                  <div
+                    onClick={() => copy('prompt2', 'Tra cứu xem trong kho flashcard của tôi đã có từ 勉強 chưa?')}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background/90 border border-emerald-500/20 hover:border-emerald-500/50 cursor-pointer active:scale-[0.99] transition-all"
+                  >
+                    <span className="line-clamp-2 select-all">"Tra cứu xem trong kho flashcard của tôi đã có từ 勉強 chưa?"</span>
+                    <Button variant="ghost" size="xs" className="h-6 px-1.5 shrink-0 text-muted-foreground hover:text-emerald-600">
+                      {copiedKey === 'prompt2' ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                      <span className="text-[10px] ml-1">{copiedKey === 'prompt2' ? 'Đã chép' : 'Chép'}</span>
+                    </Button>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs gap-1 shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => copy('client_id', activeClientId)}
-                >
-                  {copiedKey === 'client_id' ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-                  <span>{copiedKey === 'client_id' ? 'Đã chép' : 'Chép ID'}</span>
-                </Button>
-              </div>
-
-              {/* Client Secret */}
-              <div className="p-3 rounded-lg border bg-background/80 flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Client Secret</div>
-                    <button
-                      type="button"
-                      onClick={() => setShowUserSecret((prev) => !prev)}
-                      className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
-                    >
-                      {showUserSecret ? <EyeOff className="size-2.5" /> : <Eye className="size-2.5" />}
-                      <span>{showUserSecret ? 'Ẩn' : 'Hiện'}</span>
-                    </button>
-                  </div>
-                  <div className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate select-all">
-                    {activeClientSecret
-                      ? showUserSecret
-                        ? activeClientSecret
-                        : '••••••••••••••••••••••••••••••••'
-                      : isAdmin
-                      ? '[Chưa có Secret - Hãy bấm Đổi Secret]'
-                      : '[Chờ Admin thiết lập]'}
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs gap-1 shrink-0 text-muted-foreground hover:text-foreground"
-                  disabled={!activeClientSecret}
-                  onClick={() => activeClientSecret && copy('client_secret', activeClientSecret)}
-                >
-                  {copiedKey === 'client_secret' ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-                  <span>{copiedKey === 'client_secret' ? 'Đã chép' : 'Chép Secret'}</span>
-                </Button>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* 3. Secondary Card: Thông số Đối chiếu Kỹ thuật (Reference) */}
+      {/* 3. Quick Copy Summary Card (For users who know the drill) */}
       <Card className="shadow-2xs">
-        <CardHeader className="p-4 sm:p-6 pb-3">
+        <CardHeader className="p-4 sm:p-5 pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
+              <Copy className="size-4 text-primary" />
+              Bảng Tóm Tắt Nhanh 4 Thông Số
+            </CardTitle>
+            <Badge variant="secondary" className="text-[10px]">
+              Sao chép nhanh
+            </Badge>
+          </div>
+          <CardDescription className="text-xs">
+            Dành cho người dùng đã quen: chỉ cần bấm sao chép lần lượt để dán vào ChatGPT.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5 pt-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 pt-2">
+            {/* 1. Tên Plugin */}
+            <div className="p-2.5 sm:p-3 rounded-xl border bg-muted/30 flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase">1. Tên Plugin</div>
+                <div className="text-xs font-bold text-foreground truncate">{activeClient?.client_name || 'Flama Flashcard'}</div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 px-2.5 shrink-0"
+                onClick={() => copy('q_name', activeClient?.client_name || 'Flama Flashcard')}
+              >
+                {copiedKey === 'q_name' ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                <span>{copiedKey === 'q_name' ? 'Đã chép' : 'Chép tên'}</span>
+              </Button>
+            </div>
+
+            {/* 2. Mô tả */}
+            <div className="p-2.5 sm:p-3 rounded-xl border bg-muted/30 flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase">2. Mô tả (Description)</div>
+                <div className="text-xs font-medium text-foreground truncate">Tra cứu từ vựng và tự động tạo flashcard vào Flama.</div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 px-2.5 shrink-0"
+                onClick={() => copy('q_desc', 'Tra cứu từ vựng, kiểm tra ngữ nghĩa và tự động tạo flashcard vào kho Flama cá nhân qua giao thức MCP.')}
+              >
+                {copiedKey === 'q_desc' ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                <span>{copiedKey === 'q_desc' ? 'Đã chép' : 'Chép mô tả'}</span>
+              </Button>
+            </div>
+
+            {/* 3. Server URL */}
+            <div className="p-2.5 sm:p-3 rounded-xl border bg-muted/30 flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase">3. Connection URL</div>
+                <div className="text-xs font-mono font-bold text-primary truncate">{ep.resource_url}</div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 px-2.5 shrink-0"
+                onClick={() => copy('q_url', ep.resource_url)}
+              >
+                {copiedKey === 'q_url' ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                <span>{copiedKey === 'q_url' ? 'Đã chép' : 'Chép URL'}</span>
+              </Button>
+            </div>
+
+            {/* 4. Client ID */}
+            <div className="p-2.5 sm:p-3 rounded-xl border bg-muted/30 flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase">4. Client ID</div>
+                <div className="text-xs font-mono font-bold text-foreground truncate">{activeClientId}</div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 px-2.5 shrink-0"
+                onClick={() => copy('q_cid', activeClientId)}
+              >
+                {copiedKey === 'q_cid' ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                <span>{copiedKey === 'q_cid' ? 'Đã chép' : 'Chép ID'}</span>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 4. Collapsible: Thông số Đối chiếu Kỹ thuật RFC 9728 & OIDC */}
+      <Card className="shadow-2xs">
+        <CardHeader className="p-4 sm:p-5 pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
                   <SlidersHorizontal className="size-4.5 text-primary" />
-                  Thông số Đối Chiếu Kỹ Thuật (Reference)
+                  Thông Số Kỹ Thuật &amp; Đối Chiếu RFC 9728 (Dành Cho Lập Trình Viên)
                 </CardTitle>
                 <Badge variant="outline" className="text-[10px]">
-                  Tự động / Nâng cao
+                  Nâng cao / OIDC
                 </Badge>
               </div>
-              <CardDescription className="text-xs sm:text-sm mt-1">
-                ChatGPT thường tự nhận diện các thông số này qua OIDC. Bạn chỉ cần đối chiếu khi ChatGPT mở rộng yêu cầu kiểm tra kỹ thuật.
+              <CardDescription className="text-xs mt-1">
+                ChatGPT thường tự động phát hiện các thông số này qua OIDC. Bạn chỉ cần đối chiếu khi kiểm tra chi tiết giao thức.
               </CardDescription>
             </div>
             <Button
@@ -542,12 +669,12 @@ export function McpOAuthTab() {
               {showReferenceDetails ? (
                 <>
                   <ChevronUp className="size-3.5" />
-                  Thu gọn bảng đối chiếu
+                  Thu gọn bảng kỹ thuật
                 </>
               ) : (
                 <>
                   <ChevronDown className="size-3.5" />
-                  Xem bảng đối chiếu chi tiết
+                  Xem bảng kỹ thuật chi tiết
                 </>
               )}
             </Button>
@@ -555,7 +682,7 @@ export function McpOAuthTab() {
         </CardHeader>
 
         {showReferenceDetails && (
-          <CardContent className="p-4 sm:p-6 pt-0 space-y-3">
+          <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -650,9 +777,9 @@ export function McpOAuthTab() {
         )}
       </Card>
 
-      {/* 4. Registered OAuth Clients & Connected Apps */}
+      {/* 5. Registered OAuth Clients & Connected Apps */}
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Left Column: Admin sees Clients Table; Non-admin sees Pre-configured Credentials Card */}
+        {/* Left Column: Admin sees Clients Table; Non-admin sees Security Info */}
         {isAdmin ? (
           <Card className="shadow-2xs">
             <CardHeader className="p-4 sm:p-6 pb-3">
@@ -808,34 +935,34 @@ export function McpOAuthTab() {
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
                   <ShieldCheck className="size-4.5 text-emerald-500" />
-                  Bảo Mật OAuth 2.1 & Quyền Riêng Tư
+                  Bảo Mật OAuth 2.1 &amp; Quyền Riêng Tư
                 </CardTitle>
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold gap-1">
                   <Check className="size-3" /> Chuẩn PKCE
                 </Badge>
               </div>
               <CardDescription className="text-xs leading-relaxed">
-                Flama bảo vệ tài khoản và kho thẻ của bạn khi tích hợp với ChatGPT Actions thông qua cơ chế phân quyền chuẩn quốc tế.
+                Flama bảo vệ tài khoản và kho thẻ của bạn khi tích hợp với ChatGPT thông qua cơ chế phân quyền chuẩn quốc tế.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0 space-y-3 text-xs leading-relaxed text-muted-foreground">
               <div className="p-3 rounded-xl border bg-muted/30 space-y-1.5">
                 <div className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Sparkles className="size-3.5 text-primary" />
-                  Xác thực danh tính cá nhân
+                  <ShieldCheck className="size-3.5 text-primary" />
+                  Xác thực danh tính trực tiếp
                 </div>
                 <p>
-                  Khi bấm Test hoặc sử dụng Plugin trên ChatGPT lần đầu, trình duyệt sẽ tự động chuyển hướng đến màn hình đăng nhập Flama để bạn trực tiếp xác nhận cấp quyền.
+                  Khi kết nối trên ChatGPT lần đầu, trình duyệt sẽ chuyển hướng đến màn hình Flama để bạn trực tiếp bấm nút xác nhận cấp quyền.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl border bg-muted/30 space-y-1.5">
                 <div className="font-semibold text-foreground flex items-center gap-1.5">
                   <KeyRound className="size-3.5 text-primary" />
-                  Không tiết lộ mật khẩu
+                  Không tiết lộ mật khẩu cá nhân
                 </div>
                 <p>
-                  ChatGPT không bao giờ có quyền xem hay lưu mật khẩu Flama của bạn. Mọi thao tác truy vấn thẻ đều được ký bằng mã Access Token ngắn hạn và có thể thu hồi bất cứ lúc nào.
+                  ChatGPT không bao giờ có quyền xem hay lưu mật khẩu Flama của bạn. Mọi thao tác đều dùng mã Access Token ngắn hạn và có thể ngắt kết nối bất cứ lúc nào bên dưới.
                 </p>
               </div>
             </CardContent>
@@ -847,16 +974,16 @@ export function McpOAuthTab() {
           <CardHeader className="p-4 sm:p-6 pb-3">
             <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
               <ShieldCheck className="size-4.5 text-emerald-500" />
-              Ứng dụng Đang Có Quyền Truy Cập ({connectedApps.length})
+              Ứng Dụng Đang Kết Nối ({connectedApps.length})
             </CardTitle>
             <CardDescription className="text-xs">
-              Các phiên ChatGPT bạn đã bấm duyệt cấp quyền truy cập tài khoản.
+              Các phiên ChatGPT bạn đã duyệt cấp quyền truy cập tài khoản Flama.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0 space-y-2.5">
             {connectedApps.length === 0 ? (
               <div className="text-center py-6 text-xs text-muted-foreground border rounded-xl border-dashed">
-                Chưa có ứng dụng nào được cấp quyền. Khi bạn kết nối ChatGPT thành công, phiên truy cập sẽ hiển thị tại đây.
+                Chưa có ứng dụng nào được cấp quyền. Khi bạn hoàn tất Bước 5 kết nối ChatGPT, phiên truy cập sẽ hiển thị tại đây.
               </div>
             ) : (
               connectedApps.map((app) => (
@@ -876,7 +1003,7 @@ export function McpOAuthTab() {
                     className="text-xs h-7 px-2.5 gap-1"
                     onClick={() => revokeConnectedAppMutation.mutate(app.client_id)}
                   >
-                    Thu hồi quyền
+                    Ngắt kết nối
                   </Button>
                 </div>
               ))

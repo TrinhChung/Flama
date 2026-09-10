@@ -4,11 +4,10 @@ import {
   ArrowRight,
   BookOpen,
   Bot,
-  Flame,
+  HelpCircle,
   KeyRound,
   MousePointerClick,
   Wrench,
-  Zap,
 } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
@@ -20,22 +19,20 @@ import { McpTokensTab } from '../components/McpTokensTab'
 import { McpOAuthTab } from '../components/McpOAuthTab'
 
 export function McpTokensPage() {
-  const [activeTab, setActiveTab] = useState('tokens')
+  const [activeTab, setActiveTab] = useState('chatgpt')
   const hookResult = useMcpTokenCRUD()
   const { query } = hookResult
-
-
 
   if (query.isPending) return <PageLoading label="Đang tải MCP tokens…" />
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
   return (
     <Page className="max-w-7xl mx-auto space-y-6 sm:space-y-8 pb-12 px-3 sm:px-6">
-      {/* Header & Feature Highlights Bar */}
-      <div className="space-y-4 sm:space-y-6">
+      {/* Header & Feature Navigation */}
+      <div className="space-y-4">
         <PageHeader
           title="Kết nối AI qua Model Context Protocol (MCP)"
-          description="Tích hợp ChatGPT, Claude Desktop, Cursor và các trợ lý AI với kho Flashcard Flama để tự động tra cứu, tạo thẻ và ôn tập."
+          description="Tích hợp ChatGPT, Cursor và các trợ lý AI với kho Flashcard Flama để tự động tra cứu từ vựng, tạo thẻ và ôn tập thông minh."
           actions={
             <ContextHelpButton
               guidePath="/guide/integrations/mcp-ai"
@@ -47,100 +44,93 @@ export function McpTokensPage() {
           }
         />
 
-        {/* Top Quick Explanatory Links */}
-        <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs">
-          <span className="text-muted-foreground font-medium text-[11px]">Tra cứu nhanh:</span>
+        {/* Top Quick Explanatory Links - Swipeable on mobile */}
+        <div className="flex items-center gap-2 pt-0.5 text-xs overflow-x-auto no-scrollbar pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 sm:flex-wrap">
+          <span className="text-muted-foreground font-medium text-[11px] shrink-0">Tra cứu nhanh:</span>
           <Link
             to="/guide/integrations/mcp-ai"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-purple-500/10 hover:border-purple-500/40 hover:text-purple-600 dark:hover:text-purple-400 transition-all font-medium text-[11px]"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-purple-500/10 hover:border-purple-500/40 hover:text-purple-600 dark:hover:text-purple-400 transition-all font-medium text-[11px] shrink-0 whitespace-nowrap"
           >
             <Bot className="size-3 text-purple-500" />
-            <span>Cẩm nang kết nối Claude/Cursor/ChatGPT</span>
+            <span>Cẩm nang kết nối ChatGPT & Trợ lý AI</span>
           </Link>
           <Link
             to="/guide/integrations/mcp-tools"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400 transition-all font-medium text-[11px]"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400 transition-all font-medium text-[11px] shrink-0 whitespace-nowrap"
           >
             <Wrench className="size-3 text-amber-500" />
             <span>Danh mục 20 Công cụ & Prompts AI</span>
           </Link>
           <Link
             to="/guide/troubleshooting/mcp"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-sky-500/10 hover:border-sky-500/40 hover:text-sky-600 dark:hover:text-sky-400 transition-all font-medium text-[11px]"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-sky-500/10 hover:border-sky-500/40 hover:text-sky-600 dark:hover:text-sky-400 transition-all font-medium text-[11px] shrink-0 whitespace-nowrap"
           >
-            <Zap className="size-3 text-sky-500" />
+            <HelpCircle className="size-3 text-sky-500" />
             <span>Khắc phục sự cố MCP</span>
           </Link>
-        </div>
-
-        {/* Quick Highlights Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-          <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border bg-card/60 backdrop-blur-xs shadow-2xs">
-            <div className="p-2 sm:p-2.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
-              <Bot className="size-4.5 sm:size-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] sm:text-xs font-semibold truncate">AI Chat 2 chiều</div>
-              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">ChatGPT, Claude, Cursor</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border bg-card/60 backdrop-blur-xs shadow-2xs">
-            <div className="p-2 sm:p-2.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
-              <Zap className="size-4.5 sm:size-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] sm:text-xs font-semibold truncate">20 Flashcard Tools</div>
-              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">Tạo thẻ, tìm kiếm, due</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border bg-card/60 backdrop-blur-xs shadow-2xs">
-            <div className="p-2 sm:p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-              <KeyRound className="size-4.5 sm:size-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] sm:text-xs font-semibold truncate">Token Dài hạn</div>
-              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">Vĩnh viễn hoặc tự chọn</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border bg-card/60 backdrop-blur-xs shadow-2xs">
-            <div className="p-2 sm:p-2.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
-              <Flame className="size-4.5 sm:size-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] sm:text-xs font-semibold truncate">OAuth 2.1 PKCE</div>
-              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">ChatGPT Connectors</div>
-            </div>
-          </div>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-        {/* Clean 2-Tab Bar */}
-        <div className="overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
-          <TabsList className="inline-flex w-full sm:w-auto p-1 bg-muted/60 backdrop-blur-md rounded-2xl gap-1">
-            <TabsTrigger
-              value="tokens"
-              className="flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
-            >
-              <KeyRound className="size-4 shrink-0" />
-              <span>Quản lý Token (Claude / Cursor / Antigravity)</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="oauth"
-              className="flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
-            >
-              <Bot className="size-4 shrink-0" />
-              <span>ChatGPT & OAuth 2.1 (Mới)</span>
-            </TabsTrigger>
-          </TabsList>
-        </div>
+        {/* Prominent, Card-Style High-Visibility Tabs */}
+        <TabsList
+          style={{ height: 'auto' }}
+          className="grid w-full grid-cols-1 lg:grid-cols-2 p-1.5 bg-muted/50 rounded-2xl border gap-2 shadow-2xs"
+        >
+          {/* Tab 1: ChatGPT (Primary) */}
+          <TabsTrigger
+            value="chatgpt"
+            style={{ height: 'auto' }}
+            className="flex items-start sm:items-center justify-between gap-3 p-3 sm:p-4 text-left rounded-xl data-[state=active]:bg-card data-[state=active]:shadow-xs data-[state=active]:border-emerald-500/40 dark:data-[state=active]:border-emerald-500/50 data-[state=active]:ring-1 data-[state=active]:ring-emerald-500/20 border border-transparent transition-all whitespace-normal after:hidden"
+          >
+            <div className="flex items-center gap-3 min-w-0 w-full">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Bot className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground truncate">1. Kết nối ChatGPT</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 shrink-0">
+                    Khuyên dùng
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
+                  Tự động tra từ và tạo flashcard trực tiếp ngay khi chat cùng ChatGPT
+                </p>
+              </div>
+            </div>
+          </TabsTrigger>
 
-        {/* Operational Tab Contents */}
-        <McpTokensTab hookResult={hookResult} />
-        <McpOAuthTab />
+          {/* Tab 2: Tokens & Permissions (Developer / IDE) */}
+          <TabsTrigger
+            value="tokens"
+            style={{ height: 'auto' }}
+            className="flex items-start sm:items-center justify-between gap-3 p-3 sm:p-4 text-left rounded-xl data-[state=active]:bg-card data-[state=active]:shadow-xs data-[state=active]:border-sky-500/40 dark:data-[state=active]:border-sky-500/50 data-[state=active]:ring-1 data-[state=active]:ring-sky-500/20 border border-transparent transition-all whitespace-normal after:hidden"
+          >
+            <div className="flex items-center gap-3 min-w-0 w-full">
+              <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
+                <KeyRound className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground truncate">2. Quản lý Quyền & Token API</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border shrink-0">
+                    Lập trình viên
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
+                  Personal Access Token cho Cursor, Cline • Claude (Đang thử nghiệm)
+                </p>
+              </div>
+            </div>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Tab 1: ChatGPT Onboarding & OAuth 2.1 */}
+        <McpOAuthTab tabValue="chatgpt" />
+
+        {/* Tab 2: Token Management & Permissions */}
+        <McpTokensTab hookResult={hookResult} onSwitchToChatGPT={() => setActiveTab('chatgpt')} />
       </Tabs>
 
       {/* Contextual Reference / Documentation Strip */}

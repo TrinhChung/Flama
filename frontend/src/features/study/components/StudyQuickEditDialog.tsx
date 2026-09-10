@@ -15,10 +15,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { NativeSelect } from '@/components/ui/native-select'
-import { LoaderCircle, Pencil, Plus, RotateCcw, Save, Tag, X } from 'lucide-react'
+import { LoaderCircle, Pencil, PenTool, Plus, RotateCcw, Save, Tag, X } from 'lucide-react'
 import { appApi } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
 import { MediaFieldPreview } from '@/features/browse/components/MediaFieldPreview'
+import { BrowseStrokeModal } from '@/features/browse/components/BrowseStrokeModal'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
 
@@ -111,6 +112,7 @@ export function StudyQuickEditDialog({
   const [newTagInput, setNewTagInput] = useState('')
   const [deckId, setDeckId] = useState<number | null>(null)
   const [initialDeckId, setInitialDeckId] = useState<number | null>(null)
+  const [isStrokeModalOpen, setIsStrokeModalOpen] = useState(false)
 
   const isFormInitializedRef = useRef(false)
 
@@ -131,8 +133,16 @@ export function StudyQuickEditDialog({
     } else if (!open) {
       isFormInitializedRef.current = false
       setNewTagInput('')
+      setIsStrokeModalOpen(false)
     }
   }, [open, content])
+
+  const handleApplyStrokes = useCallback((targetFieldName: string, urls: string) => {
+    setFieldValues((prev) => ({
+      ...prev,
+      [targetFieldName]: urls,
+    }))
+  }, [])
 
   // Merge full detail once background query resolves
   useEffect(() => {
@@ -308,35 +318,50 @@ export function StudyQuickEditDialog({
   const deckList = cardDetailQuery.data?.decks || []
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden bg-card border-border/80 shadow-2xl rounded-2xl"
+        className="w-[calc(100%-1rem)] sm:w-full sm:max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden bg-card border-border/80 shadow-2xl rounded-2xl"
         onKeyDown={handleKeyDown}
       >
         {/* Header */}
-        <DialogHeader className="px-5 py-4 border-b border-border/60 bg-muted/20 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="size-8 rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
-              <Pencil className="size-4" />
+        <DialogHeader className="px-3.5 py-3 sm:px-5 sm:py-4 border-b border-border/60 bg-muted/20 shrink-0">
+          <div className="flex items-center justify-between gap-2 sm:gap-3 pr-9 sm:pr-8">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="size-7 sm:size-8 rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
+                <Pencil className="size-3.5 sm:size-4" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2 truncate">
+                  <span>Sửa nhanh thẻ</span>
+                  {deckName && (
+                    <Badge variant="outline" className="text-[10px] sm:text-[11px] font-normal px-1.5 sm:px-2 py-0 shrink-0 truncate max-w-[120px] sm:max-w-xs">
+                      {deckName}
+                    </Badge>
+                  )}
+                </DialogTitle>
+                <DialogDescription className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate hidden xs:block">
+                  Chỉnh sửa các trường từ vựng và nội dung mà không làm gián đoạn phiên học.
+                </DialogDescription>
+              </div>
             </div>
-            <div>
-              <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                Sửa nhanh thẻ
-                {deckName && (
-                  <Badge variant="outline" className="text-[11px] font-normal px-2 py-0">
-                    {deckName}
-                  </Badge>
-                )}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                Chỉnh sửa các trường từ vựng và nội dung mà không làm gián đoạn phiên học.
-              </DialogDescription>
-            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 sm:px-2.5 text-xs font-semibold gap-1.5 rounded-lg bg-background/80 hover:bg-muted shrink-0 border-border/80 shadow-2xs"
+              title="Tạo sơ đồ thứ tự nét Kanji & Hanzi cho thẻ này"
+              onClick={() => setIsStrokeModalOpen(true)}
+            >
+              <PenTool className="size-3.5 text-primary" />
+              <span className="hidden sm:inline">Tạo nét</span>
+            </Button>
           </div>
         </DialogHeader>
 
         {/* Scrollable Form Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-3.5 sm:space-y-4 min-h-0 pb-6 sm:pb-8">
           {/* Destination Deck Selection (if available) */}
           {deckList.length > 0 && (
             <div className="space-y-1.5">
@@ -346,7 +371,7 @@ export function StudyQuickEditDialog({
               <NativeSelect
                 value={deckId !== null ? String(deckId) : ''}
                 onChange={(e) => setDeckId(Number(e.target.value))}
-                className="h-9 text-xs sm:text-sm rounded-lg bg-muted/50"
+                className="h-10 sm:h-9 text-base sm:text-sm rounded-lg bg-muted/50"
               >
                 {deckList.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -403,7 +428,7 @@ export function StudyQuickEditDialog({
                       setFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
                     }
                     placeholder={`Nhập ${field.name}…`}
-                    className="min-h-20 text-xs sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50 focus:bg-background transition-colors"
+                    className="min-h-20 text-base sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50 focus:bg-background transition-colors"
                   />
                 ) : (
                   <Input
@@ -412,7 +437,7 @@ export function StudyQuickEditDialog({
                       setFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
                     }
                     placeholder={`Nhập ${field.name}…`}
-                    className="h-9 text-xs sm:text-sm rounded-lg bg-muted/50 focus:bg-background transition-colors"
+                    className="h-10 sm:h-9 text-base sm:text-sm rounded-lg bg-muted/50 focus:bg-background transition-colors"
                   />
                 )}
               </div>
@@ -435,13 +460,13 @@ export function StudyQuickEditDialog({
                     handleAddTag()
                   }
                 }}
-                className="h-8 rounded-lg text-xs bg-muted/50"
+                className="h-10 sm:h-8 rounded-lg text-base sm:text-xs bg-muted/50 flex-1"
               />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-8 px-2.5 rounded-lg text-xs bg-muted/50 hover:bg-muted border-border"
+                className="h-10 sm:h-8 px-3.5 sm:px-2.5 rounded-lg text-xs font-semibold bg-muted/50 hover:bg-muted border-border shrink-0"
                 onClick={handleAddTag}
               >
                 <Plus className="size-3.5 mr-1" /> Thêm
@@ -456,16 +481,16 @@ export function StudyQuickEditDialog({
                   <Badge
                     key={t}
                     variant="secondary"
-                    className="gap-1 pl-1.5 pr-1 py-0.5 text-[11px] rounded-md font-semibold select-none group"
+                    className="gap-1 pl-2 sm:pl-1.5 pr-1.5 sm:pr-1 py-1 sm:py-0.5 text-xs sm:text-[11px] rounded-md font-semibold select-none group"
                   >
-                    <Tag className="size-2.5 opacity-60" />
+                    <Tag className="size-3 sm:size-2.5 opacity-60" />
                     <span>{t}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveTag(t)}
-                      className="p-0.5 rounded-full hover:bg-muted-foreground/15 text-muted-foreground hover:text-foreground shrink-0"
+                      className="p-1 sm:p-0.5 rounded-full hover:bg-muted-foreground/15 text-muted-foreground hover:text-foreground shrink-0"
                     >
-                      <X className="size-2.5" />
+                      <X className="size-3 sm:size-2.5" />
                     </button>
                   </Badge>
                 ))
@@ -475,28 +500,29 @@ export function StudyQuickEditDialog({
         </div>
 
         {/* Footer Actions */}
-        <DialogFooter className="px-5 py-3.5 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-2">
+        <DialogFooter className="m-0 px-3.5 py-3 sm:px-5 sm:py-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-4 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-between gap-2 sm:gap-3 shrink-0 rounded-b-2xl">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {isDirty && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-9 text-xs font-semibold rounded-lg text-muted-foreground hover:text-foreground"
+                className="h-10 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-lg text-muted-foreground hover:text-foreground shrink-0"
                 onClick={handleRevert}
                 disabled={updateMutation.isPending}
               >
-                <RotateCcw className="size-3.5 mr-1.5" /> Khôi phục
+                <RotateCcw className="size-3.5 sm:mr-1.5" />
+                <span className="hidden xs:inline">Khôi phục</span>
               </Button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 text-xs font-semibold rounded-lg"
+              className="h-10 sm:h-9 px-3.5 sm:px-4 text-xs font-semibold rounded-lg shrink-0"
               onClick={() => onOpenChange(false)}
               disabled={updateMutation.isPending}
             >
@@ -506,7 +532,7 @@ export function StudyQuickEditDialog({
             <Button
               type="button"
               size="sm"
-              className="h-9 text-xs font-bold rounded-lg shadow-sm bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600"
+              className="h-10 sm:h-9 px-4 text-xs font-bold rounded-lg shadow-sm bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600 flex-1 sm:flex-initial justify-center"
               onClick={handleSubmit}
               disabled={!isDirty || updateMutation.isPending}
               title="Lưu thay đổi (Ctrl+Enter)"
@@ -525,5 +551,17 @@ export function StudyQuickEditDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <BrowseStrokeModal
+      isOpen={isStrokeModalOpen}
+      onClose={() => setIsStrokeModalOpen(false)}
+      mode="single"
+      cardId={cardId}
+      deckName={deckName}
+      fields={fieldDefs}
+      fieldValues={fieldValues}
+      onApply={handleApplyStrokes}
+    />
+  </>
   )
 }

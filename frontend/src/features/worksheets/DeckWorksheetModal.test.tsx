@@ -3,8 +3,12 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { DeckWorksheetModal } from './components/DeckWorksheetModal'
 import * as worksheetApi from './api'
+import * as clientApi from '@/shared/api/client'
+import { saveWorksheetPreset } from './utils/worksheetStorage'
+import type { DeckWorksheetMeta } from './types'
 
 describe('DeckWorksheetModal Live Studio', () => {
   let container: HTMLDivElement | null = null
@@ -20,6 +24,11 @@ describe('DeckWorksheetModal Live Studio', () => {
         name: 'Vocabulary Note',
         fields: ['Expression', 'Reading', 'Meaning'],
         note_count: 30,
+        sample_values: {
+          Expression: '食べる',
+          Reading: 'たべる',
+          Meaning: 'Ăn',
+        },
       },
     ],
     suggested_mappings: {
@@ -186,6 +195,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -214,6 +224,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -271,6 +282,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -332,6 +344,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -393,6 +406,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -428,6 +442,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -475,6 +490,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           open={true}
           onOpenChange={vi.fn()}
           deckId={null}
+          initialStep="studio"
         />,
       )
     })
@@ -516,6 +532,7 @@ describe('DeckWorksheetModal Live Studio', () => {
             onOpenChange={vi.fn()}
             deckId={1}
             deckName="JLPT N5 Core"
+            initialStep="studio"
           />,
         )
       })
@@ -567,6 +584,7 @@ describe('DeckWorksheetModal Live Studio', () => {
             onOpenChange={vi.fn()}
             deckId={1}
             deckName="JLPT N5 Core"
+            initialStep="studio"
           />,
         )
       })
@@ -604,6 +622,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1619}
           deckName="HSK 1 Bài 4"
+          initialStep="studio"
         />,
       )
     })
@@ -664,6 +683,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -719,6 +739,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -781,6 +802,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={() => {}}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -909,6 +931,7 @@ describe('DeckWorksheetModal Live Studio', () => {
           onOpenChange={vi.fn()}
           deckId={1}
           deckName="JLPT N5 Core"
+          initialStep="studio"
         />,
       )
     })
@@ -959,7 +982,7 @@ describe('DeckWorksheetModal Live Studio', () => {
 
   it('supports toggling page_fill_mode between balanced_stretch and max_density in layout tab', async () => {
     await act(async () => {
-      root!.render(<DeckWorksheetModal open={true} onOpenChange={() => {}} deckId={1} />)
+      root!.render(<DeckWorksheetModal open={true} onOpenChange={() => {}} deckId={1} initialStep="studio" />)
     })
 
     await act(async () => {
@@ -1001,7 +1024,7 @@ describe('DeckWorksheetModal Live Studio', () => {
 
   it('highlights quick preset button as selected with active styling when clicked', async () => {
     await act(async () => {
-      root!.render(<DeckWorksheetModal open={true} onOpenChange={() => {}} deckId={1} />)
+      root!.render(<DeckWorksheetModal open={true} onOpenChange={() => {}} deckId={1} initialStep="studio" />)
     })
 
     await act(async () => {
@@ -1040,6 +1063,289 @@ describe('DeckWorksheetModal Live Studio', () => {
     // Verify button has active primary styling (border-primary and bg-primary/10)
     expect(presetBtn?.className).toContain('border-primary')
     expect(presetBtn?.className).toContain('bg-primary/10')
+  })
+})
+
+describe('DeckWorksheetModal Wizard Flow', () => {
+  let container: HTMLDivElement | null = null
+  let root: Root | null = null
+  let queryClient: QueryClient
+
+  const mockMeta: DeckWorksheetMeta = {
+    deck_id: 1,
+    deck_name: 'JLPT N5 Core',
+    total_notes: 30,
+    note_types: [
+      {
+        id: 'nt1',
+        name: 'Vocabulary Note',
+        fields: ['Expression', 'Reading', 'Meaning'],
+        note_count: 30,
+        sample_values: {
+          Expression: '食べる',
+          Reading: 'たべる',
+          Meaning: 'Ăn',
+        },
+      },
+    ],
+    suggested_mappings: {
+      kanji: 'Expression',
+      reading: 'Reading',
+      meaning: 'Meaning',
+      word: 'Expression',
+      prompt_reading: 'Reading',
+      prompt_meaning: 'Meaning',
+    },
+    templates: [
+      {
+        id: 'kanji_compact',
+        name_vi: 'Luyện viết Kanji chuẩn',
+        name_en: 'Kanji Stroke Practice',
+        description_vi: 'Mẫu chữ Hán chuẩn với sơ đồ nét.',
+        description_en: 'Standard Kanji practice.',
+        category: 'kanji' as const,
+        supported_orientations: ['portrait' as const, 'landscape' as const],
+        default_orientation: 'portrait' as const,
+        default_rows_per_page: 5,
+        field_slots: [
+          {
+            key: 'kanji',
+            label_vi: 'Trường Kanji',
+            label_en: 'Kanji',
+            required: true,
+          },
+        ],
+        default_options: {
+          grid_style: 'cross' as const,
+          trace_count: 2,
+          practice_count: 5,
+        },
+      },
+      {
+        id: 'genkouyoushi',
+        name_vi: 'Trang trắng (Tập viết tay)',
+        name_en: 'Blank Essay Sheet',
+        description_vi: 'Giấy kẻ ô trống Genkō Yōshi.',
+        description_en: 'Blank paper.',
+        category: 'essay' as const,
+        supported_orientations: ['portrait' as const],
+        default_orientation: 'portrait' as const,
+        default_rows_per_page: 20,
+        field_slots: [],
+        default_options: {},
+      },
+    ],
+  }
+
+  const mockPreviewData = {
+    template: mockMeta.templates[0],
+    deck_id: 1,
+    deck_name: 'JLPT N5 Core',
+    options: { orientation: 'portrait' as const, rows_per_page: 5 },
+    field_mapping: { kanji: 'Expression' },
+    total_items: 2,
+    total_pages: 1,
+    pages: [],
+    warnings: [],
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    vi.spyOn(worksheetApi, 'fetchDeckWorksheetMeta').mockResolvedValue(mockMeta)
+    vi.spyOn(worksheetApi, 'generateWorksheetPreview').mockResolvedValue(mockPreviewData as any)
+    vi.spyOn(clientApi, 'apiRequest').mockImplementation(async (path: string) => {
+      if (path === '/api/browse/decks') {
+        return {
+          decks: [
+            { id: 1, name: 'JLPT N5 Core', parent_id: null, counts: { total: 30 } },
+            { id: 2, name: 'JLPT N4 Mixed', parent_id: null, counts: { total: 40 } },
+          ],
+        }
+      }
+      return {}
+    })
+  })
+
+  afterEach(() => {
+    if (root && container) {
+      act(() => {
+        root?.unmount()
+      })
+      container.remove()
+    }
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
+  it('starts at Step 1 (deck tree) when deckId is null, and allows selecting standalone blank sheet', async () => {
+    await act(async () => {
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <DeckWorksheetModal open={true} onOpenChange={vi.fn()} deckId={null} />
+        </QueryClientProvider>,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+
+    // Should display step 1 deck tree selection
+    expect(document.body.textContent).toContain('Bước 1: Chọn bộ thẻ để xuất bài tập')
+    expect(document.body.textContent).toContain('Tạo mẫu giấy in tự do (Không cần thẻ học)')
+
+    // Click standalone button
+    const standaloneBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Chọn mẫu tự do'),
+    )
+    expect(standaloneBtn).toBeDefined()
+
+    await act(async () => {
+      standaloneBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+
+    // Now should be on Step 3: Chọn bài tập (standalone templates)
+    expect(document.body.textContent).toContain('Chọn loại bài tập')
+    expect(document.body.textContent).toContain('Trang trắng (Tập viết tay)')
+  })
+
+  it('skips Step 1 and lands directly on Step 2 (mapping) when valid deckId is provided', async () => {
+    await act(async () => {
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <DeckWorksheetModal open={true} onOpenChange={vi.fn()} deckId={1} deckName="JLPT N5 Core" />
+        </QueryClientProvider>,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Step 2 should be active
+    expect(document.body.textContent).toContain('Ánh xạ dữ liệu')
+    expect(document.body.textContent).toContain('Chữ Hán / Từ vựng chính')
+    expect(document.body.textContent).toContain('Giá trị mẫu trên thẻ:"食べる"')
+    expect(document.body.textContent).toContain('Tiếp tục: Chọn mẫu bài tập')
+  })
+
+  it('blocks proceeding if deck contains multiple note types', async () => {
+    const mixedMeta: DeckWorksheetMeta = {
+      ...mockMeta,
+      has_mixed_note_types: true,
+      note_types: [
+        { id: 'nt1', name: 'Kanji Note', fields: ['Kanji', 'Onyomi'], note_count: 20 },
+        { id: 'nt2', name: 'Grammar Note', fields: ['Pattern', 'Meaning'], note_count: 20 },
+      ],
+    }
+    vi.spyOn(worksheetApi, 'fetchDeckWorksheetMeta').mockResolvedValue(mixedMeta)
+
+    await act(async () => {
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <DeckWorksheetModal open={true} onOpenChange={vi.fn()} deckId={2} deckName="JLPT N4 Mixed" />
+        </QueryClientProvider>,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Expect warning alert and multiple note types block
+    expect(document.body.textContent).toContain('Không thể tiếp tục: Bộ thẻ chứa 2 loại thẻ khác nhau')
+    expect(document.body.textContent).toContain('bộ thẻ phải đồng nhất duy nhất 1 loại thẻ (Note Type)')
+
+    // Find the Next button (Tiếp tục: Ánh xạ dữ liệu in step 1)
+    const nextBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiếp tục: Ánh xạ dữ liệu'),
+    )
+    expect(nextBtn).toBeDefined()
+    expect(nextBtn?.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('allows progressing through Step 2 -> Step 3 -> Step 4', async () => {
+    await act(async () => {
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <DeckWorksheetModal open={true} onOpenChange={vi.fn()} deckId={1} deckName="JLPT N5 Core" />
+        </QueryClientProvider>,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Step 2 -> Step 3
+    const toStep3Btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiếp tục: Chọn mẫu bài tập'),
+    )
+    expect(toStep3Btn).toBeDefined()
+
+    await act(async () => {
+      toStep3Btn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+
+    // Step 3 is rendered
+    expect(document.body.textContent).toContain('Chọn loại bài tập')
+    expect(document.body.textContent).toContain('Luyện viết Kanji chuẩn')
+
+    // Step 3 -> Step 4
+    const toStep4Btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiếp tục: Cấu hình & In ấn'),
+    )
+    expect(toStep4Btn).toBeDefined()
+
+    await act(async () => {
+      toStep4Btn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Step 4 Studio is rendered
+    expect(document.body.textContent).toContain('Live Studio')
+    expect(document.body.textContent).toContain('Xuất bài tập in ấn / PDF (A4)')
+  })
+
+  it('auto-populates saved preset from localStorage', async () => {
+    saveWorksheetPreset('nt1', {
+      fieldMapping: { kanji: 'Reading' },
+      templateId: 'vocab_writing',
+    })
+
+    await act(async () => {
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <DeckWorksheetModal open={true} onOpenChange={vi.fn()} deckId={1} deckName="JLPT N5 Core" />
+        </QueryClientProvider>,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Verify preset notification badge
+    expect(document.body.textContent).toContain('Đã nạp thiết lập đã lưu')
   })
 })
 

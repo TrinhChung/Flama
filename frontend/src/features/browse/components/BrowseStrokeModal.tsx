@@ -26,7 +26,7 @@ import {
   PenTool,
   Sparkles,
 } from 'lucide-react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi, type GenerateStrokesResponse } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
@@ -37,12 +37,16 @@ import {
 } from '../services/strokeStorage'
 import type { useBrowseState, CardDetailResponse } from '../hooks/useBrowseState'
 
-interface BrowseStrokeModalProps {
-  browse: ReturnType<typeof useBrowseState>
+export interface BrowseStrokeModalProps {
+  browse?: ReturnType<typeof useBrowseState>
   isOpen: boolean
   onClose: () => void
   mode?: 'single' | 'batch'
   cardId?: string | null
+  fields?: Array<{ name: string; field_type?: string }>
+  fieldValues?: Record<string, string>
+  deckName?: string | null
+  onApply?: (targetField: string, value: string) => void
 }
 
 export function BrowseStrokeModal({
@@ -51,18 +55,26 @@ export function BrowseStrokeModal({
   onClose,
   mode = 'batch',
   cardId,
+  fields,
+  fieldValues,
+  deckName,
+  onApply,
 }: BrowseStrokeModalProps) {
+  const defaultQueryClient = useQueryClient()
   const {
-    selectedCards,
+    selectedCards = [],
     selectedDeckId,
     activeCardId,
-    cards,
+    cards = [],
     decksQuery,
     cardDetailQuery,
-    editFieldValues,
+    editFieldValues: browseEditFieldValues,
     setEditFieldValues,
-    queryClient,
-  } = browse
+    queryClient: browseQueryClient,
+  } = browse || {}
+
+  const queryClient = browseQueryClient || defaultQueryClient
+  const editFieldValues = browseEditFieldValues || fieldValues || {}
 
   // Determine target card ID to resolve actual Note Type fields
   const targetCardId =
@@ -72,23 +84,26 @@ export function BrowseStrokeModal({
   const targetCardQuery = useQuery({
     queryKey: ['browse', 'stroke-modal-card-detail', targetCardId],
     queryFn: () => appApi.get<CardDetailResponse>(`/browse/cards/${targetCardId}`),
-    enabled: isOpen && Boolean(targetCardId) && cardDetailQuery.data?.card?.card_id !== targetCardId,
+    enabled: isOpen && Boolean(targetCardId) && cardDetailQuery?.data?.card?.card_id !== targetCardId,
     staleTime: 1000 * 60 * 5,
   })
 
   // Extract actual fields of the Note Type currently in use
   const actualNoteFields = useMemo(() => {
-    if (cardDetailQuery.data?.card?.card_id === targetCardId && cardDetailQuery.data?.fields?.length) {
+    if (fields && fields.length > 0) {
+      return fields
+    }
+    if (cardDetailQuery?.data?.card?.card_id === targetCardId && cardDetailQuery.data?.fields?.length) {
       return cardDetailQuery.data.fields
     }
     if (targetCardQuery.data?.fields?.length) {
       return targetCardQuery.data.fields
     }
-    if (cardDetailQuery.data?.fields?.length) {
+    if (cardDetailQuery?.data?.fields?.length) {
       return cardDetailQuery.data.fields
     }
     return []
-  }, [cardDetailQuery.data, targetCardQuery.data, targetCardId])
+  }, [fields, cardDetailQuery?.data, targetCardQuery.data, targetCardId])
 
   const noteFieldNames = useMemo(() => {
     const names = actualNoteFields.map((f) => f.name).filter(Boolean)
@@ -99,7 +114,20 @@ export function BrowseStrokeModal({
   const mediaTargetFieldNames = useMemo(
     () =>
       actualNoteFields
-        .filter((field) => ['image', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+        .filter((field) => {
+          const type = String(field.field_type || '').toLowerCase()
+          if (['image', 'diagram'].includes(type)) return true
+          const name = field.name.toLowerCase()
+          return [
+            'diagram',
+            'strokediagram',
+            'stroke_diagram',
+            'kanjistrokes',
+            'strokes',
+            'kanji_strokes',
+            'stroke',
+          ].includes(name)
+        })
         .map((field) => field.name)
         .filter(Boolean),
     [actualNoteFields],
@@ -128,9 +156,14 @@ export function BrowseStrokeModal({
       (mediaTargetFieldNames.includes('StrokeDiagram')
         ? 'StrokeDiagram'
         : mediaTargetFieldNames[0]) ||
+      noteFieldNames.find((f) =>
+        ['diagram', 'strokediagram', 'stroke_diagram', 'kanjistrokes', 'strokes', 'kanji_strokes', 'stroke'].includes(
+          f.toLowerCase(),
+        ),
+      ) ||
       ''
     )
-  }, [mediaTargetFieldNames])
+  }, [mediaTargetFieldNames, noteFieldNames])
 
   const [sourceField, setSourceField] = useState(defaultSource)
   const [targetField, setTargetField] = useState(defaultTarget)
@@ -140,9 +173,7 @@ export function BrowseStrokeModal({
     if (defaultSource && !noteFieldNames.includes(sourceField)) {
       setSourceField(defaultSource)
     }
-    if (!defaultTarget) {
-      setTargetField('')
-    } else if (!mediaTargetFieldNames.includes(targetField)) {
+    if (defaultTarget && (!targetField || (!mediaTargetFieldNames.includes(targetField) && !noteFieldNames.includes(targetField)))) {
       setTargetField(defaultTarget)
     }
   }, [defaultSource, defaultTarget, noteFieldNames, mediaTargetFieldNames, sourceField, targetField])
@@ -159,7 +190,8 @@ export function BrowseStrokeModal({
     }
     // 2. From active card note field_values
     if (
-      cardDetailQuery.data?.note?.field_values?.[sourceField] !== undefined &&
+      cardDetailQuery?.data?.note?.field_values?.[sourceField] !== undefined &&
+      cardDetailQuery.data.note.field_values[sourceField] != null &&
       String(cardDetailQuery.data.note.field_values[sourceField]).trim()
     ) {
       return String(cardDetailQuery.data.note.field_values[sourceField]).trim()
@@ -192,7 +224,7 @@ export function BrowseStrokeModal({
   }, [
     sourceField,
     editFieldValues,
-    cardDetailQuery.data,
+    cardDetailQuery?.data,
     targetCardQuery.data,
     cards,
     targetCardId,
@@ -200,16 +232,17 @@ export function BrowseStrokeModal({
 
   // Auto-detect initial locale based on deck name or character composition
   const detectedLocale = useMemo(() => {
-    const deckName = (
+    const effectiveDeckName = (
+      deckName ||
       decksQuery?.data?.decks?.find((d) => d.id === selectedDeckId)?.name ||
-      cardDetailQuery.data?.note?.deck_name ||
+      cardDetailQuery?.data?.note?.deck_name ||
       cards.find((c) => c.card_id === targetCardId)?.deck_name ||
       ''
     ).toLowerCase()
-    if (/hsk|trung|chinese|hán|zh/i.test(deckName)) {
+    if (/hsk|trung|chinese|hán|zh/i.test(effectiveDeckName)) {
       return 'zh-CN'
     }
-    if (/kanji|n[1-5]|nhật|japanese|ja/i.test(deckName)) {
+    if (/kanji|n[1-5]|nhật|japanese|ja/i.test(effectiveDeckName)) {
       return 'ja'
     }
     if (/[汉语话书买卖时间门关开钱鸡车电习爱国难易简单红蓝绿颜]/i.test(resolvedSourceValue)) {
@@ -219,7 +252,7 @@ export function BrowseStrokeModal({
       return 'zh-TW'
     }
     return 'ja'
-  }, [decksQuery?.data?.decks, cardDetailQuery.data, cards, selectedDeckId, targetCardId, resolvedSourceValue])
+  }, [deckName, decksQuery?.data?.decks, cardDetailQuery?.data, cards, selectedDeckId, targetCardId, resolvedSourceValue])
 
   const [locale, setLocale] = useState<'ja' | 'zh-CN' | 'zh-TW'>(() => {
     return loadStoredStrokeSettings().locale
@@ -338,10 +371,14 @@ export function BrowseStrokeModal({
         .map((item) => String(item.url || '').trim())
         .filter(Boolean)
         .join('\n')
-      setEditFieldValues((prev) => ({
-        ...prev,
-        [targetField]: canonicalUrls,
-      }))
+      if (onApply) {
+        onApply(targetField, canonicalUrls)
+      } else if (setEditFieldValues) {
+        setEditFieldValues((prev) => ({
+          ...prev,
+          [targetField]: canonicalUrls,
+        }))
+      }
       toast.success(`Đã điền nét vẽ vào trường "${targetField}". Bấm "Lưu thẻ" để hoàn tất nhé!`)
       onClose()
     } else {
@@ -362,7 +399,7 @@ export function BrowseStrokeModal({
   }
 
   const isDeckScope = mode === 'batch' && selectedCards.length === 0 && Boolean(selectedDeckId)
-  const selectedDeck = browse.selectedDeck
+  const selectedDeck = browse?.selectedDeck
   const isMixedNoteTypes =
     isDeckScope &&
     (Boolean(selectedDeck?.has_mixed_note_types) || Boolean(estimateQuery.data?.has_mixed_note_types))

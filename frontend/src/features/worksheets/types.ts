@@ -98,6 +98,7 @@ export interface NoteTypeMeta {
   name: string
   fields: string[]
   note_count: number
+  sample_values?: Record<string, string>
 }
 
 export interface DeckWorksheetMeta {
@@ -105,6 +106,7 @@ export interface DeckWorksheetMeta {
   deck_name: string
   total_notes: number
   note_types: NoteTypeMeta[]
+  has_mixed_note_types?: boolean
   suggested_mappings: Record<string, string>
   templates: WorksheetTemplate[]
   detected_locale?: 'ja' | 'zh' | 'zh-hant'
