@@ -53,10 +53,13 @@ import type {
   WorksheetPreviewResponse,
 } from '../types'
 import {
-  downloadWorksheetHtml,
-  openWorksheetInNewTab,
   printWorksheetHtml,
 } from '../utils/printEngine'
+import {
+  generateWorksheetPdf,
+  downloadPdfBlob,
+  openPdfBlobInNewTab,
+} from '../utils/pdfEngine'
 import { serializeWorksheetToHtml } from '../utils/serializeWorksheetToHtml'
 import { WorksheetPageRenderer } from './WorksheetPageRenderer'
 import { WorksheetWizardStepper, type WizardStepId } from './WorksheetWizardStepper'
@@ -492,33 +495,51 @@ export function DeckWorksheetModal({
     }
   }
 
-  // Handle HTML download (client-side serialization — single source of truth)
-  const handleDownloadHtml = async () => {
+  // Handle PDF download (rasterized high-DPI canvas inside PDF — tamper-proof & anti-crawl)
+  const handleDownloadPdf = async () => {
     if (!previewData) return
     setIsDownloading(true)
+    const toastId = toast.loading('Đang khởi tạo bản in PDF chất lượng cao...')
     try {
-      const html = await serializeWorksheetToHtml(previewData)
-      const filename = `flama_worksheet_${selectedTemplateId}_${layoutOptions.paper_size || 'a4'}.html`
-      downloadWorksheetHtml(html, filename)
-      toast.success('Đã tải file bản in A4 về máy.')
+      const { blob, filename } = await generateWorksheetPdf(previewData, {
+        scale: 2,
+        quality: 0.94,
+        onProgress: (prog) => {
+          toast.loading(prog.status, { id: toastId })
+        },
+      })
+      downloadPdfBlob(blob, filename)
+      toast.success('Đã tải file PDF bản in A4 về máy.', { id: toastId })
     } catch (err: any) {
-      toast.error('Không thể tải file: ' + (err.message || err))
+      toast.error('Không thể xuất file PDF: ' + (err.message || err), { id: toastId })
     } finally {
       setIsDownloading(false)
     }
   }
 
-  // Handle open standalone worksheet in new tab
+  // Handle open standalone worksheet in new tab as PDF
   const handleOpenNewTab = async () => {
     if (!previewData) return
+    setIsDownloading(true)
+    const toastId = toast.loading('Đang chuẩn bị bản xem PDF trong tab mới...')
     try {
-      const html = await serializeWorksheetToHtml(previewData)
-      const win = openWorksheetInNewTab(html)
+      const { blob } = await generateWorksheetPdf(previewData, {
+        scale: 2,
+        quality: 0.94,
+        onProgress: (prog) => {
+          toast.loading(prog.status, { id: toastId })
+        },
+      })
+      const win = openPdfBlobInNewTab(blob)
       if (win) {
-        toast.success('Đã mở bản in trong tab mới.')
+        toast.success('Đã mở bản xem PDF trong tab mới.', { id: toastId })
+      } else {
+        toast.error('Trình duyệt chặn popup. Vui lòng cấp quyền mở tab mới.', { id: toastId })
       }
     } catch (err: any) {
-      toast.error('Không thể mở bản in: ' + (err.message || err))
+      toast.error('Không thể mở tab xem PDF: ' + (err.message || err), { id: toastId })
+    } finally {
+      setIsDownloading(false)
     }
   }
 
@@ -661,21 +682,21 @@ export function DeckWorksheetModal({
                     </Button>
                   </div>
 
-                  {/* Download HTML Button */}
+                  {/* Download PDF Button */}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleDownloadHtml}
+                    onClick={handleDownloadPdf}
                     disabled={isDownloading || !previewData}
                     className="h-8.5 px-3 text-xs font-semibold gap-1.5"
-                    title="Tải file HTML hoàn chỉnh về máy"
+                    title="Tải file PDF A4 hoàn chỉnh về máy (bảo vệ bản quyền)"
                   >
                     {isDownloading ? (
                       <Loader2 className="size-3.5 animate-spin" />
                     ) : (
                       <Download className="size-3.5" />
                     )}
-                    <span>Tải file</span>
+                    <span>Tải file PDF</span>
                   </Button>
 
                   {/* Open in New Tab Button */}
@@ -4399,17 +4420,17 @@ export function DeckWorksheetModal({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={handleDownloadHtml}
+                  onClick={handleDownloadPdf}
                   disabled={isDownloading || !previewData}
                   className="h-9 px-2.5 text-xs font-semibold gap-1.5 shrink-0"
-                  title="Tải file HTML về máy"
+                  title="Tải file PDF về máy (bảo vệ bản quyền)"
                 >
                   {isDownloading ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
                     <Download className="size-3.5" />
                   )}
-                  <span>Tải file</span>
+                  <span>Tải file PDF</span>
                 </Button>
                 <Button
                   type="button"

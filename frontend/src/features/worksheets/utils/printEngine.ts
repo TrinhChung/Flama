@@ -17,8 +17,8 @@ export function openWorksheetInNewTab(htmlContent: string): Window | null {
   const url = URL.createObjectURL(blob)
   const win = window.open(url, '_blank')
   if (!win) {
-    // If popup was blocked, fallback to download
-    downloadWorksheetHtml(htmlContent)
+    // Popup was blocked by browser
+    console.warn('Popup blocked when opening worksheet')
     return null
   }
   setTimeout(() => {
@@ -50,8 +50,8 @@ export function printWorksheetHtml(htmlContent: string): void {
       }, 60000)
       return
     }
-    // If popup blocked on mobile, fallback to download
-    downloadWorksheetHtml(htmlContent)
+    // If popup blocked on mobile, fallback to window print
+    window.print()
     return
   }
 
@@ -105,14 +105,12 @@ export function printWorksheetHtml(htmlContent: string): void {
   }, 400)
 }
 
-export function downloadWorksheetHtml(htmlContent: string, filename = 'flama_worksheet.html'): void {
-  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+/**
+ * @deprecated HTML export is disabled for copyright and anti-crawl protection.
+ * Use `downloadPdfBlob` from `./pdfEngine` instead.
+ */
+export function downloadWorksheetHtml(_htmlContent: string, _filename = 'flama_worksheet.html'): void {
+  console.warn(
+    'downloadWorksheetHtml is disabled for security and copyright protection. Use downloadPdfBlob from pdfEngine instead.',
+  )
 }

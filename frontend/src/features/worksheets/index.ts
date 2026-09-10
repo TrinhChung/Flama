@@ -1,6 +1,7 @@
 export * from './types'
 export * from './api'
 export * from './utils/printEngine'
+export * from './utils/pdfEngine'
 export * from './utils/worksheetStorage'
 export * from './components/KanjiGridBox'
 export * from './components/WorksheetPageRenderer'
