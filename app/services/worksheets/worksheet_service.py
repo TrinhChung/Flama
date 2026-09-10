@@ -163,7 +163,7 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
     notes = notes_query.all()
     total_notes = len(notes)
 
-    # Collect distinct NoteTypes and their field definitions
+    # Collect distinct NoteTypes, field definitions, and sample values
     note_types_map: dict[int, dict[str, Any]] = {}
     for n in notes:
         nt = n.note_type
@@ -174,29 +174,69 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
                 "name": nt.name,
                 "fields": field_names,
                 "note_count": 0,
+                "sample_values": dict(n.field_values or {}),
             }
+        elif nt:
+            # Fill in any missing sample values from subsequent notes
+            existing_samples = note_types_map[nt.id]["sample_values"]
+            for k, v in (n.field_values or {}).items():
+                if k not in existing_samples or not existing_samples[k]:
+                    existing_samples[k] = v
         if nt:
             note_types_map[nt.id]["note_count"] += 1
 
     note_types_list = list(note_types_map.values())
 
-    # Build suggested field mappings based on field names
+    # Build suggested field mappings based on field names (strictly excluding media/audio/id fields)
     suggested_mappings: dict[str, dict[str, str]] = {}
     if note_types_list:
         primary_fields = [f.lower() for f in note_types_list[0]["fields"]]
         raw_fields = note_types_list[0]["fields"]
+        sample_vals = note_types_list[0].get("sample_values") or {}
+
+        media_blacklist = (
+            "audio", "sound", "voice", "mp3", "pronounce", "tts",
+            "id", "guid", "deck", "tag", "interval", "factor", "ease", "lapses",
+            "time", "date", "color", "style", "css"
+        )
+
+        def _is_blacklisted(f_lower: str) -> bool:
+            return any(b in f_lower for b in media_blacklist)
 
         def _find_field(candidates: list[str]) -> str | None:
+            # Pass 1: Exact match on non-blacklisted fields
             for cand in candidates:
                 cand_lower = cand.lower()
                 for idx, f in enumerate(primary_fields):
-                    if cand_lower == f or cand_lower in f:
+                    if cand_lower == f and not _is_blacklisted(f):
+                        return raw_fields[idx]
+
+            # Pass 2: Substring match on non-blacklisted fields
+            for cand in candidates:
+                cand_lower = cand.lower()
+                for idx, f in enumerate(primary_fields):
+                    if cand_lower in f and not _is_blacklisted(f):
                         return raw_fields[idx]
             return None
 
+        def _fallback_kanji_field() -> str:
+            # 1. First non-blacklisted field whose sample value has CJK or text
+            for idx, f in enumerate(primary_fields):
+                if not _is_blacklisted(f):
+                    raw_name = raw_fields[idx]
+                    sample_text = str(sample_vals.get(raw_name) or "")
+                    if any('\u4e00' <= ch <= '\u9fff' or '\u3040' <= ch <= '\u30ff' for ch in sample_text):
+                        return raw_name
+            # 2. First non-blacklisted field
+            for idx, f in enumerate(primary_fields):
+                if not _is_blacklisted(f):
+                    return raw_fields[idx]
+            # 3. Last resort
+            return raw_fields[0] if raw_fields else ""
+
         detected_locale = detect_deck_language(deck, notes)
 
-        kanji_field = _find_field(["expression", "kanji", "word", "vocab", "front", "hanzi", "sentence", "grammar"]) or (raw_fields[0] if raw_fields else "")
+        kanji_field = _find_field(["expression", "kanji", "word", "vocab", "front", "hanzi", "sentence", "grammar"]) or _fallback_kanji_field()
         reading_field = _find_field(["reading", "furigana", "kana", "pinyin", "pronunciation"]) or ""
         if detected_locale == "zh":
             meaning_field = _find_field(["meaning_vi", "translation_vi", "meaning", "definition", "vietnamese", "hanviet", "back", "nghia"]) or _find_field(["meaning_jp", "meaning"]) or ""
