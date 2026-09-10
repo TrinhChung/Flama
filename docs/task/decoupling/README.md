@@ -1,6 +1,6 @@
-# Phase 0–3 Decoupling Task Backlog
+# Study decoupling task backlog
 
-> Status: Phase 0, Phase 1, Phase 2, Phase 3 and INT-01 are closed as of 2026-09-09. Phase 4 remains separately gated and unimplemented.
+> Status: Phase 0–3 and INT-01 are closed, including the P4-00 correction that reclosed the frozen-session gate on 2026-09-10. Phase 4 is active at P4-01, with the P4-02 identity/fan-in ADR drafted provisionally; schema/runtime mirror has not started.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
@@ -8,17 +8,25 @@
 >
 > Latest Phase 3 execution plan: [2026-09-09 Phase 3 plan](./P3_EXECUTION_PLAN_2026-09-09.md) — completed through INT-01.
 >
-> Latest Phase 3 closeout: [2026-09-09 Phase 3 and INT-01 closeout](./completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md) — exact selection, query-first logical-overlay resolution, frozen restore, and the real install exit gate are complete.
+> Latest Phase 3 closeout: [2026-09-09 Phase 3 and INT-01 closeout](./completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md) — historical delivery record; amended on 2026-09-10 to record the P4-00 correction and reclosed gate.
+>
+> Latest Phase 4 plan: [2026-09-10 Phase 4 execution plan](./P4_EXECUTION_PLAN_2026-09-10.md) — correction, decision, additive shadow schema, mirror, backfill, reconciliation, and rollout rehearsal through INT-02.
+>
+> Phase 4 entry evidence: [2026-09-09 investigation](../../architecture/phase-4-entry-investigation-2026-09-09.md) — includes the P4-00 frozen-session blocker and current writer/storage inventory.
+>
+> Phase 4 current-state preflight: [2026-09-10 P4-01 report](../../architecture/phase-4-current-state-preflight-2026-09-10.md) — audit v4 and bundle are implemented; current SELECT-only MySQL evidence and the independent `study_session_batches` migration gap remain blockers.
+
+> Phase 4 identity/fan-in design: [2026-09-10 P4-02 provisional ADR](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) — learner/Note key, contributor vectors, generation/revision, lock order and typed dispositions are drafted; acceptance awaits P4-01 evidence and joint P4-02/P4-03/P4-04 review.
 >
 > Latest completed-task evidence review: [2026-08-30 review and P1-02 closeout](../../architecture/decoupling-progress-review-2026-08-30.md)
 >
 > Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **GO; P0-01 through P0-04 COMPLETED**.
 >
-> Historical cross-phase dependency plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — retained as planning history; Phase 0–3 and INT-01 are now closed.
+> Historical cross-phase dependency plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — retained as planning history for the delivered Phase 0–3 slice.
 >
-> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 8 remaining parent tasks with execution slices, required outputs and gates.
+> Historical reviewed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — superseded for active work by the Phase 4 execution plan.
 >
-> Scope boundary: chỉ đóng các phần còn thiếu của Phase 0–3. Không tạo model, migration, progress store hoặc physical Template/NoteType schema mới.
+> Scope boundary: Phase 4 chỉ bổ sung derived shadow storage và reconciliation. `CardProgress` vẫn là operational read/write authority; authority cutover thuộc Phase 5 và cần authorization riêng.
 
 ## 1. Mục tiêu
 
@@ -36,8 +44,8 @@ Không được đánh dấu một Phase hoàn thành chỉ vì test hiện có 
 
 ## 2. Invariants chung
 
-1. `CardProgress` tiếp tục là progress authority duy nhất trong Phase 0–3.
-2. Không thêm hoặc sửa model/migration phục vụ Phase 4.
+1. `CardProgress` tiếp tục là progress authority duy nhất trong toàn bộ Phase 4.
+2. Phase 4 chỉ được thêm schema/migration sau khi P4-00, P4-01 và các ADR P4-02..P4-05 đạt gate; không được đổi authority.
 3. Shared deck giữ mô hình `logical_overlay`; không copy source Notes/Cards và không mutate source content.
 4. REST, MCP và batch phải giữ tương thích API hiện có.
 5. `study-session.v2` hợp lệ phải tiếp tục hoạt động trong lease compatibility window.
@@ -79,6 +87,24 @@ All tasks --> INT-01 integration and tracker closeout
 
 Historical dependency note: `P2-01` and P0-03 gated the completed Phase 1/2 work; P3-05 and P3-07 then gated the completed Phase 3 runtime sequence. The diagram is retained to explain delivery order, not as an active queue.
 
+Active Phase 4 dependency:
+
+```text
+P4-00 frozen-session correction ----+
+                                     +--> P4-02/P4-03/P4-04 --> P4-05 --> P4-06
+P4-01 current-state preflight -------+                                  |
+                                                                        v
+P4-07 native/session mirror --> P4-08 external/lifecycle mirror
+                                      |
+                                      v
+P4-09 resumable backfill --> P4-10 shadow reconciliation
+                                      |
+                                      v
+P4-11 MySQL rollout rehearsal --> INT-02
+```
+
+P4-00 và phần repository-only của P4-01 có thể bắt đầu song song. Không chốt physical schema trước khi frozen-session gate, current MySQL evidence và các ADR P4-02..P4-05 cùng đạt.
+
 ## 4. Danh sách task
 
 ### Phase 0 — Freeze evidence and invariants
@@ -118,16 +144,36 @@ Historical dependency note: `P2-01` and P0-03 gated the completed Phase 1/2 work
 | P3-01 | [Exactly-one composition session API](./completed/P3-01_COMPOSITION_SESSION_API.md) | P1/P2 correctness + P3-05 + P3-07 | `COMPLETED`; authorized single selection và compatibility fallback |
 | P3-02 | [Clone-aware composition discovery and query-first filtering](./completed/P3-02_CLONE_AWARE_COMPOSITION_QUERY.md) | P3-01 | `COMPLETED`; một resolver cho owned/overlay/local-added contexts |
 | P3-03 | [Pre-session StudyMode selection UI](./completed/P3-03_PRE_SESSION_STUDYMODE_UI.md) | P3-01 + P3-05 | `COMPLETED`; selector trước session và request mang selection |
-| P3-04 | [Frozen composition restore and stale handling](./completed/P3-04_COMPOSITION_FREEZE_RESTORE.md) | P3-01 + P3-03 | `COMPLETED`; immutable snapshot, reload/recovery behavior |
+| P3-04 | [Frozen composition restore and stale handling](./completed/P3-04_COMPOSITION_FREEZE_RESTORE.md) | P3-01 + P3-03 | delivery completed; correctness gate reclosed by P4-00 |
 | P3-05 | [Mixed-NoteType scope policy](./completed/P3-05_MIXED_NOTETYPE_SCOPE_POLICY.md) | Phase 0 evidence | `COMPLETED`; accepted ADR và API/UI rule |
 | P3-06 | [Real overlay-only composition exit gate](./completed/P3-06_OVERLAY_COMPOSITION_EXIT_GATE.md) | P3-01..P3-05 + P3-07 | `COMPLETED`; integration proof dùng `DeckInstall` thật, không clone giả |
 | P3-07 | [Applied composition and binding contract](./completed/P3-07_APPLIED_COMPOSITION_BINDING_CONTRACT.md) | Phase 0 evidence | `COMPLETED`; accepted responsibility/identity/lifecycle contract, no schema |
+
+Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất. Acceptance claim “active lease dùng immutable artifact” từng được mở lại bởi entry review và đã được [P4-00](./P4-00_FROZEN_SESSION_ENTRY_CORRECTION.md) đóng lại bằng same-tab/cross-tab regression proof, strict restore/config validation và durable-batch composition checks.
+
+### Phase 4 — Derived learner/Note progress shadow
+
+| ID | Task | Dependency | Output chính |
+|---|---|---|---|
+| P4-00 | [Frozen-session entry correction](./P4-00_FROZEN_SESSION_ENTRY_CORRECTION.md) | none | **COMPLETED** — chặn live Template/Note propagation, strict wrapper/binding/batch validation và regression proof |
+| P4-01 | [Current-state preflight](./P4-01_CURRENT_STATE_PREFLIGHT.md) | none | **IN PROGRESS** — audit/writer/schema bundle implemented; current SELECT-only MySQL evidence and independent batch-table migration gap block acceptance |
+| P4-02 | [Progress identity, fan-in, revision and locking ADR](./P4-02_PROGRESS_IDENTITY_FANIN_REVISION.md) | P4-00 + P4-01 | **IN PROGRESS / PROVISIONAL** — learner/Note key, explicit contributors, no-winner fan-in, generation/fence and lock matrix drafted; external/joint gates remain open |
+| P4-03 | [Algorithm State and availability ADR](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | P4-00 + P4-01 | exact state envelope/codec plus context-aware availability contract |
+| P4-04 | [History, provenance and lifecycle ADR](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | P4-01 | completeness, retained scheduler facts, delete/reset/rekey rules |
+| P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | P4-02 + P4-03 + P4-04 | MySQL-ready additive model, constraints, indexes and migration/rollback design |
+| P4-06 | [Additive schema and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | P4-05 | models, Alembic migration, strict codec and authoritative-state mapper |
+| P4-07 | [Native and session mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | P4-06 | same-transaction mirror for REST, MCP, direct and batch writers |
+| P4-08 | [External and lifecycle mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | P4-07 | import/sync/reset/cutover/delete coverage with explicit dispositions |
+| P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | P4-08 | fenced, idempotent, restartable backfill and quarantine |
+| P4-10 | [Shadow reconciliation](./P4-10_SHADOW_RECONCILIATION.md) | P4-09 | state, due, queue, provenance and writer-coverage comparison report |
+| P4-11 | [MySQL rollout rehearsal](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) | P4-10 | staging/rehearsal evidence, rollback drill and production runbook |
 
 ### Cross-phase integration
 
 | ID | Task | Dependency | Output chính |
 |---|---|---|---|
 | INT-01 | [Phase 0–3 integration and closeout](./completed/INT-01_PHASE_0_3_INTEGRATION.md) | toàn bộ task trên | `COMPLETED`; combined verification, duplicate-boundary audit, tracker update |
+| INT-02 | [Phase 4 integration and exit gate](./INT-02_PHASE_4_INTEGRATION.md) | P4-00..P4-11 | full verification, zero unexplained diff, rollback proof và Phase 5 handoff only |
 
 ## 5. Output bàn giao bắt buộc cho mọi task
 
@@ -155,18 +201,21 @@ python scripts/run_tests.py --module study --backend-only
 python scripts/run_tests.py --module study --frontend-only
 python scripts/run_tests.py --module connect_mcp --backend-only
 python scripts/run_tests.py --module decks,flashcards --backend-only
+python scripts/run_tests.py --module database,cli,analytics --backend-only
 python scripts/run_tests.py --changed
 ```
 
+Chỉ chạy `python scripts/run_tests.py --all` tại INT-02/CI hoặc pre-release gate; từng task dùng ma trận hẹp ghi trong task file.
+
 Với browser security/keyboard testing, bắt buộc dùng Chrome profile riêng theo `AGENTS.md`; không dùng profile cá nhân của người dùng.
 
-## 7. Điều kiện mở Phase 4
+## 7. Phase 4 entry và exit
 
-Phase 4 chỉ được xem xét khi:
+P4-00 đã hoàn tất; entry hiện tại cho phép investigation/preflight read-only của P4-01. Additive model/migration bắt đầu ở P4-06 chỉ khi:
 
-- mọi task P0–P3 và `INT-01` đạt acceptance gate;
-- audit MySQL trả zero blocking anomaly hoặc mỗi anomaly có disposition được duyệt;
-- composition logical overlay có proof thật;
-- không còn progress-affecting untrusted iframe path;
-- tracker canonical được cập nhật theo code/test evidence;
-- có approval riêng cho schema/migration.
+- P4-00 đã chứng minh active session không bị live Template/Note edit thay artifact/binding;
+- P4-01 có current MySQL SELECT-only evidence hoặc mọi khoảng trống được ghi rõ là blocker;
+- P4-02..P4-05 được duyệt và không còn quyết định ngầm trong migration;
+- schema change được user authorize trong một implementation turn riêng.
+
+Phase 4 chỉ hoàn tất ở INT-02 khi mọi writer/lifecycle path đã tham gia mirror, backfill có thể resume, zero row/value bị bỏ mà không có disposition, và zero reconciliation difference chưa giải thích. Hoàn tất Phase 4 **không** tự động cho phép Phase 5 đọc/ghi từ shadow; authority cutover phải có kế hoạch và authorization riêng.

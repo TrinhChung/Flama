@@ -8,6 +8,10 @@ from typing import Any
 
 from app.services import study_artifact_service
 from app.services.study_algorithm_registry import list_study_algorithm_support
+from app.services.study_phase4_preflight_service import (
+    build_phase4_preflight,
+    collect_connection_safety,
+)
 from app.validators.review_event import classify_review_event_payload
 from models import db
 from models.card import Card
@@ -25,7 +29,7 @@ from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.template import Template
 
-SCHEMA_VERSION = "study-architecture-audit.v3"
+SCHEMA_VERSION = "study-architecture-audit.v4"
 MAX_SAMPLE_IDS = 10
 _SESSION_CONFIG_SCHEMA_VERSION = "scheduler-config.v1"
 _SESSION_POLICY_MATERIAL_KEYS = (
@@ -835,6 +839,29 @@ def _build_disposition_inventory(metrics: dict[str, Any]) -> list[dict[str, Any]
             "DeckCloneAddedNote records with ambiguous or drifted note associations.",
         )
 
+    phase4 = metrics.get("phase4_preflight", {})
+    if phase4.get("connection_safety", {}).get("current_mysql_evidence"):
+        for blocker in phase4.get("gate", {}).get("blockers", []):
+            add_item(
+                f"phase4_{blocker}",
+                "phase4_preflight",
+                1,
+                [],
+                "block",
+                blocker,
+                "Current-MySQL Phase 4 preflight blocker.",
+            )
+        for warning in phase4.get("gate", {}).get("warnings", []):
+            add_item(
+                f"phase4_{warning}",
+                "phase4_preflight",
+                1,
+                [],
+                "warn",
+                warning,
+                "Current-MySQL Phase 4 preflight warning.",
+            )
+
     return inventory
 
 
@@ -874,8 +901,9 @@ def _categorize_verdicts(inventory: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, Any]:
-    """Return comprehensive migration-grade audit v3 with bounded sample IDs, dispositions, and exhaustive reconciliation."""
+    """Return migration-grade audit v4 without mutating schema or application data."""
     observed_at = now or datetime.utcnow()
+    connection_safety = collect_connection_safety()
 
     # -------------------------------------------------------------------------
     # 1. Template Gates
@@ -2213,6 +2241,12 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         "review_event_algorithm_distribution": algorithm_distribution,
     }
 
+    phase4_preflight = build_phase4_preflight(
+        observed_at=observed_at,
+        connection_safety=connection_safety,
+    )
+    metrics["phase4_preflight"] = phase4_preflight
+
     # 1. Build machine-readable inventory
     inventory = _build_disposition_inventory(metrics)
     metrics["inventory"] = inventory
@@ -2222,7 +2256,7 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
     metrics["verdicts"] = verdicts
 
     # -------------------------------------------------------------------------
-    # Exhaustive Disjoint Reconciliation Accounting Formulas (11/11 Verified)
+    # Established and Phase 4 disjoint reconciliation accounting formulas.
     # -------------------------------------------------------------------------
     total_cp = metrics["counts"]["card_progress"]
     total_rev = metrics["counts"]["review_events"]
@@ -2325,6 +2359,60 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         "note_types_template_accounting": notetypes_accounting,
         "cards_clone_overlay_accounting": cards_overlay_accounting,
         "inventory_verdict_accounting": inventory_verdict_accounting,
+        "phase4_source_partition": phase4_preflight["progress"]["accounting"][
+            "source_partition"
+        ],
+        "phase4_unresolvable_reason_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["unresolvable_reason_partition"],
+        "phase4_migration_disposition_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["migration_disposition_partition"],
+        "phase4_subject_group_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["subject_group_partition"],
+        "phase4_subject_group_row_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["subject_group_row_partition"],
+        "phase4_context_partition": phase4_preflight["progress"]["accounting"][
+            "context_partition"
+        ],
+        "phase4_context_membership_presence_partition": phase4_preflight[
+            "progress"
+        ]["accounting"]["context_membership_presence_partition"],
+        "phase4_context_membership_cardinality_partition": phase4_preflight[
+            "progress"
+        ]["accounting"]["context_membership_cardinality_partition"],
+        "phase4_fan_in_state_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["fan_in_state_partition"],
+        "phase4_fan_in_lineage_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["fan_in_lineage_partition"],
+        "phase4_last_review_pointer_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["last_review_pointer_partition"],
+        "phase4_due_shape_partition": phase4_preflight["progress"]["accounting"][
+            "due_shape_partition"
+        ],
+        "phase4_queue_partition": phase4_preflight["progress"]["accounting"][
+            "queue_partition"
+        ],
+        "phase4_memory_state_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["memory_state_partition"],
+        "phase4_source_card_ref_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["source_card_ref_partition"],
+        "phase4_source_note_ref_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["source_note_ref_partition"],
+        "phase4_review_event_ref_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["review_event_ref_partition"],
+        "phase4_valid_pointer_connect_ref_partition": phase4_preflight["progress"][
+            "accounting"
+        ]["valid_pointer_connect_ref_partition"],
     }
     reconciliation_valid = all(formula_checks.values())
     if not reconciliation_valid:
@@ -2352,6 +2440,16 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
             "deck_clone_added_notes",
             "note_type_installs",
             "connect_review_event_refs",
+            "connect_source_card_refs",
+            "connect_source_note_refs",
+            "connect_import_sessions",
+            *(
+                ["study_session_batches"]
+                if phase4_preflight["schema"][
+                    "study_session_batches_database_present"
+                ]
+                else []
+            ),
         ],
     }
 

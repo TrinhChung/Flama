@@ -4,6 +4,8 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
+from sqlalchemy import text
+
 from app import create_app
 from app.services import anki_sync_service, study_artifact_service
 from app.services.mcp import study_tools as mcp_study_tools
@@ -11,6 +13,7 @@ from app.services.study_architecture_audit_service import (
     MAX_SAMPLE_IDS,
     build_study_architecture_audit,
 )
+from app.services.study_phase4_preflight_service import analyze_mysql_grants
 from app.services.study_service import execute_native_review_command
 from app.services.study_session_service import commit_study_session, open_study_session
 from models import db
@@ -112,13 +115,13 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
             db.session.remove()
             db.drop_all()
 
-    def test_report_exposes_read_only_migration_gates_v3(self):
+    def test_report_exposes_read_only_migration_gates_v4(self):
         with self.app.app_context():
             report = build_study_architecture_audit(
                 now=datetime(2026, 8, 27, 12, 0, 0)
             )
 
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["template_gates"]["note_types_with_multiple_templates"], 1)
         self.assertIsInstance(report["template_gates"]["note_types_with_multiple_templates_samples"], list)
         self.assertEqual(report["template_gates"]["default_count_anomalies"], 1)
@@ -156,34 +159,92 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
             {},
         )
 
-        # v3: revision_gates exists
+        preflight = report["phase4_preflight"]
+        self.assertEqual(preflight["schema_version"], "study-phase4-preflight.v1")
+        self.assertEqual(preflight["evidence_class"], "repository-and-fixture-only")
+        self.assertEqual(preflight["schema"]["drift_count"], 0)
+        self.assertFalse(
+            preflight["repository"]["study_session_batches_migration_declared"]
+        )
+        self.assertIn(
+            "current_mysql_select_only_evidence_missing",
+            preflight["gate"]["blockers"],
+        )
+        self.assertIn(
+            "study_session_batches_missing_repository_migration",
+            preflight["gate"]["blockers"],
+        )
+        self.assertEqual(preflight["progress"]["total_card_progress_rows"], 2)
+        self.assertEqual(preflight["progress"]["context_rows"]["owned"], 2)
+        self.assertEqual(
+            preflight["progress"]["context_membership_rows"],
+            {
+                "owned": 2,
+                "installed_source": 0,
+                "installed_local": 0,
+                "with_any": 2,
+                "single": 2,
+                "multiple": 0,
+                "none": 0,
+            },
+        )
+        self.assertEqual(
+            preflight["progress"]["subject_groups"],
+            {"total": 1, "single": 0, "fan_in": 1},
+        )
+        self.assertEqual(
+            preflight["progress"]["migration_disposition_rows"][
+                "mirror_candidate"
+            ],
+            0,
+        )
+        self.assertEqual(
+            preflight["progress"]["migration_disposition_rows"][
+                "quarantine_candidate"
+            ],
+            2,
+        )
+        self.assertEqual(
+            preflight["progress"]["unresolvable_subject_reasons"],
+            {
+                "null_learner_user_id": 0,
+                "missing_learner_user": 0,
+                "null_card_id": 0,
+                "missing_card": 0,
+                "null_note_id": 0,
+                "missing_note": 0,
+            },
+        )
+        self.assertTrue(all(preflight["progress"]["accounting"].values()))
+
+        # v4 retains the established audit gates and adds Phase 4 preflight.
         self.assertIn("revision_gates", report)
         self.assertEqual(report["revision_gates"]["zero_revision_rows"], 2)
         self.assertEqual(report["revision_gates"]["active_revision_rows"], 0)
         self.assertEqual(report["revision_gates"]["invalid_revision_rows"], 0)
 
-        # v3: algorithm_gates exists
+        # Established algorithm gates remain available.
         self.assertIn("algorithm_gates", report)
         self.assertIn("unregistered_algorithm_events", report["algorithm_gates"])
         self.assertIn("active_registry_executables", report["algorithm_gates"])
         self.assertIn("registered_algorithm_events", report["algorithm_gates"])
         self.assertIn("historical_imported_algorithm_events", report["algorithm_gates"])
 
-        # v3: review_event_gates exists
+        # Established review-event gates remain available.
         self.assertIn("review_event_gates", report)
         self.assertIn("orphan_card_id_events", report["review_event_gates"])
         self.assertIn("null_session_id_events", report["review_event_gates"])
         self.assertIn("null_algorithm_events", report["review_event_gates"])
         self.assertIn("duplicate_client_event_id_groups", report["review_event_gates"])
 
-        # v3: clone_overlay_gates exists
+        # Established clone-overlay gates remain available.
         self.assertIn("clone_overlay_gates", report)
         self.assertIn("deck_installs_count", report["clone_overlay_gates"])
         self.assertIn("installed_deck_cards", report["clone_overlay_gates"])
         self.assertIn("local_authored_cards", report["clone_overlay_gates"])
         self.assertIn("local_clone_added_cards", report["clone_overlay_gates"])
 
-        # v3: inventory list with dispositions exists
+        # Established inventory remains the operational audit verdict source.
         self.assertIn("inventory", report)
         self.assertIsInstance(report["inventory"], list)
         for item in report["inventory"]:
@@ -196,7 +257,7 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
             self.assertIn("description", item)
             self.assertLessEqual(len(item["sample_ids"]), 10)
 
-        # v3: verdicts categorization
+        # Established verdict categorization remains stable.
         self.assertIn("verdicts", report)
         verdicts = report["verdicts"]
         self.assertIsInstance(verdicts["pass"], list)
@@ -221,7 +282,7 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
         warn_texts = " ".join(verdicts["warn"])
         self.assertIn("expired_open_sessions", warn_texts)
 
-        # v3: reconciliation - all 11 formulas verified
+        # Reconciliation now includes the Phase 4 partitions.
         self.assertIn("reconciliation", report)
         self.assertEqual(report["reconciliation"]["status"], "VALID")
         checks = report["reconciliation"]["formula_checks"]
@@ -236,6 +297,167 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
         self.assertTrue(checks["note_types_template_accounting"])
         self.assertTrue(checks["cards_clone_overlay_accounting"])
         self.assertTrue(checks["inventory_verdict_accounting"])
+        self.assertTrue(checks["phase4_source_partition"])
+        self.assertTrue(checks["phase4_unresolvable_reason_partition"])
+        self.assertTrue(checks["phase4_migration_disposition_partition"])
+        self.assertTrue(checks["phase4_subject_group_partition"])
+        self.assertTrue(checks["phase4_subject_group_row_partition"])
+        self.assertTrue(checks["phase4_context_partition"])
+        self.assertTrue(checks["phase4_context_membership_presence_partition"])
+        self.assertTrue(checks["phase4_context_membership_cardinality_partition"])
+        self.assertTrue(checks["phase4_fan_in_state_partition"])
+        self.assertTrue(checks["phase4_fan_in_lineage_partition"])
+        self.assertTrue(checks["phase4_last_review_pointer_partition"])
+        self.assertTrue(checks["phase4_due_shape_partition"])
+        self.assertTrue(checks["phase4_queue_partition"])
+        self.assertTrue(checks["phase4_memory_state_partition"])
+        self.assertTrue(checks["phase4_source_card_ref_partition"])
+        self.assertTrue(checks["phase4_source_note_ref_partition"])
+        self.assertTrue(checks["phase4_review_event_ref_partition"])
+        self.assertTrue(checks["phase4_valid_pointer_connect_ref_partition"])
+
+    def test_phase4_context_memberships_preserve_owned_installed_overlap(self):
+        with self.app.app_context():
+            user = User.query.first()
+            note = Note.query.first()
+            note_type = NoteType.query.filter_by(id=note.note_type_id).one()
+            source_deck = Deck(
+                owner_user_id=user.id,
+                note_type_id=note_type.id,
+                name="Owned source",
+            )
+            db.session.add(source_deck)
+            db.session.flush()
+            note.deck_id = source_deck.id
+            item = DeckMarketplaceItem(
+                owner_user_id=user.id,
+                source_deck_id=source_deck.id,
+                source_note_type_id=note_type.id,
+                title="Owned listing",
+            )
+            db.session.add(item)
+            db.session.flush()
+            db.session.add(
+                DeckInstall(
+                    deck_item_id=item.id,
+                    user_id=user.id,
+                    source_deck_id=source_deck.id,
+                    source_note_type_id=note_type.id,
+                    source_owner_user_id=user.id,
+                    clone_mode="logical_overlay",
+                )
+            )
+            db.session.commit()
+
+            report = build_study_architecture_audit(
+                now=datetime(2026, 9, 10, 3, 4, 5)
+            )
+
+        progress = report["phase4_preflight"]["progress"]
+        self.assertEqual(progress["context_rows"]["installed_source"], 2)
+        self.assertEqual(progress["context_rows"]["owned"], 0)
+        self.assertEqual(progress["context_membership_rows"]["owned"], 2)
+        self.assertEqual(
+            progress["context_membership_rows"]["installed_source"],
+            2,
+        )
+        self.assertEqual(progress["context_membership_rows"]["with_any"], 2)
+        self.assertEqual(progress["context_membership_rows"]["single"], 0)
+        self.assertEqual(progress["context_membership_rows"]["multiple"], 2)
+        self.assertEqual(progress["context_membership_rows"]["none"], 0)
+        self.assertIn(
+            "multi_context_progress_requires_p4_02_review",
+            report["phase4_preflight"]["gate"]["warnings"],
+        )
+        self.assertTrue(all(progress["accounting"].values()))
+
+    def test_phase4_missing_learner_is_an_unresolvable_subject_reason(self):
+        with self.app.app_context():
+            card = Card.query.first()
+            db.session.commit()
+            db.session.execute(text("PRAGMA foreign_keys = OFF"))
+            db.session.commit()
+            db.session.add(CardProgress(user_id=999_999, card_id=card.id))
+            db.session.commit()
+
+            report = build_study_architecture_audit(
+                now=datetime(2026, 9, 10, 3, 4, 5)
+            )
+
+        progress = report["phase4_preflight"]["progress"]
+        self.assertEqual(progress["total_card_progress_rows"], 3)
+        self.assertEqual(progress["valid_note_subject_rows"], 2)
+        self.assertEqual(progress["unresolvable_subject_rows"], 1)
+        self.assertEqual(
+            progress["unresolvable_subject_reasons"]["missing_learner_user"],
+            1,
+        )
+        self.assertEqual(
+            progress["migration_disposition_rows"]["unresolvable"],
+            1,
+        )
+        self.assertTrue(all(progress["accounting"].values()))
+
+    def test_mysql_grant_analysis_requires_select_without_write_or_admin_rights(self):
+        safe = analyze_mysql_grants(
+            [
+                "GRANT USAGE ON *.* TO `audit`@`%`",
+                "GRANT SELECT, SHOW VIEW ON `flama`.* TO `audit`@`%`",
+            ]
+        )
+        self.assertTrue(safe["select_only_verified"])
+        self.assertEqual(safe["disallowed_privileges"], [])
+
+        unsafe = analyze_mysql_grants(
+            ["GRANT SELECT, INSERT, UPDATE ON `flama`.* TO `app`@`%` WITH GRANT OPTION"]
+        )
+        self.assertFalse(unsafe["select_only_verified"])
+        self.assertEqual(
+            unsafe["disallowed_privileges"],
+            ["GRANT OPTION", "INSERT", "UPDATE"],
+        )
+
+        role_grant = analyze_mysql_grants(
+            [
+                "GRANT SELECT ON `flama`.* TO `audit`@`%`",
+                "GRANT `application_writer`@`%` TO `audit`@`%`",
+            ]
+        )
+        self.assertFalse(role_grant["select_only_verified"])
+        self.assertEqual(role_grant["unparsed_grant_row_count"], 1)
+        self.assertEqual(
+            role_grant["disallowed_privileges"],
+            ["UNPARSED OR ROLE GRANT"],
+        )
+
+    def test_current_mysql_phase4_blockers_flow_to_top_level_exit_code(self):
+        verified_connection = {
+            "dialect": "mysql",
+            "evidence_scope": "current-mysql-select-only",
+            "select_only_verified": True,
+            "current_mysql_evidence": True,
+        }
+        with self.app.app_context(), patch(
+            "app.services.study_architecture_audit_service.collect_connection_safety",
+            return_value=verified_connection,
+        ):
+            report = build_study_architecture_audit(
+                now=datetime(2026, 9, 10, 3, 4, 5)
+            )
+
+        self.assertEqual(report["verdicts"]["exit_code"], 2)
+        self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
+        self.assertIn(
+            "study_session_batches_missing_repository_migration",
+            report["phase4_preflight"]["gate"]["blockers"],
+        )
+        self.assertTrue(
+            any(
+                item["category"]
+                == "phase4_study_session_batches_missing_repository_migration"
+                for item in report["inventory"]
+            )
+        )
 
     def test_progress_fan_in_classification_equivalent_vs_divergent(self):
         """Test distinction between single-card progress, equivalent fan-in, and divergent fan-in across all 21 authoritative scheduling fields."""
@@ -391,6 +613,35 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
                     CardProgress(user_id=user.id, card_id=c_susp2.id, queue="review", interval_days=5, ease_factor=2.5, is_suspended=False, suspension_reason=None),
                 ]
             )
+            db.session.flush()
+
+            # Keep raw state equal while giving the two contributors distinct,
+            # valid event lineage. Phase 4 must report these dimensions
+            # independently instead of silently choosing a winner.
+            eq_event_1 = ReviewEvent(
+                user_id=user.id,
+                card_id=c_eq1.id,
+                rating="good",
+                mode="review",
+                scheduler_mode="legacy",
+                scheduler_algorithm="legacy-anki",
+                algorithm_version="1.0.0",
+                reviewed_at=now,
+            )
+            eq_event_2 = ReviewEvent(
+                user_id=user.id,
+                card_id=c_eq2.id,
+                rating="good",
+                mode="review",
+                scheduler_mode="legacy",
+                scheduler_algorithm="legacy-anki",
+                algorithm_version="1.0.0",
+                reviewed_at=now,
+            )
+            db.session.add_all([eq_event_1, eq_event_2])
+            db.session.flush()
+            CardProgress.query.filter_by(user_id=user.id, card_id=c_eq1.id).one().last_review_event_id = eq_event_1.id
+            CardProgress.query.filter_by(user_id=user.id, card_id=c_eq2.id).one().last_review_event_id = eq_event_2.id
             db.session.commit()
 
             report = build_study_architecture_audit()
@@ -399,6 +650,13 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
             self.assertEqual(pg["equivalent_fan_in_groups"], 2)  # matching/mismatched from setUp + note_equiv
             self.assertGreaterEqual(pg["divergent_fan_in_groups"], 3)
             self.assertTrue(report["reconciliation"]["formula_checks"]["card_progress_fan_in_consistency"])
+            phase4_fan_in = report["phase4_preflight"]["progress"]["fan_in"]
+            self.assertGreaterEqual(phase4_fan_in["state_equivalent_groups"], 2)
+            self.assertGreaterEqual(phase4_fan_in["lineage_divergent_groups"], 1)
+            self.assertGreaterEqual(
+                phase4_fan_in["state_equivalent_lineage_divergent_groups"],
+                1,
+            )
 
     def test_algorithm_gates_historical_import_vs_unregistered_native(self):
         """Test that historical Anki import algorithm events pass cleanly without false warnings, while unregistered native events warn."""
@@ -927,7 +1185,10 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
 
             report = build_study_architecture_audit(now=now)
             gates = report["session_gates"]
-            self.assertEqual(gates["invalid_config_snapshot_sessions"], 9)
+            # The fixture-level empty legacy snapshot is also invalid: a
+            # genuine legacy policy map must contain at least one validated
+            # canonical policy entry.
+            self.assertEqual(gates["invalid_config_snapshot_sessions"], 10)
             self.assertNotIn(valid_session.id, gates["invalid_config_snapshot_samples"])
             self.assertTrue(
                 {session.id for session in invalid_sessions}.issubset(

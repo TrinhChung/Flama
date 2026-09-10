@@ -2,6 +2,7 @@
 
 import os
 import sys
+from datetime import datetime, timezone
 
 # Ensure startup maintenance is disabled in environment prior to app creation
 os.environ["STARTUP_RUN_MAINTENANCE"] = "0"
@@ -49,12 +50,34 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional file path to write audit JSON.",
     )
+    parser.add_argument(
+        "--observed-at",
+        type=_parse_observed_at,
+        default=None,
+        help="Freeze the audit observation time (ISO-8601) for repeatability.",
+    )
     args = parser.parse_args(argv)
     return run_study_architecture_audit_command(
         app=None,
         compact=args.compact,
         output_path=args.output_path,
+        observed_at=args.observed_at,
     )
+
+
+def _parse_observed_at(value: str) -> datetime:
+    """Parse ISO-8601 into the naive UTC convention used by persisted timestamps."""
+
+    normalized = str(value or "").strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError("expected an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 if __name__ == "__main__":

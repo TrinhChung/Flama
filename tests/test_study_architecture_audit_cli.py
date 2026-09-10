@@ -46,7 +46,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 0)
         report = json.loads(result.output)
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "PASS")
         self.assertEqual(report["verdicts"]["exit_code"], 0)
 
@@ -110,9 +110,24 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
             self.assertTrue(output_file.exists())
             file_content = output_file.read_text(encoding="utf-8")
             report = json.loads(file_content)
-            self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+            self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
             # Compact file output has no 2-space indented lines
             self.assertNotIn('\n  "card_gates"', file_content)
+
+    def test_audit_cli_accepts_frozen_observation_time(self):
+        runner = self.app.test_cli_runner()
+        result = runner.invoke(
+            args=[
+                "study-architecture-audit",
+                "--compact",
+                "--observed-at",
+                "2026-09-10T03:04:05",
+            ]
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        report = json.loads(result.output)
+        self.assertEqual(report["observed_at"], "2026-09-10T03:04:05")
 
     def test_audit_cli_handles_execution_error(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -128,7 +143,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
                 self.assertEqual(result.exit_code, 2)
                 self.assertTrue(output_file.exists())
                 file_report = json.loads(output_file.read_text(encoding="utf-8"))
-                self.assertEqual(file_report["schema_version"], "study-architecture-audit.v3")
+                self.assertEqual(file_report["schema_version"], "study-architecture-audit.v4")
                 self.assertEqual(file_report["verdicts"]["overall_status"], "BLOCK")
                 self.assertEqual(file_report["verdicts"]["exit_code"], 2)
                 self.assertIn("Simulated database connection crash", file_report["error"])
@@ -143,7 +158,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 2)
         report = json.loads(result.output)
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
         self.assertIn("Audit execution error", report["verdicts"]["block"][0])
@@ -159,7 +174,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 2)
         report = json.loads(result.output)
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
 
@@ -176,7 +191,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 2)
         report = json.loads(result.output)
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
 
@@ -262,6 +277,8 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
                     sys.executable,
                     "wsgi_audit.py",
                     "--compact",
+                    "--observed-at",
+                    "2026-09-10T12:04:05+09:00",
                     "--output",
                     str(out_json),
                 ],
@@ -274,7 +291,8 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, f"Subprocess failed: {proc.stderr}\n{proc.stdout}")
             self.assertTrue(out_json.exists())
             report = json.loads(out_json.read_text(encoding="utf-8"))
-            self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+            self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
+            self.assertEqual(report["observed_at"], "2026-09-10T03:04:05")
             self.assertEqual(report["verdicts"]["overall_status"], "PASS")
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -355,6 +373,15 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
 
             payload1 = json.dumps(report1, ensure_ascii=False, sort_keys=True, indent=2)
             payload2 = json.dumps(report2, ensure_ascii=False, sort_keys=True, indent=2)
+
+            self.assertEqual(payload1, payload2)
+            self.assertEqual(
+                report1["phase4_preflight"]["repository"]["code_manifest_sha256"],
+                report2["phase4_preflight"]["repository"]["code_manifest_sha256"],
+            )
+            self.assertTrue(
+                all(report1["phase4_preflight"]["progress"]["accounting"].values())
+            )
 
     def test_audit_app_command_surface_isolation(self):
         """Audit app exposes ONLY study-architecture-audit and zero mutating commands."""
@@ -477,7 +504,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
             result = runner.invoke(args=["study-architecture-audit", "--output", str(invalid_output_path)])
             self.assertEqual(result.exit_code, 2)
             report = json.loads(result.output)
-            self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+            self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
             self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
             self.assertEqual(report["verdicts"]["exit_code"], 2)
             self.assertIn("Failed to write audit output file", report["error"])
@@ -504,7 +531,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         self.assertNotIn("super_secret_audit_pw", proc.stdout)
         self.assertNotIn("super_secret_audit_pw", proc.stderr)
         report = json.loads(proc.stdout)
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
         self.assertIn("error", report)
@@ -542,7 +569,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
 
             self.assertEqual(proc.returncode, 2)
             report = json.loads(proc.stdout)
-            self.assertEqual(report["schema_version"], "study-architecture-audit.v3")
+            self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
             self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
             self.assertEqual(report["verdicts"]["exit_code"], 2)
             self.assertIn("Failed to write audit output file", report["error"])

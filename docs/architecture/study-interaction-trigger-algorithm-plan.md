@@ -1,12 +1,12 @@
 # Study, Interaction, Trigger, Algorithm, and Progress Architecture Plan
 
-Status: active staged refactor. Product decisions were approved on 2026-08-24. Phases 0–3 and INT-01 are complete as of 2026-09-09. Phases 4–9 have not started and require separate authorization for schema or authority changes. See the [P1/P2 closeout](../task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) and [Phase 3/INT-01 closeout](../task/decoupling/completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md).
+Status: active staged refactor. Product decisions were approved on 2026-08-24. Phases 0–3 and INT-01 are complete; P4-00 reclosed the frozen-session correctness gate on 2026-09-10. Phase 4 is active at P4-01 with P4-02 drafted provisionally: repository/audit instrumentation and the learner/Note identity/fan-in contract are ready for evidence/cross-review, but current SELECT-only MySQL evidence, the independent `study_session_batches` migration gap and joint P4-02/P4-03/P4-04 acceptance still block physical design; schema/runtime mirror work has not started. Phases 5–9 have not started. Schema and authority changes require separate authorization. See the [P1/P2 closeout](../task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md), [Phase 3/INT-01 closeout](../task/decoupling/completed/PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md), [Phase 4 entry investigation](./phase-4-entry-investigation-2026-09-09.md), [current-state preflight](./phase-4-current-state-preflight-2026-09-10.md), [P4-02 provisional ADR](./phase-4-progress-identity-fanin-revision-adr-2026-09-10.md), and [Phase 4 execution plan](../task/decoupling/P4_EXECUTION_PLAN_2026-09-10.md).
 
-Detailed Phase 0-3 work items, dependencies, required outputs, and acceptance gates are maintained in [`docs/task/decoupling/`](../task/decoupling/README.md).
+Detailed work items, dependencies, required outputs, and acceptance gates are maintained in [`docs/task/decoupling/`](../task/decoupling/README.md).
 
 Last investigated: 2026-08-24
 
-Last implementation review: 2026-09-09
+Last planning review: 2026-09-10
 
 ## Scope and evidence discipline
 
@@ -29,7 +29,7 @@ Statements are labelled as follows:
 
 This plan intentionally stops before detailed SQL. It follows the requested order: responsibility, identity, ownership, runtime flow, state ownership, lifecycle, extensibility, compatibility, migration, then physical storage.
 
-## Implementation progress snapshot — 2026-09-09
+## Implementation progress snapshot — 2026-09-10
 
 `Partial` means that reviewed code exists and its focused tests pass, but every exit condition written for the phase has not yet been satisfied. This avoids treating an adapter seam as the completed target architecture.
 
@@ -38,8 +38,8 @@ This plan intentionally stops before detailed SQL. It follows the requested orde
 | Phase 0 — evidence and invariants | **Complete** | Read-only audit entrypoint/contract, expanded anomaly inventory, MySQL evidence bundle and immutable behavior baseline are closed in P0-01..P0-04 | none for Phase 0 |
 | Phase 1 — runtime boundaries | **Complete** | canonical native transaction, external revision/conflict contract, bounded versioned ReviewEvent provenance and exact Algorithm retirement lifecycle | async production enablement remains a separately contained transport prerequisite, not an active writer |
 | Phase 2 — built-in Interaction/Trigger compatibility | **Complete** | owner-token mutex, strict restore/quarantine, one semantic callback, accepted no-bridge keyboard boundary, exact built-in Trigger dispatcher and dual v2/v3 readers | v3 issuance is deliberately flag-off until rollout; async admission is flag-off until its independent readiness gates pass |
-| Phase 3 — composition/StudyMode | **Complete** | exactly-one authorized selection, grouped mixed-NoteType discovery, query-first effective-scope filtering, pre-session selector, frozen composition/binding snapshot, and real `DeckInstall` overlay proof | physical reusable definition/application storage remains explicitly deferred to Phase 4+ |
-| Phase 4 — learner/Note progress and Algorithm State | **Not started** | none; `CardProgress` remains authoritative | approved state/availability/history contracts, additive schema, backfill and shadow reconciliation |
+| Phase 3 — composition/StudyMode | **Complete; correction gate reclosed** | exactly-one authorized selection, grouped mixed-NoteType discovery, query-first effective-scope filtering, pre-session selector, versioned session snapshot, real `DeckInstall` overlay proof, plus P4-00 immutable-edit/strict-restore correction | Phase 3 has no open gate; physical reusable definition/application storage remains deferred |
+| Phase 4 — learner/Note progress and Algorithm State | **Active at P4-01; P4-02 provisional; external and migration-provenance blockers open** | P4-00 complete; P4-01 audit v4/two-run bundle implemented; P4-02 learner/Note identity, fan-in, generation and lock contract drafted; `CardProgress` remains authoritative | collect current SELECT-only MySQL evidence, resolve `study_session_batches` migration gap independently, cross-review/accept P4-02..P4-05, then additive schema, mirrors, backfill, reconciliation and MySQL rehearsal |
 | Phases 5-9 — authority cutover through contract cleanup | **Not started** | none | all earlier exit gates plus explicit production migration approval |
 
 ### Current authority and compatibility
@@ -51,12 +51,13 @@ This plan intentionally stops before detailed SQL. It follows the requested orde
 - Direct REST and MCP reviews now run through one locked command and stamp Algorithm/version plus the same canonical scheduler-config hash used by batch sessions. They intentionally have no StudySession identity because they are immediate commits rather than leased batches.
 - The forged iframe `host_command` path is contained. Keyboard input inside the untrusted renderer remains local; only the parent document maps trusted shortcuts to semantic Actions.
 - New sessions resolve exactly one context-qualified composition before opening. Discovery and authorization share effective owned/installed-source/installed-local card semantics, and ambiguous legacy requests fail closed.
-- The selected composition and binding fingerprint are frozen in the existing session JSON. Restore does not rediscover an active lease, and commit/batch requests cannot switch its composition.
+- The selected composition and binding fingerprint are stored in the existing session JSON and commit/batch selection cannot switch them. P4-00 prevents same-tab/cross-tab Template or Note changes from rewriting active/pending artifacts, recomputes immutable restore relationships, and rejects batch/config mismatches. Saved authoring changes become visible in the next session.
 
 ### Verification evidence
 
 - Phase 3 focused backend: 46 composition/session/exit-gate tests passed; the broader Study backend module passed 151 tests.
 - Phase 3 focused frontend: 44 hook/restore tests passed; the pre-session selector is also covered by the full frontend run.
+- P4-00 correction: the complete Study backend module passed 154 tests; the complete frontend Study module passed 186 tests; frontend typecheck and lint passed with zero errors.
 - Connect/MCP backend: 161 tests across 13 files passed.
 - Decks/Flashcards backend: 361 tests across 31 files passed.
 - Frontend TypeScript typecheck passed; lint completed with pre-existing unrelated warnings and no errors.
@@ -1172,7 +1173,7 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 
 ### Phase 0 — Freeze evidence and invariants
 
-**Implementation status (2026-08-27): Partial.** Production anomaly checks, an aggregate audit seam, and immutable shared Python/TypeScript golden vectors exist; the complete migration inventory and operational audit gates remain open.
+**Current implementation status: Complete.** P0-01..P0-04 closed the read-only audit contract, migration inventory, current MySQL evidence and immutable behavior baseline. The work list below preserves the earlier 2026-08-27 planning description.
 
 **Work:**
 
@@ -1185,7 +1186,7 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 
 ### Phase 1 — Extract runtime boundaries without changing storage
 
-**Implementation status (2026-08-27): Partial.** Exact-version server/client dispatch, semantic Action metadata, canonical native ReviewEvent persistence, a locked REST/MCP transaction owner, and shared scheduler-config identity are implemented. The retained executable/state-decoder retirement lifecycle remains open.
+**Current implementation status: Complete.** P1-01..P1-04 closed the canonical native transaction, external revision/conflict contract, ReviewEvent provenance and exact executable/decoder retirement lifecycle. The work list below preserves the earlier extraction scope.
 
 **Work:**
 
@@ -1203,7 +1204,7 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 
 ### Phase 2 — Introduce the built-in Interaction and Trigger Runtime compatibility path
 
-**Implementation status (2026-08-27): Partial.** The built-in metadata contract, compatibility mapping, optional v2 validation, and synthetic keyboard-path closure are implemented. Reusable UI ownership, a real Trigger dispatcher, restored-event normalization, and secure iframe-focus shortcuts remain open.
+**Current implementation status: Complete for the built-in compatibility path.** P2-01..P2-07 closed iframe containment, the frontend mutex, strict restore/quarantine, semantic Interaction ownership, the accepted no-bridge keyboard boundary, exact built-in Trigger dispatch and v2/v3 policy. Arbitrary Trigger chains and custom evaluator runtimes remain later-scope features, not incomplete Phase 2 work.
 
 **Work:**
 
@@ -1219,9 +1220,9 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 
 **Exit gate:** no user-visible scheduling or clone behavior changes, and custom Template JS cannot bypass the Action boundary.
 
-### Phase 0-2 implementation review and cleanup backlog — 2026-08-27
+### Historical Phase 0-2 implementation review — 2026-08-27
 
-The following findings were re-derived from the implementation diff after the focused suites passed. They define the cleanup needed before Phase 0-2 can be closed; they are not authorization to begin the Phase 3 or Phase 4 schema work.
+The following findings were re-derived from the implementation diff after the focused suites passed. They are retained as delivery history; later P0/P1/P2 task files and closeouts supersede their old `Partial`/open labels. They are not an active backlog or authorization for Phase 4 schema work.
 
 #### Finding C1 — Resolved 2026-08-27: client Algorithm dispatch is exact and fail-closed
 
@@ -1298,11 +1299,11 @@ The following findings were re-derived from the implementation diff after the fo
 | 5 | Audit/event hardening | MySQL and SQLite reports categorize integrity/inventory/warnings; detached/import/clone/version accounting reconciles; canonical event payloads enforce limits |
 | 6 | Trigger dispatcher design | approved primary/follow-up semantics; exact Trigger version dispatch fails closed; no arbitrary Template code capability |
 
-Orders 2-6 remain open. Only after all six orders pass should Phase 0-2 be marked complete. If Trigger dispatch is intentionally deferred to later generic Trigger work, Phase 2 must remain partial and the current module must stay named and documented as a compatibility runtime.
+Orders 2–6 were later closed or explicitly scoped by P0/P1/P2 acceptance. The built-in compatibility runtime is complete; generic Trigger chaining and custom evaluator capabilities remain Priority 1 future work. Use the completed task files and P1/P2 closeout for current evidence rather than the historical row labels above.
 
 ### Phase 3 — Establish the composition responsibility
 
-**Implementation status (reviewed 2026-09-09): Complete.** The accepted mixed-NoteType policy groups eligible compositions by NoteType but authorizes exactly one selected application. The React flow discovers before opening; the backend validates context-qualified owned/installed selections and filters before the session limit; the selected composition and FieldDef-based compatibility binding material are frozen for restore and commit. A real publish/install `DeckInstall` test covers source plus local-added Cards and proves that ordinary source Cards are neither copied nor mutated. Physical reusable definition/application tables remain deferred.
+**Implementation status (reviewed 2026-09-10): complete; frozen-session correctness gate reclosed by P4-00.** The accepted mixed-NoteType policy groups eligible compositions by NoteType but authorizes exactly one selected application. The React flow discovers before opening; the backend validates context-qualified owned/installed selections and filters before the session limit; a real publish/install `DeckInstall` test covers source plus local-added Cards and proves that ordinary source Cards are neither copied nor mutated. The Phase 4 entry review found gaps in active Template/Note propagation, restore consistency, durable-batch composition identity and versioned config decoding. [P4-00](../task/decoupling/P4-00_FROZEN_SESSION_ENTRY_CORRECTION.md) corrected those paths and added complete Study-module regression evidence. Physical reusable definition/application tables remain deferred.
 
 **Work:**
 
@@ -1321,7 +1322,9 @@ Orders 2-6 remain open. Only after all six orders pass should Phase 0-2 be marke
 
 ### Phase 4 — Add generic progress envelope, availability projection, and versioned Algorithm State
 
-**Implementation status (2026-08-27): Not started.** No additive progress/state schema or mirror exists; `CardProgress` is still the sole authority.
+**Implementation status (active 2026-09-10): P4-00 complete; P4-01 repository/audit slice implemented but not accepted; P4-02 logical ADR drafted provisionally.** No additive progress/state schema or mirror exists; `CardProgress` is still the sole authority. Audit v4, writer/schema accounting and the fixed-time two-run bundle are ready. The [P4-02 ADR](./phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) proposes exact learner/Note identity, explicit contributors, no-winner fan-in, lifecycle generation and deterministic locks, but remains unaccepted pending current MySQL evidence and joint P4-02/P4-03/P4-04 review. Current MySQL evidence still requires a dedicated `SELECT`-only principal, and the missing `study_session_batches` migration declaration remains an independent blocker. The executable sequence, task gates and rollback rules are in the [Phase 4 execution plan](../task/decoupling/P4_EXECUTION_PLAN_2026-09-10.md), grounded by the [entry investigation](./phase-4-entry-investigation-2026-09-09.md) and [current-state preflight](./phase-4-current-state-preflight-2026-09-10.md).
+
+**Task chain:** P4-00 frozen-session correction is complete. P4-01 current-state preflight feeds P4-02..P4-04 architecture decisions; P4-05 fixes the physical design; P4-06..P4-08 add the schema and cover every writer/lifecycle path; P4-09 backfills; P4-10 reconciles; P4-11 rehearses MySQL rollout; INT-02 closes only the shadow phase.
 
 **Work:**
 
@@ -1432,38 +1435,37 @@ Before destructive removal: take a verified backup, run production reconciliatio
 | 17/23. Installed-definition updates | installed definitions are pinned shared versions; editing forks a private copy through copy-on-write |
 | 20. Detail retention | retain detailed session/execution data for 30 days, aggregate it, then clean up detail |
 | SharedImage relationship | SharedImage is independent; Note stores free URL/key content without a SharedImage FK |
+| Mixed-NoteType study scope | group compatible choices by NoteType on one pre-session screen and authorize exactly one composition |
+| Algorithm executable retirement | retain exact executables through active leases; exact key/version resolution fails closed instead of using latest |
+| External progress conflicts | external state mutations use the P1-02 typed revision/precondition contract; conflicts never silently overwrite newer native state |
+| Built-in Trigger/evaluator security | use the fixed versioned built-in dispatcher and server verification; untrusted Template/iframe code has no progress-write capability |
 
 ### 16.2 Priority 0 — required before physical state/runtime implementation
 
-1. **Availability/selection contract:** is one normalized eligibility projection sufficient, or must StudyMode choose a versioned selection policy?
-2. **Algorithm binding with shared progress:** does the active Algorithm belong to learner/Note progress, user/deck policy, or the applied StudyMode? If a selected mode specifies another Algorithm, who may authorize the history-based switch?
-3. **Algorithm State contract:** define state validation, maximum size, schema-version migration, query projection, corruption recovery, and initializer compatibility.
-4. **Incomplete-history initialization:** define the canonical fallback when imported/legacy history is partial. Current ReviewEvent cannot reconstruct every existing state, and production history is predominantly imported Anki data.
-5. **Thirty-day retention reconciliation:** define which compact review history or Algorithm-neutral scheduler summary survives detail cleanup so a future Algorithm can still initialize from history. Ordinary aggregate analytics is insufficient.
-6. **Mixed-NoteType Deck selection:** for a recursive Deck scope with several NoteTypes, group Templates by NoteType, ask for a NoteType first, or restrict the scope? Production contains one two-NoteType recursive scope.
-7. **Version retirement details:** Algorithm/evaluator executables are required through active leases, but how long must stored state decoders, payload readers, and renderers remain compatible for audit/support?
-8. **Primary/follow-up semantics:** may evaluation and scheduling be chained triggers, and if so are they one transaction; how are cycles and idempotency constrained?
-9. **External-state conflicts:** define priority/reconciliation among native study, MCP, Anki progress snapshots, revlog import, clone repair, and offline sessions.
-10. **Action ordering/repetition:** decide which StudyModes permit early/out-of-queue or repeated Actions for one Note; current batches allow repeated Card answers.
-11. **Revision unit:** decide whether shared Note progress revision advances per Action, per committed batch, or via separate state and commit revisions.
-12. **Evaluator runtime/security:** select the versioned client/server evaluator technology, deterministic normalization, tamper evidence, and trusted-host gesture requirements.
-13. **Note deletion/marketplace history:** define progress/history behavior when source or local Notes are removed while learners, releases, or imported provenance still refer to them.
+1. **Progress subject, fan-in, revision and locking:** fix the canonical learner/Note key, contributor accounting, revision unit, first-create/sibling-card lock order, divergence quarantine and reset/delete/rekey fence semantics.
+2. **Exact Algorithm State envelope:** define the versioned codec, raw-value preservation, size/hash limits, decoder lifecycle, query projection, corruption quarantine and initializer compatibility. `card_state_from_progress` is not a lossless migration serializer.
+3. **Context-aware availability:** define which normalized facts are durable and which eligibility results must be evaluated from current time, timezone/day boundary, learn-ahead window, suspension/burial and selected policy. Do not persist a timeless `eligible` boolean.
+4. **Active Algorithm binding and future switch authorization:** decide where the learner/Note active Algorithm identity lives, who may authorize a mode-requested switch, and how the already-approved history-based initialization is fenced and audited.
+5. **History completeness and retained scheduler facts:** classify complete/partial/unavailable history and define the minimal Algorithm-neutral facts that survive 30-day detail cleanup. Analytics aggregates alone are not sufficient for a future switch.
+6. **Provenance and destructive lifecycle:** define behavior for Note/source/local deletion, reset, import replacement, clone cutover/rekey and marketplace removal while progress, events, releases or external identities still refer to the learning subject.
 
 ### 16.3 Priority 1 — required before broad reuse/distribution
 
-14. Can a Deck choose a subset/order/default among compatible StudyModes after the mandatory learner selection UI is introduced?
-15. Do Template inputs initially support only direct FieldDef bindings, or also constants, computed expressions, collections, and media transformations?
-16. What broader trust tiers are allowed for custom Template JavaScript, custom Interaction Components, and custom Algorithms?
-17. Should MCP remain a rating compatibility adapter or expose generic mode/action contracts, and must all MCP rendering become clone-aware?
-18. How are marketplace package dependencies, licenses, versions, and clone overrides represented for pinned/copy-on-write definitions?
-19. Does Anki `source_ord` bind to a Template, an applied composition, or a presentation occurrence, and how does it remain stable across reorder or repeated applications?
-20. Can a Template host auxiliary progress-affecting Interactions in addition to one primary component?
-21. Which of the current session snapshot, manifest/artifact, server-rendered-card, and MCP render-resolution paths becomes canonical?
-22. Which aggregate dimensions, retention clock, late-import correction policy, and deletion schedule define the 30-day analytics system of record?
+7. May future evaluation and scheduling use primary/follow-up Trigger chains; if so, what transaction, cycle and idempotency rules apply?
+8. Which future StudyModes allow early, out-of-queue or repeated Actions for one Note?
+9. Which runtime and trust tiers are allowed for custom evaluators, Template JavaScript, Interaction Components and Algorithms?
+10. Can a Deck choose a subset/order/default among compatible StudyModes after the mandatory learner selection UI?
+11. Do Template inputs support only direct FieldDef bindings initially, or also constants, computed expressions, collections and media transformations?
+12. Should MCP remain a rating compatibility adapter or expose generic mode/action contracts, and must all MCP rendering become clone-aware?
+13. How are marketplace dependencies, licenses, versions and clone overrides represented for pinned/copy-on-write definitions?
+14. Does Anki `source_ord` bind to a Template, applied composition or presentation occurrence, and how does it remain stable across reorder or repeated applications?
+15. Can a Template host auxiliary progress-affecting Interactions in addition to one primary component?
+16. Which current session snapshot, manifest/artifact, server-rendered-card and MCP render-resolution path becomes canonical?
+17. Which aggregate dimensions, retention clock, late-import correction policy and deletion schedule define the 30-day analytics system of record?
 
 ### Recommended decision order
 
-Resolve Priority 0 items 1–7 before finalizing the progress/history physical design. Resolve transaction, conflict, and security items 8–13 before enabling the generic runtime for writes. Priority 1 reuse/distribution decisions can follow the four-button compatibility extraction, except mixed-NoteType selection must be handled before the new Study entry screen reaches production.
+Resolve Priority 0 items 1–6 through P4-02, P4-03 and P4-04 before P4-05 finalizes physical storage. P4-06 may then add only the approved derived shadow representation; P4-07 and P4-08 must cover every writer/lifecycle path before backfill. Priority 1 decisions remain outside the Phase 4 critical path unless an implementation slice introduces the corresponding generic capability.
 
 ---
 
