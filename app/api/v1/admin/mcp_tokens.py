@@ -11,7 +11,8 @@ from flask_login import current_user
 from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 
-from app.api.common import admin_required, error_response, json_object
+from app.api.common import error_response, json_object
+from app.utils.permissions import is_admin_user
 from app.services import mcp_access_token_service, mcp_scope_service
 from app.services.mcp_access_token_service import (
     DEFAULT_SCOPES,
@@ -29,9 +30,13 @@ admin_mcp_tokens_bp = Blueprint("api_v1_admin_mcp_tokens", __name__)
 
 
 @admin_mcp_tokens_bp.before_request
-@admin_required
 def _ensure_admin_access():
-    pass
+    if request.method == "OPTIONS":
+        return None
+    if not getattr(current_user, "is_authenticated", False):
+        return error_response("AUTHENTICATION_REQUIRED", "Authentication is required.", status=401)
+    if not is_admin_user(current_user):
+        return error_response("FORBIDDEN", "Administrator access is required.", status=403)
 
 
 @admin_mcp_tokens_bp.get("/summary")
