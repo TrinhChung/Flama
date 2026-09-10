@@ -5,12 +5,12 @@ from __future__ import annotations
 import concurrent.futures
 import html
 import logging
-import random
 import re
 from typing import Any
 import xml.etree.ElementTree as ET
 
 from flask import current_app, has_app_context
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
 from app.services.strokes.cjk_extractor import CjkExtractor, is_cjk_ideograph, to_simplified_chinese
@@ -156,36 +156,57 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
             target_deck_id = install.source_deck_id
 
     subtree_ids = collect_subtree_ids(target_deck_id) or [target_deck_id]
-    notes_query = (
-        Note.query.filter(Note.deck_id.in_(subtree_ids))
-        .options(selectinload(Note.note_type).selectinload(NoteType.field_defs))
+    notes_query = Note.query.filter(Note.deck_id.in_(subtree_ids))
+    count_rows = (
+        notes_query.with_entities(Note.note_type_id, func.count(Note.id))
+        .group_by(Note.note_type_id)
+        .all()
     )
-    notes = notes_query.all()
-    total_notes = len(notes)
+    total_notes = sum(int(note_count or 0) for _, note_count in count_rows)
 
-    # Collect distinct NoteTypes, field definitions, and sample values
-    note_types_map: dict[int, dict[str, Any]] = {}
-    for n in notes:
-        nt = n.note_type
-        if nt and nt.id not in note_types_map:
-            field_names = [f.name for f in sorted(nt.field_defs, key=lambda x: getattr(x, "position", 0))]
-            note_types_map[nt.id] = {
-                "id": nt.id,
-                "name": nt.name,
-                "fields": field_names,
-                "note_count": 0,
-                "sample_values": dict(n.field_values or {}),
-            }
-        elif nt:
-            # Fill in any missing sample values from subsequent notes
-            existing_samples = note_types_map[nt.id]["sample_values"]
-            for k, v in (n.field_values or {}).items():
-                if k not in existing_samples or not existing_samples[k]:
-                    existing_samples[k] = v
-        if nt:
-            note_types_map[nt.id]["note_count"] += 1
+    # Metadata only needs a bounded content sample. Counting remains in SQL so a
+    # large deck no longer hydrates every JSON field value into Python.
+    note_type_ids = [note_type_id for note_type_id, _ in count_rows if note_type_id]
+    note_types = (
+        NoteType.query.filter(NoteType.id.in_(note_type_ids))
+        .options(selectinload(NoteType.field_defs))
+        .all()
+        if note_type_ids
+        else []
+    )
+    note_types_by_id = {str(note_type.id): note_type for note_type in note_types}
+    sample_notes: list[Note] = []
+    note_types_list: list[dict[str, Any]] = []
+    for note_type_id, note_count in count_rows:
+        note_type = note_types_by_id.get(str(note_type_id))
+        if note_type is None:
+            continue
+        samples = (
+            notes_query.filter(Note.note_type_id == note_type_id)
+            .options(selectinload(Note.note_type).selectinload(NoteType.field_defs))
+            .limit(20)
+            .all()
+        )
+        sample_notes.extend(samples)
+        sample_values: dict[str, Any] = {}
+        for note in samples:
+            for key, value in (note.field_values or {}).items():
+                if key not in sample_values or not sample_values[key]:
+                    sample_values[key] = value
 
-    note_types_list = list(note_types_map.values())
+        note_types_list.append({
+            "id": note_type.id,
+            "name": note_type.name,
+            "fields": [
+                field.name
+                for field in sorted(
+                    note_type.field_defs,
+                    key=lambda item: getattr(item, "position", 0),
+                )
+            ],
+            "note_count": int(note_count or 0),
+            "sample_values": sample_values,
+        })
 
     # Build suggested field mappings based on field names (strictly excluding media/audio/id fields)
     suggested_mappings: dict[str, dict[str, str]] = {}
@@ -234,7 +255,7 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
             # 3. Last resort
             return raw_fields[0] if raw_fields else ""
 
-        detected_locale = detect_deck_language(deck, notes)
+        detected_locale = detect_deck_language(deck, sample_notes)
 
         kanji_field = _find_field(["expression", "kanji", "word", "vocab", "front", "hanzi", "sentence", "grammar"]) or _fallback_kanji_field()
         reading_field = _find_field(["reading", "furigana", "kana", "pinyin", "pronunciation"]) or ""
@@ -259,7 +280,7 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
             "example": example_field,
         }
     else:
-        detected_locale = detect_deck_language(deck, notes)
+        detected_locale = detect_deck_language(deck, sample_notes)
 
     return {
         "deck_id": deck.id,
@@ -996,6 +1017,7 @@ def generate_worksheet_preview(
     note_ids = payload.get("note_ids")
     note_type_id = payload.get("note_type_id")
     limit_n = int(payload.get("limit") or 0)
+    max_process_limit = 500
 
     # 1. Query Notes
     notes: list[Note] = []
@@ -1011,7 +1033,7 @@ def generate_worksheet_preview(
 
         if card_ids and isinstance(card_ids, list):
             cards = (
-                Card.query.filter(Card.id.in_([str(cid) for cid in card_ids]))
+                Card.query.filter(Card.id.in_([str(cid) for cid in card_ids[:max_process_limit]]))
                 .options(selectinload(Card.note))
                 .all()
             )
@@ -1022,7 +1044,7 @@ def generate_worksheet_preview(
                     notes.append(c.note)
         elif note_ids and isinstance(note_ids, list):
             notes = (
-                Note.query.filter(Note.id.in_([str(nid) for nid in note_ids]))
+                Note.query.filter(Note.id.in_([str(nid) for nid in note_ids[:max_process_limit]]))
                 .all()
             )
         else:
@@ -1031,15 +1053,28 @@ def generate_worksheet_preview(
             query = Note.query.filter(Note.deck_id.in_(subtree_ids))
             if note_type_id:
                 query = query.filter(Note.note_type_id == str(note_type_id).strip())
-            notes = query.all()
 
-    if scope == "all" and not note_type_id and not card_ids and not note_ids:
-        nt_ids = {n.note_type_id for n in notes if n.note_type_id}
-        if len(nt_ids) > 1:
-            raise WorksheetServiceError(
-                "Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác in bài tập.",
-                code="MIXED_NOTE_TYPES",
-            )
+            if scope == "all" and not note_type_id:
+                distinct_note_types = (
+                    query.with_entities(Note.note_type_id)
+                    .filter(Note.note_type_id.isnot(None))
+                    .distinct()
+                    .limit(2)
+                    .all()
+                )
+                if len(distinct_note_types) > 1:
+                    raise WorksheetServiceError(
+                        "Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác in bài tập.",
+                        code="MIXED_NOTE_TYPES",
+                    )
+
+            query_limit = max_process_limit
+            if scope in {"first_n", "random_n"} and limit_n > 0:
+                query_limit = min(limit_n, max_process_limit)
+            if scope == "random_n" and limit_n > 0:
+                dialect_name = db.session.get_bind().dialect.name
+                query = query.order_by(func.rand() if dialect_name == "mysql" else func.random())
+            notes = query.limit(query_limit).all()
 
     if template.id == "genkouyoushi":
         return _generate_genkouyoushi_pages(deck, template, notes, field_mapping, options)
@@ -1062,11 +1097,9 @@ def generate_worksheet_preview(
     if scope == "first_n" and limit_n > 0:
         notes = notes[:limit_n]
     elif scope == "random_n" and limit_n > 0:
-        sample_size = min(limit_n, len(notes))
-        notes = random.sample(notes, sample_size)
+        notes = notes[:limit_n]
 
     # Safety ceiling
-    max_process_limit = 500
     if len(notes) > max_process_limit:
         notes = notes[:max_process_limit]
 

@@ -7,6 +7,7 @@ from .cors import init_cors
 from .csrf import init_csrf_protection
 from .cli import register_cli_commands, register_audit_cli_commands
 from .extensions import login_manager, migrate
+from .public_media_session import PublicMediaSessionInterface
 from .routes import register_blueprints
 from .settings import BASE_DIR, build_app_config
 from .spa import init_spa_delivery
@@ -20,6 +21,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         template_folder=None,
         static_folder=str(BASE_DIR / "static"),
     )
+    app.session_interface = PublicMediaSessionInterface()
     app.config.update(build_app_config(config))
     if audit_mode:
         app.config.update(

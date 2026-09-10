@@ -209,7 +209,7 @@ describe('DeckWorksheetModal Live Studio', () => {
     expect(document.body.textContent).toContain('Live Studio')
     expect(document.body.textContent).toContain('Luyện viết Kanji chuẩn')
     expect(document.body.textContent).toContain('Luyện viết từ vựng')
-    expect(document.body.textContent).toContain('In ngay (A4)')
+    expect(document.body.textContent).toContain('In / Lưu PDF')
 
     // Live preview canvas content (reading and meaning hidden by default)
     expect(document.body.textContent).toContain('日')
@@ -549,9 +549,11 @@ describe('DeckWorksheetModal Live Studio', () => {
       expect(mobileControlsBtn).toBeDefined()
       expect(mobilePreviewBtn).toBeDefined()
 
-      // Check mobile zoom / fit and download buttons
+      // Check mobile zoom / fit and the single native print action
       expect(document.body.textContent).toContain('Vừa trang')
-      expect(document.body.textContent).toContain('Tải file')
+      expect(document.body.textContent).toContain('In / Lưu PDF')
+      expect(document.body.textContent).not.toContain('Tải file PDF')
+      expect(document.body.textContent).not.toContain('Tab mới')
 
       // Switch to controls
       await act(async () => {
@@ -1239,6 +1241,7 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     expect(document.body.textContent).toContain('Chữ Hán / Từ vựng chính')
     expect(document.body.textContent).toContain('Giá trị mẫu trên thẻ:"食べる"')
     expect(document.body.textContent).toContain('Tiếp tục: Chọn mẫu bài tập')
+    expect(worksheetApi.generateWorksheetPreview).not.toHaveBeenCalled()
   })
 
   it('blocks proceeding if deck contains multiple note types', async () => {
@@ -1348,6 +1351,4 @@ describe('DeckWorksheetModal Wizard Flow', () => {
     expect(document.body.textContent).toContain('Đã nạp thiết lập đã lưu')
   })
 })
-
-
 
