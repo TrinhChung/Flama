@@ -843,6 +843,23 @@ def ensure_backward_compatible_schema() -> None:
                 schema_changed = True
         except Exception:
             pass
+        _ensure_column(
+            "oauth_clients",
+            "client_secret",
+            "ALTER TABLE oauth_clients ADD COLUMN client_secret VARCHAR(255) NULL",
+        )
+        _ensure_column(
+            "oauth_clients",
+            "is_default",
+            "ALTER TABLE oauth_clients ADD COLUMN is_default BOOLEAN NOT NULL DEFAULT FALSE"
+            if is_mysql
+            else "ALTER TABLE oauth_clients ADD COLUMN is_default BOOLEAN DEFAULT 0",
+        )
+        _ensure_index(
+            "oauth_clients",
+            "ix_oauth_clients_is_default",
+            "CREATE INDEX ix_oauth_clients_is_default ON oauth_clients (is_default)",
+        )
 
 
     if "oauth_authorization_codes" not in table_names:

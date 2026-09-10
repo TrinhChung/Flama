@@ -141,6 +141,7 @@ def consent_decision():
             403,
         )
 
+
     body = request.get_json(silent=True) or request.form or {}
     client_id = str(body.get("client_id") or "").strip()
     redirect_uri = str(body.get("redirect_uri") or "").strip()
@@ -249,6 +250,7 @@ def authorize():
     if not bool(getattr(current_user, "is_active", True)):
         err = OAuthError("access_denied", "User account is disabled.", redirect_uri=redirect_uri, state=state)
         return redirect(err.to_redirect_url())
+
 
     if request.method == "GET":
         query_string = request.query_string.decode("utf-8") if request.query_string else ""
@@ -403,6 +405,17 @@ def userinfo():
 def get_endpoints_info():
     """Return discovered URLs and suggested config for AI client setup."""
     base_url = oauth_service.get_base_url(request)
+    default_client = oauth_repository.get_default_client()
+    default_client_data = None
+    if default_client:
+        default_client_data = {
+            "id": default_client.id,
+            "client_id": default_client.client_id,
+            "client_name": default_client.client_name,
+            "client_secret": default_client.client_secret,
+            "redirect_uris": default_client.get_redirect_uris(),
+            "is_default": bool(default_client.is_default),
+        }
     return jsonify(
         {
             "base_url": base_url,
@@ -413,6 +426,7 @@ def get_endpoints_info():
             "openid_config_url": f"{base_url}/.well-known/openid-configuration",
             "scopes": list(oauth_service.ALLOWED_SCOPES),
             "scopes_string": " ".join(sorted(oauth_service.ALLOWED_SCOPES)),
+            "default_client": default_client_data,
         }
     )
 
@@ -438,6 +452,7 @@ def create_oauth_client():
     client_id = str(payload.get("client_id") or "").strip()
     client_name = str(payload.get("client_name") or "").strip()
     client_secret = payload.get("client_secret")
+    is_default = payload.get("is_default")
     raw_redirect_uris = payload.get("redirect_uris") or []
 
     if isinstance(raw_redirect_uris, str):
@@ -456,6 +471,7 @@ def create_oauth_client():
             client_secret=str(client_secret).strip() if client_secret else None,
             redirect_uris=redirect_uris,
             is_confidential=bool(client_secret and str(client_secret).strip()),
+            is_default=bool(is_default) if is_default is not None else False,
         )
         return jsonify({"success": True, "client": client.to_dict()}), 201
     except OAuthError as exc:
@@ -483,8 +499,10 @@ def update_oauth_client_endpoint(client_pk: int):
     """Update a registered OAuth 2.1 client (Admin only)."""
     payload = request.get_json(silent=True) or request.form or {}
     client_name = str(payload.get("client_name") or "").strip() if "client_name" in payload else None
-    client_secret = str(payload.get("client_secret") or "").strip() if "client_secret" in payload else None
+    raw_secret = payload.get("client_secret")
+    client_secret = str(raw_secret).strip() if (raw_secret is not None and str(raw_secret).strip()) else None
     raw_redirect_uris = payload.get("redirect_uris")
+    is_default = payload.get("is_default")
 
     redirect_uris = None
     if raw_redirect_uris is not None:
@@ -501,13 +519,28 @@ def update_oauth_client_endpoint(client_pk: int):
             client_name=client_name,
             client_secret=client_secret,
             redirect_uris=redirect_uris,
-            is_confidential=bool(client_secret) if client_secret is not None else None,
+            is_default=bool(is_default) if is_default is not None else None,
         )
         return jsonify({"success": True, "client": client.to_dict()}), 200
     except OAuthError as exc:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(exc)}), exc.status
     except Exception as exc:
         logger.exception("Failed to update OAuth client: %s", exc)
+        db.session.rollback()
+        return jsonify({"error": "DATABASE_ERROR", "message": str(exc)}), 500
+
+
+@oauth_bp.post("/api/oauth/clients/<int:client_pk>/set-default")
+@admin_required
+def set_default_oauth_client_endpoint(client_pk: int):
+    """Set an OAuth client as the default preset for users (Admin only)."""
+    try:
+        client = oauth_service.set_default_client(client_pk)
+        return jsonify({"success": True, "client": client.to_dict()}), 200
+    except OAuthError as exc:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(exc)}), exc.status
+    except Exception as exc:
+        logger.exception("Failed to set default OAuth client: %s", exc)
         db.session.rollback()
         return jsonify({"error": "DATABASE_ERROR", "message": str(exc)}), 500
 

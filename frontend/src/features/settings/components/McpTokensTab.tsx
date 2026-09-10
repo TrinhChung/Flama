@@ -29,6 +29,7 @@ import {
   Eraser,
   FileText,
   FolderTree,
+  Globe,
   Image as ImageIcon,
   Key,
   KeyRound,
@@ -42,6 +43,7 @@ import {
   Trash2,
   Zap,
 } from 'lucide-react'
+import { FLAMA_MCP_URL, BACKEND_ORIGIN } from '@/config/env'
 import {
   ALL_MCP_SCOPES,
   SCOPE_CATEGORIES,
@@ -132,6 +134,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
     revokeMutation,
     purgeMutation,
     cleanupMutation,
+    canManageTokens,
   } = hookResult
 
   const items = query.data?.items || []
@@ -150,30 +153,187 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
 
   return (
     <TabsContent value="tokens" className="space-y-6">
-      {/* Stats row */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard
-          label="Token đang hoạt động"
-          value={activeCount.toString()}
-          hint="Đang sẵn sàng kết nối AI"
-          tone={activeCount > 0 ? 'success' : 'default'}
-        />
-        <StatCard
-          label="Token cũ / Hết hạn"
-          value={inactiveCount.toString()}
-          hint={inactiveCount > 0 ? 'Có thể dọn dẹp để giải phóng DB' : 'Cơ sở dữ liệu gọn gàng'}
-          tone={inactiveCount > 0 ? 'warning' : 'default'}
-        />
-        <StatCard
-          label="Quyền hạn hỗ trợ"
-          value={`${ALL_MCP_SCOPES.length} Scopes`}
-          hint="5 nhóm: Bộ thẻ, Thẻ, Mẫu, SRS & Ảnh"
-          tone="default"
-        />
-      </div>
+      {/* Stats row (Admin or Users with Token Management Permission) */}
+      {canManageTokens && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Token đang hoạt động"
+            value={activeCount.toString()}
+            hint="Đang sẵn sàng kết nối AI"
+            tone={activeCount > 0 ? 'success' : 'default'}
+          />
+          <StatCard
+            label="Token cũ / Hết hạn"
+            value={inactiveCount.toString()}
+            hint={inactiveCount > 0 ? 'Có thể dọn dẹp để giải phóng DB' : 'Cơ sở dữ liệu gọn gàng'}
+            tone={inactiveCount > 0 ? 'warning' : 'default'}
+          />
+          <StatCard
+            label="Quyền hạn hỗ trợ"
+            value={`${ALL_MCP_SCOPES.length} Scopes`}
+            hint="5 nhóm: Bộ thẻ, Thẻ, Mẫu, SRS & Ảnh"
+            tone="default"
+          />
+        </div>
+      )}
 
-      {/* Quick Generate Card */}
-      <Card className="shadow-2xs border-primary/20">
+      {/* 1. Connection Endpoint Info Card (Visible to All Users) */}
+      {(() => {
+        const defaultBase = BACKEND_ORIGIN || window.location.origin
+        const mcpServerUrl = FLAMA_MCP_URL || `${defaultBase}/api/mcp`
+        return (
+          <Card className="shadow-2xs border-primary/20 bg-linear-to-r from-primary/5 via-card to-card">
+            <CardHeader className="p-4 sm:p-5 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+                    <Globe className="size-5" />
+                  </div>
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CardTitle className="text-base sm:text-lg font-bold">
+                        Thông số Kết nối MCP Server
+                      </CardTitle>
+                      <Badge variant="outline" className="text-[10px] text-primary border-primary/30 font-mono">
+                        Stream HTTP POST / SSE
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-xs sm:text-sm">
+                      Đường dẫn kết nối MCP dùng cho Claude Desktop, Cursor, Antigravity, Cline. Đối với ChatGPT, hãy mở tab <strong className="text-foreground">ChatGPT &amp; OAuth 2.1</strong> để sử dụng Client ID &amp; Secret dùng chung do Admin cấu hình sẵn.
+                    </CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                  <Link
+                    to="/guide/integrations/mcp-ai"
+                    className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1"
+                  >
+                    <BookOpen className="size-3.5" />
+                    <span>Hướng dẫn cài đặt &rarr;</span>
+                  </Link>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-5 pt-0 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border bg-muted/40 p-2.5 text-xs font-mono">
+                <span className="text-muted-foreground font-sans text-[11px] font-semibold shrink-0">Endpoint URL:</span>
+                <span className="flex-1 break-all select-all font-semibold text-foreground text-xs sm:text-sm">{mcpServerUrl}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-8 gap-1.5 text-xs self-end sm:self-auto"
+                  onClick={() => copy('Server URL', mcpServerUrl)}
+                >
+                  {copied === 'Server URL' ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                  {copied === 'Server URL' ? 'Đã chép' : 'Sao chép URL'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
+
+      {/* Standard User Notice (when user cannot self-manage tokens) */}
+      {!canManageTokens && (
+        <Card className="shadow-2xs border-primary/20 bg-linear-to-r from-primary/5 via-card to-card">
+          <CardHeader className="p-4 sm:p-5 pb-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+                <ShieldCheck className="size-5" />
+              </div>
+              <div className="space-y-1">
+                <CardTitle className="text-base sm:text-lg font-bold">
+                  Thông số Kết nối AI do Quản trị viên Quản lý
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm leading-relaxed">
+                  Tài khoản của bạn đang sử dụng cơ chế bảo mật kết nối AI tiêu chuẩn. Bạn có thể sao chép URL kết nối từ danh sách Token bên dưới để tích hợp với Claude Desktop hoặc Cursor. Đối với ChatGPT, hãy chuyển sang tab <strong>ChatGPT &amp; OAuth 2.1</strong> để sử dụng thông tin Client ID &amp; Secret do hệ thống thiết lập sẵn.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
+
+      {/* Scope Matrix Card for Standard Users (Granted to all tokens by default) */}
+      {!canManageTokens && (
+        <Card className="shadow-2xs border-emerald-500/20">
+          <CardHeader className="p-4 sm:p-6 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                    <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    Bảng Phân Quyền Tính Năng AI ({ALL_MCP_SCOPES.length} Scopes)
+                  </CardTitle>
+                  <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-semibold gap-1">
+                    <Check className="size-3" /> Cấp cho tất cả token
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs sm:text-sm">
+                  Tất cả các quyền hạn tính năng AI dưới đây được hệ thống kích hoạt đầy đủ cho toàn bộ token kết nối của bạn. Token của bạn có thể sử dụng tất cả công cụ tương ứng để tra cứu, tạo thẻ và ôn tập mà không cần cấu hình thủ công.
+                </CardDescription>
+              </div>
+              <Link to="/guide/integrations/mcp-tools" className="text-xs text-primary hover:underline font-normal shrink-0">
+                Xem 20 công cụ tương ứng &rarr;
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-1">
+              {SCOPE_CATEGORIES.map((cat) => {
+                const CatIcon = getCategoryIcon(cat.key)
+                const catScopes = ALL_MCP_SCOPES.filter((s) => s.category === cat.key)
+
+                return (
+                  <div
+                    key={cat.key}
+                    className="rounded-xl border bg-muted/20 p-3 space-y-2.5 flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border/50">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                            <CatIcon className="size-3.5" />
+                          </div>
+                          <span className="font-semibold text-xs text-foreground truncate">{cat.name}</span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/5 font-semibold">
+                          {catScopes.length}/{catScopes.length} quyền
+                        </Badge>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {catScopes.map((scope) => (
+                          <div
+                            key={scope.key}
+                            className="flex items-start gap-2 p-1.5 rounded-lg border border-border/40 bg-background/80 text-xs shadow-2xs"
+                          >
+                            <div className="mt-0.5 rounded-full p-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                              <Check className="size-3" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-[11px] leading-tight text-foreground">
+                                {scope.label}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground leading-tight line-clamp-1 mt-0.5">
+                                {scope.desc}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick Generate Card (Admin or Users with Token Management Permission) */}
+      {canManageTokens && (
+        <Card className="shadow-2xs border-primary/20">
         <CardHeader className="p-4 sm:p-6 pb-3">
           <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
             <KeyRound className="size-5 text-primary shrink-0" />
@@ -351,6 +511,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Newly Issued or Rotated Token Notice */}
       {issued && (
@@ -418,17 +579,22 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
         </Alert>
       )}
 
-      {/* Token List */}
-      <Card className="shadow-2xs">
+      {/* Token List (Admin or Users with Token Management Permission) */}
+      {canManageTokens && (
+        <Card className="shadow-2xs">
         <CardHeader className="p-4 sm:p-6 pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base sm:text-lg font-bold">Danh sách Token & Secrets ({items.length})</CardTitle>
+              <CardTitle className="text-base sm:text-lg font-bold">
+                {canManageTokens ? `Danh sách Token & Secrets (${items.length})` : `Token & Quyền Kết nối AI (${items.length})`}
+              </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Theo dõi trạng thái, chỉnh sửa quyền hạn trực tiếp hoặc xoay vòng secret mà không làm gián đoạn kết nối.
+                {canManageTokens
+                  ? 'Theo dõi trạng thái, chỉnh sửa quyền hạn trực tiếp hoặc xoay vòng secret mà không làm gián đoạn kết nối.'
+                  : 'Danh sách các Token kết nối được cấp cho tài khoản của bạn để tích hợp với các trợ lý AI.'}
               </CardDescription>
             </div>
-            {inactiveCount > 0 && (
+            {canManageTokens && inactiveCount > 0 && (
               <Button
                 variant="outline"
                 size="sm"
@@ -444,8 +610,12 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
         <CardContent className="p-4 sm:p-6 pt-0">
           {!items.length ? (
             <EmptyState
-              title="Chưa có MCP token nào"
-              description="Điền tên và bấm 'Tạo Token mới' ở trên để cấp token kết nối đầu tiên cho AI client."
+              title={canManageTokens ? 'Chưa có MCP token nào' : 'Chưa có Token cá nhân'}
+              description={
+                canManageTokens
+                  ? "Điền tên và bấm 'Tạo Token mới' ở trên để cấp token kết nối đầu tiên cho AI client."
+                  : 'Bạn chưa có token kết nối Claude/Cursor nào được cấp. Bạn có thể sử dụng kết nối ChatGPT ở tab bên cạnh hoặc liên hệ Quản trị viên để được cấp Token.'
+              }
             />
           ) : (
             <div className="overflow-x-auto">
@@ -504,8 +674,10 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                         {/* Interactive Scopes Cell */}
                         <TableCell>
                           <div
-                            className="group flex flex-wrap items-center gap-1 cursor-pointer py-1 max-w-xs"
-                            title="Bấm để chỉnh sửa quyền hạn trực tiếp"
+                            className={`group flex flex-wrap items-center gap-1 ${
+                              canManageTokens ? 'cursor-pointer' : 'cursor-default'
+                            } py-1 max-w-xs`}
+                            title={canManageTokens ? 'Bấm để chỉnh sửa quyền hạn trực tiếp' : 'Xem chi tiết quyền hạn'}
                             onClick={() => openPermissionsDialog(token)}
                           >
                             {isFullAccess ? (
@@ -537,9 +709,11 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                                 </Badge>
                               ))}
 
-                            <span className="text-[10px] text-primary/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 ml-1">
-                              <Pencil className="size-2.5" /> Sửa
-                            </span>
+                            {canManageTokens && (
+                              <span className="text-[10px] text-primary/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 ml-1">
+                                <Pencil className="size-2.5" /> Sửa
+                              </span>
+                            )}
                           </div>
                         </TableCell>
 
@@ -548,66 +722,81 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                         </TableCell>
 
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {/* Phân quyền nhanh (Edit Scopes) */}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-primary hover:bg-primary/10"
-                              title="Phân quyền & Cấp quyền hạn (Scopes)"
-                              onClick={() => openPermissionsDialog(token)}
-                            >
-                              <ShieldCheck className="size-4" />
-                            </Button>
-
-                            {/* Sửa thông tin (Edit Name & Expiry) */}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-muted-foreground hover:text-foreground"
-                              title="Chỉnh sửa tên & thời hạn"
-                              onClick={() => openEditDialog(token)}
-                            >
-                              <Pencil className="size-3.5" />
-                            </Button>
-
-                            {/* Rotate / Đổi Secret */}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40"
-                              title="Xoay vòng / Đổi Secret Key"
-                              onClick={() => openRotateDialog(token)}
-                            >
-                              <RefreshCw className="size-3.5" />
-                            </Button>
-
-                            {/* Thu hồi (Revoke) nếu đang active */}
-                            {token.status === 'active' && (
+                          {canManageTokens ? (
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Phân quyền nhanh (Edit Scopes) */}
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="size-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
-                                title="Thu hồi Token"
-                                onClick={() => setRevokeTargetId(token.id)}
+                                className="size-8 text-primary hover:bg-primary/10"
+                                title="Phân quyền & Cấp quyền hạn (Scopes)"
+                                onClick={() => openPermissionsDialog(token)}
                               >
-                                <ShieldAlert className="size-3.5" />
+                                <ShieldCheck className="size-4" />
                               </Button>
-                            )}
 
-                            {/* Xóa vĩnh viễn (Purge) nếu đã revoked hoặc expired */}
-                            {token.status !== 'active' && (
+                              {/* Sửa thông tin (Edit Name & Expiry) */}
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="size-8 text-destructive hover:bg-destructive/10"
-                                title="Xóa vĩnh viễn khỏi database"
-                                onClick={() => setPurgeTargetToken(token)}
+                                className="size-8 text-muted-foreground hover:text-foreground"
+                                title="Chỉnh sửa tên & thời hạn"
+                                onClick={() => openEditDialog(token)}
                               >
-                                <Trash2 className="size-3.5" />
+                                <Pencil className="size-3.5" />
                               </Button>
-                            )}
-                          </div>
+
+                              {/* Rotate / Đổi Secret */}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40"
+                                title="Xoay vòng / Đổi Secret Key"
+                                onClick={() => openRotateDialog(token)}
+                              >
+                                <RefreshCw className="size-3.5" />
+                              </Button>
+
+                              {/* Thu hồi (Revoke) nếu đang active */}
+                              {token.status === 'active' && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="size-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
+                                  title="Thu hồi Token"
+                                  onClick={() => setRevokeTargetId(token.id)}
+                                >
+                                  <ShieldAlert className="size-3.5" />
+                                </Button>
+                              )}
+
+                              {/* Xóa vĩnh viễn (Purge) nếu đã revoked hoặc expired */}
+                              {token.status !== 'active' && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="size-8 text-destructive hover:bg-destructive/10"
+                                  title="Xóa vĩnh viễn khỏi database"
+                                  onClick={() => setPurgeTargetToken(token)}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                                title="Xem chi tiết quyền hạn (Scopes)"
+                                onClick={() => openPermissionsDialog(token)}
+                              >
+                                <Shield className="size-3.5 text-primary" />
+                                <span>Xem quyền</span>
+                              </Button>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
@@ -618,6 +807,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* 1. Edit Token & Permissions Dialog */}
       <Dialog open={editingToken !== null} onOpenChange={(open) => !open && setEditingToken(null)}>
@@ -629,10 +819,22 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
               ) : (
                 <Pencil className="size-5 text-primary" />
               )}
-              {isPermissionsOnlyDialog ? 'Cấp & Chỉnh sửa Quyền hạn MCP Token' : 'Chỉnh sửa MCP Token'}
+              {isPermissionsOnlyDialog
+                ? canManageTokens
+                  ? 'Cấp & Chỉnh sửa Quyền hạn MCP Token'
+                  : 'Chi tiết Quyền hạn MCP Token'
+                : 'Chỉnh sửa MCP Token'}
             </DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              Cập nhật quyền hạn cho token <strong>"{editingToken?.name}"</strong>. Thay đổi có hiệu lực ngay lập tức và <strong>giữ nguyên Secret Token</strong>.
+              {canManageTokens ? (
+                <>
+                  Cập nhật quyền hạn cho token <strong>"{editingToken?.name}"</strong>. Thay đổi có hiệu lực ngay lập tức và <strong>giữ nguyên Secret Token</strong>.
+                </>
+              ) : (
+                <>
+                  Danh sách quyền hạn (scopes) được thiết lập cho token <strong>"{editingToken?.name}"</strong>.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -677,27 +879,29 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                 </div>
 
                 {/* Presets Bar */}
-                <div className="flex flex-wrap items-center gap-1">
-                  {SCOPE_PRESETS.map((preset) => {
-                    const isPresetActive =
-                      preset.scopes.length === editScopes.length &&
-                      preset.scopes.every((s) => editScopes.includes(s))
-                    return (
-                      <Button
-                        key={preset.key}
-                        type="button"
-                        variant={isPresetActive ? 'secondary' : 'outline'}
-                        size="xs"
-                        className={`text-[10px] h-5 px-1.5 gap-1 rounded-md transition-colors ${
-                          isPresetActive ? 'border-primary/40 font-semibold text-primary' : 'text-muted-foreground'
-                        }`}
-                        onClick={() => applyEditPreset(preset.key)}
-                      >
-                        <span>{preset.label}</span>
-                      </Button>
-                    )
-                  })}
-                </div>
+                {canManageTokens && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    {SCOPE_PRESETS.map((preset) => {
+                      const isPresetActive =
+                        preset.scopes.length === editScopes.length &&
+                        preset.scopes.every((s) => editScopes.includes(s))
+                      return (
+                        <Button
+                          key={preset.key}
+                          type="button"
+                          variant={isPresetActive ? 'secondary' : 'outline'}
+                          size="xs"
+                          className={`text-[10px] h-5 px-1.5 gap-1 rounded-md transition-colors ${
+                            isPresetActive ? 'border-primary/40 font-semibold text-primary' : 'text-muted-foreground'
+                          }`}
+                          onClick={() => applyEditPreset(preset.key)}
+                        >
+                          <span>{preset.label}</span>
+                        </Button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Categorized Matrix */}
@@ -719,15 +923,17 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                             <CatIcon className="size-3.5 text-primary shrink-0" />
                             <span className="font-semibold text-xs text-foreground truncate">{cat.name}</span>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                            onClick={() => toggleEditCategory(cat.key)}
-                          >
-                            {isAllInCat ? 'Bỏ chọn' : 'Chọn hết'}
-                          </Button>
+                          {canManageTokens && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="xs"
+                              className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                              onClick={() => toggleEditCategory(cat.key)}
+                            >
+                              {isAllInCat ? 'Bỏ chọn' : 'Chọn hết'}
+                            </Button>
+                          )}
                         </div>
 
                         <div className="space-y-1.5">
@@ -736,7 +942,9 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                             return (
                               <label
                                 key={scope.key}
-                                className={`flex items-start gap-2 p-1.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                                className={`flex items-start gap-2 p-1.5 rounded-lg border text-xs transition-colors ${
+                                  canManageTokens ? 'cursor-pointer' : 'cursor-default'
+                                } ${
                                   checked
                                     ? 'bg-background border-primary/30 text-foreground shadow-2xs'
                                     : 'bg-muted/40 border-transparent text-muted-foreground hover:bg-muted/60'
@@ -744,7 +952,8 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                               >
                                 <Checkbox
                                   checked={checked}
-                                  onCheckedChange={() => toggleEditScope(scope.key)}
+                                  disabled={!canManageTokens}
+                                  onCheckedChange={() => canManageTokens && toggleEditScope(scope.key)}
                                   className="mt-0.5"
                                 />
                                 <div className="min-w-0 flex-1">
@@ -768,15 +977,23 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
-            <Button variant="outline" onClick={() => setEditingToken(null)}>
-              Hủy
-            </Button>
-            <Button
-              onClick={() => updateMutation.mutate()}
-              disabled={!editName.trim() || editScopes.length === 0 || updateMutation.isPending}
-            >
-              {updateMutation.isPending ? 'Đang lưu…' : `Lưu quyền hạn (${editScopes.length} Scopes)`}
-            </Button>
+            {canManageTokens ? (
+              <>
+                <Button variant="outline" onClick={() => setEditingToken(null)}>
+                  Hủy
+                </Button>
+                <Button
+                  onClick={() => updateMutation.mutate()}
+                  disabled={!editName.trim() || editScopes.length === 0 || updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? 'Đang lưu…' : `Lưu quyền hạn (${editScopes.length} Scopes)`}
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => setEditingToken(null)}>
+                Đóng
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

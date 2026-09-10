@@ -21,6 +21,21 @@ def ensure_user_management_schema(session) -> None:
                 text("ALTER TABLE users ADD COLUMN is_disabled BOOLEAN NOT NULL DEFAULT 0")
             )
             session.flush()
+        if "can_use_mcp" not in user_columns:
+            session.execute(
+                text("ALTER TABLE users ADD COLUMN can_use_mcp BOOLEAN NOT NULL DEFAULT 0")
+            )
+            session.flush()
+        if "can_manage_mcp_tokens" not in user_columns:
+            session.execute(
+                text("ALTER TABLE users ADD COLUMN can_manage_mcp_tokens BOOLEAN NOT NULL DEFAULT 0")
+            )
+            session.flush()
+            if "can_use_mcp" in user_columns:
+                session.execute(
+                    text("UPDATE users SET can_manage_mcp_tokens = can_use_mcp WHERE can_use_mcp = 1")
+                )
+                session.flush()
         if "balance_amount_minor" not in user_columns:
             session.execute(
                 text("ALTER TABLE users ADD COLUMN balance_amount_minor INTEGER NOT NULL DEFAULT 0")

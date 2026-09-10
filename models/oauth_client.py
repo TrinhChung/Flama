@@ -14,11 +14,13 @@ class OAuthClient(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    client_secret = db.Column(db.String(255), nullable=True)
     client_secret_hash = db.Column(db.String(255), nullable=True)
     client_name = db.Column(db.String(120), nullable=False, default="OAuth Client")
     client_uri = db.Column(db.String(255), nullable=True)
     redirect_uris = db.Column(db.Text, nullable=False, default="[]")
     is_confidential = db.Column(db.Boolean, nullable=False, default=True)
+    is_default = db.Column(db.Boolean, nullable=False, default=False, index=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -43,11 +45,13 @@ class OAuthClient(db.Model):
         return {
             "id": self.id,
             "client_id": self.client_id,
+            "client_secret": self.client_secret,
             "client_name": self.client_name,
             "client_uri": self.client_uri,
             "redirect_uris": self.get_redirect_uris(),
             "is_confidential": bool(self.is_confidential),
-            "has_secret": bool(self.client_secret_hash),
+            "has_secret": bool(self.client_secret_hash or self.client_secret),
+            "is_default": bool(self.is_default),
             "is_active": bool(self.is_active),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

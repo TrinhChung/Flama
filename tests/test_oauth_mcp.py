@@ -39,11 +39,11 @@ class OAuthRemoteMcpTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            # Create users
             self.user = User(
                 username="alice",
                 email="alice@example.com",
                 timezone="UTC",
+                can_use_mcp=True,
             )
             self.user.set_password("password123")
 
@@ -51,6 +51,7 @@ class OAuthRemoteMcpTests(unittest.TestCase):
                 username="bob",
                 email="bob@example.com",
                 timezone="UTC",
+                can_use_mcp=True,
             )
             self.other_user.set_password("password123")
 
@@ -59,6 +60,7 @@ class OAuthRemoteMcpTests(unittest.TestCase):
                 email="admin@example.com",
                 timezone="UTC",
                 is_admin=True,
+                can_use_mcp=True,
             )
             self.admin_user.set_password("adminpass123")
 
@@ -624,7 +626,7 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         client_ids = [c["client_id"] for c in items]
         self.assertIn("claude_custom", client_ids)
 
-        # 5. Update client via PUT API
+        # 5. Update client via PUT API (without passing client_secret) -> should PRESERVE existing secret
         update_resp = self.client.put(
             f"/api/oauth/clients/{client_pk}",
             json={
@@ -636,6 +638,20 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         updated_client = update_resp.get_json()["client"]
         self.assertEqual(updated_client["client_name"], "Claude Desktop Renamed")
         self.assertEqual(updated_client["redirect_uris"], ["https://claude.ai/cb_new"])
+        self.assertEqual(updated_client["client_secret"], "secret_claude_999")
+
+        # 5b. Test set-default client endpoint
+        set_def_resp = self.client.post(f"/api/oauth/clients/{client_pk}/set-default")
+        self.assertEqual(set_def_resp.status_code, 200)
+        self.assertTrue(set_def_resp.get_json()["client"]["is_default"])
+
+        # 5c. Test endpoints-info returns default_client
+        ep_info_resp = self.client.get("/api/oauth/endpoints-info")
+        self.assertEqual(ep_info_resp.status_code, 200)
+        ep_data = ep_info_resp.get_json()
+        self.assertIsNotNone(ep_data["default_client"])
+        self.assertEqual(ep_data["default_client"]["client_id"], "claude_custom")
+        self.assertEqual(ep_data["default_client"]["client_secret"], "secret_claude_999")
 
         # 6. Rotate secret for client
         rotate_sec_resp = self.client.post(

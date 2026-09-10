@@ -8,6 +8,16 @@ import { StudyCompletionCard } from './StudyCompletionCard'
 import type { PersistedStudySession } from '../session/sessionStore'
 import type { StudySessionCommitReceipt } from '../types'
 
+vi.mock('@/features/worksheets', () => ({
+  DeckWorksheetModal: vi.fn(({ open, deckId, deckName }: any) =>
+    open ? (
+      <div data-testid="deck-worksheet-modal" data-deck-id={deckId} data-deck-name={deckName}>
+        Mock Worksheet Modal
+      </div>
+    ) : null,
+  ),
+}))
+
 let root: Root | null = null
 let container: HTMLDivElement | null = null
 
@@ -196,5 +206,65 @@ describe('StudyCompletionCard', () => {
     const links = Array.from(container?.querySelectorAll('a') || [])
     const dashboardLink = links.find((a) => a.textContent?.includes('Về Dashboard'))
     expect(dashboardLink?.getAttribute('href')).toBe('/dashboard')
+  })
+
+  it('renders worksheet button and opens DeckWorksheetModal when clicked', async () => {
+    const session = createMockSession({
+      accumulated_stats: {
+        total_reviews: 10,
+        total_duration_ms: 120_000,
+        again_count: 1,
+        hard_count: 1,
+        good_count: 6,
+        easy_count: 2,
+      },
+    })
+
+    const receipt: StudySessionCommitReceipt = {
+      schema_version: 'study-commit-receipt.v1',
+      success: true,
+      session_id: 'session-123',
+      commit_id: 'commit-456',
+      commit_reason: 'manual_exit',
+      applied_event_count: 10,
+      updated_cards: [],
+      rating_counts: { again: 1, hard: 1, good: 6, easy: 2 },
+      committed_at: '2026-09-05T00:15:00Z',
+    }
+
+    await act(async () => {
+      root?.render(
+        render(
+          <StudyCompletionCard
+            deckName="JLPT N3 Kanji"
+            deckId="10"
+            session={session}
+            receipt={receipt}
+            counts={{ new: 0, learning: 0, due: 0 }}
+            isBusy={false}
+            onCommit={vi.fn()}
+          />,
+        ),
+      )
+    })
+
+    const worksheetBtn = Array.from(container?.querySelectorAll('button') || []).find((b) =>
+      b.textContent?.includes('Tạo Worksheet cho deck'),
+    )
+    expect(worksheetBtn).toBeDefined()
+
+    // Initially modal should not be rendered
+    expect(container?.querySelector('[data-testid="deck-worksheet-modal"]')).toBeNull()
+
+    // Click worksheet button
+    await act(async () => {
+      worksheetBtn?.click()
+    })
+
+    // Now modal should be open with correct deckId and deckName
+    const modalEl = container?.querySelector('[data-testid="deck-worksheet-modal"]')
+    expect(modalEl).not.toBeNull()
+    expect(modalEl?.getAttribute('data-deck-id')).toBe('10')
+    expect(modalEl?.getAttribute('data-deck-name')).toBe('JLPT N3 Kanji')
   })
 })

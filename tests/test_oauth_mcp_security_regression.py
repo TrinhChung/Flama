@@ -47,6 +47,7 @@ class OAuthMcpSecurityRegressionTests(unittest.TestCase):
                 username="alice",
                 email="alice@example.com",
                 timezone="UTC",
+                can_use_mcp=True,
             )
             self.user.set_password("password123")
 

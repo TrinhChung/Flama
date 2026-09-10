@@ -13,6 +13,8 @@ export type FrontendUser = {
   social_links?: Array<{ type: string; url: string; label?: string }>
   timezone: string
   is_admin: boolean
+  can_use_mcp?: boolean
+  can_manage_mcp_tokens?: boolean
   balance_amount_minor?: number
   balance_amount_display?: string
   role: FrontendRole | null
@@ -47,6 +49,7 @@ export type FrontendLinks = {
   admin_payments: string | null
   admin_tts: string | null
   admin_fees?: string | null
+  admin_mcp_tokens?: string | null
 }
 
 export type FrontendBootstrap = {

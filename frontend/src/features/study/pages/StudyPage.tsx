@@ -407,7 +407,7 @@ export function StudyPage() {
 
   if (study.receipt && isSessionComplete && !isLeaving) {
     return (
-      <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 bg-background text-foreground overflow-y-auto">
+      <div className="min-h-[100dvh] w-full flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 bg-background text-foreground overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
         <StudyCompletionCard
           deckName={deckName}
           deckId={deckIdRaw}
@@ -490,7 +490,7 @@ export function StudyPage() {
           <PageLoading label="Đang lưu tiến độ và chuyển trang…" />
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto min-h-0">
+        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 overflow-y-auto min-h-0 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
           <StudyCompletionCard
             deckName={deckName}
             deckId={deckIdRaw}

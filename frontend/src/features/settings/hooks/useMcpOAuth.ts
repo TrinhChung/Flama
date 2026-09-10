@@ -13,16 +13,26 @@ export type OAuthEndpointsInfo = {
   openid_config_url: string
   scopes: string[]
   scopes_string: string
+  default_client?: {
+    id: number
+    client_id: string
+    client_name: string
+    client_secret: string | null
+    redirect_uris: string[]
+    is_default: boolean
+  } | null
 }
 
 export type OAuthClientItem = {
   id: number
   client_id: string
+  client_secret?: string | null
   client_name: string
   client_uri: string | null
   redirect_uris: string[]
   is_confidential: boolean
   has_secret?: boolean
+  is_default?: boolean
   is_active: boolean
   created_at: string | null
 }
@@ -198,10 +208,24 @@ export function useMcpOAuth() {
     onError: (error: Error) => toast.error(error.message),
   })
 
+  // Set Default Client Mutation (Admin only)
+  const setDefaultClientMutation = useMutation({
+    mutationFn: (clientPk: number) =>
+      appApi.mutate<{ success: boolean; client: OAuthClientItem }>(
+        `/api/oauth/clients/${clientPk}/set-default`,
+        'POST'
+      ),
+    onSuccess: async (data) => {
+      await refresh()
+      toast.success(`Đã chọn "${data.client.client_name}" làm bộ thông số mặc định cho người dùng.`)
+    },
+    onError: (error: Error) => toast.error(error.message || 'Không thể chọn làm mặc định.'),
+  })
+
   const openEditClient = (client: OAuthClientItem) => {
     setEditingClient(client)
     setEditClientName(client.client_name)
-    setEditClientSecret('')
+    setEditClientSecret(client.client_secret || '')
     setEditRedirectUrisText(client.redirect_uris.join('\n'))
     setIsEditOpen(true)
   }
@@ -254,6 +278,7 @@ export function useMcpOAuth() {
     rotateSecretMutation,
     deleteClientMutation,
     revokeConnectedAppMutation,
+    setDefaultClientMutation,
     refresh,
     isAdmin,
   }

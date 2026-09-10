@@ -24,6 +24,8 @@ class User(UserMixin, db.Model):
     role_id = db.Column(db.Integer, db.ForeignKey("user_roles.id"), nullable=True, index=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     is_disabled = db.Column(db.Boolean, nullable=False, default=False)
+    can_use_mcp = db.Column(db.Boolean, nullable=False, default=False)
+    can_manage_mcp_tokens = db.Column(db.Boolean, nullable=False, default=False)
     balance_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     custom_platform_fee_percent = db.Column(db.Float, nullable=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)

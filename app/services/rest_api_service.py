@@ -47,6 +47,12 @@ def serialize_user(user) -> dict[str, Any] | None:
         "timezone": str(getattr(user, "timezone", "UTC") or "UTC"),
         "is_admin": bool(is_admin_user(user)),
         "is_disabled": bool(getattr(user, "is_disabled", False)),
+        "can_use_mcp": True,
+        "can_manage_mcp_tokens": bool(
+            is_admin_user(user)
+            or getattr(user, "can_manage_mcp_tokens", False)
+            or getattr(user, "can_use_mcp", False)
+        ),
         "balance_amount_minor": balance,
         "balance_amount_display": balance_display,
         "email_verified": bool(student_data["email_verified"]),

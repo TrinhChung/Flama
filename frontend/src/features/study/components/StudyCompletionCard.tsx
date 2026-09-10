@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -7,8 +7,10 @@ import {
   Trophy,
   BarChart2,
   Layers,
+  Printer,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DeckWorksheetModal } from '@/features/worksheets'
 import type {
   StudySessionCommitReceipt,
   StudySessionEvent,
@@ -39,8 +41,15 @@ export function StudyCompletionCard({
   isBusy,
   onCommit,
 }: StudyCompletionCardProps) {
+  const [isWorksheetOpen, setIsWorksheetOpen] = useState(false)
   const isCommitted = Boolean(receipt)
   const events = useMemo(() => session?.events ?? [], [session?.events])
+
+  const numericDeckId = useMemo(() => {
+    if (!deckId) return null
+    const parsed = Number(deckId)
+    return Number.isFinite(parsed) ? parsed : null
+  }, [deckId])
 
   const stats = useMemo(() => {
     // If totalSessionStats was provided directly from hook:
@@ -144,23 +153,23 @@ export function StudyCompletionCard({
   const appliedCount = stats.totalRatings || (receipt?.applied_event_count ?? events.length)
 
   return (
-    <div className="w-full max-w-2xl mx-auto py-6 px-4">
-      <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-8 space-y-6 text-center shadow-xs">
+    <div className="w-full max-w-2xl mx-auto py-4 sm:py-6 px-3 sm:px-4 my-auto">
+      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-8 space-y-4 sm:space-y-6 text-center shadow-xs">
         {/* Header (Symmetrical & Centered) */}
-        <div className="space-y-3">
-          <div className="inline-flex items-center justify-center size-12 rounded-xl bg-muted border border-border/60 text-foreground mx-auto">
+        <div className="space-y-2 sm:space-y-3">
+          <div className="inline-flex items-center justify-center size-11 sm:size-12 rounded-xl bg-muted border border-border/60 text-foreground mx-auto">
             {isCommitted ? (
-              <CheckCircle2 className="size-6 text-emerald-600 dark:text-emerald-400" />
+              <CheckCircle2 className="size-5 sm:size-6 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <Trophy className="size-6 text-amber-500" />
+              <Trophy className="size-5 sm:size-6 text-amber-500" />
             )}
           </div>
 
           <div className="space-y-1">
-            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/60">
+            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/60 max-w-full truncate">
               <span>{deckName || (deckId ? `Deck #${deckId}` : 'Phiên học')}</span>
             </div>
-            <h2 className="text-2xl font-bold text-foreground tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
               {isCommitted
                 ? 'Đã đồng bộ phiên học'
                 : 'Hoàn thành lượt học hôm nay'}
@@ -174,30 +183,30 @@ export function StudyCompletionCard({
         </div>
 
         {/* 3 Equal-Width Metrics Cards (Symmetrical Row) */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-0.5">
-            <span className="block text-xs font-medium text-muted-foreground">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5 sm:p-3.5 space-y-0.5">
+            <span className="block text-[11px] sm:text-xs font-medium text-muted-foreground">
               Đã ôn
             </span>
-            <span className="text-lg font-bold text-foreground">
+            <span className="text-base sm:text-lg font-bold text-foreground">
               {stats.totalRatings} thẻ
             </span>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-0.5">
-            <span className="block text-xs font-medium text-muted-foreground">
+          <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5 sm:p-3.5 space-y-0.5">
+            <span className="block text-[11px] sm:text-xs font-medium text-muted-foreground">
               Thời gian
             </span>
-            <span className="text-lg font-bold text-foreground truncate block">
+            <span className="text-base sm:text-lg font-bold text-foreground whitespace-nowrap block" title={stats.timeFormatted}>
               {stats.timeFormatted}
             </span>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-0.5">
-            <span className="block text-xs font-medium text-muted-foreground">
+          <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5 sm:p-3.5 space-y-0.5">
+            <span className="block text-[11px] sm:text-xs font-medium text-muted-foreground">
               Tỉ lệ đúng
             </span>
-            <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
               {stats.retentionRate}%
             </span>
           </div>
@@ -205,7 +214,7 @@ export function StudyCompletionCard({
 
         {/* 4 Equal-Width Rating Breakdown Cards (Symmetrical Grid) */}
         {stats.totalRatings > 0 ? (
-          <div className="space-y-2 text-left">
+          <div className="space-y-1.5 sm:space-y-2 text-left">
             <div className="flex items-center justify-between text-xs font-medium text-muted-foreground px-0.5">
               <span className="flex items-center gap-1.5">
                 <BarChart2 className="size-3.5 text-muted-foreground" />
@@ -214,109 +223,163 @@ export function StudyCompletionCard({
               <span>{stats.totalRatings} lượt</span>
             </div>
 
-            <div className="grid grid-cols-4 gap-2 text-center text-xs">
-              <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300">
-                <span className="block text-[11px] font-medium opacity-80">Quên</span>
-                <span className="text-sm font-bold">{stats.againCount}</span>
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs">
+              <div className="p-1.5 sm:p-2 rounded-xl bg-rose-500/10 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300">
+                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Quên</span>
+                <span className="text-xs sm:text-sm font-bold">{stats.againCount}</span>
               </div>
-              <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300">
-                <span className="block text-[11px] font-medium opacity-80">Khó</span>
-                <span className="text-sm font-bold">{stats.hardCount}</span>
+              <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/10 border border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300">
+                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Khó</span>
+                <span className="text-xs sm:text-sm font-bold">{stats.hardCount}</span>
               </div>
-              <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-200 dark:border-blue-900/40 text-blue-700 dark:text-blue-300">
-                <span className="block text-[11px] font-medium opacity-80">Tốt</span>
-                <span className="text-sm font-bold">{stats.goodCount}</span>
+              <div className="p-1.5 sm:p-2 rounded-xl bg-blue-500/10 border border-blue-200 dark:border-blue-900/40 text-blue-700 dark:text-blue-300">
+                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Tốt</span>
+                <span className="text-xs sm:text-sm font-bold">{stats.goodCount}</span>
               </div>
-              <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-                <span className="block text-[11px] font-medium opacity-80">Dễ</span>
-                <span className="text-sm font-bold">{stats.easyCount}</span>
+              <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-500/10 border border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Dễ</span>
+                <span className="text-xs sm:text-sm font-bold">{stats.easyCount}</span>
               </div>
             </div>
           </div>
         ) : null}
 
         {/* 3 Equal-Width Deck Status Cards (Symmetrical Grid) */}
-        <div className="space-y-2 text-left">
+        <div className="space-y-1.5 sm:space-y-2 text-left">
           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground px-0.5">
             <Layers className="size-3.5 text-muted-foreground" />
             <span>Trạng thái thẻ trong Deck</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="p-2.5 rounded-xl border border-border/60 bg-muted/20">
-              <span className="block text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-center text-xs">
+            <div className="p-2 sm:p-2.5 rounded-xl border border-border/60 bg-muted/20">
+              <span className="block text-[10px] sm:text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                 Mới
               </span>
-              <span className="text-sm font-bold text-foreground">{counts.new}</span>
+              <span className="text-xs sm:text-sm font-bold text-foreground">{counts.new}</span>
             </div>
 
-            <div className="p-2.5 rounded-xl border border-border/60 bg-muted/20">
-              <span className="block text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            <div className="p-2 sm:p-2.5 rounded-xl border border-border/60 bg-muted/20">
+              <span className="block text-[10px] sm:text-[11px] font-medium text-amber-600 dark:text-amber-400">
                 Đang học
               </span>
-              <span className="text-sm font-bold text-foreground">{counts.learning}</span>
+              <span className="text-xs sm:text-sm font-bold text-foreground">{counts.learning}</span>
             </div>
 
-            <div className="p-2.5 rounded-xl border border-border/60 bg-muted/20">
-              <span className="block text-[11px] font-medium text-rose-600 dark:text-rose-400">
+            <div className="p-2 sm:p-2.5 rounded-xl border border-border/60 bg-muted/20">
+              <span className="block text-[10px] sm:text-[11px] font-medium text-rose-600 dark:text-rose-400">
                 Đến hạn
               </span>
-              <span className="text-sm font-bold text-foreground">{counts.due}</span>
+              <span className="text-xs sm:text-sm font-bold text-foreground">{counts.due}</span>
             </div>
           </div>
         </div>
 
-        {/* Centered Actions */}
-        <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+        {/* Action Controls */}
+        <div className="pt-2">
           {!isCommitted ? (
-            <Button
-              type="button"
-              disabled={isBusy}
-              onClick={onCommit}
-              size="lg"
-              className="w-full sm:w-auto h-11 px-6 rounded-xl bg-primary hover:bg-primary/95 text-primary-foreground font-semibold text-xs sm:text-sm"
-            >
-              {isBusy ? (
-                <>
-                  <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-                  <span>Đang đồng bộ…</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="size-4 mr-2" />
-                  <span>Kết thúc & Đồng bộ phiên</span>
-                </>
-              )}
-            </Button>
-          ) : null}
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
+              <Button
+                type="button"
+                disabled={isBusy}
+                onClick={onCommit}
+                size="lg"
+                className="w-full sm:w-auto h-11 px-6 rounded-xl bg-primary hover:bg-primary/95 text-primary-foreground font-semibold text-xs sm:text-sm shadow-xs"
+              >
+                {isBusy ? (
+                  <>
+                    <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
+                    <span>Đang đồng bộ…</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="size-4 mr-2" />
+                    <span>Kết thúc & Đồng bộ phiên</span>
+                  </>
+                )}
+              </Button>
 
-          <Button
-            asChild
-            variant={isCommitted ? 'default' : 'outline'}
-            size="lg"
-            className="w-full sm:w-auto h-11 px-6 rounded-xl font-semibold text-xs sm:text-sm gap-2"
-          >
-            <Link to="/dashboard">
-              <LayoutDashboard className="size-4" />
-              <span>Về Dashboard</span>
-            </Link>
-          </Button>
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setIsWorksheetOpen(true)}
+                  className="w-full sm:w-auto h-10 sm:h-11 px-3 sm:px-5 rounded-xl font-semibold text-xs sm:text-sm gap-2 border-primary/25 text-primary hover:bg-primary/5 hover:border-primary/40"
+                  title="Tạo bài tập / mẫu giấy in cho deck này"
+                >
+                  <Printer className="size-4 shrink-0 text-primary" />
+                  <span className="truncate">Tạo Worksheet</span>
+                </Button>
 
-          {isCommitted ? (
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="w-full sm:w-auto h-11 px-6 rounded-xl font-semibold text-xs sm:text-sm gap-2"
-            >
-              <Link to="/vocabulary">
-                <span>Học deck khác</span>
-                <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-          ) : null}
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="w-full sm:w-auto h-10 sm:h-11 px-3 sm:px-6 rounded-xl font-semibold text-xs sm:text-sm gap-2"
+                >
+                  <Link to="/dashboard">
+                    <LayoutDashboard className="size-4 shrink-0" />
+                    <span className="truncate">Về Dashboard</span>
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
+              {/* Primary highlight CTA: Tạo Worksheet cho deck vừa học xong */}
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => setIsWorksheetOpen(true)}
+                className="w-full sm:w-auto h-11 px-5 rounded-xl font-semibold text-xs sm:text-sm gap-2 border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary shadow-xs"
+                title="Tạo bài tập in A4, luyện viết Kanji, từ vựng cho deck này"
+              >
+                <Printer className="size-4 text-primary shrink-0" />
+                <span>Tạo Worksheet cho deck</span>
+              </Button>
+
+              {/* Navigation group: On mobile side-by-side in 2-cols, on desktop inline */}
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="w-full sm:w-auto h-10 sm:h-11 px-3 sm:px-5 rounded-xl font-semibold text-xs sm:text-sm gap-2"
+                >
+                  <Link to="/dashboard">
+                    <LayoutDashboard className="size-4 shrink-0" />
+                    <span className="truncate">Về Dashboard</span>
+                  </Link>
+                </Button>
+
+                <Button
+                  asChild
+                  variant="default"
+                  size="lg"
+                  className="w-full sm:w-auto h-10 sm:h-11 px-3 sm:px-6 rounded-xl font-semibold text-xs sm:text-sm gap-2 shadow-xs"
+                >
+                  <Link to="/vocabulary">
+                    <span className="truncate">Học deck khác</span>
+                    <ArrowRight className="size-4 shrink-0" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Printable Worksheet Live Studio Modal */}
+      {isWorksheetOpen ? (
+        <DeckWorksheetModal
+          open={isWorksheetOpen}
+          onOpenChange={setIsWorksheetOpen}
+          deckId={numericDeckId}
+          deckName={deckName || undefined}
+        />
+      ) : null}
     </div>
   )
 }
