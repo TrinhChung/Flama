@@ -6,12 +6,19 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-for command_name in mysql openssl python3 redis-cli; do
+for command_name in mysql nginx openssl python3 redis-cli; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Missing required command: $command_name" >&2
     exit 1
   fi
 done
+
+headers_more_module="/etc/nginx/modules-enabled/50-mod-http-headers-more-filter.conf"
+if [ ! -r "$headers_more_module" ]; then
+  echo "Missing Nginx headers-more module." >&2
+  echo "Install it with: apt-get install libnginx-mod-http-headers-more-filter" >&2
+  exit 1
+fi
 
 if ! id flama >/dev/null 2>&1; then
   useradd --system --home-dir /opt/flama --shell /usr/sbin/nologin flama
@@ -39,6 +46,7 @@ DB_NAME=flama
 USE_NEW_CARD_MODEL=true
 FLASHCARD_MEDIA_UPLOAD_ROOT=/var/lib/flama/media
 FLASHCARD_MEDIA_MAX_BYTES=10485760
+MEDIA_PROXY_USE_XACCEL=false
 CONNECT_MAX_CONTENT_LENGTH=2097152
 CONNECT_MEDIA_RATE_LIMIT=20
 CONNECT_MEDIA_MAX_BYTES=1048576

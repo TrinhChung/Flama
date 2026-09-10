@@ -120,7 +120,26 @@ class TestWorksheetAPI(unittest.TestCase):
         self.assertEqual(data["total_items"], 2)  # 勉, 強
         self.assertEqual(data["total_pages"], 1)
 
-    def test_post_render_html(self):
+    def test_post_render_html_forbidden_for_regular_user(self):
+        payload = {
+            "template_id": "kanji_stroke",
+            "deck_id": self.deck.id,
+            "field_mapping": {
+                "kanji": "Expression",
+            },
+        }
+        resp = self.client.post(
+            "/api/worksheets/render-html",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+        data = resp.get_json()
+        self.assertEqual(data.get("code"), "HTML_EXPORT_DISABLED")
+
+    def test_post_render_html_allowed_for_admin(self):
+        self.user.is_admin = True
+        db.session.commit()
         payload = {
             "template_id": "kanji_stroke",
             "deck_id": self.deck.id,

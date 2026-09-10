@@ -523,6 +523,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "migrations/**",
             "scripts/audit_legacy_schema.py",
             "scripts/probe_p1_02_mysql_concurrency.py",
+            "scripts/run_phase4_preflight_bundle.py",
         ],
         "backend_tests": [
             "tests/test_app_startup.py",
@@ -530,6 +531,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_flashcard_media_migration.py",
             "tests/test_image_library_schema.py",
             "tests/test_marketplace_taxonomy_migration.py",
+            "tests/test_phase4_preflight_bundle.py",
             "tests/test_scheduler_schema.py",
         ],
         "frontend_tests": [],
@@ -538,7 +540,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
         # app/cli.py is still a monolith, so path-only selection cannot know
         # which command changed. Keep a broad CLI contract set here, but do not
         # invalidate unrelated API/UI suites; master/manual still run all tests.
-        "source_patterns": ["app/cli.py"],
+        "source_patterns": [
+            "app/cli.py",
+            "scripts/run_phase4_preflight_bundle.py",
+        ],
         "backend_tests": [
             "tests/test_admin_user_roles.py",
             "tests/test_anki_import_api.py",
@@ -556,6 +561,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_marketplace_taxonomy_db.py",
             "tests/test_oauth_mcp.py",
             "tests/test_payment_order_flow.py",
+            "tests/test_phase4_preflight_bundle.py",
             "tests/test_stroke_service.py",
             "tests/test_study_architecture_audit_cli.py",
             "tests/test_transactional_email_service.py",

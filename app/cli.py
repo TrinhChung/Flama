@@ -134,6 +134,7 @@ def run_study_architecture_audit_command(
     app: Flask | None = None,
     compact: bool = False,
     output_path: str | None = None,
+    observed_at: datetime | None = None,
 ) -> int:
     """Run read-only reconciliation gates for the study refactor and return exit code.
 
@@ -191,7 +192,7 @@ def run_study_architecture_audit_command(
                 )
 
         with app.app_context():
-            report = build_study_architecture_audit()
+            report = build_study_architecture_audit(now=observed_at)
             payload = json.dumps(
                 report,
                 ensure_ascii=False,
@@ -257,7 +258,17 @@ def register_audit_cli_commands(app: Flask) -> None:
         default=None,
         help="Optional file path to write audit JSON.",
     )
-    def study_architecture_audit(compact: bool, output_path: str | None) -> None:
+    @click.option(
+        "--observed-at",
+        type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S"]),
+        default=None,
+        help="Freeze the audit observation time for repeatability.",
+    )
+    def study_architecture_audit(
+        compact: bool,
+        output_path: str | None,
+        observed_at: datetime | None,
+    ) -> None:
         """Print read-only reconciliation gates for the study refactor."""
         import sys
 
@@ -265,6 +276,7 @@ def register_audit_cli_commands(app: Flask) -> None:
             app=app,
             compact=compact,
             output_path=output_path,
+            observed_at=observed_at,
         )
         if exit_code != 0:
             sys.exit(exit_code)

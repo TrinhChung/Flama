@@ -10,9 +10,24 @@ WORKFLOW_PATH = (
     / "workflows"
     / "deploy.yml"
 )
+BOOTSTRAP_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "deploy"
+    / "bootstrap_hostinger.sh"
+)
 
 
 class DeployWorkflowTests(unittest.TestCase):
+    def test_host_bootstrap_requires_headers_more_for_media_cache_headers(self):
+        bootstrap = BOOTSTRAP_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("nginx openssl", bootstrap)
+        self.assertIn(
+            "/etc/nginx/modules-enabled/50-mod-http-headers-more-filter.conf",
+            bootstrap,
+        )
+        self.assertIn("libnginx-mod-http-headers-more-filter", bootstrap)
+
     def test_deploy_is_reusable_and_has_manual_recovery_only(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 

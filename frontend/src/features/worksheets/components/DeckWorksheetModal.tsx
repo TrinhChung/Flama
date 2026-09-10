@@ -19,8 +19,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
-  Download,
-  ExternalLink,
   Eye,
   FileEdit,
   FileText,
@@ -52,12 +50,7 @@ import type {
   WorksheetLayoutOptions,
   WorksheetPreviewResponse,
 } from '../types'
-import {
-  downloadWorksheetHtml,
-  openWorksheetInNewTab,
-  printWorksheetHtml,
-} from '../utils/printEngine'
-import { serializeWorksheetToHtml } from '../utils/serializeWorksheetToHtml'
+import { printWorksheet } from '../utils/printEngine'
 import { WorksheetPageRenderer } from './WorksheetPageRenderer'
 import { WorksheetWizardStepper, type WizardStepId } from './WorksheetWizardStepper'
 import { WorksheetDeckSelectStep } from './WorksheetDeckSelectStep'
@@ -115,7 +108,6 @@ export function DeckWorksheetModal({
   const [isLoadingMeta, setIsLoadingMeta] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
-  const [isDownloading, setIsDownloading] = useState(false)
 
   // Meta state
   const [meta, setMeta] = useState<DeckWorksheetMeta | null>(null)
@@ -197,6 +189,7 @@ export function DeckWorksheetModal({
   })
 
   const isFirstLoadRef = useRef(true)
+  const acceptedMetaDeckIdRef = useRef<number | null>(null)
   const lastTapRef = useRef<number>(0)
   const layoutOptionsRef = useRef(layoutOptions)
   layoutOptionsRef.current = layoutOptions
@@ -242,6 +235,13 @@ export function DeckWorksheetModal({
       setScope('selected')
     } else {
       setScope('all')
+    }
+
+    // The picker already fetched this exact metadata before confirmation.
+    if (currentDeckId && acceptedMetaDeckIdRef.current === currentDeckId) {
+      acceptedMetaDeckIdRef.current = null
+      setIsLoadingMeta(false)
+      return
     }
 
     fetchDeckWorksheetMeta(currentDeckId)
@@ -413,7 +413,7 @@ export function DeckWorksheetModal({
 
   // Reactive Debounced Live Preview Generator
   useEffect(() => {
-    if (!open || !meta || !currentTemplate) return
+    if (!open || wizardStep !== 'studio' || !meta || !currentTemplate) return
 
     setIsGenerating(true)
     const abortController = new AbortController()
@@ -467,6 +467,7 @@ export function DeckWorksheetModal({
     }
   }, [
     open,
+    wizardStep,
     currentDeckId,
     meta,
     selectedTemplateId,
@@ -478,47 +479,16 @@ export function DeckWorksheetModal({
     initialCardIds,
   ])
 
-  // Handle direct print (client-side serialization — single source of truth)
+  // Native browser print also exposes "Save as PDF" without a PDF/canvas dependency.
   const handlePrint = async () => {
     if (!previewData) return
     setIsPrinting(true)
     try {
-      const html = await serializeWorksheetToHtml(previewData)
-      printWorksheetHtml(html)
+      await printWorksheet(previewData)
     } catch (err: any) {
       toast.error('Không thể in tài liệu: ' + (err.message || err))
     } finally {
       setIsPrinting(false)
-    }
-  }
-
-  // Handle HTML download (client-side serialization — single source of truth)
-  const handleDownloadHtml = async () => {
-    if (!previewData) return
-    setIsDownloading(true)
-    try {
-      const html = await serializeWorksheetToHtml(previewData)
-      const filename = `flama_worksheet_${selectedTemplateId}_${layoutOptions.paper_size || 'a4'}.html`
-      downloadWorksheetHtml(html, filename)
-      toast.success('Đã tải file bản in A4 về máy.')
-    } catch (err: any) {
-      toast.error('Không thể tải file: ' + (err.message || err))
-    } finally {
-      setIsDownloading(false)
-    }
-  }
-
-  // Handle open standalone worksheet in new tab
-  const handleOpenNewTab = async () => {
-    if (!previewData) return
-    try {
-      const html = await serializeWorksheetToHtml(previewData)
-      const win = openWorksheetInNewTab(html)
-      if (win) {
-        toast.success('Đã mở bản in trong tab mới.')
-      }
-    } catch (err: any) {
-      toast.error('Không thể mở bản in: ' + (err.message || err))
     }
   }
 
@@ -661,36 +631,6 @@ export function DeckWorksheetModal({
                     </Button>
                   </div>
 
-                  {/* Download HTML Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownloadHtml}
-                    disabled={isDownloading || !previewData}
-                    className="h-8.5 px-3 text-xs font-semibold gap-1.5"
-                    title="Tải file HTML hoàn chỉnh về máy"
-                  >
-                    {isDownloading ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Download className="size-3.5" />
-                    )}
-                    <span>Tải file</span>
-                  </Button>
-
-                  {/* Open in New Tab Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenNewTab}
-                    disabled={!previewData}
-                    className="hidden xl:inline-flex h-8.5 px-3 text-xs font-semibold gap-1.5"
-                    title="Mở tài liệu in trong tab mới"
-                  >
-                    <ExternalLink className="size-3.5" />
-                    <span>Mở tab mới</span>
-                  </Button>
-
                   {/* Print Button */}
                   <Button
                     size="sm"
@@ -706,7 +646,7 @@ export function DeckWorksheetModal({
                     ) : (
                       <>
                         <Printer className="size-3.5" />
-                        <span>In ngay (A4)</span>
+                        <span>In / Lưu PDF</span>
                       </>
                     )}
                   </Button>
@@ -830,19 +770,43 @@ export function DeckWorksheetModal({
             <WorksheetDeckSelectStep
               selectedDeckId={currentDeckId}
               onSelectDeck={(newDeckId, newMeta) => {
+                acceptedMetaDeckIdRef.current = newDeckId
                 setCurrentDeckId(newDeckId)
                 setMeta(newMeta)
                 setIsStandalone(false)
-                if (newMeta.note_types && newMeta.note_types.length > 0) {
-                  setSelectedNoteTypeId(String(newMeta.note_types[0].id))
+                const primaryNoteType = newMeta.note_types?.[0]
+                if (primaryNoteType) {
+                  setSelectedNoteTypeId(String(primaryNoteType.id))
                 }
-                if (newMeta.note_types && newMeta.note_types.length === 1) {
-                  const preset = loadWorksheetPreset(newMeta.note_types[0].id)
-                  if (preset) {
-                    if (preset.fieldMapping) setFieldMapping(preset.fieldMapping)
-                    if (preset.templateId) setSelectedTemplateId(preset.templateId)
-                    if (preset.layoutOptions) setLayoutOptions((prev) => ({ ...prev, ...preset.layoutOptions }))
-                  }
+                const preset = primaryNoteType ? loadWorksheetPreset(primaryNoteType.id) : null
+                const nextTemplateId = preset?.templateId || 'kanji_compact'
+                const nextTemplate = newMeta.templates?.find((item) => item.id === nextTemplateId)
+                const nextMapping = preset?.fieldMapping || {
+                  kanji: newMeta.suggested_mappings?.kanji || 'Expression',
+                  reading: newMeta.suggested_mappings?.reading || '',
+                  meaning: newMeta.suggested_mappings?.meaning || '',
+                  word: newMeta.suggested_mappings?.word || 'Expression',
+                  prompt_reading: newMeta.suggested_mappings?.prompt_reading || '',
+                  prompt_meaning: newMeta.suggested_mappings?.prompt_meaning || 'Meaning',
+                  sentence: newMeta.suggested_mappings?.sentence || newMeta.suggested_mappings?.kanji || 'Expression',
+                  grammar_point: newMeta.suggested_mappings?.grammar_point || newMeta.suggested_mappings?.kanji || 'Expression',
+                  meaning_usage: newMeta.suggested_mappings?.meaning_usage || newMeta.suggested_mappings?.meaning || '',
+                  example: newMeta.suggested_mappings?.example || newMeta.suggested_mappings?.reading || '',
+                  custom_columns: [],
+                }
+                setSelectedTemplateId(nextTemplateId)
+                setFieldMapping(nextMapping)
+                const nextOptions = {
+                  ...layoutOptionsRef.current,
+                  locale: newMeta.detected_locale || 'ja',
+                  header_title: newMeta.deck_name || '',
+                  ...(nextTemplate?.default_options || {}),
+                  ...(preset?.layoutOptions || {}),
+                }
+                setLayoutOptions(nextOptions)
+                if (nextTemplate) {
+                  setTemplateOptionsMap({ [nextTemplate.id]: nextOptions })
+                  setTemplateFieldMappingMap({ [nextTemplate.id]: nextMapping })
                 }
                 setWizardStep('mapping')
               }}
@@ -4393,38 +4357,7 @@ export function DeckWorksheetModal({
             </div>
 
             {/* Mobile Bottom Floating Action Bar for Preview */}
-            <div className="w-full max-w-full flex md:hidden items-center justify-between gap-2 p-2 border-t border-border/80 bg-background/95 backdrop-blur-md shrink-0">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadHtml}
-                  disabled={isDownloading || !previewData}
-                  className="h-9 px-2.5 text-xs font-semibold gap-1.5 shrink-0"
-                  title="Tải file HTML về máy"
-                >
-                  {isDownloading ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Download className="size-3.5" />
-                  )}
-                  <span>Tải file</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenNewTab}
-                  disabled={!previewData}
-                  className="h-9 px-2.5 text-xs font-semibold gap-1.5 shrink-0"
-                  title="Mở tài liệu in trong tab mới"
-                >
-                  <ExternalLink className="size-3.5" />
-                  <span>Tab mới</span>
-                </Button>
-              </div>
-
+            <div className="w-full max-w-full flex md:hidden items-center justify-end gap-2 p-2 border-t border-border/80 bg-background/95 backdrop-blur-md shrink-0">
               <Button
                 type="button"
                 size="sm"
@@ -4440,7 +4373,7 @@ export function DeckWorksheetModal({
                 ) : (
                   <>
                     <Printer className="size-3.5" />
-                    <span>In ngay (A4)</span>
+                    <span>In / Lưu PDF</span>
                   </>
                 )}
               </Button>
@@ -4452,4 +4385,3 @@ export function DeckWorksheetModal({
     </Dialog>
   )
 }
-

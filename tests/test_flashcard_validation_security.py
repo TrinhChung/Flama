@@ -574,7 +574,34 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         # Request media as anonymous/guest
         proxy_resp = self.client.get(f"/media/proxy/{asset_id}")
         self.assertEqual(proxy_resp.status_code, 200)
+        self.assertEqual(
+            proxy_resp.headers.get("Cache-Control"),
+            "public, max-age=3600, s-maxage=86400",
+        )
+        self.assertNotIn("Vary", proxy_resp.headers)
+        etag = proxy_resp.headers.get("ETag")
+        self.assertTrue(etag)
         proxy_resp.close()
+
+        conditional_resp = self.client.get(
+            f"/media/proxy/{asset_id}",
+            headers={"If-None-Match": etag},
+        )
+        self.assertEqual(conditional_resp.status_code, 304)
+
+        self.app.config["MEDIA_PROXY_USE_XACCEL"] = True
+        try:
+            accel_resp = self.client.get(f"/media/proxy/{asset_id}")
+            self.assertEqual(accel_resp.status_code, 200)
+            self.assertTrue(
+                accel_resp.headers.get("X-Accel-Redirect", "").startswith("/internal-media/")
+            )
+            self.assertEqual(
+                accel_resp.headers.get("Cache-Control"),
+                "public, max-age=3600, s-maxage=86400",
+            )
+        finally:
+            self.app.config["MEDIA_PROXY_USE_XACCEL"] = False
 
     def test_proxy_media_accessible_by_other_user(self):
         note_type = self._create_note_type_with_media()

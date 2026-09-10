@@ -4,11 +4,13 @@
 >
 > Priority: P1
 >
-> Status: COMPLETED — 2026-09-09
+> Status: COMPLETED delivery — 2026-09-09; correctness gate RECLOSED BY P4-00 — 2026-09-10
 >
 > Dependency: P3-01 and P3-03
 >
 > Primary lane: Backend + Frontend Session
+
+> Post-closeout review found active/persisted live Template/Note propagation and strict restore/config/batch validation gaps. [P4-00](../P4-00_FROZEN_SESSION_ENTRY_CORRECTION.md) corrected them and reclosed the immutable-artifact gate; this file remains the historical Phase 3 delivery record.
 
 ## Mục tiêu
 

@@ -86,7 +86,16 @@ def generate_worksheet_preview_route():
 @worksheets_bp.post("/worksheets/render-html")
 @login_required
 def render_worksheet_html_route():
-    """Generate a self-contained printable A4 HTML document."""
+    """Generate a self-contained printable A4 HTML document (Admin only for anti-crawling protection)."""
+    if not is_admin_user(current_user):
+        return (
+            jsonify({
+                "error": "Tính năng xuất HTML trực tiếp đã bị vô hiệu hóa để bảo vệ bản quyền. Vui lòng sử dụng tính năng tải PDF trong ứng dụng.",
+                "code": "HTML_EXPORT_DISABLED",
+            }),
+            403,
+        )
+
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         return jsonify({"error": "Payload phải là JSON object.", "code": "INVALID_PAYLOAD"}), 400

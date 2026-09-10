@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import quote
 from flask import jsonify, request, send_file, current_app
 from flask_login import current_user, login_required
 from models.flashcard import *
@@ -191,12 +192,38 @@ def proxy_media(asset_id: str):
         return _api_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
     if not full_path.exists():
         return _api_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
-    response = send_file(full_path, mimetype=asset.mime_type, conditional=True, max_age=3600)
+
+    # A short browser TTL keeps deletion/revocation reasonably fresh. Shared
+    # caches may retain the immutable-by-ID payload for one day.
+    cache_control = "public, max-age=3600, s-maxage=86400"
+
+    if request.if_none_match.contains(asset.sha256):
+        response = current_app.response_class(status=304)
+    elif current_app.config.get("MEDIA_PROXY_USE_XACCEL", False):
+        # Production: Nginx serves the validated file while Gunicorn is freed.
+        response = current_app.response_class()
+        relative_url_path = Path(asset.storage_path).as_posix().lstrip("/")
+        response.headers["X-Accel-Redirect"] = quote(
+            f"/internal-media/{relative_url_path}",
+            safe="/",
+        )
+        response.headers["Content-Type"] = asset.mime_type
+    else:
+        # Development / test fallback: Flask streams the file.
+        response = send_file(
+            full_path, mimetype=asset.mime_type, conditional=True,
+        )
+
+    response.set_etag(asset.sha256)
+    response.headers["Cache-Control"] = cache_control
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
     response.headers["Content-Disposition"] = (
-        f"inline; filename=\"{build_safe_download_filename(asset.filename)}\""
+        f'inline; filename="{build_safe_download_filename(asset.filename)}"'
     )
+    # Remove Vary: Cookie — media is a public static asset that does not
+    # depend on session state.  Keeping Vary prevents CDN caching.
+    response.headers.pop("Vary", None)
     return response
 
 

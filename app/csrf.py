@@ -23,7 +23,9 @@ def init_csrf_protection(app) -> None:
 
 def inject_csrf_cookie(response):
     """Set the csrf_token cookie so client-side JavaScript can read it."""
-    if not csrf_enabled():
+    # Public media responses must remain independent from session cookies so
+    # browsers and the CDN can share one cached representation.
+    if not csrf_enabled() or request.path.startswith("/media/proxy/"):
         return response
     session_token = session.get(SESSION_TOKEN_KEY)
     if session_token:
