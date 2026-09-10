@@ -4,7 +4,7 @@
 >
 > Evidence: repository code and existing reports; no current production database inspection
 >
-> Related plan: [Phase 4 execution plan](../task/decoupling/P4_EXECUTION_PLAN_2026-09-09.md)
+> Related plan: [Phase 4 execution plan](../task/decoupling/P4_EXECUTION_PLAN_2026-09-10.md)
 
 ## 1. Runtime and authority
 
@@ -55,6 +55,8 @@ Production entry is `wsgi.py -> create_app()`, served by Gunicorn. Current confi
 - **Impact:** state mirroring should not build compatibility proofs on a snapshot whose binding and executable can disagree.
 - **Unknowns:** complete reachable combinations of live edit, cross-tab sync, pending batch, and restore need regression fixtures.
 - **Planning owner:** P4-00, a prerequisite correction task. Historical Phase 3 closeout remains historical evidence, not a waiver of this new finding.
+
+**Resolution — 2026-09-10:** P4-00 disabled Template/Note propagation into active and persisted sessions, added canonical immutable relationship checks during frontend restore, enforced durable-batch `composition_id`, and made backend wrapper/binding decoding fail closed. Complete Study backend/frontend module tests passed; the frozen-session gate is reclosed.
 
 Read-only reproduction of the unknown-schema branch on this baseline returned `legacy=True` and `selected_composition_id=None` for `study-session-config.v999`. The probe loaded only the pure config module with `runpy`; no app/database was started. This proves decoder classification, not acceptance of an entire forged commit.
 

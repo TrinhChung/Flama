@@ -8,6 +8,8 @@
 >
 > Storage boundary: no model, migration, DDL, progress store, or physical clone behavior was added
 
+> **Post-closeout amendment — 2026-09-10:** the Phase 4 entry review found that frontend live Template/Note propagation could replace frozen material, restore did not recompute the full binding/artifact relationship, durable batches did not strictly preserve composition identity, and unknown server config wrappers were classified as legacy. [P4-00](../P4-00_FROZEN_SESSION_ENTRY_CORRECTION.md) corrected these paths and reclosed the P3-04 gate with complete Study backend/frontend regression evidence. See the [entry investigation](../../../architecture/phase-4-entry-investigation-2026-09-09.md). The original verification below remains historical evidence; the P4-00 handoff records the correction evidence.
+
 ## Outcome
 
 Phase 3 now makes the selected compatibility composition an explicit server-authorized session input. The client discovers eligible options before opening a new session, auto-resolves only a single unambiguous option, waits for learner selection when multiple options exist, and does not create a fake empty session when none exist.
@@ -31,7 +33,7 @@ The selected composition and its effective compatibility binding are frozen in t
 | P3-01 exactly-one authorization | PASS | canonical validator, typed resolved selection, route/service tests |
 | P3-02 query-first effective scope | PASS | shared effective-card query, limit-fairness and mixed-scope tests |
 | P3-03 pre-session selection | PASS | zero/one/many hook tests, no-premature-POST and retry deduplication |
-| P3-04 frozen restore | PASS | versioned config wrapper, dual reader, restore quarantine, commit/batch mismatch tests |
+| P3-04 frozen restore | PASS AFTER P4-00 | versioned wrapper/dual reader retained; live-update mutation, strict binding/config validation and durable-batch composition gaps corrected |
 | P3-05 mixed-NoteType decision | PASS | accepted ADR and deterministic group/order/cardinality contract |
 | P3-06 real logical overlay | PASS | production publish/install service path with source and local-added Cards; zero ordinary source Card copies |
 | P3-07 binding contract | PASS | accepted logical contract and explicit Phase 4+ deferrals |
@@ -77,7 +79,7 @@ If Phase 3 admission must be rolled back, stop opening new sessions through the 
 - logical-overlay invariants and the real-install regression test;
 - historical compatibility composition IDs.
 
-Any regression in the exit matrix requires the canonical tracker to return Phase 3 to `Partial`; tests or documentation must not be weakened to legitimize physical clone behavior.
+Any regression in the exit matrix requires the canonical tracker to reopen the affected Phase 3 gate; tests or documentation must not be weakened to legitimize physical clone behavior. The 2026-09-10 amendment recorded the temporary reopening and the P4-00 correction that subsequently reclosed the frozen-session gate.
 
 ## Remaining work and recommendation
 
@@ -88,4 +90,3 @@ Phase 4 may enter a separate architecture/planning review, but this closeout doe
 - learner/Note progress envelope and availability projection;
 - versioned Algorithm State, reconciliation, retention, and cutover;
 - production rollout decisions for currently flag-off async admission and wire-v3 issuance.
-
