@@ -21,7 +21,9 @@ import { StatCard } from '@/shared/components/Page'
 import { EmptyState } from '@/shared/components/PageState'
 import {
   AlertCircle,
+  ArrowRight,
   BookOpen,
+  Bot,
   Brain,
   Check,
   Clock,
@@ -31,6 +33,7 @@ import {
   FolderTree,
   Globe,
   Image as ImageIcon,
+  Info,
   Key,
   KeyRound,
   Layers,
@@ -41,7 +44,6 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
-  Zap,
 } from 'lucide-react'
 import { FLAMA_MCP_URL, BACKEND_ORIGIN } from '@/config/env'
 import {
@@ -55,6 +57,7 @@ type McpTokenCrudResult = ReturnType<typeof useMcpTokenCRUD>
 
 interface McpTokensTabProps {
   hookResult: McpTokenCrudResult
+  onSwitchToChatGPT?: () => void
 }
 
 function displayDate(value: string | null) {
@@ -89,7 +92,7 @@ function getCategoryIcon(catKey: string) {
   }
 }
 
-export function McpTokensTab({ hookResult }: McpTokensTabProps) {
+export function McpTokensTab({ hookResult, onSwitchToChatGPT }: McpTokensTabProps) {
   const {
     query,
     name,
@@ -153,9 +156,37 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
 
   return (
     <TabsContent value="tokens" className="space-y-6">
+      {/* Friendly Guide Switcher Banner for casual users */}
+      {onSwitchToChatGPT && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <Bot className="size-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-xs sm:text-sm font-bold text-foreground">
+                Bạn đang tìm cách kết nối Flashcard Flama với ChatGPT?
+              </div>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
+                Hãy mở tab <strong>1. Kết nối ChatGPT</strong> để được hướng dẫn 5 bước kết nối tự động bằng OAuth, không cần tạo mã token thủ công.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSwitchToChatGPT}
+            className="h-8 text-xs gap-1.5 shrink-0 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 w-full sm:w-auto justify-center"
+          >
+            <span>Mở Hướng Dẫn ChatGPT</span>
+            <ArrowRight className="size-3.5" />
+          </Button>
+        </div>
+      )}
+
       {/* Stats row (Admin or Users with Token Management Permission) */}
       {canManageTokens && (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
           <StatCard
             label="Token đang hoạt động"
             value={activeCount.toString()}
@@ -168,12 +199,14 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
             hint={inactiveCount > 0 ? 'Có thể dọn dẹp để giải phóng DB' : 'Cơ sở dữ liệu gọn gàng'}
             tone={inactiveCount > 0 ? 'warning' : 'default'}
           />
-          <StatCard
-            label="Quyền hạn hỗ trợ"
-            value={`${ALL_MCP_SCOPES.length} Scopes`}
-            hint="5 nhóm: Bộ thẻ, Thẻ, Mẫu, SRS & Ảnh"
-            tone="default"
-          />
+          <div className="col-span-2 sm:col-span-1">
+            <StatCard
+              label="Quyền hạn hỗ trợ"
+              value={`${ALL_MCP_SCOPES.length} Scopes`}
+              hint="5 nhóm: Bộ thẻ, Thẻ, Mẫu, SRS & Ảnh"
+              tone="default"
+            />
+          </div>
         </div>
       )}
 
@@ -192,14 +225,14 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <CardTitle className="text-base sm:text-lg font-bold">
-                        Thông số Kết nối MCP Server
+                        Thông số Máy chủ MCP (Dành cho IDE &amp; Lập trình viên)
                       </CardTitle>
                       <Badge variant="outline" className="text-[10px] text-primary border-primary/30 font-mono">
                         Stream HTTP POST / SSE
                       </Badge>
                     </div>
                     <CardDescription className="text-xs sm:text-sm">
-                      Đường dẫn kết nối MCP dùng cho Claude Desktop, Cursor, Antigravity, Cline. Đối với ChatGPT, hãy mở tab <strong className="text-foreground">ChatGPT &amp; OAuth 2.1</strong> để sử dụng Client ID &amp; Secret dùng chung do Admin cấu hình sẵn.
+                      Đường dẫn kết nối MCP dùng cho Cursor IDE, Antigravity, Cline và các script tự động hóa qua Personal Access Token. Đối với ChatGPT, hãy mở tab <strong className="text-foreground">1. Kết nối ChatGPT</strong> để sử dụng quy trình đăng nhập OAuth tự động.
                     </CardDescription>
                   </div>
                 </div>
@@ -214,19 +247,26 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-4 sm:p-5 pt-0 space-y-2">
+            <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border bg-muted/40 p-2.5 text-xs font-mono">
                 <span className="text-muted-foreground font-sans text-[11px] font-semibold shrink-0">Endpoint URL:</span>
                 <span className="flex-1 break-all select-all font-semibold text-foreground text-xs sm:text-sm">{mcpServerUrl}</span>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="shrink-0 h-8 gap-1.5 text-xs self-end sm:self-auto"
+                  className="shrink-0 h-8 gap-1.5 text-xs w-full sm:w-auto justify-center"
                   onClick={() => copy('Server URL', mcpServerUrl)}
                 >
                   {copied === 'Server URL' ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-                  {copied === 'Server URL' ? 'Đã chép' : 'Sao chép URL'}
+                  <span>{copied === 'Server URL' ? 'Đã chép' : 'Sao chép URL'}</span>
                 </Button>
+              </div>
+
+              <div className="flex items-start gap-2.5 p-2.5 rounded-xl border bg-amber-500/5 border-amber-500/20 text-xs text-amber-900 dark:text-amber-200">
+                <Info className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="leading-relaxed text-[11px] sm:text-xs">
+                  <span className="font-bold">Claude Desktop:</span> Tính năng kết nối trợ lý Claude Desktop hiện đang trong giai đoạn thử nghiệm nội bộ (chưa ra mắt chính thức). Màn hình này hiện chủ yếu phục vụ Cursor IDE, Antigravity, Cline và quản lý Personal Access Token.
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -246,7 +286,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                   Thông số Kết nối AI do Quản trị viên Quản lý
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm leading-relaxed">
-                  Tài khoản của bạn đang sử dụng cơ chế bảo mật kết nối AI tiêu chuẩn. Bạn có thể sao chép URL kết nối từ danh sách Token bên dưới để tích hợp với Claude Desktop hoặc Cursor. Đối với ChatGPT, hãy chuyển sang tab <strong>ChatGPT &amp; OAuth 2.1</strong> để sử dụng thông tin Client ID &amp; Secret do hệ thống thiết lập sẵn.
+                  Tài khoản của bạn đang sử dụng cơ chế bảo mật kết nối AI tiêu chuẩn. Bạn có thể sao chép URL kết nối từ danh sách Token bên dưới để tích hợp với Cursor hoặc công cụ lập trình. Đối với ChatGPT, hãy chuyển sang tab <strong>1. Kết nối ChatGPT</strong> để làm theo hướng dẫn kết nối 5 bước dễ dàng.
                 </CardDescription>
               </div>
             </div>
@@ -340,7 +380,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
             Tạo MCP Access Token mới
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
-            Mỗi AI client (Claude Desktop, Cursor, Antigravity) nên tạo 1 token riêng để phân quyền an toàn.{' '}
+            Mỗi công cụ lập trình (Cursor IDE, Antigravity, Cline) nên tạo 1 token riêng để phân quyền an toàn.{' '}
             <Link to="/guide/integrations/mcp-ai" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">
               Xem hướng dẫn cấu hình file JSON &rarr;
             </Link>
@@ -642,7 +682,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                       <TableRow key={token.id}>
                         <TableCell className="font-medium text-xs sm:text-sm">
                           <div className="flex items-center gap-2">
-                            <Zap className="size-3.5 text-primary shrink-0" />
+                            <Key className="size-3.5 text-primary shrink-0" />
                             <span className="font-semibold">{token.name || 'MCP Token'}</span>
                           </div>
                         </TableCell>
