@@ -29,7 +29,6 @@ import {
   removeStudySessionIfMatches,
   saveStudySession,
   scopeKey,
-  updateCardFieldValuesInSessions,
 } from '../session/sessionStore'
 import type {
   PersistedStudySession,
@@ -37,7 +36,6 @@ import type {
   StudySessionAccumulatedStats,
   UpdatedTemplatePayload,
 } from '../session/sessionStore'
-import { patchRenderContext } from '../renderer/clientRenderer'
 import {
   useStudySessionLease,
   waitForNextOperationCheck,
@@ -874,198 +872,23 @@ export function useStudySession(deckId: string | null) {
     updatedFieldValues: Record<string, string>,
     options?: { noteId?: string | null; skipBroadcast?: boolean; media?: StudyMediaArtifact[] },
   ) => {
-    const controller = leaseControllerRef.current
-    if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
-    const owner = await waitForMutation('content-update', controller)
-    if (!owner) return
-    beginLeaseWork(controller)
-    try {
-      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
-      const current = sessionRef.current
-      if (!current) return
-      const targetCards = current.snapshot.cards.filter(
-        (c) => c.card_id === cardId || (options?.noteId && c.note_id === options.noteId),
-      )
-      if (targetCards.length === 0) return
-
-      const updatedContents = { ...current.snapshot.contents }
-      for (const card of targetCards) {
-        const contentKey = card.content_key
-        const template = current.snapshot.templates[card.template_key]
-        const existingContent = updatedContents[contentKey]
-        if (existingContent) {
-        // Merge media assets
-        const combinedMedia: StudyMediaArtifact[] = options?.media && options.media.length > 0
-          ? [...options.media]
-          : [...(existingContent.media || [])]
-
-        // Synthesize any proxy URLs found in updatedFieldValues not yet in combinedMedia
-        const existingProxyUrls = new Set(combinedMedia.map((m) => m.proxy_url))
-        for (const [fieldName, val] of Object.entries(updatedFieldValues)) {
-          if (typeof val === 'string') {
-            const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
-            if (matches) {
-              for (const pUrl of matches) {
-                if (!existingProxyUrls.has(pUrl)) {
-                  const assetId = pUrl.replace('/media/proxy/', '')
-                  const lk = fieldName.toLowerCase()
-                  const isAudio = lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
-                  combinedMedia.push({
-                    id: assetId,
-                    field_name: fieldName,
-                    filename: `${assetId}`,
-                    mime_type: isAudio ? 'audio/mpeg' : 'image/jpeg',
-                    sha256: '',
-                    proxy_url: pUrl,
-                  })
-                  existingProxyUrls.add(pUrl)
-                }
-              }
-            }
-          }
-        }
-
-        const nextRenderContext = patchRenderContext(
-          existingContent.render_context || {},
-          updatedFieldValues,
-          template?.field_defs,
-          combinedMedia,
-        )
-          updatedContents[contentKey] = {
-            ...existingContent,
-            field_values: {
-              ...existingContent.field_values,
-              ...updatedFieldValues,
-            },
-            render_context: nextRenderContext,
-            media: combinedMedia,
-          }
-        }
-      }
-
-      const nextSession: PersistedStudySession = {
-        ...current,
-        snapshot: {
-          ...current.snapshot,
-          contents: updatedContents,
-        },
-        updated_at_ms: Date.now(),
-      }
-
-      activateSession(nextSession)
-      sessionDurableRef.current = await saveStudySession(nextSession)
-      if (!options?.skipBroadcast) {
-        await updateCardFieldValuesInSessions(cardId, updatedFieldValues, {
-          noteId: options?.noteId,
-          media: options?.media,
-        })
-      }
-    } catch {
-      // Retain in-memory copy when storage is temporarily unavailable.
-    } finally {
-      endLeaseWork(controller)
-      releaseMutation(owner)
-    }
-  }, [
-    activateSession,
-    beginLeaseWork,
-    endLeaseWork,
-    hasLeaseRef,
-    isCurrentLease,
-    leaseControllerRef,
-    releaseMutation,
-    waitForMutation,
-  ])
+    // The authoring request has already persisted the new Note content. Keep
+    // the active lease's content artifact frozen; the next session will load
+    // the saved value.
+    void cardId
+    void updatedFieldValues
+    void options
+  }, [])
 
   const updateTemplateContent = useCallback(async (
     templateId: string,
     updated: UpdatedTemplatePayload,
   ) => {
-    const controller = leaseControllerRef.current
-    if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
-    const owner = await waitForMutation('template-update', controller)
-    if (!owner) return
-    beginLeaseWork(controller)
-    try {
-      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
-      const current = sessionRef.current
-      if (!current) return
-
-      const snapshot = current.snapshot
-      const templateKeysToUpdate: string[] = []
-      for (const [tplKey, tpl] of Object.entries(snapshot.templates)) {
-        if (tpl && tpl.id === templateId) {
-          templateKeysToUpdate.push(tplKey)
-        }
-      }
-      if (templateKeysToUpdate.length === 0) return
-
-    const versionNonce = Date.now().toString(36)
-    const updatedTemplates = { ...snapshot.templates }
-    const updatedCards = [...snapshot.cards]
-
-    for (const oldKey of templateKeysToUpdate) {
-      const existingTpl = updatedTemplates[oldKey]
-      if (!existingTpl) continue
-      const newVersion = `${existingTpl.version || 'v'}-${versionNonce}`
-      const newKey = `${templateId}:${newVersion}`
-
-      const newFrontSource = updated.front_source ?? updated.front_html ?? existingTpl.front_source
-      const newBackSource = updated.back_source ?? updated.back_html ?? existingTpl.back_source
-      const newSharedCss = updated.shared_css ?? existingTpl.shared_css
-
-      updatedTemplates[newKey] = {
-        ...existingTpl,
-        version: newVersion,
-        front_source: newFrontSource,
-        back_source: newBackSource,
-        shared_css: newSharedCss,
-        front_inline_scripts: updated.front_inline_scripts ?? existingTpl.front_inline_scripts,
-        back_inline_scripts: updated.back_inline_scripts ?? existingTpl.back_inline_scripts,
-      }
-
-      for (let i = 0; i < updatedCards.length; i++) {
-        if (updatedCards[i].template_id === templateId || updatedCards[i].template_key === oldKey) {
-          updatedCards[i] = {
-            ...updatedCards[i],
-            template_key: newKey,
-          }
-        }
-      }
-
-      if (oldKey !== newKey) {
-        delete updatedTemplates[oldKey]
-      }
-    }
-
-    const nextSession: PersistedStudySession = {
-      ...current,
-      snapshot: {
-        ...snapshot,
-        cards: updatedCards,
-        templates: updatedTemplates,
-      },
-      updated_at_ms: Date.now(),
-    }
-
-      activateSession(nextSession)
-      sessionDurableRef.current = await saveStudySession(nextSession)
-    } catch {
-      // Retain in-memory copy when storage is temporarily unavailable.
-    } finally {
-      endLeaseWork(controller)
-      releaseMutation(owner)
-    }
-  }, [
-    activateSession,
-    beginLeaseWork,
-    endLeaseWork,
-    hasLeaseRef,
-    isCurrentLease,
-    leaseControllerRef,
-    releaseMutation,
-    waitForMutation,
-  ])
+    // Template source, version and binding are immutable for an active lease.
+    // The saved authoring change becomes visible only in a newly opened one.
+    void templateId
+    void updated
+  }, [])
 
   const reloadSession = useCallback(async (force = false) => {
     if (!deckId || userId === null) return

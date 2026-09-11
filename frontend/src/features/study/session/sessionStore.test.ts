@@ -5,6 +5,8 @@ import {
   acknowledgeStudySessionQuarantine,
   loadStudySessionWithDurability,
   saveStudySession,
+  updateCardFieldValuesInSessions,
+  updateTemplateInSessions,
 } from './sessionStore'
 
 function snapshot(): StudySessionSnapshot {
@@ -122,6 +124,38 @@ afterEach(() => {
 })
 
 describe('study session quarantine fallback', () => {
+  it('keeps active content and template artifacts frozen after authoring updates', async () => {
+    vi.stubGlobal('indexedDB', undefined)
+    const session = createPersistedSession(snapshot())
+    expect(await saveStudySession(session)).toBe(false)
+
+    await updateCardFieldValuesInSessions(
+      'card-1',
+      { Word: 'dog' },
+      { noteId: 'note-1' },
+    )
+    await updateTemplateInSessions('template-1', {
+      front_source: '<strong>updated</strong>',
+      shared_css: '.updated { color: red; }',
+    })
+
+    const restored = await loadStudySessionWithDurability(session.scope_key)
+    expect(restored.session?.snapshot.cards[0]).toMatchObject({
+      template_key: 'template',
+      content_key: 'content',
+    })
+    expect(restored.session?.snapshot.templates.template).toMatchObject({
+      version: 'v1',
+      front_source: '{{Word}}',
+      shared_css: '',
+    })
+    expect(restored.session?.snapshot.contents.content).toMatchObject({
+      version: 'v1',
+      field_values: { Word: 'cat' },
+      render_context: { Word: 'cat' },
+    })
+  })
+
   it('keeps a stable quarantine marker across repeated loads when IndexedDB fails', async () => {
     vi.stubGlobal('indexedDB', undefined)
     const session = createPersistedSession(snapshot())

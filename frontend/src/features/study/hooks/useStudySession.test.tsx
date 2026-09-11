@@ -875,6 +875,42 @@ describe('useStudySession cross-tab ownership', () => {
     expect(mocks.saveSession).toHaveBeenCalled()
   })
 
+  it('defers Note and Template authoring changes until the next session', async () => {
+    await openReadySession()
+    mocks.saveSession.mockClear()
+
+    await act(async () => {
+      await latest.updateCardContent('card-1', { Word: 'dog' }, { noteId: 'note-1' })
+      await latest.updateTemplateContent('template-1', {
+        front_source: '<strong>updated</strong>',
+        shared_css: '.updated { color: red; }',
+      })
+      window.dispatchEvent(new CustomEvent('flama_study_template_updated', {
+        detail: {
+          templateId: 'template-1',
+          updated: { front_source: '<strong>cross-tab</strong>' },
+        },
+      }))
+      await Promise.resolve()
+    })
+
+    expect(latest.session?.snapshot.cards[0]).toMatchObject({
+      template_key: 'template',
+      content_key: 'content',
+    })
+    expect(latest.session?.snapshot.templates.template).toMatchObject({
+      version: 'v1',
+      front_source: '{{Word}}',
+      shared_css: '',
+    })
+    expect(latest.session?.snapshot.contents.content).toMatchObject({
+      version: 'v1',
+      field_values: { Word: 'cat' },
+      render_context: { Word: 'cat' },
+    })
+    expect(mocks.saveSession).not.toHaveBeenCalled()
+  })
+
   it('admits only one same-tick answer while the owner is becoming durable', async () => {
     await openReadySession()
     const pendingSave = deferred<boolean>()

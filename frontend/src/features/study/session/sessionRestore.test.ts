@@ -6,7 +6,12 @@ import {
   validateSnapshotAlgorithmContract,
 } from '../scheduler/algorithmRegistry'
 import type { StudySessionSnapshot } from '../types'
+import { canonicalDigest } from './canonicalDigest'
 import { normalizePersistedStudySession } from './sessionRestore'
+
+const FROZEN_TEMPLATE_VERSION = 'sha256-d2ee81f91e39933b64c17571d6b6e567b339f3349024d95bd383d77dac83fd84'
+const FROZEN_CONTENT_VERSION = 'sha256-cd4d425619f174fcfd5a7e53d2578b8f63ec314efdf728c6985bf71405d73fce'
+const FROZEN_BINDING_FINGERPRINT = 'sha256-fcc37db709986454b8f9f41ee8761518992b282185bb140812749a562580142d'
 
 function snapshot(): StudySessionSnapshot {
   return {
@@ -169,6 +174,8 @@ function addFrozenCompositionContract(stored: ReturnType<typeof persistedSession
     template_name: 'Front -> Back',
     is_default: true,
     context_kind: 'owned' as const,
+    definition_id: 'legacy-template:template-1',
+    application_id: 'comp:notetype:type-1:template:template-1',
     interaction_key: 'review.four-rating',
     trigger_key: 'scheduler.review',
     trigger_contract_version: '1',
@@ -183,14 +190,41 @@ function addFrozenCompositionContract(stored: ReturnType<typeof persistedSession
     schema_version: 'study-composition-binding.v1',
     composition_id: composition.composition_id,
     definition_id: 'legacy-template:template-1',
-    definition_version: 'v1',
-    application_id: 'application:owned:type-1',
-    application_occurrence_id: 'application:owned:type-1',
+    definition_version: FROZEN_TEMPLATE_VERSION,
+    application_id: composition.composition_id,
+    application_occurrence_id: composition.composition_id,
     binding_kind: 'legacy-fielddef-direct',
-    binding_fingerprint: 'sha256-test-binding-hash',
-    field_bindings: [],
+    binding_fingerprint: FROZEN_BINDING_FINGERPRINT,
+    field_bindings: [{
+      input_id: 'legacy-field:field-1',
+      field_def_id: 'field-1',
+      field_name: 'Word',
+      field_type: 'text',
+      required: true,
+    }],
   }
   stored.snapshot.cards[0].composition_id = composition.composition_id
+  stored.snapshot.cards[0].template_key = `template-1:${FROZEN_TEMPLATE_VERSION}`
+  stored.snapshot.cards[0].content_key = `note-1:${FROZEN_CONTENT_VERSION}`
+  stored.snapshot.templates = {
+    [`template-1:${FROZEN_TEMPLATE_VERSION}`]: {
+      ...stored.snapshot.templates.template,
+      version: FROZEN_TEMPLATE_VERSION,
+      field_defs: [{
+        id: 'field-1',
+        name: 'Word',
+        field_type: 'text',
+        required: true,
+        position: 0,
+      }],
+    },
+  }
+  stored.snapshot.contents = {
+    [`note-1:${FROZEN_CONTENT_VERSION}`]: {
+      ...stored.snapshot.contents.content,
+      version: FROZEN_CONTENT_VERSION,
+    },
+  }
   stored.snapshot.compositions = { [composition.composition_id]: composition }
   return stored
 }
@@ -214,6 +248,12 @@ describe('client Algorithm registry', () => {
 })
 
 describe('persisted study session normalization', () => {
+  it('matches the backend canonical SHA-256 contract for UTF-8 material', () => {
+    expect(canonicalDigest({ z: '猫', a: [true, null, 'x'] })).toBe(
+      'sha256-874350020a8ee09fe053dd03644ebef3ff65adca723ae89f421cd30bbb92ef23',
+    )
+  })
+
   it('restores a complete frozen composition contract without rewriting it', () => {
     const stored = addFrozenCompositionContract(persistedSession())
 
@@ -225,8 +265,31 @@ describe('persisted study session normalization', () => {
       'comp:notetype:type-1:template:template-1',
     )
     expect(result.session.snapshot.composition_binding?.binding_fingerprint).toBe(
-      'sha256-test-binding-hash',
+      FROZEN_BINDING_FINGERPRINT,
     )
+  })
+
+  it('quarantines tampered frozen fingerprints and artifact relationships', () => {
+    const badFingerprint = addFrozenCompositionContract(persistedSession())
+    badFingerprint.snapshot.composition_binding!.binding_fingerprint = `sha256-${'0'.repeat(64)}`
+    expect(normalizePersistedStudySession(badFingerprint)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+    })
+
+    const badTemplateVersion = addFrozenCompositionContract(persistedSession())
+    badTemplateVersion.snapshot.composition_binding!.definition_version = `sha256-${'2'.repeat(64)}`
+    expect(normalizePersistedStudySession(badTemplateVersion)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+    })
+
+    const badContentIdentity = addFrozenCompositionContract(persistedSession())
+    badContentIdentity.snapshot.contents[`note-1:${FROZEN_CONTENT_VERSION}`].note_id = 'note-2'
+    expect(normalizePersistedStudySession(badContentIdentity)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+    })
   })
 
   it('quarantines partial or contradictory frozen composition material', () => {
@@ -503,6 +566,59 @@ describe('persisted study session normalization', () => {
     expect(result.session.events[0]).toMatchObject({
       event_id: '00000000-0000-4000-8000-000000000002',
       sequence: 2,
+    })
+  })
+
+  it('preserves and validates the frozen composition on pending batches', () => {
+    const frozen = addFrozenCompositionContract(persistedSession())
+    const pendingEvent = {
+      ...frozen.events[0],
+      action_key: 'review.good',
+      trigger_key: 'scheduler.review.good',
+      trigger_contract_version: '1',
+    }
+    const stored = {
+      ...frozen,
+      events: [],
+      batch_sequence: 1,
+      event_sequence: 1,
+      in_flight_batches: [{
+        schema_version: 'study-batch.v1',
+        batch_id: '22222222-2222-4222-8222-222222222222',
+        batch_sequence: 1,
+        session_token: 'token',
+        snapshot_hash: 'snapshot-hash',
+        composition_id: frozen.snapshot.selected_composition_id,
+        commit_reason: 'rollover',
+        is_final: false,
+        events: [pendingEvent],
+        final_states: [{
+          card_id: 'card-1',
+          base_revision: 0,
+          state: frozen.snapshot.cards[0].state,
+        }],
+      }],
+    }
+
+    const result = normalizePersistedStudySession(stored)
+    expect(result.status).toBe('restored')
+    if (result.status !== 'restored') return
+    expect(result.session.in_flight_batches?.[0].composition_id).toBe(
+      frozen.snapshot.selected_composition_id,
+    )
+
+    const missing = structuredClone(stored)
+    Reflect.deleteProperty(missing.in_flight_batches[0], 'composition_id')
+    expect(normalizePersistedStudySession(missing)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+    })
+
+    const mismatched = structuredClone(stored)
+    mismatched.in_flight_batches[0].composition_id = 'different-composition'
+    expect(normalizePersistedStudySession(mismatched)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
     })
   })
 

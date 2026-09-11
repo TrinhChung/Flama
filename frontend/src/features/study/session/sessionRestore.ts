@@ -19,6 +19,7 @@ import type {
   StudySessionAccumulatedStats,
   StudySessionUndoItem,
 } from './sessionStore'
+import { canonicalDigest, canonicalJson } from './canonicalDigest'
 import {
   STUDY_SESSION_SCHEMA_V2,
   STUDY_SESSION_SCHEMA_V3,
@@ -57,6 +58,7 @@ export type StudySessionRestoreResult =
     }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SHA256_DIGEST_PATTERN = /^sha256-[0-9a-f]{64}$/
 const VALID_CARD_TYPES = new Set(['new', 'learning', 'review', 'relearning'])
 const VALID_RATINGS = new Set<string>(REVIEW_RATINGS)
 const VALID_COMMIT_REASONS = new Set<StudyCommitReason>([
@@ -289,6 +291,22 @@ function normalizeBatch(
       `Stored in-flight batch ${index + 1} has an invalid final marker.`,
     )
   }
+  const selectedCompositionId = snapshot.selected_composition_id
+  if (
+    (
+      selectedCompositionId !== undefined
+      && value.composition_id !== selectedCompositionId
+    )
+    || (
+      selectedCompositionId === undefined
+      && value.composition_id !== undefined
+    )
+  ) {
+    return quarantine(
+      'COMPOSITION_CONTRACT_MISMATCH',
+      `Stored in-flight batch ${index + 1} does not match the frozen composition.`,
+    )
+  }
 
   const events: StudySessionEvent[] = []
   let migrated = false
@@ -357,6 +375,9 @@ function normalizeBatch(
       batch_sequence: value.batch_sequence as number,
       session_token: value.session_token,
       snapshot_hash: value.snapshot_hash,
+      ...(selectedCompositionId === undefined
+        ? {}
+        : { composition_id: selectedCompositionId }),
       ...(value.commit_reason === undefined
         ? {}
         : { commit_reason: value.commit_reason as StudyCommitReason }),
@@ -475,6 +496,126 @@ export function normalizePersistedStudySession(
       return quarantine(
         'COMPOSITION_CONTRACT_MISMATCH',
         'Stored study composition does not match its frozen session material.',
+      )
+    }
+
+    const selectedRecord = selected as Record<string, unknown>
+    const selectedDictionaryRecord = selectedFromDictionary as Record<string, unknown>
+    const bindingRecord = binding as Record<string, unknown>
+    const bindingFingerprint = bindingRecord.binding_fingerprint as string
+    const fieldBindings = bindingRecord.field_bindings as unknown[]
+    const bindingMaterial = { ...bindingRecord }
+    delete bindingMaterial.binding_fingerprint
+
+    let compositionIntegrityValid = true
+    try {
+      compositionIntegrityValid = (
+        SHA256_DIGEST_PATTERN.test(bindingFingerprint)
+        && canonicalDigest(bindingMaterial) === bindingFingerprint
+        && canonicalJson(selectedDictionaryRecord) === canonicalJson(selectedRecord)
+        && typeof selectedRecord.template_id === 'string'
+        && selectedRecord.template_id.length > 0
+        && typeof selectedRecord.note_type_id === 'string'
+        && selectedRecord.note_type_id.length > 0
+        && typeof selectedRecord.definition_id === 'string'
+        && selectedRecord.definition_id === bindingRecord.definition_id
+        && selectedRecord.definition_id === `legacy-template:${selectedRecord.template_id}`
+        && typeof selectedRecord.application_id === 'string'
+        && selectedRecord.application_id === bindingRecord.application_id
+        && bindingRecord.application_occurrence_id === bindingRecord.application_id
+        && selectedRecord.algorithm_key === snapshotValue.scheduler_algorithm
+        && selectedRecord.algorithm_version === snapshotValue.algorithm_version
+      )
+
+      const seenInputIds = new Set<string>()
+      const seenFieldDefIds = new Set<string>()
+      for (const rawBinding of fieldBindings) {
+        if (!isRecord(rawBinding)) {
+          compositionIntegrityValid = false
+          break
+        }
+        const inputId = rawBinding.input_id
+        const fieldDefId = rawBinding.field_def_id
+        if (
+          typeof inputId !== 'string'
+          || typeof fieldDefId !== 'string'
+          || inputId !== `legacy-field:${fieldDefId}`
+          || seenInputIds.has(inputId)
+          || seenFieldDefIds.has(fieldDefId)
+          || typeof rawBinding.field_name !== 'string'
+          || typeof rawBinding.field_type !== 'string'
+          || typeof rawBinding.required !== 'boolean'
+        ) {
+          compositionIntegrityValid = false
+          break
+        }
+        seenInputIds.add(inputId)
+        seenFieldDefIds.add(fieldDefId)
+      }
+
+      for (const rawCard of snapshotValue.cards) {
+        if (!isRecord(rawCard)) {
+          compositionIntegrityValid = false
+          break
+        }
+        const templateKey = rawCard.template_key
+        const contentKey = rawCard.content_key
+        const template = typeof templateKey === 'string'
+          ? (templates as Record<string, unknown>)[templateKey]
+          : undefined
+        const content = typeof contentKey === 'string'
+          ? (contents as Record<string, unknown>)[contentKey]
+          : undefined
+        if (!isRecord(template) || !isRecord(content)) {
+          compositionIntegrityValid = false
+          break
+        }
+
+        const templateVersion = template.version
+        const expectedBindings = Array.isArray(template.field_defs)
+          ? template.field_defs.map((rawField) => {
+              if (!isRecord(rawField)) return null
+              return {
+                input_id: `legacy-field:${String(rawField.id ?? '')}`,
+                field_def_id: String(rawField.id ?? ''),
+                field_name: String(rawField.name ?? ''),
+                field_type: String(rawField.field_type ?? ''),
+                required: rawField.required,
+              }
+            })
+          : []
+        if (
+          rawCard.template_id !== selectedRecord.template_id
+          || rawCard.note_type_id !== selectedRecord.note_type_id
+          || template.schema_version !== 'study-template.v1'
+          || template.id !== rawCard.template_id
+          || typeof templateVersion !== 'string'
+          || !SHA256_DIGEST_PATTERN.test(templateVersion)
+          || templateKey !== `${template.id}:${templateVersion}`
+          || bindingRecord.definition_version !== templateVersion
+          || !Array.isArray(template.field_defs)
+          || expectedBindings.some((item) => item === null)
+          || canonicalJson(expectedBindings) !== canonicalJson(fieldBindings)
+          || content.schema_version !== 'study-content.v1'
+          || content.id !== rawCard.note_id
+          || content.note_id !== rawCard.note_id
+          || typeof content.version !== 'string'
+          || !SHA256_DIGEST_PATTERN.test(content.version)
+          || contentKey !== `${content.id}:${content.version}`
+          || content.renderer_abi !== template.renderer_abi
+        ) {
+          compositionIntegrityValid = false
+          break
+        }
+      }
+    } catch {
+      compositionIntegrityValid = false
+    }
+
+    if (!compositionIntegrityValid) {
+      return quarantine(
+        'COMPOSITION_CONTRACT_MISMATCH',
+        'Stored study composition failed frozen binding or artifact validation.',
       )
     }
   }
