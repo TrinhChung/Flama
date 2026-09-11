@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from typing import Any
 
@@ -902,7 +902,9 @@ def _categorize_verdicts(inventory: list[dict[str, Any]]) -> dict[str, Any]:
 
 def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, Any]:
     """Return migration-grade audit v4 without mutating schema or application data."""
-    observed_at = now or datetime.utcnow()
+    if now is not None and now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
+    observed_at = now or datetime.now(timezone.utc).replace(tzinfo=None)
     connection_safety = collect_connection_safety()
 
     # -------------------------------------------------------------------------
