@@ -124,7 +124,7 @@ afterEach(() => {
 })
 
 describe('study session quarantine fallback', () => {
-  it('keeps active content and template artifacts frozen after authoring updates', async () => {
+  it('updates card content live while keeping template artifacts frozen after authoring updates', async () => {
     vi.stubGlobal('indexedDB', undefined)
     const session = createPersistedSession(snapshot())
     expect(await saveStudySession(session)).toBe(false)
@@ -140,19 +140,19 @@ describe('study session quarantine fallback', () => {
     })
 
     const restored = await loadStudySessionWithDurability(session.scope_key)
-    expect(restored.session?.snapshot.cards[0]).toMatchObject({
-      template_key: 'template',
-      content_key: 'content',
-    })
+    // Template remains frozen for active lease per P3/P4 contract
     expect(restored.session?.snapshot.templates.template).toMatchObject({
       version: 'v1',
       front_source: '{{Word}}',
       shared_css: '',
     })
-    expect(restored.session?.snapshot.contents.content).toMatchObject({
-      version: 'v1',
-      field_values: { Word: 'cat' },
-      render_context: { Word: 'cat' },
+
+    // Content is updated live so learner sees Quick Edit changes immediately
+    const updatedContentKey = restored.session?.snapshot.cards[0]?.content_key
+    expect(updatedContentKey).toBeDefined()
+    expect(restored.session?.snapshot.contents[updatedContentKey!]).toMatchObject({
+      field_values: { Word: 'dog' },
+      render_context: { Word: 'dog' },
     })
   })
 

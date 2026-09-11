@@ -29,6 +29,7 @@ import {
   removeStudySessionIfMatches,
   saveStudySession,
   scopeKey,
+  updateCardFieldValuesInSessions,
 } from '../session/sessionStore'
 import type {
   PersistedStudySession,
@@ -36,6 +37,8 @@ import type {
   StudySessionAccumulatedStats,
   UpdatedTemplatePayload,
 } from '../session/sessionStore'
+import { patchRenderContext } from '../renderer/clientRenderer'
+import { canonicalDigest } from '../session/canonicalDigest'
 import {
   useStudySessionLease,
   waitForNextOperationCheck,
@@ -872,13 +875,132 @@ export function useStudySession(deckId: string | null) {
     updatedFieldValues: Record<string, string>,
     options?: { noteId?: string | null; skipBroadcast?: boolean; media?: StudyMediaArtifact[] },
   ) => {
-    // The authoring request has already persisted the new Note content. Keep
-    // the active lease's content artifact frozen; the next session will load
-    // the saved value.
-    void cardId
-    void updatedFieldValues
-    void options
-  }, [])
+    const controller = leaseControllerRef.current
+    if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
+    const owner = await waitForMutation('content-update', controller)
+    if (!owner) return
+    beginLeaseWork(controller)
+    try {
+      if (!isCurrentLease(controller) || !hasLeaseRef.current) return
+      const current = sessionRef.current
+      if (!current) return
+      const targetCards = current.snapshot.cards.filter(
+        (c) => c.card_id === cardId || (options?.noteId && c.note_id === options.noteId),
+      )
+      if (targetCards.length === 0) return
+
+      const updatedContents = { ...current.snapshot.contents }
+      const updatedCards = [...current.snapshot.cards]
+      for (const card of targetCards) {
+        const contentKey = card.content_key
+        const template = current.snapshot.templates[card.template_key]
+        const existingContent = updatedContents[contentKey]
+        if (existingContent) {
+          // Merge media assets
+          const combinedMedia: StudyMediaArtifact[] = options?.media && options.media.length > 0
+            ? [...options.media]
+            : [...(existingContent.media || [])]
+
+          // Synthesize any proxy URLs found in updatedFieldValues not yet in combinedMedia
+          const existingProxyUrls = new Set(combinedMedia.map((m) => m.proxy_url))
+          for (const [fieldName, val] of Object.entries(updatedFieldValues)) {
+            if (typeof val === 'string') {
+              const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+              if (matches) {
+                for (const pUrl of matches) {
+                  if (!existingProxyUrls.has(pUrl)) {
+                    const assetId = pUrl.replace('/media/proxy/', '')
+                    const lk = fieldName.toLowerCase()
+                    const isAudio = lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
+                    combinedMedia.push({
+                      id: assetId,
+                      field_name: fieldName,
+                      filename: `${assetId}`,
+                      mime_type: isAudio ? 'audio/mpeg' : 'image/jpeg',
+                      sha256: '',
+                      proxy_url: pUrl,
+                    })
+                    existingProxyUrls.add(pUrl)
+                  }
+                }
+              }
+            }
+          }
+
+          const mergedFieldValues = {
+            ...existingContent.field_values,
+            ...updatedFieldValues,
+          }
+
+          const nextRenderContext = patchRenderContext(
+            existingContent.render_context || {},
+            updatedFieldValues,
+            template?.field_defs,
+            combinedMedia,
+          )
+
+          const nextVersion = canonicalDigest({
+            schema_version: 'study-content.v1',
+            renderer_abi: existingContent.renderer_abi,
+            note_id: existingContent.note_id,
+            field_values: mergedFieldValues,
+            media: combinedMedia,
+          })
+          const newContentKey = `${existingContent.id}:${nextVersion}`
+
+          updatedContents[newContentKey] = {
+            ...existingContent,
+            version: nextVersion,
+            field_values: mergedFieldValues,
+            render_context: nextRenderContext,
+            media: combinedMedia,
+          }
+
+          for (let i = 0; i < updatedCards.length; i++) {
+            if (updatedCards[i].card_id === card.card_id) {
+              updatedCards[i] = {
+                ...updatedCards[i],
+                content_key: newContentKey,
+              }
+            }
+          }
+        }
+      }
+
+      const nextSession: PersistedStudySession = {
+        ...current,
+        snapshot: {
+          ...current.snapshot,
+          cards: updatedCards,
+          contents: updatedContents,
+        },
+        updated_at_ms: Date.now(),
+      }
+
+      activateSession(nextSession)
+      sessionDurableRef.current = await saveStudySession(nextSession)
+      if (!options?.skipBroadcast) {
+        await updateCardFieldValuesInSessions(cardId, updatedFieldValues, {
+          noteId: options?.noteId,
+          media: options?.media,
+        })
+      }
+    } catch {
+      // Retain in-memory copy when storage is temporarily unavailable.
+    } finally {
+      endLeaseWork(controller)
+      releaseMutation(owner)
+    }
+  }, [
+    activateSession,
+    beginLeaseWork,
+    endLeaseWork,
+    hasLeaseRef,
+    isCurrentLease,
+    leaseControllerRef,
+    releaseMutation,
+    waitForMutation,
+  ])
 
   const updateTemplateContent = useCallback(async (
     templateId: string,

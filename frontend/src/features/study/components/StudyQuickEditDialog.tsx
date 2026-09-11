@@ -152,17 +152,26 @@ export function StudyQuickEditDialog({
       const detailTags = detail.note.tags || []
       const detailDeckId = detail.note.deck_id || null
 
-      setFieldValues((current) => ({
-        ...detailValues,
-        ...current,
-      }))
+      setFieldValues((current) => {
+        // If form has not been modified by user yet, adopt authoritative detailValues directly
+        const isPristine = Object.keys(current).every(
+          (k) => (current[k] || '') === (initialFieldValues[k] || '')
+        )
+        if (isPristine) {
+          return { ...detailValues }
+        }
+        return {
+          ...detailValues,
+          ...current,
+        }
+      })
       setInitialFieldValues(detailValues)
       setTags(detailTags)
       setInitialTags(detailTags)
       setDeckId(detailDeckId)
       setInitialDeckId(detailDeckId)
     }
-  }, [cardDetailQuery.data, open])
+  }, [cardDetailQuery.data, open, initialFieldValues])
 
   const handleAddTag = useCallback(() => {
     const trimmed = newTagInput.trim()

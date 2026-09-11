@@ -875,7 +875,7 @@ describe('useStudySession cross-tab ownership', () => {
     expect(mocks.saveSession).toHaveBeenCalled()
   })
 
-  it('defers Note and Template authoring changes until the next session', async () => {
+  it('updates card content live while deferring template authoring changes', async () => {
     await openReadySession()
     mocks.saveSession.mockClear()
 
@@ -894,21 +894,21 @@ describe('useStudySession cross-tab ownership', () => {
       await Promise.resolve()
     })
 
-    expect(latest.session?.snapshot.cards[0]).toMatchObject({
-      template_key: 'template',
-      content_key: 'content',
-    })
+    // Template remains frozen for active lease per P3/P4 contract
     expect(latest.session?.snapshot.templates.template).toMatchObject({
       version: 'v1',
       front_source: '{{Word}}',
       shared_css: '',
     })
-    expect(latest.session?.snapshot.contents.content).toMatchObject({
-      version: 'v1',
-      field_values: { Word: 'cat' },
-      render_context: { Word: 'cat' },
+
+    // Card content is updated live so learner sees edits immediately
+    const updatedContentKey = latest.session?.snapshot.cards[0]?.content_key
+    expect(updatedContentKey).toBeDefined()
+    expect(latest.session?.snapshot.contents[updatedContentKey!]).toMatchObject({
+      field_values: { Word: 'dog' },
+      render_context: { Word: 'dog' },
     })
-    expect(mocks.saveSession).not.toHaveBeenCalled()
+    expect(mocks.saveSession).toHaveBeenCalled()
   })
 
   it('admits only one same-tick answer while the owner is becoming durable', async () => {

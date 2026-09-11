@@ -9,6 +9,8 @@ import {
   normalizePersistedStudySession,
 } from './sessionRestore'
 import type { StudySessionQuarantine } from './sessionRestore'
+import { canonicalDigest } from './canonicalDigest'
+import { patchRenderContext } from '../renderer/clientRenderer'
 
 const DB_NAME = 'flama-study'
 const DB_VERSION = 2
@@ -444,12 +446,134 @@ export async function updateCardFieldValuesInSessions(
   newFieldValues: Record<string, string>,
   options?: { noteId?: string | null; media?: StudyMediaArtifact[] },
 ) {
-  // Authoring writes are already saved by the caller. An active lease keeps
-  // its original content artifact so restore/retry/replay all see one frozen
-  // input. The saved content is picked up by the next session.
-  void cardId
-  void newFieldValues
-  void options
+  try {
+    const keys: string[] = []
+    try {
+      const db = await openDatabase()
+      const tx = db.transaction(STORE_NAME, 'readonly')
+      const store = tx.objectStore(STORE_NAME)
+      const allKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+        const req = store.getAllKeys()
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+      db.close()
+      for (const k of allKeys) {
+        if (typeof k === 'string') keys.push(k)
+      }
+    } catch {}
+
+    for (const key of memoryFallback.keys()) {
+      if (!keys.includes(key)) keys.push(key)
+    }
+
+    for (const key of keys) {
+      const session = await loadStudySession(key)
+      if (!session) continue
+      let updated = false
+      const snapshot = session.snapshot
+      for (const card of snapshot.cards) {
+        if (card.card_id === cardId || (options?.noteId && card.note_id === options.noteId)) {
+          const contentKey = card.content_key
+          const template = snapshot.templates[card.template_key]
+          const existingContent = snapshot.contents[contentKey]
+          if (existingContent) {
+            const combinedMedia: StudyMediaArtifact[] = options?.media && options.media.length > 0
+              ? [...options.media]
+              : [...(existingContent.media || [])]
+
+            const existingProxyUrls = new Set(combinedMedia.map((m) => m.proxy_url))
+            for (const [fieldName, val] of Object.entries(newFieldValues)) {
+              if (typeof val === 'string') {
+                const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
+                if (matches) {
+                  for (const pUrl of matches) {
+                    if (!existingProxyUrls.has(pUrl)) {
+                      const assetId = pUrl.replace('/media/proxy/', '')
+                      const lk = fieldName.toLowerCase()
+                      const isAudio = lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
+                      combinedMedia.push({
+                        id: assetId,
+                        field_name: fieldName,
+                        filename: `${assetId}`,
+                        mime_type: isAudio ? 'audio/mpeg' : 'image/jpeg',
+                        sha256: '',
+                        proxy_url: pUrl,
+                      })
+                      existingProxyUrls.add(pUrl)
+                    }
+                  }
+                }
+              }
+            }
+
+            const mergedFieldValues = {
+              ...existingContent.field_values,
+              ...newFieldValues,
+            }
+
+            const nextRenderContext = patchRenderContext(
+              existingContent.render_context || {},
+              newFieldValues,
+              template?.field_defs,
+              combinedMedia,
+            )
+
+            const nextVersion = canonicalDigest({
+              schema_version: 'study-content.v1',
+              renderer_abi: existingContent.renderer_abi,
+              note_id: existingContent.note_id,
+              field_values: mergedFieldValues,
+              media: combinedMedia,
+            })
+            const newContentKey = `${existingContent.id}:${nextVersion}`
+
+            snapshot.contents[newContentKey] = {
+              ...existingContent,
+              version: nextVersion,
+              field_values: mergedFieldValues,
+              render_context: nextRenderContext,
+              media: combinedMedia,
+            }
+            card.content_key = newContentKey
+            updated = true
+          }
+        }
+      }
+      if (updated) {
+        await saveStudySession(session)
+      }
+    }
+
+    // Broadcast synchronization event to any active study sessions (in current window & across tabs)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('flama_study_card_updated', {
+          detail: {
+            cardId,
+            noteId: options?.noteId || null,
+            fieldValues: newFieldValues,
+            media: options?.media,
+          },
+        }),
+      )
+      try {
+        const channel = new BroadcastChannel('flama_study_sync_channel')
+        channel.postMessage({
+          type: 'CARD_UPDATED',
+          cardId,
+          noteId: options?.noteId || null,
+          fieldValues: newFieldValues,
+          media: options?.media,
+        })
+        channel.close()
+      } catch {
+        // BroadcastChannel unavailable
+      }
+    }
+  } catch {
+    // Ignore errors if storage is temporarily unaccessible
+  }
 }
 
 export type UpdatedTemplatePayload = {
