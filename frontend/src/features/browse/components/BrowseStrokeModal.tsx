@@ -93,17 +93,21 @@ export function BrowseStrokeModal({
     if (fields && fields.length > 0) {
       return fields
     }
-    if (cardDetailQuery?.data?.card?.card_id === targetCardId && cardDetailQuery.data?.fields?.length) {
+    if (
+      Boolean(targetCardId) &&
+      cardDetailQuery?.data?.card?.card_id === targetCardId &&
+      Boolean(cardDetailQuery?.data?.fields?.length)
+    ) {
       return cardDetailQuery.data.fields
     }
-    if (targetCardQuery.data?.fields?.length) {
+    if (targetCardQuery?.data?.fields?.length) {
       return targetCardQuery.data.fields
     }
     if (cardDetailQuery?.data?.fields?.length) {
       return cardDetailQuery.data.fields
     }
     return []
-  }, [fields, cardDetailQuery?.data, targetCardQuery.data, targetCardId])
+  }, [fields, cardDetailQuery?.data, targetCardQuery?.data, targetCardId])
 
   const noteFieldNames = useMemo(() => {
     const names = actualNoteFields.map((f) => f.name).filter(Boolean)
@@ -189,22 +193,26 @@ export function BrowseStrokeModal({
       return String(editFieldValues[sourceField]).trim()
     }
     // 2. From active card note field_values
+    const cardNoteFieldVal = cardDetailQuery?.data?.note?.field_values?.[sourceField]
     if (
-      cardDetailQuery?.data?.note?.field_values?.[sourceField] !== undefined &&
-      cardDetailQuery.data.note.field_values[sourceField] != null &&
-      String(cardDetailQuery.data.note.field_values[sourceField]).trim()
+      cardNoteFieldVal !== undefined &&
+      cardNoteFieldVal !== null &&
+      String(cardNoteFieldVal).trim()
     ) {
-      return String(cardDetailQuery.data.note.field_values[sourceField]).trim()
+      return String(cardNoteFieldVal).trim()
     }
     // 3. From target card query note field_values
+    const targetNoteFieldVal = targetCardQuery?.data?.note?.field_values?.[sourceField]
     if (
-      targetCardQuery.data?.note?.field_values?.[sourceField] !== undefined &&
-      String(targetCardQuery.data.note.field_values[sourceField]).trim()
+      targetNoteFieldVal !== undefined &&
+      targetNoteFieldVal !== null &&
+      String(targetNoteFieldVal).trim()
     ) {
-      return String(targetCardQuery.data.note.field_values[sourceField]).trim()
+      return String(targetNoteFieldVal).trim()
     }
     // 4. Fallback from card row
-    const matchingCard = cards.find((c) => c.card_id === targetCardId) || cards[0]
+    const matchingCard =
+      (targetCardId ? cards.find((c) => c.card_id === targetCardId) : undefined) || cards[0]
     if (matchingCard) {
       const lower = sourceField.toLowerCase()
       if (
@@ -225,7 +233,7 @@ export function BrowseStrokeModal({
     sourceField,
     editFieldValues,
     cardDetailQuery?.data,
-    targetCardQuery.data,
+    targetCardQuery?.data,
     cards,
     targetCardId,
   ])
@@ -236,7 +244,7 @@ export function BrowseStrokeModal({
       deckName ||
       decksQuery?.data?.decks?.find((d) => d.id === selectedDeckId)?.name ||
       cardDetailQuery?.data?.note?.deck_name ||
-      cards.find((c) => c.card_id === targetCardId)?.deck_name ||
+      (targetCardId ? cards.find((c) => c.card_id === targetCardId)?.deck_name : undefined) ||
       ''
     ).toLowerCase()
     if (/hsk|trung|chinese|hán|zh/i.test(effectiveDeckName)) {

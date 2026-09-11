@@ -552,16 +552,18 @@ export function StudyQuickEditDialog({
       </DialogContent>
     </Dialog>
 
-    <BrowseStrokeModal
-      isOpen={isStrokeModalOpen}
-      onClose={() => setIsStrokeModalOpen(false)}
-      mode="single"
-      cardId={cardId}
-      deckName={deckName}
-      fields={fieldDefs}
-      fieldValues={fieldValues}
-      onApply={handleApplyStrokes}
-    />
+    {isStrokeModalOpen && (
+      <BrowseStrokeModal
+        isOpen={isStrokeModalOpen}
+        onClose={() => setIsStrokeModalOpen(false)}
+        mode="single"
+        cardId={cardId}
+        deckName={deckName}
+        fields={fieldDefs}
+        fieldValues={fieldValues}
+        onApply={handleApplyStrokes}
+      />
+    )}
   </>
   )
 }
