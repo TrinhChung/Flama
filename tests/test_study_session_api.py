@@ -19,6 +19,10 @@ from app.services.study_session_service import (
     deserialize_deck_options,
     serialize_card_state,
 )
+from app.services.study_session_config import (
+    StudySessionConfigError,
+    decode_study_session_config,
+)
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -201,6 +205,44 @@ class StudySessionApiTests(unittest.TestCase):
             session = db.session.get(StudySession, snapshot["session_id"])
             self.assertIsNotNone(session)
             self.assertEqual(session.status, "open")
+
+    def test_session_config_accepts_valid_legacy_policy_map_only(self):
+        snapshot = self._open_session()
+        with self.app.app_context():
+            session = db.session.get(StudySession, snapshot["session_id"])
+            wrapped = json.loads(session.config_snapshot_json)
+
+        legacy = decode_study_session_config(json.dumps(wrapped["policies"]))
+        self.assertTrue(legacy.legacy)
+        self.assertEqual(legacy.policies, wrapped["policies"])
+
+        with self.assertRaises(StudySessionConfigError):
+            decode_study_session_config(json.dumps({"policies": wrapped["policies"]}))
+        with self.assertRaises(StudySessionConfigError):
+            decode_study_session_config("{}")
+
+    def test_unknown_or_tampered_versioned_session_config_fails_closed(self):
+        snapshot = self._open_session()
+        with self.app.app_context():
+            session = db.session.get(StudySession, snapshot["session_id"])
+            wrapped = json.loads(session.config_snapshot_json)
+
+            unknown = {**wrapped, "schema_version": "study-session-config.v999"}
+            session.config_snapshot_json = json.dumps(unknown)
+            db.session.commit()
+
+        response = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=self._commit_payload(snapshot),
+        )
+        self.assertEqual(response.status_code, 500, response.get_json())
+        self.assertEqual(response.get_json()["error"], "INVALID_CONFIG_SNAPSHOT")
+
+        wrapped["composition_binding"]["binding_fingerprint"] = (
+            "sha256-" + "0" * 64
+        )
+        with self.assertRaises(StudySessionConfigError):
+            decode_study_session_config(json.dumps(wrapped))
 
     def test_wire_v3_is_capability_negotiated_and_flag_gated(self):
         previous = self.app.config["STUDY_WIRE_V3_ENABLED"]

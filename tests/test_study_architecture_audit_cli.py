@@ -41,11 +41,16 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
             db.drop_all()
             db.engine.dispose()
 
+    @staticmethod
+    def _parse_audit_output(result) -> dict:
+        text = (getattr(result, "stdout", None) or result.output).strip()
+        return json.loads(text)
+
     def test_audit_cli_returns_zero_on_clean_db(self):
         runner = self.app.test_cli_runner()
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 0)
-        report = json.loads(result.output)
+        report = self._parse_audit_output(result)
         self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "PASS")
         self.assertEqual(report["verdicts"]["exit_code"], 0)
@@ -64,7 +69,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         runner = self.app.test_cli_runner()
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 1)
-        report = json.loads(result.output)
+        report = self._parse_audit_output(result)
         self.assertEqual(report["verdicts"]["overall_status"], "WARN")
         self.assertEqual(report["verdicts"]["exit_code"], 1)
 
@@ -95,7 +100,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         runner = self.app.test_cli_runner()
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 2)
-        report = json.loads(result.output)
+        report = self._parse_audit_output(result)
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
 
@@ -126,7 +131,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         )
 
         self.assertEqual(result.exit_code, 0)
-        report = json.loads(result.output)
+        report = self._parse_audit_output(result)
         self.assertEqual(report["observed_at"], "2026-09-10T03:04:05")
 
     def test_audit_cli_handles_execution_error(self):
@@ -157,7 +162,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         runner = self.app.test_cli_runner()
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 2)
-        report = json.loads(result.output)
+        report = self._parse_audit_output(result)
         self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
@@ -173,7 +178,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         runner = self.app.test_cli_runner()
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 2)
-        report = json.loads(result.output)
+        report = self._parse_audit_output(result)
         self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
@@ -190,7 +195,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
         runner = broken_app.test_cli_runner()
         result = runner.invoke(args=["study-architecture-audit"])
         self.assertEqual(result.exit_code, 2)
-        report = json.loads(result.output)
+        report = self._parse_audit_output(result)
         self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
         self.assertEqual(report["verdicts"]["exit_code"], 2)
@@ -503,7 +508,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
             runner = self.app.test_cli_runner()
             result = runner.invoke(args=["study-architecture-audit", "--output", str(invalid_output_path)])
             self.assertEqual(result.exit_code, 2)
-            report = json.loads(result.output)
+            report = self._parse_audit_output(result)
             self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
             self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
             self.assertEqual(report["verdicts"]["exit_code"], 2)
