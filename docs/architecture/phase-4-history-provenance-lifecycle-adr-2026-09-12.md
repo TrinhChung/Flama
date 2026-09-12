@@ -2,7 +2,7 @@
 
 > Date: 2026-09-12 | Mode: DESIGN | Decision: P4-D4-4
 >
-> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; P4-01A passed locally, while production refresh and the joint P4-02/P4-03/P4-04 review block acceptance
+> Status: **ACCEPTED** — production P4-01 passed at head `20260913_000038`; joint P4-02/P4-03/P4-04 review closed on 2026-09-13
 >
 > Runtime change: none | Schema change: none | Operational authority: `CardProgress`
 >
@@ -80,7 +80,7 @@ stateDiagram-v2
 - **Evidence:** `models/review_event.py`; `app/repositories/review_event_repository.py:47-119`; `app/services/study_service.py:417-592`; `app/services/study_session_service.py:1380-1640`; `app/services/anki_sync_service.py:353-489`; P1-02.
 - **Potential concern:** replaying all events would omit snapshot state and mix incompatible/partial sources.
 - **Impact:** reconstructed current state could differ from the authority and silently replace a valid imported snapshot.
-- **Production evidence (2026-09-12):** the audit found 119,698 Anki-import events, 5,687 versioned native events, four native events without Algorithm labels and 595 event rows detached from a current Card. This confirms that imported and detached history must not be replayed as current authority.
+- **Initial pre-remediation production evidence (2026-09-12):** the audit found 119,698 Anki-import events, 5,687 versioned native events, four native events without Algorithm labels and 595 event rows detached from a current Card. The accepted refresh is recorded in section 20. Both captures confirm that imported and detached history must not be replayed as current authority.
 - **Alternatives Considered:** (A) event-source current state from `ReviewEvent`; (B) map `CardProgress` and retain history solely as evidence/initializer input.
 - **Trade-offs:** A offers a single conceptual stream but the stream is incomplete. B keeps two clear responsibilities and requires explicit completeness metadata.
 - **Recommendation:** select B.
@@ -293,7 +293,7 @@ Reset does not delete immutable ReviewEvents in Phase 4 and does not rewrite the
 
 ### Clone cutover/rekey
 
-- lock old/new subjects in the P4-02 global order and retain the P1-02 local/source progress lock prefix;
+- lock old/new subjects in the P4-02 global order, then lock contributor `CardProgress` rows while retaining P1-02's deterministic local/source Card-ID order inside that contributor stage; only an existing transaction-owner or Connect source-identity lock may remain a prefix;
 - the accepted cutover merge decides authoritative state; P4 never applies ordinary fan-in winner rules;
 - close/detach the old contributor/subject generation and link it to the destination generation;
 - copy no source Note/Card and mutate no publisher content;
@@ -376,7 +376,7 @@ The initializer rechecks generation, current authority vector and history cut be
 | Alternative | Integrity | Delete behavior | Decision |
 |---|---|---|---|
 | A. Cascade envelope/history with Note/Card | strong live FK, no retained fence | delete erases reconciliation/lifecycle evidence | rejected |
-| B. Keep live nullable pointers plus immutable subject/contributor identity in a separate lifecycle/history ledger | validates active relations and preserves detached evidence | live pointer detaches; ledger survives through gate | selected provisionally |
+| B. Keep live nullable pointers plus immutable subject/contributor identity in a separate lifecycle/history ledger | validates active relations and preserves detached evidence | live pointer detaches; ledger survives through gate | selected |
 | C. Remove all content FKs and keep only detached IDs | survives every delete | weak live integrity and easier orphan creation | rejected as default; may be appropriate only for immutable fact rows |
 
 P4-05 owns exact columns, constraints and whether immutable fact rows deliberately omit FKs like `ReviewEvent`.
@@ -410,25 +410,26 @@ P4-06/P4-08/P4-10/P4-11 must eventually prove:
 
 No history purge, Algorithm switch, user-facing shadow read or destructive contraction occurs in Phase 4.
 
-## 20. Open gates
+## 20. Acceptance evidence and downstream proof
 
 ### Current MySQL evidence from P4-01
 
 - 15,992 latest-event pointers are valid and 432 are null; missing and mismatched pointer rows are `0`, and all Connect source/ref accounting partitions pass;
-- 119,698 imported events, 5,687 versioned native events, four null-label native events and 595 detached event/Card references are observed; occurrence-versus-ingestion age still requires a dedicated history query if it changes retention sizing;
-- FK/delete actions, `utf8mb4_unicode_ci`, zero fractional timestamp precision and matching repository/database head `20260910_000036` are captured;
-- four sessions are actively open, 117 are expired and active Connect imports are `0`; destructive-path history and batch exposure remain unavailable;
-- `study_session_batches` is absent in the captured production baseline; its independent migration and remaining schema repairs pass locally, with production apply/refresh still pending.
+- 119,698 imported events, 23 native-direct events, 5,829 native-session events, four null-label native events and 595 detached event/Card references are observed; occurrence-versus-ingestion age remains independently queryable in the P4-05 history design;
+- FK/delete actions, `utf8mb4_unicode_ci`, zero fractional timestamp precision and matching repository/database head `20260913_000038` are captured with zero drift;
+- active-open sessions, active Connect imports and active/enqueued batches are all `0`; 121 open-status sessions are expired and remain an explicit historical warning;
+- `study_session_batches` is present with no contract issue.
 
-### Joint review
+### Joint review result
 
-- P4-02 must align generation/vector transitions and detached/tombstone codes with this lifecycle contract.
-- P4-03 state/control hashes must exclude history identity while retaining every lineage difference separately.
-- P4-05 must prevent cascade loss, compare physical alternatives and keep unbounded history off the hot envelope.
+- P4-02 generation/vector transitions and detached/tombstone codes align with this lifecycle contract.
+- P4-03 state/control hashes exclude history identity while every lineage difference remains separate.
+- The [joint acceptance record](./phase-4-logical-contract-joint-acceptance-2026-09-13.md) resolves clone cutover ordering as subject locks before the P1-02-ordered contributor locks.
+- The [P4-05 physical schema ADR](./phase-4-physical-shadow-schema-adr-2026-09-13.md) prevents cascade loss and keeps history off the hot envelope.
 
-### Provisional result
+### Accepted result
 
-- current-state/history authority boundary: **ready for cross-review**;
-- provenance/completeness vocabulary: **ready for cross-review** against the captured production distributions;
-- reset/delete/rekey and retention fence: **ready for cross-review**, physical FK/layout pending;
-- P4-04 overall: **not Accepted** while the P4-01A production gate and joint gates remain open.
+- current-state/history authority boundary: **ACCEPTED**;
+- provenance/completeness vocabulary: **ACCEPTED** against the refreshed production distributions;
+- reset/delete/rekey and retention fence: **ACCEPTED**, with physical FK/layout fixed by P4-05;
+- P4-04 overall: **ACCEPTED**.

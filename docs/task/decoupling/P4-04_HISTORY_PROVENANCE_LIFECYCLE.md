@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: IN PROGRESS / PROVISIONAL — logical ADR drafted; P4-01A remediation passed locally, while production refresh and joint decision gates remain open
+> Status: **COMPLETED / ACCEPTED** — joint logical review and production P4-01 gate closed on 2026-09-13
 >
 > Dependency: P4-01; consistency with P4-02/P4-03
 >
@@ -33,9 +33,9 @@ Chốt evidence cần giữ cho migration, future history initializer và reset/
 - Minimum retained scheduler history contract for Phase 7.
 - Phase 5 initializer handoff requirements.
 
-## Progress — 2026-09-12
+## Completion handoff — 2026-09-13
 
-The repository-grounded [P4-04 provisional ADR](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) now defines:
+The repository-grounded [P4-04 accepted ADR](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) defines:
 
 - separate provenance and conservative history-completeness vocabularies;
 - per-contributor pointer/external-reference accounting with no fan-in winner;
@@ -43,7 +43,7 @@ The repository-grounded [P4-04 provisional ADR](../../architecture/phase-4-histo
 - reset, Card/Template/Note deletion, import replacement and clone rekey transitions;
 - tombstone/detached retention gates and the future Phase 5 initializer handoff.
 
-Runtime change: none. Schema change: none. The production snapshot found 15,992 valid latest-event pointers, 432 null pointers, no invalid/cross-subject pointer, and complete source/ref accounting. P4-01A has repaired the schema/migration findings in repository/local MySQL; acceptance remains blocked by production refresh and joint P4-02/P4-03/P4-04 review.
+Runtime change: none. Schema change: none. The refreshed production snapshot found 15,992 valid latest-event pointers, 432 null pointers, no invalid/cross-subject pointer, complete source/ref accounting, 125,554 heterogeneous ReviewEvents and 595 detached event/Card references. The [joint acceptance record](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) resolves clone lock ordering and confirms history remains outside semantic state. [P4-05](../../architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md) fixes detachable live pointers, normalized history facts and retained lifecycle storage.
 
 ## Acceptance
 

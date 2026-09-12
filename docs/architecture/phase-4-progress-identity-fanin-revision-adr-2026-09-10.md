@@ -2,7 +2,7 @@
 
 > Date: 2026-09-10 | Mode: DESIGN | Decision: P4-D4-1
 >
-> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; P4-01A passed locally, while production refresh and the joint P4-02/P4-03/P4-04 review block acceptance
+> Status: **ACCEPTED** — production P4-01 passed at head `20260913_000038`; joint P4-02/P4-03/P4-04 review closed on 2026-09-13
 >
 > Runtime change: none | Schema change: none | Operational authority: `CardProgress`
 >
@@ -163,10 +163,10 @@ If one learner reaches the same source Note through multiple install contexts, t
 | Alternative | Integrity / reconciliation | MySQL OLTP behavior | Evolution cost | Decision |
 |---|---|---|---|---|
 | A. One learner/Note row with state and contributor JSON | weak relational identity; difficult per-contributor disposition | fewer joins, but a wider frequently rewritten row and larger JSON redo/locking footprint | easy initial DDL, hard lifecycle/history evolution | rejected |
-| B. Lockable envelope plus state and contributor/disposition rows | explicit fan-in, provenance and lifecycle accounting | one narrow coordination lock; extra indexed rows/joins; bounded updates | more initial DDL, safest staged migration | selected provisionally |
+| B. Lockable envelope plus state and contributor/disposition rows | explicit fan-in, provenance and lifecycle accounting | one narrow coordination lock; extra indexed rows/joins; bounded updates | more initial DDL, safest staged migration | selected |
 | C. Keep only per-Card shadow rows | lossless but does not create the requested Note subject or solve fan-in | closest to current writes | defers rather than resolves Phase 4 identity | rejected |
 
-The production snapshot confirms collation, row volume and a zero-fan-in current distribution, and exposes the 15 actionable schema drift entries that P4-01A now repairs in repository/local MySQL. The selection remains provisional until refreshed production evidence and joint review are accepted. P4-05 owns exact tables, columns, FKs, indexes and retention.
+The refreshed production snapshot confirms collation, row volume, a zero-fan-in current distribution, matching Alembic head `20260913_000038` and zero schema drift. The [joint review](./phase-4-logical-contract-joint-acceptance-2026-09-13.md) accepts this selection. [P4-05](./phase-4-physical-shadow-schema-adr-2026-09-13.md) owns the exact tables, columns, FKs, indexes and retention representation.
 
 ## 7. Contributor and equivalence contract
 
@@ -253,7 +253,7 @@ If any predicate fails, the item is stale and is retried from fresh authority; i
 
 Future mirror-enabled writers must resolve and validate affected subject keys before acquiring progress locks, then use this order inside the transaction/savepoint already owned by the writer:
 
-1. retain any pre-existing transaction-owner lock that must precede the mutation, such as a StudySession/Batch or Connect source-identity row; P4-07/P4-08 must inventory this prefix and prevent reverse acquisition;
+1. retain any pre-existing transaction-owner lock that must precede the mutation, such as a StudySession/Batch or Connect source-identity row; P4-07/P4-08 must inventory this prefix and prevent reverse acquisition; P1-02 local/source `CardProgress` locks are contributor locks in step 4, not prefix locks;
 2. ensure the coordination row exists using the P4-05-approved unique-key pattern;
 3. lock all affected subject envelopes in canonical binary `(learner_user_id, logical_note_id)` order;
 4. lock all current `CardProgress` contributors for those subjects in canonical `(card_id, progress_id)` order;
@@ -360,28 +360,29 @@ Cutover from learner-local Note/Card to source Note/Card locks both affected sub
 4. **Reconcile — P4-10/P4-11:** require full source accounting, no unexplained differences and MySQL race/restart proof. Rollback disables mirror/comparison flags while retaining additive evidence.
 5. **Contract:** no destructive schema contraction and no authority cutover in Phase 4. Any Phase 5 use of Note progress requires separate authorization and a new contract.
 
-## 15. Open questions and acceptance gates
+## 15. Acceptance evidence and downstream proof
 
 ### Current MySQL evidence from P4-01
 
 - 16,424 single-contributor groups; fan-in and all four state/lineage fan-in quadrants are `0`;
 - NULL/orphan/missing-learner, unclassified and multi-context rows are `0`;
-- production charset/collation is `utf8mb4` / `utf8mb4_unicode_ci`, and database/repository Alembic heads both equal `20260910_000036`;
-- four open sessions are active, 117 are expired, active Connect imports are `0`, and batch exposure is unavailable because its table is absent;
-- `study_session_batches` is absent in the captured production baseline; repository migration `20260913_000037` and the remaining P4-01A repairs pass locally, but production apply/refresh remains a P4-01 blocker.
+- production charset/collation is `utf8mb4` / `utf8mb4_unicode_ci`, database/repository Alembic heads both equal `20260913_000038`, and schema drift is `0`;
+- 121 sessions are open but all are expired, so active-open sessions are `0`; active Connect imports and active/enqueued batches are also `0`;
+- `study_session_batches` is present with no contract issue after production applied `20260913_000037`; revision `20260913_000038` closes the remaining model/migration drift.
 
-### Joint decisions still required
+### Joint decisions closed
 
-- The [P4-03 provisional ADR](./phase-4-algorithm-state-availability-adr-2026-09-12.md) now defines the exact semantic-state fields, canonical raw/state codecs and supported/corrupt boundary; joint review must confirm them before future fan-in can leave provisional quarantine. The current zero-fan-in snapshot does not eliminate that design requirement.
-- The [P4-04 provisional ADR](./phase-4-history-provenance-lifecycle-adr-2026-09-12.md) now defines external lineage completeness, tombstone/detached retention and purge gates; joint review and physical design remain open.
-- P4-05 must choose the physical schema only after P4-01 evidence and the three logical ADRs are accepted together.
+- The [accepted P4-03 ADR](./phase-4-algorithm-state-availability-adr-2026-09-12.md) defines the exact semantic-state fields, canonical raw/state codecs and supported/corrupt boundary. Current zero fan-in does not remove the need for golden-vector and race proof.
+- The [accepted P4-04 ADR](./phase-4-history-provenance-lifecycle-adr-2026-09-12.md) defines external lineage completeness, tombstone/detached retention and purge gates.
+- The [joint acceptance record](./phase-4-logical-contract-joint-acceptance-2026-09-13.md) confirms that state equality excludes history, lineage remains per contributor, and the P1-02 local/source order belongs inside the contributor-lock stage after subject locks.
+- The [P4-05 physical schema ADR](./phase-4-physical-shadow-schema-adr-2026-09-13.md) translates the accepted rules into additive storage.
 
-### Provisional review result
+### Accepted review result
 
-- identity, authority boundary and no-winner rule: **ready for cross-review**;
-- contributor/vector and counter semantics: **ready for cross-review**, exact hashes depend on P4-03/P4-04;
-- lock/race contract: **ready for implementation planning**, MySQL proof pending;
-- P4-02 overall: **not Accepted** while the P4-01A production gate and joint ADR gates remain open.
+- identity, authority boundary and no-winner rule: **ACCEPTED**;
+- contributor/vector and counter semantics: **ACCEPTED**, using the exact P4-03 state hash and independent P4-04 lineage hash;
+- lock/race contract: **ACCEPTED FOR IMPLEMENTATION**, with two-connection proof assigned to P4-11;
+- P4-02 overall: **ACCEPTED**.
 
 ## 16. Rollback
 
