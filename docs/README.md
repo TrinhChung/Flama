@@ -13,7 +13,11 @@ Tài liệu mô tả kiến trúc hiện hành và các tiêu chuẩn kỹ thu�
 | [`SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) | **Tổng quan kiến trúc toàn hệ thống** (React SPA, Flask REST API, Flama Connect, Flama Audio). |
 | [`FLAMA_PAYMENT_ARCHITECTURE.md`](architecture/FLAMA_PAYMENT_ARCHITECTURE.md) | **Kiến trúc thanh toán payOS** (Orders, PaymentAttempts, Webhook, Entitlements). |
 | [`CARD_TEMPLATE_SANDBOX_RENDERER.md`](architecture/CARD_TEMPLATE_SANDBOX_RENDERER.md) | **Cơ chế render iframe sandbox an toàn** cho custom card templates. |
-| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–2 hoàn tất, Phase 3 và INT-01 còn mở, Phase 4–9 chưa bắt đầu. |
+| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–3 và INT-01 hoàn tất, Phase 4 active tại P4-01 với production evidence đã capture và P4-02/P4-03/P4-04 provisional. |
+| [`phase-4-current-state-preflight-2026-09-10.md`](architecture/phase-4-current-state-preflight-2026-09-10.md) | P4-01 audit/preflight; deterministic production MySQL bundle đã capture, 15 actionable schema drift entries và absent/unmigrated `study_session_batches` còn block. |
+| [`phase-4-progress-identity-fanin-revision-adr-2026-09-10.md`](architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) | P4-02 provisional ADR cho learner/Note identity, fan-in, generation và lock order. |
+| [`phase-4-algorithm-state-availability-adr-2026-09-12.md`](architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) | P4-03 provisional ADR cho exact Algorithm State/raw codecs và context-aware availability. |
+| [`phase-4-history-provenance-lifecycle-adr-2026-09-12.md`](architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) | P4-04 provisional ADR cho history completeness, provenance, retention fence và reset/delete/rekey. |
 | [`STUDY_ALGORITHM_RETIREMENT_LIFECYCLE.md`](architecture/STUDY_ALGORITHM_RETIREMENT_LIFECYCLE.md) | Lifecycle `active/deprecated/lease-only/retired`, retention gate và rollback cho exact Algorithm artifacts. |
 | [`builtin-trigger-runtime-contract-2026-09-07.md`](architecture/builtin-trigger-runtime-contract-2026-09-07.md) | ADR cho exact-version dispatcher của bốn built-in review Triggers. |
 | [`trusted-study-keyboard-boundary-2026-09-07.md`](architecture/trusted-study-keyboard-boundary-2026-09-07.md) | ADR no-bridge bảo vệ Study shortcuts khỏi iframe Template không tin cậy. |
@@ -51,7 +55,7 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 |---|---|
 | [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
-| [`Phase 0–3 Decoupling Task Backlog`](task/decoupling/README.md) | 23 task specs chi tiết để đóng các phần còn thiếu của Phase 0–3, gồm dependency, output, acceptance gate và rollback. |
+| [`Study Decoupling Task Backlog`](task/decoupling/README.md) | Tracker task Phase 0–4, dependency, output, acceptance gate và rollback; Phase 4 hiện ở preflight/ADR. |
 | [`P1/P2 closeout — 2026-09-08`](task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) | Handoff hoàn tất 8 task P1/P2, test evidence, async containment, v3 rollout và rollback. |
 | [`FLASHCARD_FOR_KIDS_PLAN.md`](plans/proposals/FLASHCARD_FOR_KIDS_PLAN.md) | Ý tưởng phát triển bộ flashcard chuyên biệt cho trẻ em. |
 | [`LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md`](plans/proposals/LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md) | **Đề xuất phân tích & gợi ý âm nghe nhầm đa ngôn ngữ (P3 - Low Priority)**: Dựa trên lịch sử nhập từ và từ gốc trong chế độ Dictation để tìm ra ma trận âm người dùng hay nghe nhầm (Tiếng Nhật, Tiếng Anh, Tiếng Hàn, Tiếng Trung, Tiếng Việt...). |

@@ -273,7 +273,7 @@ def collect_connection_safety() -> dict[str, Any]:
 
     identity = db.session.execute(
         sa.text(
-            "SELECT CURRENT_USER() AS current_user, DATABASE() AS database_name, "
+            "SELECT CURRENT_USER() AS connected_principal, DATABASE() AS database_name, "
             "@@version AS server_version, @@sql_mode AS sql_mode, "
             "@@character_set_database AS database_charset, "
             "@@collation_database AS database_collation, @@time_zone AS time_zone"
@@ -288,7 +288,7 @@ def collect_connection_safety() -> dict[str, Any]:
             "is not verified SELECT-only."
         )
 
-    principal = str(identity.get("current_user") or "")
+    principal = str(identity.get("connected_principal") or "")
     database_name = str(identity.get("database_name") or "")
     return {
         "dialect": dialect,
@@ -462,6 +462,7 @@ def _model_table_contract(
         {
             (tuple(index.columns.keys()), bool(index.unique))
             for index in table.indexes
+            if not bool(index.unique)
         }
     )
     return {
@@ -508,6 +509,7 @@ def _database_table_contract(inspector: sa.Inspector, table_name: str) -> dict[s
         {
             (tuple(item.get("column_names") or ()), bool(item.get("unique")))
             for item in indexes_raw
+            if not bool(item.get("unique"))
         }
     )
     try:
@@ -540,8 +542,14 @@ def _database_table_contract(inspector: sa.Inspector, table_name: str) -> dict[s
 
 
 def _normalized_type(value: str) -> str:
-    normalized = re.sub(r"\s+", "", str(value or "").upper())
-    if normalized in {"BOOL", "BOOLEAN", "TINYINT(1)"}:
+    normalized = str(value or "").strip().upper()
+    normalized = re.sub(
+        r"\s+COLLATE\s+(?:\"[^\"]+\"|'[^']+'|`[^`]+`|[A-Z0-9_]+)\s*$",
+        "",
+        normalized,
+    )
+    normalized = re.sub(r"\s+", "", normalized)
+    if normalized in {"BOOL", "BOOLEAN", "TINYINT", "TINYINT(1)"}:
         return "BOOLEAN"
     return normalized
 
@@ -558,6 +566,19 @@ def _normalized_server_default(value: str | None) -> str | None:
     if normalized.endswith("()"):
         normalized = normalized[:-2]
     return normalized
+
+
+def _actionable_indexes(contract: dict[str, Any]) -> list[list[Any]]:
+    """Exclude indexes MySQL must synthesize to support declared foreign keys."""
+
+    foreign_key_columns = {
+        tuple(item[0]) for item in contract.get("foreign_keys", []) if item
+    }
+    return [
+        item
+        for item in contract.get("indexes", [])
+        if tuple(item[0]) not in foreign_key_columns
+    ]
 
 
 def _schema_inventory(repository: dict[str, Any]) -> dict[str, Any]:
@@ -678,7 +699,7 @@ def _schema_inventory(repository: dict[str, Any]) -> dict[str, Any]:
                             "database": database_default,
                         }
                     )
-        for key in ("primary_key", "foreign_keys", "unique_column_sets", "indexes"):
+        for key in ("primary_key", "foreign_keys", "unique_column_sets"):
             if model_contract[key] != database_contract[key]:
                 drift.append(
                     {
@@ -688,6 +709,17 @@ def _schema_inventory(repository: dict[str, Any]) -> dict[str, Any]:
                         "database": database_contract[key],
                     }
                 )
+        model_indexes = _actionable_indexes(model_contract)
+        database_indexes = _actionable_indexes(database_contract)
+        if model_indexes != database_indexes:
+            drift.append(
+                {
+                    "table": table_name,
+                    "kind": "indexes",
+                    "model": model_indexes,
+                    "database": database_indexes,
+                }
+            )
 
     repository_heads = repository["repository_alembic_heads"]
     return {

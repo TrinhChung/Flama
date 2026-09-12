@@ -2,7 +2,7 @@
 
 > Date: 2026-09-10 | Mode: DESIGN | Decision: P4-D4-1
 >
-> Status: PROPOSED / PROVISIONAL — repository-grounded contract; acceptance is blocked by current P4-01 MySQL evidence and the joint P4-02/P4-03/P4-04 review
+> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; acceptance is blocked by P4-01 schema remediation and the joint P4-02/P4-03/P4-04 review
 >
 > Runtime change: none | Schema change: none | Operational authority: `CardProgress`
 >
@@ -104,7 +104,7 @@ If one learner reaches the same source Note through multiple install contexts, t
 - **Evidence:** `models/card_progress.py:13`, `models/card_progress.py:52`, `models/card.py:13`, `models/card.py:23`; `app/services/study_phase4_preflight_service.py:724-1073`.
 - **Potential concern:** a one-row backfill that picks one Card silently drops state, revision or provenance from sibling Cards.
 - **Impact:** current-state divergence can be hidden and a later review can make the chosen row stale without a detectable Note-level conflict.
-- **Unknowns:** current MySQL fan-in counts and distributions remain Needs Verification in P4-01.
+- **Production evidence (2026-09-12):** all 16,424 valid learner/Note groups are single-contributor; fan-in groups and all fan-in state/lineage quadrants are `0`.
 - **Alternatives Considered:** (A) collapse Cards directly into one JSON row; (B) keep a Note envelope plus explicit contributor rows.
 - **Trade-offs:** A reduces joins but makes contributor integrity and lifecycle accounting opaque. B adds rows/joins but supports relational accounting, deterministic locking and reconciliation.
 - **Recommendation:** select B; permit a subject projection only when all supported semantic-state hashes are equal.
@@ -116,7 +116,7 @@ If one learner reaches the same source Note through multiple install contexts, t
 - **Evidence:** `models/deck_install.py:20-44`, `models/deck_clone_deck_map.py:13-39`, `models/deck_clone_added_note.py:11-23`; `app/services/study_session_service.py:1424-1488`; `app/services/study_phase4_preflight_service.py:904-1085`.
 - **Potential concern:** using `Note.user_id`, local deck or install ID as the learner/subject key would split or misattribute existing authority.
 - **Impact:** installed-source progress can be assigned to the publisher, duplicated per install or lost during overlay rebase/cutover.
-- **Unknowns:** multi-context rows and overlapping current installs need current MySQL accounting.
+- **Production evidence (2026-09-12):** 16,107 rows are owned and 317 are installed-source; installed-local, overlapping and unclassified context memberships are all `0`.
 - **Alternatives Considered:** (A) key by learner + install + Note; (B) key by learner + Note and retain install/deck roles as context evidence.
 - **Trade-offs:** A isolates presentation contexts but contradicts the current learner/Card uniqueness contract. B matches current authority but requires query-time context resolution for availability.
 - **Recommendation:** use learner + Note; retain zero-to-many context evidence and let P4-03 resolve effective policy at query time.
@@ -128,7 +128,7 @@ If one learner reaches the same source Note through multiple install contexts, t
 - **Evidence:** `models/card_progress.py:36-42`, `models/review_event.py:10-29`, `models/connect_source_card_ref.py:13-57`, `models/connect_source_note_ref.py:13-52`, `models/connect_review_event_ref.py:19-58`; P4-01 audit v4 pointer/source partitions.
 - **Potential concern:** one equality hash either discards lineage or falsely treats different contributor revisions/pointers as scheduler-state divergence.
 - **Impact:** future reconciliation cannot distinguish a safe equivalent fan-in from missing or contradictory provenance.
-- **Unknowns:** current invalid pointer and multi-ref counts require the secured P4-01 bundle.
+- **Production evidence (2026-09-12):** 15,992 latest-event pointers are valid and 432 are null; missing and mismatched learner/Card pointers are `0`, and every source/ref accounting partition passes.
 - **Alternatives Considered:** (A) one opaque contributor hash; (B) separate raw, semantic, topology and lineage hashes.
 - **Trade-offs:** A is compact but not explainable or safely evolvable. B costs more storage/computation but gives bounded drift categories and exact codec ownership.
 - **Recommendation:** use separate hashes and retain their source fields; P4-03 owns semantic-state serialization and P4-04 owns lineage completeness.
@@ -152,7 +152,7 @@ If one learner reaches the same source Note through multiple install contexts, t
 - **Evidence:** `app/services/study_service.py:417-592`, `app/services/study_session_service.py:1021-1627`, `app/services/anki_sync_service.py:99-269`, `app/services/share/cutover.py:164-241`; P1-02 completion evidence.
 - **Potential concern:** two first reviews of sibling Cards can each see only itself and publish incompatible Note projections; adding locks in different orders can deadlock MySQL.
 - **Impact:** an apparently atomic mirror can miss a committed sibling or turn rollout into a lock-cycle risk.
-- **Unknowns:** final physical key/collation and MySQL execution plans depend on P4-01/P4-05 evidence.
+- **Remaining decision:** production uses `utf8mb4_unicode_ci`; P4-05 must choose binary-safe physical identity and prove MySQL execution plans after the 15 actionable schema drift entries are dispositioned.
 - **Alternatives Considered:** (A) optimistic retry without a coordination row; (B) ensure and lock a unique learner/Note coordination row before progress contributors.
 - **Trade-offs:** A avoids a hot row but cannot serialize absent first contributors cheaply. B introduces one lock per affected subject but makes first-create, sibling review and lifecycle fencing deterministic.
 - **Recommendation:** use B with globally sorted subject keys and then sorted contributor locks.
@@ -166,7 +166,7 @@ If one learner reaches the same source Note through multiple install contexts, t
 | B. Lockable envelope plus state and contributor/disposition rows | explicit fan-in, provenance and lifecycle accounting | one narrow coordination lock; extra indexed rows/joins; bounded updates | more initial DDL, safest staged migration | selected provisionally |
 | C. Keep only per-Card shadow rows | lossless but does not create the requested Note subject or solve fan-in | closest to current writes | defers rather than resolves Phase 4 identity | rejected |
 
-The selection is provisional until current MySQL evidence confirms key collation, row volumes, fan-in distribution and schema drift. P4-05 owns exact tables, columns, FKs, indexes and retention.
+The production snapshot confirms collation, row volume and a zero-fan-in current distribution, but it also exposes 15 actionable schema drift entries. The selection remains provisional until those entries and the independent missing batch-table migration are resolved. P4-05 owns exact tables, columns, FKs, indexes and retention.
 
 ## 7. Contributor and equivalence contract
 
@@ -362,18 +362,18 @@ Cutover from learner-local Note/Card to source Note/Card locks both affected sub
 
 ## 15. Open questions and acceptance gates
 
-### Needs Verification from P4-01
+### Current MySQL evidence from P4-01
 
-- current MySQL single/fan-in counts and all four state/lineage fan-in quadrants;
-- NULL/orphan/missing-learner and unclassified/multi-context rows;
-- actual key collation, UUID casing/shape, FK/delete actions and Alembic head;
-- reset/cutover/import volume and active session/batch/import exposure;
-- independent `study_session_batches` migration provenance.
+- 16,424 single-contributor groups; fan-in and all four state/lineage fan-in quadrants are `0`;
+- NULL/orphan/missing-learner, unclassified and multi-context rows are `0`;
+- production charset/collation is `utf8mb4` / `utf8mb4_unicode_ci`, and database/repository Alembic heads both equal `20260910_000036`;
+- four open sessions are active, 117 are expired, active Connect imports are `0`, and batch exposure is unavailable because its table is absent;
+- `study_session_batches` is absent in production and has no repository migration; the 15-entry schema drift inventory remains a P4-01 blocker.
 
 ### Joint decisions still required
 
-- P4-03 must define the exact semantic-state fields, canonical raw/state codecs and supported/corrupt boundary before equivalent fan-in can leave provisional quarantine.
-- P4-04 must define external lineage completeness, tombstone/detached retention and purge behavior.
+- The [P4-03 provisional ADR](./phase-4-algorithm-state-availability-adr-2026-09-12.md) now defines the exact semantic-state fields, canonical raw/state codecs and supported/corrupt boundary; joint review must confirm them before future fan-in can leave provisional quarantine. The current zero-fan-in snapshot does not eliminate that design requirement.
+- The [P4-04 provisional ADR](./phase-4-history-provenance-lifecycle-adr-2026-09-12.md) now defines external lineage completeness, tombstone/detached retention and purge gates; joint review and physical design remain open.
 - P4-05 must choose the physical schema only after P4-01 evidence and the three logical ADRs are accepted together.
 
 ### Provisional review result
@@ -381,7 +381,7 @@ Cutover from learner-local Note/Card to source Note/Card locks both affected sub
 - identity, authority boundary and no-winner rule: **ready for cross-review**;
 - contributor/vector and counter semantics: **ready for cross-review**, exact hashes depend on P4-03/P4-04;
 - lock/race contract: **ready for implementation planning**, MySQL proof pending;
-- P4-02 overall: **not Accepted** while P4-01 external evidence and joint ADR gates remain open.
+- P4-02 overall: **not Accepted** while P4-01 schema remediation and joint ADR gates remain open.
 
 ## 16. Rollback
 

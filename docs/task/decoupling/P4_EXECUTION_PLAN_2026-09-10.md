@@ -1,6 +1,6 @@
 # Kế hoạch triển khai Phase 4 — learner/Note progress shadow
 
-> Status: P4-00 COMPLETED; P4-01 external gates open; P4-02 logical ADR drafted provisionally; schema/runtime mirror chưa bắt đầu
+> Status: P4-00 COMPLETED; P4-01 production evidence captured with schema blockers open; P4-02/P4-03/P4-04 logical ADRs drafted provisionally; schema/runtime mirror chưa bắt đầu
 >
 > Planning date: 2026-09-10
 >
@@ -131,7 +131,7 @@ P4-10 ─> P4-11 MySQL rollout rehearsal
 P4-11 ─> INT-02 Phase 4 integration/closeout
 ```
 
-P4-00 và phần repository-only của P4-01 có thể chạy song song. Production evidence của P4-01 cần một SELECT-only environment được cấp quyền; thiếu evidence thì design draft được tiếp tục nhưng P4-05 không được approve và không chạy migration/backfill production.
+P4-00 và phần repository-only của P4-01 có thể chạy song song. Production evidence của P4-01 đã được capture ngày 2026-09-12 bằng principal tạm chỉ có `SELECT, SHOW VIEW`; P4-05 vẫn không được approve và không chạy migration/backfill production cho đến khi 15 actionable drift entries cùng missing `study_session_batches` migration được disposition.
 
 ## 8. Task map
 
@@ -157,7 +157,7 @@ P4-00 và phần repository-only của P4-01 có thể chạy song song. Product
 
 P4-00 corrects the newly found frozen-session gaps. For new-contract active/pending leases, same-tab and cross-tab Template changes must not rewrite frozen Template keys, versions, sources or hashes. Content edit behavior must be explicit; recommended policy is “saved for the next session” for any material that can affect evaluation. Restore recomputes/validates binding material, preserves `composition_id` in durable batches, and fails closed for unknown versioned wrappers while accepting genuine legacy flat policy maps.
 
-P4-00 completed on 2026-09-10 with the “saved for the next session” policy, strict frontend/backend validation, pending-batch composition checks and full Study module regressions. Wave 0 now continues at P4-01; G4-0 remains open until its accounting/evidence gate is complete.
+P4-00 completed on 2026-09-10 with the “saved for the next session” policy, strict frontend/backend validation, pending-batch composition checks and full Study module regressions. P4-01 now has deterministic current-MySQL accounting, but G4-0 remains open until the actionable schema drift and independent batch-table migration remediation are complete.
 
 P4-01 extends the read-only architecture audit and runs it through `wsgi_audit.py`. Inventory includes actual Alembic head/FKs/defaults/indexes/collation/time precision, `study_session_batches` drift, NULL/orphans, all learner/Note fan-in, raw queue labels, FSRS-labelled provenance, event pointer/linkage, logical overlay mappings, active sessions/batches and every writer. Current production facts must be timestamped and redacted.
 
@@ -169,7 +169,9 @@ Gate G4-0: P4-00 tests pass; P4-01 has deterministic accounting and an explicit 
 
 P4-02, P4-03 and P4-04 produce three linked ADRs. They may be drafted in parallel from the same evidence but are approved together. Terminology, identity, generation, source hash, state version, availability anchors and lifecycle status must match. Each ADR records at least two alternatives and MySQL/SQLAlchemy trade-offs.
 
-As of 2026-09-10, [P4-02's provisional ADR](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) fixes the proposed `(learner_user_id, Note.id)` identity, explicit contributor accounting, no-winner fan-in policy, separate subject generation/mirror revision, lifecycle fencing and global lock/race matrix. It is not Accepted: exact semantic-state equality belongs to P4-03, tombstone/provenance retention belongs to P4-04, and current MySQL distribution/collation evidence remains blocked in P4-01.
+As of 2026-09-12, [P4-02's provisional ADR](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) fixes the proposed `(learner_user_id, Note.id)` identity, explicit contributor accounting, no-winner fan-in policy, separate subject generation/mirror revision, lifecycle fencing and global lock/race matrix. It is not Accepted: exact semantic-state equality belongs to P4-03, tombstone/provenance retention belongs to P4-04, and the captured production distribution must be reviewed together with P4-01 schema remediation.
+
+As of 2026-09-12, [P4-03](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) and [P4-04](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) are also drafted provisionally. They define the exact compatibility state/raw codecs, context-aware per-Card availability comparison, conservative history completeness, scheduler-grade retained facts and reset/delete/rekey fences. All three ADRs remain unaccepted until secured current-MySQL evidence, the independent `study_session_batches` migration disposition and joint cross-review close G4-D.
 
 Gate G4-D: all three ADRs are `Accepted`; every current `CardProgress` column maps to raw preservation, generic envelope, Algorithm State, availability or lineage; every current writer/lifecycle path has a planned outcome; no open decision is deferred into DDL code.
 

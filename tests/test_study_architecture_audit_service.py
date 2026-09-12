@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
+import sqlalchemy as sa
 from sqlalchemy import text
 
 from app import create_app
@@ -13,7 +14,14 @@ from app.services.study_architecture_audit_service import (
     MAX_SAMPLE_IDS,
     build_study_architecture_audit,
 )
-from app.services.study_phase4_preflight_service import analyze_mysql_grants
+from app.services.study_phase4_preflight_service import (
+    _actionable_indexes,
+    _database_table_contract,
+    _model_table_contract,
+    _normalized_type,
+    analyze_mysql_grants,
+    collect_connection_safety,
+)
 from app.services.study_service import execute_native_review_command
 from app.services.study_session_service import commit_study_session, open_study_session
 from models import db
@@ -428,6 +436,124 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
         self.assertEqual(
             role_grant["disallowed_privileges"],
             ["UNPARSED OR ROLE GRANT"],
+        )
+
+    def test_mysql_connection_safety_uses_non_reserved_principal_alias(self):
+        fake_db = Mock()
+        fake_db.engine.dialect.name = "mysql"
+
+        identity_result = Mock()
+        identity_result.mappings.return_value.one.return_value = {
+            "connected_principal": "audit@127.0.0.1",
+            "database_name": "flama",
+            "server_version": "8.0",
+            "sql_mode": "STRICT_TRANS_TABLES",
+            "database_charset": "utf8mb4",
+            "database_collation": "utf8mb4_unicode_ci",
+            "time_zone": "+00:00",
+        }
+        grants_result = Mock()
+        grants_result.all.return_value = [
+            ("GRANT SELECT, SHOW VIEW ON `flama`.* TO `audit`@`127.0.0.1`",)
+        ]
+        fake_db.session.execute.side_effect = [identity_result, grants_result]
+
+        with patch(
+            "app.services.study_phase4_preflight_service.db",
+            fake_db,
+        ):
+            result = collect_connection_safety()
+
+        identity_sql = str(fake_db.session.execute.call_args_list[0].args[0])
+        self.assertIn("AS connected_principal", identity_sql)
+        self.assertNotIn("AS current_user", identity_sql)
+        self.assertTrue(result["current_mysql_evidence"])
+        self.assertTrue(result["select_only_verified"])
+
+    def test_mysql_schema_comparison_normalizes_reflection_only_type_details(self):
+        self.assertEqual(
+            _normalized_type('VARCHAR(36) COLLATE "utf8mb4_unicode_ci"'),
+            "VARCHAR(36)",
+        )
+        self.assertEqual(_normalized_type("BOOL"), _normalized_type("TINYINT"))
+        self.assertNotEqual(
+            _normalized_type("VARCHAR(16)"),
+            _normalized_type('VARCHAR(32) COLLATE "utf8mb4_unicode_ci"'),
+        )
+
+    def test_schema_contract_compares_unique_sets_separately_from_indexes(self):
+        metadata = sa.MetaData()
+        table = sa.Table(
+            "example",
+            metadata,
+            sa.Column("id", sa.Integer, primary_key=True),
+            sa.Column("lookup", sa.String(36), nullable=False),
+            sa.Column("scope", sa.String(36), nullable=False),
+        )
+        sa.Index("ix_example_lookup", table.c.lookup)
+        sa.Index("uq_example_lookup_scope", table.c.lookup, table.c.scope, unique=True)
+
+        model_contract = _model_table_contract(
+            table,
+            dialect=sa.engine.default.DefaultDialect(),
+        )
+        self.assertEqual(model_contract["indexes"], [[["lookup"], False]])
+        self.assertEqual(
+            model_contract["unique_column_sets"],
+            [["lookup", "scope"]],
+        )
+
+        inspector = Mock()
+        inspector.get_columns.return_value = [
+            {
+                "name": "id",
+                "type": sa.Integer(),
+                "nullable": False,
+                "default": None,
+            },
+            {
+                "name": "lookup",
+                "type": sa.String(36),
+                "nullable": False,
+                "default": None,
+            },
+            {
+                "name": "scope",
+                "type": sa.String(36),
+                "nullable": False,
+                "default": None,
+            },
+        ]
+        inspector.get_foreign_keys.return_value = []
+        inspector.get_indexes.return_value = [
+            {"column_names": ["lookup"], "unique": False},
+            {"column_names": ["lookup", "scope"], "unique": True},
+        ]
+        inspector.get_unique_constraints.return_value = []
+        inspector.get_pk_constraint.return_value = {"constrained_columns": ["id"]}
+        inspector.get_table_options.return_value = {}
+
+        database_contract = _database_table_contract(inspector, "example")
+        self.assertEqual(database_contract["indexes"], [[["lookup"], False]])
+        self.assertEqual(
+            database_contract["unique_column_sets"],
+            [["lookup", "scope"]],
+        )
+
+    def test_schema_comparison_excludes_mysql_foreign_key_support_indexes(self):
+        contract = {
+            "foreign_keys": [
+                [["scheduler_preset_id"], "scheduler_presets", ["id"], "SET NULL"]
+            ],
+            "indexes": [
+                [["scheduler_preset_id"], False],
+                [["session_id", "ordinal"], False],
+            ],
+        }
+
+        self.assertEqual(
+            _actionable_indexes(contract),
+            [[["session_id", "ordinal"], False]],
         )
 
     def test_current_mysql_phase4_blockers_flow_to_top_level_exit_code(self):

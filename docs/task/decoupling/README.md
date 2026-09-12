@@ -1,6 +1,6 @@
 # Study decoupling task backlog
 
-> Status: Phase 0–3 and INT-01 are closed, including the P4-00 correction that reclosed the frozen-session gate on 2026-09-10. Phase 4 is active at P4-01, with the P4-02 identity/fan-in ADR drafted provisionally; schema/runtime mirror has not started.
+> Status: Phase 0–3 and INT-01 are closed, including the P4-00 correction that reclosed the frozen-session gate on 2026-09-10. Phase 4 is active at P4-01, with the P4-02/P4-03/P4-04 logical ADRs drafted provisionally; schema/runtime mirror has not started.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
@@ -14,9 +14,13 @@
 >
 > Phase 4 entry evidence: [2026-09-09 investigation](../../architecture/phase-4-entry-investigation-2026-09-09.md) — includes the P4-00 frozen-session blocker and current writer/storage inventory.
 >
-> Phase 4 current-state preflight: [2026-09-10 P4-01 report](../../architecture/phase-4-current-state-preflight-2026-09-10.md) — audit v4 and bundle are implemented; current SELECT-only MySQL evidence and the independent `study_session_batches` migration gap remain blockers.
+> Phase 4 current-state preflight: [2026-09-10 P4-01 report, updated 2026-09-12](../../architecture/phase-4-current-state-preflight-2026-09-10.md) — deterministic production evidence is captured; 15 actionable schema drift entries and the absent/unmigrated `study_session_batches` table remain blockers.
 
-> Phase 4 identity/fan-in design: [2026-09-10 P4-02 provisional ADR](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) — learner/Note key, contributor vectors, generation/revision, lock order and typed dispositions are drafted; acceptance awaits P4-01 evidence and joint P4-02/P4-03/P4-04 review.
+> Phase 4 identity/fan-in design: [2026-09-10 P4-02 provisional ADR](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) — learner/Note key, contributor vectors, generation/revision, lock order and typed dispositions are drafted; production distribution is incorporated, while schema remediation and joint P4-02/P4-03/P4-04 review remain open.
+>
+> Phase 4 state/availability design: [2026-09-12 P4-03 provisional ADR](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) — exact compatibility identity, lossless raw/state codecs, typed failures, availability anchors and fixed-context Card-order comparison.
+>
+> Phase 4 history/lifecycle design: [2026-09-12 P4-04 provisional ADR](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) — provenance/completeness, retained scheduler facts, reset/delete/rekey fences and initializer handoff.
 >
 > Latest completed-task evidence review: [2026-08-30 review and P1-02 closeout](../../architecture/decoupling-progress-review-2026-08-30.md)
 >
@@ -156,10 +160,10 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | ID | Task | Dependency | Output chính |
 |---|---|---|---|
 | P4-00 | [Frozen-session entry correction](./P4-00_FROZEN_SESSION_ENTRY_CORRECTION.md) | none | **COMPLETED** — chặn live Template/Note propagation, strict wrapper/binding/batch validation và regression proof |
-| P4-01 | [Current-state preflight](./P4-01_CURRENT_STATE_PREFLIGHT.md) | none | **IN PROGRESS** — audit/writer/schema bundle implemented; current SELECT-only MySQL evidence and independent batch-table migration gap block acceptance |
-| P4-02 | [Progress identity, fan-in, revision and locking ADR](./P4-02_PROGRESS_IDENTITY_FANIN_REVISION.md) | P4-00 + P4-01 | **IN PROGRESS / PROVISIONAL** — learner/Note key, explicit contributors, no-winner fan-in, generation/fence and lock matrix drafted; external/joint gates remain open |
-| P4-03 | [Algorithm State and availability ADR](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | P4-00 + P4-01 | exact state envelope/codec plus context-aware availability contract |
-| P4-04 | [History, provenance and lifecycle ADR](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | P4-01 | completeness, retained scheduler facts, delete/reset/rekey rules |
+| P4-01 | [Current-state preflight](./P4-01_CURRENT_STATE_PREFLIGHT.md) | none | **IN PROGRESS** — deterministic production bundle captured; actionable schema drift and independent batch-table migration remediation block acceptance |
+| P4-02 | [Progress identity, fan-in, revision and locking ADR](./P4-02_PROGRESS_IDENTITY_FANIN_REVISION.md) | P4-00 + P4-01 | **IN PROGRESS / PROVISIONAL** — learner/Note key, explicit contributors, no-winner fan-in, generation/fence and lock matrix drafted; production distribution captured, schema/joint gates open |
+| P4-03 | [Algorithm State and availability ADR](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | P4-00 + P4-01 | **IN PROGRESS / PROVISIONAL** — exact compatibility state/raw codecs, typed failures and fixed-context per-Card availability contract drafted |
+| P4-04 | [History, provenance and lifecycle ADR](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | P4-01 | **IN PROGRESS / PROVISIONAL** — completeness/provenance, retained scheduler facts and reset/delete/rekey fence contract drafted |
 | P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | P4-02 + P4-03 + P4-04 | MySQL-ready additive model, constraints, indexes and migration/rollback design |
 | P4-06 | [Additive schema and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | P4-05 | models, Alembic migration, strict codec and authoritative-state mapper |
 | P4-07 | [Native and session mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | P4-06 | same-transaction mirror for REST, MCP, direct and batch writers |
@@ -214,7 +218,7 @@ Với browser security/keyboard testing, bắt buộc dùng Chrome profile riên
 P4-00 đã hoàn tất; entry hiện tại cho phép investigation/preflight read-only của P4-01. Additive model/migration bắt đầu ở P4-06 chỉ khi:
 
 - P4-00 đã chứng minh active session không bị live Template/Note edit thay artifact/binding;
-- P4-01 có current MySQL SELECT-only evidence hoặc mọi khoảng trống được ghi rõ là blocker;
+- P4-01 current MySQL SELECT-only evidence đã được capture và mọi schema/data gap có disposition được duyệt;
 - P4-02..P4-05 được duyệt và không còn quyết định ngầm trong migration;
 - schema change được user authorize trong một implementation turn riêng.
 

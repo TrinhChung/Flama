@@ -4,7 +4,7 @@
 >
 > Priority: P0 gate
 >
-> Status: IN PROGRESS — repository/audit implementation complete; current MySQL evidence and independent batch-table migration disposition remain blocked
+> Status: IN PROGRESS — current MySQL evidence captured; actionable schema drift and the independent batch-table migration disposition remain blocked
 >
 > Dependency: accepted Phase 0 evidence as historical baseline
 >
@@ -39,19 +39,21 @@ Tạo current, signed, read-only evidence đủ để chốt physical design và
 - Schema drift and writer inventory with blocker/warn/pass disposition.
 - Explicit data-volume inputs for P4-05/P4-09/P4-11.
 
-## Current handoff — 2026-09-10
+## Current handoff — 2026-09-12
 
 - Implemented audit contracts: `study-architecture-audit.v4` and `study-phase4-preflight.v1`.
 - Added a grant-first MySQL guard that refuses non-`SELECT`-only principals before application-table inspection.
 - Added schema/model/migration/default/table-option drift inventory, progress/lineage/disposition accounting and a machine-readable writer lifecycle inventory.
 - P4-02 cross-check hardened the audit with missing-learner disposition and independent overlapping context-membership counts; the exclusive context partition remains for compatibility.
 - Added `scripts/run_phase4_preflight_bundle.py` for two fixed-time runs, deterministic comparison, timings, exit codes and checksums.
+- Fixed two audit-only portability defects found by the production run: use a non-reserved alias for `CURRENT_USER()` and normalize MySQL collation/Boolean reflection while comparing unique sets separately from ordinary indexes.
 - Repository investigation report: [Phase 4 current-state preflight](../../architecture/phase-4-current-state-preflight-2026-09-10.md).
-- External blocker: no dedicated current-MySQL `SELECT`-only URI was available; the normal application credential was not used.
-- Independent repository blocker: `study_session_batches` is declared/used but absent from Alembic migration declarations. It must be resolved independently and must not be hidden in P4-06.
-- Verification: `study,database,cli --backend-only` passed 358 tests across 41 files; the focused audit/CLI/bundle slice passed 36 tests; compile, local Markdown links and `git diff --check` passed.
-- The current-MySQL command was not run because the required dedicated `SELECT`-only credential was unavailable.
-- Until both blockers are resolved, P4-01 remains open, P4-02..P4-04 may only be provisional where production distribution matters, and P4-05 remains blocked.
+- Production evidence was captured at `2026-09-12T11:16:29Z` with an ephemeral principal limited to `SELECT, SHOW VIEW`; the normal application principal was not used and the ephemeral principal was verified absent after the run.
+- Both fixed-time runs were byte-equivalent at the canonical-report layer, with no changed JSON paths. The secured bundle remains outside the repository at `/var/lib/flama-audit/phase4-preflight-20260912T111629Z`.
+- Production has 16,424 valid progress rows: all 16,424 are preliminary mirror candidates, with zero unresolvable rows, zero quarantine candidates and zero learner/Note fan-in groups. Every accounting partition passed.
+- Repository and database Alembic heads both equal `20260910_000036`, but 15 normalized actionable drift entries remain: 12 server-default mismatches, one ordinary-index mismatch, one `student_offer_mode` width mismatch and the missing `study_session_batches` table.
+- Independent repository blocker: `study_session_batches` is declared/used, absent from production and absent from Alembic migration declarations. It must be resolved independently and must not be hidden in P4-06.
+- Until the schema drift and missing-table migration disposition are resolved, P4-01 remains open and P4-05 remains blocked. P4-02..P4-04 may consume the measured production distributions but still require joint acceptance.
 
 ## Acceptance
 
