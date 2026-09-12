@@ -160,4 +160,36 @@ describe('MediaFieldPreview', () => {
     expect(audio).not.toBeNull()
     expect(audio?.src).toBe('https://example.com/custom_sound.mp3')
   })
+
+  it('rejects pasted images exceeding 2MB and does not send request', async () => {
+    const { toast } = await import('sonner')
+    const toastErrorSpy = vi.spyOn(toast, 'error')
+
+    const onChange = vi.fn()
+    const { container: view } = await render('', 'image', onChange)
+    const previewContainer = view.querySelector('[tabindex="0"]') as HTMLDivElement
+
+    const imageCompression = await import('@/lib/imageCompression')
+    vi.spyOn(imageCompression, 'compressImage').mockRejectedValue(new Error('Mock compression error'))
+
+    // Create an oversized file (3MB)
+    const largeFile = new File([new ArrayBuffer(3 * 1024 * 1024)], 'huge.png', { type: 'image/png' })
+
+    const pasteEvent = new Event('paste', { bubbles: true, cancelable: true }) as any
+    pasteEvent.clipboardData = {
+      items: [{
+        type: 'image/png',
+        getAsFile: () => largeFile,
+      }],
+      files: [largeFile],
+      getData: () => '',
+    }
+
+    await act(async () => {
+      previewContainer.dispatchEvent(pasteEvent)
+    })
+
+    expect(toastErrorSpy).toHaveBeenCalledWith('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })

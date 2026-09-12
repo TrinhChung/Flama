@@ -570,13 +570,22 @@ export function AdminImageLibraryPage() {
 
             <div className="space-y-2">
               <Label htmlFor="asset-file">
-                {editingAsset ? 'Thay đổi File ảnh (Không bắt buộc)' : 'Tập tin ảnh (PNG/JPG/WEBP/SVG)'}
+                {editingAsset ? 'Thay đổi File ảnh (Không bắt buộc, tối đa 2MB)' : 'Tập tin ảnh (PNG/JPG/WEBP/SVG, tối đa 2MB)'}
               </Label>
               <Input
                 id="asset-file"
                 type="file"
                 accept="image/*"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file && file.size > 2 * 1024 * 1024) {
+                    toast.error('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
+                    e.target.value = ''
+                    setSelectedFile(null)
+                    return
+                  }
+                  setSelectedFile(file || null)
+                }}
               />
             </div>
 

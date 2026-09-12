@@ -36,8 +36,8 @@ export function AvatarUploadModal({
       return
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Dung lượng ảnh vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn.')
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
       return
     }
 
@@ -97,7 +97,7 @@ export function AvatarUploadModal({
             Cập nhật ảnh đại diện
           </DialogTitle>
           <DialogDescription className="text-xs sm:text-sm">
-            Tải lên ảnh mới (tối đa 5MB, tự động cắt vuông và tối ưu định dạng WebP).
+            Tải lên ảnh mới (tối đa 2MB, tự động cắt vuông và tối ưu định dạng WebP).
           </DialogDescription>
         </DialogHeader>
 
