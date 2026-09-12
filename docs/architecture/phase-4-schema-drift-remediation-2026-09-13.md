@@ -14,8 +14,10 @@ P4-01 model/migration drift through a second forward-only repair. Local MySQL
 rehearsal reaches repository/database head `20260913_000038` with zero schema
 drift under the Phase 4 preflight comparator.
 
-Production remains at the earlier captured head until the normal deployment
-applies both revisions and a fresh SELECT-only bundle confirms the result.
+Production applied both revisions in release
+`11eefb15938cc8f4847df6d2d4014f40f41f3d13`. The fresh SELECT-only bundle
+confirms matching head `20260913_000038`, zero schema drift and no batch-table
+contract issue.
 
 ## Observed state
 
@@ -95,11 +97,13 @@ rollback; schema downgrade intentionally performs no destructive contraction.
 - `study_session_batches` contract issues: none.
 - Phase 4 local schema comparison: zero drift and matching Alembic head.
 
-## Remaining production verification
+## Production verification completed
 
-- Apply through the normal release migration unit; do not run application tests
-  against production.
-- Re-run the deterministic two-pass bundle with an ephemeral SELECT-only user.
-- Confirm no active/enqueued batch requires a rollout fence.
-- Keep P4-05 blocked until the refreshed evidence and the joint P4-02/P4-03/P4-04
-  decision review are accepted.
+- The normal release migration unit applied `000037` and `000038`; no
+  application test was run against production.
+- The deterministic two-pass bundle used an ephemeral `SELECT, SHOW VIEW`
+  principal and the principal was removed afterward.
+- Repository/database head matches, schema drift is zero, the batch contract
+  has no issue and active/enqueued batch count is zero.
+- [Joint P4-01/P4-02/P4-03/P4-04 acceptance](./phase-4-logical-contract-joint-acceptance-2026-09-13.md)
+  closes the gate and allows P4-05 physical design.

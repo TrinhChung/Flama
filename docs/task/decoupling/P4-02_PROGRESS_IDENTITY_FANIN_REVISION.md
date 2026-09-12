@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: IN PROGRESS — provisional ADR drafted; P4-01A remediation passed locally, while production refresh and joint P4-02/P4-03/P4-04 acceptance remain open
+> Status: **COMPLETED / ACCEPTED** — joint logical review and production P4-01 gate closed on 2026-09-13
 >
 > Dependency: P4-00 and P4-01
 >
@@ -36,19 +36,20 @@ Chốt logical subject, contributor accounting, quarantine và concurrency contr
 - Quarantine/disposition/error codes.
 - Owned/overlay/reset/rekey examples.
 
-## Current handoff — 2026-09-10
+## Completion handoff — 2026-09-13
 
-- Provisional design ADR: [Phase 4 learner/Note identity, fan-in and revision](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md).
-- Proposed logical key: exactly `(CardProgress.user_id, Card.note_id)`; Template, Card, deck, install, source owner and external IDs remain contributor/context/provenance material.
-- Proposed storage direction: lockable learner/Note envelope plus explicit contributor rows. No physical table, FK, index or migration is authorized by this task.
+- Accepted design ADR: [Phase 4 learner/Note identity, fan-in and revision](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md).
+- Accepted logical key: exactly `(CardProgress.user_id, Card.note_id)`; Template, Card, deck, install, source owner and external IDs remain contributor/context/provenance material.
+- Accepted storage direction: lockable learner/Note envelope plus explicit contributor rows. The exact physical design is owned by [P4-05](../../architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md); this task itself creates no schema.
 - Ordinary fan-in has no winner. Single and semantically equivalent fan-in may be mirrored while preserving all contributor/lineage evidence; divergent/unsupported/corrupt fan-in is quarantined.
 - `subject_generation` fences topology/reset/delete/rekey/backfill, while `mirror_revision` versions only the derived projection. Per-Card `CardProgress.revision` remains the sole current scheduler conflict token.
-- Proposed global order: existing transaction-owner prefix locks, sorted subject coordination locks, sorted CardProgress contributor locks, authoritative mutation/event flush, then one mirror finalization per subject.
+- Accepted global order: existing transaction-owner/Connect source-identity prefix locks, sorted subject coordination locks, sorted CardProgress contributor locks, authoritative mutation/event flush, then one mirror finalization per subject. P1-02 local/source order is preserved inside the contributor stage, never before subject locks.
 - P1-02 result codes are mapped without changing their apply/no-op/conflict semantics.
 - Runtime/schema change: none.
-- [P4-03](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) now provisionally defines the exact raw/state codecs, `algorithm_state_hash`, availability/control anchors and the resulting `semantic_state_hash` used by this fan-in contract.
-- [P4-04](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) now provisionally defines lineage completeness, retained scheduler facts and reset/delete/rekey fence retention.
-- The secured production snapshot found 16,424 single-contributor learner/Note groups and zero fan-in, unresolvable or overlapping-context groups. P4-01A has repaired the schema/migration findings in repository/local MySQL; acceptance remains blocked by production refresh and joint ADR review.
+- [P4-03](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) defines the exact raw/state codecs, `algorithm_state_hash`, availability/control anchors and resulting `semantic_state_hash` used by this fan-in contract.
+- [P4-04](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) defines lineage completeness, retained scheduler facts and reset/delete/rekey fence retention.
+- The refreshed production snapshot found 16,424 single-contributor learner/Note groups and zero fan-in, quarantine, unresolvable or overlapping-context groups at matching head `20260913_000038` with zero drift.
+- The [joint acceptance record](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) closes all logical consistency gates. MySQL race proof remains correctly assigned to P4-11 rather than being treated as an unresolved design choice.
 
 ## Acceptance
 

@@ -4,7 +4,7 @@
 >
 > Priority: P0 design gate
 >
-> Status: TODO
+> Status: **COMPLETED / ACCEPTED FOR P4-06 IMPLEMENTATION**
 >
 > Dependency: P4-02, P4-03, P4-04 accepted; P4-01 schema evidence complete
 >
@@ -36,6 +36,22 @@ Chuyển logical contracts thành một additive MySQL design có lockable subje
 ## Recommended direction
 
 Envelope plus separate current state, availability and contributor/disposition rows, because it gives a stable learner/Note lock and explicit reconciliation evidence. The ADR may choose another design only with equivalent locking, accountability and query behavior.
+
+## Completion handoff — 2026-09-13
+
+The [accepted physical schema ADR](../../architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md) selects the recommended normalized direction and fixes:
+
+- ten additive table contracts for subject/state/contributor/availability/lineage/history/lifecycle and backfill run/checkpoint/disposition storage;
+- exact MySQL types, nullability, defaults, PK/UQ/FK/delete actions, checks and hot-path indexes;
+- a binary immutable Note/Card identity beside nullable live FKs, so content cascades cannot erase lifecycle evidence;
+- exact bounded JSON/codec/hash rules with relational availability anchors and no stored `eligible_now`;
+- the idempotent unique-key first-create protocol and global subject-before-contributor lock order;
+- a production-sized initial estimate of roughly 380,846 additive rows from 16,424 progress rows and 125,554 history events;
+- additive migration order, complete-contract adoption for any startup-created table, empty-only downgrade and flag-off production rollback;
+- independent default-off write, comparison and backfill flags, with no Phase 4 shadow-read authority flag;
+- the exact P4-06 file-ownership and verification handoff.
+
+No DDL, model, runtime flag or writer was added by P4-05 itself. P4-06 is now ready for a separately reviewable implementation slice.
 
 ## Output
 

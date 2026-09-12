@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: IN PROGRESS / PROVISIONAL — logical ADR drafted; P4-01A remediation passed locally, while production refresh and joint decision gates remain open
+> Status: **COMPLETED / ACCEPTED** — joint logical review and production P4-01 gate closed on 2026-09-13
 >
 > Dependency: P4-00 and P4-01; consistency with P4-02/P4-04
 >
@@ -34,9 +34,9 @@ Chốt exact versioned state và query projection cho current compatibility sche
 - SQL query projection and ordering specification.
 - Golden-vector specification.
 
-## Progress — 2026-09-12
+## Completion handoff — 2026-09-13
 
-The repository-grounded [P4-03 provisional ADR](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) now defines:
+The repository-grounded [P4-03 accepted ADR](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) defines:
 
 - separate lossless raw contributor and exact Algorithm State codecs;
 - the sole proven compatibility identity `legacy-anki/1.0.0` + `anki-card-state.v1`;
@@ -44,7 +44,7 @@ The repository-grounded [P4-03 provisional ADR](../../architecture/phase-4-algor
 - relational per-contributor availability anchors with a frozen query context;
 - current queue/due/count/order/learn-ahead behavior and cross-engine golden vectors.
 
-Runtime change: none. Schema change: none. The production snapshot found 16,424 canonical queue rows, no unknown/compatibility queues, no partial memory state and no non-finite values. P4-01A has repaired the schema/migration findings in repository/local MySQL; acceptance remains blocked by production refresh and joint P4-02/P4-03/P4-04 review.
+Runtime change: none. Schema change: none. The refreshed production snapshot found 16,424 canonical queue rows, no unknown/compatibility queues, no partial memory state and no non-finite values at matching head `20260913_000038` with zero drift. The [joint acceptance record](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) confirms that semantic equality includes control anchors but excludes history/lineage. [P4-05](../../architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md) fixes the separate state and relational per-contributor availability layout. Codec/golden-vector/MySQL round-trip proof belongs to P4-06/P4-11.
 
 ## Acceptance
 

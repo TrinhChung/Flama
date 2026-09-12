@@ -1,6 +1,6 @@
 # Study decoupling task backlog
 
-> Status: Phase 0–3 and INT-01 are closed, including the P4-00 correction that reclosed the frozen-session gate on 2026-09-10. Phase 4 is active at P4-01/P4-01A: schema remediation is implemented and rehearsed on local MySQL, while production upgrade plus refreshed SELECT-only evidence and joint P4-02/P4-03/P4-04 acceptance remain open; schema/runtime mirror has not started.
+> Status: Phase 0–3 and INT-01 are closed. Phase 4 gates P4-00 through P4-05 are accepted: production is at head `20260913_000038` with zero preflight drift, the logical contracts are jointly accepted, and the physical shadow schema is specified. P4-06 additive schema/codec implementation is next; runtime mirror has not started.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
@@ -14,13 +14,15 @@
 >
 > Phase 4 entry evidence: [2026-09-09 investigation](../../architecture/phase-4-entry-investigation-2026-09-09.md) — includes the P4-00 frozen-session blocker and current writer/storage inventory.
 >
-> Phase 4 current-state preflight: [2026-09-10 P4-01 report, updated 2026-09-13](../../architecture/phase-4-current-state-preflight-2026-09-10.md) — deterministic production evidence is captured; [P4-01A](./P4-01A_SCHEMA_DRIFT_REMEDIATION.md) implements the independent repairs through head `20260913_000038`, with production application and refreshed evidence still pending.
+> Phase 4 current-state preflight: [2026-09-10 P4-01 report, accepted 2026-09-13](../../architecture/phase-4-current-state-preflight-2026-09-10.md) — deterministic production evidence confirms head `20260913_000038`, zero drift and complete accounting after [P4-01A](./P4-01A_SCHEMA_DRIFT_REMEDIATION.md).
 
-> Phase 4 identity/fan-in design: [2026-09-10 P4-02 provisional ADR](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) — learner/Note key, contributor vectors, generation/revision, lock order and typed dispositions are drafted; production distribution is incorporated, while the P4-01A production gate and joint P4-02/P4-03/P4-04 review remain open.
+> Phase 4 identity/fan-in design: [2026-09-10 P4-02 accepted ADR](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) — learner/Note key, contributor vectors, generation/revision, subject-before-contributor lock order and typed dispositions.
 >
-> Phase 4 state/availability design: [2026-09-12 P4-03 provisional ADR](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) — exact compatibility identity, lossless raw/state codecs, typed failures, availability anchors and fixed-context Card-order comparison.
+> Phase 4 state/availability design: [2026-09-12 P4-03 accepted ADR](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) — exact compatibility identity, lossless raw/state codecs, typed failures, availability anchors and fixed-context Card-order comparison.
 >
-> Phase 4 history/lifecycle design: [2026-09-12 P4-04 provisional ADR](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) — provenance/completeness, retained scheduler facts, reset/delete/rekey fences and initializer handoff.
+> Phase 4 history/lifecycle design: [2026-09-12 P4-04 accepted ADR](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) — provenance/completeness, retained scheduler facts, reset/delete/rekey fences and initializer handoff.
+>
+> Phase 4 joint acceptance and physical design: [2026-09-13 joint review](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) and [P4-05 accepted schema ADR](../../architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md).
 >
 > Latest completed-task evidence review: [2026-08-30 review and P1-02 closeout](../../architecture/decoupling-progress-review-2026-08-30.md)
 >
@@ -160,12 +162,12 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | ID | Task | Dependency | Output chính |
 |---|---|---|---|
 | P4-00 | [Frozen-session entry correction](./P4-00_FROZEN_SESSION_ENTRY_CORRECTION.md) | none | **COMPLETED** — chặn live Template/Note propagation, strict wrapper/binding/batch validation và regression proof |
-| P4-01 | [Current-state preflight](./P4-01_CURRENT_STATE_PREFLIGHT.md) | none | **IN PROGRESS** — deterministic production baseline captured; repository/local remediation passed; production refresh blocks acceptance |
-| P4-01A | [Independent schema drift remediation](./P4-01A_SCHEMA_DRIFT_REMEDIATION.md) | P4-01 evidence | **LOCAL GATE PASSED / PRODUCTION PENDING** — independent batch-table migration, model/default parity, safe marketplace convergence and zero-drift local MySQL rehearsal |
-| P4-02 | [Progress identity, fan-in, revision and locking ADR](./P4-02_PROGRESS_IDENTITY_FANIN_REVISION.md) | P4-00 + P4-01 | **IN PROGRESS / PROVISIONAL** — learner/Note key, explicit contributors, no-winner fan-in, generation/fence and lock matrix drafted; production distribution captured, schema/joint gates open |
-| P4-03 | [Algorithm State and availability ADR](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | P4-00 + P4-01 | **IN PROGRESS / PROVISIONAL** — exact compatibility state/raw codecs, typed failures and fixed-context per-Card availability contract drafted |
-| P4-04 | [History, provenance and lifecycle ADR](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | P4-01 | **IN PROGRESS / PROVISIONAL** — completeness/provenance, retained scheduler facts and reset/delete/rekey fence contract drafted |
-| P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | P4-01A production gate + P4-02 + P4-03 + P4-04 | MySQL-ready additive model, constraints, indexes and migration/rollback design |
+| P4-01 | [Current-state preflight](./P4-01_CURRENT_STATE_PREFLIGHT.md) | none | **COMPLETED / ACCEPTED** — deterministic production refresh; head `000038`, zero drift and complete accounting |
+| P4-01A | [Independent schema drift remediation](./P4-01A_SCHEMA_DRIFT_REMEDIATION.md) | P4-01 evidence | **COMPLETED / PRODUCTION VERIFIED** — migrations applied; batch contract and model/migration parity pass |
+| P4-02 | [Progress identity, fan-in, revision and locking ADR](./P4-02_PROGRESS_IDENTITY_FANIN_REVISION.md) | P4-00 + P4-01 | **COMPLETED / ACCEPTED** — learner/Note identity, no-winner fan-in, generation/fence and lock matrix |
+| P4-03 | [Algorithm State and availability ADR](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | P4-00 + P4-01 | **COMPLETED / ACCEPTED** — exact compatibility state/raw codecs and fixed-context per-Card availability |
+| P4-04 | [History, provenance and lifecycle ADR](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | P4-01 | **COMPLETED / ACCEPTED** — completeness/provenance, retained facts and reset/delete/rekey fence |
+| P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | P4-01A production gate + P4-02 + P4-03 + P4-04 | **COMPLETED / ACCEPTED** — exact additive tables, constraints, indexes, first-create locking and rollback design |
 | P4-06 | [Additive schema and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | P4-05 | models, Alembic migration, strict codec and authoritative-state mapper |
 | P4-07 | [Native and session mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | P4-06 | same-transaction mirror for REST, MCP, direct and batch writers |
 | P4-08 | [External and lifecycle mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | P4-07 | import/sync/reset/cutover/delete coverage with explicit dispositions |

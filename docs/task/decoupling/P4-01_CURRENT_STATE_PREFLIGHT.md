@@ -4,7 +4,7 @@
 >
 > Priority: P0 gate
 >
-> Status: IN PROGRESS — schema remediation implemented/rehearsed locally; production upgrade and refreshed SELECT-only evidence remain open
+> Status: **COMPLETED / ACCEPTED** — production head, zero-drift schema and deterministic SELECT-only refresh verified on 2026-09-13
 >
 > Dependency: accepted Phase 0 evidence as historical baseline
 >
@@ -53,8 +53,25 @@ Tạo current, signed, read-only evidence đủ để chốt physical design và
 - Production has 16,424 valid progress rows: all 16,424 are preliminary mirror candidates, with zero unresolvable rows, zero quarantine candidates and zero learner/Note fan-in groups. Every accounting partition passed.
 - The captured production evidence remains at repository/database head `20260910_000036` and reports the 15 normalized actionable drift entries observed before remediation.
 - [P4-01A](./P4-01A_SCHEMA_DRIFT_REMEDIATION.md) now declares `study_session_batches` independently in `20260913_000037` and reconciles the remaining model/migration contracts in `20260913_000038`; local MySQL reaches the new head with zero preflight schema drift.
-- P4-01 stays open until the normal production migration unit applies both revisions and a fresh deterministic SELECT-only bundle confirms head parity, table shape and zero unexplained drift.
-- The repository/local dispositions are complete, but P4-01 and P4-05 remain blocked until production applies P4-01A and the refreshed bundle verifies the new head and zero unexplained drift. P4-02..P4-04 may consume the measured production distributions but still require joint acceptance.
+- The normal production migration unit applied both revisions in release `11eefb15938cc8f4847df6d2d4014f40f41f3d13` and the refreshed deterministic SELECT-only bundle confirms repository/database head `20260913_000038`, a valid batch-table contract and `drift_count=0`.
+- The accepted refresh is stored at `/var/lib/flama-audit/phase4-preflight-20260912T225725Z-11eefb1`; both canonical reports hash to `59bdd8e680f09d0ed78a9164426abcf19ada81311d738dcf1947c15628aa1d63`, comparison reports changed paths `[]`, and all recorded file checksums verify.
+- Both runs report P4 gate `PASS`, zero P4 blockers/warnings and zero active-open sessions, active Connect imports or active/enqueued batches. The wider audit's seven historical warnings remain explicitly tracked but do not block this current-state/schema gate.
+- [Joint acceptance](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) closes P4-01 with P4-02/P4-03/P4-04 and authorizes P4-05 design.
+
+## Completion handoff — 2026-09-13
+
+```text
+Task ID: P4-01
+Primary outcome: deterministic production MySQL current-state/schema/writer evidence with complete source accounting.
+Production release: 11eefb15938cc8f4847df6d2d4014f40f41f3d13.
+Repository/database head: 20260913_000038 / 20260913_000038.
+Schema drift: 0; batch contract issues: none.
+Current progress: 16,424 source = 16,424 mirror + 0 quarantine + 0 unresolvable.
+Determinism: two canonical reports equal; changed paths empty; checksums verified.
+Safety: startup mutation disabled; ephemeral SELECT/SHOW VIEW principal removed after collection.
+Runtime/schema change in P4-01: none.
+Follow-up: P4-05 physical design, then P4-06 implementation.
+```
 
 ## Acceptance
 

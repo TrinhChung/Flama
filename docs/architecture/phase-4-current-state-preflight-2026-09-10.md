@@ -2,21 +2,36 @@
 
 > Scope: P4-01 repository implementation and evidence readiness
 >
-> Verdict: **REMEDIATION IMPLEMENTED/LOCALLY REHEARSED; production upgrade and refreshed SELECT-only evidence pending**
+> Verdict: **ACCEPTED — production upgraded and deterministic SELECT-only refresh passed on 2026-09-13**
 >
 > Runtime/storage change: none; this work is read-only audit instrumentation
 
 ## 1. Outcome first
 
-The repository side of P4-01 is implemented: audit schema `study-architecture-audit.v4` now embeds `study-phase4-preflight.v1`, verifies MySQL grants before reading application tables, inventories model/migration/database contracts, accounts for progress state and lineage independently, and emits the complete writer lifecycle inventory. A two-run bundle command freezes `observed_at`, records timings and exit codes, compares deterministic output, and writes checksums without putting a database URI in the command or artifacts.
+The repository side of P4-01 is implemented: audit schema `study-architecture-audit.v4` embeds `study-phase4-preflight.v1`, verifies MySQL grants before reading application tables, inventories model/migration/database contracts, accounts for progress state and lineage independently, and emits the complete writer lifecycle inventory. A two-run bundle command freezes `observed_at`, records timings and exit codes, compares deterministic output, and writes checksums without putting a database URI in the command or artifacts.
 
-P4-01 is not accepted yet, but the external evidence gap is closed. On 2026-09-12 the audit ran twice against production MySQL with one frozen observation time and an ephemeral principal limited to `SELECT, SHOW VIEW`. The normal application principal was deliberately not used because its grants include write/admin capability. The ephemeral principal was dropped and verified absent after each run.
+P4-01 is accepted. After PR #162 deployed, the audit ran twice again against production MySQL with one frozen observation time and an ephemeral principal limited to `SELECT, SHOW VIEW`. The normal application principal was not used. The ephemeral principal was dropped and verified absent.
 
-The two reports are deterministic and expose no credential or raw principal. They establish the historical production row distributions, Alembic head, MySQL settings and 15 normalized actionable drift entries at head `20260910_000036`.
+The two refreshed reports are deterministic and expose no credential or raw principal. They establish matching repository/database head `20260913_000038`, a valid `study_session_batches` contract and zero schema drift. The earlier bundle remains a labeled pre-remediation baseline that exposed 15 normalized actionable drift entries at head `20260910_000036`.
 
-P4-01A now resolves those findings in the repository through independent revisions `20260913_000037` and `20260913_000038`, and local MySQL reports matching heads with zero drift. P4-01 remains open because production has not yet applied those revisions or produced the required refreshed SELECT-only bundle.
+P4-01A resolved those findings through independent revisions `20260913_000037` and `20260913_000038`. Both local and production MySQL now report matching heads with zero drift. The [joint acceptance record](./phase-4-logical-contract-joint-acceptance-2026-09-13.md) carries the final checksums and closes P4-01.
 
-## 2. Frozen repository evidence
+### Accepted refresh — 2026-09-13
+
+| Evidence | Observation | Disposition |
+|---|---|---|
+| deployed release | `11eefb15938cc8f4847df6d2d4014f40f41f3d13` | master deployment and services healthy |
+| repository/database head | `20260913_000038` / `20260913_000038` | **PASS** |
+| schema and batch contract | `drift_count=0`; batch issues `[]`; active/enqueued batches `0` | **PASS** |
+| secured bundle | `/var/lib/flama-audit/phase4-preflight-20260912T225725Z-11eefb1` | root-owned `0700`; artifacts `0600` |
+| deterministic result | canonical hash `59bdd8e680f09d0ed78a9164426abcf19ada81311d738dcf1947c15628aa1d63` twice; changed paths `[]` | **PASS** |
+| file checksums | reports `fb45255ecd92f6bb7e10d99873bac0ef6db66e22ed6665a9b1b53be39a38d669`; comparison `ad4a8180c65ba4b907163d3ecf509f9d2bcd4b7890d69ffb9be895bd45db1026` | `sha256sum --check` passed |
+| privilege/cleanup | only `SELECT, SHOW VIEW`; no disallowed privilege; temporary principals remaining `0` | **PASS** |
+| P4 phase gate | both runs `PASS`; blockers `[]`; warnings `[]` | **ACCEPTED** |
+
+The wider established audit exits `1` for seven historical warnings that remain visible and assigned; it has no overall blocker. This does not weaken the stricter P4 phase result.
+
+## 2. Historical pre-remediation bundle
 
 | Evidence | Observation | Disposition |
 |---|---|---|
@@ -28,7 +43,7 @@ P4-01A now resolves those findings in the repository through independent revisio
 | current MySQL evidence | observed `2026-09-12T11:16:29Z`; MySQL `8.0.46-0ubuntu0.22.04.4`; `utf8mb4` / `utf8mb4_unicode_ci`; timezone `SYSTEM` | **PASS for evidence availability and read-only safety.** `current_mysql_evidence=true`, two grant rows parsed, no disallowed privilege, and the temporary principal was removed. |
 | deterministic bundle | `/var/lib/flama-audit/phase4-preflight-20260912T111629Z` on the VPS, mode `0700` directory / `0600` files | Both canonical report hashes are `307762278953f29ec88a31887f71af8c4b4a221f7d1e3ebf33c86db38a1e5704`; changed paths `[]`; durations `25,232 ms` and `25,281 ms`; both exits are expected blocker code `2`. |
 | Alembic heads | repository `20260910_000036`; database `20260910_000036` | **PASS.** Repository and production database heads match. |
-| `study_session_batches` migration/table | production table absent in captured evidence | **REMEDIATED IN REPOSITORY.** `20260913_000037` creates or contract-validates the table independently; production application remains pending and P4-06 does not absorb it. |
+| `study_session_batches` migration/table | production table absent in captured evidence | **Historical finding.** `20260913_000037` later created/validated the table independently; the accepted refresh confirms it in production and P4-06 does not absorb it. |
 
 The runtime report hashes the connected principal and database name, records server version, `sql_mode`, database charset/collation and timezone, but never returns the raw principal, URI, password or `SHOW GRANTS` text. For MySQL it queries identity/settings and `SHOW GRANTS` first, then refuses execution before application-table inspection when any write/admin privilege is present.
 
@@ -96,13 +111,13 @@ The same inventory is embedded in the machine report as `phase4_preflight.writer
 
 Read-only repositories, dashboards, due queries and study selectors were inspected as consumers, not classified as writers. Overlay installation itself does not copy source Notes/Cards and must remain overlay-only.
 
-## 6. Independent blocker disposition
+## 6. Independent blocker disposition and closeout
 
-### Remediation update — 2026-09-13
+### Remediation completion — 2026-09-13
 
 [P4-01A](../task/decoupling/P4-01A_SCHEMA_DRIFT_REMEDIATION.md) implements two independent revisions. `20260913_000037` creates or validates `study_session_batches` and fails closed on an incompatible pre-existing shape. `20260913_000038` reconciles the 12 intentional server defaults, pins `student_offer_mode` to the migration-established width, adds its missing index, and safely converges nullable marketplace taxonomy metadata where required. Local MySQL was upgraded from `20260910_000036` to `20260913_000038`; the preflight schema comparator reports matching heads and zero drift. See the [design record](./phase-4-schema-drift-remediation-2026-09-13.md).
 
-This closes the repository/local blocker, not the production gate. The captured production bundle still describes the old head and must be regenerated after deployment.
+Production applied both revisions and the accepted refresh above closes the gate. The older captured bundle below remains evidence of the pre-remediation state rather than a current claim.
 
 ### `study_session_batches` migration gap
 
@@ -112,10 +127,10 @@ This closes the repository/local blocker, not the production gate. The captured 
 - **Potential concern:** environments upgraded strictly through Alembic can lack a table that `db.create_all()` environments happen to possess.
 - **Impact:** async admission or worker execution can fail by environment history; a Phase 4 migration that happens to create the table would make the provenance gap invisible.
 - **Production observation (2026-09-12):** the table is absent even though the deployed model is registered; active batch row/status counts are therefore unavailable.
-- **Disposition:** remain a named P4-01 blocker outside the Phase 4 shadow migration. A dedicated remediation must create the absent table, preserve existing-environment handling, and fail closed if an unexpected pre-existing shape is encountered. P4-01 itself creates no migration/model; the forward migration requires separate review on disposable MySQL.
-- **Verification needed:** pre-upgrade schema without startup `create_all`, upgrade to the dedicated revision, model/migration parity, absent/exact/drifted existing-table handling, and downgrade/forward-rollback policy.
+- **Disposition:** closed outside the Phase 4 shadow migration by dedicated revision `20260913_000037`, which creates or validates the table and fails closed for an unexpected pre-existing shape. P4-01 itself created no migration/model.
+- **Verification completed:** pre-upgrade schema without startup `create_all`, upgrade to the dedicated revision, model/migration parity, absent/exact/drifted existing-table handling, non-destructive downgrade policy and the accepted production refresh.
 
-## 7. Secured two-run procedure
+## 7. Secured two-run procedure and historical first bundle
 
 Run against a database snapshot/read replica or a quiesced maintenance window so both processes observe the same data. The target output directory must be empty and should be outside the repository.
 
@@ -125,7 +140,7 @@ $env:STUDY_AUDIT_DATABASE_URI = 'mysql+pymysql://SELECT_ONLY_USER:SECRET@HOST:33
 Remove-Item Env:STUDY_AUDIT_DATABASE_URI
 ```
 
-The bundle writes `run-1.json`, `run-2.json`, `comparison.json` and `SHA256SUMS`. `comparison.json` stores the credential-free command, per-run timing and exit code, report hashes, deterministic equality and bounded changed JSON paths. An audit exit code of `2` is expected while a named P4 blocker remains; bundle creation is still useful, but P4-01 acceptance remains blocked.
+The bundle writes `run-1.json`, `run-2.json`, `comparison.json` and `SHA256SUMS`. `comparison.json` stores the credential-free command, per-run timing and exit code, report hashes, deterministic equality and bounded changed JSON paths. The first bundle's exit code `2` recorded the then-open schema blocker; the accepted refreshed bundle reports P4 `PASS` while the wider audit exits `1` only for retained historical warnings.
 
 Do not place credentials in CLI arguments, check them into `.env`, or substitute the normal application principal. Do not run application tests against this database.
 
@@ -134,15 +149,15 @@ Do not place credentials in CLI arguments, check them into `.env`, or substitute
 | Gate | State | Owner / next evidence |
 |---|---|---|
 | read-only entrypoint and grant fail-closed | PASS in tests | Study audit lane; retain v4 tests |
-| deterministic fixed-time report and checksummed bundle | **PASS in production evidence** | Retain the secured bundle and checksum; regenerate after audit contract or deployment changes |
+| deterministic fixed-time report and checksummed bundle | **PASS / ACCEPTED** | Retain both secured bundles; regenerate after relevant audit/schema/deployment changes |
 | repository/model/migration inventory | PASS | Regenerate after final implementation commit |
 | writer/delete/reset/rekey inventory | PASS for static code paths | P4-07/P4-08 consume this list; current active volume still comes from MySQL evidence |
-| current MySQL identity/settings/schema/data | **PASS for evidence; drift gate BLOCKED** | Database lane dispositions the 15 actionable entries before P4-05 approval |
-| `study_session_batches` migration provenance/table | **REPOSITORY/LOCAL PASS; PRODUCTION PENDING** | Apply `000037`, validate the table, and recapture SELECT-only evidence |
-| schema drift remediation | **LOCAL MYSQL PASS; PRODUCTION PENDING** | Apply `000038` and require zero unexplained drift in the refreshed bundle |
-| P4-05 physical schema approval | **BLOCKED** | Requires the production P4-01A gate plus accepted P4-02/P4-03/P4-04 decisions |
+| current MySQL identity/settings/schema/data | **PASS / ACCEPTED** | Refresh shows head `000038`, zero drift and complete accounting |
+| `study_session_batches` migration provenance/table | **PASS / ACCEPTED** | Production table exists, contract issues none, active/enqueued rows zero |
+| schema drift remediation | **PASS / ACCEPTED** | Production applied `000038`; fresh comparator reports zero drift |
+| P4-05 physical schema approval | **PASS / COMPLETED** | Joint logical review and physical schema ADR accepted on 2026-09-13 |
 
-P4-02 through P4-04 may consume the production distribution above, but remain provisional until their joint review and the P4-01A production verification are accepted. P4-05 and every learner/Note shadow migration/backfill task remain closed.
+P4-02 through P4-04 consumed the refreshed distribution and were accepted jointly. P4-05 is complete; P4-06 may implement the additive schema/codecs with all runtime flags default off. Mirror/backfill remain closed until their owning tasks.
 
 ## 9. Verification completed
 
@@ -152,8 +167,8 @@ P4-02 through P4-04 may consume the production distribution above, but remain pr
 - fixed-time CLI option, grant rejection, redaction, deterministic output, independent fan-in dimensions and accounting partitions are covered;
 - learner-FK orphan accounting and overlapping owned/install context membership are covered by focused fixtures;
 - the reserved-alias, MySQL type-reflection and unique-index normalization regressions pass in the focused audit test slice;
-- the final production bundle ran twice through `wsgi_audit.py` on a copied deployed release with startup maintenance disabled; the application principal and serving release were not used for data inspection or modified;
+- the historical pre-remediation production bundle ran twice through `wsgi_audit.py` on a copied deployed release with startup maintenance disabled; the application principal and serving release were not used for data inspection or modified;
 - `SHA256SUMS` records `e7e09c97afa827e23e41b55032b40ea815c43feeba72c3b951123bf1c7c2096e` for each pretty report and `1223e706825134e72fef5ab840a423361046682a075c0e635a9d79b6137d72a5` for `comparison.json`;
-- the ephemeral audit principal was verified absent after the final run.
+- the ephemeral audit principal was verified absent after the historical run; the accepted refresh repeated the same cleanup guarantee and retained its own checksums above.
 
 The final modular command and diff/link checks are rerun after documentation updates; their result belongs in the P4-01 task handoff.

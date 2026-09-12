@@ -2,7 +2,7 @@
 
 > Phase: 4 entry remediation
 >
-> Status: IMPLEMENTED AND REHEARSED ON LOCAL MYSQL; production upgrade and fresh SELECT-only evidence pending
+> Status: **COMPLETED / PRODUCTION VERIFIED**
 >
 > Dependency: P4-01 production evidence captured at repository/database head `20260910_000036`
 >
@@ -79,6 +79,14 @@ Do not mark P4-01 accepted from local evidence. Deployment must:
 3. verify head `20260913_000038` and batch-table contract;
 4. regenerate the two-run P4-01 bundle with an ephemeral SELECT-only principal;
 5. require zero unexplained schema drift and retain the secured checksums.
+
+## Production completion — 2026-09-13
+
+- PR [#162](https://github.com/TrinhChung/Flama/pull/162) merged as `11eefb15938cc8f4847df6d2d4014f40f41f3d13` after the full branch suite passed.
+- The master deployment completed successfully and its migration unit applied `20260910_000036 -> 20260913_000037 -> 20260913_000038`.
+- The serving release, services and health checks passed after deployment.
+- A fresh two-run production bundle with an ephemeral `SELECT, SHOW VIEW` principal reports matching repository/database head `20260913_000038`, `drift_count=0`, no batch-table contract issue and no active/enqueued batch.
+- The audit principal was dropped and verified absent. See the [joint acceptance evidence](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md).
 
 ## Rollback
 

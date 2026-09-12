@@ -13,12 +13,14 @@ Tài liệu mô tả kiến trúc hiện hành và các tiêu chuẩn kỹ thu�
 | [`SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) | **Tổng quan kiến trúc toàn hệ thống** (React SPA, Flask REST API, Flama Connect, Flama Audio). |
 | [`FLAMA_PAYMENT_ARCHITECTURE.md`](architecture/FLAMA_PAYMENT_ARCHITECTURE.md) | **Kiến trúc thanh toán payOS** (Orders, PaymentAttempts, Webhook, Entitlements). |
 | [`CARD_TEMPLATE_SANDBOX_RENDERER.md`](architecture/CARD_TEMPLATE_SANDBOX_RENDERER.md) | **Cơ chế render iframe sandbox an toàn** cho custom card templates. |
-| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–3 và INT-01 hoàn tất, Phase 4 active tại P4-01/P4-01A với schema remediation đã pass trên local MySQL. |
-| [`phase-4-current-state-preflight-2026-09-10.md`](architecture/phase-4-current-state-preflight-2026-09-10.md) | P4-01 audit/preflight; production baseline đã capture, repository/local drift đã được xử lý, production refresh còn block. |
+| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–3 và INT-01 hoàn tất, Phase 4 đã accept P4-00..P4-05 và chuẩn bị P4-06. |
+| [`phase-4-current-state-preflight-2026-09-10.md`](architecture/phase-4-current-state-preflight-2026-09-10.md) | P4-01 accepted audit/preflight; production head `20260913_000038`, zero drift và complete accounting. |
 | [`phase-4-schema-drift-remediation-2026-09-13.md`](architecture/phase-4-schema-drift-remediation-2026-09-13.md) | P4-01A design record cho independent batch-table migration, model/default parity và safe schema convergence. |
-| [`phase-4-progress-identity-fanin-revision-adr-2026-09-10.md`](architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) | P4-02 provisional ADR cho learner/Note identity, fan-in, generation và lock order. |
-| [`phase-4-algorithm-state-availability-adr-2026-09-12.md`](architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) | P4-03 provisional ADR cho exact Algorithm State/raw codecs và context-aware availability. |
-| [`phase-4-history-provenance-lifecycle-adr-2026-09-12.md`](architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) | P4-04 provisional ADR cho history completeness, provenance, retention fence và reset/delete/rekey. |
+| [`phase-4-progress-identity-fanin-revision-adr-2026-09-10.md`](architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) | P4-02 accepted ADR cho learner/Note identity, fan-in, generation và lock order. |
+| [`phase-4-algorithm-state-availability-adr-2026-09-12.md`](architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) | P4-03 accepted ADR cho exact Algorithm State/raw codecs và context-aware availability. |
+| [`phase-4-history-provenance-lifecycle-adr-2026-09-12.md`](architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) | P4-04 accepted ADR cho history completeness, provenance, retention fence và reset/delete/rekey. |
+| [`phase-4-logical-contract-joint-acceptance-2026-09-13.md`](architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) | Joint acceptance record cho production P4-01 và logical contracts P4-02/P4-03/P4-04. |
+| [`phase-4-physical-shadow-schema-adr-2026-09-13.md`](architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md) | P4-05 accepted physical design cho additive subject/state/contributor/availability/history/lifecycle/backfill schema. |
 | [`STUDY_ALGORITHM_RETIREMENT_LIFECYCLE.md`](architecture/STUDY_ALGORITHM_RETIREMENT_LIFECYCLE.md) | Lifecycle `active/deprecated/lease-only/retired`, retention gate và rollback cho exact Algorithm artifacts. |
 | [`builtin-trigger-runtime-contract-2026-09-07.md`](architecture/builtin-trigger-runtime-contract-2026-09-07.md) | ADR cho exact-version dispatcher của bốn built-in review Triggers. |
 | [`trusted-study-keyboard-boundary-2026-09-07.md`](architecture/trusted-study-keyboard-boundary-2026-09-07.md) | ADR no-bridge bảo vệ Study shortcuts khỏi iframe Template không tin cậy. |
@@ -56,7 +58,7 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 |---|---|
 | [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
-| [`Study Decoupling Task Backlog`](task/decoupling/README.md) | Tracker task Phase 0–4, dependency, output, acceptance gate và rollback; Phase 4 hiện ở preflight/ADR. |
+| [`Study Decoupling Task Backlog`](task/decoupling/README.md) | Tracker task Phase 0–4, dependency, output, acceptance gate và rollback; P4-06 additive schema/codecs là task tiếp theo. |
 | [`P1/P2 closeout — 2026-09-08`](task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) | Handoff hoàn tất 8 task P1/P2, test evidence, async containment, v3 rollout và rollback. |
 | [`FLASHCARD_FOR_KIDS_PLAN.md`](plans/proposals/FLASHCARD_FOR_KIDS_PLAN.md) | Ý tưởng phát triển bộ flashcard chuyên biệt cho trẻ em. |
 | [`LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md`](plans/proposals/LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md) | **Đề xuất phân tích & gợi ý âm nghe nhầm đa ngôn ngữ (P3 - Low Priority)**: Dựa trên lịch sử nhập từ và từ gốc trong chế độ Dictation để tìm ra ma trận âm người dùng hay nghe nhầm (Tiếng Nhật, Tiếng Anh, Tiếng Hàn, Tiếng Trung, Tiếng Việt...). |

@@ -2,7 +2,7 @@
 
 > Date: 2026-09-12 | Mode: DESIGN | Decision: P4-D4-2 / P4-D4-3
 >
-> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; P4-01A passed locally, while production refresh and the joint P4-02/P4-03/P4-04 review block acceptance
+> Status: **ACCEPTED** — production P4-01 passed at head `20260913_000038`; joint P4-02/P4-03/P4-04 review closed on 2026-09-13
 >
 > Runtime change: none | Schema change: none | Operational authority: `CardProgress`
 >
@@ -64,7 +64,7 @@ flowchart LR
 - **Evidence:** `app/repositories/study_repository.py:31-120`; `app/services/anki_scheduler.py:38-53`.
 - **Potential concern:** using this adapter for backfill would change nullness and invalid values while making the result depend on execution time and user configuration.
 - **Impact:** raw round-trip, deterministic hashes and cross-run reconciliation would be impossible; corrupt rows could appear as valid new Cards.
-- **Production evidence (2026-09-12):** unknown and compatibility-alias queues are `0`; due shapes are 432 both-null, 14,172 both-present, 1,820 time-only and `0` day-only; partial memory pairs and non-finite values are `0`.
+- **Initial pre-remediation production evidence (2026-09-12):** unknown and compatibility-alias queues are `0`; due shapes were 432 both-null, 14,172 both-present, 1,820 time-only and `0` day-only; partial memory pairs and non-finite values were `0`. The accepted refresh is recorded in section 15.
 - **Alternatives Considered:** (A) reuse `card_state_from_progress()`; (B) introduce a strict source serializer plus a separate compatibility mapper.
 - **Trade-offs:** A reuses runtime code but is not a migration codec. B adds explicit code and fixtures but preserves evidence and isolates compatibility rules.
 - **Recommendation:** select B.
@@ -76,7 +76,7 @@ flowchart LR
 - **Evidence:** `app/services/study_algorithm_registry.py:20-45`; `app/services/anki_scheduler.py:691-693`; `app/services/scheduler_config_service.py`; existing architecture audit findings.
 - **Potential concern:** migrating rows under an `fsrs` Algorithm identity based only on their label would fabricate provenance and select a decoder that never produced the state.
 - **Impact:** a future switch or replay could execute the wrong scheduler against incompatible state.
-- **Production evidence (2026-09-12):** FSRS-labelled rows are `0`; both memory fields are null on all 16,424 progress rows. Scheduler labels are 14,681 `anki` and 1,743 `legacy`, which remain provenance labels rather than executable identities.
+- **Initial pre-remediation production evidence (2026-09-12):** FSRS-labelled rows were `0`; both memory fields were null on all 16,424 progress rows. Scheduler labels were 14,681 `anki` and 1,743 `legacy`, which remain provenance labels rather than executable identities. The accepted refresh is recorded in section 15.
 - **Alternatives Considered:** (A) choose Algorithm from `scheduler_mode`; (B) map all current compatibility rows through the proven registry identity and retain labels separately.
 - **Trade-offs:** A appears intuitive but is unsupported by runtime evidence. B is conservative and may quarantine rows needing a future specialized importer.
 - **Recommendation:** select B; only an exact registry/provenance contract can introduce another Algorithm identity.
@@ -111,7 +111,7 @@ flowchart LR
 | Alternative | Integrity | MySQL behavior | Evolution | Decision |
 |---|---|---|---|---|
 | A. Put state JSON on the learner/Note envelope | state and hot lock share one wide row | every state update rewrites/locks the coordination row and its JSON | simple first DDL, poor independent version lifecycle | rejected |
-| B. Narrow envelope plus separate 1:1 current Algorithm State row | exact identity/hash isolated from coordination | one additional keyed row; bounded JSON update | supports decoder retirement and future state replacement | selected provisionally |
+| B. Narrow envelope plus separate 1:1 current Algorithm State row | exact identity/hash isolated from coordination | one additional keyed row; bounded JSON update | supports decoder retirement and future state replacement | selected |
 | C. Add legacy/FSRS columns directly to the envelope | relational but algorithm-specific | many nullable columns and future DDL churn | couples generic progress to each scheduler | rejected |
 
 Availability alternatives:
@@ -120,9 +120,9 @@ Availability alternatives:
 |---|---|---|---|
 | Persist an `eligible_now` boolean | simple filter | stale immediately; hides timezone/policy context | rejected |
 | Keep availability only inside Algorithm JSON | no stable generic query | forces generic SQL to understand arbitrary state | rejected |
-| Relational contributor anchors evaluated with explicit context | indexed anchors and deterministic comparison | preserves time/policy dependence and Card order | selected provisionally |
+| Relational contributor anchors evaluated with explicit context | indexed anchors and deterministic comparison | preserves time/policy dependence and Card order | selected |
 
-Exact tables, column types and indexes remain P4-05 outputs after the P4-01A production gate and joint logical decisions are accepted.
+Exact tables, column types and indexes are accepted by the [P4-05 physical schema ADR](./phase-4-physical-shadow-schema-adr-2026-09-13.md), after the [joint logical review](./phase-4-logical-contract-joint-acceptance-2026-09-13.md) closed the P4-01A production gate.
 
 ## 5. Lossless raw contributor codec
 
@@ -380,25 +380,27 @@ This ADR does not enable switching. A future request must carry or resolve:
 
 No startup backfill, authority cutover or destructive contraction is part of Phase 4.
 
-## 15. Open gates
+## 15. Acceptance evidence and downstream proof
 
 ### Current MySQL evidence from P4-01
 
 - all 16,424 queue labels are canonical; due-shape, memory-pair and non-finite partitions reconcile exactly;
-- timestamp fractional precision is zero; charset/collation is `utf8mb4` / `utf8mb4_unicode_ci`; actual table/index/FK shape is captured with 15 actionable drift entries;
+- the fresh queue distribution is 432 new, 1,595 learning, 224 relearning and 14,173 review; due shapes are 432 both-null, 14,173 both-present, 1,819 time-only and zero day-only;
+- timestamp fractional precision is zero; charset/collation is `utf8mb4` / `utf8mb4_unicode_ci`; repository/database heads match at `20260913_000038` with zero schema drift;
 - current fan-in is `0`, so semantic/control hash equality still needs golden-vector proof rather than production fan-in examples;
 - current volume is 16,424 contributor rows; exact ordering-tie distribution and proposed-index execution plans remain P4-05/P4-11 evidence;
-- `study_session_batches` is absent in the captured production baseline; its independent migration and remaining schema repairs pass locally, with production apply/refresh still pending.
+- `study_session_batches` is present with no contract issue; active/enqueued batch count is zero.
 
-### Joint review
+### Joint review result
 
-- P4-02 must consume the exact `semantic_state_hash` definition and contributor projection cardinality.
-- P4-04 must define provenance/completeness and lifecycle retention without adding history fields to semantic equality.
-- P4-05 cannot be accepted until P4-01 evidence and all three logical ADRs are jointly consistent.
+- P4-02 consumes the exact `semantic_state_hash` definition and contributor projection cardinality.
+- P4-04 keeps provenance/completeness and lifecycle retention outside semantic equality.
+- The [joint acceptance record](./phase-4-logical-contract-joint-acceptance-2026-09-13.md) found no remaining logical contradiction.
+- P4-05 selects separate state and relational per-contributor availability rows; codecs and golden vectors remain P4-06 implementation proof.
 
-### Provisional result
+### Accepted result
 
-- exact compatibility identity and no-label-dispatch rule: **ready for cross-review**;
-- raw/state codec and typed error boundary: **ready for cross-review**, MySQL round-trip pending;
-- availability anchors/context/order contract: **ready for cross-review**, production distribution/query proof pending;
-- P4-03 overall: **not Accepted** while the P4-01A production gate and joint gates remain open.
+- exact compatibility identity and no-label-dispatch rule: **ACCEPTED**;
+- raw/state codec and typed error boundary: **ACCEPTED**, MySQL round-trip proof assigned to P4-06/P4-11;
+- availability anchors/context/order contract: **ACCEPTED**, query parity proof assigned to P4-10/P4-11;
+- P4-03 overall: **ACCEPTED**.
