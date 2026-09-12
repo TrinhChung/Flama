@@ -16,6 +16,7 @@ import {
   Music,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { compressImage, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/imageCompression'
 
 interface MediaFieldPreviewProps {
   fieldName: string
@@ -184,8 +185,24 @@ export function MediaFieldPreview({
 
         setIsUploading(true)
         try {
+          let fileToSend: File = imageFile
+          try {
+            const compressed = await compressImage(imageFile, {
+              maxDimension: 1600,
+              quality: 0.85,
+            })
+            fileToSend = compressed.file
+          } catch {
+            // Fall back to original file if compression fails
+          }
+
+          if (fileToSend.size > MAX_IMAGE_UPLOAD_BYTES) {
+            toast.error('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
+            return
+          }
+
           const formData = new FormData()
-          formData.append('file', imageFile)
+          formData.append('file', fileToSend)
 
           const data = await apiRequest<{ url: string }>(
             '/api/browse/media/stage-paste',

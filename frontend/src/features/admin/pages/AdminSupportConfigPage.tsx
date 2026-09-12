@@ -155,12 +155,21 @@ export function AdminSupportConfigPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="qr-file">Tải lên / Thay ảnh QR mới</Label>
+                <Label htmlFor="qr-file">Tải lên / Thay ảnh QR mới (tối đa 2MB)</Label>
                 <Input
                   id="qr-file"
                   type="file"
                   accept="image/*"
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file && file.size > 2 * 1024 * 1024) {
+                      toast.error('Dung lượng ảnh QR vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
+                      e.target.value = ''
+                      setSelectedFile(null)
+                      return
+                    }
+                    setSelectedFile(file || null)
+                  }}
                 />
               </div>
             </div>

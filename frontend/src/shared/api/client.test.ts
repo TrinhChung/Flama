@@ -327,4 +327,22 @@ describe('apiJsonKeepalive', () => {
     expect((retriedCall.headers as Headers).get('X-CSRF-Token')).toBe('refreshed-csrf-token')
     expect(formData.get('csrf_token')).toBe('refreshed-csrf-token')
   })
+
+  it('throws UPLOAD_NETWORK_ERROR and does not mark backend unavailable on FormData network error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const formData = new FormData()
+    formData.append('file', new Blob(['data']), 'image.png')
+
+    const request = apiRequest('/api/browse/media/stage-paste', {
+      method: 'POST',
+      body: formData,
+    })
+
+    await expect(request).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'UPLOAD_NETWORK_ERROR',
+      message: 'Tải lên tệp thất bại do lỗi kết nối tới máy chủ.',
+    })
+  })
 })
+

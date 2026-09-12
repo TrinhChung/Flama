@@ -41,6 +41,7 @@ import { Textarea } from '@/components/ui/textarea'
 import type { TicketItem } from '@/features/admin/pages/AdminTicketsPage'
 import { Page } from '@/shared/components/Page'
 import { EmptyState } from '@/shared/components/PageState'
+import { compressImage, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/imageCompression'
 
 type FeedbackCategory = 'bug' | 'feature' | 'ui' | 'other'
 
@@ -236,15 +237,27 @@ export function FeedbackPage() {
       toast.error('Chỉ chấp nhận tập tin hình ảnh (PNG, JPG, WEBP, GIF)!')
       return
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('Dung lượng ảnh vượt quá 10MB!')
-      return
-    }
 
-    const formData = new FormData()
-    formData.append('file', file)
     setIsUploading(true)
     try {
+      let fileToSend: File = file
+      try {
+        const compressed = await compressImage(file, {
+          maxDimension: 1600,
+          quality: 0.85,
+        })
+        fileToSend = compressed.file
+      } catch {
+        // Fall back to original file if compression fails
+      }
+
+      if (fileToSend.size > MAX_IMAGE_UPLOAD_BYTES) {
+        toast.error('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
+        return
+      }
+
+      const formData = new FormData()
+      formData.append('file', fileToSend)
       const res = await appApi.mutateFormData<{ url: string }>('/tickets/upload-image', 'POST', formData)
       if (res.url) {
         setAttachedUrls((prev) => {
@@ -257,7 +270,7 @@ export function FeedbackPage() {
         toast.success('Đã tải lên ảnh chụp màn hình!')
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Không thể tải ảnh lên.')
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể tải ảnh lên.')
     } finally {
       setIsUploading(false)
     }
@@ -705,7 +718,7 @@ export function FeedbackPage() {
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Hỗ trợ PNG, JPG, WEBP (tối đa 10MB). Bạn có thể chụp màn hình và bấm <strong>Ctrl+V</strong> để dán trực tiếp.
+                Hỗ trợ PNG, JPG, WEBP (tối đa 2MB). Bạn có thể chụp màn hình và bấm <strong>Ctrl+V</strong> để dán trực tiếp.
               </p>
             </div>
           </div>
