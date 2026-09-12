@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: TODO
+> Status: IN PROGRESS / PROVISIONAL — logical ADR drafted; current MySQL distribution captured, while P4-01 schema remediation and joint decision gates remain open
 >
 > Dependency: P4-00 and P4-01; consistency with P4-02/P4-04
 >
@@ -33,6 +33,18 @@ Chốt exact versioned state và query projection cho current compatibility sche
 - Decoder/size/retirement contract.
 - SQL query projection and ordering specification.
 - Golden-vector specification.
+
+## Progress — 2026-09-12
+
+The repository-grounded [P4-03 provisional ADR](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) now defines:
+
+- separate lossless raw contributor and exact Algorithm State codecs;
+- the sole proven compatibility identity `legacy-anki/1.0.0` + `anki-card-state.v1`;
+- typed size/hash/decoder failures and an explicit field-classification matrix;
+- relational per-contributor availability anchors with a frozen query context;
+- current queue/due/count/order/learn-ahead behavior and cross-engine golden vectors.
+
+Runtime change: none. Schema change: none. The production snapshot found 16,424 canonical queue rows, no unknown/compatibility queues, no partial memory state and no non-finite values. Acceptance remains blocked by P4-01 schema remediation, the independent `study_session_batches` migration disposition and joint P4-02/P4-03/P4-04 review.
 
 ## Acceptance
 

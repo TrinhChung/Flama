@@ -2,7 +2,7 @@
 
 > Scope: P4-01 repository implementation and evidence readiness
 >
-> Verdict: **BLOCKED for current-MySQL acceptance**
+> Verdict: **CURRENT MYSQL EVIDENCE CAPTURED; BLOCKED on actionable schema drift and independent batch-table migration remediation**
 >
 > Runtime/storage change: none; this work is read-only audit instrumentation
 
@@ -10,7 +10,9 @@
 
 The repository side of P4-01 is implemented: audit schema `study-architecture-audit.v4` now embeds `study-phase4-preflight.v1`, verifies MySQL grants before reading application tables, inventories model/migration/database contracts, accounts for progress state and lineage independently, and emits the complete writer lifecycle inventory. A two-run bundle command freezes `observed_at`, records timings and exit codes, compares deterministic output, and writes checksums without putting a database URI in the command or artifacts.
 
-P4-01 is not accepted yet. No dedicated current-MySQL `SELECT`-only URI was available in the process environment on 2026-09-10. The normal `.env` application principal was deliberately not used. Therefore all current database counts, actual Alembic head, table options and schema drift remain **Needs Verification**.
+P4-01 is not accepted yet, but the external evidence gap is closed. On 2026-09-12 the audit ran twice against production MySQL with one frozen observation time and an ephemeral principal limited to `SELECT, SHOW VIEW`. The normal application principal was deliberately not used because its grants include write/admin capability. The ephemeral principal was dropped and verified absent after each run.
+
+The two reports are deterministic and expose no credential or raw principal. They establish the current row distributions, Alembic head, MySQL settings and normalized schema drift. Acceptance remains blocked by 15 actionable drift entries, including an absent `study_session_batches` table, and by the table's missing independent Alembic migration.
 
 There is also an independent repository blocker: `StudySessionBatch` is registered and used at runtime, but no Alembic revision declares `study_session_batches`. This gap must be remediated as its own migration concern and must not be hidden inside the later Phase 4 shadow-schema migration.
 
@@ -22,8 +24,11 @@ There is also an independent repository blocker: `StudySessionBatch` is register
 | repository Alembic head | `20260910_000036` | Compare against `alembic_version` in the current MySQL bundle. Mismatch blocks P4-05. |
 | audit contract | `study-architecture-audit.v4` + `study-phase4-preflight.v1` | Versioned in [study architecture audit service](../../app/services/study_architecture_audit_service.py) and [Phase 4 preflight service](../../app/services/study_phase4_preflight_service.py). |
 | audit entrypoint | `wsgi_audit.py -> create_audit_app()` | Startup DDL, compatibility repair, seeds and clone cutover stay disabled. Normal `wsgi.py` is prohibited for evidence collection. |
-| current MySQL evidence | unavailable | Platform/operator must provide an ephemeral environment variable containing a dedicated `SELECT`-only URI. This is an external gate, not a reason to weaken the audit. |
-| `study_session_batches` migration | no migration mention found | **BLOCK.** Database lane owns a dedicated migration-gap disposition before P4-05 approval; P4-06 must not silently absorb it. |
+| deployed release source | `/opt/flama/releases/1ff3035826e3f370cba92639bc913640413bb148` | The release package has no `.git` metadata, so the report records `git_commit=null` and freezes a per-file code manifest instead. The run used a private copy of this release with only the reviewed audit portability patch applied; the serving release was not edited. |
+| current MySQL evidence | observed `2026-09-12T11:16:29Z`; MySQL `8.0.46-0ubuntu0.22.04.4`; `utf8mb4` / `utf8mb4_unicode_ci`; timezone `SYSTEM` | **PASS for evidence availability and read-only safety.** `current_mysql_evidence=true`, two grant rows parsed, no disallowed privilege, and the temporary principal was removed. |
+| deterministic bundle | `/var/lib/flama-audit/phase4-preflight-20260912T111629Z` on the VPS, mode `0700` directory / `0600` files | Both canonical report hashes are `307762278953f29ec88a31887f71af8c4b4a221f7d1e3ebf33c86db38a1e5704`; changed paths `[]`; durations `25,232 ms` and `25,281 ms`; both exits are expected blocker code `2`. |
+| Alembic heads | repository `20260910_000036`; database `20260910_000036` | **PASS.** Repository and production database heads match. |
+| `study_session_batches` migration/table | no migration mention; production table absent | **BLOCK.** Database lane owns a dedicated migration-gap remediation before P4-05 approval; P4-06 must not silently absorb it. |
 
 The runtime report hashes the connected principal and database name, records server version, `sql_mode`, database charset/collation and timezone, but never returns the raw principal, URI, password or `SHOW GRANTS` text. For MySQL it queries identity/settings and `SHOW GRANTS` first, then refuses execution before application-table inspection when any write/admin privilege is present.
 
@@ -43,13 +48,32 @@ Quarantine reasons are overlapping diagnostics, while the top-level migration di
 
 Required formulas are emitted under `phase4_preflight.progress.accounting` and repeated in the top-level reconciliation gate. They include source, unresolvable-reason, migration-disposition, exclusive context, overlapping context-membership presence/cardinality, fan-in-state, fan-in-lineage, last-event-pointer, due-shape, queue and memory-state partitions.
 
-Current production values for all of the above are **Needs Verification** until the secured bundle is run.
+Current production evidence is now available:
+
+- 16,424 `CardProgress` rows are all valid learner→Card→Note subjects; unresolvable rows are `0`;
+- 16,424 subject groups are single-contributor and fan-in groups are `0`; preliminary disposition is 16,424 mirror candidates, `0` quarantine candidates and `0` unresolvable;
+- contexts partition into 16,107 owned and 317 installed-source rows, with no installed-local, overlapping or unclassified membership;
+- all 16,424 queue labels are canonical: 432 new, 1,596 learning, 224 relearning and 14,172 review; no partial memory state, non-finite float, burial, suspension or leech rows were found;
+- scheduler modes are 14,681 `anki` and 1,743 `legacy`; timestamp values have no fractional microseconds;
+- 15,992 latest-event pointers are valid and 432 are null; no missing or cross-user/card pointer was found. All source-card/source-note/review-reference accounting partitions pass;
+- four open sessions are active, 117 open sessions are expired, four session config snapshots are invalid, and no active Connect import exists. Batch volume is unavailable because `study_session_batches` is absent.
 
 ## 4. Schema comparison contract
 
 For each relevant table the report records ORM and inspected database columns, dialect-compiled types, nullability, primary key, foreign keys and delete actions, unique column sets, indexes, server/client/database defaults and table options. Server-default mismatches are structural drift; Python client defaults are preserved as separate observations rather than mistaken for database defaults. Database and repository Alembic heads are compared independently.
 
 This covers the MySQL-sensitive facts needed by P4-05: JSON/date-time/float representation, charset/collation, index shape, FK action and server defaults. SQLite fixture output is labeled `repository-and-fixture-only`; it can prove accounting and contract stability but cannot satisfy the MySQL gate.
+
+The production comparison contains 15 normalized actionable entries:
+
+| Drift kind | Count | Current observation |
+|---|---:|---|
+| server default | 12 | Database-only defaults on `card_progress.revision`, `connect_import_sessions.attempted_notes`, five `deck_installs` columns and five `deck_marketplace_items` columns |
+| ordinary index | 1 | Model-only index on `deck_marketplace_items.student_offer_mode` |
+| type/width | 1 | `deck_marketplace_items.student_offer_mode` is model `VARCHAR(16)` versus database `VARCHAR(32)` |
+| table presence | 1 | `study_session_batches` is model-declared but absent in production |
+
+The first production attempt also exposed audit noise: MySQL reflects collated strings with a `COLLATE` suffix and ORM `BOOL` as `TINYINT`, unique constraints may reappear through `get_indexes()`, and MySQL synthesizes indexes required by declared foreign keys. The audit now normalizes those dialect-managed representations and compares unique column sets independently from ordinary indexes. This reduced the raw 148 observations to the 15 entries above without suppressing the real width, default, application index or table mismatches.
 
 ## 5. Writer, delete, reset and rekey inventory
 
@@ -77,10 +101,13 @@ Read-only repositories, dashboards, due queries and study selectors were inspect
 ### `study_session_batches` migration gap
 
 - **Observed:** [study_session_batch.py](../../models/study_session_batch.py) declares the table; [app factory](../../app/__init__.py) registers the model; session and worker services read/write it; no file under `migrations/versions/` contains `study_session_batches`.
+- **Repository provenance update (2026-09-12):** `git log --follow` traces the model to commit `6da743e` (`feat(study): add redis queue and async batch processing for study reviews`, 2026-09-07). That commit added the model, app registration, session/worker writers and tests but no Alembic revision. No later revision through repository head `20260910_000036` declares the table.
+- **Potential impact:** a database bootstrapped only through `alembic upgrade` can lack the durable async idempotency table, while an environment that ran startup `db.create_all()` may contain an unversioned table. Enabling async admission therefore has environment-dependent schema behavior.
 - **Potential concern:** environments upgraded strictly through Alembic can lack a table that `db.create_all()` environments happen to possess.
 - **Impact:** async admission or worker execution can fail by environment history; a Phase 4 migration that happens to create the table would make the provenance gap invisible.
-- **Disposition:** remain a named P4-01 blocker. The Database lane must first inspect current MySQL presence and shape, then create/review a dedicated forward-migration strategy on disposable MySQL. It is not part of the shadow schema and no remediation DDL is authorized in P4-01.
-- **Verification needed:** pre-upgrade schema without startup `create_all`, upgrade to the dedicated revision, model/migration parity, existing-table handling based on current MySQL evidence, and downgrade/forward-rollback policy.
+- **Production observation (2026-09-12):** the table is absent even though the deployed model is registered; active batch row/status counts are therefore unavailable.
+- **Disposition:** remain a named P4-01 blocker outside the Phase 4 shadow migration. A dedicated remediation must create the absent table, preserve existing-environment handling, and fail closed if an unexpected pre-existing shape is encountered. P4-01 itself creates no migration/model; the forward migration requires separate review on disposable MySQL.
+- **Verification needed:** pre-upgrade schema without startup `create_all`, upgrade to the dedicated revision, model/migration parity, absent/exact/drifted existing-table handling, and downgrade/forward-rollback policy.
 
 ## 7. Secured two-run procedure
 
@@ -101,21 +128,25 @@ Do not place credentials in CLI arguments, check them into `.env`, or substitute
 | Gate | State | Owner / next evidence |
 |---|---|---|
 | read-only entrypoint and grant fail-closed | PASS in tests | Study audit lane; retain v4 tests |
-| deterministic fixed-time report and checksummed bundle | PASS in tests | Operator must execute against the same current snapshot |
+| deterministic fixed-time report and checksummed bundle | **PASS in production evidence** | Retain the secured bundle and checksum; regenerate after audit contract or deployment changes |
 | repository/model/migration inventory | PASS | Regenerate after final implementation commit |
 | writer/delete/reset/rekey inventory | PASS for static code paths | P4-07/P4-08 consume this list; current active volume still comes from MySQL evidence |
-| current MySQL identity/settings/schema/data | **BLOCKED / Needs Verification** | Platform/operator supplies dedicated `SELECT`-only URI and secured output location |
-| `study_session_batches` migration provenance | **BLOCKED** | Database lane resolves independently before P4-05 approval |
+| current MySQL identity/settings/schema/data | **PASS for evidence; drift gate BLOCKED** | Database lane dispositions the 15 actionable entries before P4-05 approval |
+| `study_session_batches` migration provenance/table | **BLOCKED; production table absent** | Database lane creates and rehearses an independent migration before P4-05 approval |
 | P4-05 physical schema approval | **BLOCKED** | Requires both blockers above plus accepted P4-02/P4-03/P4-04 decisions |
 
-P4-02 through P4-04 may continue as explicitly provisional drafts using repository evidence, but they cannot be accepted where a decision depends on current MySQL distribution. P4-05 and every migration/backfill task remain closed.
+P4-02 through P4-04 may now consume the production distribution above, but remain provisional until their joint review and the P4-01 schema blockers are resolved. P4-05 and every migration/backfill task remain closed.
 
-## 9. Verification completed locally
+## 9. Verification completed
 
-- audit service/CLI and bundle suites: 36 tests passed;
-- modular `study,database,cli --backend-only` gate: 358 tests across 41 files passed;
+- audit service/CLI and bundle suites: 40 tests passed;
+- modular `study,database,cli --backend-only` gate: 362 tests across 41 files passed;
+- changed-file gate: 163 Study tests across 17 backend files passed; no frontend tests were selected;
 - fixed-time CLI option, grant rejection, redaction, deterministic output, independent fan-in dimensions and accounting partitions are covered;
 - learner-FK orphan accounting and overlapping owned/install context membership are covered by focused fixtures;
-- no production/current MySQL command was executed because a dedicated `SELECT`-only credential was unavailable.
+- the reserved-alias, MySQL type-reflection and unique-index normalization regressions pass in the focused audit test slice;
+- the final production bundle ran twice through `wsgi_audit.py` on a copied deployed release with startup maintenance disabled; the application principal and serving release were not used for data inspection or modified;
+- `SHA256SUMS` records `e7e09c97afa827e23e41b55032b40ea815c43feeba72c3b951123bf1c7c2096e` for each pretty report and `1223e706825134e72fef5ab840a423361046682a075c0e635a9d79b6137d72a5` for `comparison.json`;
+- the ephemeral audit principal was verified absent after the final run.
 
 The final modular command and diff/link checks are rerun after documentation updates; their result belongs in the P4-01 task handoff.

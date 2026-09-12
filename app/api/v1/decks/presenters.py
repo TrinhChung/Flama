@@ -12,6 +12,9 @@ def serialize_deck(deck: Deck) -> dict:
         "parent_id": (
             int(deck.parent_id) if deck.parent_id is not None else None
         ),
+        "note_type_id": (
+            str(deck.note_type_id) if deck.note_type_id is not None else None
+        ),
         "owner_user_id": (
             int(deck.owner_user_id)
             if deck.owner_user_id is not None

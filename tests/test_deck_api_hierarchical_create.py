@@ -105,6 +105,80 @@ class HierarchicalDeckCreateTests(unittest.TestCase):
             r4 = Deck.query.filter_by(name="Lesson 01", parent_id=r3.id).first()
             self.assertIsNotNone(r4)
 
+    def test_create_deck_with_explicit_note_type_id(self):
+        from models.note_type import NoteType
+
+        self._login()
+
+        with self.app.app_context():
+            nt = NoteType(name="Custom Vocab", user_id=self.user_id)
+            db.session.add(nt)
+            db.session.commit()
+            nt_id = nt.id
+
+        res = self.client.post(
+            "/api/decks",
+            json={"name": "Grammar N1", "note_type_id": nt_id},
+        )
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()
+        self.assertEqual(data["item"]["note_type_id"], nt_id)
+
+        with self.app.app_context():
+            deck = Deck.query.filter_by(name="Grammar N1").first()
+            self.assertIsNotNone(deck)
+            self.assertEqual(deck.note_type_id, nt_id)
+
+    def test_create_child_deck_inherits_parent_note_type_id(self):
+        from models.note_type import NoteType
+
+        self._login()
+
+        with self.app.app_context():
+            nt = NoteType(name="Inherited Model", user_id=self.user_id)
+            db.session.add(nt)
+            db.session.commit()
+            parent = Deck(name="Parent Deck", owner_user_id=self.user_id, note_type_id=nt.id)
+            db.session.add(parent)
+            db.session.commit()
+            parent_id = parent.id
+            nt_id = nt.id
+
+        res = self.client.post(
+            "/api/decks",
+            json={"name": "Child Deck", "parent_id": str(parent_id)},
+        )
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()
+        self.assertEqual(data["item"]["note_type_id"], nt_id)
+
+        with self.app.app_context():
+            child = Deck.query.filter_by(name="Child Deck", parent_id=parent_id).first()
+            self.assertIsNotNone(child)
+            self.assertEqual(child.note_type_id, nt_id)
+
+    def test_dashboard_payload_includes_deck_note_type_id(self):
+        from models.note_type import NoteType
+
+        self._login()
+
+        with self.app.app_context():
+            nt = NoteType(name="Dashboard NT", user_id=self.user_id)
+            db.session.add(nt)
+            db.session.commit()
+            deck = Deck(name="Root Deck For Dashboard", owner_user_id=self.user_id, note_type_id=nt.id)
+            db.session.add(deck)
+            db.session.commit()
+            nt_id = nt.id
+            deck_id = deck.id
+
+        res = self.client.get("/api/dashboard")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        found = next((item for item in data["items"] if item["deck_id"] == deck_id), None)
+        self.assertIsNotNone(found)
+        self.assertEqual(found.get("note_type_id"), nt_id)
+
 
 if __name__ == "__main__":
     unittest.main()

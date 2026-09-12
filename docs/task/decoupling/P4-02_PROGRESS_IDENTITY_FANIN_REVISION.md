@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: IN PROGRESS — provisional ADR drafted; current MySQL evidence and joint P4-02/P4-03/P4-04 acceptance remain open
+> Status: IN PROGRESS — provisional ADR drafted; current MySQL distribution captured, while P4-01 schema remediation and joint P4-02/P4-03/P4-04 acceptance remain open
 >
 > Dependency: P4-00 and P4-01
 >
@@ -46,7 +46,9 @@ Chốt logical subject, contributor accounting, quarantine và concurrency contr
 - Proposed global order: existing transaction-owner prefix locks, sorted subject coordination locks, sorted CardProgress contributor locks, authoritative mutation/event flush, then one mirror finalization per subject.
 - P1-02 result codes are mapped without changing their apply/no-op/conflict semantics.
 - Runtime/schema change: none.
-- Acceptance remains blocked by the secured current-MySQL P4-01 evidence, the independent `study_session_batches` migration gap, exact P4-03 codec/state equality, P4-04 lifecycle retention and joint ADR review.
+- [P4-03](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) now provisionally defines the exact raw/state codecs, `algorithm_state_hash`, availability/control anchors and the resulting `semantic_state_hash` used by this fan-in contract.
+- [P4-04](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) now provisionally defines lineage completeness, retained scheduler facts and reset/delete/rekey fence retention.
+- The secured production snapshot found 16,424 single-contributor learner/Note groups and zero fan-in, unresolvable or overlapping-context groups. Acceptance remains blocked by P4-01 schema remediation, the independent `study_session_batches` migration gap and joint ADR review.
 
 ## Acceptance
 
