@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: IN PROGRESS / PROVISIONAL — logical ADR drafted; current MySQL distribution captured, while P4-01 schema remediation and joint decision gates remain open
+> Status: IN PROGRESS / PROVISIONAL — logical ADR drafted; P4-01A remediation passed locally, while production refresh and joint decision gates remain open
 >
 > Dependency: P4-01; consistency with P4-02/P4-03
 >
@@ -43,7 +43,7 @@ The repository-grounded [P4-04 provisional ADR](../../architecture/phase-4-histo
 - reset, Card/Template/Note deletion, import replacement and clone rekey transitions;
 - tombstone/detached retention gates and the future Phase 5 initializer handoff.
 
-Runtime change: none. Schema change: none. The production snapshot found 15,992 valid latest-event pointers, 432 null pointers, no invalid/cross-subject pointer, and complete source/ref accounting. Acceptance remains blocked by P4-01 schema remediation, the independent `study_session_batches` migration disposition and joint P4-02/P4-03/P4-04 review.
+Runtime change: none. Schema change: none. The production snapshot found 15,992 valid latest-event pointers, 432 null pointers, no invalid/cross-subject pointer, and complete source/ref accounting. P4-01A has repaired the schema/migration findings in repository/local MySQL; acceptance remains blocked by production refresh and joint P4-02/P4-03/P4-04 review.
 
 ## Acceptance
 

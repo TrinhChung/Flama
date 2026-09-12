@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: IN PROGRESS / PROVISIONAL — logical ADR drafted; current MySQL distribution captured, while P4-01 schema remediation and joint decision gates remain open
+> Status: IN PROGRESS / PROVISIONAL — logical ADR drafted; P4-01A remediation passed locally, while production refresh and joint decision gates remain open
 >
 > Dependency: P4-00 and P4-01; consistency with P4-02/P4-04
 >
@@ -44,7 +44,7 @@ The repository-grounded [P4-03 provisional ADR](../../architecture/phase-4-algor
 - relational per-contributor availability anchors with a frozen query context;
 - current queue/due/count/order/learn-ahead behavior and cross-engine golden vectors.
 
-Runtime change: none. Schema change: none. The production snapshot found 16,424 canonical queue rows, no unknown/compatibility queues, no partial memory state and no non-finite values. Acceptance remains blocked by P4-01 schema remediation, the independent `study_session_batches` migration disposition and joint P4-02/P4-03/P4-04 review.
+Runtime change: none. Schema change: none. The production snapshot found 16,424 canonical queue rows, no unknown/compatibility queues, no partial memory state and no non-finite values. P4-01A has repaired the schema/migration findings in repository/local MySQL; acceptance remains blocked by production refresh and joint P4-02/P4-03/P4-04 review.
 
 ## Acceptance
 

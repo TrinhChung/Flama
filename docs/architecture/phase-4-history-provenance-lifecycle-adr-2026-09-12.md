@@ -2,7 +2,7 @@
 
 > Date: 2026-09-12 | Mode: DESIGN | Decision: P4-D4-4
 >
-> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; acceptance is blocked by P4-01 schema remediation and the joint P4-02/P4-03/P4-04 review
+> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; P4-01A passed locally, while production refresh and the joint P4-02/P4-03/P4-04 review block acceptance
 >
 > Runtime change: none | Schema change: none | Operational authority: `CardProgress`
 >
@@ -400,7 +400,7 @@ P4-06/P4-08/P4-10/P4-11 must eventually prove:
 
 ## 19. Staged delivery and rollback
 
-1. **P4-05:** select physical envelope/state/availability/contributor/lifecycle/history representations after the P4-01 schema drift and missing batch-table migration are dispositioned.
+1. **P4-05:** select physical envelope/state/availability/contributor/lifecycle/history representations after the P4-01A production gate and joint logical decisions are accepted.
 2. **P4-06:** add only additive structures/codecs with flags off; no cleanup or startup backfill.
 3. **P4-07:** mirror native/session/worker state and per-contributor pointers atomically.
 4. **P4-08:** cover snapshots, revlog, reset, delete, import replacement and clone rekey in their existing transaction/savepoint boundaries.
@@ -418,7 +418,7 @@ No history purge, Algorithm switch, user-facing shadow read or destructive contr
 - 119,698 imported events, 5,687 versioned native events, four null-label native events and 595 detached event/Card references are observed; occurrence-versus-ingestion age still requires a dedicated history query if it changes retention sizing;
 - FK/delete actions, `utf8mb4_unicode_ci`, zero fractional timestamp precision and matching repository/database head `20260910_000036` are captured;
 - four sessions are actively open, 117 are expired and active Connect imports are `0`; destructive-path history and batch exposure remain unavailable;
-- `study_session_batches` is absent in production and its independent migration disposition remains blocked.
+- `study_session_batches` is absent in the captured production baseline; its independent migration and remaining schema repairs pass locally, with production apply/refresh still pending.
 
 ### Joint review
 
@@ -431,4 +431,4 @@ No history purge, Algorithm switch, user-facing shadow read or destructive contr
 - current-state/history authority boundary: **ready for cross-review**;
 - provenance/completeness vocabulary: **ready for cross-review** against the captured production distributions;
 - reset/delete/rekey and retention fence: **ready for cross-review**, physical FK/layout pending;
-- P4-04 overall: **not Accepted** while P4-01 schema remediation and joint gates remain open.
+- P4-04 overall: **not Accepted** while the P4-01A production gate and joint gates remain open.

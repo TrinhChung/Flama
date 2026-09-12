@@ -4,7 +4,7 @@
 >
 > Priority: P0 decision
 >
-> Status: IN PROGRESS — provisional ADR drafted; current MySQL distribution captured, while P4-01 schema remediation and joint P4-02/P4-03/P4-04 acceptance remain open
+> Status: IN PROGRESS — provisional ADR drafted; P4-01A remediation passed locally, while production refresh and joint P4-02/P4-03/P4-04 acceptance remain open
 >
 > Dependency: P4-00 and P4-01
 >
@@ -48,7 +48,7 @@ Chốt logical subject, contributor accounting, quarantine và concurrency contr
 - Runtime/schema change: none.
 - [P4-03](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) now provisionally defines the exact raw/state codecs, `algorithm_state_hash`, availability/control anchors and the resulting `semantic_state_hash` used by this fan-in contract.
 - [P4-04](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) now provisionally defines lineage completeness, retained scheduler facts and reset/delete/rekey fence retention.
-- The secured production snapshot found 16,424 single-contributor learner/Note groups and zero fan-in, unresolvable or overlapping-context groups. Acceptance remains blocked by P4-01 schema remediation, the independent `study_session_batches` migration gap and joint ADR review.
+- The secured production snapshot found 16,424 single-contributor learner/Note groups and zero fan-in, unresolvable or overlapping-context groups. P4-01A has repaired the schema/migration findings in repository/local MySQL; acceptance remains blocked by production refresh and joint ADR review.
 
 ## Acceptance
 

@@ -2,7 +2,7 @@
 
 > Scope: P4-01 repository implementation and evidence readiness
 >
-> Verdict: **CURRENT MYSQL EVIDENCE CAPTURED; BLOCKED on actionable schema drift and independent batch-table migration remediation**
+> Verdict: **REMEDIATION IMPLEMENTED/LOCALLY REHEARSED; production upgrade and refreshed SELECT-only evidence pending**
 >
 > Runtime/storage change: none; this work is read-only audit instrumentation
 
@@ -12,23 +12,23 @@ The repository side of P4-01 is implemented: audit schema `study-architecture-au
 
 P4-01 is not accepted yet, but the external evidence gap is closed. On 2026-09-12 the audit ran twice against production MySQL with one frozen observation time and an ephemeral principal limited to `SELECT, SHOW VIEW`. The normal application principal was deliberately not used because its grants include write/admin capability. The ephemeral principal was dropped and verified absent after each run.
 
-The two reports are deterministic and expose no credential or raw principal. They establish the current row distributions, Alembic head, MySQL settings and normalized schema drift. Acceptance remains blocked by 15 actionable drift entries, including an absent `study_session_batches` table, and by the table's missing independent Alembic migration.
+The two reports are deterministic and expose no credential or raw principal. They establish the historical production row distributions, Alembic head, MySQL settings and 15 normalized actionable drift entries at head `20260910_000036`.
 
-There is also an independent repository blocker: `StudySessionBatch` is registered and used at runtime, but no Alembic revision declares `study_session_batches`. This gap must be remediated as its own migration concern and must not be hidden inside the later Phase 4 shadow-schema migration.
+P4-01A now resolves those findings in the repository through independent revisions `20260913_000037` and `20260913_000038`, and local MySQL reports matching heads with zero drift. P4-01 remains open because production has not yet applied those revisions or produced the required refreshed SELECT-only bundle.
 
 ## 2. Frozen repository evidence
 
 | Evidence | Observation | Disposition |
 |---|---|---|
 | inspected branch / HEAD | `develop` / `a6dc9b392ee8095b4777542ec20169fd939b1a19` | HEAD advanced during the handoff through non-overlapping MCP/Study UI/worksheet commits. The audit records the actual run HEAD, dirty-worktree digest and per-file code manifest because P4 work is not committed yet. Regenerate the final bundle after the implementation commit is chosen. |
-| repository Alembic head | `20260910_000036` | Compare against `alembic_version` in the current MySQL bundle. Mismatch blocks P4-05. |
+| captured repository/Alembic head | `20260910_000036` | Historical production bundle baseline; current repository head is `20260913_000038` after P4-01A. A fresh bundle is required after deployment. |
 | audit contract | `study-architecture-audit.v4` + `study-phase4-preflight.v1` | Versioned in [study architecture audit service](../../app/services/study_architecture_audit_service.py) and [Phase 4 preflight service](../../app/services/study_phase4_preflight_service.py). |
 | audit entrypoint | `wsgi_audit.py -> create_audit_app()` | Startup DDL, compatibility repair, seeds and clone cutover stay disabled. Normal `wsgi.py` is prohibited for evidence collection. |
 | deployed release source | `/opt/flama/releases/1ff3035826e3f370cba92639bc913640413bb148` | The release package has no `.git` metadata, so the report records `git_commit=null` and freezes a per-file code manifest instead. The run used a private copy of this release with only the reviewed audit portability patch applied; the serving release was not edited. |
 | current MySQL evidence | observed `2026-09-12T11:16:29Z`; MySQL `8.0.46-0ubuntu0.22.04.4`; `utf8mb4` / `utf8mb4_unicode_ci`; timezone `SYSTEM` | **PASS for evidence availability and read-only safety.** `current_mysql_evidence=true`, two grant rows parsed, no disallowed privilege, and the temporary principal was removed. |
 | deterministic bundle | `/var/lib/flama-audit/phase4-preflight-20260912T111629Z` on the VPS, mode `0700` directory / `0600` files | Both canonical report hashes are `307762278953f29ec88a31887f71af8c4b4a221f7d1e3ebf33c86db38a1e5704`; changed paths `[]`; durations `25,232 ms` and `25,281 ms`; both exits are expected blocker code `2`. |
 | Alembic heads | repository `20260910_000036`; database `20260910_000036` | **PASS.** Repository and production database heads match. |
-| `study_session_batches` migration/table | no migration mention; production table absent | **BLOCK.** Database lane owns a dedicated migration-gap remediation before P4-05 approval; P4-06 must not silently absorb it. |
+| `study_session_batches` migration/table | production table absent in captured evidence | **REMEDIATED IN REPOSITORY.** `20260913_000037` creates or contract-validates the table independently; production application remains pending and P4-06 does not absorb it. |
 
 The runtime report hashes the connected principal and database name, records server version, `sql_mode`, database charset/collation and timezone, but never returns the raw principal, URI, password or `SHOW GRANTS` text. For MySQL it queries identity/settings and `SHOW GRANTS` first, then refuses execution before application-table inspection when any write/admin privilege is present.
 
@@ -98,6 +98,12 @@ Read-only repositories, dashboards, due queries and study selectors were inspect
 
 ## 6. Independent blocker disposition
 
+### Remediation update — 2026-09-13
+
+[P4-01A](../task/decoupling/P4-01A_SCHEMA_DRIFT_REMEDIATION.md) implements two independent revisions. `20260913_000037` creates or validates `study_session_batches` and fails closed on an incompatible pre-existing shape. `20260913_000038` reconciles the 12 intentional server defaults, pins `student_offer_mode` to the migration-established width, adds its missing index, and safely converges nullable marketplace taxonomy metadata where required. Local MySQL was upgraded from `20260910_000036` to `20260913_000038`; the preflight schema comparator reports matching heads and zero drift. See the [design record](./phase-4-schema-drift-remediation-2026-09-13.md).
+
+This closes the repository/local blocker, not the production gate. The captured production bundle still describes the old head and must be regenerated after deployment.
+
 ### `study_session_batches` migration gap
 
 - **Observed:** [study_session_batch.py](../../models/study_session_batch.py) declares the table; [app factory](../../app/__init__.py) registers the model; session and worker services read/write it; no file under `migrations/versions/` contains `study_session_batches`.
@@ -132,10 +138,11 @@ Do not place credentials in CLI arguments, check them into `.env`, or substitute
 | repository/model/migration inventory | PASS | Regenerate after final implementation commit |
 | writer/delete/reset/rekey inventory | PASS for static code paths | P4-07/P4-08 consume this list; current active volume still comes from MySQL evidence |
 | current MySQL identity/settings/schema/data | **PASS for evidence; drift gate BLOCKED** | Database lane dispositions the 15 actionable entries before P4-05 approval |
-| `study_session_batches` migration provenance/table | **BLOCKED; production table absent** | Database lane creates and rehearses an independent migration before P4-05 approval |
-| P4-05 physical schema approval | **BLOCKED** | Requires both blockers above plus accepted P4-02/P4-03/P4-04 decisions |
+| `study_session_batches` migration provenance/table | **REPOSITORY/LOCAL PASS; PRODUCTION PENDING** | Apply `000037`, validate the table, and recapture SELECT-only evidence |
+| schema drift remediation | **LOCAL MYSQL PASS; PRODUCTION PENDING** | Apply `000038` and require zero unexplained drift in the refreshed bundle |
+| P4-05 physical schema approval | **BLOCKED** | Requires the production P4-01A gate plus accepted P4-02/P4-03/P4-04 decisions |
 
-P4-02 through P4-04 may now consume the production distribution above, but remain provisional until their joint review and the P4-01 schema blockers are resolved. P4-05 and every migration/backfill task remain closed.
+P4-02 through P4-04 may consume the production distribution above, but remain provisional until their joint review and the P4-01A production verification are accepted. P4-05 and every learner/Note shadow migration/backfill task remain closed.
 
 ## 9. Verification completed
 

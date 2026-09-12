@@ -171,14 +171,14 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
         self.assertEqual(preflight["schema_version"], "study-phase4-preflight.v1")
         self.assertEqual(preflight["evidence_class"], "repository-and-fixture-only")
         self.assertEqual(preflight["schema"]["drift_count"], 0)
-        self.assertFalse(
+        self.assertTrue(
             preflight["repository"]["study_session_batches_migration_declared"]
         )
         self.assertIn(
             "current_mysql_select_only_evidence_missing",
             preflight["gate"]["blockers"],
         )
-        self.assertIn(
+        self.assertNotIn(
             "study_session_batches_missing_repository_migration",
             preflight["gate"]["blockers"],
         )
@@ -573,11 +573,11 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
 
         self.assertEqual(report["verdicts"]["exit_code"], 2)
         self.assertEqual(report["verdicts"]["overall_status"], "BLOCK")
-        self.assertIn(
+        self.assertNotIn(
             "study_session_batches_missing_repository_migration",
             report["phase4_preflight"]["gate"]["blockers"],
         )
-        self.assertTrue(
+        self.assertFalse(
             any(
                 item["category"]
                 == "phase4_study_session_batches_missing_repository_migration"

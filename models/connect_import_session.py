@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from sqlalchemy import text
+
 from models import db
 from models.model_uuid import uuid_str
 
@@ -27,7 +29,12 @@ class ConnectImportSession(db.Model):
     total_notes = db.Column(db.Integer, nullable=False, default=0)
     total_media = db.Column(db.Integer, nullable=False, default=0)
     processed_notes = db.Column(db.Integer, nullable=False, default=0)
-    attempted_notes = db.Column(db.Integer, nullable=False, default=0)
+    attempted_notes = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     processed_media = db.Column(db.Integer, nullable=False, default=0)
     error_summary = db.Column(db.JSON, nullable=False, default=list)
     expires_at = db.Column(db.DateTime, nullable=False, index=True)

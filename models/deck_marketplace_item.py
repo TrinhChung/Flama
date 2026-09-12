@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from sqlalchemy import text
 from sqlalchemy.orm import synonym
 
 from models import db
@@ -49,6 +50,7 @@ class DeckMarketplaceItem(db.Model):
         db.String(32),
         nullable=False,
         default="free",
+        server_default="free",
         index=True,
     )
     course_title = db.Column(db.String(255), nullable=True)
@@ -56,9 +58,17 @@ class DeckMarketplaceItem(db.Model):
     course_url = db.Column(db.String(500), nullable=True)
     course_instructions = db.Column(db.Text, nullable=True)
     student_offer_mode = db.Column(
-        db.Enum("none", "free", "percent_discount", name="deck_marketplace_student_offer_mode_enum", native_enum=False),
+        db.Enum(
+            "none",
+            "free",
+            "percent_discount",
+            name="deck_marketplace_student_offer_mode_enum",
+            native_enum=False,
+            length=32,
+        ),
         nullable=False,
         default="none",
+        server_default="none",
         index=True,
     )
     student_discount_percent = db.Column(db.Integer, nullable=True)
@@ -88,12 +98,22 @@ class DeckMarketplaceItem(db.Model):
     )
     preview_samples_schema_version = db.Column(db.SmallInteger, nullable=True)
     preview_samples_json = db.Column(db.JSON, nullable=True)
-    working_revision = db.Column(db.BigInteger, nullable=False, default=0)
+    working_revision = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     # Highest working revision for which every source mutation was recorded in
     # deck_working_dirty_entities.  A mismatch makes release preview/publish
     # fall back to the full-deck comparison instead of trusting an incomplete
     # sparse change set.
-    dirty_tracking_revision = db.Column(db.BigInteger, nullable=False, default=0)
+    dirty_tracking_revision = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     publish_status = db.Column(
         db.Enum("private", "published", "unlisted", "archived", name="deck_marketplace_publish_status_enum", native_enum=False),
         nullable=False,
@@ -107,7 +127,13 @@ class DeckMarketplaceItem(db.Model):
     active_usage_count = db.Column(db.Integer, nullable=False, default=0)
     rating_avg = db.Column(db.Float, nullable=False, default=0.0)
     rating_count = db.Column(db.Integer, nullable=False, default=0)
-    auto_publish_enabled = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    auto_publish_enabled = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+        index=True,
+    )
     last_auto_published_at = db.Column(db.DateTime, nullable=True)
     last_auto_publish_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
