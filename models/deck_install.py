@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, text
 from sqlalchemy.orm import synonym
 
 from models import db
@@ -64,19 +64,42 @@ class DeckInstall(db.Model):
         nullable=True,
         index=True,
     )
-    overlay_revision = db.Column(db.BigInteger, nullable=False, default=0)
+    overlay_revision = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     version_mode = db.Column(
         db.String(32),
         nullable=False,
         default="legacy_snapshot",
+        server_default="legacy_snapshot",
         index=True,
     )
     last_synced_at = db.Column(db.DateTime, nullable=True, index=True)
     last_sync_status = db.Column(db.String(32), nullable=True, index=True)
-    auto_update_enabled = db.Column(db.Boolean, nullable=False, default=False, index=True)
-    sync_mode = db.Column(db.String(32), nullable=False, default="manual", index=True)
+    auto_update_enabled = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+        index=True,
+    )
+    sync_mode = db.Column(
+        db.String(32),
+        nullable=False,
+        default="manual",
+        server_default="manual",
+        index=True,
+    )
     last_auto_updated_at = db.Column(db.DateTime, nullable=True, index=True)
-    pending_conflict_count = db.Column(db.Integer, nullable=False, default=0)
+    pending_conflict_count = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     purchase_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     purchase_price_cents = synonym("purchase_amount_minor")
     installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

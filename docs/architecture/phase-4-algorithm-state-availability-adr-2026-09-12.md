@@ -2,7 +2,7 @@
 
 > Date: 2026-09-12 | Mode: DESIGN | Decision: P4-D4-2 / P4-D4-3
 >
-> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; acceptance is blocked by P4-01 schema remediation and the joint P4-02/P4-03/P4-04 review
+> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; P4-01A passed locally, while production refresh and the joint P4-02/P4-03/P4-04 review block acceptance
 >
 > Runtime change: none | Schema change: none | Operational authority: `CardProgress`
 >
@@ -122,7 +122,7 @@ Availability alternatives:
 | Keep availability only inside Algorithm JSON | no stable generic query | forces generic SQL to understand arbitrary state | rejected |
 | Relational contributor anchors evaluated with explicit context | indexed anchors and deterministic comparison | preserves time/policy dependence and Card order | selected provisionally |
 
-Exact tables, column types and indexes remain P4-05 outputs after the P4-01 schema drift and missing batch-table migration are dispositioned.
+Exact tables, column types and indexes remain P4-05 outputs after the P4-01A production gate and joint logical decisions are accepted.
 
 ## 5. Lossless raw contributor codec
 
@@ -388,7 +388,7 @@ No startup backfill, authority cutover or destructive contraction is part of Pha
 - timestamp fractional precision is zero; charset/collation is `utf8mb4` / `utf8mb4_unicode_ci`; actual table/index/FK shape is captured with 15 actionable drift entries;
 - current fan-in is `0`, so semantic/control hash equality still needs golden-vector proof rather than production fan-in examples;
 - current volume is 16,424 contributor rows; exact ordering-tie distribution and proposed-index execution plans remain P4-05/P4-11 evidence;
-- `study_session_batches` is absent in production and its independent migration disposition remains blocked.
+- `study_session_batches` is absent in the captured production baseline; its independent migration and remaining schema repairs pass locally, with production apply/refresh still pending.
 
 ### Joint review
 
@@ -401,4 +401,4 @@ No startup backfill, authority cutover or destructive contraction is part of Pha
 - exact compatibility identity and no-label-dispatch rule: **ready for cross-review**;
 - raw/state codec and typed error boundary: **ready for cross-review**, MySQL round-trip pending;
 - availability anchors/context/order contract: **ready for cross-review**, production distribution/query proof pending;
-- P4-03 overall: **not Accepted** while P4-01 schema remediation and joint gates remain open.
+- P4-03 overall: **not Accepted** while the P4-01A production gate and joint gates remain open.

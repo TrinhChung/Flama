@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from sqlalchemy import text
+
 from models import db
 
 
@@ -42,7 +44,12 @@ class CardProgress(db.Model):
     reps = db.Column(db.Integer, nullable=False, default=0)
     lapses = db.Column(db.Integer, nullable=False, default=0)
     last_reviewed_at = db.Column(db.DateTime, nullable=True)
-    revision = db.Column(db.BigInteger, nullable=False, default=0)
+    revision = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

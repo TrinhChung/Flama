@@ -2,7 +2,7 @@
 
 > Date: 2026-09-10 | Mode: DESIGN | Decision: P4-D4-1
 >
-> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; acceptance is blocked by P4-01 schema remediation and the joint P4-02/P4-03/P4-04 review
+> Status: PROPOSED / PROVISIONAL — repository-grounded contract with current MySQL distribution; P4-01A passed locally, while production refresh and the joint P4-02/P4-03/P4-04 review block acceptance
 >
 > Runtime change: none | Schema change: none | Operational authority: `CardProgress`
 >
@@ -166,7 +166,7 @@ If one learner reaches the same source Note through multiple install contexts, t
 | B. Lockable envelope plus state and contributor/disposition rows | explicit fan-in, provenance and lifecycle accounting | one narrow coordination lock; extra indexed rows/joins; bounded updates | more initial DDL, safest staged migration | selected provisionally |
 | C. Keep only per-Card shadow rows | lossless but does not create the requested Note subject or solve fan-in | closest to current writes | defers rather than resolves Phase 4 identity | rejected |
 
-The production snapshot confirms collation, row volume and a zero-fan-in current distribution, but it also exposes 15 actionable schema drift entries. The selection remains provisional until those entries and the independent missing batch-table migration are resolved. P4-05 owns exact tables, columns, FKs, indexes and retention.
+The production snapshot confirms collation, row volume and a zero-fan-in current distribution, and exposes the 15 actionable schema drift entries that P4-01A now repairs in repository/local MySQL. The selection remains provisional until refreshed production evidence and joint review are accepted. P4-05 owns exact tables, columns, FKs, indexes and retention.
 
 ## 7. Contributor and equivalence contract
 
@@ -368,7 +368,7 @@ Cutover from learner-local Note/Card to source Note/Card locks both affected sub
 - NULL/orphan/missing-learner, unclassified and multi-context rows are `0`;
 - production charset/collation is `utf8mb4` / `utf8mb4_unicode_ci`, and database/repository Alembic heads both equal `20260910_000036`;
 - four open sessions are active, 117 are expired, active Connect imports are `0`, and batch exposure is unavailable because its table is absent;
-- `study_session_batches` is absent in production and has no repository migration; the 15-entry schema drift inventory remains a P4-01 blocker.
+- `study_session_batches` is absent in the captured production baseline; repository migration `20260913_000037` and the remaining P4-01A repairs pass locally, but production apply/refresh remains a P4-01 blocker.
 
 ### Joint decisions still required
 
@@ -381,7 +381,7 @@ Cutover from learner-local Note/Card to source Note/Card locks both affected sub
 - identity, authority boundary and no-winner rule: **ready for cross-review**;
 - contributor/vector and counter semantics: **ready for cross-review**, exact hashes depend on P4-03/P4-04;
 - lock/race contract: **ready for implementation planning**, MySQL proof pending;
-- P4-02 overall: **not Accepted** while P4-01 schema remediation and joint ADR gates remain open.
+- P4-02 overall: **not Accepted** while the P4-01A production gate and joint ADR gates remain open.
 
 ## 16. Rollback
 
