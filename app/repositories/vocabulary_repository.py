@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 from types import SimpleNamespace
 from typing import Any
 
 UTC = timezone.utc
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import selectinload
 
@@ -705,62 +708,135 @@ def build_browse_deck_tree_payload(
             .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
             .all()
         )
-        for install in logical_installs:
-            if install.id is None:
-                continue
-            map_rows = (
-                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
-                .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
-                .all()
-            )
-            source_to_local = {
-                int(row.source_deck_id): int(row.local_deck_id)
-                for row in map_rows
-                if row.source_deck_id is not None
-                and row.local_deck_id is not None
-                and int(row.local_deck_id) in scoped_ids
-            }
-            if not source_to_local:
-                continue
+        maps_by_install: dict[str, dict[int, int]] = defaultdict(dict)
+        if logical_installs:
+            install_ids = [str(inst.id) for inst in logical_installs if inst.id is not None]
+            if install_ids:
+                all_map_rows = (
+                    DeckCloneDeckMap.query.filter(DeckCloneDeckMap.deck_install_id.in_(install_ids))
+                    .all()
+                )
+                source_to_install: dict[int, str] = {}
+                source_to_local_all: dict[int, int] = {}
+                has_overlap = False
 
-            clone_counts_query = (
-                db.session.query(
-                    Note.deck_id,
-                    db.func.count(Card.id).label("total"),
-                    db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
-                    db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
-                    db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
-                )
-                .select_from(Card)
-                .join(Note, Card.note_id == Note.id)
-                .outerjoin(progress_alias, progress_join)
-                .filter(Note.deck_id.in_(source_to_local.keys()))
-            )
-            if install.source_owner_user_id is not None:
-                clone_counts_query = clone_counts_query.filter(Note.user_id == install.source_owner_user_id)
-            snapshot_at = install.base_snapshot_at or install.installed_at
-            if snapshot_at is not None:
-                clone_counts_query = clone_counts_query.filter(
-                    Note.created_at <= snapshot_at,
-                    Card.created_at <= snapshot_at,
-                )
-            clone_counts_query = clone_counts_query.group_by(Note.deck_id)
+                for row in all_map_rows:
+                    if (
+                        row.deck_install_id
+                        and row.source_deck_id is not None
+                        and row.local_deck_id is not None
+                        and int(row.local_deck_id) in scoped_ids
+                    ):
+                        sid = int(row.source_deck_id)
+                        lid = int(row.local_deck_id)
+                        iid = str(row.deck_install_id)
 
-            for row in clone_counts_query.all():
-                source_deck_id = row[0]
-                if source_deck_id is None:
-                    continue
-                local_deck_id = source_to_local.get(int(source_deck_id))
-                if local_deck_id is None:
-                    continue
-                bucket = direct_counts.setdefault(
-                    int(local_deck_id),
-                    {"total": 0, "new": 0, "learn": 0, "due": 0},
-                )
-                bucket["total"] += int(row[1] or 0)
-                bucket["new"] += int(row[2] or 0)
-                bucket["learn"] += int(row[3] or 0)
-                bucket["due"] += int(row[4] or 0)
+                        prev_iid = source_to_install.get(sid)
+                        if prev_iid is not None and prev_iid != iid:
+                            logger.warning(
+                                "Cross-install source overlap detected for user %s: source_deck_id=%s mapped to installs %s and %s",
+                                user_id,
+                                sid,
+                                prev_iid,
+                                iid,
+                            )
+                            has_overlap = True
+                        else:
+                            source_to_install[sid] = iid
+                            source_to_local_all[sid] = lid
+
+                        maps_by_install[iid][sid] = lid
+
+                if not has_overlap:
+                    install_conditions = []
+                    for install in logical_installs:
+                        inst_key = str(install.id)
+                        source_to_local = maps_by_install.get(inst_key)
+                        if not source_to_local:
+                            continue
+                        conds = [Note.deck_id.in_(list(source_to_local.keys()))]
+                        if install.source_owner_user_id is not None:
+                            conds.append(Note.user_id == install.source_owner_user_id)
+                        snapshot_at = install.base_snapshot_at or install.installed_at
+                        if snapshot_at is not None:
+                            conds.append(Note.created_at <= snapshot_at)
+                            conds.append(Card.created_at <= snapshot_at)
+                        install_conditions.append(db.and_(*conds))
+
+                    if install_conditions:
+                        clone_counts_query = (
+                            db.session.query(
+                                Note.deck_id,
+                                db.func.count(Card.id).label("total"),
+                                db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
+                                db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
+                                db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
+                            )
+                            .select_from(Card)
+                            .join(Note, Card.note_id == Note.id)
+                            .outerjoin(progress_alias, progress_join)
+                            .filter(db.or_(*install_conditions))
+                            .group_by(Note.deck_id)
+                        )
+                        for row in clone_counts_query.all():
+                            source_deck_id = row[0]
+                            if source_deck_id is None:
+                                continue
+                            local_deck_id = source_to_local_all.get(int(source_deck_id))
+                            if local_deck_id is None:
+                                continue
+                            bucket = direct_counts.setdefault(
+                                int(local_deck_id),
+                                {"total": 0, "new": 0, "learn": 0, "due": 0},
+                            )
+                            bucket["total"] += int(row[1] or 0)
+                            bucket["new"] += int(row[2] or 0)
+                            bucket["learn"] += int(row[3] or 0)
+                            bucket["due"] += int(row[4] or 0)
+                else:
+                    for install in logical_installs:
+                        inst_key = str(install.id)
+                        source_to_local = maps_by_install.get(inst_key)
+                        if not source_to_local:
+                            continue
+                        clone_counts_query = (
+                            db.session.query(
+                                Note.deck_id,
+                                db.func.count(Card.id).label("total"),
+                                db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
+                                db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
+                                db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
+                            )
+                            .select_from(Card)
+                            .join(Note, Card.note_id == Note.id)
+                            .outerjoin(progress_alias, progress_join)
+                            .filter(Note.deck_id.in_(list(source_to_local.keys())))
+                        )
+                        if install.source_owner_user_id is not None:
+                            clone_counts_query = clone_counts_query.filter(Note.user_id == install.source_owner_user_id)
+                        snapshot_at = install.base_snapshot_at or install.installed_at
+                        if snapshot_at is not None:
+                            clone_counts_query = clone_counts_query.filter(
+                                Note.created_at <= snapshot_at,
+                                Card.created_at <= snapshot_at,
+                            )
+                        clone_counts_query = clone_counts_query.group_by(Note.deck_id)
+
+                        for row in clone_counts_query.all():
+                            source_deck_id = row[0]
+                            if source_deck_id is None:
+                                continue
+                            local_deck_id = source_to_local.get(int(source_deck_id))
+                            if local_deck_id is None:
+                                continue
+                            bucket = direct_counts.setdefault(
+                                int(local_deck_id),
+                                {"total": 0, "new": 0, "learn": 0, "due": 0},
+                            )
+                            bucket["total"] += int(row[1] or 0)
+                            bucket["new"] += int(row[2] or 0)
+                            bucket["learn"] += int(row[3] or 0)
+                            bucket["due"] += int(row[4] or 0)
 
     deck_note_type_rows = (
         db.session.query(Note.deck_id, Note.note_type_id)
@@ -777,18 +853,8 @@ def build_browse_deck_tree_payload(
 
     if logical_installs:
         for install in logical_installs:
-            map_rows = (
-                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
-                .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
-                .all()
-            )
-            source_to_local = {
-                int(row.source_deck_id): int(row.local_deck_id)
-                for row in map_rows
-                if row.source_deck_id is not None
-                and row.local_deck_id is not None
-                and int(row.local_deck_id) in scoped_ids
-            }
+            inst_key = str(install.id)
+            source_to_local = maps_by_install.get(inst_key, {})
             if install.source_note_type_id:
                 snt_id = str(install.source_note_type_id)
                 all_nt_ids.add(snt_id)
