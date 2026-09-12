@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.repositories import vocabulary_repository
+from app.repositories import flashcards_share_repository, vocabulary_repository
 from app.services import deck_management_service, flashcards_share_service
 from models import db
 from models.deck import Deck
@@ -78,12 +78,57 @@ def create_deck(
         ),
         fallback_name=deck_name,
     )
+    note_type_id_raw = payload.get("note_type_id")
+    note_type_id: str | None = (
+        str(note_type_id_raw).strip()
+        if note_type_id_raw is not None and str(note_type_id_raw).strip()
+        else None
+    )
+
+    if not note_type_id and parent_resolution.parent_deck:
+        if parent_resolution.parent_deck.note_type_id:
+            note_type_id = str(parent_resolution.parent_deck.note_type_id)
+        else:
+            existing_nt_ids = flashcards_share_repository.get_note_type_ids_for_user_deck_notes(
+                parent_resolution.parent_deck.id, user_id
+            )
+            if existing_nt_ids and len(existing_nt_ids) == 1:
+                note_type_id = next(iter(existing_nt_ids))
+
+    if note_type_id:
+        from models.note_type import NoteType
+        from models.note_type_install import NoteTypeInstall
+
+        nt_query = NoteType.query.filter(NoteType.id == note_type_id)
+        if not admin_mode:
+            installed_ids = [
+                r[0]
+                for r in db.session.query(
+                    NoteTypeInstall.installed_note_type_id
+                )
+                .filter_by(user_id=user_id)
+                .all()
+                if r[0]
+            ]
+            nt_query = nt_query.filter(
+                (NoteType.user_id == user_id)
+                | (NoteType.id.in_(installed_ids))
+            )
+        if not nt_query.first():
+            raise DeckApiError(
+                "VALIDATION_ERROR",
+                "Invalid note_type_id.",
+                status=400,
+                field="note_type_id",
+            )
+
     try:
         result = vocabulary_repository.upsert_deck_path(
             parent_id=parent_resolution.parent_id,
             path_tokens=path_tokens,
             owner_user_id=user_id,
             admin_mode=admin_mode,
+            note_type_id=note_type_id,
         )
         db.session.commit()
     except SQLAlchemyError as exc:

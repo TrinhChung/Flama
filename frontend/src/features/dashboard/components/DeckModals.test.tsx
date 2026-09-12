@@ -11,6 +11,12 @@ import { CreateDeckModal } from './DeckModals'
 vi.mock('@/app/api', () => ({
   appApi: {
     createDeck: vi.fn().mockResolvedValue({ id: 99, name: 'New Deck' }),
+    get: vi.fn().mockResolvedValue({
+      items: [
+        { id: 'nt-default', name: 'Từ vựng Flama' },
+        { id: 'nt-kanji', name: 'Mẫu Kanji N2' },
+      ],
+    }),
   },
 }))
 
@@ -24,6 +30,7 @@ const childDeck: DeckNode = {
   name: 'N1:Bài 1',
   depth: 1,
   study_url: '/study?deck_id=10',
+  note_type_id: 'nt-kanji',
   counts: { new: 5, learning: 1, due: 2 },
   move: { alias: 'deck-10', token: 'token', parent_alias: 'deck-2', parent_token: 'token2' },
   actions: {
@@ -42,6 +49,7 @@ const parentDeck: DeckNode = {
   name: 'N1 Master',
   depth: 0,
   study_url: '/study?deck_id=2',
+  note_type_id: 'nt-kanji',
   counts: { new: 10, learning: 2, due: 3 },
   move: { alias: 'deck-2', token: 'token', parent_alias: null, parent_token: null },
   actions: {
@@ -82,7 +90,7 @@ describe('CreateDeckModal', () => {
     container.remove()
   })
 
-  it('pre-fills the hierarchical sibling deck path (N1 Master::N1:Bài 2) when child deck is selected', async () => {
+  it('pre-fills the hierarchical sibling deck path (N1 Master::N1:Bài 2) and inherits parent note_type_id when child deck is selected', async () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -95,14 +103,18 @@ describe('CreateDeckModal', () => {
         </QueryClientProvider>,
       )
     })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
 
     const nameInput = document.querySelector<HTMLInputElement>('#create-deck-name')
     expect(nameInput).not.toBeNull()
     expect(nameInput?.value).toBe('N1 Master::N1:Bài 2')
 
-    // Ensure parent deck selection dropdown is NOT present in DOM
-    const parentSelect = document.querySelector('#create-deck-parent')
-    expect(parentSelect).toBeNull()
+    // Ensure Note Type select is rendered and pre-filled with childDeck.note_type_id
+    const noteTypeSelect = document.querySelector<HTMLSelectElement>('#create-deck-notetype')
+    expect(noteTypeSelect).not.toBeNull()
+    expect(noteTypeSelect?.value).toBe('nt-kanji')
 
     // Submit form
     const form = document.querySelector('form')
@@ -114,10 +126,11 @@ describe('CreateDeckModal', () => {
       name: 'N1 Master::N1:Bài 2',
       deck_path: 'N1 Master::N1:Bài 2',
       parent_id: '',
+      note_type_id: 'nt-kanji',
     })
   })
 
-  it('defaults to root level and empty name when no deck is selected', async () => {
+  it('defaults to root level and fallback note type when no deck is selected', async () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -130,10 +143,18 @@ describe('CreateDeckModal', () => {
         </QueryClientProvider>,
       )
     })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
 
     const nameInput = document.querySelector<HTMLInputElement>('#create-deck-name')
     expect(nameInput).not.toBeNull()
     expect(nameInput?.value).toBe('')
+
+    // Note Type should default to fallback ('nt-default')
+    const noteTypeSelect = document.querySelector<HTMLSelectElement>('#create-deck-notetype')
+    expect(noteTypeSelect).not.toBeNull()
+    expect(noteTypeSelect?.value).toBe('nt-default')
 
     // Ensure parent select is not rendered
     expect(document.querySelector('#create-deck-parent')).toBeNull()

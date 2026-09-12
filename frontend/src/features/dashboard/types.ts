@@ -4,6 +4,7 @@ export type DeckNode = {
   name: string
   depth: number
   study_url: string
+  note_type_id?: string | null
   counts: {
     new: number
     learning: number

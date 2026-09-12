@@ -67,6 +67,7 @@ class DeckNode:
     new_count: int
     learn_count: int
     due_count: int
+    note_type_id: str | None = None
     children: List["DeckNode"] = field(default_factory=list)
 
 
@@ -92,6 +93,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         installs = []
 
     visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
+    deck_note_types: Dict[int, str] = {}
     card_counts_by_deck: Dict[int, Dict[str, int]] = {
         int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
         for deck_id in visible_deck_ids
@@ -104,6 +106,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         state_rows = (
             db.session.query(
                 Note.deck_id,
+                Note.note_type_id,
                 CardProgress.queue,
                 CardProgress.due_at,
                 CardProgress.due_day,
@@ -118,9 +121,18 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             )
             .all()
         )
-        for deck_id, progress_queue, progress_due_at, progress_due_day, progress_is_suspended in state_rows:
+        for (
+            deck_id,
+            note_type_id,
+            progress_queue,
+            progress_due_at,
+            progress_due_day,
+            progress_is_suspended,
+        ) in state_rows:
             if not deck_id:
                 continue
+            if note_type_id and int(deck_id) not in deck_note_types:
+                deck_note_types[int(deck_id)] = str(note_type_id)
             bucket = card_counts_by_deck.setdefault(
                 int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
             )
@@ -163,6 +175,10 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                 }
                 if not source_to_local:
                     continue
+
+                if install.source_note_type_id:
+                    for local_deck_id in source_to_local.values():
+                        deck_note_types.setdefault(int(local_deck_id), str(install.source_note_type_id))
 
                 clone_query = (
                     db.session.query(
@@ -279,6 +295,11 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             deck_new = int(card_counts["new"])
             deck_learn = int(card_counts["learn"])
             deck_due = int(card_counts["due"])
+            deck_nt_id = (
+                str(deck.note_type_id)
+                if deck.note_type_id
+                else deck_note_types.get(deck.id)
+            )
             nodes.append(
                 DeckNode(
                     deck_id=deck.id,
@@ -293,6 +314,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                     new_count=deck_new,
                     learn_count=deck_learn,
                     due_count=deck_due,
+                    note_type_id=deck_nt_id,
                     children=_build_nodes(deck.id, depth + 1),
                 )
             )

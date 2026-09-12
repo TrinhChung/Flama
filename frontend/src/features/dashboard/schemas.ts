@@ -8,6 +8,7 @@ export const createDeckSchema = z.object({
     .max(255, 'Tên deck quá dài.'),
   deck_path: z.string().trim().max(1000, 'Đường dẫn deck quá dài.'),
   parent_id: z.string(),
+  note_type_id: z.string().optional(),
 })
 
 export type CreateDeckForm = z.infer<typeof createDeckSchema>

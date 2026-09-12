@@ -100,6 +100,7 @@ type DashboardRow = {
   new_count: number
   learn_count: number
   due_count: number
+  note_type_id?: string | null
   children: DashboardRow[]
 }
 
@@ -147,6 +148,7 @@ function toDeckNode(row: DashboardRow): DeckNode {
     name: row.label,
     depth: row.depth,
     study_url: `/study?deck_id=${row.deck_id}`,
+    note_type_id: row.note_type_id ?? null,
     counts: {
       new: row.new_count,
       learning: row.learn_count,
@@ -302,6 +304,7 @@ export const appApi = {
       name: values.name,
       path: values.deck_path,
       parent_id: values.parent_id || null,
+      note_type_id: values.note_type_id || null,
     })
   },
 

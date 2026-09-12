@@ -168,6 +168,7 @@ def upsert_deck_path(
     path_tokens: list[str],
     owner_user_id: int | None,
     admin_mode: bool,
+    note_type_id: str | None = None,
 ) -> DeckPathUpsertResult:
     current_parent_id = parent_id
     created_count = 0
@@ -189,11 +190,18 @@ def upsert_deck_path(
             current_parent_id = existing.id
             continue
 
+        effective_nt_id = note_type_id
+        if effective_nt_id is None and current_parent_id is not None:
+            parent_deck = db.session.get(Deck, current_parent_id)
+            if parent_deck and parent_deck.note_type_id:
+                effective_nt_id = parent_deck.note_type_id
+
         node = Deck(
             parent_id=current_parent_id,
             owner_user_id=owner_user_id,
             name=token,
             position=next_deck_position(current_parent_id),
+            note_type_id=effective_nt_id,
         )
         db.session.add(node)
         db.session.flush()

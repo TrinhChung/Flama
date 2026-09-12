@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, LoaderCircle } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
@@ -101,20 +101,44 @@ export function CreateDeckModal({
   const queryClient = useQueryClient()
   const form = useForm<CreateDeckForm>({
     resolver: zodResolver(createDeckSchema),
-    defaultValues: { name: '', deck_path: '', parent_id: '' },
+    defaultValues: { name: '', deck_path: '', parent_id: '', note_type_id: '' },
   })
+
+  const noteTypesQuery = useQuery({
+    queryKey: ['note-types'],
+    queryFn: () =>
+      appApi.get<{ items: Array<{ id: string; name: string; title?: string }> }>(
+        '/note-types',
+      ),
+    enabled: opened,
+  })
+
+  const noteTypesData = noteTypesQuery.data?.items
+  const noteTypes = noteTypesData || []
 
   useEffect(() => {
     if (!opened) return
 
+    const items = noteTypesData || []
     const suggestedPath = suggestNextDeckPath(selectedDeck, dashboard.decks)
+    const inheritedNoteTypeId = selectedDeck?.note_type_id || ''
+    const defaultFallbackNoteTypeId =
+      items.find(
+        (nt) =>
+          nt.name?.toLowerCase().includes('từ vựng') ||
+          nt.name?.toLowerCase().includes('vocab') ||
+          nt.name?.toLowerCase().includes('word'),
+      )?.id ||
+      items[0]?.id ||
+      ''
 
     form.reset({
       name: suggestedPath,
       deck_path: suggestedPath,
       parent_id: '',
+      note_type_id: inheritedNoteTypeId || defaultFallbackNoteTypeId,
     })
-  }, [opened, selectedDeck, dashboard.decks, form])
+  }, [opened, selectedDeck, dashboard.decks, form, noteTypesData])
 
   const mutation = useMutation<unknown, Error, CreateDeckForm>({
     mutationFn: (values) =>
@@ -122,6 +146,7 @@ export function CreateDeckModal({
         ...values,
         deck_path: values.name,
         parent_id: values.parent_id || '',
+        note_type_id: values.note_type_id || undefined,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
@@ -154,6 +179,32 @@ export function CreateDeckModal({
             error={form.formState.errors.name?.message}
             {...form.register('name')}
           />
+          <div className="space-y-2">
+            <Label htmlFor="create-deck-notetype">Mẫu thẻ (Note Type)</Label>
+            <NativeSelect
+              id="create-deck-notetype"
+              className="w-full"
+              disabled={noteTypesQuery.isPending}
+              {...form.register('note_type_id')}
+            >
+              {noteTypes.length === 0 ? (
+                <NativeSelectOption value="">
+                  {noteTypesQuery.isPending ? 'Đang tải mẫu thẻ...' : 'Mặc định'}
+                </NativeSelectOption>
+              ) : (
+                noteTypes.map((nt) => (
+                  <NativeSelectOption key={nt.id} value={nt.id}>
+                    {nt.name || nt.title || nt.id}
+                  </NativeSelectOption>
+                ))
+              )}
+            </NativeSelect>
+            <p className="text-xs text-muted-foreground">
+              {selectedDeck?.note_type_id
+                ? 'Mặc định kế thừa từ deck cha đã chọn.'
+                : 'Mẫu thẻ sẽ áp dụng cho các thẻ thuộc deck này.'}
+            </p>
+          </div>
           <input type="hidden" {...form.register('parent_id')} />
           <input type="hidden" {...form.register('deck_path')} />
           <DialogFooter>
