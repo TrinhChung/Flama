@@ -4,6 +4,8 @@
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
+> Current update (2026-09-13): P4-06 is completed/merged. P4-07 native/session/worker mirror is implemented and locally verified but intentionally uncommitted. P4-08 is next; shadow writes remain default-off. This update supersedes the historical status line above.
+>
 > Latest P1/P2 closeout: [2026-09-08 execution closeout](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) — 8 tasks completed; async admission and v3 issuance remain flag-off by default.
 >
 > Latest Phase 3 execution plan: [2026-09-09 Phase 3 plan](./P3_EXECUTION_PLAN_2026-09-09.md) — completed through INT-01.

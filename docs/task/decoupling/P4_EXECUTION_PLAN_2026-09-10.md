@@ -4,6 +4,8 @@
 >
 > Planning date: 2026-09-10
 >
+> Current update (2026-09-13): P4-06 is completed/merged. P4-07 is implemented and locally verified but intentionally uncommitted; P4-08 is next. This update supersedes the historical status line above.
+>
 > Repository baseline: `develop` at `880ff1b` (`phase3`)
 >
 > Scope: generic learner/Note progress envelope, versioned Algorithm State, normalized availability projection, additive backfill and shadow reconciliation

@@ -118,6 +118,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_session_api.py",
             "tests/test_study_session_wire_contract.py",
             "tests/test_study_progress_shadow_codec.py",
+            "tests/test_study_progress_shadow_mirror.py",
             "tests/test_study_progress_shadow_schema.py",
             "tests/test_scheduler_schema.py",
             "tests/test_stats_study_time.py",
@@ -529,6 +530,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_p1_02_mysql_concurrency.py",
             "scripts/run_phase4_preflight_bundle.py",
             "scripts/probe_phase4_shadow_schema_mysql.py",
+            "scripts/probe_phase4_shadow_mirror_mysql.py",
         ],
         "backend_tests": [
             "tests/test_app_startup.py",

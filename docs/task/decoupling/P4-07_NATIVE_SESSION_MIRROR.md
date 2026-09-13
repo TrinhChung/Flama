@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**
 >
 > Dependency: P4-06
 >
@@ -33,6 +33,8 @@ Mirror all native authoritative mutations once per learner/Note inside the exist
 - Native/session/worker adapters.
 - Lock-order documentation and observability counters.
 - Atomicity/idempotency/concurrency tests.
+
+Implementation and verification evidence: [Phase 4 native/session/worker mirror verification](../../architecture/phase-4-native-session-worker-mirror-verification-2026-09-13.md).
 
 ## Acceptance
 

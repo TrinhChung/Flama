@@ -21,6 +21,7 @@ from app.repositories.study_repository import (
 from app.services import (
     flashcards_share_service,
     study_artifact_service,
+    study_progress_shadow_mirror_service,
     study_service,
 )
 from app.services.anki_scheduler import (
@@ -1398,8 +1399,33 @@ def commit_study_session(
             status=409,
         )
 
+    card_rows: dict[str, Card] = {}
+    mirror_plan = None
     progress_rows = []
-    if touched_ids:
+    if touched_ids and study_progress_shadow_mirror_service.shadow_writes_enabled():
+        card_rows = {
+            str(card.id): card
+            for card in Card.query.filter(Card.id.in_(sorted(touched_ids))).all()
+        }
+        try:
+            mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
+                db.session,
+                learner_user_id=int(user.id),
+                cards=card_rows.values(),
+                now_utc=committed_at,
+            )
+        except Exception:
+            db.session.rollback()
+            raise
+        locked_progress = study_progress_shadow_mirror_service.locked_progress_map(
+            mirror_plan
+        )
+        progress_rows = [
+            locked_progress[card_id]
+            for card_id in sorted(touched_ids)
+            if card_id in locked_progress
+        ]
+    elif touched_ids:
         progress_rows = (
             CardProgress.query.filter(
                 CardProgress.user_id == int(user.id),
@@ -1430,6 +1456,8 @@ def commit_study_session(
                 }
             )
     if conflicts:
+        if mirror_plan is not None:
+            db.session.rollback()
         raise StudySessionError(
             "CARD_PROGRESS_CONFLICT",
             "One or more cards changed in another study session.",
@@ -1437,10 +1465,11 @@ def commit_study_session(
             details=conflicts,
         )
 
-    card_rows = {
-        str(card.id): card
-        for card in Card.query.filter(Card.id.in_(sorted(touched_ids))).all()
-    } if touched_ids else {}
+    if touched_ids and not card_rows:
+        card_rows = {
+            str(card.id): card
+            for card in Card.query.filter(Card.id.in_(sorted(touched_ids))).all()
+        }
     if session.clone_install_id is not None:
         install = db.session.get(DeckInstall, session.clone_install_id)
         if (
@@ -1448,6 +1477,8 @@ def commit_study_session(
             or int(install.user_id) != int(user.id)
             or str(install.clone_mode or "") != "logical_overlay"
         ):
+            if mirror_plan is not None:
+                db.session.rollback()
             raise StudySessionError(
                 "SESSION_SCOPE_CHANGED",
                 "The installed deck scope changed during this session.",
@@ -1476,6 +1507,8 @@ def commit_study_session(
                     or card.note.deck_id != session_card.source_deck_id
                     or card.note.deck_id != session_card.local_deck_id
                 ):
+                    if mirror_plan is not None:
+                        db.session.rollback()
                     raise StudySessionError(
                         "SESSION_SCOPE_CHANGED",
                         "A locally-added clone card moved outside the session scope.",
@@ -1488,6 +1521,8 @@ def commit_study_session(
                 or current_map.get(int(session_card.source_deck_id))
                 != int(session_card.local_deck_id)
             ):
+                if mirror_plan is not None:
+                    db.session.rollback()
                 raise StudySessionError(
                     "SESSION_SCOPE_CHANGED",
                     "The installed deck mapping changed during this session.",
@@ -1500,6 +1535,8 @@ def commit_study_session(
                 int(card.note.user_id) != int(user.id)
                 or card.note.deck_id != session_card.source_deck_id
             ):
+                if mirror_plan is not None:
+                    db.session.rollback()
                 raise StudySessionError(
                     "SESSION_SCOPE_CHANGED",
                     "A card moved outside the session scope.",
@@ -1546,6 +1583,9 @@ def commit_study_session(
                 ) from exc
 
         last_review_event_by_card: dict[str, Any] = {}
+        mirror_history_events: list[
+            study_progress_shadow_mirror_service.NativeMirrorHistoryEvent
+        ] = []
         last_replay_index_by_card = {
             session_card.card_id: index
             for index, (_, session_card, *_rest) in enumerate(replayed_events)
@@ -1612,6 +1652,17 @@ def commit_study_session(
                 ) from exc
             review_event = mutation_result.review_event
             last_review_event_by_card[session_card.card_id] = review_event
+            mirror_history_events.append(
+                study_progress_shadow_mirror_service.NativeMirrorHistoryEvent(
+                    review_event=review_event,
+                    before_state_hash=study_artifact_service.canonical_digest(
+                        serialize_card_state(before)
+                    ),
+                    after_state_hash=study_artifact_service.canonical_digest(
+                        serialize_card_state(transition.state)
+                    ),
+                )
+            )
 
         db.session.flush()
         updated_cards = []
@@ -1662,6 +1713,11 @@ def commit_study_session(
                     "commit_reason": commit_reason,
                 },
             )
+        )
+        study_progress_shadow_mirror_service.finalize_native_mirror(
+            mirror_plan,
+            review_events=tuple(mirror_history_events),
+            now_utc=committed_at,
         )
         db.session.commit()
     except IntegrityError:

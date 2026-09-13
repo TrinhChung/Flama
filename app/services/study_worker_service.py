@@ -12,7 +12,11 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.repositories.study_repository import is_progress_suspended
-from app.services import study_artifact_service, study_service
+from app.services import (
+    study_artifact_service,
+    study_progress_shadow_mirror_service,
+    study_service,
+)
 from app.services.anki_scheduler import DeckOptions
 from app.services.study_action_runtime import ReviewTransitionResult, resolve_review_action
 from app.services.study_algorithm_registry import (
@@ -317,14 +321,31 @@ def process_single_study_batch(
             for c in Card.query.filter(Card.id.in_(sorted(touched_ids))).all()
         } if touched_ids else {}
 
-        progress_rows = (
-            CardProgress.query.filter(
-                CardProgress.user_id == user_id,
-                CardProgress.card_id.in_(sorted(touched_ids)),
+        mirror_plan = None
+        if touched_ids and study_progress_shadow_mirror_service.shadow_writes_enabled():
+            mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
+                db.session,
+                learner_user_id=user_id,
+                cards=card_rows.values(),
+                now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
             )
-            .with_for_update()
-            .all()
-        ) if touched_ids else []
+            locked_progress = (
+                study_progress_shadow_mirror_service.locked_progress_map(mirror_plan)
+            )
+            progress_rows = [
+                locked_progress[card_id]
+                for card_id in sorted(touched_ids)
+                if card_id in locked_progress
+            ]
+        else:
+            progress_rows = (
+                CardProgress.query.filter(
+                    CardProgress.user_id == user_id,
+                    CardProgress.card_id.in_(sorted(touched_ids)),
+                )
+                .with_for_update()
+                .all()
+            ) if touched_ids else []
         progress_map = {str(row.card_id): row for row in progress_rows if row.card_id}
 
         # Initialize card states: use existing progress if present, else session card initial state
@@ -425,6 +446,11 @@ def process_single_study_batch(
                     batch_id,
                     existing_event.client_event_id,
                 )
+                if mirror_plan is not None:
+                    # A duplicate delivery is a no-op: discard any first-create
+                    # coordination row produced by prepare before preserving the
+                    # established Redis-marker/DB-receipt order below.
+                    db.session.rollback()
                 mark_batch_processed(batch_id)
                 if existing_batch:
                     existing_batch.status = "completed"
@@ -449,6 +475,9 @@ def process_single_study_batch(
             db.session.flush()
 
         last_review_event_by_card: dict[str, Any] = {}
+        mirror_history_events: list[
+            study_progress_shadow_mirror_service.NativeMirrorHistoryEvent
+        ] = []
         last_replay_index_by_card = {
             session_card.card_id: index
             for index, (_, session_card, *_rest) in enumerate(replayed_events)
@@ -509,6 +538,17 @@ def process_single_study_batch(
                 )
             )
             last_review_event_by_card[session_card.card_id] = mutation_result.review_event
+            mirror_history_events.append(
+                study_progress_shadow_mirror_service.NativeMirrorHistoryEvent(
+                    review_event=mutation_result.review_event,
+                    before_state_hash=study_artifact_service.canonical_digest(
+                        serialize_card_state(before)
+                    ),
+                    after_state_hash=study_artifact_service.canonical_digest(
+                        serialize_card_state(transition.state)
+                    ),
+                )
+            )
 
         db.session.flush()
 
@@ -520,6 +560,12 @@ def process_single_study_batch(
                 prog.last_review_event_id = int(last_ev.id)
 
         now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        study_progress_shadow_mirror_service.finalize_native_mirror(
+            mirror_plan,
+            review_events=tuple(mirror_history_events),
+            now_utc=now_utc,
+        )
 
         # Step 7: Update or create StudySessionBatch record
         if existing_batch is None:
