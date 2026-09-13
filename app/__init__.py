@@ -97,6 +97,16 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.study_session_card import StudySessionCard  # noqa: F401
     from models.study_session_commit import StudySessionCommit  # noqa: F401
     from models.study_session_batch import StudySessionBatch  # noqa: F401
+    from models.study_progress_subject import StudyProgressSubject  # noqa: F401
+    from models.study_progress_state import StudyProgressState  # noqa: F401
+    from models.study_progress_contributor import StudyProgressContributor  # noqa: F401
+    from models.study_progress_availability import StudyProgressAvailability  # noqa: F401
+    from models.study_progress_lineage_ref import StudyProgressLineageRef  # noqa: F401
+    from models.study_progress_history_fact import StudyProgressHistoryFact  # noqa: F401
+    from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent  # noqa: F401
+    from models.study_progress_backfill_run import StudyProgressBackfillRun  # noqa: F401
+    from models.study_progress_backfill_checkpoint import StudyProgressBackfillCheckpoint  # noqa: F401
+    from models.study_progress_backfill_disposition import StudyProgressBackfillDisposition  # noqa: F401
     from models.payment_order import PaymentOrder  # noqa: F401  # register model
     from models.payment_order_item import PaymentOrderItem  # noqa: F401  # register model
     from models.payment_webhook_event import PaymentWebhookEvent  # noqa: F401  # register model

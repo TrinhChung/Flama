@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED (2026-09-13)**
 >
 > Dependency: P4-05
 >
@@ -34,6 +34,9 @@ Implement approved additive tables and pure, exact mapping from `CardProgress` w
 - Config flags off by default.
 - Migration report and golden vectors.
 
+Implementation/verification record:
+[Phase 4 additive schema and mapper verification](../../architecture/phase-4-additive-schema-mapper-verification-2026-09-13.md).
+
 ## Acceptance
 
 - No existing table/column is dropped, rewritten or made authoritative.
@@ -61,3 +64,19 @@ Disable flags and keep additive tables. Downgrade only in disposable rehearsal o
 - Không add writer hooks/backfill.
 - Không read shadow in product queries.
 - Không add physical composition/application tables.
+
+## Kết quả 2026-09-13
+
+- Added all ten accepted tables and Alembic head `20260913_000039`; no existing
+  authority/content/history table is altered.
+- Added lossless raw codec, exact Algorithm State decoder/mapper, availability
+  projection/evaluator and subject first-create/fence repository primitives.
+- All three flags remain default-off; flags-off startup creates zero rows and no
+  shadow read-authority flag exists.
+- SQLite focused tests: 16 passed.
+- Backend regression: 257 passed / 1 skipped for `database,study,core`; 212 passed
+  for `cli`.
+- Disposable local MySQL: upgrade/schema reflection/JSON + `DATETIME(6)`
+  round-trip/first-create/empty downgrade/re-upgrade all passed; probe database
+  was removed.
+- Work is intentionally uncommitted and unpushed per user instruction.

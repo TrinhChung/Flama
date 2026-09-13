@@ -1,6 +1,6 @@
 # Study decoupling task backlog
 
-> Status: Phase 0–3 and INT-01 are closed. Phase 4 gates P4-00 through P4-05 are accepted: production is at head `20260913_000038` with zero preflight drift, the logical contracts are jointly accepted, and the physical shadow schema is specified. P4-06 additive schema/codec implementation is next; runtime mirror has not started.
+> Status: Phase 0–3 and INT-01 are closed. Phase 4 gates P4-00 through P4-05 are accepted. P4-06 additive schema/codec is implemented and locally verified but intentionally uncommitted; production remains at head `20260913_000038`. P4-07 is next after review/commit; runtime mirror has not started.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
@@ -168,7 +168,7 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | P4-03 | [Algorithm State and availability ADR](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | P4-00 + P4-01 | **COMPLETED / ACCEPTED** — exact compatibility state/raw codecs and fixed-context per-Card availability |
 | P4-04 | [History, provenance and lifecycle ADR](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | P4-01 | **COMPLETED / ACCEPTED** — completeness/provenance, retained facts and reset/delete/rekey fence |
 | P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | P4-01A production gate + P4-02 + P4-03 + P4-04 | **COMPLETED / ACCEPTED** — exact additive tables, constraints, indexes, first-create locking and rollback design |
-| P4-06 | [Additive schema and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | P4-05 | models, Alembic migration, strict codec and authoritative-state mapper |
+| P4-06 | [Additive schema and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | P4-05 | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; models, Alembic `000039`, strict codec/mapper, MySQL rehearsal passed |
 | P4-07 | [Native and session mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | P4-06 | same-transaction mirror for REST, MCP, direct and batch writers |
 | P4-08 | [External and lifecycle mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | P4-07 | import/sync/reset/cutover/delete coverage with explicit dispositions |
 | P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | P4-08 | fenced, idempotent, restartable backfill and quarantine |

@@ -253,6 +253,20 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "STUDY_WIRE_V3_ENABLED",
             default=False,
         ),
+        # Phase 4 shadow progress remains inert until each later rollout gate
+        # is approved independently.  None of these flags grants read authority.
+        "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": coerce_bool_env(
+            "STUDY_PROGRESS_SHADOW_WRITE_ENABLED",
+            default=False,
+        ),
+        "STUDY_PROGRESS_SHADOW_COMPARE_ENABLED": coerce_bool_env(
+            "STUDY_PROGRESS_SHADOW_COMPARE_ENABLED",
+            default=False,
+        ),
+        "STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED": coerce_bool_env(
+            "STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED",
+            default=False,
+        ),
         "RATE_LIMIT_BACKEND": os.getenv("RATE_LIMIT_BACKEND", "local").strip().lower(),
         "RATE_LIMIT_KEY_PREFIX": os.getenv("RATE_LIMIT_KEY_PREFIX", "flama:v1").strip(),
         "RATE_LIMIT_HMAC_KEY": os.getenv("RATE_LIMIT_HMAC_KEY", "").strip(),

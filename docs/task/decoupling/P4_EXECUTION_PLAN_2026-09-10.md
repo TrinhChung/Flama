@@ -1,6 +1,6 @@
 # Kế hoạch triển khai Phase 4 — learner/Note progress shadow
 
-> Status: P4-00 through P4-05 COMPLETED/ACCEPTED; P4-06 additive schema and codec implementation is next; runtime mirror chưa bắt đầu
+> Status: P4-00 through P4-05 COMPLETED/ACCEPTED; P4-06 is IMPLEMENTED / LOCAL VERIFIED and awaits user commit; P4-07 is next; runtime mirror chưa bắt đầu
 >
 > Planning date: 2026-09-10
 >
@@ -144,7 +144,7 @@ Production applied both P4-01A revisions. The refreshed two-run P4-01 bundle use
 | P4-03 | [Algorithm State and availability contract](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | **COMPLETED / ACCEPTED** — state/codec/query projection ADR | exact decoder + due/order parity definition |
 | P4-04 | [History, provenance and lifecycle contract](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | **COMPLETED / ACCEPTED** — initializer-input and lifecycle ADR | every lineage/lifecycle case has disposition |
 | P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | **COMPLETED / ACCEPTED** — exact MySQL schema and migration specification | alternatives/trade-offs/constraints approved |
-| P4-06 | [Additive migration and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | models, Alembic, exact codecs, flags off | disposable MySQL round-trip + raw parity |
+| P4-06 | [Additive migration and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; models, Alembic `000039`, exact codecs, flags off | disposable MySQL round-trip + raw parity passed |
 | P4-07 | [Native/session/worker transactional mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | shared no-commit coordinator for native writers | atomicity, locks, receipt/retry parity |
 | P4-08 | [External and lifecycle transactional mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | sync/import/reset/cutover/delete coverage | savepoint/conflict/lifecycle parity |
 | P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | dry-run-first CLI, keyset batches, checkpoints | crash/resume/idempotency/stale-fence pass |
@@ -172,7 +172,7 @@ P4-02, P4-03 and P4-04 produce three linked ADRs. They may be drafted in paralle
 
 As of 2026-09-13, [P4-02](../../architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) accepts `(learner_user_id, Note.id)` identity, explicit contributor accounting, no-winner fan-in, separate subject generation/mirror revision, lifecycle fencing and the global lock/race matrix.
 
-As of 2026-09-13, [P4-03](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) and [P4-04](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) are accepted. The refreshed production evidence and [joint cross-review](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) close G4-D. [P4-05](../../architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md) then closes the physical-design gate; P4-06 is next.
+As of 2026-09-13, [P4-03](../../architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) and [P4-04](../../architecture/phase-4-history-provenance-lifecycle-adr-2026-09-12.md) are accepted. The refreshed production evidence and [joint cross-review](../../architecture/phase-4-logical-contract-joint-acceptance-2026-09-13.md) close G4-D. [P4-05](../../architecture/phase-4-physical-shadow-schema-adr-2026-09-13.md) closes the physical-design gate, and [P4-06](../../architecture/phase-4-additive-schema-mapper-verification-2026-09-13.md) is implemented and locally verified. P4-07 is next after user review/commit.
 
 Gate G4-D: all three ADRs are `Accepted`; every current `CardProgress` column maps to raw preservation, generic envelope, Algorithm State, availability or lineage; every current writer/lifecycle path has a planned outcome; no open decision is deferred into DDL code.
 
