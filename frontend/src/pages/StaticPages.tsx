@@ -1,53 +1,258 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  AlertTriangle,
   Check,
   ChevronRight,
   Copy,
   FileText,
   HelpCircle,
   Info,
+  Link2,
   List,
   Printer,
+  Scale,
   Shield,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import {
+  legalDocuments,
+  type LegalDocument,
+  type StatutoryCallout,
+} from '@/data/legalDocumentsData'
+import { cn } from '@/lib/utils'
 import { Page } from '@/shared/components/Page'
 
+// CRITICAL REQUIREMENT: PRESERVE ALL RE-EXPORTS
 export { SupportPage } from '@/features/support/pages/SupportPage'
 export { TtsKeyGuidePage } from '@/features/support/pages/TtsKeyGuidePage'
 export { FlamaAudioGuidePage } from '@/features/support/pages/FlamaAudioGuidePage'
 
-type LegalSection = {
-  title: string
-  paragraphs?: string[]
-  items?: string[]
-}
-
-const LEGAL_NAV_LINKS = [
-  { path: '/terms', label: 'Điều khoản sử dụng' },
-  { path: '/privacy', label: 'Chính sách bảo mật' },
-  { path: '/cookies', label: 'Chính sách cookie' },
+const LEGAL_NAV_ITEMS = [
+  { id: 'terms', path: '/terms', label: 'Điều khoản dịch vụ' },
+  { id: 'privacy', path: '/privacy', label: 'Chính sách bảo mật' },
+  {
+    id: 'marketplace-guidelines',
+    path: '/marketplace-guidelines',
+    label: 'Quy chế Marketplace',
+  },
+  {
+    id: 'community-guidelines',
+    path: '/community-guidelines',
+    label: 'Chuẩn mực cộng đồng',
+  },
+  { id: 'cookies', path: '/cookies', label: 'Chính sách cookie' },
 ]
 
-function LegalPage({
-  title,
-  summary,
-  sections,
-}: {
-  title: string
-  summary: string
-  sections: LegalSection[]
-}) {
-  const [activeSection, setActiveSection] = useState<number>(0)
-  const [copied, setCopied] = useState(false)
+function CalloutBlock({ callout }: { callout: StatutoryCallout }) {
+  const isWarning = callout.type === 'warning'
+  const isStatutory = callout.type === 'statutory'
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href).then(() => {
+  return (
+    <aside
+      aria-label={callout.label}
+      className={cn(
+        'my-4 rounded-r-lg border-l-2 py-2.5 pl-4 text-sm transition-colors',
+        isWarning
+          ? 'border-amber-500/80 bg-amber-500/5 text-amber-950 dark:text-amber-200'
+          : isStatutory
+            ? 'border-primary/80 bg-primary/5 text-foreground'
+            : 'border-sky-500/80 bg-sky-500/5 text-foreground',
+      )}
+    >
+      <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+        {isWarning ? (
+          <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+        ) : isStatutory ? (
+          <Scale className="size-3.5 shrink-0 text-primary" />
+        ) : (
+          <Info className="size-3.5 shrink-0 text-sky-500" />
+        )}
+        <span>{callout.label}</span>
+      </div>
+      <p className="text-xs leading-relaxed font-normal text-foreground/90 sm:text-sm">
+        {callout.text}
+      </p>
+    </aside>
+  )
+}
+
+function TableOfContentsNav({
+  documentData,
+  activeClauseId,
+  onSelectClause,
+}: {
+  documentData: LegalDocument
+  activeClauseId: string
+  onSelectClause: (id: string) => void
+}) {
+  return (
+    <nav className="space-y-1.5 text-xs" aria-label="Mục lục điều khoản">
+      {documentData.clauses.map((clause) => {
+        const isClauseActive =
+          activeClauseId === clause.id ||
+          clause.subClauses?.some((sub) => sub.id === activeClauseId)
+
+        return (
+          <div key={clause.id} className="space-y-1">
+            <button
+              type="button"
+              onClick={() => onSelectClause(clause.id)}
+              className={cn(
+                'flex w-full items-start gap-1.5 rounded-md px-2.5 py-1.5 text-left font-medium transition-all',
+                isClauseActive
+                  ? 'translate-x-0.5 bg-primary/10 font-semibold text-primary'
+                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+              )}
+            >
+              <span className="shrink-0 font-semibold tabular-nums text-primary/80">
+                {clause.clauseNumber}.
+              </span>
+              <span className="line-clamp-2 leading-tight">{clause.title}</span>
+            </button>
+
+            {clause.subClauses && clause.subClauses.length > 0 && (
+              <div className="my-0.5 space-y-0.5 border-l border-border/40 pl-2 ml-3">
+                {clause.subClauses.map((sub) => {
+                  const isSubActive = activeClauseId === sub.id
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => onSelectClause(sub.id)}
+                      className={cn(
+                        'flex w-full items-start gap-1.5 rounded px-2 py-1 text-left text-[11px] transition-colors',
+                        isSubActive
+                          ? 'bg-primary/15 font-medium text-primary'
+                          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                      )}
+                    >
+                      <span className="shrink-0 font-medium tabular-nums text-primary/70">
+                        {sub.clauseNumber}
+                      </span>
+                      <span className="line-clamp-1 leading-snug">{sub.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </nav>
+  )
+}
+
+function LegalDocumentViewer({
+  documentData,
+}: {
+  documentData: LegalDocument
+}) {
+  const [activeClauseId, setActiveClauseId] = useState<string>(
+    documentData.clauses[0]?.id || '',
+  )
+  const [copied, setCopied] = useState(false)
+  const [mobileTocOpen, setMobileTocOpen] = useState(false)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+
+  // Scrollspy via IntersectionObserver
+  useEffect(() => {
+    const headings = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-clause-id]'),
+    )
+    if (!headings.length) return
+
+    observerRef.current?.disconnect()
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const intersecting = entries.filter((entry) => entry.isIntersecting)
+        if (intersecting.length > 0) {
+          // Select topmost intersecting element
+          const topmost = intersecting.reduce((prev, curr) =>
+            prev.boundingClientRect.top < curr.boundingClientRect.top
+              ? prev
+              : curr,
+          )
+          const id = topmost.target.getAttribute('data-clause-id')
+          if (id) {
+            setActiveClauseId(id)
+          }
+        }
+      },
+      {
+        rootMargin: '-80px 0px -55% 0px',
+        threshold: [0, 0.2, 0.5, 1],
+      },
+    )
+
+    headings.forEach((heading) => observer.observe(heading))
+    observerRef.current = observer
+
+    return () => observer.disconnect()
+  }, [documentData])
+
+  // Scroll to hash target on mount/hash change
+  useEffect(() => {
+    if (window.location.hash) {
+      const targetId = window.location.hash.slice(1)
+      const el = document.getElementById(targetId)
+      if (el) {
+        const timeout = setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth' })
+          setActiveClauseId(targetId)
+        }, 120)
+        return () => clearTimeout(timeout)
+      }
+    }
+  }, [documentData.id])
+
+  const scrollToClause = (id: string) => {
+    const el = document.getElementById(id)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' })
+      window.history.replaceState(null, '', `#${id}`)
+      setActiveClauseId(id)
+    }
+    setMobileTocOpen(false)
+  }
+
+  const handleCopyAnchor = (
+    id: string,
+    clauseTitle: string,
+    e?: React.MouseEvent,
+  ) => {
+    e?.stopPropagation()
+    const url = `${window.location.origin}${window.location.pathname}#${id}`
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        window.history.replaceState(null, '', `#${id}`)
+        setActiveClauseId(id)
+        toast.success(`Đã sao chép liên kết: ${clauseTitle}`)
+      })
+      .catch(() => {
+        window.history.replaceState(null, '', `#${id}`)
+        setActiveClauseId(id)
+        toast.success(`Đã chọn: ${clauseTitle}`)
+      })
+  }
+
+  const handleCopyDocumentLink = () => {
+    const url = `${window.location.origin}${window.location.pathname}`
+    navigator.clipboard.writeText(url).then(() => {
       setCopied(true)
-      toast.success('Đã sao chép liên kết trang!')
+      toast.success('Đã sao chép liên kết văn bản!')
       setTimeout(() => setCopied(false), 2000)
     })
   }
@@ -56,262 +261,388 @@ function LegalPage({
     window.print()
   }
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY + 140
-      sections.forEach((_, idx) => {
-        const el = document.getElementById(`legal-sec-${idx}`)
-        if (el) {
-          const top = el.offsetTop
-          const height = el.offsetHeight
-          if (scrollPosition >= top && scrollPosition < top + height) {
-            setActiveSection(idx)
+  return (
+    <Page className="max-w-6xl pb-20 print:m-0 print:max-w-none print:p-0">
+      {/* Comprehensive print style overrides */}
+      <style>{`
+        @media print {
+          body, #root, main, article {
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+          .print-hidden, nav, aside, button, [role="button"] {
+            display: none !important;
+          }
+          .legal-clause {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            margin-bottom: 2rem !important;
+          }
+          h1, h2, h3, h4 {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+            color: #000000 !important;
+          }
+          p, li {
+            color: #111111 !important;
           }
         }
-      })
-    }
+      `}</style>
 
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [sections])
+      {/* Top Document Switcher Tabs */}
+      <nav
+        aria-label="Chuyển đổi văn bản pháp lý"
+        className="no-scrollbar mb-6 flex items-center gap-1.5 overflow-x-auto border-b border-border/40 pb-2.5 print:hidden"
+      >
+        {LEGAL_NAV_ITEMS.map((item) => {
+          const isCurrent = item.id === documentData.id
+          return (
+            <Link
+              key={item.id}
+              to={item.path}
+              className={cn(
+                'inline-flex items-center whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                isCurrent
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                  : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
+              )}
+            >
+              {item.label}
+            </Link>
+          )
+        })}
+      </nav>
 
-  return (
-    <Page className="max-w-5xl">
-      {/* Editorial Header & Meta Bar */}
-      <header className="space-y-4 border-b border-border/70 pb-6 pt-2">
+      {/* Document Header & Metadata Bar */}
+      <header className="space-y-4 border-b border-border/60 pb-6 pt-1">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Badge variant="outline" className="gap-1.5 font-medium text-xs px-2.5 py-0.5 border-primary/30 text-primary bg-primary/5">
-            <Shield className="size-3" /> Văn bản pháp lý Flama
-          </Badge>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Cập nhật lần cuối: <strong className="font-semibold text-foreground">26/07/2026</strong></span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className="gap-1.5 border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary"
+            >
+              <Shield className="size-3" /> {documentData.officialBadge}
+            </Badge>
+            <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+              Phiên bản {documentData.version}
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground print:hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={handleCopyDocumentLink}
+              title="Sao chép liên kết tài liệu"
+            >
+              {copied ? (
+                <Check className="size-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="size-3.5" />
+              )}
+              <span className="hidden sm:inline">Sao chép</span>
+            </Button>
             <span className="text-border">·</span>
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-              onClick={handleCopyLink}
-              title="Sao chép liên kết"
-            >
-              {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-              <span className="hidden sm:inline">Sao chép</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+              className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={handlePrint}
-              title="In tài liệu"
+              title="In văn bản hoặc xuất PDF"
             >
               <Printer className="size-3.5" />
-              <span className="hidden sm:inline">In</span>
+              <span className="hidden sm:inline">In PDF</span>
             </Button>
           </div>
         </div>
 
-        <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-          {title}
+        <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl lg:text-4xl font-heading">
+          {documentData.title}
         </h1>
 
-        {/* Editorial Summary Callout (Clean subtle border & warm backdrop) */}
-        <div className="rounded-xl border border-border/80 bg-muted/30 px-4 py-3.5 sm:px-5 sm:py-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            Ngày hiệu lực:{' '}
+            <strong className="font-medium text-foreground">
+              {documentData.effectiveDate}
+            </strong>
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            Cập nhật lần cuối:{' '}
+            <strong className="font-medium text-foreground">
+              {documentData.lastUpdated}
+            </strong>
+          </span>
+          <span className="text-border">·</span>
+          <span>~{documentData.readTimeMinutes} phút đọc tiêu chuẩn</span>
+        </div>
+
+        {/* Executive Summary Editorial Callout (Clean paper quote style, zero box-in-box) */}
+        <div className="my-4 rounded-r-lg border-l-2 border-primary/50 bg-muted/20 py-2.5 pl-4 pr-3">
           <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            <Info className="size-3.5" /> Tóm tắt cốt lõi
+            <Info className="size-3.5 text-primary" /> Tóm tắt điều hành
           </div>
-          <p className="text-sm sm:text-base leading-relaxed text-foreground/90 font-medium">
-            {summary}
+          <p className="text-sm leading-relaxed font-medium text-foreground/90 sm:text-base">
+            {documentData.executiveSummary}
           </p>
         </div>
       </header>
 
-      {/* Main Two-Column Editorial Layout */}
-      <div className="grid grid-cols-1 gap-8 pt-4 lg:grid-cols-12 lg:gap-12">
-        {/* Left Column: Continuous Prose Flow (No nested cards) */}
-        <article className="lg:col-span-8 space-y-10">
-          {sections.map((section, idx) => (
+      {/* Main Two-Column Layout */}
+      <div className="grid grid-cols-1 gap-8 pt-6 lg:grid-cols-12 lg:gap-12">
+        {/* Left Column: Continuous Prose Flow (Reading measure max-w-3xl, zero UI-ification) */}
+        <article className="max-w-3xl space-y-12 lg:col-span-8 print:max-w-none print:col-span-12">
+          {documentData.clauses.map((clause) => (
             <section
-              key={section.title}
-              id={`legal-sec-${idx}`}
-              className="scroll-mt-24 space-y-3.5"
+              key={clause.id}
+              id={clause.id}
+              data-clause-id={clause.id}
+              className="legal-clause scroll-mt-24 space-y-4"
             >
-              <h2 className="text-xl font-bold tracking-tight text-foreground border-b border-border/40 pb-2">
-                {section.title}
-              </h2>
+              {/* Clause Heading (H2) with Hover Anchor Copy */}
+              <div className="group flex items-start justify-between gap-3 pt-2">
+                <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                  <span className="mr-2 font-semibold tabular-nums text-primary">
+                    {clause.clauseNumber}.
+                  </span>
+                  {clause.title}
+                </h2>
+                <button
+                  type="button"
+                  onClick={(e) =>
+                    handleCopyAnchor(
+                      clause.id,
+                      `${clause.clauseNumber} - ${clause.title}`,
+                      e,
+                    )
+                  }
+                  className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary focus:opacity-100 group-hover:opacity-100 print:hidden"
+                  title="Sao chép liên kết điều khoản"
+                  aria-label={`Sao chép liên kết ${clause.clauseNumber}`}
+                >
+                  <Link2 className="size-4" />
+                </button>
+              </div>
 
-              {section.paragraphs?.map((paragraph, pIdx) => (
-                <p key={pIdx} className="text-sm sm:text-base leading-relaxed text-muted-foreground">
+              {/* Clause Summary */}
+              {clause.summary && (
+                <p className="text-sm font-medium italic text-foreground/80 sm:text-base">
+                  {clause.summary}
+                </p>
+              )}
+
+              {/* Clause Opening Paragraphs */}
+              {clause.content?.map((paragraph, pIdx) => (
+                <p
+                  key={pIdx}
+                  className="text-sm leading-relaxed font-normal text-foreground/90 sm:text-base"
+                >
                   {paragraph}
                 </p>
               ))}
 
-              {section.items?.length ? (
-                <ul className="space-y-2.5 pl-5 list-disc text-sm sm:text-base leading-relaxed text-muted-foreground marker:text-primary">
-                  {section.items.map((item, itemIdx) => (
-                    <li key={itemIdx} className="pl-1">
-                      {item}
+              {/* Bullets if any */}
+              {clause.bullets && clause.bullets.length > 0 && (
+                <ul className="space-y-2 pl-5 list-disc text-sm leading-relaxed text-foreground/85 marker:text-primary sm:text-base">
+                  {clause.bullets.map((bullet, bIdx) => (
+                    <li key={bIdx} className="pl-1">
+                      {bullet}
                     </li>
                   ))}
                 </ul>
-              ) : null}
+              )}
+
+              {/* Statutory Callout */}
+              {clause.callout && <CalloutBlock callout={clause.callout} />}
+
+              {/* Subclauses (H3) */}
+              {clause.subClauses && clause.subClauses.length > 0 && (
+                <div className="space-y-6 pt-2">
+                  {clause.subClauses.map((subClause) => (
+                    <div
+                      key={subClause.id}
+                      id={subClause.id}
+                      data-clause-id={subClause.id}
+                      className="scroll-mt-24 space-y-2.5 pt-2"
+                    >
+                      <div className="group/sub flex items-start justify-between gap-2">
+                        <h3 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                          <span className="mr-2 font-medium tabular-nums text-primary/90">
+                            {subClause.clauseNumber}
+                          </span>
+                          {subClause.title}
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={(e) =>
+                            handleCopyAnchor(
+                              subClause.id,
+                              `${subClause.clauseNumber} - ${subClause.title}`,
+                              e,
+                            )
+                          }
+                          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary focus:opacity-100 group-hover/sub:opacity-100 print:hidden"
+                          title="Sao chép liên kết tiểu mục"
+                          aria-label={`Sao chép liên kết ${subClause.clauseNumber}`}
+                        >
+                          <Link2 className="size-3.5" />
+                        </button>
+                      </div>
+
+                      {subClause.content.map((subParagraph, spIdx) => (
+                        <p
+                          key={spIdx}
+                          className="text-sm leading-relaxed font-normal text-foreground/90 sm:text-base"
+                        >
+                          {subParagraph}
+                        </p>
+                      ))}
+
+                      {subClause.bullets && subClause.bullets.length > 0 && (
+                        <ul className="space-y-1.5 pl-5 list-disc text-sm leading-relaxed text-foreground/85 marker:text-primary/70 sm:text-base">
+                          {subClause.bullets.map((bullet, sbIdx) => (
+                            <li key={sbIdx} className="pl-1">
+                              {bullet}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           ))}
 
-          {/* Editorial Footer Note & Support Action */}
-          <div className="rounded-2xl border border-border/80 bg-muted/20 p-5 sm:p-6 space-y-3">
+          {/* Editorial Support & Dispute Resolution Note */}
+          <footer className="mt-14 space-y-3 border-t border-border/60 pt-8 print:hidden">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <HelpCircle className="size-4 text-primary" /> Bạn có thắc mắc về chính sách này?
+              <HelpCircle className="size-4 text-primary" /> Bạn có thắc mắc hoặc cần giải quyết tranh chấp pháp lý?
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Nếu bạn cần làm rõ bất kỳ điều khoản nào hoặc có yêu cầu liên quan đến quyền riêng tư và dữ liệu cá nhân, đội ngũ Flama luôn sẵn sàng hỗ trợ.
+            <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+              Nếu bạn cần làm rõ bất kỳ điều khoản nào, báo cáo vi phạm bản quyền theo quy trình Notice &amp; Takedown, hoặc có yêu cầu liên quan đến quyền riêng tư và dữ liệu cá nhân theo Nghị định 13/2023/NĐ-CP, đội ngũ Pháp chế Flama luôn sẵn sàng tiếp nhận và phản hồi trong 24–48 giờ.
             </p>
-            <div className="pt-1">
-              <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
                 <Link to="/support">
                   Gửi yêu cầu hỗ trợ <ChevronRight className="size-3.5" />
                 </Link>
               </Button>
             </div>
-          </div>
+          </footer>
         </article>
 
         {/* Right Column: Sticky Table of Contents (Desktop Only) */}
-        <aside className="hidden lg:col-span-4 lg:block">
-          <div className="sticky top-20 space-y-6">
-            {/* Table of Contents Box */}
-            <div className="rounded-xl border border-border/60 bg-card/50 p-4 shadow-2xs backdrop-blur-xs">
-              <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                <List className="size-3.5 text-primary" /> Mục lục điều khoản
+        <aside className="hidden lg:col-span-4 lg:block print:hidden">
+          <div className="sticky top-20 flex max-h-[calc(100vh-6rem)] flex-col space-y-4">
+            {/* Table of Contents Container */}
+            <div className="flex max-h-[calc(100vh-14rem)] flex-col rounded-xl border border-border/60 bg-card/40 p-4 shadow-2xs backdrop-blur-xs">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-border/40 pb-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <List className="size-3.5 text-primary" /> Mục lục văn bản
+                </span>
+                <span className="text-[11px] font-normal lowercase">
+                  {documentData.clauses.length} điều khoản
+                </span>
               </div>
-              <nav className="space-y-1">
-                {sections.map((section, idx) => {
-                  const isActive = activeSection === idx
-                  return (
-                    <a
-                      key={section.title}
-                      href={`#legal-sec-${idx}`}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        document.getElementById(`legal-sec-${idx}`)?.scrollIntoView({ behavior: 'smooth' })
-                        setActiveSection(idx)
-                      }}
-                      className={`block rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
-                        isActive
-                          ? 'bg-primary/10 text-primary font-semibold translate-x-1'
-                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                      }`}
-                    >
-                      {section.title}
-                    </a>
-                  )
-                })}
-              </nav>
+
+              <ScrollArea className="flex-1 pr-2">
+                <TableOfContentsNav
+                  documentData={documentData}
+                  activeClauseId={activeClauseId}
+                  onSelectClause={scrollToClause}
+                />
+              </ScrollArea>
             </div>
 
-            {/* Related Policies Box */}
-            <div className="rounded-xl border border-border/60 bg-card/30 p-4 space-y-2.5">
+            {/* Related Policies Nav Box */}
+            <div className="rounded-xl border border-border/60 bg-card/30 p-3.5 space-y-2">
               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Chính sách liên quan
+                Văn bản pháp lý liên quan
               </div>
-              <div className="space-y-1.5">
-                {LEGAL_NAV_LINKS.map((link) => (
-                  <Link
-                    key={link.path}
-                    to={link.path}
-                    className="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-primary transition-colors"
-                  >
-                    <span className="flex items-center gap-2">
-                      <FileText className="size-3.5" /> {link.label}
-                    </span>
-                    <ChevronRight className="size-3 opacity-60" />
-                  </Link>
-                ))}
+              <div className="space-y-1">
+                {LEGAL_NAV_ITEMS.filter((item) => item.id !== documentData.id).map(
+                  (link) => (
+                    <Link
+                      key={link.id}
+                      to={link.path}
+                      className="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-primary"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileText className="size-3.5 text-primary/70" /> {link.label}
+                      </span>
+                      <ChevronRight className="size-3 opacity-60" />
+                    </Link>
+                  ),
+                )}
               </div>
             </div>
           </div>
         </aside>
+      </div>
+
+      {/* Floating Mobile TOC Drawer Button */}
+      <div className="fixed bottom-6 right-6 z-40 lg:hidden print:hidden">
+        <Sheet open={mobileTocOpen} onOpenChange={setMobileTocOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-2 rounded-full border border-primary/20 px-4 py-2.5 text-xs font-semibold shadow-lg shadow-primary/25"
+            >
+              <List className="size-4" />
+              <span>Mục lục ({documentData.clauses.length} điều)</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent
+            side="right"
+            className="flex w-[85vw] max-w-sm flex-col p-0"
+          >
+            <SheetHeader className="border-b border-border/40 p-4">
+              <SheetTitle className="flex items-center gap-2 text-sm font-bold">
+                <List className="size-4 text-primary" /> Mục lục văn bản
+              </SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="flex-1 p-4">
+              <TableOfContentsNav
+                documentData={documentData}
+                activeClauseId={activeClauseId}
+                onSelectClause={scrollToClause}
+              />
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
       </div>
     </Page>
   )
 }
 
 export function TermsPage() {
+  return <LegalDocumentViewer documentData={legalDocuments.terms} />
+}
+
+export function PrivacyPage() {
+  return <LegalDocumentViewer documentData={legalDocuments.privacy} />
+}
+
+export function MarketplaceGuidelinesPage() {
   return (
-    <LegalPage
-      title="Điều khoản sử dụng"
-      summary="Các nguyên tắc sử dụng tài khoản, học liệu và marketplace Flama."
-      sections={[
-        {
-          title: '1. Sự đồng ý và phạm vi dịch vụ',
-          paragraphs: ['Khi sử dụng Flama, bạn đồng ý tuân thủ các điều khoản này. Flama cung cấp flashcard, quản lý từ vựng và lịch học lặp lại ngắt quãng.'],
-        },
-        {
-          title: '2. Quyền sở hữu nội dung',
-          paragraphs: ['Bạn sở hữu học liệu do mình tạo. Bạn cho phép Flama lưu trữ, xử lý, hiển thị, sao lưu và khôi phục nội dung đó để vận hành dịch vụ.'],
-          items: ['Không sao chép hoặc phân phối trái phép tài sản, thương hiệu và mã nguồn Flama.', 'Không đăng nội dung vi phạm bản quyền hoặc quyền riêng tư của người khác.'],
-        },
-        {
-          title: '3. Hành vi bị cấm',
-          items: ['Tấn công, phá hoại, khai thác lỗ hổng hoặc đưa mã độc vào hệ thống.', 'Dùng bot, crawler hoặc tải dữ liệu hàng loạt trái phép.', 'Gian lận, giả mạo, spam, quấy rối hoặc sử dụng dịch vụ cho mục đích bất hợp pháp.'],
-        },
-        {
-          title: '4. Tài khoản và chấm dứt dịch vụ',
-          paragraphs: ['Bạn chịu trách nhiệm bảo vệ mật khẩu và hoạt động trên tài khoản. Flama có thể đình chỉ tài khoản vi phạm; bạn có thể yêu cầu xóa tài khoản và dữ liệu theo chính sách hiện hành.'],
-        },
-        {
-          title: '5. Giới hạn trách nhiệm và thay đổi',
-          paragraphs: ['Flama không chịu trách nhiệm cho thiệt hại gián tiếp, lỗi thiết bị hoặc nội dung của người dùng khác. Điều khoản có thể được cập nhật và ngày cập nhật sẽ được công bố trên trang này.'],
-        },
-      ]}
+    <LegalDocumentViewer
+      documentData={legalDocuments['marketplace-guidelines']}
     />
   )
 }
 
-export function PrivacyPage() {
+export function CommunityGuidelinesPage() {
   return (
-    <LegalPage
-      title="Chính sách bảo mật"
-      summary="Cách Flama thu thập, sử dụng và bảo vệ dữ liệu của người học."
-      sections={[
-        {
-          title: '1. Dữ liệu được thu thập',
-          items: ['Thông tin tài khoản như email, tên đăng nhập và mật khẩu đã băm.', 'Học liệu, tiến độ, lịch sử ôn tập và lựa chọn cấu hình.', 'Thông tin kỹ thuật cần thiết cho bảo mật và vận hành dịch vụ.'],
-        },
-        {
-          title: '2. Mục đích sử dụng',
-          items: ['Cung cấp, đồng bộ và cải thiện trải nghiệm học tập.', 'Bảo vệ tài khoản, phát hiện lạm dụng và hỗ trợ người dùng.', 'Đáp ứng nghĩa vụ pháp lý hợp lệ.'],
-        },
-        {
-          title: '3. Chia sẻ và bảo vệ dữ liệu',
-          paragraphs: ['Flama không bán dữ liệu người dùng. Dữ liệu chỉ được chia sẻ khi có sự đồng ý, yêu cầu pháp lý hợp lệ hoặc với nhà cung cấp cần thiết để vận hành dịch vụ theo nghĩa vụ bảo mật.'],
-        },
-        {
-          title: '4. Quyền và thời gian lưu giữ',
-          paragraphs: ['Bạn có thể yêu cầu truy cập, sửa, xuất hoặc xóa dữ liệu. Dữ liệu được giữ khi tài khoản hoạt động và có thể được giữ tạm thời trong bản sao lưu hoặc log bảo mật trước khi xóa theo chu kỳ vận hành.'],
-        },
-      ]}
+    <LegalDocumentViewer
+      documentData={legalDocuments['community-guidelines']}
     />
   )
 }
 
 export function CookiesPage() {
-  return (
-    <LegalPage
-      title="Chính sách cookie"
-      summary="Cookie phiên đăng nhập, CSRF và các lựa chọn cần thiết để ứng dụng hoạt động."
-      sections={[
-        {
-          title: '1. Cookie thiết yếu',
-          paragraphs: ['Flama dùng cookie phiên để duy trì đăng nhập và token CSRF để bảo vệ các thao tác thay đổi dữ liệu. Các cookie này cần thiết để ứng dụng hoạt động an toàn.'],
-        },
-        {
-          title: '2. Lưu trữ cục bộ',
-          paragraphs: ['Ứng dụng có thể lưu tùy chọn giao diện và trạng thái tạm thời trên trình duyệt. Không lưu mật khẩu hoặc khóa thanh toán trong local storage.'],
-        },
-        {
-          title: '3. Kiểm soát của bạn',
-          paragraphs: ['Bạn có thể xóa hoặc chặn cookie trong trình duyệt, nhưng đăng nhập và một số tính năng bảo mật có thể không hoạt động.'],
-        },
-      ]}
-    />
-  )
+  return <LegalDocumentViewer documentData={legalDocuments.cookies} />
 }
