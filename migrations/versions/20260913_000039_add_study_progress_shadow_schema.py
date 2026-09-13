@@ -24,6 +24,7 @@ from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_lineage_ref import StudyProgressLineageRef
 from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
+from models.study_progress_types import align_mysql_parent_collations
 
 
 revision = "20260913_000039"
@@ -325,6 +326,10 @@ def upgrade() -> None:
         )
 
     for table in TARGET_TABLES:
+        # Live UUID pointers reference legacy tables whose effective collation
+        # follows the deployment database default.  Align the child column
+        # before either CREATE TABLE or validation without altering parents.
+        align_mysql_parent_collations(table, bind)
         if table.name in existing_tables:
             _assert_table_contract(bind, table)
             continue

@@ -117,8 +117,7 @@ def run_probe() -> dict[str, object]:
     try:
         with admin.cursor() as cursor:
             cursor.execute(
-                f"CREATE DATABASE `{database_name}` "
-                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                f"CREATE DATABASE `{database_name}` CHARACTER SET utf8mb4"
             )
 
         app = create_app(
@@ -142,6 +141,14 @@ def run_probe() -> dict[str, object]:
                 if table.name not in target_names:
                     table.to_metadata(baseline_metadata)
             baseline_metadata.create_all(bind=db.engine)
+            with db.engine.connect() as connection:
+                database_collation = connection.execute(
+                    sa.text(
+                        "SELECT DEFAULT_COLLATION_NAME "
+                        "FROM information_schema.SCHEMATA "
+                        "WHERE SCHEMA_NAME = DATABASE()"
+                    )
+                ).scalar_one()
             stamp(revision="20260913_000038", directory="migrations")
             upgrade(directory="migrations")
             inspector = sa.inspect(db.engine)
@@ -153,6 +160,46 @@ def run_probe() -> dict[str, object]:
             }
             if any(issues.values()):
                 raise AssertionError(f"MySQL schema contract mismatch: {issues!r}")
+
+            with db.engine.connect() as connection:
+                live_fk_collations = {
+                    row.table_name: {
+                        "parent": row.parent_collation,
+                        "child": row.child_collation,
+                    }
+                    for row in connection.execute(
+                        sa.text(
+                            "SELECT 'study_progress_subjects.live_note_id' AS table_name, "
+                            "parent.COLLATION_NAME AS parent_collation, "
+                            "child.COLLATION_NAME AS child_collation "
+                            "FROM information_schema.COLUMNS parent "
+                            "JOIN information_schema.COLUMNS child "
+                            "ON child.TABLE_SCHEMA = parent.TABLE_SCHEMA "
+                            "WHERE parent.TABLE_SCHEMA = DATABASE() "
+                            "AND parent.TABLE_NAME = 'notes' AND parent.COLUMN_NAME = 'id' "
+                            "AND child.TABLE_NAME = 'study_progress_subjects' "
+                            "AND child.COLUMN_NAME = 'live_note_id' "
+                            "UNION ALL "
+                            "SELECT 'study_progress_contributors.live_card_id', "
+                            "parent.COLLATION_NAME, child.COLLATION_NAME "
+                            "FROM information_schema.COLUMNS parent "
+                            "JOIN information_schema.COLUMNS child "
+                            "ON child.TABLE_SCHEMA = parent.TABLE_SCHEMA "
+                            "WHERE parent.TABLE_SCHEMA = DATABASE() "
+                            "AND parent.TABLE_NAME = 'cards' AND parent.COLUMN_NAME = 'id' "
+                            "AND child.TABLE_NAME = 'study_progress_contributors' "
+                            "AND child.COLUMN_NAME = 'live_card_id'"
+                        )
+                    )
+                }
+            if len(live_fk_collations) != 2 or any(
+                value["parent"] != value["child"]
+                for value in live_fk_collations.values()
+            ):
+                raise AssertionError(
+                    "Live FK collations do not match their parents: "
+                    f"{live_fk_collations!r}"
+                )
 
             user = User(email="phase4-probe@example.test", username="phase4-probe")
             db.session.add(user)
@@ -300,10 +347,10 @@ def run_probe() -> dict[str, object]:
             after_downgrade = set(sa.inspect(db.engine).get_table_names())
             if any(table.name in after_downgrade for table in migration.TARGET_TABLES):
                 raise AssertionError("Empty-only downgrade left a target table behind.")
-            # Reproduce the historical development/CI case where create_all
-            # pre-created the exact tables before Alembic records revision 39.
-            for table in migration.TARGET_TABLES:
-                table.create(bind=db.engine, checkfirst=False)
+            # Reproduce the historical development/CI startup path where
+            # create_all pre-creates current model tables before Alembic records
+            # revision 39.
+            db.create_all()
             upgrade(directory="migrations")
             final_counts = {
                 table.name: int(
@@ -316,12 +363,14 @@ def run_probe() -> dict[str, object]:
             return {
                 "database_head": "20260913_000039",
                 "database_name": database_name,
+                "database_collation": database_collation,
+                "live_fk_collations": live_fk_collations,
                 "schema_contract_issues": issues,
                 "first_create_subject_id_stable": True,
                 "raw_codec_round_trip": True,
                 "datetime_microseconds_round_trip": True,
                 "empty_only_downgrade_rehearsed": True,
-                "preexisting_create_all_contract_revalidated": True,
+                "startup_create_all_contract_revalidated": True,
                 "final_shadow_row_counts": final_counts,
             }
     finally:

@@ -19,6 +19,7 @@ from app.repositories.study_progress_shadow_repository import (
 )
 from models import db
 from models.study_progress_backfill_run import StudyProgressBackfillRun
+from models.study_progress_types import MYSQL_PARENT_COLLATIONS_INFO_KEY
 from models.user import User
 
 
@@ -66,6 +67,22 @@ class StudyProgressShadowSchemaTests(unittest.TestCase):
         }
         self.assertEqual(actual, expected)
         self.assertEqual(len(actual), 10)
+
+    def test_live_string_fks_declare_parent_collation_sources(self):
+        expected = {
+            "study_progress_subjects": {
+                "live_note_id": ("notes", "id"),
+            },
+            "study_progress_contributors": {
+                "live_card_id": ("cards", "id"),
+            },
+        }
+        actual = {
+            table.name: table.info.get(MYSQL_PARENT_COLLATIONS_INFO_KEY)
+            for table in migration.TARGET_TABLES
+            if MYSQL_PARENT_COLLATIONS_INFO_KEY in table.info
+        }
+        self.assertEqual(actual, expected)
 
     def test_upgrade_creates_missing_tables_and_revalidates_idempotently(self):
         with db.engine.begin() as connection:

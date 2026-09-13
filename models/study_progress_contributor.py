@@ -18,6 +18,7 @@ from models.study_progress_types import (
     binary_hash,
     binary_string,
     datetime6,
+    register_mysql_parent_collations,
 )
 
 
@@ -127,3 +128,9 @@ class StudyProgressContributor(db.Model):
         ),
         MYSQL_TABLE_OPTIONS,
     )
+
+
+register_mysql_parent_collations(
+    StudyProgressContributor.__table__,
+    {"live_card_id": ("cards", "id")},
+)

@@ -14,6 +14,7 @@ from models.study_progress_types import (
     binary_hash,
     binary_string,
     datetime6,
+    register_mysql_parent_collations,
 )
 
 
@@ -89,3 +90,9 @@ class StudyProgressSubject(db.Model):
         ),
         MYSQL_TABLE_OPTIONS,
     )
+
+
+register_mysql_parent_collations(
+    StudyProgressSubject.__table__,
+    {"live_note_id": ("notes", "id")},
+)

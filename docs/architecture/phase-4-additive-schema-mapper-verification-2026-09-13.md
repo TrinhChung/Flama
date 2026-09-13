@@ -2,7 +2,7 @@
 
 > Date: 2026-09-13 | Task: P4-06
 >
-> Status: **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**
+> Status: **IMPLEMENTED / PR #166 MYSQL REGRESSION FIXED LOCALLY**
 >
 > Runtime authority: unchanged (`CardProgress`) | Production migration: not run
 
@@ -56,10 +56,12 @@ SQLite verification covers missing-table upgrade, compatible-table revalidation,
 incompatible-table fail-closed behavior, empty downgrade, non-empty downgrade
 rejection, default-off startup and no-self-commit first-create behavior.
 
-The successful disposable MySQL run used a random database under the guarded
-`flama_p4_shadow_probe_*` prefix and deleted it after completion. It reproduced
-the pre-P4 baseline without startup `create_all()`, stamped `20260913_000038`,
-then performed:
+The disposable MySQL probe now leaves the database collation at the MySQL 8
+default instead of forcing `utf8mb4_unicode_ci`. This reproduces the
+`utf8mb4_0900_ai_ci` parent-column contract used by CI and the primary local
+database. Random databases remain guarded by the `flama_p4_shadow_probe_*`
+prefix and are deleted after completion. The probe reproduces the pre-P4
+baseline, stamps `20260913_000038`, then performs:
 
 1. upgrade to `20260913_000039`;
 2. complete reflected column/type/default/PK/UQ/FK/delete/index/check/table-option
@@ -69,19 +71,29 @@ then performed:
 5. user-privacy cascade cleanup;
 6. guarded empty downgrade to `20260913_000038`;
 7. upgrade again to `20260913_000039`;
-8. compatible pre-existing/create-all table revalidation on MySQL;
-9. final zero-row accounting for every new table.
+8. real `db.create_all()` startup pre-creation before Alembic revalidation;
+9. exact effective-collation comparison for `live_note_id -> notes.id` and
+   `live_card_id -> cards.id`;
+10. final zero-row accounting for every new table.
 
-Result: every table reported zero contract issues and zero final rows. A final
-`information_schema` check found no remaining `flama_p4_shadow_probe_*`
-database.
+The two live UUID columns resolve the parent column charset/collation at DDL
+time. Shadow table defaults remain `utf8mb4_unicode_ci`; no legacy table is
+altered. The full CI command (`flask --app wsgi.py db upgrade` with startup
+maintenance and `db.create_all()` enabled) passed from an empty database under
+both `utf8mb4_0900_ai_ci` and `utf8mb4_unicode_ci`.
+
+Result: every table reported zero contract issues and zero final rows. Both FK
+collation pairs matched their parents. A final `information_schema` check found
+no remaining `flama_p4_shadow_probe_*` database.
 
 ## Regression evidence
 
 ```text
-Focused P4-06 tests:                         16 passed
-database,study,core backend modules:        257 passed, 1 skipped
-cli backend module:                         212 passed
+Focused P4-06 tests after FK fix:           17 passed
+Changed-file database/study modules:       205 passed
+MySQL default-collation probe:              passed
+Full CI MySQL command, 0900_ai_ci:          passed
+Full CI MySQL command, unicode_ci:          passed
 Python compileall:                           passed
 wsgi.py flags-off import:                    app / false / false / false
 Alembic repository head:                     20260913_000039
@@ -95,7 +107,7 @@ both passed.
 ## Rollout state and next task
 
 - No production or primary local database was migrated.
-- All work remains uncommitted on local-only branch
+- The MySQL regression fix remains uncommitted on PR branch
   `local/p4-06-shadow-schema-codecs` for user review.
 - Runtime rollback remains “keep all three flags false”; the additive tables are
   inert.
