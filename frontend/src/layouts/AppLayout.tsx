@@ -346,6 +346,8 @@ export function AppLayout() {
     '/terms',
     '/privacy',
     '/cookies',
+    '/marketplace-guidelines',
+    '/community-guidelines',
   ]
   const isPublicPage = publicPaths.includes(location.pathname)
 

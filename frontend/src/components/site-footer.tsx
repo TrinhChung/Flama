@@ -124,6 +124,8 @@ export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 						<FooterColumn title="Pháp lý & Hỗ trợ">
 							<FooterLink to={bootstrap.links.terms || '/terms'}>Điều khoản sử dụng</FooterLink>
 							<FooterLink to={bootstrap.links.privacy || '/privacy'}>Chính sách bảo mật</FooterLink>
+							<FooterLink to="/marketplace-guidelines">Quy chế Marketplace</FooterLink>
+							<FooterLink to="/community-guidelines">Chuẩn mực cộng đồng</FooterLink>
 							<FooterLink to={bootstrap.links.cookies || '/cookies'}>Chính sách cookie</FooterLink>
 							<FooterLink to={bootstrap.links.support || '/support'}>Ủng hộ hệ thống</FooterLink>
 						</FooterColumn>

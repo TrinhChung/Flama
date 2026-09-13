@@ -284,6 +284,16 @@ const CookiesPage = lazy(() =>
     default: module.CookiesPage,
   })),
 )
+const MarketplaceGuidelinesPage = lazy(() =>
+  import('./pages/StaticPages').then((module) => ({
+    default: module.MarketplaceGuidelinesPage,
+  })),
+)
+const CommunityGuidelinesPage = lazy(() =>
+  import('./pages/StaticPages').then((module) => ({
+    default: module.CommunityGuidelinesPage,
+  })),
+)
 const OAuthConsentPage = lazy(() =>
   import('./features/oauth/pages/OAuthConsentPage').then((module) => ({
     default: module.OAuthConsentPage,
@@ -381,6 +391,14 @@ const router = createBrowserRouter([
       { path: 'terms', element: deferred(<TermsPage />) },
       { path: 'privacy', element: deferred(<PrivacyPage />) },
       { path: 'cookies', element: deferred(<CookiesPage />) },
+      {
+        path: 'marketplace-guidelines',
+        element: deferred(<MarketplaceGuidelinesPage />),
+      },
+      {
+        path: 'community-guidelines',
+        element: deferred(<CommunityGuidelinesPage />),
+      },
       {
         element: <RequireAuth />,
         children: [
