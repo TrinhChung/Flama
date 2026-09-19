@@ -344,8 +344,10 @@ def generate_voicevox(
             source_text = _strip_richtext_to_plain(source_text_raw)
         elif source_type == "markdown":
             source_text = _strip_markdown_to_plain(source_text_raw)
+        elif source_type == "text":
+            source_text = _strip_richtext_to_plain(source_text_raw)
         else:
-            source_text = source_text_raw
+            source_text = _strip_richtext_to_plain(source_text_raw)
         source_text = source_text.strip()
         if not source_text:
             skipped_items.append(
@@ -523,6 +525,19 @@ def _to_bool(value: object) -> bool:
 
 def _strip_richtext_to_plain(raw_value: object) -> str:
     text = str(raw_value or "")
+    # Strip <rp> tags
+    text = re.sub(r"(?is)<rp>[^<]*</rp>", "", text)
+
+    # Extract <rt> text from <ruby> blocks
+    def _replace_ruby(m: re.Match) -> str:
+        inner = m.group(1)
+        rt_matches = re.findall(r"(?is)<rt\b[^>]*>([^<]*)</rt>", inner)
+        if rt_matches:
+            return "".join(rt_matches)
+        return re.sub(r"(?is)<[^>]+>", "", inner)
+
+    text = re.sub(r"(?is)<ruby\b[^>]*>(.*?)</ruby>", _replace_ruby, text)
+    text = re.sub(r"(?is)<rt\b[^>]*>.*?</rt>", "", text)
     no_tags = re.sub(r"(?is)<[^>]+>", " ", text)
     return " ".join(no_tags.replace("&nbsp;", " ").split()).strip()
 

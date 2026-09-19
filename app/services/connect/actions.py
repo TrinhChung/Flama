@@ -33,7 +33,10 @@ from app.services import (
     flama_connect_media_service,
     study_service,
 )
-from app.services.anki_content_normalizer import normalize_anki_field_values
+from app.services.anki_content_normalizer import (
+    normalize_anki_field_values,
+    normalize_anki_text_entities,
+)
 from app.validators.flashcard_input import RequestValidationError, validate_note_create_request
 
 from models import db
@@ -163,7 +166,13 @@ def _parse_note(
     ):
         raise ConnectError("field names are invalid")
     field_defs_by_name = {field.name: field for field in note_type.field_defs}
-    fields = normalize_anki_field_values(fields, tuple(note_type.field_defs))
+    if import_session_id is None:
+        fields = normalize_anki_field_values(fields, tuple(note_type.field_defs))
+    else:
+        fields = {
+            name: normalize_anki_text_entities(value)
+            for name, value in fields.items()
+        }
     if import_session_id is None and any(
         field_defs_by_name.get(field_name) is not None
         and field_defs_by_name[field_name].field_type in {"image", "diagram"}
@@ -302,7 +311,16 @@ def _ensure_note_ref(note: Note, user_id: int) -> ConnectNoteRef:
         provider="yomitan",
     ).first()
     if row is None:
-        row = ConnectNoteRef(note_id=note.id, user_id=user_id, provider="yomitan")
+        ref_kwargs: dict[str, Any] = {
+            "note_id": note.id,
+            "user_id": user_id,
+            "provider": "yomitan",
+        }
+        if note.id and str(note.id).isdigit():
+            cand_id = int(note.id)
+            if not db.session.get(ConnectNoteRef, cand_id):
+                ref_kwargs["id"] = cand_id
+        row = ConnectNoteRef(**ref_kwargs)
         db.session.add(row)
         db.session.flush()
     return row
@@ -344,14 +362,22 @@ def add_note(user_id: int, raw_note: object) -> int:
                         field_names=changed_field_names,
                     )
                 db.session.commit()
-            return existing_note.id
+            return int(_ensure_note_ref(existing_note, user_id).id)
         raise ConnectError("cannot create note because it is a duplicate in the target deck")
     if prepared.deck.note_type_id is None:
         prepared.deck.note_type_id = prepared.note_type.id
 
     materialized = None
     try:
+        max_ref_id = db.session.query(db.func.max(ConnectNoteRef.id)).scalar() or 0
+        next_ref_id = int(max_ref_id) + 1
+        note_id = str(next_ref_id)
+        while db.session.query(Note.id).filter_by(id=note_id).first() is not None:
+            next_ref_id += 1
+            note_id = str(next_ref_id)
+
         note = Note(
+            id=note_id,
             note_type_id=prepared.note_type.id,
             user_id=user_id,
             deck_id=prepared.deck.id,

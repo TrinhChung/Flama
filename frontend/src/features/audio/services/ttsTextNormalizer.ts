@@ -10,11 +10,25 @@ export function cleanTextForTts(rawText: string, engineId: 'voicevox' | 'kokoro'
   // 1. Strip [sound:...] media tags first
   text = text.replace(/\[sound:[^\]]+\]/gi, '')
 
-  // 2. Strip HTML tags
+  // 2. Strip fallback <rp> tags
+  text = text.replace(/<rp>[^<]*<\/rp>/gi, '')
+
+  // 3. For Japanese engines (voicevox), extract reading from <ruby> tags before stripping HTML
+  if (engineId === 'voicevox') {
+    text = text.replace(/<ruby\b[^>]*>(.*?)<\/ruby>/gis, (_match, inner) => {
+      const rtMatches = [...inner.matchAll(/<rt\b[^>]*>([^<]*)<\/rt>/gi)]
+      if (rtMatches.length > 0) {
+        return rtMatches.map(m => m[1]).join('')
+      }
+      return inner.replace(/<[^>]*>/g, '')
+    })
+  }
+
+  // 4. Strip generic HTML tags
   text = text.replace(/<[^>]*>/g, ' ')
 
   if (engineId === 'voicevox') {
-    // 3. Replace Japanese furigana brackets:
+    // 5. Replace Japanese furigana brackets:
     // e.g. 漢字[かんじ] -> かんじ, 食[た]べる -> たべる
     text = text.replace(/([\u4e00-\u9faf\u30a0-\u30ff]+)\s*\[([^\]]+)\]/g, '$2')
     // e.g. 漢字(かんじ) -> かんじ, 食べる(たべる) -> たべる

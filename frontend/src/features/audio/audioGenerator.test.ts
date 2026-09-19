@@ -28,6 +28,12 @@ describe('TTS Text Normalizer', () => {
     expect(cleanTextForTts(raw3, 'voicevox')).toBe('たべる')
   })
 
+  it('extracts ruby <rt> reading for VOICEVOX speech synthesis', () => {
+    expect(cleanTextForTts('<ruby>食<rt>た</rt></ruby>べる', 'voicevox')).toBe('たべる')
+    expect(cleanTextForTts('<ruby>日<rt>に</rt>本<rt>ほん</rt>語<rt>ご</rt></ruby>', 'voicevox')).toBe('にほんご')
+    expect(cleanTextForTts('<ruby>食<rp>(</rp><rt>た</rt><rp>)</rp></ruby>べる', 'voicevox')).toBe('たべる')
+  })
+
   it('strips [sound:...] media tags', () => {
     const raw = '猫[sound:cat_audio.mp3]が好き'
     expect(cleanTextForTts(raw, 'voicevox')).toBe('猫が好き')
