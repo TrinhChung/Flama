@@ -64,15 +64,17 @@ def init_spa_delivery(app) -> None:
 
 
 def _legacy_adapter_removed():
-    return (
-        jsonify(
-            {
-                "error": "LEGACY_ENDPOINT_REMOVED",
-                "message": "Use the canonical REST API under /api.",
-            }
-        ),
-        410,
+    resp = jsonify(
+        {
+            "error": "LEGACY_ENDPOINT_REMOVED",
+            "message": "Use the canonical REST API under /api.",
+        }
     )
+    if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers.pop("Vary", None)
+    return resp, 410
 
 
 def serve_react_spa(*_args, **_kwargs) -> Response:
