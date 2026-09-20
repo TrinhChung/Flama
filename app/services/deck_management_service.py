@@ -16,6 +16,7 @@ from app.repositories.deck_tree_query import (
     collect_ancestor_ids as _collect_deck_ancestor_ids,
     collect_subtree_ids as _collect_deck_subtree_ids,
 )
+from app.services import study_progress_lifecycle_mirror_service
 from app.utils.deck_move_token import parse_deck_move_token
 
 UTC = timezone.utc
@@ -141,10 +142,22 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
         if note_ids:
             card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
             card_ids = [str(row[0]) for row in card_rows if row and row[0]]
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=card_ids,
+                deleted_note_ids=note_ids,
+            )
             if card_ids:
                 CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
                     synchronize_session=False
                 )
+            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+                lifecycle_plan,
+                transition_code="TOMBSTONED_SUBJECT_DELETED",
+                source_path="deck.delete.purge",
+                operation_key=f"deck-purge:{deck_obj.id}",
+            )
+            if card_ids:
                 Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
             Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
 
@@ -200,10 +213,22 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
     if note_ids:
         card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
         card_ids = [str(row[0]) for row in card_rows if row and row[0]]
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=card_ids,
+            deleted_note_ids=note_ids,
+        )
         if card_ids:
             CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
                 synchronize_session=False
             )
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_SUBJECT_DELETED",
+            source_path="deck.delete",
+            operation_key=f"deck-delete:{deck_obj.id}",
+        )
+        if card_ids:
             Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
         Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
 
@@ -274,9 +299,20 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
         for session in open_sessions:
             session.status = "cancelled"
 
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=card_id_set,
+            learner_user_ids=(user_id,),
+        )
         deleted_count = CardProgress.query.filter(
             CardProgress.user_id == user_id,
             CardProgress.card_id.in_(sorted(card_id_set)),
         ).delete(synchronize_session=False) or 0
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_RESET",
+            source_path="deck.progress_reset",
+            operation_key=f"deck-reset:{deck_obj.id}:user:{user_id}",
+        )
         db.session.commit()
     return deleted_count

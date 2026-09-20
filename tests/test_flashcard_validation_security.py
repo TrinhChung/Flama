@@ -640,6 +640,91 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertEqual(proxy_resp.status_code, 200)
         proxy_resp.close()
 
+    def test_proxy_media_nonexistent_returns_404_no_store(self):
+        resp = self.client.get("/media/proxy/00000000-0000-0000-0000-000000000000")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(
+            resp.headers.get("Cache-Control"),
+            "no-cache, no-store, must-revalidate, max-age=0",
+        )
+        self.assertEqual(resp.headers.get("Pragma"), "no-cache")
+
+    def test_proxy_media_missing_file_on_disk_returns_404_no_store(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Picture",
+                "file": (io.BytesIO(_MIN_PNG_BYTES), "normal.png", "image/png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {}).get("asset_id")
+        self.assertTrue(asset_id)
+
+        # Delete the file on disk directly
+        with self.app.app_context():
+            asset = MediaAsset.query.filter_by(id=asset_id).first()
+            self.assertIsNotNone(asset)
+            upload_root = Path(self.app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+            disk_file = upload_root / asset.storage_path
+            if disk_file.exists():
+                disk_file.unlink()
+
+        # Request media again
+        resp = self.client.get(f"/media/proxy/{asset_id}")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(
+            resp.headers.get("Cache-Control"),
+            "no-cache, no-store, must-revalidate, max-age=0",
+        )
+        self.assertEqual(resp.headers.get("Pragma"), "no-cache")
+
+    def test_proxy_media_xaccel_mode_preserves_404_no_store(self):
+        self.app.config["MEDIA_PROXY_USE_XACCEL"] = True
+        try:
+            resp = self.client.get("/media/proxy/00000000-0000-0000-0000-000000000000")
+            self.assertEqual(resp.status_code, 404)
+            self.assertEqual(
+                resp.headers.get("Cache-Control"),
+                "no-cache, no-store, must-revalidate, max-age=0",
+            )
+            self.assertEqual(resp.headers.get("Pragma"), "no-cache")
+            self.assertNotIn("X-Accel-Redirect", resp.headers)
+        finally:
+            self.app.config["MEDIA_PROXY_USE_XACCEL"] = False
+
+    def test_proxy_media_root_without_slash_returns_404_no_store(self):
+        resp = self.client.get("/media/proxy")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(
+            resp.headers.get("Cache-Control"),
+            "no-cache, no-store, must-revalidate, max-age=0",
+        )
+        self.assertEqual(resp.headers.get("Pragma"), "no-cache")
+        self.assertNotIn("Cookie", resp.headers.get("Vary", ""))
+        self.assertNotIn("Vary", resp.headers)
+
+    def test_proxy_media_unsupported_methods_return_no_store(self):
+        for method in ("post", "put", "delete", "patch"):
+            client_fn = getattr(self.client, method)
+            resp = client_fn("/media/proxy/123")
+            self.assertIn(resp.status_code, (405, 410))
+            self.assertEqual(
+                resp.headers.get("Cache-Control"),
+                "no-cache, no-store, must-revalidate, max-age=0",
+                f"{method.upper()} /media/proxy/123 missing Cache-Control",
+            )
+            self.assertEqual(
+                resp.headers.get("Pragma"),
+                "no-cache",
+                f"{method.upper()} /media/proxy/123 missing Pragma",
+            )
+            self.assertNotIn("Cookie", resp.headers.get("Vary", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

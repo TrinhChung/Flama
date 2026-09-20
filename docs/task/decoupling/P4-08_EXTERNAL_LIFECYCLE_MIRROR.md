@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**
 >
 > Dependency: P4-07
 >
@@ -45,6 +45,18 @@ Extend the same learner/Note mirror contract to every non-native mutation, reset
 - Complete current writer/delete coverage matrix.
 - Reset/rekey/tombstone and partial-success tests.
 - Real logical-overlay source/local-added evidence.
+
+Implementation and verification evidence: [Phase 4 external/lifecycle mirror verification](../../architecture/phase-4-external-lifecycle-mirror-verification-2026-09-14.md).
+
+## Completion handoff — 2026-09-14
+
+- Modern and legacy Connect snapshots finalize only applied current-state changes and retain source Card/Note lineage; no-op, conflict and unresolved results do not advance a trusted mirror.
+- Revlog creates normalized `CONNECT_REVLOG` facts only, preserves `CardProgress` revision/pointer/current state and classifies mixed snapshot/history conservatively.
+- Reset, Card/Template/Note/deck delete, MCP/browse bulk delete, seed replacement and import reconciliation use one no-commit lifecycle adapter with generation fences and retained contributor/history evidence.
+- Clone cutover locks all old/new subjects before P1-02 progress locks, mirrors only the committed destination authority and retains paired rekey lifecycle rows without mutating source Note/Card content.
+- Generation rollover now keeps old contributor rows immutable, so prior history facts cannot silently point at a contributor moved into a newer epoch.
+- The requested backend matrix passed 755 tests across 68 files. Disposable local MySQL passed external savepoint rollback, multi-subject reset/delete, post-reset generation and native-vs-external race checks; the existing P4-07 MySQL fan-in/worker/fault probe also remains green.
+- `STUDY_PROGRESS_SHADOW_WRITE_ENABLED` remains default-off. No shadow reads, backfill, production change, commit, push or merge are part of this handoff.
 
 ## Acceptance
 

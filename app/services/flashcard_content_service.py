@@ -12,6 +12,7 @@ from app.services import (
     deck_working_tree_service,
     flashcards_share_service,
     marketplace_query_service,
+    study_progress_lifecycle_mirror_service,
 )
 from app.services.flashcard_legacy import (
     LEGACY_BACK_TEMPLATE,
@@ -33,6 +34,7 @@ from app.validators import (
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
+from models.card_progress import CardProgress
 from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
 from models.note import Note
@@ -224,6 +226,35 @@ def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is
         install_query.delete(synchronize_session=False)
 
         # 6. Delete NoteType itself, which cascades
+        note_ids = [
+            str(row[0])
+            for row in db.session.query(Note.id)
+            .filter(Note.note_type_id == note_type_id)
+            .all()
+            if row and row[0]
+        ]
+        card_ids = [
+            str(row[0])
+            for row in db.session.query(Card.id)
+            .filter(Card.note_id.in_(note_ids))
+            .all()
+            if row and row[0]
+        ] if note_ids else []
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=card_ids,
+            deleted_note_ids=note_ids,
+        )
+        if card_ids:
+            CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
+                synchronize_session=False
+            )
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_SUBJECT_DELETED",
+            source_path="flashcards.note_type_purge",
+            operation_key=f"note-type-purge:{note_type_id}",
+        )
         db.session.delete(note_type)
         _audit(user_id, "note_type.purge", {"note_type_id": note_type_id})
         db.session.commit()
@@ -722,6 +753,27 @@ def delete_template(
             "A note type requires at least one template.",
             status=409,
         )
+    card_ids = [
+        str(row[0])
+        for row in db.session.query(Card.id)
+        .filter(Card.template_id == template.id)
+        .all()
+        if row and row[0]
+    ]
+    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+        db.session,
+        removed_card_ids=card_ids,
+    )
+    if card_ids:
+        CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
+            synchronize_session=False
+        )
+    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+        lifecycle_plan,
+        transition_code="DETACHED_CONTRIBUTOR_DELETED",
+        source_path="flashcards.template_delete",
+        operation_key=f"template-delete:{template.id}",
+    )
     Card.query.filter_by(template_id=template.id).delete()
     db.session.delete(template)
     _audit(
@@ -1147,6 +1199,22 @@ def delete_note(*, user_id: int, note_id: str) -> dict[str, bool]:
                 "operation": "remove",
             }
         ],
+    )
+    card_ids = [str(card.id) for card in note.cards]
+    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+        db.session,
+        removed_card_ids=card_ids,
+        deleted_note_ids=(note.id,),
+    )
+    if card_ids:
+        CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
+            synchronize_session=False
+        )
+    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+        lifecycle_plan,
+        transition_code="TOMBSTONED_SUBJECT_DELETED",
+        source_path="flashcards.note_delete",
+        operation_key=f"note-delete:{note.id}",
     )
     db.session.delete(note)
     _audit(user_id, "note.delete", {"note_id": note.id})

@@ -19,7 +19,7 @@ class Phase4PreflightBundleTests(unittest.TestCase):
 
     def test_bundle_writes_redacted_repeatability_artifacts(self):
         report = {
-            "schema_version": "study-architecture-audit.v4",
+            "schema_version": "study-architecture-audit.v5",
             "observed_at": "2026-09-10T03:04:05",
             "phase4_preflight": {
                 "connection_safety": {"current_mysql_evidence": True},

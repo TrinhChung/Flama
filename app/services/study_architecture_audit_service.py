@@ -29,7 +29,7 @@ from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.template import Template
 
-SCHEMA_VERSION = "study-architecture-audit.v4"
+SCHEMA_VERSION = "study-architecture-audit.v5"
 MAX_SAMPLE_IDS = 10
 _SESSION_CONFIG_SCHEMA_VERSION = "scheduler-config.v1"
 _SESSION_POLICY_MATERIAL_KEYS = (
@@ -862,6 +862,20 @@ def _build_disposition_inventory(metrics: dict[str, Any]) -> list[dict[str, Any]
                 "Current-MySQL Phase 4 preflight warning.",
             )
 
+    shadow = metrics.get("shadow_reconciliation", {})
+    shadow_gate = shadow.get("gate", {})
+    if shadow_gate.get("enforced"):
+        for blocker in shadow_gate.get("blockers", []):
+            add_item(
+                f"shadow_{blocker}",
+                "shadow_reconciliation",
+                1,
+                [],
+                "block",
+                blocker,
+                "Phase 4 shadow reconciliation blocker.",
+            )
+
     return inventory
 
 
@@ -901,7 +915,7 @@ def _categorize_verdicts(inventory: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, Any]:
-    """Return migration-grade audit v4 without mutating schema or application data."""
+    """Return migration-grade audit v5 without mutating schema or application data."""
     if now is not None and now.tzinfo is not None:
         now = now.astimezone(timezone.utc).replace(tzinfo=None)
     observed_at = now or datetime.now(timezone.utc).replace(tzinfo=None)
@@ -2248,6 +2262,20 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         connection_safety=connection_safety,
     )
     metrics["phase4_preflight"] = phase4_preflight
+    from flask import current_app
+    from app.services.study_progress_reconciliation_service import (
+        build_study_progress_reconciliation,
+        disabled_study_progress_reconciliation,
+    )
+
+    if current_app.config.get("STUDY_PROGRESS_SHADOW_COMPARE_ENABLED", False):
+        shadow_reconciliation = build_study_progress_reconciliation(
+            db.session,
+            observed_at=observed_at,
+        )
+    else:
+        shadow_reconciliation = disabled_study_progress_reconciliation()
+    metrics["shadow_reconciliation"] = shadow_reconciliation
 
     # 1. Build machine-readable inventory
     inventory = _build_disposition_inventory(metrics)
@@ -2415,6 +2443,21 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         "phase4_valid_pointer_connect_ref_partition": phase4_preflight["progress"][
             "accounting"
         ]["valid_pointer_connect_ref_partition"],
+        "phase4_shadow_source_accounting": (
+            not shadow_reconciliation["gate"]["enforced"]
+            or shadow_reconciliation["accounting"]["source_partition"]
+        ),
+        "phase4_shadow_zero_unexplained": (
+            not shadow_reconciliation["gate"]["enforced"]
+            or shadow_reconciliation["accounting"]["zero_unexplained"]
+        ),
+        "phase4_shadow_query_parity": (
+            not shadow_reconciliation["gate"]["enforced"]
+            or (
+                shadow_reconciliation["accounting"]["query_scope_partition"]
+                and shadow_reconciliation["accounting"]["query_parity"]
+            )
+        ),
     }
     reconciliation_valid = all(formula_checks.values())
     if not reconciliation_valid:
@@ -2445,6 +2488,22 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
             "connect_source_card_refs",
             "connect_source_note_refs",
             "connect_import_sessions",
+            *(
+                [
+                    "study_progress_subjects",
+                    "study_progress_states",
+                    "study_progress_contributors",
+                    "study_progress_availability",
+                    "study_progress_lineage_refs",
+                    "study_progress_history_facts",
+                    "study_progress_lifecycle_events",
+                    "study_progress_backfill_runs",
+                    "study_progress_backfill_checkpoints",
+                    "study_progress_backfill_dispositions",
+                ]
+                if shadow_reconciliation["gate"]["enforced"]
+                else []
+            ),
             *(
                 ["study_session_batches"]
                 if phase4_preflight["schema"][

@@ -1,5 +1,5 @@
 from typing import Optional
-from flask import Flask, jsonify, redirect, request
+from flask import Flask, has_request_context, jsonify, redirect, request
 
 from models import db
 
@@ -14,6 +14,21 @@ from .spa import init_spa_delivery
 from .startup import run_startup_maintenance
 
 
+class MediaHardenedSessionInterface(PublicMediaSessionInterface):
+    """Ensure media responses never leak Vary: Cookie or Set-Cookie."""
+
+    def save_session(self, app, session, response) -> None:
+        super().save_session(app, session, response)
+        if has_request_context() and (
+            request.path == "/media/proxy" or request.path.startswith("/media/proxy/")
+        ):
+            response.vary.discard("Cookie")
+            if not response.vary:
+                response.headers.pop("Vary", None)
+            while "Set-Cookie" in response.headers:
+                response.headers.remove("Set-Cookie")
+
+
 def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask:
     """Application factory that sets up Flask, database, and authentication."""
     app = Flask(
@@ -21,7 +36,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         template_folder=None,
         static_folder=str(BASE_DIR / "static"),
     )
-    app.session_interface = PublicMediaSessionInterface()
+    app.session_interface = MediaHardenedSessionInterface()
     app.config.update(build_app_config(config))
     if audit_mode:
         app.config.update(
@@ -199,7 +214,12 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     def page_not_found(error):
         """Handle 404 errors."""
         if request.path.startswith(("/api/", "/media/", "/static/")):
-            return jsonify({"error": "NOT_FOUND", "message": "Resource not found."}), 404
+            resp = jsonify({"error": "NOT_FOUND", "message": "Resource not found."})
+            if request.path == "/media/proxy" or request.path.startswith("/media/proxy/"):
+                resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+                resp.headers["Pragma"] = "no-cache"
+                resp.headers.pop("Vary", None)
+            return resp, 404
         from app.spa import serve_react_spa
 
         return serve_react_spa()
@@ -208,12 +228,22 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     def internal_server_error(error):
         """Handle 500 errors."""
         _rollback_failed_session()
-        return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
+        resp = jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."})
+        if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers.pop("Vary", None)
+        return resp, 500
 
     @app.errorhandler(403)
     def forbidden(error):
         """Handle 403 errors."""
-        return jsonify({"error": "FORBIDDEN", "message": "Access is forbidden."}), 403
+        resp = jsonify({"error": "FORBIDDEN", "message": "Access is forbidden."})
+        if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers.pop("Vary", None)
+        return resp, 403
 
     @app.errorhandler(Exception)
     def handle_exception(error):
@@ -222,7 +252,12 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         if isinstance(error, HTTPException):
             status = int(error.code or 500)
             code = str(error.name or "HTTP_ERROR").upper().replace(" ", "_")
-            return jsonify({"error": code, "message": str(error.description)}), status
+            resp = jsonify({"error": code, "message": str(error.description)})
+            if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+                resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+                resp.headers["Pragma"] = "no-cache"
+                resp.headers.pop("Vary", None)
+            return resp, status
         import logging
         _rollback_failed_session()
         logging.getLogger(__name__).error(
@@ -230,7 +265,12 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
             error,
             exc_info=True,
         )
-        return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
+        resp = jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."})
+        if request.path == "/media/proxy" or request.path.startswith("/media/proxy"):
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers.pop("Vary", None)
+        return resp, 500
 
     if not audit_mode:
         run_startup_maintenance(app)

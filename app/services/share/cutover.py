@@ -34,6 +34,7 @@ from app.services import (
     marketplace_query_service,
     marketplace_taxonomy_service,
     note_sync_service,
+    study_progress_lifecycle_mirror_service,
     study_service,
 )
 from app.services.share.constants import (
@@ -394,6 +395,9 @@ def migrate_legacy_clone_install_to_overlay(
     progress_migrated = 0
     local_note_ids: list[str] = []
     template_map_cache: dict[str, dict[str, str]] = {}
+    progress_rekeys: list[
+        study_progress_lifecycle_mirror_service.CloneProgressRekey
+    ] = []
 
     for local_note, source_note in pairs:
         local_note_ids.append(local_note.id)
@@ -440,6 +444,7 @@ def migrate_legacy_clone_install_to_overlay(
             for card in Card.query.filter_by(note_id=source_note.id).all()
         }
         local_cards = Card.query.filter_by(note_id=local_note.id).all()
+        card_id_map: dict[str, str] = {}
         for local_card in local_cards:
             source_template_id = template_map.get(str(local_card.template_id))
             if not source_template_id:
@@ -459,11 +464,33 @@ def migrate_legacy_clone_install_to_overlay(
                     ),
                     status=409,
                 )
+            card_id_map[str(local_card.id)] = str(source_card.id)
+        if card_id_map:
+            progress_rekeys.append(
+                study_progress_lifecycle_mirror_service.CloneProgressRekey(
+                    old_note_id=str(local_note.id),
+                    new_note_id=str(source_note.id),
+                    card_id_map=card_id_map,
+                )
+            )
+
+    rekey_plan = study_progress_lifecycle_mirror_service.prepare_clone_rekey_mirror(
+        db.session,
+        learner_user_id=install.user_id,
+        rekeys=progress_rekeys,
+    )
+    for rekey in progress_rekeys:
+        for local_card_id, source_card_id in sorted(rekey.card_id_map.items()):
             progress_migrated += _merge_card_progress_rows_for_cutover(
                 user_id=install.user_id,
-                local_card_id=local_card.id,
-                source_card_id=source_card.id,
+                local_card_id=local_card_id,
+                source_card_id=source_card_id,
             )
+    study_progress_lifecycle_mirror_service.finalize_clone_rekey_mirror(
+        rekey_plan,
+        source_path="share.clone_cutover",
+        operation_key=f"clone-cutover:{install.id}",
+    )
 
     if note_override_payload:
         _counters, validation_error = upsert_clone_overlay(

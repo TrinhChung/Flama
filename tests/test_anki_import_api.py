@@ -9,7 +9,12 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from app import create_app
+from app.services.study_progress_backfill_service import run_current_progress_backfill
+from app.services.study_progress_reconciliation_service import (
+    build_study_progress_reconciliation,
+)
 from models import db
+from models.card import Card
 from models.connect_import_session import ConnectImportSession
 from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_card_ref import ConnectSourceCardRef
@@ -21,6 +26,10 @@ from models.note_type import NoteType
 from models.media_asset import MediaAsset
 from models.template import Template
 from models.review_event import ReviewEvent
+from models.study_progress_contributor import StudyProgressContributor
+from models.study_progress_history_fact import StudyProgressHistoryFact
+from models.study_progress_lineage_ref import StudyProgressLineageRef
+from models.study_progress_subject import StudyProgressSubject
 from models.user import User
 from models.user_role import UserRole
 
@@ -368,6 +377,9 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(hidden.status_code, 404)
 
     def test_anki_progress_migration(self):
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
+        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = True
+        self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = True
         self._login()
         created = self._create_session()
         session_id = created["importSessionId"]
@@ -434,6 +446,9 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertIsNotNone(progress.due_at)
             self.assertEqual(progress.is_suspended, False)
             self.assertEqual(progress.is_buried, False)
+            contributor = StudyProgressContributor.query.one()
+            self.assertEqual(contributor.current_provenance_code, "CONNECT_LEGACY_PROGRESS")
+            self.assertEqual(contributor.history_completeness_code, "HISTORY_SNAPSHOT_ONLY")
 
         # Let's test conflict resolution:
         # 1. Update with older progress: Flama progress should NOT be overwritten (newest wins)
@@ -539,6 +554,7 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(progress.ease_factor, 2.6)
             self.assertEqual(progress.reps, 12)
             self.assertEqual(progress.lapses, 2)
+            self.assertEqual(StudyProgressSubject.query.one().mirror_revision, 2)
 
         identical_session = self._create_session()["importSessionId"]
         identical = self._upload_package(
@@ -590,6 +606,21 @@ class AnkiImportApiTests(unittest.TestCase):
         with self.app.app_context():
             progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
             self.assertEqual((progress.interval_days, int(progress.revision or 0)), (20, 2))
+            self.assertTrue(run_current_progress_backfill(db.session, apply=True).complete)
+            legacy_reconciliation = build_study_progress_reconciliation(
+                db.session, observed_at=datetime(2026, 8, 16, 12)
+            )
+            self.assertEqual(legacy_reconciliation["unexplained"]["by_code"], {})
+            self.assertEqual(legacy_reconciliation["gate"]["status"], "PASS")
+            self.assertEqual(
+                legacy_reconciliation["writer_coverage"]["current_contributor_provenance"],
+                {"CONNECT_LEGACY_PROGRESS": 1},
+            )
+            self.assertEqual(
+                legacy_reconciliation["writer_coverage"]["matrix"]
+                ["CONNECT_LEGACY_PROGRESS"]["status"],
+                "PASS",
+            )
 
     def test_anki_progress_migration_suspended_and_learning(self):
         self._login()
@@ -905,6 +936,7 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(changed.get_json()["notes"][0]["state"], "changed")
 
     def test_progress_snapshot_conflict_and_idempotency_contract(self):
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         self._login()
         session_id = self._create_session()["importSessionId"]
         note_record = {
@@ -941,13 +973,22 @@ class AnkiImportApiTests(unittest.TestCase):
             "mod": 1,
         }
         applied = self._upload_package(session_id, "progress", 0, [snapshot_a])["results"][0]
-        self.assertEqual(applied["code"], "PROGRESS_APPLIED")
+        self.assertEqual(applied["code"], "PROGRESS_APPLIED", applied)
         self.assertEqual(applied["serverSnapshotHash"], "a" * 64)
         self.assertNotIn("legacy_unversioned", applied)
         with self.app.app_context():
             progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
             self.assertEqual(int(progress.revision or 0), 1)
             self.assertEqual(progress.scheduler_mode, "anki")
+            subject = StudyProgressSubject.query.one()
+            contributor = StudyProgressContributor.query.one()
+            self.assertEqual(subject.mirror_revision, 1)
+            self.assertEqual(contributor.current_provenance_code, "CONNECT_PROGRESS_SNAPSHOT")
+            self.assertEqual(contributor.history_completeness_code, "HISTORY_SNAPSHOT_ONLY")
+            self.assertEqual(
+                {row.ref_kind for row in StudyProgressLineageRef.query.all()},
+                {"CONNECT_SOURCE_CARD", "CONNECT_SOURCE_NOTE"},
+            )
 
         unchanged = self._upload_package(
             session_id,
@@ -1043,6 +1084,123 @@ class AnkiImportApiTests(unittest.TestCase):
             ).one()
             self.assertEqual(int(progress.revision or 0), 4)
             self.assertEqual(source_card.snapshot_hash, "d" * 64)
+            self.assertEqual(StudyProgressSubject.query.one().mirror_revision, 3)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 0)
+
+        with patch(
+            "app.services.study_progress_shadow_mirror_service.finalize_external_progress_mirror",
+            side_effect=RuntimeError("external mirror fault injection"),
+        ):
+            failed = self._upload_package(
+                session_id,
+                "progress",
+                7,
+                [
+                    {
+                        **snapshot_b,
+                        "snapshotHash": "f" * 64,
+                        "baseSnapshotHash": "d" * 64,
+                        "force": True,
+                    }
+                ],
+            )["results"][0]
+        self.assertEqual(failed["code"], "PROGRESS_IMPORT_FAILED")
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            source_card = ConnectSourceCardRef.query.filter_by(
+                user_id=self.admin_id,
+                external_card_id="4001",
+            ).one()
+            self.assertEqual(int(progress.revision or 0), 4)
+            self.assertEqual(source_card.snapshot_hash, "d" * 64)
+            self.assertEqual(StudyProgressSubject.query.one().mirror_revision, 3)
+
+            from app.services import study_service
+
+            card = db.session.get(Card, progress.card_id)
+            study_service.execute_native_review_command(
+                user=db.session.get(User, self.admin_id),
+                card=card,
+                action="good",
+                payload={"duration_ms": 100},
+                clone_scope=None,
+                requested_scope_id=int(card.note.deck_id),
+                timezone_name="UTC",
+                now=datetime(2026, 8, 14, 12, 0, 0),
+            )
+            contributor = StudyProgressContributor.query.filter_by(
+                live_card_progress_id=progress.id
+            ).one()
+            self.assertEqual(contributor.current_provenance_code, "NATIVE_DIRECT")
+            self.assertEqual(
+                contributor.history_completeness_code,
+                "HISTORY_MIXED_PARTIAL",
+            )
+            self.assertEqual(StudyProgressSubject.query.one().mirror_revision, 4)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 1)
+
+            sibling_template = Template(
+                note_type_id=card.note.note_type_id,
+                name="Snapshot lineage sibling",
+                front_html="{{Word}}",
+                back_html="{{Meaning}}",
+                position=99,
+                is_default=False,
+            )
+            db.session.add(sibling_template)
+            db.session.flush()
+            sibling_card = Card(
+                note_id=card.note_id,
+                template_id=sibling_template.id,
+            )
+            db.session.add(sibling_card)
+            db.session.commit()
+            study_service.execute_native_review_command(
+                user=db.session.get(User, self.admin_id),
+                card=sibling_card,
+                action="again",
+                payload={"duration_ms": 100},
+                clone_scope=None,
+                requested_scope_id=int(card.note.deck_id),
+                timezone_name="UTC",
+                now=datetime(2026, 8, 14, 12, 1, 0),
+            )
+            original_active = StudyProgressContributor.query.filter_by(
+                live_card_progress_id=progress.id
+            ).one()
+            self.assertEqual(original_active.subject_generation, 2)
+            self.assertEqual(
+                {
+                    row.ref_kind
+                    for row in StudyProgressLineageRef.query.filter_by(
+                        contributor_id=original_active.id
+                    ).all()
+                },
+                {"LAST_REVIEW_EVENT", "CONNECT_SOURCE_CARD", "CONNECT_SOURCE_NOTE"},
+            )
+            self.assertEqual(
+                StudyProgressSubject.query.one().status_code,
+                "QUARANTINED_STATE_DIVERGENCE",
+            )
+
+        external_quarantine = self._upload_package(
+            session_id,
+            "progress",
+            8,
+            [
+                {
+                    **snapshot_b,
+                    "snapshotHash": "9" * 64,
+                    "baseSnapshotHash": "d" * 64,
+                    "force": True,
+                }
+            ],
+        )["results"][0]
+        self.assertEqual(external_quarantine["code"], "FORCED_PROGRESS_APPLIED")
+        with self.app.app_context():
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(subject.status_code, "QUARANTINED_STATE_DIVERGENCE")
+            self.assertEqual(subject.mirror_revision, 6)
 
     def test_progress_first_insert_race_returns_typed_conflict(self):
         from app.services.anki_sync_service import (
@@ -1106,6 +1264,9 @@ class AnkiImportApiTests(unittest.TestCase):
     def test_progress_and_full_revlog_are_separate_idempotent_sync_streams(self):
         from app.services.stats_overview import build_stats_overview
 
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
+        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = True
+        self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = True
         self._login()
         created = self._create_session()
         session_id = created["importSessionId"]
@@ -1171,7 +1332,7 @@ class AnkiImportApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.get_json())
         progress_result = response.get_json()["results"][0]
-        self.assertEqual(progress_result["state"], "applied")
+        self.assertEqual(progress_result["state"], "applied", progress_result)
         self.assertEqual(progress_result["code"], "PROGRESS_APPLIED")
         self.assertEqual(progress_result["serverSnapshotHash"], "2" * 64)
         self.assertTrue(progress_result["legacy_unversioned"])
@@ -1256,6 +1417,16 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(int(progress.revision or 0), snapshot_revision)
             self.assertEqual(progress.last_reviewed_at, snapshot_last_reviewed_at)
             self.assertEqual(progress.last_review_event_id, snapshot_last_review_event_id)
+            self.assertEqual(StudyProgressSubject.query.one().mirror_revision, 1)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 3)
+            self.assertEqual(
+                StudyProgressContributor.query.one().history_completeness_code,
+                "HISTORY_MIXED_PARTIAL",
+            )
+            self.assertEqual(
+                {row.provenance_code for row in StudyProgressHistoryFact.query.all()},
+                {"CONNECT_REVLOG"},
+            )
             overview = build_stats_overview(
                 user_id=self.admin_id,
                 year=2026,
@@ -1266,6 +1437,44 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(points["2026-08-12"]["cards"], 1)
             self.assertEqual(points["2026-08-13"]["cards"], 2)
             self.assertEqual(points["2026-08-12"]["study_time"], 1200)
+            self.assertTrue(run_current_progress_backfill(db.session, apply=True).complete)
+            reconciled = build_study_progress_reconciliation(
+                db.session, observed_at=datetime(2026, 8, 14, 12)
+            )
+            self.assertEqual(reconciled["unexplained"]["by_code"], {})
+            self.assertEqual(reconciled["gate"]["status"], "PASS")
+            self.assertEqual(
+                reconciled["writer_coverage"]["history_fact_provenance"],
+                {"CONNECT_REVLOG": 3},
+            )
+            self.assertEqual(
+                reconciled["writer_coverage"]["matrix"]["CONNECT_REVLOG"]["status"],
+                "PASS",
+            )
+
+        fault_review = [{**reviews[1], "sourceReviewId": third_ms + 2000}]
+        fault_package = gzip.compress(
+            (json.dumps(fault_review[0]) + "\n").encode(),
+            mtime=0,
+        )
+        with patch(
+            "app.services.study_progress_shadow_mirror_service.append_external_history_facts",
+            side_effect=RuntimeError("revlog mirror fault injection"),
+        ):
+            fault_response = self.client.put(
+                f"/api/flashcards/import/anki/sessions/{session_id}/packages/reviews/4",
+                data=fault_package,
+                headers={
+                    "Content-Encoding": "gzip",
+                    "X-Package-SHA256": hashlib.sha256(fault_package).hexdigest(),
+                },
+            )
+        self.assertEqual(fault_response.status_code, 200, fault_response.get_json())
+        self.assertEqual(fault_response.get_json()["results"][0]["state"], "failed")
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.filter_by(user_id=self.admin_id).count(), 3)
+            self.assertEqual(ConnectReviewEventRef.query.filter_by(user_id=self.admin_id).count(), 3)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 3)
 
         status = self.client.post(
             f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
@@ -1322,6 +1531,11 @@ class AnkiImportApiTests(unittest.TestCase):
                 .count(),
                 3,
             )
+            repaired_reconciliation = build_study_progress_reconciliation(
+                db.session, observed_at=datetime(2026, 8, 14, 12)
+            )
+            self.assertEqual(repaired_reconciliation["unexplained"]["by_code"], {})
+            self.assertEqual(repaired_reconciliation["gate"]["status"], "PASS")
 
         repaired_status = self.client.post(
             f"/api/flashcards/import/anki/sessions/{session_id}/note-status",

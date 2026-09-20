@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from app.repositories.review_event_repository import create_review_event_record
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
+from app.services import study_progress_shadow_mirror_service
 from app.validators.review_event import (
     ReviewEventPayloadError,
     build_anki_revlog_review_event_payload,
@@ -273,11 +274,33 @@ def import_progress(
                     external_note_id=note_id,
                     source_ord=source_ord,
                 )
+                mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
+                    db.session,
+                    learner_user_id=session.user_id,
+                    cards=(db.session.get(Card, source_card.card_id),),
+                )
                 state, code, legacy_unversioned = _apply_progress_snapshot(
                     session,
                     source_card,
                     record,
                 )
+                if state == "applied":
+                    source_note_ref = ConnectSourceNoteRef.query.filter_by(
+                        user_id=session.user_id,
+                        source_key=session.source_key,
+                        external_note_id=source_card.external_note_id,
+                    ).first()
+                    study_progress_shadow_mirror_service.finalize_external_progress_mirror(
+                        mirror_plan,
+                        applied_contexts={
+                            str(source_card.card_id): study_progress_shadow_mirror_service.ExternalProgressMirrorContext(
+                                provenance_code="CONNECT_PROGRESS_SNAPSHOT",
+                                history_completeness_code="HISTORY_SNAPSHOT_ONLY",
+                                source_card_ref=source_card,
+                                source_note_ref=source_note_ref,
+                            )
+                        },
+                    )
                 db.session.flush()
             result = {
                 "sourceCardId": external_card_id,
@@ -485,11 +508,22 @@ def import_reviews(
         card_results: list[dict[str, Any]] = []
         try:
             with db.session.begin_nested():
+                shadow_history: list[
+                    study_progress_shadow_mirror_service.ExternalMirrorHistoryEvent
+                ] = []
                 for current_record in sorted(
                     card_records,
                     key=lambda item: int(item.get("sourceReviewId") or 0),
                 ):
-                    state, _ref = _import_review(session, current_record)
+                    state, ref = _import_review(session, current_record)
+                    if state in {"imported", "repaired"} and ref.review_event is not None:
+                        shadow_history.append(
+                            study_progress_shadow_mirror_service.ExternalMirrorHistoryEvent(
+                                review_event=ref.review_event,
+                                source_ref=ref,
+                                import_state=state,
+                            )
+                        )
                     card_results.append(
                         {
                             "sourceReviewId": current_record.get("sourceReviewId"),
@@ -497,6 +531,28 @@ def import_reviews(
                             "imported": state in {"imported", "repaired"},
                             "state": state,
                         }
+                    )
+                if shadow_history:
+                    source_card = ConnectSourceCardRef.query.filter_by(
+                        user_id=session.user_id,
+                        source_key=session.source_key,
+                        external_card_id=source_card_id,
+                    ).first()
+                    source_card_obj = (
+                        db.session.get(Card, source_card.card_id)
+                        if source_card is not None
+                        else None
+                    )
+                    if source_card is None or source_card_obj is None:
+                        raise AnkiSyncError("source card has not been mapped")
+                    mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
+                        db.session,
+                        learner_user_id=session.user_id,
+                        cards=(source_card_obj,),
+                    )
+                    study_progress_shadow_mirror_service.append_external_history_facts(
+                        mirror_plan,
+                        history_events=shadow_history,
                     )
                 db.session.flush()
             results.extend(card_results)

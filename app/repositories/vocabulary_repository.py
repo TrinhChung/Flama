@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import html
 import logging
+import re
 from types import SimpleNamespace
 from typing import Any
 
@@ -270,6 +272,114 @@ def note_ordered_field_names(note_obj: Note | None, *, text_only: bool = False) 
     return ordered_names
 
 
+def format_display_summary(
+    raw: str | None,
+    max_length: int = 200,
+    is_reading: bool = False,
+    is_word: bool = False,
+) -> str:
+    """Format and clean HTML content for compact Browse Table summaries.
+
+    - Strips fallback <rp> tags.
+    - For is_reading: extracts <rt> kana from <ruby>.
+    - For is_word: extracts base text/kanji from <ruby>.
+    - For other (e.g. meaning): converts <ol>/<li> to '1. item; 2. item; ...',
+      <ul>/<li> to 'item; item; ...', and <br>/<p> to '; ' or space.
+    - Strips remaining HTML tags.
+    - Unescapes HTML entities.
+    - Collapses consecutive whitespace into single spaces and cleans punctuation.
+    - Gracefully bounds output to max_length.
+    """
+    if not raw:
+        return ""
+    text = str(raw).strip()
+    if not text:
+        return ""
+
+    # Strip fallback <rp> tags
+    text = re.sub(r"(?is)<rp>[^<]*</rp>", "", text)
+
+    # Ruby handling based on role
+    if is_reading:
+        def _replace_ruby_reading(match: re.Match) -> str:
+            inner = match.group(1)
+            rt_matches = re.findall(r"(?is)<rt\b[^>]*>([^<]*)</rt>", inner)
+            if rt_matches:
+                return "".join(rt_matches)
+            return re.sub(r"(?is)<[^>]+>", "", inner)
+
+        text = re.sub(r"(?is)<ruby\b[^>]*>(.*?)</ruby>", _replace_ruby_reading, text)
+    elif is_word:
+        def _replace_ruby_word(match: re.Match) -> str:
+            inner = match.group(1)
+            inner_no_rt = re.sub(r"(?is)<rt\b[^>]*>.*?</rt>", "", inner)
+            return re.sub(r"(?is)<[^>]+>", "", inner_no_rt)
+
+        text = re.sub(r"(?is)<ruby\b[^>]*>(.*?)</ruby>", _replace_ruby_word, text)
+    else:
+        def _replace_ruby_other(match: re.Match) -> str:
+            inner = match.group(1)
+            inner_no_rt = re.sub(r"(?is)<rt\b[^>]*>.*?</rt>", "", inner)
+            return re.sub(r"(?is)<[^>]+>", "", inner_no_rt)
+
+        text = re.sub(r"(?is)<ruby\b[^>]*>(.*?)</ruby>", _replace_ruby_other, text)
+
+    # Strip any dangling <rt> tags
+    text = re.sub(r"(?is)<rt\b[^>]*>.*?</rt>", "", text)
+
+    # Convert ordered lists: <ol><li>item</li></ol> -> 1. item; 2. item; ...
+    def _replace_ol(match: re.Match) -> str:
+        inner = match.group(1)
+        items = re.findall(r"(?is)<li\b[^>]*>(.*?)</li>", inner)
+        if items:
+            formatted = []
+            for idx, item in enumerate(items, 1):
+                clean = re.sub(r"(?is)<[^>]+>", " ", item)
+                clean = " ".join(clean.split()).strip()
+                if clean:
+                    formatted.append(f"{idx}. {clean}")
+            return "; ".join(formatted)
+        return inner
+
+    # Convert unordered lists: <ul><li>item</li></ul> -> item; item; ...
+    def _replace_ul(match: re.Match) -> str:
+        inner = match.group(1)
+        items = re.findall(r"(?is)<li\b[^>]*>(.*?)</li>", inner)
+        if items:
+            formatted = []
+            for item in items:
+                clean = re.sub(r"(?is)<[^>]+>", " ", item)
+                clean = " ".join(clean.split()).strip()
+                if clean:
+                    formatted.append(clean)
+            return "; ".join(formatted)
+        return inner
+
+    text = re.sub(r"(?is)<ol\b[^>]*>(.*?)</ol>", _replace_ol, text)
+    text = re.sub(r"(?is)<ul\b[^>]*>(.*?)</ul\s*>", _replace_ul, text)
+    text = re.sub(r"(?is)<li\b[^>]*>(.*?)</li>", r"; \1", text)
+    text = re.sub(r"(?is)<br\s*/?>", "; ", text)
+    text = re.sub(r"(?is)</p\s*>", "; ", text)
+    text = re.sub(r"(?is)<p\b[^>]*>", " ", text)
+
+    # Strip remaining HTML tags
+    text = re.sub(r"(?is)<[^>]+>", " ", text)
+
+    # Unescape HTML entities
+    text = html.unescape(text).replace("\xa0", " ")
+
+    # Collapse consecutive whitespace into single spaces and clean punctuation
+    text = " ".join(text.split()).strip()
+    text = re.sub(r"\s*;\s*(?:;\s*)+", "; ", text)
+    text = re.sub(r"\s*;\s*", "; ", text)
+    text = text.strip(" ;,\t\r\n")
+
+    if max_length > 0 and len(text) > max_length:
+        text = text[: max_length - 3].rstrip() + "..."
+
+    return text
+
+
 def note_display_triplet(note_obj: Note | None) -> dict[str, str]:
     field_values = note_field_values_as_strings(note_obj)
     if not field_values:
@@ -284,12 +394,16 @@ def note_display_triplet(note_obj: Note | None) -> dict[str, str]:
 
     if not non_empty_values:
         fallback = browse_first_non_empty(field_values)
-        return {"word": fallback, "reading": "", "meaning": ""}
+        return {
+            "word": format_display_summary(fallback, is_word=True),
+            "reading": "",
+            "meaning": "",
+        }
 
     return {
-        "word": non_empty_values[0] if len(non_empty_values) >= 1 else "",
-        "reading": non_empty_values[1] if len(non_empty_values) >= 2 else "",
-        "meaning": non_empty_values[2] if len(non_empty_values) >= 3 else "",
+        "word": format_display_summary(non_empty_values[0], is_word=True) if len(non_empty_values) >= 1 else "",
+        "reading": format_display_summary(non_empty_values[1], is_reading=True) if len(non_empty_values) >= 2 else "",
+        "meaning": format_display_summary(non_empty_values[2], is_reading=False, is_word=False) if len(non_empty_values) >= 3 else "",
     }
 
 

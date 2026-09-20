@@ -129,7 +129,7 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
                 now=datetime(2026, 8, 27, 12, 0, 0)
             )
 
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v4")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v5")
         self.assertEqual(report["template_gates"]["note_types_with_multiple_templates"], 1)
         self.assertIsInstance(report["template_gates"]["note_types_with_multiple_templates_samples"], list)
         self.assertEqual(report["template_gates"]["default_count_anomalies"], 1)
@@ -469,6 +469,30 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
         self.assertNotIn("AS current_user", identity_sql)
         self.assertTrue(result["current_mysql_evidence"])
         self.assertTrue(result["select_only_verified"])
+
+    def test_shadow_compare_refuses_nonrepeatable_mysql_snapshot(self):
+        fake_db = Mock()
+        fake_db.engine.dialect.name = "mysql"
+        identity_result = Mock()
+        identity_result.mappings.return_value.one.return_value = {
+            "connected_principal": "audit@127.0.0.1",
+            "database_name": "flama",
+            "transaction_isolation": "READ-COMMITTED",
+        }
+        grants_result = Mock()
+        grants_result.all.return_value = [
+            ("GRANT SELECT ON `flama`.* TO `audit`@`127.0.0.1`",)
+        ]
+        fake_db.session.execute.side_effect = [identity_result, grants_result]
+
+        with self.app.app_context(), patch(
+            "app.services.study_phase4_preflight_service.db", fake_db
+        ):
+            self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = True
+            with self.assertRaisesRegex(RuntimeError, "REPEATABLE-READ"):
+                collect_connection_safety()
+
+        self.assertEqual(fake_db.session.execute.call_count, 2)
 
     def test_mysql_schema_comparison_normalizes_reflection_only_type_details(self):
         self.assertEqual(

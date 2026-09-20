@@ -4,7 +4,7 @@
 >
 > Priority: P0 data gate
 >
-> Status: TODO
+> Status: **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**
 >
 > Dependency: P4-08; P4-01 current evidence
 >
@@ -38,6 +38,20 @@ Backfill historical `CardProgress` into trusted mirror or audited quarantine whi
 - Run/checkpoint/disposition records.
 - Accounting report and quarantine samples.
 - Crash/resume/concurrency/idempotency tests.
+
+Implementation and verification evidence: [Phase 4 resumable backfill verification](../../architecture/phase-4-resumable-backfill-verification-2026-09-14.md).
+
+## Completion handoff — 2026-09-14
+
+- Added `flask study-progress-backfill`; it is read-only by default and requires explicit `--apply`. The default-off backfill gate admits both modes, while apply additionally requires the mirror-write gate so concurrent writers participate in the same subject fence.
+- Apply freezes repository/database/mapper/state/projection identities plus the CardProgress high-water mark and source count in one versioned run contract. Resume refuses a changed code/schema/settings digest.
+- Source traversal is stable `CardProgress.id` keyset pagination with fixed initial limits of 250 source rows and 100 learner/Note subjects per transaction. No OFFSET path exists.
+- Each batch observes the complete subject authority vector, expires observation-only ORM state, locks every subject in canonical order, locks/reloads contributor rows, and compares generation, mirror revision, source identity/revision/raw hash and full authority vector before finalization.
+- Disposition writes and checkpoint advancement share the mirror transaction. Injected failures at read, lock, upsert, disposition and checkpoint boundaries leave the cursor before the failed batch.
+- `RETRY_PENDING` retains a stale observed source until a fresh CAS succeeds. If reset/delete/rekey removes that row, retained contributor/lifecycle evidence produces a typed tombstone/detach/rekey disposition instead of resurrecting state.
+- Current progress only is in scope. No `ReviewEvent` is replayed, no synthetic Note is created, and neither source Note/Card content nor `CardProgress` is mutated by the backfill.
+- SQLite coverage passes dry-run, keyset resume, idempotent completed replay, fan-in divergence, NULL Card, unclassified/logical-overlay context, every fault boundary, stale revision, concurrent contributor creation and reset.
+- Disposable local MySQL migration `000038 -> 000039` passes crash/resume, completed replay, two-connection Card-create/reset races and deadlock-free generation/vector CAS. No production run, commit, push or merge is part of this handoff.
 
 ## Acceptance
 

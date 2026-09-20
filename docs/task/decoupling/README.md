@@ -1,8 +1,10 @@
 # Study decoupling task backlog
 
-> Status: Phase 0–3 and INT-01 are closed. Phase 4 gates P4-00 through P4-05 are accepted. P4-06 additive schema/codec is implemented and locally verified but intentionally uncommitted; production remains at head `20260913_000038`. P4-07 is next after review/commit; runtime mirror has not started.
+> Status (2026-09-20): Phase 0–3 and INT-01 are closed. Phase 4 P4-10 is locally complete; P4-11/INT-02 remain open. `CardProgress` retains product authority and all shadow flags default off.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
+>
+> Current update (2026-09-20): P4-07 is committed on `develop` at `bd96abc`. P4-08/P4-09/P4-10 remain implemented and intentionally uncommitted; P4-10 is **locally complete**. It reconciles every required writer class in flag-on regression tests, including Connect revlog/legacy import and clone cutover; a 16,424-row disposable MySQL SELECT-only audit passes with zero unexplained differences. P4-11 has a partial local migration/restart/backup/rollback/race rehearsal, but production-matched MySQL and complete fault gates remain open. INT-02 and Phase 4 are **not closed**. Shadow write/backfill/compare flags remain default-off and all product reads still use `CardProgress`. This update supersedes the historical status lines above.
 >
 > Latest P1/P2 closeout: [2026-09-08 execution closeout](./completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) — 8 tasks completed; async admission and v3 issuance remain flag-off by default.
 >
@@ -168,12 +170,12 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | P4-03 | [Algorithm State and availability ADR](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | P4-00 + P4-01 | **COMPLETED / ACCEPTED** — exact compatibility state/raw codecs and fixed-context per-Card availability |
 | P4-04 | [History, provenance and lifecycle ADR](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | P4-01 | **COMPLETED / ACCEPTED** — completeness/provenance, retained facts and reset/delete/rekey fence |
 | P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | P4-01A production gate + P4-02 + P4-03 + P4-04 | **COMPLETED / ACCEPTED** — exact additive tables, constraints, indexes, first-create locking and rollback design |
-| P4-06 | [Additive schema and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | P4-05 | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; models, Alembic `000039`, strict codec/mapper, MySQL rehearsal passed |
-| P4-07 | [Native and session mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | P4-06 | same-transaction mirror for REST, MCP, direct and batch writers |
-| P4-08 | [External and lifecycle mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | P4-07 | import/sync/reset/cutover/delete coverage with explicit dispositions |
-| P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | P4-08 | fenced, idempotent, restartable backfill and quarantine |
-| P4-10 | [Shadow reconciliation](./P4-10_SHADOW_RECONCILIATION.md) | P4-09 | state, due, queue, provenance and writer-coverage comparison report |
-| P4-11 | [MySQL rollout rehearsal](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) | P4-10 | staging/rehearsal evidence, rollback drill and production runbook |
+| P4-06 | [Additive schema and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | P4-05 | **COMPLETED / MERGED**; models, Alembic `000039`, strict codec/mapper, MySQL rehearsal passed |
+| P4-07 | [Native and session mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | P4-06 | **IMPLEMENTED / LOCAL VERIFIED — COMMITTED ON DEVELOP (`bd96abc`)**; same-transaction REST/MCP/session/worker mirror |
+| P4-08 | [External and lifecycle mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | P4-07 | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; import/sync/reset/cutover/delete coverage with explicit dispositions |
+| P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | P4-08 | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; fenced, idempotent, restartable backfill and quarantine |
+| P4-10 | [Shadow reconciliation](./P4-10_SHADOW_RECONCILIATION.md) | P4-09 | **LOCALLY COMPLETE — UNCOMMITTED**; writer matrix, fixed-context parity and 16,424-row MySQL probe pass |
+| P4-11 | [MySQL rollout rehearsal](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) | P4-10 | **IN PROGRESS — LOCAL PARTIAL**; 16,424-row load passes; production-matched schema/version, fault matrix and rollout limits remain open |
 
 ### Cross-phase integration
 

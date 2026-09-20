@@ -177,11 +177,22 @@ def delete_media(asset_id: str):
             field=exc.field,
         )
 
+_NO_CACHE_CONTROL = "no-cache, no-store, must-revalidate, max-age=0"
+_PRAGMA_NO_CACHE = "no-cache"
+
+
+def _media_error(error: str, message: str, *, status: int = 404):
+    response, code = _api_error(error, message, status=status)
+    response.headers["Cache-Control"] = _NO_CACHE_CONTROL
+    response.headers["Pragma"] = _PRAGMA_NO_CACHE
+    return response, code
+
+
 @flashcards_bp.route("/media/proxy/<asset_id>", methods=["GET"])
 def proxy_media(asset_id: str):
     asset = MediaAsset.query.filter(MediaAsset.id == asset_id).first()
     if not asset:
-        return _api_error("FIELD_NOT_FOUND", "Media asset not found.", status=404)
+        return _media_error("FIELD_NOT_FOUND", "Media asset not found.", status=404)
     upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
     try:
         full_path = resolve_safe_storage_path(
@@ -189,9 +200,9 @@ def proxy_media(asset_id: str):
             relative_path=Path(asset.storage_path),
         )
     except RequestValidationError:
-        return _api_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
+        return _media_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
     if not full_path.exists():
-        return _api_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
+        return _media_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
 
     # A short browser TTL keeps deletion/revocation reasonably fresh. Shared
     # caches may retain the immutable-by-ID payload for one day.

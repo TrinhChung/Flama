@@ -25,7 +25,8 @@ RULE_DESCRIPTION = "Cache media proxy assets at edge (bounded audio/image TTL)"
 LEGACY_RULE_DESCRIPTION = "Cache media proxy assets at edge (immutable audio/image)"
 MATCH_EXPRESSION = (
     '(http.host eq "be-flama.stmtp.com"'
-    ' and starts_with(http.request.uri.path, "/media/proxy/"))'
+    ' and (http.request.uri.path eq "/media/proxy"'
+    ' or starts_with(http.request.uri.path, "/media/proxy/")))'
 )
 MEDIA_CACHE_PREFIX = "be-flama.stmtp.com/media/proxy/"
 
@@ -96,6 +97,30 @@ def _build_cache_rule() -> dict:
             "edge_ttl": {
                 "mode": "override_origin",
                 "default": 86400,
+                "status_code_ttl": [
+                    {
+                        "status_code": 200,
+                        "value": 86400,
+                    },
+                    {
+                        "status_code": 206,
+                        "value": 86400,
+                    },
+                    {
+                        "status_code_range": {
+                            "from": 400,
+                            "to": 499,
+                        },
+                        "value": 0,
+                    },
+                    {
+                        "status_code_range": {
+                            "from": 500,
+                            "to": 599,
+                        },
+                        "value": 0,
+                    },
+                ],
             },
             "browser_ttl": {
                 "mode": "override_origin",

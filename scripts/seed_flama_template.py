@@ -22,6 +22,7 @@ from app.services.flashcard_legacy import (
     ensure_legacy_note_type,
     ensure_quiz_note_type,
 )
+from app.services import study_progress_lifecycle_mirror_service
 from app.utils.bootstrap_admin import (
     MissingBootstrapAdminCredentials,
     resolve_bootstrap_admin_credentials,
@@ -151,7 +152,24 @@ def _seed_quiz_dump_for_user(*, user_id: int, note_type_id: str, template_id: st
             if row and row[0]
         ]
         if existing_card_ids:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=existing_card_ids,
+                deleted_note_ids=existing_note_ids,
+            )
             CardProgress.query.filter(CardProgress.card_id.in_(existing_card_ids)).delete(synchronize_session=False)
+        else:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=(),
+                deleted_note_ids=existing_note_ids,
+            )
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_SUBJECT_DELETED",
+            source_path="seed.flama_template_replace",
+            operation_key=f"seed-flama-template-replace:{deck.id}:{dump_file.name}",
+        )
         Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
         Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
 

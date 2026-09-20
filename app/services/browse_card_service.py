@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 from types import SimpleNamespace
 from typing import Any, Mapping
 
@@ -23,6 +24,7 @@ from app.repositories.study_repository import (
     normalized_queue_expr,
     review_due_expr,
 )
+from app.services import study_progress_lifecycle_mirror_service
 from app.validators import (
     RequestValidationError,
     escape_like_pattern,
@@ -809,6 +811,27 @@ def delete_browse_card(
         )
 
     note_id = card_obj.note_id
+    note_will_be_deleted = (
+        Card.query.filter(Card.note_id == note_id).count() == 1
+    )
+    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+        db.session,
+        removed_card_ids=(card_obj.id,),
+        deleted_note_ids=((note_id,) if note_will_be_deleted else ()),
+    )
+    CardProgress.query.filter(CardProgress.card_id == card_obj.id).delete(
+        synchronize_session=False
+    )
+    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+        lifecycle_plan,
+        transition_code=(
+            "TOMBSTONED_SUBJECT_DELETED"
+            if note_will_be_deleted
+            else "DETACHED_CONTRIBUTOR_DELETED"
+        ),
+        source_path="browse.card_delete",
+        operation_key=f"browse-card-delete:{card_obj.id}",
+    )
     db.session.delete(card_obj)
     db.session.flush()
     if Card.query.filter(Card.note_id == note_id).count() == 0:
@@ -874,6 +897,37 @@ def delete_browse_cards_batch(
 
     note_ids = {card_obj.note_id for card_obj in cards_to_delete if card_obj.note_id}
     deleted_count = len(cards_to_delete)
+
+    selected_by_note: dict[str, set[str]] = {}
+    for card_obj in cards_to_delete:
+        selected_by_note.setdefault(str(card_obj.note_id), set()).add(str(card_obj.id))
+    all_cards_by_note: dict[str, set[str]] = {str(note_id): set() for note_id in note_ids}
+    for current in Card.query.filter(Card.note_id.in_(sorted(note_ids))).all():
+        all_cards_by_note[str(current.note_id)].add(str(current.id))
+    deleted_note_ids = {
+        note_id
+        for note_id, selected_ids in selected_by_note.items()
+        if selected_ids == all_cards_by_note.get(note_id, set())
+    }
+    deleted_card_ids = {str(card_obj.id) for card_obj in cards_to_delete}
+    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+        db.session,
+        removed_card_ids=deleted_card_ids,
+        deleted_note_ids=deleted_note_ids,
+    )
+    CardProgress.query.filter(CardProgress.card_id.in_(sorted(deleted_card_ids))).delete(
+        synchronize_session=False
+    )
+    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+        lifecycle_plan,
+        transition_code="DETACHED_CONTRIBUTOR_DELETED",
+        transition_by_note_id={
+            note_id: "TOMBSTONED_SUBJECT_DELETED" for note_id in deleted_note_ids
+        },
+        source_path="browse.card_batch_delete",
+        operation_key="browse-card-batch-delete:"
+        + hashlib.sha256("\n".join(sorted(deleted_card_ids)).encode("utf-8")).hexdigest(),
+    )
 
     for card_obj in cards_to_delete:
         db.session.delete(card_obj)

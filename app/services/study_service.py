@@ -18,6 +18,7 @@ from app.services import (
     deck_working_tree_service,
     flashcards_share_service,
     study_artifact_service,
+    study_progress_shadow_mirror_service,
 )
 from app.services.anki_scheduler import CardState, DeckOptions, _day_index
 from app.services.scheduler_config_service import resolve_deck_options
@@ -466,14 +467,25 @@ def execute_native_review_command(
         raise
 
     try:
-        progress = (
-            CardProgress.query.filter_by(
-                user_id=int(user.id),
-                card_id=str(card.id),
-            )
-            .with_for_update()
-            .first()
+        mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
+            db.session,
+            learner_user_id=int(user.id),
+            cards=(card,),
+            now_utc=reviewed_at,
         )
+        if mirror_plan is not None:
+            progress = study_progress_shadow_mirror_service.locked_progress_map(
+                mirror_plan
+            ).get(str(card.id))
+        else:
+            progress = (
+                CardProgress.query.filter_by(
+                    user_id=int(user.id),
+                    card_id=str(card.id),
+                )
+                .with_for_update()
+                .first()
+            )
         if require_review_state_version:
             requested_version = str(review_state_version or "").strip()
             current_version = study_artifact_service.review_state_version(
@@ -596,6 +608,11 @@ def execute_native_review_command(
                 "card_id": str(card.id),
                 "rating": transition.action.rating,
             },
+        )
+        study_progress_shadow_mirror_service.finalize_native_mirror(
+            mirror_plan,
+            review_events=(review_event,),
+            now_utc=reviewed_at,
         )
         db.session.commit()
         return NativeReviewCommandResult(

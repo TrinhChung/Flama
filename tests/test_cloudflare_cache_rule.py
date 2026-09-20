@@ -23,9 +23,25 @@ class CloudflareCacheRuleTests(unittest.TestCase):
 
         self.assertEqual(parameters["edge_ttl"]["default"], 86400)
         self.assertEqual(
+            parameters["edge_ttl"]["status_code_ttl"],
+            [
+                {"status_code": 200, "value": 86400},
+                {"status_code": 206, "value": 86400},
+                {"status_code_range": {"from": 400, "to": 499}, "value": 0},
+                {"status_code_range": {"from": 500, "to": 599}, "value": 0},
+            ],
+        )
+        self.assertEqual(
             parameters["browser_ttl"],
             {"mode": "override_origin", "default": 3600},
         )
+
+    def test_rule_expression_matches_media_proxy_root_and_subpaths(self):
+        rule = cache_rule_script._build_cache_rule()
+        expression = rule["expression"]
+        self.assertIn('http.request.uri.path eq "/media/proxy"', expression)
+        self.assertIn('starts_with(http.request.uri.path, "/media/proxy/")', expression)
+        self.assertEqual(expression, cache_rule_script.MATCH_EXPRESSION)
 
     def test_existing_rule_is_reconciled_with_patch(self):
         calls: list[tuple[str, str, dict | None]] = []
