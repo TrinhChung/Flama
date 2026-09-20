@@ -14,6 +14,7 @@ STORAGE_CODEC = "flama-canonical-state-json.v1"
 MAPPER_VERSION = "card-progress-legacy-anki.v1"
 PROJECTION_VERSION = "availability-anchor.v1"
 HISTORY_SCHEMA_VERSION = "study-progress-history-fact.v1"
+LIFECYCLE_EVIDENCE_SCHEMA_VERSION = "study-progress-lifecycle-evidence.v1"
 ALGORITHM_KEY = "legacy-anki"
 ALGORITHM_VERSION = "1.0.0"
 MAX_CANONICAL_PAYLOAD_BYTES = 16_384

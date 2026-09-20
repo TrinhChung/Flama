@@ -4,7 +4,7 @@
 >
 > Priority: P0 deployment gate
 >
-> Status: TODO
+> Status: IN PROGRESS — local large-cohort and isolated VPS small-cohort rehearsals pass; representative production-matched gate open
 >
 > Dependency: P4-10
 >
@@ -52,6 +52,46 @@ Chứng minh migration, flags-off restart, atomic mirror, bounded backfill, reco
 ## Verification
 
 Run the full MySQL rehearsal matrix plus relevant modular backend suites. Store no credentials or unredacted user data in Git.
+
+## Local progress — 2026-09-20
+
+The [local evidence report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md)
+records a migration-only disposable path from a reconstructed local head-38
+core schema, migration round-trip, checksum-equal synthetic backup/restore,
+flags-off `wsgi.py` restarts before and after backfill, a bounded backfill,
+indexed lookup plans and a full read-only audit with a SELECT-only principal.
+The 16,424-row synthetic local run completed in 165 backfill batches with
+zero unexplained reconciliation differences. Its measured times and indexed
+query plans are in the report. The local server is MySQL 8.0.40 with
+`utf8mb4_0900_ai_ci`; the production preflight recorded MySQL 8.0.46 with
+`utf8mb4_unicode_ci`. This is **not** an environment match or an approved
+production apply. The complete race/fault matrix, production-shaped
+multi-user/overlay cohort, metadata-lock measurement, operational batch/abort
+limits and signed rehearsal result remain open.
+
+## Isolated VPS progress — 2026-09-20
+
+With explicit approval, an isolated database on the production VPS ran the
+migration 38→39 round-trip, synthetic backup/restore checksum, flags-off
+`wsgi.py` restarts, backfill, SELECT-only two-run reconciliation, full audit and
+indexed lookup checks on MySQL 8.0.46. The database default matched `flama`'s
+`utf8mb4_unicode_ci` and SQL mode. The live `flama` database was read-only:
+its observed Alembic head was already `20260913_000039` before and after the
+probe. Only DDL, not application rows, was copied to reconstruct a head-38
+core schema. The disposable databases and principal were removed and their
+absence was verified. All checks passed for **12 synthetic progress rows**;
+exact timings and limitations are in the [evidence report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md#isolated-vps-mysql-rehearsal).
+Four further version/collation-matched disposable probes passed: shadow
+schema/codec/duplicate-key savepoint, resumable backfill with create/reset/
+delete races, native fan-in/fault/lock timeout, and external lifecycle with
+native–external race. Each used synthetic model-generated core tables, not a
+production data copy. Post-check again found no temporary database/principal.
+
+This does **not** close P4-11. The 16,424-row local cohort ran on MySQL 8.0.40;
+the VPS cohort is small and one-user, with tunnel-dominated timings. A
+representative, version-matched cohort, the remaining fault/race matrix,
+metadata-lock/load measurements, release limits and reviewed go/no-go remain
+open. No production application write or authority cutover was performed.
 
 ## Rollback
 

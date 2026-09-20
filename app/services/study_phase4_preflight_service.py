@@ -15,6 +15,7 @@ from typing import Any, Iterable
 
 import sqlalchemy as sa
 from sqlalchemy.orm import aliased
+from flask import current_app, has_app_context
 
 from app.services import study_artifact_service
 from models import db
@@ -276,7 +277,8 @@ def collect_connection_safety() -> dict[str, Any]:
             "SELECT CURRENT_USER() AS connected_principal, DATABASE() AS database_name, "
             "@@version AS server_version, @@sql_mode AS sql_mode, "
             "@@character_set_database AS database_charset, "
-            "@@collation_database AS database_collation, @@time_zone AS time_zone"
+            "@@collation_database AS database_collation, @@time_zone AS time_zone, "
+            "@@transaction_isolation AS transaction_isolation"
         )
     ).mappings().one()
     grant_rows = db.session.execute(sa.text("SHOW GRANTS FOR CURRENT_USER")).all()
@@ -286,6 +288,16 @@ def collect_connection_safety() -> dict[str, Any]:
         raise RuntimeError(
             "Audit refused before application-table inspection: the MySQL principal "
             "is not verified SELECT-only."
+        )
+    isolation = str(identity.get("transaction_isolation") or "").upper()
+    if (
+        has_app_context()
+        and current_app.config.get("STUDY_PROGRESS_SHADOW_COMPARE_ENABLED", False)
+        and isolation != "REPEATABLE-READ"
+    ):
+        raise RuntimeError(
+            "Audit refused before application-table inspection: shadow comparison "
+            "requires a REPEATABLE-READ MySQL snapshot."
         )
 
     principal = str(identity.get("connected_principal") or "")
@@ -306,6 +318,7 @@ def collect_connection_safety() -> dict[str, Any]:
         "database_charset": str(identity.get("database_charset") or ""),
         "database_collation": str(identity.get("database_collation") or ""),
         "time_zone": str(identity.get("time_zone") or ""),
+        "transaction_isolation": isolation,
         **grant_analysis,
     }
 

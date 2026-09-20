@@ -1,10 +1,10 @@
 # Kế hoạch triển khai Phase 4 — learner/Note progress shadow
 
-> Status: P4-00 through P4-05 COMPLETED/ACCEPTED; P4-06 is IMPLEMENTED / LOCAL VERIFIED and awaits user commit; P4-07 is next; runtime mirror chưa bắt đầu
+> Status (2026-09-20): P4-10 locally complete; P4-11 and INT-02 remain open. No shadow read authority or production rollout has been approved.
 >
 > Planning date: 2026-09-10
 >
-> Current update (2026-09-13): P4-06 is completed/merged. P4-07 is implemented and locally verified but intentionally uncommitted; P4-08 is next. This update supersedes the historical status line above.
+> Current update (2026-09-20): P4-07 is committed on `develop` at `bd96abc`. P4-08/P4-09/P4-10 remain intentionally uncommitted; P4-10 is locally complete. Writer-by-writer reconciliation covers Connect revlog/legacy import and clone cutover; a 16,424-row disposable MySQL SELECT-only audit passes with zero unexplained differences. P4-11 has a local migration/backup/restart/rollback and representative-count rehearsal, but production-matched environment/fault gates remain open. INT-02 has not closed; `CardProgress` remains authoritative and all Phase 4 flags remain default-off. See the [2026-09-20 evidence report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md). This update supersedes the historical status line above.
 >
 > Repository baseline: `develop` at `880ff1b` (`phase3`)
 >
@@ -146,12 +146,12 @@ Production applied both P4-01A revisions. The refreshed two-run P4-01 bundle use
 | P4-03 | [Algorithm State and availability contract](./P4-03_ALGORITHM_STATE_AVAILABILITY.md) | **COMPLETED / ACCEPTED** — state/codec/query projection ADR | exact decoder + due/order parity definition |
 | P4-04 | [History, provenance and lifecycle contract](./P4-04_HISTORY_PROVENANCE_LIFECYCLE.md) | **COMPLETED / ACCEPTED** — initializer-input and lifecycle ADR | every lineage/lifecycle case has disposition |
 | P4-05 | [Physical shadow schema design](./P4-05_PHYSICAL_SHADOW_SCHEMA.md) | **COMPLETED / ACCEPTED** — exact MySQL schema and migration specification | alternatives/trade-offs/constraints approved |
-| P4-06 | [Additive migration and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; models, Alembic `000039`, exact codecs, flags off | disposable MySQL round-trip + raw parity passed |
-| P4-07 | [Native/session/worker transactional mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | shared no-commit coordinator for native writers | atomicity, locks, receipt/retry parity |
-| P4-08 | [External and lifecycle transactional mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | sync/import/reset/cutover/delete coverage | savepoint/conflict/lifecycle parity |
-| P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | dry-run-first CLI, keyset batches, checkpoints | crash/resume/idempotency/stale-fence pass |
-| P4-10 | [Shadow comparison and audit](./P4-10_SHADOW_RECONCILIATION.md) | full accounting and context-fixed parity report | zero unexplained difference |
-| P4-11 | [Disposable MySQL rollout rehearsal](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) | migration/load/race/restart/rollback evidence | rollout candidate, flags still off by default |
+| P4-06 | [Additive migration and lossless mapper](./P4-06_ADDITIVE_SCHEMA_AND_MAPPER.md) | **COMPLETED / MERGED**; models, Alembic `000039`, exact codecs, flags off | disposable MySQL round-trip + raw parity passed |
+| P4-07 | [Native/session/worker transactional mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | **IMPLEMENTED / LOCAL VERIFIED — COMMITTED ON DEVELOP (`bd96abc`)** | atomicity, locks, receipt/retry parity passed |
+| P4-08 | [External and lifecycle transactional mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED** | 755 backend tests + disposable MySQL savepoint/reset/delete/race passed |
+| P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; dry-run-first CLI, keyset batches, checkpoints | SQLite fault/race coverage and disposable MySQL crash/resume/CAS pass |
+| P4-10 | [Shadow comparison and audit](./P4-10_SHADOW_RECONCILIATION.md) | **LOCALLY COMPLETE — UNCOMMITTED**; writer matrix, context-fixed parity and 16,424-row MySQL probe pass | production-matched rollout proof belongs to P4-11 |
+| P4-11 | [Disposable MySQL rollout rehearsal](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) | **IN PROGRESS — LOCAL PARTIAL**; 16,424-row load, migration/backup/restart/rollback subset passes | production-matched version/schema and complete fault matrix remain open |
 | INT-02 | [Phase 4 integration and closeout](./INT-02_PHASE_4_INTEGRATION.md) | combined gate, tracker and Phase 5 recommendation | Phase 4 complete; no authority cutover |
 
 ## 9. Implementation waves

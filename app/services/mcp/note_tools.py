@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 from typing import Any
 
-from app.services import note_sync_service
+from app.services import note_sync_service, study_progress_lifecycle_mirror_service
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.services.mcp.base import (
     _resolve_deck_for_user,
@@ -560,8 +561,19 @@ def delete_note(*, user_id: int, note_id: str, confirm: bool = False) -> dict[st
         ],
     )
 
+    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+        db.session,
+        removed_card_ids=card_ids,
+        deleted_note_ids=(note.id,),
+    )
     if card_ids:
         CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(synchronize_session=False)
+    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+        lifecycle_plan,
+        transition_code="TOMBSTONED_SUBJECT_DELETED",
+        source_path="mcp.note_delete",
+        operation_key=f"mcp-note-delete:{note.id}",
+    )
 
     db.session.delete(note)
     db.session.commit()
@@ -773,8 +785,20 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
         ],
     )
 
+    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+        db.session,
+        removed_card_ids=all_card_ids,
+        deleted_note_ids=found_note_ids,
+    )
     if all_card_ids:
         CardProgress.query.filter(CardProgress.card_id.in_(all_card_ids)).delete(synchronize_session=False)
+    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+        lifecycle_plan,
+        transition_code="TOMBSTONED_SUBJECT_DELETED",
+        source_path="mcp.note_batch_delete",
+        operation_key="mcp-note-batch-delete:"
+        + hashlib.sha256("\n".join(sorted(found_note_ids)).encode("utf-8")).hexdigest(),
+    )
 
     for note in notes:
         db.session.delete(note)

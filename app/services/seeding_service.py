@@ -29,6 +29,7 @@ from app.services import (
     flashcard_content_service,
     flashcards_share,
     flashcards_share_service,
+    study_progress_lifecycle_mirror_service,
     study_service,
 )
 import click
@@ -720,9 +721,26 @@ def _seed_rows_to_deck(
                 if row and row[0]
             ]
         if existing_card_ids:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=existing_card_ids,
+                deleted_note_ids=existing_note_ids,
+            )
             CardProgress.query.filter(
                 CardProgress.card_id.in_(existing_card_ids)
             ).delete(synchronize_session=False)
+        else:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=(),
+                deleted_note_ids=existing_note_ids,
+            )
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_SUBJECT_DELETED",
+            source_path="seed.deck_replace",
+            operation_key=f"seed-deck-replace:{deck.id}:{source_label}",
+        )
         if existing_note_ids:
             Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
             Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
@@ -1281,9 +1299,26 @@ def _seed_quiz_dump_for_user(
             if row and row[0]
         ]
         if existing_card_ids:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=existing_card_ids,
+                deleted_note_ids=existing_note_ids,
+            )
             CardProgress.query.filter(
                 CardProgress.card_id.in_(existing_card_ids)
             ).delete(synchronize_session=False)
+        else:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=(),
+                deleted_note_ids=existing_note_ids,
+            )
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_SUBJECT_DELETED",
+            source_path="seed.quiz_replace",
+            operation_key=f"seed-quiz-replace:{quiz_deck.id}:{dump_filename}",
+        )
         Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
         Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
         stats.replaced_files += 1

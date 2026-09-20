@@ -42,10 +42,12 @@ from models import db
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_state import StudyProgressState
+from models.study_progress_subject import StudyProgressSubject
 from models.user import User
 
 
 PROBE_NAME_PATTERN = re.compile(r"^flama_p4_shadow_probe_[a-z0-9_]+$")
+SCHEMA_IDENTIFIER = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def _connection_settings() -> dict[str, object]:
@@ -61,6 +63,24 @@ def _connection_settings() -> dict[str, object]:
         "charset": "utf8mb4",
         "autocommit": True,
     }
+
+
+def _source_database_collation(admin: pymysql.connections.Connection) -> str:
+    """Match the configured schema default without reading application rows."""
+
+    source_database = os.getenv("DB_NAME", "").strip()
+    if not SCHEMA_IDENTIFIER.fullmatch(source_database):
+        raise RuntimeError("A safe DB_NAME is required for the disposable MySQL probe.")
+    with admin.cursor() as cursor:
+        cursor.execute(
+            "SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME "
+            "FROM information_schema.SCHEMATA WHERE SCHEMA_NAME=%s",
+            (source_database,),
+        )
+        row = cursor.fetchone()
+    if row is None or row[0] != "utf8mb4" or not SCHEMA_IDENTIFIER.fullmatch(str(row[1])):
+        raise RuntimeError("The configured schema must use a safe utf8mb4 collation.")
+    return str(row[1])
 
 
 def _database_uri(settings: dict[str, object], database_name: str) -> str:
@@ -115,9 +135,11 @@ def run_probe() -> dict[str, object]:
 
     admin = pymysql.connect(**settings)
     try:
+        source_collation = _source_database_collation(admin)
         with admin.cursor() as cursor:
             cursor.execute(
-                f"CREATE DATABASE `{database_name}` CHARACTER SET utf8mb4"
+                f"CREATE DATABASE `{database_name}` CHARACTER SET utf8mb4 "
+                f"COLLATE {source_collation}"
             )
 
         app = create_app(
@@ -222,6 +244,23 @@ def run_probe() -> dict[str, object]:
             )
             if first.id != second.id:
                 raise AssertionError("First-create subject identity is not stable.")
+            try:
+                with db.session.begin_nested():
+                    db.session.add(
+                        StudyProgressSubject(
+                            learner_user_id=user.id,
+                            logical_note_key=b"probe-note",
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
+                    db.session.flush()
+            except sa.exc.IntegrityError:
+                pass
+            else:
+                raise AssertionError("Duplicate learner/Note subject key was accepted.")
+            if db.session.get(StudyProgressSubject, first.id) is None:
+                raise AssertionError("Duplicate-key savepoint erased the existing subject.")
 
             source = _fixture()
             source.user_id = user.id
@@ -367,6 +406,7 @@ def run_probe() -> dict[str, object]:
                 "live_fk_collations": live_fk_collations,
                 "schema_contract_issues": issues,
                 "first_create_subject_id_stable": True,
+                "duplicate_subject_unique_savepoint_verified": True,
                 "raw_codec_round_trip": True,
                 "datetime_microseconds_round_trip": True,
                 "empty_only_downgrade_rehearsed": True,

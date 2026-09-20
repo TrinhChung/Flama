@@ -4,7 +4,7 @@
 >
 > Priority: P0 final gate
 >
-> Status: TODO
+> Status: IN PROGRESS — local integration subset passes; P4-11 final gate open
 >
 > Dependency: P4-00 through P4-11
 >
@@ -66,6 +66,29 @@ Run full suite only at this pre-release closeout gate after narrower suites pass
 - Updated canonical tracker and completed task index.
 - Quarantine/known limitation inventory.
 - Phase 5 recommendation and required separate approvals.
+
+## Progress — 2026-09-20
+
+The [rehearsal report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md)
+records 948 passing modular backend tests, 179 passing Study frontend tests,
+passing typecheck/lint (lint has existing warnings), default-off flag/static
+authority checks and a 16,424-row disposable MySQL reconciliation with zero
+unexplained differences. Local migration/restart/backup/rollback and several
+two-connection probes pass. A subsequent isolated VPS MySQL 8.0.46 run passed
+migration round-trip, flags-off restart/rollback, checksum-equal synthetic
+restore, SELECT-only reconciliation and full audit on 12 synthetic rows with
+the production database collation and SQL mode; the application database
+remained read-only and at head 39. Four further VPS disposable probes passed
+schema/codec, backfill resume/create/reset/delete races, native fan-in/fault/
+lock timeout, and external lifecycle/native–external race cases. These results
+do **not** close INT-02:
+P4-11 still lacks a representative production-version multi-user/overlay
+load/traffic rehearsal and the complete failure matrix. The final
+`--changed`/`--all` pre-release gate is deferred
+until those prerequisites are satisfied. No Phase 5 authority cutover is
+authorized. Current Phase 5 recommendation: **NO-GO** pending P4-11 and this
+final integration gate; this is an evidence status, not a claim that the
+derived shadow is product authority.
 
 ## Rollback
 

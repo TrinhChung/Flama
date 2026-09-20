@@ -16,7 +16,7 @@ import json
 from typing import Any, Iterable, Mapping, Sequence
 
 from flask import current_app
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
 from app.repositories.study_progress_shadow_repository import (
@@ -25,8 +25,10 @@ from app.repositories.study_progress_shadow_repository import (
     load_current_contributors,
 )
 from app.services.study_progress_contract import (
+    HISTORY_COMPLETENESS_CODES,
     HISTORY_SCHEMA_VERSION,
     MAPPER_VERSION,
+    PROVENANCE_CODES,
     RAW_SCHEMA_VERSION,
     STORAGE_CODEC,
 )
@@ -47,6 +49,9 @@ from app.validators.review_event import (
 )
 from models.card import Card
 from models.card_progress import CardProgress
+from models.connect_source_card_ref import ConnectSourceCardRef
+from models.connect_source_note_ref import ConnectSourceNoteRef
+from models.connect_review_event_ref import ConnectReviewEventRef
 from models.review_event import ReviewEvent
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
@@ -116,6 +121,25 @@ class NativeMirrorHistoryEvent:
     review_event: ReviewEvent
     before_state_hash: str | bytes | None = None
     after_state_hash: str | bytes | None = None
+
+
+@dataclass(frozen=True)
+class ExternalProgressMirrorContext:
+    """Applied external snapshot context for one authoritative CardProgress."""
+
+    provenance_code: str
+    history_completeness_code: str
+    source_card_ref: ConnectSourceCardRef | None = None
+    source_note_ref: ConnectSourceNoteRef | None = None
+
+
+@dataclass(frozen=True)
+class ExternalMirrorHistoryEvent:
+    """One imported revlog fact; never a current-state mutation."""
+
+    review_event: ReviewEvent
+    source_ref: ConnectReviewEventRef
+    import_state: str
 
 
 @dataclass(frozen=True)
@@ -284,6 +308,123 @@ def prepare_native_mirror(
     )
 
 
+def prepare_mirror_scopes(
+    session: Session,
+    *,
+    subject_keys: Iterable[tuple[int, str]],
+    now_utc: datetime | None = None,
+) -> tuple[NativeMirrorPlan, ...]:
+    """Prepare multiple learner/Note scopes under one global lock ordering.
+
+    Lifecycle and rekey writers discover subject identities with non-locking
+    reads, then call this function once.  All subject envelopes are locked
+    before any CardProgress row, avoiding the per-subject reverse edge that
+    would result from repeatedly calling ``prepare_native_mirror``.
+    """
+
+    if not shadow_writes_enabled():
+        return ()
+    prepared_at = _utc_naive(now_utc)
+    keys = sorted(
+        {
+            (int(learner_user_id), str(note_id))
+            for learner_user_id, note_id in subject_keys
+            if str(note_id)
+        },
+        key=lambda item: (item[0], item[1].encode("utf-8")),
+    )
+    if not keys:
+        return ()
+
+    subjects = lock_subjects_in_canonical_order(
+        session,
+        (
+            (learner_user_id, note_id, note_id)
+            for learner_user_id, note_id in keys
+        ),
+        now_utc=prepared_at,
+    )
+    subject_by_key = {
+        (int(row.learner_user_id), bytes(row.logical_note_key)): row
+        for row in subjects
+    }
+    note_ids = sorted({note_id for _learner_id, note_id in keys})
+    cards = tuple(
+        session.execute(
+            select(Card)
+            .where(Card.note_id.in_(note_ids))
+            .order_by(Card.note_id.asc(), Card.id.asc())
+        ).scalars()
+    )
+    cards_by_note: dict[str, dict[str, Card]] = {note_id: {} for note_id in note_ids}
+    card_by_id: dict[str, Card] = {}
+    for card in cards:
+        cards_by_note[str(card.note_id)][str(card.id)] = card
+        card_by_id[str(card.id)] = card
+
+    progress_rows = tuple(
+        session.execute(
+            select(CardProgress)
+            .join(Card, CardProgress.card_id == Card.id)
+            .where(tuple_(CardProgress.user_id, Card.note_id).in_(keys))
+            .order_by(CardProgress.card_id.asc(), CardProgress.id.asc())
+            .with_for_update()
+        ).scalars()
+    )
+    progress_by_subject: dict[tuple[int, str], list[CardProgress]] = {
+        key: [] for key in keys
+    }
+    for progress in progress_rows:
+        card_obj = card_by_id.get(str(progress.card_id))
+        if card_obj is None:
+            raise _fail("Locked lifecycle CardProgress has no current Card.")
+        progress_by_subject[(int(progress.user_id), str(card_obj.note_id))].append(
+            progress
+        )
+
+    plans: list[NativeMirrorPlan] = []
+    for learner_id, note_id in keys:
+        subject = subject_by_key.get((learner_id, note_id.encode("utf-8")))
+        if subject is None:
+            raise _fail("Multi-scope mirror did not return a requested subject lock.")
+        current_contributors = load_current_contributors(
+            session,
+            subject_id=int(subject.id),
+            subject_generation=int(subject.subject_generation),
+            for_update=True,
+        )
+        rows = progress_by_subject[(learner_id, note_id)]
+        authority_ids = frozenset(int(row.id) for row in rows)
+        shadow_ids = frozenset(
+            int(row.live_card_progress_id)
+            for row in current_contributors
+            if row.live_card_progress_id is not None
+        )
+        plans.append(
+            NativeMirrorPlan(
+                session=session,
+                learner_user_id=learner_id,
+                prepared_at=prepared_at,
+                subjects_by_note_id={
+                    note_id: _PreparedSubject(
+                        note_id=note_id,
+                        subject=subject,
+                        expected_generation=int(subject.subject_generation),
+                        expected_mirror_revision=int(subject.mirror_revision),
+                        shadow_progress_ids=shadow_ids,
+                        authority_progress_ids=authority_ids,
+                    )
+                },
+                cards_by_id=dict(cards_by_note[note_id]),
+                locked_progress_by_card_id={
+                    str(row.card_id): row for row in rows if row.card_id is not None
+                },
+            )
+        )
+    _metric("prepare_lifecycle")
+    return tuple(plans)
+
+
 def locked_progress_map(plan: NativeMirrorPlan | None) -> dict[str, CardProgress]:
     """Expose the progress locks acquired by prepare to the transaction owner."""
 
@@ -433,12 +574,53 @@ def _lineage_material(row: StudyProgressLineageRef) -> dict[str, Any]:
     }
 
 
+def _external_lineage_material(
+    context: ExternalProgressMirrorContext | None,
+) -> tuple[dict[str, Any], ...]:
+    if context is None:
+        return ()
+    rows: list[dict[str, Any]] = []
+    card_ref = context.source_card_ref
+    if card_ref is not None:
+        rows.append(
+            {
+                "ref_kind": "CONNECT_SOURCE_CARD",
+                "source_row_key": str(card_ref.id),
+                "source_key": str(card_ref.source_key),
+                "external_card_id": str(card_ref.external_card_id),
+                "external_note_id": str(card_ref.external_note_id),
+                "source_snapshot_hash": _decode_digest(card_ref.snapshot_hash),
+                "source_payload_hash": None,
+                "ref_status": "VALID",
+                "occurred_at": card_ref.updated_at,
+            }
+        )
+    note_ref = context.source_note_ref
+    if note_ref is not None:
+        rows.append(
+            {
+                "ref_kind": "CONNECT_SOURCE_NOTE",
+                "source_row_key": str(note_ref.id),
+                "source_key": str(note_ref.source_key),
+                "external_card_id": None,
+                "external_note_id": str(note_ref.external_note_id),
+                "source_snapshot_hash": None,
+                "source_payload_hash": _decode_digest(note_ref.content_hash),
+                "ref_status": "VALID",
+                "occurred_at": note_ref.updated_at,
+            }
+        )
+    return tuple(rows)
+
+
 def _sync_pointer_lineage(
     session: Session,
     *,
     contributor: StudyProgressContributor,
     generation: int,
     pointer: dict[str, Any],
+    external_context: ExternalProgressMirrorContext | None = None,
+    inherited_contributor: StudyProgressContributor | None = None,
     now_utc: datetime,
 ) -> bytes:
     existing = tuple(
@@ -457,6 +639,120 @@ def _sync_pointer_lineage(
     external_rows = [row for row in existing if row.ref_kind != "LAST_REVIEW_EVENT"]
     for row in external_rows:
         row.subject_generation = generation
+
+    if (
+        inherited_contributor is not None
+        and inherited_contributor.id != contributor.id
+    ):
+        inherited_external_rows = tuple(
+            session.execute(
+                select(StudyProgressLineageRef)
+                .where(
+                    StudyProgressLineageRef.contributor_id
+                    == inherited_contributor.id,
+                    StudyProgressLineageRef.ref_kind != "LAST_REVIEW_EVENT",
+                )
+                .order_by(
+                    StudyProgressLineageRef.ref_kind.asc(),
+                    StudyProgressLineageRef.source_row_key.asc(),
+                    StudyProgressLineageRef.id.asc(),
+                )
+                .with_for_update()
+            ).scalars()
+        )
+        for inherited_row in inherited_external_rows:
+            copied = StudyProgressLineageRef(
+                contributor_id=int(contributor.id),
+                subject_generation=generation,
+                ref_kind=str(inherited_row.ref_kind),
+                source_row_key=bytes(inherited_row.source_row_key),
+                source_key=(
+                    bytes(inherited_row.source_key)
+                    if inherited_row.source_key is not None
+                    else None
+                ),
+                external_card_id=(
+                    bytes(inherited_row.external_card_id)
+                    if inherited_row.external_card_id is not None
+                    else None
+                ),
+                external_note_id=(
+                    bytes(inherited_row.external_note_id)
+                    if inherited_row.external_note_id is not None
+                    else None
+                ),
+                source_snapshot_hash=(
+                    bytes(inherited_row.source_snapshot_hash)
+                    if inherited_row.source_snapshot_hash is not None
+                    else None
+                ),
+                source_payload_hash=(
+                    bytes(inherited_row.source_payload_hash)
+                    if inherited_row.source_payload_hash is not None
+                    else None
+                ),
+                ref_status=str(inherited_row.ref_status),
+                occurred_at=inherited_row.occurred_at,
+                ingested_at=now_utc,
+            )
+            session.add(copied)
+            external_rows.append(copied)
+
+    for supplied in _external_lineage_material(external_context):
+        encoded_row_key = encode_identity(
+            str(supplied["source_row_key"]),
+            max_bytes=144,
+            field_name="source_row_key",
+        )
+        selected = next(
+            (
+                row
+                for row in external_rows
+                if row.ref_kind == supplied["ref_kind"]
+                and bytes(row.source_row_key) == encoded_row_key
+            ),
+            None,
+        )
+        if selected is None:
+            selected = StudyProgressLineageRef(
+                contributor_id=int(contributor.id),
+                subject_generation=generation,
+                ref_kind=str(supplied["ref_kind"]),
+                source_row_key=encoded_row_key,
+                ref_status=str(supplied["ref_status"]),
+                ingested_at=now_utc,
+            )
+            session.add(selected)
+            external_rows.append(selected)
+        selected.subject_generation = generation
+        selected.source_key = encode_identity(
+            str(supplied["source_key"]),
+            max_bytes=1020,
+            field_name="source_key",
+        )
+        selected.external_card_id = (
+            encode_identity(
+                str(supplied["external_card_id"]),
+                max_bytes=512,
+                field_name="external_card_id",
+            )
+            if supplied["external_card_id"] is not None
+            else None
+        )
+        selected.external_note_id = (
+            encode_identity(
+                str(supplied["external_note_id"]),
+                max_bytes=512,
+                field_name="external_note_id",
+            )
+            if supplied["external_note_id"] is not None
+            else None
+        )
+        selected.source_snapshot_hash = supplied["source_snapshot_hash"]
+        selected.source_payload_hash = supplied["source_payload_hash"]
+        selected.ref_status = str(supplied["ref_status"])
+        selected.occurred_at = supplied["occurred_at"]
+        selected.ingested_at = now_utc
 
     desired_key = pointer.get("source_row_key")
     if desired_key is None:
@@ -725,6 +1021,8 @@ def finalize_native_mirror(
     plan: NativeMirrorPlan | None,
     *,
     review_events: Sequence[ReviewEvent | NativeMirrorHistoryEvent],
+    external_contexts: Mapping[str, ExternalProgressMirrorContext] | None = None,
+    force_generation_advance: bool = False,
     now_utc: datetime | None = None,
 ) -> NativeMirrorResult | None:
     """Finalize each prepared learner/Note exactly once without committing."""
@@ -736,6 +1034,10 @@ def finalize_native_mirror(
     plan.finalized = True
     session = plan.session
     finalized_at = _utc_naive(now_utc)
+    context_by_card = {
+        str(card_id): context
+        for card_id, context in (external_contexts or {}).items()
+    }
     try:
         # Flush both event ids and final CardProgress pointer/timestamp values.
         session.flush()
@@ -811,7 +1113,7 @@ def finalize_native_mirror(
                 key=lambda row: (str(row.card_id).encode("utf-8"), int(row.id)),
             )
             final_ids = frozenset(int(row.id) for row in rows)
-            if (
+            if force_generation_advance or (
                 prepared.expected_mirror_revision > 0
                 and prepared.shadow_progress_ids != final_ids
             ):
@@ -837,12 +1139,48 @@ def finalize_native_mirror(
                 for row in prior_contributors
                 if row.live_card_progress_id is not None
             }
+            active_prior_contributors = tuple(
+                row
+                for row in prior_contributors
+                if row.contributor_status == "ACTIVE"
+                and int(row.subject_generation) == prepared.expected_generation
+            )
+            active_without_authority = tuple(
+                row
+                for row in active_prior_contributors
+                if row.live_card_progress_id is None
+            )
+            if active_without_authority and generation == prepared.expected_generation:
+                raise _fail(
+                    "Native mirror found active contributors without live authority; "
+                    "lifecycle projection must classify them first."
+                )
             stale_active = set(prior_by_progress_id) - set(final_ids)
             if stale_active:
                 raise _fail(
                     "Native mirror found stale active contributors; lifecycle projection "
                     "must run before an authoritative removal."
                 )
+
+            # A generation is an immutable topology/lifecycle epoch.  When it
+            # advances, retain the old contributor rows for history facts and
+            # release their live-progress identities before materializing the
+            # new generation.  Mutating an old contributor's generation would
+            # make already-retained facts point at evidence from another epoch.
+            inherited_by_progress_id = dict(prior_by_progress_id)
+            if generation != prepared.expected_generation:
+                for contributor in active_prior_contributors:
+                    contributor.live_card_progress_id = None
+                    contributor.contributor_status = "DETACHED"
+                    contributor.detached_at = finalized_at
+                    contributor.updated_at = finalized_at
+                    availability = session.get(
+                        StudyProgressAvailability, int(contributor.id)
+                    )
+                    if availability is not None:
+                        session.delete(availability)
+                session.flush()
+                prior_by_progress_id = {}
 
             mapped_by_progress_id: dict[int, MappedCardProgress | MappingFailure] = {}
             pointer_by_progress_id: dict[int, tuple[str, dict[str, Any]]] = {}
@@ -868,20 +1206,44 @@ def finalize_native_mirror(
                     progress, event_by_id
                 )
                 prior = prior_by_progress_id.get(progress_id)
+                inherited = inherited_by_progress_id.get(progress_id)
                 new_event = new_event_by_card.get(str(progress.card_id))
-                if new_event is not None:
+                external_context = context_by_card.get(str(progress.card_id))
+                if external_context is not None:
+                    provenance_code = external_context.provenance_code
+                elif new_event is not None:
                     provenance_code, _provenance, _runtime = _event_provenance(new_event)
-                elif prior is not None:
-                    provenance_code = str(prior.current_provenance_code)
+                elif inherited is not None:
+                    provenance_code = str(inherited.current_provenance_code)
                 else:
                     provenance_code = "UNKNOWN_LEGACY"
                 provenance_by_progress_id[progress_id] = provenance_code
 
                 is_new_authority = progress_id not in prepared.authority_progress_ids
-                if is_new_authority:
+                if external_context is not None:
+                    requested = external_context.history_completeness_code
+                    if (
+                        inherited is not None
+                        and str(inherited.history_completeness_code)
+                        not in {"HISTORY_UNKNOWN", "HISTORY_SNAPSHOT_ONLY"}
+                        and requested == "HISTORY_SNAPSHOT_ONLY"
+                    ):
+                        completeness = "HISTORY_MIXED_PARTIAL"
+                    else:
+                        completeness = requested
+                elif is_new_authority:
                     completeness = "HISTORY_NATIVE_COMPLETE"
-                elif prior is not None and generation == prepared.expected_generation:
-                    completeness = str(prior.history_completeness_code)
+                elif new_event is not None and inherited is not None:
+                    inherited_completeness = str(
+                        inherited.history_completeness_code
+                    )
+                    completeness = (
+                        "HISTORY_NATIVE_COMPLETE"
+                        if inherited_completeness == "HISTORY_NATIVE_COMPLETE"
+                        else "HISTORY_MIXED_PARTIAL"
+                    )
+                elif inherited is not None:
+                    completeness = str(inherited.history_completeness_code)
                 else:
                     completeness = "HISTORY_UNKNOWN"
                 completeness_by_progress_id[progress_id] = completeness
@@ -944,6 +1306,8 @@ def finalize_native_mirror(
                     contributor=contributor,
                     generation=generation,
                     pointer=pointer,
+                    external_context=context_by_card.get(str(progress.card_id)),
+                    inherited_contributor=inherited_by_progress_id.get(progress_id),
                     now_utc=finalized_at,
                 )
                 lineage_by_progress_id[progress_id] = lineage_hash
@@ -1114,6 +1478,241 @@ def finalize_native_mirror(
             ",".join(result.statuses),
         )
         return result
+    except Exception:
+        _metric("internal_error")
+        raise
+
+
+def finalize_external_progress_mirror(
+    plan: NativeMirrorPlan | None,
+    *,
+    applied_contexts: Mapping[str, ExternalProgressMirrorContext],
+    now_utc: datetime | None = None,
+) -> NativeMirrorResult | None:
+    """Mirror only externally applied current-state snapshots.
+
+    Conflict, unchanged and unresolved records must not call this adapter.  It
+    deliberately supplies no ReviewEvent because an external snapshot is not a
+    chronological scheduler action.
+    """
+
+    if plan is None:
+        return None
+    if not applied_contexts:
+        raise _fail("External progress finalization requires an applied Card context.")
+    prepared_card_ids = set(plan.cards_by_id)
+    for card_id, context in applied_contexts.items():
+        card_key = str(card_id)
+        if card_key not in prepared_card_ids:
+            raise _fail("External progress context is outside its prepared subject.")
+        if context.provenance_code not in PROVENANCE_CODES:
+            raise _fail("External progress context has an unsupported provenance code.")
+        if context.history_completeness_code not in HISTORY_COMPLETENESS_CODES:
+            raise _fail("External progress context has an unsupported completeness code.")
+        card = plan.cards_by_id[card_key]
+        if context.source_card_ref is not None and (
+            not context.source_card_ref.id
+            or int(context.source_card_ref.user_id) != plan.learner_user_id
+            or str(context.source_card_ref.card_id) != card_key
+        ):
+            raise _fail("External source Card lineage does not match its contributor.")
+        if context.source_note_ref is not None and (
+            not context.source_note_ref.id
+            or int(context.source_note_ref.user_id) != plan.learner_user_id
+            or str(context.source_note_ref.note_id) != str(card.note_id)
+        ):
+            raise _fail("External source Note lineage does not match its contributor.")
+    return finalize_native_mirror(
+        plan,
+        review_events=(),
+        external_contexts=applied_contexts,
+        now_utc=now_utc,
+    )
+
+
+def append_external_history_facts(
+    plan: NativeMirrorPlan | None,
+    *,
+    history_events: Sequence[ExternalMirrorHistoryEvent],
+    now_utc: datetime | None = None,
+) -> int:
+    """Append imported revlog evidence without touching current mirror state.
+
+    The caller must invoke this inside the existing per-card savepoint after
+    Connect source/ref locks have been acquired.  CardProgress, its revision,
+    latest-event pointer, subject generation and mirror revision are unchanged.
+    """
+
+    if plan is None:
+        return 0
+    if plan.finalized:
+        raise _fail("A mirror plan may be consumed only once.")
+    plan.finalized = True
+    if not history_events:
+        return 0
+    session = plan.session
+    ingested_at = _utc_naive(now_utc)
+    try:
+        session.flush()
+        inserted = 0
+        for supplied in history_events:
+            event = supplied.review_event
+            source_ref = supplied.source_ref
+            if event.id is None or source_ref.id is None:
+                raise _fail("External history requires flushed event/ref identities.")
+            if int(event.user_id) != plan.learner_user_id:
+                raise _fail("External history learner does not match its plan.")
+            if (
+                int(source_ref.user_id) != plan.learner_user_id
+                or source_ref.review_event_id != event.id
+            ):
+                raise _fail("External history reference does not match its event.")
+            card = plan.cards_by_id.get(str(event.card_id))
+            if card is None:
+                raise _fail("External history Card is outside its prepared subject.")
+            note_id = str(card.note_id)
+            prepared = plan.subjects_by_note_id.get(note_id)
+            if prepared is None:
+                raise _fail("External history Note is outside its prepared subject.")
+            assert_subject_finalization_fence(
+                prepared.subject,
+                expected_generation=prepared.expected_generation,
+                expected_mirror_revision=prepared.expected_mirror_revision,
+            )
+
+            progress = plan.locked_progress_by_card_id.get(str(event.card_id))
+            contributor = None
+            if progress is not None and progress.id is not None:
+                contributor = session.execute(
+                    select(StudyProgressContributor)
+                    .where(
+                        StudyProgressContributor.subject_id == prepared.subject.id,
+                        StudyProgressContributor.live_card_progress_id == progress.id,
+                        StudyProgressContributor.contributor_status == "ACTIVE",
+                    )
+                    .with_for_update()
+                ).scalar_one_or_none()
+
+            fact_identity = canonical_document(
+                {
+                    "connect_review_event_ref_id": str(source_ref.id),
+                    "source": "connect_review_event_refs",
+                },
+                too_large_code="STATE_PAYLOAD_TOO_LARGE",
+            ).digest
+            existing = session.execute(
+                select(StudyProgressHistoryFact)
+                .where(
+                    StudyProgressHistoryFact.learner_user_id
+                    == plan.learner_user_id,
+                    StudyProgressHistoryFact.fact_identity_hash == fact_identity,
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+
+            fact_material = {
+                field: getattr(event, field) for field in _HISTORY_PAYLOAD_FIELDS
+            }
+            fact_material.update(
+                {
+                    "connect_review_event_ref_id": str(source_ref.id),
+                    "source_key": str(source_ref.source_key),
+                    "external_review_id": str(source_ref.external_review_id),
+                    "external_card_id": str(source_ref.external_card_id),
+                    "source_payload_hash": str(source_ref.payload_hash),
+                    "source_status": str(source_ref.status),
+                }
+            )
+            fact = canonical_typed_document(
+                fact_material,
+                too_large_code="STATE_PAYLOAD_TOO_LARGE",
+            )
+            if existing is not None:
+                if bytes(existing.fact_payload_hash) != fact.digest:
+                    raise _fail(
+                        "External history identity was reused with different evidence."
+                    )
+                continue
+
+            completeness = (
+                "HISTORY_REPAIRED_PARTIAL"
+                if supplied.import_state == "repaired"
+                else "HISTORY_IMPORTED_PARTIAL"
+            )
+            operation_key = encode_identity(
+                f"{source_ref.source_key}:{source_ref.external_review_id}",
+                max_bytes=512,
+                field_name="source_operation_key",
+            )
+            session.add(
+                StudyProgressHistoryFact(
+                    learner_user_id=plan.learner_user_id,
+                    subject_id=int(prepared.subject.id),
+                    logical_note_key=note_id.encode("utf-8"),
+                    subject_generation=int(prepared.subject.subject_generation),
+                    contributor_id=(
+                        int(contributor.id) if contributor is not None else None
+                    ),
+                    logical_card_key=encode_identity(
+                        str(event.card_id),
+                        max_bytes=256,
+                        field_name="logical_card_key",
+                    ),
+                    review_event_id=int(event.id),
+                    fact_identity_hash=fact_identity,
+                    history_schema_version=HISTORY_SCHEMA_VERSION,
+                    storage_codec=STORAGE_CODEC,
+                    occurred_at=_utc_naive(event.reviewed_at),
+                    ingested_at=ingested_at,
+                    provenance_code="CONNECT_REVLOG",
+                    source_operation_key=operation_key,
+                    action_key="anki.revlog.rating",
+                    action_version="revlog-v1",
+                    review_kind=str(event.review_kind or "") or None,
+                    algorithm_key=str(event.scheduler_algorithm or "") or None,
+                    algorithm_version=str(event.algorithm_version or "") or None,
+                    state_schema_version=None,
+                    scheduler_config_hash=_decode_digest(
+                        event.scheduler_config_hash
+                    ),
+                    before_state_hash=None,
+                    after_state_hash=None,
+                    history_completeness_code=completeness,
+                    gap_reason_code=(
+                        "REPAIRED_EXTERNAL_PROJECTION"
+                        if supplied.import_state == "repaired"
+                        else "EXTERNAL_HISTORY_RANGE_UNPROVEN"
+                    ),
+                    fact_payload=fact.payload,
+                    fact_payload_size=fact.size,
+                    fact_payload_hash=fact.digest,
+                    created_at=ingested_at,
+                )
+            )
+            if contributor is not None:
+                current_completeness = str(
+                    contributor.history_completeness_code
+                )
+                if current_completeness in {
+                    "HISTORY_NATIVE_COMPLETE",
+                    "HISTORY_SNAPSHOT_ONLY",
+                    "HISTORY_MIXED_PARTIAL",
+                }:
+                    contributor.history_completeness_code = (
+                        "HISTORY_MIXED_PARTIAL"
+                    )
+                elif (
+                    current_completeness == "HISTORY_IMPORTED_PARTIAL"
+                    and supplied.import_state == "repaired"
+                ):
+                    contributor.history_completeness_code = (
+                        "HISTORY_REPAIRED_PARTIAL"
+                    )
+                contributor.updated_at = ingested_at
+            inserted += 1
+        session.flush()
+        _metric("external_history")
+        return inserted
     except Exception:
         _metric("internal_error")
         raise

@@ -44,6 +44,7 @@ from scripts.probe_phase4_shadow_schema_mysql import (
     PROBE_NAME_PATTERN,
     _connection_settings,
     _database_uri,
+    _source_database_collation,
 )
 
 
@@ -156,8 +157,12 @@ def run_probe() -> dict[str, object]:
     admin = pymysql.connect(**settings)
     app = None
     try:
+        source_collation = _source_database_collation(admin)
         with admin.cursor() as cursor:
-            cursor.execute(f"CREATE DATABASE `{database_name}` CHARACTER SET utf8mb4")
+            cursor.execute(
+                f"CREATE DATABASE `{database_name}` CHARACTER SET utf8mb4 "
+                f"COLLATE {source_collation}"
+            )
 
         app = create_app(
             {
@@ -349,6 +354,68 @@ def run_probe() -> dict[str, object]:
             ).count():
                 raise AssertionError("Mirror fault committed its coordination subject.")
 
+            lock_subject_id = int(fanin_subject.id)
+            locked_card_id = str(fixture["fanin_card_ids"][0])
+            before_lock_revision = int(
+                CardProgress.query.filter_by(
+                    user_id=fixture["user_id"], card_id=locked_card_id
+                ).one().revision
+            )
+            before_lock_mirror_revision = int(fanin_subject.mirror_revision)
+            before_lock_events = ReviewEvent.query.count()
+            db.session.remove()
+
+            lock_connection = pymysql.connect(
+                **{**settings, "database": database_name, "autocommit": False}
+            )
+            try:
+                with lock_connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT id FROM study_progress_subjects WHERE id=%s FOR UPDATE",
+                        (lock_subject_id,),
+                    )
+                    if cursor.fetchone() is None:
+                        raise AssertionError("Lock-timeout probe subject disappeared.")
+
+                def timeout_writer() -> None:
+                    with app.app_context():
+                        db.session.execute(sa.text("SET SESSION innodb_lock_wait_timeout=1"))
+                        try:
+                            study_service.execute_native_review_command(
+                                user=db.session.get(User, fixture["user_id"]),
+                                card=db.session.get(Card, locked_card_id),
+                                action="good",
+                                payload={"duration_ms": 100},
+                                clone_scope=None,
+                                requested_scope_id=int(fixture["deck_id"]),
+                                timezone_name="Asia/Tokyo",
+                                now=datetime(2026, 9, 13, 12, 1, 0),
+                            )
+                        except sa.exc.OperationalError as exc:
+                            if int(exc.orig.args[0]) != 1205:
+                                raise
+                        else:
+                            raise AssertionError("Locked subject did not cause a bounded timeout.")
+                        finally:
+                            db.session.rollback()
+                            db.session.remove()
+
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    executor.submit(timeout_writer).result(timeout=10)
+            finally:
+                lock_connection.rollback()
+                lock_connection.close()
+
+            if (
+                int(CardProgress.query.filter_by(
+                    user_id=fixture["user_id"], card_id=locked_card_id
+                ).one().revision) != before_lock_revision
+                or int(db.session.get(StudyProgressSubject, lock_subject_id).mirror_revision)
+                != before_lock_mirror_revision
+                or ReviewEvent.query.count() != before_lock_events
+            ):
+                raise AssertionError("Lock timeout committed a partial native review.")
+
             result = {
                 "database_name": database_name,
                 "concurrent_writers": ["native_session", "native_direct", "native_mcp"],
@@ -359,6 +426,7 @@ def run_probe() -> dict[str, object]:
                 "worker_status": worker_result["status"],
                 "history_fact_count": StudyProgressHistoryFact.query.count(),
                 "fault_rollback_verified": True,
+                "lock_timeout_atomic_rollback_verified": True,
             }
             db.session.remove()
             db.engine.dispose()

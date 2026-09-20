@@ -8,8 +8,19 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app import create_app
-from app.services import study_service, study_session_service
+from app.services import (
+    browse_card_service,
+    deck_management_service,
+    flashcard_content_service,
+    study_progress_lifecycle_mirror_service,
+    study_service,
+    study_session_service,
+)
 from app.services.study_worker_service import process_single_study_batch
+from app.services.study_progress_backfill_service import run_current_progress_backfill
+from app.services.study_progress_reconciliation_service import (
+    build_study_progress_reconciliation,
+)
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -22,6 +33,7 @@ from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_lineage_ref import StudyProgressLineageRef
+from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
@@ -40,6 +52,8 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
                 "REDIS_URL": "",
                 "STUDY_ASYNC_BATCH_ENABLED": True,
                 "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": True,
+                "STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED": True,
+                "STUDY_PROGRESS_SHADOW_COMPARE_ENABLED": True,
             }
         )
         self.context = self.app.app_context()
@@ -141,6 +155,17 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
             now=datetime(2026, 9, 13, 10, 0, 0),
         )
 
+    def _assert_reconciles(self):
+        backfill = run_current_progress_backfill(db.session, apply=True)
+        self.assertTrue(backfill.complete)
+        report = build_study_progress_reconciliation(
+            db.session,
+            observed_at=datetime(2026, 9, 13, 10, 10, 0),
+        )
+        self.assertEqual(report["unexplained"]["by_code"], {})
+        self.assertEqual(report["gate"]["status"], "PASS")
+        return report
+
     @staticmethod
     def _events(snapshot, count: int = 2):
         card = snapshot["cards"][0]
@@ -196,6 +221,9 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
         self.assertEqual(fact.review_event_id, event.id)
         self.assertEqual(fact.contributor_id, contributor.id)
         self.assertEqual(fact.provenance_code, "NATIVE_DIRECT")
+        report = self._assert_reconciles()
+        self.assertEqual(report["writer_coverage"]["matrix"]["NATIVE_DIRECT"]["status"], "PASS")
+        self.assertEqual(report["writer_coverage"]["matrix"]["NATIVE_MCP"]["status"], "NOT_OBSERVED")
 
     def test_mcp_uses_the_same_mirror_with_distinct_provenance(self):
         self._review(
@@ -208,6 +236,8 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
         fact = StudyProgressHistoryFact.query.one()
         self.assertEqual(contributor.current_provenance_code, "NATIVE_MCP")
         self.assertEqual(fact.provenance_code, "NATIVE_MCP")
+        report = self._assert_reconciles()
+        self.assertEqual(report["writer_coverage"]["matrix"]["NATIVE_MCP"]["status"], "PASS")
 
     def test_sibling_card_add_advances_generation_and_quarantines_divergence(self):
         self._review(self.card_id, action="good")
@@ -225,8 +255,39 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
         self.assertEqual(subject.contributor_count, 2)
         self.assertEqual(subject.status_code, "QUARANTINED_STATE_DIVERGENCE")
         self.assertIsNone(db.session.get(StudyProgressState, subject.id))
-        self.assertEqual(StudyProgressContributor.query.count(), 2)
+        contributors = StudyProgressContributor.query.order_by(
+            StudyProgressContributor.id.asc()
+        ).all()
+        self.assertEqual(len(contributors), 3)
+        self.assertEqual(
+            [(row.subject_generation, row.contributor_status) for row in contributors],
+            [(1, "DETACHED"), (2, "ACTIVE"), (2, "ACTIVE")],
+        )
+        first_fact = StudyProgressHistoryFact.query.order_by(
+            StudyProgressHistoryFact.id.asc()
+        ).first()
+        self.assertEqual(first_fact.subject_generation, 1)
+        self.assertEqual(first_fact.contributor.subject_generation, 1)
         self.assertEqual(StudyProgressHistoryFact.query.count(), 2)
+        report = self._assert_reconciles()
+        self.assertEqual(
+            report["quarantines"]["by_code"],
+            {"QUARANTINED_STATE_DIVERGENCE": 2},
+        )
+        self.assertEqual(report["query_parity"]["comparable_scope_count"], 0)
+
+    def test_equivalent_sibling_fanin_reconciles_distinct_review_lineage(self):
+        self._review(self.card_id, action="good")
+        self._review(self.sibling_card_id, action="good")
+
+        subject = StudyProgressSubject.query.one()
+        self.assertEqual(
+            subject.status_code,
+            "MIRRORED_EQUIVALENT_FANIN_DISTINCT_LINEAGE",
+        )
+        report = self._assert_reconciles()
+        self.assertEqual(report["quarantines"]["count"], 0)
+        self.assertEqual(report["accounting"]["active_contributors"], 2)
 
     def test_session_finalizes_once_per_note_after_all_event_pointers(self):
         snapshot = self._open_session()
@@ -265,6 +326,8 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
             db.session.get(ReviewEvent, progress.last_review_event_id).sequence_no,
             2,
         )
+        report = self._assert_reconciles()
+        self.assertEqual(report["writer_coverage"]["matrix"]["NATIVE_SESSION"]["status"], "PASS")
 
     def test_worker_retry_is_idempotent_for_revision_and_history(self):
         snapshot = self._open_session()
@@ -294,6 +357,8 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
             {row.provenance_code for row in StudyProgressHistoryFact.query.all()},
             {"NATIVE_ASYNC_BATCH"},
         )
+        report = self._assert_reconciles()
+        self.assertEqual(report["writer_coverage"]["matrix"]["NATIVE_ASYNC_BATCH"]["status"], "PASS")
 
     def test_unexpected_mirror_failure_rolls_back_authority_event_and_shadow(self):
         with patch(
@@ -307,6 +372,160 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
         self.assertEqual(ReviewEvent.query.count(), 0)
         self.assertEqual(StudyProgressSubject.query.count(), 0)
         self.assertEqual(StudyProgressContributor.query.count(), 0)
+
+    def test_card_delete_detaches_contributor_and_advances_generation(self):
+        self._review(self.card_id)
+        progress_id = CardProgress.query.one().id
+
+        browse_card_service.delete_browse_card(
+            user_id=self.user_id,
+            admin_mode=False,
+            card_id=self.card_id,
+        )
+
+        subject = StudyProgressSubject.query.one()
+        contributor = StudyProgressContributor.query.one()
+        lifecycle = StudyProgressLifecycleEvent.query.one()
+        self.assertIsNone(db.session.get(Card, self.card_id))
+        self.assertIsNone(db.session.get(CardProgress, progress_id))
+        self.assertEqual(subject.status_code, "NO_CURRENT_PROGRESS")
+        self.assertEqual((subject.subject_generation, subject.mirror_revision), (2, 2))
+        self.assertEqual(contributor.contributor_status, "DETACHED")
+        self.assertIsNone(contributor.live_card_progress_id)
+        self.assertIsNone(contributor.live_card_id)
+        self.assertEqual(lifecycle.transition_code, "DETACHED_CONTRIBUTOR_DELETED")
+        self._assert_reconciles()
+
+    def test_note_delete_tombstones_subject_without_deleting_history(self):
+        self._review(self.card_id)
+        event_id = ReviewEvent.query.one().id
+
+        flashcard_content_service.delete_note(
+            user_id=self.user_id,
+            note_id=self.note_id,
+        )
+
+        subject = StudyProgressSubject.query.one()
+        contributor = StudyProgressContributor.query.one()
+        lifecycle = StudyProgressLifecycleEvent.query.one()
+        self.assertIsNone(db.session.get(Note, self.note_id))
+        self.assertIsNotNone(db.session.get(ReviewEvent, event_id))
+        self.assertEqual(subject.status_code, "TOMBSTONED_SUBJECT_DELETED")
+        self.assertIsNone(subject.live_note_id)
+        self.assertEqual(contributor.contributor_status, "TOMBSTONED")
+        self.assertEqual(lifecycle.transition_code, "TOMBSTONED_SUBJECT_DELETED")
+        self._assert_reconciles()
+
+    def test_partial_card_delete_retains_closed_generation_and_reprojects_survivor(self):
+        self._review(self.card_id, action="good")
+        self._review(
+            self.sibling_card_id,
+            action="again",
+            now=datetime(2026, 9, 13, 10, 1, 0),
+        )
+
+        browse_card_service.delete_browse_card(
+            user_id=self.user_id,
+            admin_mode=False,
+            card_id=self.sibling_card_id,
+        )
+
+        subject = StudyProgressSubject.query.one()
+        active = StudyProgressContributor.query.filter_by(
+            contributor_status="ACTIVE"
+        ).one()
+        contributors = StudyProgressContributor.query.order_by(
+            StudyProgressContributor.id.asc()
+        ).all()
+        lifecycle = StudyProgressLifecycleEvent.query.one()
+        self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
+        self.assertEqual((subject.subject_generation, subject.mirror_revision), (3, 3))
+        self.assertEqual(subject.contributor_count, 1)
+        self.assertEqual(active.subject_generation, 3)
+        self.assertEqual(active.live_card_id, self.card_id)
+        self.assertEqual(len(contributors), 4)
+        self.assertEqual(
+            [row.subject_generation for row in contributors],
+            [1, 2, 2, 3],
+        )
+        self.assertEqual(lifecycle.transition_code, "DETACHED_CONTRIBUTOR_DELETED")
+        self.assertEqual(lifecycle.evidence_payload["removed_card_count"], "1")
+        self._assert_reconciles()
+
+    def test_unexpected_lifecycle_failure_rolls_back_progress_and_card_delete(self):
+        self._review(self.card_id)
+        progress_id = CardProgress.query.one().id
+
+        with patch(
+            "app.services.study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror",
+            side_effect=RuntimeError("lifecycle fault injection"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "lifecycle fault injection"):
+                browse_card_service.delete_browse_card(
+                    user_id=self.user_id,
+                    admin_mode=False,
+                    card_id=self.card_id,
+                )
+        db.session.rollback()
+
+        self.assertIsNotNone(db.session.get(Card, self.card_id))
+        self.assertIsNotNone(db.session.get(CardProgress, progress_id))
+        self.assertEqual(StudyProgressSubject.query.one().mirror_revision, 1)
+        self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
+
+    def test_lifecycle_fence_rejects_a_removed_card_with_live_authority(self):
+        self._review(self.card_id)
+        plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=(self.card_id,),
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "left authoritative progress on a removed Card",
+        ):
+            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+                plan,
+                transition_code="DETACHED_CONTRIBUTOR_DELETED",
+                source_path="test.missing_authority_delete",
+                operation_key="missing-authority-delete",
+            )
+        db.session.rollback()
+
+        self.assertEqual(CardProgress.query.count(), 1)
+        self.assertEqual(StudyProgressSubject.query.one().mirror_revision, 1)
+        self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
+
+    def test_reset_tombstone_separates_history_from_later_review_generation(self):
+        self._review(self.card_id)
+        first_event_id = ReviewEvent.query.one().id
+
+        deleted = deck_management_service.reset_deck_progress(
+            deck_obj=db.session.get(Deck, self.deck_id),
+            user_id=self.user_id,
+        )
+        self.assertEqual(deleted, 1)
+        subject = StudyProgressSubject.query.one()
+        prior_contributor = StudyProgressContributor.query.one()
+        self.assertEqual(subject.status_code, "TOMBSTONED_RESET")
+        self.assertEqual((subject.subject_generation, subject.mirror_revision), (2, 2))
+        self.assertEqual(prior_contributor.contributor_status, "TOMBSTONED")
+        self.assertIsNotNone(db.session.get(ReviewEvent, first_event_id))
+        self._assert_reconciles()
+
+        self._review(
+            self.card_id,
+            now=datetime(2026, 9, 13, 10, 5, 0),
+        )
+        subject = StudyProgressSubject.query.one()
+        self.assertEqual((subject.subject_generation, subject.mirror_revision), (3, 3))
+        self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
+        self.assertEqual(
+            StudyProgressContributor.query.filter_by(contributor_status="ACTIVE").count(),
+            1,
+        )
+        self.assertEqual(StudyProgressHistoryFact.query.count(), 2)
+        self._assert_reconciles()
 
 
 if __name__ == "__main__":

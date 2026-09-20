@@ -4,7 +4,7 @@
 >
 > Priority: P0
 >
-> Status: **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**
+> Status: **IMPLEMENTED / LOCAL VERIFIED — COMMITTED ON DEVELOP (`bd96abc`)**
 >
 > Dependency: P4-06
 >

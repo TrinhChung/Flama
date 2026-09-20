@@ -31,6 +31,8 @@ from app.services import (
     flashcards_share,
     flashcards_share_service,
     flama_connect_media_service,
+    study_progress_lifecycle_mirror_service,
+    study_progress_shadow_mirror_service,
     study_service,
 )
 from app.services.anki_content_normalizer import normalize_anki_field_values
@@ -155,6 +157,7 @@ def _migrate_cards_progress(
     note: Note,
     note_type: NoteType,
     cards_progress_payload: list[dict[str, Any]],
+    source_note_ref: ConnectSourceNoteRef,
 ) -> list[dict[str, Any]]:
     if not cards_progress_payload:
         return []
@@ -209,6 +212,21 @@ def _migrate_cards_progress(
             raise ConnectError("cardsProgress lapses is out of range")
         progress_map[ord_value] = item
 
+    cards_in_scope = tuple(
+        card
+        for ord_idx, template in enumerate(templates)
+        if ord_idx in progress_map
+        for card in (existing_cards.get(template.id),)
+        if card is not None
+    )
+    mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
+        db.session,
+        learner_user_id=user_id,
+        cards=cards_in_scope,
+    )
+    applied_contexts: dict[
+        str, study_progress_shadow_mirror_service.ExternalProgressMirrorContext
+    ] = {}
     results: list[dict[str, Any]] = []
     for ord_idx, template in enumerate(templates):
         card = existing_cards.get(template.id)
@@ -393,6 +411,18 @@ def _migrate_cards_progress(
                 "revision": int(progress.revision or 0),
             }
         )
+        applied_contexts[str(card.id)] = (
+            study_progress_shadow_mirror_service.ExternalProgressMirrorContext(
+                provenance_code="CONNECT_LEGACY_PROGRESS",
+                history_completeness_code="HISTORY_SNAPSHOT_ONLY",
+                source_note_ref=source_note_ref,
+            )
+        )
+    if applied_contexts:
+        study_progress_shadow_mirror_service.finalize_external_progress_mirror(
+            mirror_plan,
+            applied_contexts=applied_contexts,
+        )
     return results
 
 
@@ -543,6 +573,27 @@ def _upsert_import_card(
         prepared.deck.note_type_id = None
     elif prepared.deck.note_type_id is None:
         prepared.deck.note_type_id = prepared.note_type.id
+
+    if source_ref is None:
+        source_ref = ConnectSourceNoteRef(
+            user_id=user_id,
+            source_key=session.source_key,
+            external_note_id=external_note_id,
+            source_model_id=source_model_id,
+            source_deck_path=source_deck_path,
+            note_id=note.id,
+            content_hash=content_hash.lower(),
+            last_session_id=session.id,
+        )
+        db.session.add(source_ref)
+    else:
+        source_ref.source_model_id = source_model_id
+        source_ref.source_deck_path = source_deck_path
+        source_ref.note_id = note.id
+        source_ref.content_hash = content_hash.lower()
+        source_ref.last_session_id = session.id
+    db.session.flush()
+
     deck_ref = ConnectSourceDeckRef.query.filter_by(
         user_id=user_id,
         source_key=session.source_key,
@@ -561,12 +612,31 @@ def _upsert_import_card(
     else:
         deck_ref.source_path = source_deck_path
         deck_ref.deck_id = prepared.deck.id
+    expected_template_ids = {template.id for template in prepared.note_type.templates}
+    removed_cards = tuple(
+        card for card in note.cards if card.template_id not in expected_template_ids
+    )
+    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+        db.session,
+        removed_card_ids=(card.id for card in removed_cards),
+    )
+    if removed_cards:
+        CardProgress.query.filter(
+            CardProgress.card_id.in_([str(card.id) for card in removed_cards])
+        ).delete(synchronize_session=False)
     _reconcile_note_cards(
         note,
         prepared.note_type,
         is_new_note=created,
         preserve_released_history=preserve_released_history,
     )
+    if lifecycle_plan is not None:
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="DETACHED_CONTRIBUTOR_DELETED",
+            source_path="connect.import_cards.reconcile",
+            operation_key=f"{session.id}:{external_note_id}:template-reconcile",
+        )
     cards_progress_payload = card_data.get("cardsProgress")
     progress_results: list[dict[str, Any]] = []
     if cards_progress_payload:
@@ -575,6 +645,7 @@ def _upsert_import_card(
             note,
             prepared.note_type,
             cards_progress_payload,
+            source_ref,
         )
     materialized = flama_connect_media_service.materialize_import_media(
         user_id=user_id,
@@ -625,25 +696,6 @@ def _upsert_import_card(
             mutations=dirty_mutations,
         )
     connect_ref = _ensure_note_ref(note, user_id)
-
-    if source_ref is None:
-        source_ref = ConnectSourceNoteRef(
-            user_id=user_id,
-            source_key=session.source_key,
-            external_note_id=external_note_id,
-            source_model_id=source_model_id,
-            source_deck_path=source_deck_path,
-            note_id=note.id,
-            content_hash=content_hash.lower(),
-            last_session_id=session.id,
-        )
-        db.session.add(source_ref)
-    else:
-        source_ref.source_model_id = source_model_id
-        source_ref.source_deck_path = source_deck_path
-        source_ref.note_id = note.id
-        source_ref.content_hash = content_hash.lower()
-        source_ref.last_session_id = session.id
 
     db.session.add(
         AuditLog(

@@ -13,6 +13,8 @@ from models.deck import Deck
 from models.card_progress import CardProgress
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
+from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
+from models.study_progress_subject import StudyProgressSubject
 
 
 class DeckSettingsRoutesTests(unittest.TestCase):
@@ -176,6 +178,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             self.assertEqual(moved.parent_id, target_parent_id)
 
     def test_reset_deck_only_clears_current_user_progress(self):
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         with self.app.app_context():
             deck = Deck(name="Deck Reset", parent_id=None, position=1)
             db.session.add(deck)
@@ -294,6 +297,13 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 db.session.get(StudySession, other_session_id).status,
                 "open",
             )
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(subject.learner_user_id, self.admin_id)
+            self.assertEqual(subject.status_code, "TOMBSTONED_RESET")
+            self.assertEqual((subject.subject_generation, subject.mirror_revision), (2, 1))
+            lifecycle = StudyProgressLifecycleEvent.query.one()
+            self.assertEqual(lifecycle.transition_code, "TOMBSTONED_RESET")
+            self.assertEqual((lifecycle.old_generation, lifecycle.new_generation), (1, 2))
 
     def test_non_admin_owner_can_reset_owned_deck_without_clone_install(self):
         with self.app.app_context():

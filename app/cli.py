@@ -285,6 +285,55 @@ def register_audit_cli_commands(app: Flask) -> None:
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
 
+    @app.cli.command("study-progress-backfill")
+    @click.option(
+        "--apply",
+        is_flag=True,
+        default=False,
+        help="Persist mirror/disposition/checkpoint batches; default is read-only dry-run.",
+    )
+    @click.option(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Resume one existing apply run by canonical UUID.",
+    )
+    @click.option(
+        "--max-batches",
+        type=click.IntRange(1, 100_000),
+        default=None,
+        help="Stop cleanly after a bounded number of committed batches.",
+    )
+    def study_progress_backfill(
+        apply: bool,
+        run_id: str | None,
+        max_batches: int | None,
+    ) -> None:
+        """Dry-run or resume the fenced Phase 4 current-progress backfill."""
+
+        from app.services.study_progress_backfill_service import (
+            StudyProgressBackfillError,
+            run_current_progress_backfill,
+        )
+
+        try:
+            result = run_current_progress_backfill(
+                db.session,
+                apply=apply,
+                run_id=run_id,
+                max_batches=max_batches,
+            )
+        except StudyProgressBackfillError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(
+            json.dumps(
+                result.to_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
     @click.option(

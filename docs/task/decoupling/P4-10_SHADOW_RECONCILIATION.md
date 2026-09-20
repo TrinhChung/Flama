@@ -4,7 +4,7 @@
 >
 > Priority: P0 exit gate
 >
-> Status: TODO
+> Status: LOCALLY COMPLETE — intentionally uncommitted; P4-11 deployment gate open
 >
 > Dependency: P4-09
 >
@@ -51,6 +51,52 @@ python wsgi_audit.py --compact
 ```
 
 Plus disposable MySQL full reconciliation at representative volume.
+
+## Local implementation evidence (2026-09-19)
+
+Observed: `study_progress_reconciliation_service` provides a versioned read-only
+report embedded in audit v5 only when `STUDY_PROGRESS_SHADOW_COMPARE_ENABLED=true`.
+With the flag off, the audit does not query shadow tables. The comparator
+accounts for raw hashes, generations, contributor/subject state, availability,
+last-review pointers, applied Connect lineage, backfill dispositions, query
+counts/order and explicit quarantine. It compares decoded shadow state against
+the current `CardState` projection using the learner's resolved deck policy.
+The accepted representation tolerances are a product fallback for null
+`due_at`, a derived review `due_day`, and later Connect source-Note content
+edits with unchanged identity and strictly advanced `updated_at`; each has
+named fields, bounds, counts and samples. Source-Card snapshot hash drift
+still blocks the gate.
+
+Evidence: `tests/test_study_progress_reconciliation.py` covers deterministic
+read-only runs, raw/provenance drift, Connect drift, quarantine, day-boundary
+counting, installed source and installed-local notes in child deck scopes,
+product transition goldens, and malformed transition failure. The local
+disposable MySQL probe (`scripts/probe_phase4_reconciliation_mysql.py`) passed
+with 1,002 and then 16,424 source rows, a SELECT-only principal,
+REPEATABLE-READ snapshot, two identical reports, zero unexplained differences
+and indexed query plans. The 16,424-row backfill used 165 bounded batches
+in 413.002 s; two reconciliation runs took 313.468 s total. The probe
+removed its temporary databases and principal. No production database was
+touched. The 2026-09-20 modular integration run passed 948
+backend tests across 86 files; 179 Study frontend tests passed too.
+
+The transactional mirror suite now calls the reconciler after real direct REST,
+MCP, session, async worker, reset, card delete and note delete flows, including
+equivalent and divergent sibling fan-in. A valid contributor may retain its
+availability row during subject-level divergence quarantine; the comparator
+verifies that row but excludes the entire subject from trusted query parity.
+`test_anki_import_api.py` now reconciles applied Connect revlog and legacy
+progress imports; `test_flashcard_api_integration.py` reconciles a real
+legacy-clone-to-overlay cutover. The report includes a required writer matrix
+whose absent classes remain `NOT_OBSERVED`, never silently `PASS`.
+
+Residual scope: P4-10's local representative-row-count acceptance is met,
+but the synthetic MySQL cohort uses one owned learner/deck context;
+installed overlay parity is proved by integration tests, not a
+production-shaped MySQL mix. The exact production MySQL version/collation,
+concurrent traffic and full failure matrix remain P4-11 deployment gates.
+No shadow-backed product read has been enabled. See the
+[2026-09-20 evidence report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md).
 
 ## Rollback
 

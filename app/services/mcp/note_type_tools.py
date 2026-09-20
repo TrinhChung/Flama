@@ -6,7 +6,10 @@ import json
 from typing import Any
 from sqlalchemy import or_
 
-from app.services import flashcard_content_service
+from app.services import (
+    flashcard_content_service,
+    study_progress_lifecycle_mirror_service,
+)
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.mcp.base import (
     _compact_description,
@@ -23,6 +26,7 @@ from app.services.mcp_preview_service import (
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
+from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -867,6 +871,37 @@ def update_note_type(
         current_templates = {t.name: t for t in nt.templates}
         current_template_ids = {t.id: t for t in nt.templates}
 
+        removed_template_ids: set[str] = set()
+        if isinstance(templates, dict):
+            removed_template_ids = {
+                str(current_templates[name].id)
+                for name in (str(value) for value in templates.get("removed", []))
+                if name in current_templates
+            }
+        elif isinstance(templates, list):
+            requested_names = {t.get("name") for t in templates if t.get("name")}
+            requested_ids = {t.get("id") for t in templates if t.get("id")}
+            removed_template_ids = {
+                str(row.id)
+                for row in current_templates.values()
+                if row.name not in requested_names and row.id not in requested_ids
+            }
+        removed_card_ids = [
+            str(row[0])
+            for row in db.session.query(Card.id)
+            .filter(Card.template_id.in_(sorted(removed_template_ids)))
+            .all()
+            if row and row[0]
+        ] if removed_template_ids else []
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=removed_card_ids,
+        )
+        if removed_card_ids:
+            CardProgress.query.filter(
+                CardProgress.card_id.in_(removed_card_ids)
+            ).delete(synchronize_session=False)
+
         if isinstance(templates, dict):
             for rem_name in templates.get("removed", []):
                 t_obj = current_templates.get(str(rem_name))
@@ -955,6 +990,12 @@ def update_note_type(
                 status=400,
                 code="NOTE_TYPE_MUST_HAVE_TEMPLATES",
             )
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="DETACHED_CONTRIBUTOR_DELETED",
+            source_path="mcp.note_type_template_update",
+            operation_key=f"mcp-note-type-template-update:{nt.id}:{preview_id or 'direct'}",
+        )
 
     if preview_id:
         consume_preview_token(preview_id)
