@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from models import db
 from models.flashcard import ReviewEvent
 
@@ -79,6 +81,7 @@ def create_review_event_record(
     leeched_after: bool = False,
     suspended_after: bool = False,
     payload_json: str = "{}",
+    session: Session | None = None,
 ) -> ReviewEvent:
     event = ReviewEvent(
         user_id=user_id,
@@ -115,7 +118,7 @@ def create_review_event_record(
         suspended_after=bool(suspended_after),
         payload_json=payload_json or "{}",
     )
-    db.session.add(event)
+    (session or db.session).add(event)
     return event
 
 

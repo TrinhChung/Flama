@@ -13,6 +13,12 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
 
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_compatibility,
+    lock_study_authority_route,
+    lock_study_authority_siblings,
+)
 from app.repositories.study_repository import (
     card_state_from_progress,
     is_progress_suspended,
@@ -56,6 +62,22 @@ from app.services.study_session_config import (
     encode_study_session_config,
     validate_payload_composition,
 )
+from app.services.study_session_authority_pin_service import (
+    LockedStudySessionAuthorityPins,
+    StudySessionAuthorityPinError,
+    lock_study_session_authority_pins,
+    lock_study_session_authority_subjects,
+    serialize_study_note_authority_identity,
+    serialize_study_session_authority_pin,
+    stage_study_session_authority_pin,
+    study_session_authority_pins_are_stale,
+)
+from app.services.study_authority_cas_service import StudyAuthorityCASExpectation
+from app.services.study_authority_command_service import ExistingStateNoteReviewCommand
+from app.services.study_authority_receipt_service import (
+    IdempotentExistingStateNoteReviewCommand,
+    apply_idempotent_existing_state_note_review,
+)
 from app.services.scheduler_config_service import (
     resolve_deck_options,
     resolve_scheduler_runtime_settings,
@@ -70,6 +92,7 @@ from app.validators.study_session_wire import (
     COMMIT_SCHEMA_V1,
     SESSION_SCHEMA_V2,
     StudyWireContractError,
+    build_note_authority_wire_identity,
     resolve_wire_envelope_contract,
     select_session_schema,
     validate_review_event_wire_contract,
@@ -165,9 +188,14 @@ def negotiate_session_wire_schema(
     accepted_versions: Any,
     *,
     v3_enabled: bool,
+    v4_enabled: bool = False,
 ) -> str:
     try:
-        return select_session_schema(accepted_versions, v3_enabled=v3_enabled)
+        return select_session_schema(
+            accepted_versions,
+            v3_enabled=v3_enabled,
+            v4_enabled=v4_enabled,
+        )
     except StudyWireContractError as exc:
         raise StudySessionError(exc.code, str(exc), status=exc.status) from exc
 
@@ -451,6 +479,7 @@ def open_study_session(
     now: datetime | None = None,
     composition_selection: ResolvedCompositionSelection | None = None,
     wire_schema_version: str = WIRE_SCHEMA_VERSION,
+    legacy_wire_schema_version: str | None = None,
 ) -> dict[str, Any]:
     wire_contract = _wire_contract_or_session_error(wire_schema_version)
     _require_session_algorithm(
@@ -458,6 +487,32 @@ def open_study_session(
         version=DEFAULT_ALGORITHM_IDENTITY.version,
         purpose=AlgorithmResolutionPurpose.NEW_SESSION,
     )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user.id),
+            allow_note_authority=wire_contract.requires_note_authority_identity,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise StudySessionError(exc.code, str(exc), status=409) from exc
+    if wire_contract.requires_note_authority_identity and authority_route.mode_code != "NOTE":
+        if legacy_wire_schema_version is None:
+            raise StudySessionError(
+                "NOTE_AUTHORITY_UNAVAILABLE",
+                "Study Session v4 requires an active NOTE authority enrollment.",
+                status=409,
+            )
+        fallback_contract = _wire_contract_or_session_error(
+            legacy_wire_schema_version
+        )
+        if fallback_contract.requires_note_authority_identity:
+            raise StudySessionError(
+                "WIRE_CONTRACT_MISMATCH",
+                "LEGACY authority fallback must use a legacy wire decoder.",
+                status=409,
+            )
+        wire_contract = fallback_contract
     # MySQL DATETIME (without an explicit fsp) truncates sub-second precision.
     # Use the same durable anchor in the snapshot and during commit replay.
     opened_at = (now or datetime.utcnow()).replace(microsecond=0)
@@ -508,9 +563,25 @@ def open_study_session(
             status=404,
         )
 
-    progress_map = load_card_progress_map(
-        user_id=int(user.id),
-        card_ids=[str(card.id) for card in cards],
+    authority_subjects = None
+    if authority_route.mode_code == "NOTE":
+        try:
+            authority_subjects = lock_study_session_authority_subjects(
+                db.session,
+                route=authority_route,
+                logical_note_keys=[str(card.note_id) for card in cards],
+                now_utc=opened_at,
+            )
+        except StudySessionAuthorityPinError as exc:
+            db.session.rollback()
+            raise StudySessionError(exc.code, str(exc), status=409) from exc
+    progress_map = (
+        {}
+        if authority_subjects is not None
+        else load_card_progress_map(
+            user_id=int(user.id),
+            card_ids=[str(card.id) for card in cards],
+        )
     )
     runtime = resolve_scheduler_runtime_settings(user_id=int(user.id))
     session_id = str(uuid4())
@@ -556,13 +627,16 @@ def open_study_session(
             }
 
         progress = progress_map.get(str(card.id))
-        state = card_state_from_progress(
-            progress,
-            opened_at,
-            timezone_name=timezone_name,
-            user_id=int(user.id),
-            options=options,
-        )
+        if authority_subjects is not None:
+            state = authority_subjects.state_by_logical_note_key[str(note.id)]
+        else:
+            state = card_state_from_progress(
+                progress,
+                opened_at,
+                timezone_name=timezone_name,
+                user_id=int(user.id),
+                options=options,
+            )
         state_payload = serialize_card_state(state)
         state_hash = study_artifact_service.canonical_digest(state_payload)
         context = study_artifact_service.build_effective_study_card(
@@ -616,8 +690,7 @@ def open_study_session(
         base_revision = int(getattr(progress, "revision", 0) or 0)
         created_at = getattr(card, "created_at", None) or opened_at
 
-        card_payloads.append(
-            {
+        card_payload = {
                 "card_id": str(card.id),
                 "note_id": str(note.id),
                 "template_id": str(card.template_id),
@@ -636,7 +709,19 @@ def open_study_session(
                 "state": state_payload,
                 "can_edit_card": bool(note.user_id == user.id),
             }
-        )
+        if authority_subjects is not None:
+            locked = authority_subjects.locked_by_logical_note_key[str(note.id)]
+            authority_identity = build_note_authority_wire_identity(
+                enrollment_epoch=authority_route.epoch,
+                logical_note_key=bytes(locked.subject.logical_note_key),
+                subject_generation=locked.subject.subject_generation,
+                base_authority_revision=locked.token.authority_revision,
+                base_authority_state_hash=locked.state.semantic_state_hash,
+            )
+            card_payload["authority_pin"] = (
+                serialize_study_note_authority_identity(authority_identity)
+            )
+        card_payloads.append(card_payload)
         session_card_rows.append(
             StudySessionCard(
                 session_id=session_id,
@@ -699,6 +784,13 @@ def open_study_session(
         "contents": contents,
         "compositions": compositions,
     }
+    if authority_subjects is not None:
+        snapshot_material.update(
+            {
+                "authority_mode": "NOTE",
+                "enrollment_epoch": str(authority_route.epoch),
+            }
+        )
     snapshot_hash = study_artifact_service.canonical_digest(snapshot_material)
     expires_at = opened_at + SESSION_TTL
     session = StudySession(
@@ -731,6 +823,34 @@ def open_study_session(
     )
     db.session.add(session)
     db.session.add_all(session_card_rows)
+    if authority_subjects is not None:
+        try:
+            db.session.flush()
+            for session_card, card_payload in zip(
+                session_card_rows,
+                card_payloads,
+                strict=True,
+            ):
+                pin = stage_study_session_authority_pin(
+                    db.session,
+                    study_session=session,
+                    session_card=session_card,
+                    route=authority_route,
+                    locked=authority_subjects.locked_by_logical_note_key[
+                        str(card_payload["note_id"])
+                    ],
+                    now_utc=opened_at,
+                )
+                if serialize_study_session_authority_pin(pin) != card_payload.get(
+                    "authority_pin"
+                ):
+                    raise StudySessionAuthorityPinError(
+                        "SESSION_AUTHORITY_PIN_DIVERGED",
+                        "Persisted Study Session authority pin differs from its snapshot.",
+                    )
+        except StudySessionAuthorityPinError as exc:
+            db.session.rollback()
+            raise StudySessionError(exc.code, str(exc), status=409) from exc
     db.session.commit()
     return {
         **snapshot_material,
@@ -800,6 +920,23 @@ def get_study_session_status(
                 is not None
             )
             if has_updated_note:
+                is_stale = True
+
+    if status == "open":
+        wire_contract = _wire_contract_or_session_error(
+            session.wire_schema_version
+        )
+        if wire_contract.requires_note_authority_identity:
+            session_cards = (
+                StudySessionCard.query.filter_by(session_id=session.id)
+                .order_by(StudySessionCard.ordinal.asc())
+                .all()
+            )
+            if study_session_authority_pins_are_stale(
+                db.session,
+                study_session=session,
+                session_cards=session_cards,
+            ):
                 is_stale = True
 
     return {
@@ -899,6 +1036,14 @@ def enqueue_study_session_batch(
             "commit_reason must be auto_finish, manual_exit, page_exit, or rollover.",
             status=422,
         )
+    try:
+        lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user.id),
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise StudySessionError(exc.code, str(exc), status=409) from exc
     session = StudySession.query.filter_by(id=session_id, user_id=int(user.id)).first()
     if session is None:
         raise StudySessionError(
@@ -1019,6 +1164,329 @@ def enqueue_study_session_batch(
     }
 
 
+def _commit_note_authority_session(
+    *,
+    user: Any,
+    session: StudySession,
+    session_cards: list[StudySessionCard],
+    route: Any,
+    pins: LockedStudySessionAuthorityPins,
+    replayed_events: list[
+        tuple[
+            dict[str, Any],
+            StudySessionCard,
+            CardState,
+            CardState,
+            datetime,
+            DeckOptions,
+            ReviewTransitionResult,
+        ]
+    ],
+    states: dict[str, CardState],
+    commit_key: str,
+    payload_hash: str,
+    commit_reason: str,
+    committed_at: datetime,
+) -> dict[str, Any]:
+    """Commit a replayed v4 log through the canonical NOTE receipt command."""
+
+    event_card_ids = sorted(
+        {session_card.card_id for _, session_card, *_rest in replayed_events}
+    )
+    card_rows = {
+        str(card.id): card
+        for card in Card.query.filter(Card.id.in_(event_card_ids))
+        .order_by(Card.id.asc())
+        .with_for_update(read=True)
+        .all()
+    } if event_card_ids else {}
+    if set(card_rows) != set(event_card_ids):
+        raise StudySessionError(
+            "CARD_OUTSIDE_SESSION",
+            "One or more NOTE authority Cards no longer exist.",
+            status=409,
+        )
+
+    membership_by_card_id = {row.card_id: row for row in session_cards}
+    note_keys: set[str] = set()
+    for card_id, card in card_rows.items():
+        membership = membership_by_card_id[card_id]
+        identity = pins.identity_by_session_card_id[int(membership.id)]
+        if str(card.note_id) != identity.logical_note_key:
+            raise StudySessionError(
+                "SESSION_AUTHORITY_SUBJECT_CONFLICT",
+                "A Study Session Card moved to another authority Note.",
+                status=409,
+            )
+        note_keys.add(identity.logical_note_key)
+
+    if session.clone_install_id is not None:
+        install = db.session.get(DeckInstall, session.clone_install_id)
+        if (
+            install is None
+            or int(install.user_id) != int(user.id)
+            or str(install.clone_mode or "") != "logical_overlay"
+        ):
+            raise StudySessionError(
+                "SESSION_SCOPE_CHANGED",
+                "The installed deck scope changed during this session.",
+                status=409,
+            )
+        current_map = {
+            int(row.source_deck_id): int(row.local_deck_id)
+            for row in DeckCloneDeckMap.query.filter_by(
+                deck_install_id=install.id
+            ).all()
+        }
+        for card_id, card in card_rows.items():
+            membership = membership_by_card_id[card_id]
+            is_local_added = bool(
+                DeckCloneAddedNote.query.filter_by(
+                    deck_install_id=install.id,
+                    note_id=card.note_id,
+                ).first()
+            )
+            if is_local_added:
+                valid = (
+                    int(card.note.user_id) == int(user.id)
+                    and card.note.deck_id == membership.source_deck_id
+                    and card.note.deck_id == membership.local_deck_id
+                )
+            else:
+                valid = (
+                    membership.source_deck_id is not None
+                    and membership.local_deck_id is not None
+                    and current_map.get(int(membership.source_deck_id))
+                    == int(membership.local_deck_id)
+                )
+            if not valid:
+                raise StudySessionError(
+                    "SESSION_SCOPE_CHANGED",
+                    "A NOTE authority Card moved outside the installed session scope.",
+                    status=409,
+                )
+    else:
+        for card_id, card in card_rows.items():
+            membership = membership_by_card_id[card_id]
+            if (
+                int(card.note.user_id) != int(user.id)
+                or card.note.deck_id != membership.source_deck_id
+            ):
+                raise StudySessionError(
+                    "SESSION_SCOPE_CHANGED",
+                    "A NOTE authority Card moved outside the session scope.",
+                    status=409,
+                )
+
+    locked_subjects = None
+    locked_vectors: dict[str, tuple[Any, Any]] = {}
+    if note_keys:
+        try:
+            locked_subjects = lock_study_session_authority_subjects(
+                db.session,
+                route=route,
+                logical_note_keys=sorted(note_keys),
+                now_utc=committed_at,
+            )
+            for note_key in sorted(note_keys, key=lambda value: value.encode("utf-8")):
+                locked = locked_subjects.locked_by_logical_note_key[note_key]
+                membership_identity = next(
+                    pins.identity_by_session_card_id[int(row.id)]
+                    for row in session_cards
+                    if pins.identity_by_session_card_id[
+                        int(row.id)
+                    ].logical_note_key == note_key
+                )
+                current_identity = build_note_authority_wire_identity(
+                    enrollment_epoch=route.epoch,
+                    logical_note_key=bytes(locked.subject.logical_note_key),
+                    subject_generation=locked.subject.subject_generation,
+                    base_authority_revision=locked.token.authority_revision,
+                    base_authority_state_hash=locked.state.semantic_state_hash,
+                )
+                if current_identity != membership_identity:
+                    raise StudySessionAuthorityPinError(
+                        "AUTHORITY_STATE_CONFLICT",
+                        "Study Session NOTE authority lease is stale.",
+                    )
+                siblings = lock_study_authority_siblings(
+                    db.session,
+                    route=route,
+                    locked=locked,
+                )
+                compatibility = lock_study_authority_compatibility(
+                    db.session,
+                    route=route,
+                    locked=locked,
+                    siblings=siblings,
+                )
+                locked_vectors[note_key] = (siblings, compatibility)
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if code is None:
+                raise
+            db.session.rollback()
+            raise StudySessionError(str(code), str(exc), status=409) from exc
+
+    rating_counts = {rating: 0 for rating in sorted(VALID_RATINGS)}
+    projected_revisions: dict[str, int] = {}
+    seen_note_events: dict[str, int] = {}
+    try:
+        for (
+            raw_event,
+            session_card,
+            before,
+            _after,
+            answer_at,
+            options,
+            transition,
+        ) in replayed_events:
+            card = card_rows[session_card.card_id]
+            identity = pins.identity_by_session_card_id[int(session_card.id)]
+            note_key = identity.logical_note_key
+            locked = locked_subjects.locked_by_logical_note_key[note_key]
+            siblings, compatibility = locked_vectors[note_key]
+            if seen_note_events.get(note_key, 0):
+                compatibility = lock_study_authority_compatibility(
+                    db.session,
+                    route=route,
+                    locked=locked,
+                    siblings=siblings,
+                )
+                locked_vectors[note_key] = (siblings, compatibility)
+            expected = StudyAuthorityCASExpectation(
+                enrollment_epoch=int(route.epoch),
+                subject_generation=int(locked.subject.subject_generation),
+                authority_revision=int(locked.token.authority_revision),
+                semantic_state_hash=bytes(locked.token.semantic_state_hash),
+            )
+            mutation = study_service.NativeReviewMutationInput(
+                user_id=int(user.id),
+                card=card,
+                current_state=before,
+                transition=transition,
+                reviewed_at=answer_at,
+                duration_ms=study_service.normalize_review_duration(
+                    raw_event.get("duration_ms")
+                ),
+                payload=None,
+                local_deck_id=session_card.local_deck_id,
+                scheduler_preset_id=session_card.scheduler_preset_id,
+                scheduler_config_hash=session_card.scheduler_config_hash,
+                timezone_name=session.timezone,
+                deck_options=options,
+                note_type_id=session_card.note_type_id,
+                provenance=study_service.NativeReviewProvenance(
+                    source_path="native.session.commit",
+                    study_session_id=session.id,
+                    client_event_id=str(raw_event["event_id"]),
+                    sequence_no=int(raw_event["sequence"]),
+                    request_id=str(raw_event["event_id"]),
+                    wire_schema_version=session.wire_schema_version,
+                ),
+                progress_input=None,
+            )
+            result = apply_idempotent_existing_state_note_review(
+                db.session,
+                command=IdempotentExistingStateNoteReviewCommand(
+                    operation_key=str(raw_event["operation_key"]),
+                    command=ExistingStateNoteReviewCommand(
+                        route=route,
+                        locked=locked,
+                        expected=expected,
+                        siblings=siblings,
+                        compatibility=compatibility,
+                        review=mutation,
+                        now_utc=committed_at,
+                    ),
+                ),
+            )
+            if result.replayed:
+                raise StudySessionError(
+                    "CLIENT_EVENT_REUSED",
+                    "A NOTE authority event was already committed.",
+                    status=409,
+                )
+            study_service.stage_native_review_side_effects(mutation)
+            for card_id, revision in dict(
+                result.response_payload["projected_card_revisions"]
+            ).items():
+                projected_revisions[str(card_id)] = int(revision)
+            rating = str(raw_event["rating"]).lower()
+            rating_counts[rating] += 1
+            seen_note_events[note_key] = seen_note_events.get(note_key, 0) + 1
+
+        updated_cards = [
+            {
+                "card_id": card_id,
+                "revision": revision,
+                "state": serialize_card_state(states[card_id]),
+            }
+            for card_id, revision in sorted(projected_revisions.items())
+            if card_id in states
+        ]
+        response = {
+            "schema_version": "study-commit-receipt.v2",
+            "authority_mode": "NOTE",
+            "enrollment_epoch": str(route.epoch),
+            "success": True,
+            "session_id": session.id,
+            "commit_id": commit_key,
+            "commit_reason": commit_reason,
+            "applied_event_count": len(replayed_events),
+            "updated_cards": updated_cards,
+            "rating_counts": rating_counts,
+            "committed_at": _utc_iso(committed_at),
+        }
+        session.status = "committed"
+        session.committed_at = committed_at
+        db.session.add(
+            StudySessionCommit(
+                session_id=session.id,
+                user_id=int(user.id),
+                idempotency_key=commit_key,
+                request_hash=payload_hash,
+                response_json=_json_dumps(response),
+            )
+        )
+        db.session.add(
+            AuditLog(
+                user_id=int(user.id),
+                action="study.session.commit.note",
+                payload={
+                    "session_id": session.id,
+                    "scope_type": session.scope_type,
+                    "scope_id": session.scope_id,
+                    "event_count": len(replayed_events),
+                    "note_count": len(note_keys),
+                    "commit_reason": commit_reason,
+                    "enrollment_epoch": int(route.epoch),
+                },
+            )
+        )
+        db.session.commit()
+        return response
+    except IntegrityError:
+        db.session.rollback()
+        replayed = _idempotent_response(
+            session_id=session.id,
+            idempotency_key=commit_key,
+            request_hash=payload_hash,
+        )
+        if replayed is not None:
+            return replayed
+        raise
+    except StudySessionError:
+        db.session.rollback()
+        raise
+    except Exception as exc:
+        db.session.rollback()
+        code = getattr(exc, "code", None)
+        if code is not None:
+            raise StudySessionError(str(code), str(exc), status=409) from exc
+        raise
+
+
 def commit_study_session(
     *,
     user: Any,
@@ -1049,7 +1517,17 @@ def commit_study_session(
             status=422,
         )
     payload_hash = _request_hash(payload)
-    committed_at = now or datetime.utcnow()
+    # Authority compatibility projects into legacy MySQL DATETIME(0) columns.
+    committed_at = (now or datetime.utcnow()).replace(microsecond=0)
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user.id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise StudySessionError(exc.code, str(exc), status=409) from exc
     session = (
         StudySession.query.filter_by(id=session_id, user_id=int(user.id))
         .with_for_update()
@@ -1063,6 +1541,19 @@ def commit_study_session(
         )
     _validate_session_token(session, payload.get("session_token"))
     wire_contract = _wire_contract_or_session_error(session.wire_schema_version)
+    if wire_contract.requires_note_authority_identity:
+        if authority_route.mode_code != "NOTE":
+            raise StudySessionError(
+                "AUTHORITY_MODE_CONFLICT",
+                "Study Session v4 requires active NOTE authority.",
+                status=409,
+            )
+    elif authority_route.mode_code == "NOTE":
+        raise StudySessionError(
+            "WIRE_CONTRACT_MISMATCH",
+            "NOTE authority cannot commit a legacy Study Session lease.",
+            status=409,
+        )
     if str(payload.get("schema_version") or "") != wire_contract.commit_schema:
         raise StudySessionError(
             "UNSUPPORTED_COMMIT_SCHEMA",
@@ -1134,6 +1625,18 @@ def commit_study_session(
         .all()
     )
     membership = {row.card_id: row for row in session_cards}
+    note_authority_pins: LockedStudySessionAuthorityPins | None = None
+    if wire_contract.requires_note_authority_identity:
+        try:
+            note_authority_pins = lock_study_session_authority_pins(
+                db.session,
+                study_session=session,
+                session_cards=session_cards,
+                route=authority_route,
+            )
+        except StudySessionAuthorityPinError as exc:
+            db.session.rollback()
+            raise StudySessionError(exc.code, str(exc), status=409) from exc
     session_config = _decode_and_validate_session_config(session, payload)
     policies = session_config.policies
     states = {
@@ -1258,6 +1761,13 @@ def commit_study_session(
                 algorithm_version=session.algorithm_version,
                 policy=policy,
                 event_index=index,
+                note_authority=(
+                    note_authority_pins.identity_by_session_card_id[
+                        int(session_card.id)
+                    ]
+                    if note_authority_pins is not None
+                    else None
+                ),
             )
         except StudyWireContractError as exc:
             raise StudySessionError(
@@ -1327,8 +1837,20 @@ def commit_study_session(
                 transition,
             )
         )
-        states[card_id] = after
-        touched_ids.add(card_id)
+        if note_authority_pins is None:
+            states[card_id] = after
+            touched_ids.add(card_id)
+        else:
+            note_identity = note_authority_pins.identity_by_session_card_id[
+                int(session_card.id)
+            ]
+            for sibling in session_cards:
+                sibling_identity = note_authority_pins.identity_by_session_card_id[
+                    int(sibling.id)
+                ]
+                if sibling_identity.logical_note_key == note_identity.logical_note_key:
+                    states[sibling.card_id] = after
+                    touched_ids.add(sibling.card_id)
 
     if event_ids:
         reused_event = ReviewEvent.query.filter(
@@ -1351,6 +1873,12 @@ def commit_study_session(
             "INVALID_FINAL_STATES",
             "final_states must be an array.",
             status=400,
+        )
+    if note_authority_pins is not None and final_states_payload:
+        raise StudySessionError(
+            "INVALID_FINAL_STATES",
+            "Study Session v4 derives NOTE final state only from its event log.",
+            status=422,
         )
     for raw_final in final_states_payload or []:
         if not isinstance(raw_final, dict):
@@ -1397,6 +1925,21 @@ def commit_study_session(
             "SESSION_NOT_COMPLETE",
             "Study session still contains cards eligible for review.",
             status=409,
+        )
+
+    if note_authority_pins is not None:
+        return _commit_note_authority_session(
+            user=user,
+            session=session,
+            session_cards=session_cards,
+            route=authority_route,
+            pins=note_authority_pins,
+            replayed_events=replayed_events,
+            states=states,
+            commit_key=commit_key,
+            payload_hash=payload_hash,
+            commit_reason=commit_reason,
+            committed_at=committed_at,
         )
 
     card_rows: dict[str, Card] = {}

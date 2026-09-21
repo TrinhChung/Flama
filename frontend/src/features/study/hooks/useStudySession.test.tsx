@@ -485,6 +485,7 @@ describe('useStudySession cross-tab ownership', () => {
         scope_id: '12',
         composition_id: 'comp:notetype:type-1:template:template-1',
         accepted_session_schema_versions: [
+          'study-session.v4',
           'study-session.v3',
           'study-session.v2',
         ],

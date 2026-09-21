@@ -799,7 +799,26 @@ def study_session_open():
             v3_enabled=bool(
                 current_app.config.get("STUDY_WIRE_V3_ENABLED", False)
             ),
+            v4_enabled=bool(
+                current_app.config.get("STUDY_WIRE_V4_ENABLED", False)
+            ),
         )
+        legacy_wire_schema_version = wire_schema_version
+        if wire_schema_version == "study-session.v4":
+            try:
+                legacy_wire_schema_version = (
+                    study_session_service.negotiate_session_wire_schema(
+                        payload.get("accepted_session_schema_versions"),
+                        v3_enabled=bool(
+                            current_app.config.get("STUDY_WIRE_V3_ENABLED", False)
+                        ),
+                        v4_enabled=False,
+                    )
+                )
+            except study_session_service.StudySessionError as exc:
+                if exc.code != "UNSUPPORTED_SESSION_SCHEMA":
+                    raise
+                legacy_wire_schema_version = None
         result = study_session_service.open_study_session(
             user=current_user,
             query=query,
@@ -809,6 +828,7 @@ def study_session_open():
             timezone_name=timezone_name,
             composition_selection=composition_selection,
             wire_schema_version=wire_schema_version,
+            legacy_wire_schema_version=legacy_wire_schema_version,
         )
     except StudyCompositionError as exc:
         db.session.rollback()

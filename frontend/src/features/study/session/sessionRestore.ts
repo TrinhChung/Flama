@@ -23,9 +23,13 @@ import { canonicalDigest, canonicalJson } from './canonicalDigest'
 import {
   STUDY_SESSION_SCHEMA_V2,
   STUDY_SESSION_SCHEMA_V3,
+  STUDY_SESSION_SCHEMA_V4,
   StudyWireContractError,
   reviewEventWireIdentity,
+  reviewEventWireIdentityV4,
+  validateNoteAuthorityWireIdentity,
   validateReviewEventWireIdentity,
+  validateReviewEventWireIdentityV4,
   wireEnvelopeForSession,
 } from './wireContract'
 
@@ -160,11 +164,17 @@ function normalizeEvent(
   const policy = snapshot.policies[value.policy_key]
   let action
   try {
-    action = validateReviewEventWireIdentity(value, {
-      schema: snapshot.schema_version,
-      sessionId: snapshot.session_id,
-      policy,
-    })
+    action = snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+      ? validateReviewEventWireIdentityV4(value, {
+          sessionId: snapshot.session_id,
+          policy,
+          authority: card.authority_pin!,
+        })
+      : validateReviewEventWireIdentity(value, {
+          schema: snapshot.schema_version,
+          sessionId: snapshot.session_id,
+          policy,
+        })
   } catch (error) {
     if (!(error instanceof StudyWireContractError)) throw error
     return quarantine(
@@ -176,12 +186,20 @@ function normalizeEvent(
     && value.action_key === undefined
     && value.trigger_key === undefined
     && value.trigger_contract_version === undefined
-  const wireIdentity = reviewEventWireIdentity(
-    snapshot.schema_version,
-    snapshot.session_id,
-    action,
-    policy,
-  )
+  const wireIdentity = snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+    ? reviewEventWireIdentityV4(
+        snapshot.session_id,
+        value.event_id,
+        action,
+        policy,
+        card.authority_pin!,
+      )
+    : reviewEventWireIdentity(
+        snapshot.schema_version,
+        snapshot.session_id,
+        action,
+        policy,
+      )
 
   return {
     migrated: isLegacyEvent,
@@ -412,6 +430,7 @@ export function normalizePersistedStudySession(
     (
       snapshotValue.schema_version !== STUDY_SESSION_SCHEMA_V2
       && snapshotValue.schema_version !== STUDY_SESSION_SCHEMA_V3
+      && snapshotValue.schema_version !== STUDY_SESSION_SCHEMA_V4
     )
     || !isUuid(snapshotValue.session_id)
     || !Number.isSafeInteger(snapshotValue.user_id)
@@ -457,6 +476,65 @@ export function normalizePersistedStudySession(
     )
   })) {
     return quarantine('MALFORMED_SESSION', 'Stored study cards are malformed.')
+  }
+
+  const isV4 = snapshotValue.schema_version === STUDY_SESSION_SCHEMA_V4
+  const invalidV4Pins = isV4 && (
+    snapshotValue.authority_mode !== 'NOTE'
+    || typeof snapshotValue.enrollment_epoch !== 'string'
+    || !snapshotValue.cards.every((rawCard) => {
+      if (!isRecord(rawCard) || !isRecord(rawCard.authority_pin)) return false
+      const pin = rawCard.authority_pin
+      if (
+        pin.schema_version !== 'study-note-authority-pin.v1'
+        || pin.authority_mode !== 'NOTE'
+        || pin.enrollment_epoch !== snapshotValue.enrollment_epoch
+      ) return false
+      try {
+        validateNoteAuthorityWireIdentity(pin as {
+          enrollment_epoch: string
+          logical_note_key: string
+          subject_generation: string
+          base_authority_revision: string
+          base_authority_state_hash: string
+        })
+      } catch {
+        return false
+      }
+      return true
+    })
+  )
+  const legacyHasPins = !isV4 && snapshotValue.cards.some(
+    (rawCard) => isRecord(rawCard) && rawCard.authority_pin !== undefined,
+  )
+  if (invalidV4Pins || legacyHasPins) {
+    return quarantine(
+      'MALFORMED_SESSION',
+      'Stored study NOTE authority pins do not match the session envelope.',
+    )
+  }
+  if (isV4) {
+    const pinByNote = new Map<string, string>()
+    for (const rawCard of snapshotValue.cards) {
+      const pin = (rawCard as Record<string, unknown>)
+        .authority_pin as Record<string, unknown>
+      const noteKey = String(pin.logical_note_key)
+      const token = canonicalJson({
+        enrollment_epoch: pin.enrollment_epoch,
+        logical_note_key: pin.logical_note_key,
+        subject_generation: pin.subject_generation,
+        base_authority_revision: pin.base_authority_revision,
+        base_authority_state_hash: pin.base_authority_state_hash,
+      })
+      const prior = pinByNote.get(noteKey)
+      if (prior !== undefined && prior !== token) {
+        return quarantine(
+          'MALFORMED_SESSION',
+          'Stored sibling Cards disagree on their frozen NOTE token.',
+        )
+      }
+      pinByNote.set(noteKey, token)
+    }
   }
 
   const compositionFields = [

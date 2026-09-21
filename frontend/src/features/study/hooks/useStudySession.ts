@@ -69,7 +69,10 @@ type SessionMutationOwner = Readonly<{
 function isCommitReceipt(value: unknown): value is StudySessionCommitReceipt {
   if (!value || typeof value !== 'object') return false
   const receipt = value as Partial<StudySessionCommitReceipt>
-  return receipt.schema_version === 'study-commit-receipt.v1'
+  return (
+    receipt.schema_version === 'study-commit-receipt.v1'
+    || receipt.schema_version === 'study-commit-receipt.v2'
+  )
     && receipt.success === true
     && typeof receipt.session_id === 'string'
     && typeof receipt.commit_id === 'string'
@@ -88,6 +91,7 @@ function openSnapshot(userId: number, deckId: string, compositionId: string) {
       scope_id: deckId,
       composition_id: compositionId,
       accepted_session_schema_versions: [
+        'study-session.v4',
         'study-session.v3',
         'study-session.v2',
       ],

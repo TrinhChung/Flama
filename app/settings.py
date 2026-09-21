@@ -253,6 +253,12 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "STUDY_WIRE_V3_ENABLED",
             default=False,
         ),
+        # Wire v4 is NOTE-authority-only. Negotiation fails closed at session
+        # issuance until the dedicated Note-token issuer is wired end to end.
+        "STUDY_WIRE_V4_ENABLED": coerce_bool_env(
+            "STUDY_WIRE_V4_ENABLED",
+            default=False,
+        ),
         # Phase 4 shadow progress remains inert until each later rollout gate
         # is approved independently.  None of these flags grants read authority.
         "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": coerce_bool_env(

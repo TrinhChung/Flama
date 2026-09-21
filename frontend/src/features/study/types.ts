@@ -3,6 +3,7 @@ import type {
   SchedulerOptions,
 } from './scheduler/types'
 import type { ReviewRating } from './interactions/reviewInteraction'
+import type { StudyNoteAuthorityWireIdentity } from './session/wireContract'
 
 export type Rating = ReviewRating
 
@@ -179,6 +180,10 @@ export type StudySessionCard = {
   base_state_hash: string
   state: SchedulerCardState
   can_edit_card: boolean
+  authority_pin?: StudyNoteAuthorityWireIdentity & {
+    schema_version: 'study-note-authority-pin.v1'
+    authority_mode: 'NOTE'
+  }
 }
 
 type StudySessionSnapshotBase = {
@@ -210,6 +215,11 @@ type StudySessionSnapshotBase = {
 export type StudySessionSnapshot = StudySessionSnapshotBase & (
   | { schema_version: 'study-session.v2' }
   | { schema_version: 'study-session.v3' }
+  | {
+      schema_version: 'study-session.v4'
+      authority_mode: 'NOTE'
+      enrollment_epoch: string
+    }
 )
 
 type StudySessionEventBase = {
@@ -245,7 +255,20 @@ export type StudySessionEventV3 = StudySessionEventBase & {
   study_session_id: string
 }
 
-export type StudySessionEvent = StudySessionEventV2 | StudySessionEventV3
+export type StudySessionEventV4 = StudySessionEventV3 & {
+  authority_mode: 'NOTE'
+  enrollment_epoch: string
+  logical_note_key: string
+  subject_generation: string
+  base_authority_revision: string
+  base_authority_state_hash: string
+  operation_key: string
+}
+
+export type StudySessionEvent =
+  | StudySessionEventV2
+  | StudySessionEventV3
+  | StudySessionEventV4
 
 type StudyBatchPayloadBase = {
   batch_id: string
@@ -271,6 +294,10 @@ export type StudyBatchPayload = StudyBatchPayloadBase & (
       schema_version: 'study-batch.v2'
       events: StudySessionEventV3[]
     }
+  | {
+      schema_version: 'study-batch.v3'
+      events: StudySessionEventV4[]
+    }
 )
 
 export type StudyBatchReceipt = {
@@ -282,8 +309,7 @@ export type StudyBatchReceipt = {
   enqueued_at: string
 }
 
-export type StudySessionCommitReceipt = {
-  schema_version: 'study-commit-receipt.v1'
+type StudySessionCommitReceiptBase = {
   success: boolean
   session_id: string
   commit_id: string
@@ -297,6 +323,15 @@ export type StudySessionCommitReceipt = {
   rating_counts: Record<Rating, number>
   committed_at: string
 }
+
+export type StudySessionCommitReceipt = StudySessionCommitReceiptBase & (
+  | { schema_version: 'study-commit-receipt.v1' }
+  | {
+      schema_version: 'study-commit-receipt.v2'
+      authority_mode: 'NOTE'
+      enrollment_epoch: string
+    }
+)
 
 export type StudySessionStatus = {
   schema_version: 'study-session-status.v1'

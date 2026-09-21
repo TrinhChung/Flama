@@ -547,6 +547,65 @@ describe('local study session engine', () => {
     expect(extractPendingBatch(answered)?.batch.schema_version).toBe('study-batch.v2')
   })
 
+  it('emits frozen v4 Note identity and updates sibling presentation Cards together', () => {
+    let id = 0
+    vi.stubGlobal('crypto', {
+      randomUUID: () => `00000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
+    })
+    const base = snapshotWithCards(2)
+    const authorityPin = {
+      schema_version: 'study-note-authority-pin.v1' as const,
+      authority_mode: 'NOTE' as const,
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+    }
+    const v4Snapshot: StudySessionSnapshot = {
+      ...base,
+      schema_version: 'study-session.v4',
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      cards: base.cards.map((card) => ({ ...card, authority_pin: authorityPin })),
+    }
+    const local = createPersistedSession(v4Snapshot)
+    const now = Date.parse(local.snapshot.server_now_utc)
+    const answered = applyLocalAnswer(
+      local,
+      'card-1',
+      'good',
+      decisionForCard(local, 'card-1', now + 1000),
+      500,
+    )
+
+    expect(answered.events[0]).toMatchObject({
+      event_id: '00000000-0000-4000-8000-000000000001',
+      operation_key: '00000000-0000-4000-8000-000000000001',
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+    })
+    expect(answered.snapshot.cards[1].state).toEqual(
+      answered.snapshot.cards[0].state,
+    )
+    expect(prepareCommit(answered).payload).toMatchObject({
+      schema_version: 'study-commit.v3',
+      final_states: [],
+    })
+    expect(extractPendingBatch(answered)?.batch).toMatchObject({
+      schema_version: 'study-batch.v3',
+      final_states: [],
+    })
+
+    const undone = undoLocalAnswer(answered)
+    expect(undone?.session.snapshot.cards[0].state.type).toBe('new')
+    expect(undone?.session.snapshot.cards[1].state.type).toBe('new')
+  })
+
   it('keeps the event checkpoint after extraction and excludes accepted work from undo', () => {
     let uuidSequence = 0
     vi.stubGlobal('crypto', {

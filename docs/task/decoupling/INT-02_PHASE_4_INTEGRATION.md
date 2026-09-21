@@ -4,7 +4,7 @@
 >
 > Priority: P0 final gate
 >
-> Status: IN PROGRESS — local integration subset passes; P4-11 final gate open
+> Status: **COMPLETED FOR PRE-RELEASE DEVELOPMENT — 2026-09-20**; production enablement remains separately gated by the [P4-11 deferrals](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md)
 >
 > Dependency: P4-00 through P4-11
 >
@@ -44,7 +44,7 @@ Xác minh Phase 4 hoạt động như một derived shadow hoàn chỉnh, không
 - P4-07/P4-08 all authoritative writers/lifecycle paths atomic.
 - P4-09 backfill accounting/resume/race gates pass.
 - P4-10 zero unexplained reconciliation difference.
-- P4-11 backup/migration/restart/load/rollback rehearsal pass.
+- P4-11 [pre-release development closeout](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) accepted; deferred production load/fault/abort gates are not passed and do not authorize production shadow enablement.
 - No product shadow read, second authority, source mutation or destructive cleanup.
 
 ## Verification
@@ -67,7 +67,7 @@ Run full suite only at this pre-release closeout gate after narrower suites pass
 - Quarantine/known limitation inventory.
 - Phase 5 recommendation and required separate approvals.
 
-## Progress — 2026-09-20
+## Historical progress before the final gate — 2026-09-20
 
 The [rehearsal report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md)
 records 948 passing modular backend tests, 179 passing Study frontend tests,
@@ -81,14 +81,20 @@ the production database collation and SQL mode; the application database
 remained read-only and at head 39. Four further VPS disposable probes passed
 schema/codec, backfill resume/create/reset/delete races, native fan-in/fault/
 lock timeout, and external lifecycle/native–external race cases. These results
-do **not** close INT-02:
-P4-11 still lacks a representative production-version multi-user/overlay
-load/traffic rehearsal and the complete failure matrix. The final
-`--changed`/`--all` pre-release gate is deferred
-until those prerequisites are satisfied. No Phase 5 authority cutover is
-authorized. Current Phase 5 recommendation: **NO-GO** pending P4-11 and this
-final integration gate; this is an evidence status, not a claim that the
-derived shadow is product authority.
+do **not** close INT-02. The [P4-11 risk-scoped decision](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md)
+now accepts the existing rehearsal as a **pre-release development** dependency
+and explicitly defers representative production-version multi-user/overlay
+load, complete MySQL fault matrix and measured abort limits to the
+production-enablement/P5-09 gate. The final `--changed`/`--all` pre-release
+integration gate is now unblocked but has **not yet run**. No production Phase 4
+shadow flag enablement or Phase 5 authority cutover is authorized. Current
+Phase 5 implementation recommendation remains **NO-GO pending INT-02**;
+this is an evidence status, not a claim that the derived shadow is product
+authority.
+
+## Final INT-02 closeout — 2026-09-20
+
+The [integration closeout report](../../architecture/phase-4-int02-closeout-2026-09-20.md) supersedes the historical in-progress paragraph above. Fresh modular backend tests passed across 86 files; Study frontend passed 179 tests; typecheck and lint passed. `--changed` selected no tests because this worktree changes documentation only, so the full `--all` gate was run: **1,267 backend tests (2 skipped) and 437 frontend tests passed**. A fresh 1,002-row disposable local MySQL migration/backfill/reconciliation/flags-off rollback probe passed with zero unexplained difference and cleaned up its temporary databases/principal. Static authority and transaction-boundary searches passed. Phase 4 and INT-02 are **closed for pre-release development**; no production shadow flag or NOTE authority was enabled. The P4-11 production-version load/fault/limit exceptions remain mandatory before production enablement.
 
 ## Rollback
 

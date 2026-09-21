@@ -58,6 +58,13 @@ SESSION_EVENT_FIELDS = frozenset(
         "duration_ms",
         "before_state_hash",
         "after_state_hash",
+        "authority_mode",
+        "enrollment_epoch",
+        "logical_note_key",
+        "subject_generation",
+        "base_authority_revision",
+        "base_authority_state_hash",
+        "operation_key",
     }
 )
 

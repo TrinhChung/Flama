@@ -5,11 +5,15 @@ import unittest
 from app.validators.study_session_wire import (
     BATCH_SCHEMA_V1,
     BATCH_SCHEMA_V2,
+    BATCH_SCHEMA_V3,
     COMMIT_SCHEMA_V1,
     COMMIT_SCHEMA_V2,
+    COMMIT_SCHEMA_V3,
     SESSION_SCHEMA_V2,
     SESSION_SCHEMA_V3,
+    SESSION_SCHEMA_V4,
     StudyWireContractError,
+    build_note_authority_wire_identity,
     resolve_wire_envelope_contract,
     select_session_schema,
     validate_envelope_schema,
@@ -35,10 +39,14 @@ class StudySessionWireContractTests(unittest.TestCase):
     def test_envelope_versions_are_mapped_independently(self) -> None:
         v2 = resolve_wire_envelope_contract(SESSION_SCHEMA_V2)
         v3 = resolve_wire_envelope_contract(SESSION_SCHEMA_V3)
+        v4 = resolve_wire_envelope_contract(SESSION_SCHEMA_V4)
         self.assertEqual(v2.commit_schema, COMMIT_SCHEMA_V1)
         self.assertEqual(v2.batch_schema, BATCH_SCHEMA_V1)
         self.assertEqual(v3.commit_schema, COMMIT_SCHEMA_V2)
         self.assertEqual(v3.batch_schema, BATCH_SCHEMA_V2)
+        self.assertEqual(v4.commit_schema, COMMIT_SCHEMA_V3)
+        self.assertEqual(v4.batch_schema, BATCH_SCHEMA_V3)
+        self.assertTrue(v4.requires_note_authority_identity)
 
     def test_negotiation_preserves_old_clients_and_gates_v3(self) -> None:
         self.assertEqual(select_session_schema(None, v3_enabled=True), SESSION_SCHEMA_V2)
@@ -53,6 +61,22 @@ class StudySessionWireContractTests(unittest.TestCase):
         self.assertEqual(
             select_session_schema([SESSION_SCHEMA_V2, SESSION_SCHEMA_V3], v3_enabled=True),
             SESSION_SCHEMA_V2,
+        )
+        self.assertEqual(
+            select_session_schema(
+                [SESSION_SCHEMA_V4, SESSION_SCHEMA_V3, SESSION_SCHEMA_V2],
+                v3_enabled=True,
+                v4_enabled=False,
+            ),
+            SESSION_SCHEMA_V3,
+        )
+        self.assertEqual(
+            select_session_schema(
+                [SESSION_SCHEMA_V4, SESSION_SCHEMA_V3, SESSION_SCHEMA_V2],
+                v3_enabled=True,
+                v4_enabled=True,
+            ),
+            SESSION_SCHEMA_V4,
         )
 
     def test_envelope_decoder_is_selected_from_pinned_session(self) -> None:
@@ -170,6 +194,95 @@ class StudySessionWireContractTests(unittest.TestCase):
         with self.assertRaisesRegex(StudyWireContractError, "action_contract_version"):
             validate_review_event_wire_contract(
                 self.base_event,
+                session_schema=SESSION_SCHEMA_V3,
+                session_id="session-1",
+                algorithm_key="legacy-anki",
+                algorithm_version="1.0.0",
+                policy=self.policy,
+                event_index=1,
+            )
+
+    def test_v4_requires_exact_note_authority_and_operation_key(self) -> None:
+        identity = build_note_authority_wire_identity(
+            enrollment_epoch=3,
+            logical_note_key=b"note-key",
+            subject_generation=2,
+            base_authority_revision=7,
+            base_authority_state_hash=b"\x11" * 32,
+        )
+        event = {
+            **self.base_event,
+            "event_id": "operation-1",
+            "action_contract_version": "1",
+            "algorithm_key": "legacy-anki",
+            "algorithm_version": "1.0.0",
+            "config_schema_version": "scheduler-config.v1",
+            "config_hash": "config-1",
+            "study_session_id": "session-1",
+            **identity.event_fields(operation_key="operation-1"),
+        }
+        action = validate_review_event_wire_contract(
+            event,
+            session_schema=SESSION_SCHEMA_V4,
+            session_id="session-1",
+            algorithm_key="legacy-anki",
+            algorithm_version="1.0.0",
+            policy=self.policy,
+            event_index=1,
+            note_authority=identity,
+        )
+        self.assertEqual(action.rating, "good")
+
+        for field, bad_value in (
+            ("operation_key", "another-operation"),
+            ("enrollment_epoch", "4"),
+            ("base_authority_revision", "8"),
+            ("base_authority_state_hash", "22" * 32),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(StudyWireContractError):
+                    validate_review_event_wire_contract(
+                        {**event, field: bad_value},
+                        session_schema=SESSION_SCHEMA_V4,
+                        session_id="session-1",
+                        algorithm_key="legacy-anki",
+                        algorithm_version="1.0.0",
+                        policy=self.policy,
+                        event_index=1,
+                        note_authority=identity,
+                    )
+
+    def test_v4_identity_is_canonical_and_cannot_leak_into_v3(self) -> None:
+        with self.assertRaises(StudyWireContractError):
+            build_note_authority_wire_identity(
+                enrollment_epoch="01",
+                logical_note_key="note-key",
+                subject_generation="1",
+                base_authority_revision="0",
+                base_authority_state_hash="11" * 32,
+            )
+        with self.assertRaises(StudyWireContractError):
+            build_note_authority_wire_identity(
+                enrollment_epoch="1",
+                logical_note_key=" note-key",
+                subject_generation="1",
+                base_authority_revision="0",
+                base_authority_state_hash="11" * 32,
+            )
+
+        event = {
+            **self.base_event,
+            "action_contract_version": "1",
+            "algorithm_key": "legacy-anki",
+            "algorithm_version": "1.0.0",
+            "config_schema_version": "scheduler-config.v1",
+            "config_hash": "config-1",
+            "study_session_id": "session-1",
+            "authority_mode": "NOTE",
+        }
+        with self.assertRaisesRegex(StudyWireContractError, "mixes v4"):
+            validate_review_event_wire_contract(
+                event,
                 session_schema=SESSION_SCHEMA_V3,
                 session_id="session-1",
                 algorithm_key="legacy-anki",

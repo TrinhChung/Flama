@@ -1,0 +1,123 @@
+# Kế hoạch thực thi Phase 5 — chuyển authority sang learner/Note
+
+> Lập ngày: 2026-09-20; cập nhật 2026-09-21 | Trạng thái: **P5 bắt đầu bằng schema foundation; production authority hiện NO-GO**
+>
+> Baseline commit: `develop` tại `263b65e`. Worktree đã có migration `20260921_000040` (hai bảng authority-fence LEGACY-only) và `20260921_000041` (receipt additive), cùng test/probe; `CardProgress` vẫn là operational authority. Chưa có Phase 5 runtime authority route/flag hoặc production cutover.
+>
+> Entry bắt buộc: [P4-11](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) đã [đóng theo phạm vi pre-release/dev](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md), và [INT-02 đã đóng](../../architecture/phase-4-int02-closeout-2026-09-20.md) bằng full integration evidence. Phase 5 có thể bắt đầu từ P5-00/P5-01; exact design và production enablement vẫn cần gate riêng. Rủi ro production được defer từ P4-11 phải xử lý tại P5-09, không được coi là pass.
+>
+> Thiết kế dữ liệu và các lựa chọn còn phải phê duyệt: [Phase 5 authority cutover design](../../architecture/phase-5-authority-cutover-design-2026-09-20.md). Scope gốc: [canonical architecture plan](../../architecture/study-interaction-trigger-algorithm-plan.md).
+
+## 1. Kết quả và ranh giới
+
+Phase 5 **hoàn tất phát triển** khi mode authority theo learner được fence bền vững và được kiểm chứng trên cohort tổng hợp ở disposable/staging MySQL: với learner ở mode NOTE, mọi Action/state-sync/read dùng progress learner/Note + exact Algorithm State. `CardProgress` chỉ còn là **write-through compatibility projection** đầy đủ trong cửa sổ rollback; Card ID, composition và old wire vẫn được giữ. Đối soát old/new và rollback phải được chứng minh trước production. Theo chỉ đạo chủ sản phẩm, Phase 5 còn có **mốc bật canary trên production hiện tại và giữ vận hành/giám sát** sau khi đạt gate kỹ thuật; ít người dùng thật không phải lý do treo rollout hoặc thay thế kiểm thử tải tổng hợp.
+
+Phase 5 **không** xóa `CardProgress`, không xóa Card/Template, không chuyển progress ownership theo presentation lifecycle (Phase 6), không purge detail 30 ngày (Phase 7), không tự bật Algorithm mới/FSRS từ label (Phase 8), không contract schema cũ (Phase 9). `ReviewEvent` không được replay để đoán current state. Clone install vẫn overlay-only và không mutate source Note/Card.
+
+## 2. Vì sao chưa bắt đầu cutover
+
+P4-10 đã đối soát 16.424 dòng tổng hợp trên MySQL local 8.0.40 và VPS 8.0.46 đã pass các probe nhỏ. [P4-11 closeout](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) chấp nhận bằng chứng này để không chặn phát triển khi app chưa release và ít người dùng, **không** biến nó thành rollout-ready: VPS cohort chỉ 12 dòng, một learner/deck, qua SSH tunnel; metadata-lock/traffic/load, một số fault injection và ngưỡng vận hành chưa được chứng minh. [INT-02](../../architecture/phase-4-int02-closeout-2026-09-20.md) đã pass final `--all` và local MySQL re-probe; `--changed` không chọn test vì chỉ sửa docs. P5-00 đã refresh production head 39 và audit SELECT-only hai lượt ngày 2026-09-21; Redis study queue/DLQ bằng 0 tại lúc đo, nhưng old/new reconciliation chưa thể làm khi shadow rỗng, còn traffic/load và browser offline chưa hoàn tất.
+
+| Gate | Điều kiện tối thiểu | Hiện tại |
+|---|---|---|
+| G5-0 — Phase 4 handoff | P4-11 pre-release development closeout (có waiver rõ) + INT-02 full integration và go/no-go | **PASS cho Phase 5 development**; production exceptions còn ở P5-09 |
+| G5-D — authority design | Exact identity/CAS/enrollment, full legacy projection, wire/lease, external conflict, rollback policy được review cùng nhau | Physical schema ADR cho lát cắt inert đã chốt; runtime/lock/wire còn mở |
+| G5-E — additive expansion | MySQL migration, defaults LEGACY, flags-off `wsgi.py` boot và backup/restore pass | Migration 40 LEGACY-only + SQLite/local MySQL probe + flags-off local `wsgi.py` pass; VPS/backup chưa pass |
+| G5-W — write-through | Mọi writer/lifecycle path atomic; zero split brain, zero unprojectable accepted transition | Chưa bắt đầu |
+| G5-R — reader/wire parity | NOTE readers/clients/worker đúng fixed-context due/order/CAS; v2/v3 leases an toàn | Chưa bắt đầu |
+| G5-X — Phase 5 development exit | Full canonical writer/reader matrix chuyển qua mode-aware boundary; NOTE cohort tổng hợp, zero unexplained diff và rollback proof trên disposable MySQL; INT-03 pass | Chưa bắt đầu |
+| G5-P — production enablement (sau G5-X) | Canary, abort limits, owner/on-call, measured synthetic concurrent traffic và rollback proof; không đòi tối thiểu user production | Là mốc triển khai đã được chủ sản phẩm chỉ định, **chưa đạt gate kỹ thuật** |
+| G5-F — final Phase 5 closeout | Canary production chạy ổn qua lease/job horizon, diff bằng 0, có on-call/rollback và theo dõi tiếp | Sau P5-10; không đòi số lượt review thực tối thiểu |
+
+P5-00 [đã có snapshot và audit production SELECT-only hai lượt ngày 2026-09-21, vẫn PARTIAL](../../architecture/phase-5-p5-00-inventory-2026-09-21.md): head 39, 16.764 `CardProgress`/6 learners, drift 0, Phase 4 preflight PASS, full architecture audit WARN do 7 nhóm session/event lịch sử; shadow rỗng và 126 session mở đều hết hạn tại lúc đo. Principal tạm đã xóa, checksum bundle pass; Gunicorn flags Phase 4/v3/async đều unset, Redis study queue/DLQ đều 0 tại lúc đo. Còn thiếu browser offline evidence, old/new parity và full writer disposition. [Physical schema ADR](../../architecture/phase-5-authority-fence-adr-2026-09-21.md) đã thử thành công primitive khóa learner-row với hai connection MySQL local, nhưng suffix lock graph/wire/CAS vẫn chưa chốt P5-01. Gate P5-09 và G5-P vẫn bắt buộc trước mọi NOTE production write.
+
+## 3. Invariants không thương lượng
+
+1. Authority route được lưu/fence theo learner, nhất quán giữa web, worker, MCP, Connect và tất cả Deck/Template contexts; mode mặc định LEGACY. Không dùng một global/process-local flag làm source of truth.
+2. Subject key là `(learner_user_id, logical_note_key)` theo P4-02; source-installed/local-added Note resolve theo overlay context. Một learner/Note có một state và independent `authority_revision`; không tái nghĩa `subject_generation` hoặc `mirror_revision` của Phase 4.
+3. Native Action, Note state, authority revision, đầy đủ sibling-Card legacy projection, `ReviewEvent`, scheduler-grade history fact và idempotency receipt commit cùng một transaction/savepoint owner. Projection không đầy đủ thì rollback Action.
+4. No-op/duplicate/conflict không bump revision hoặc append duplicate event. Reset/delete/rekey fencing không cho session cũ hồi sinh state. External snapshot là state-sync command, revlog là history-only, không biến thành native Action.
+5. Exact Algorithm/Trigger/state/config decoder fail closed; Template/iframe không có progress-write capability. Không suy diễn FSRS executable từ `scheduler_mode`.
+6. Old v2/v3 sessions, pending batch và frontend offline records được kiểm kê; không cho commit qua authority epoch khác. Cửa sổ compatibility tính từ lease/jobs **thực tế**, không đoán browser storage rỗng.
+7. `CardProgress` rollback chỉ an toàn khi mọi NOTE write vẫn có lossless write-through projection và được đối soát. Khi có state mới không biểu diễn được ở legacy, flag flip quay lại legacy bị cấm.
+8. Không chuyển Card/Template lifecycle thành progress ownership trong Phase 5; presentation Card có thể nhiều nhưng state Note là một. Không xóa compatibility rows/decoders trong phase này.
+
+## 4. Quyết định phải chốt trước NOTE-capable DDL/runtime (P5-01)
+
+Thiết kế draft khuyến nghị **promote** `study_progress_subjects` + `study_progress_states`, bổ sung token authority riêng và persisted learner enrollment; so sánh với phương án thêm parallel authority tables trong [design](../../architecture/phase-5-authority-cutover-design-2026-09-20.md#3-target-architecture-and-alternatives). ADR được chấp nhận phải đóng chính xác:
+
+- PK/FK/index, trạng thái/epoch và lock order của enrollment; cách ngăn writer LEGACY commit sau khi chuyển mode mà không serialize mọi Note của một learner vô hạn;
+- `authority_revision` và CAS token `(enrollment_epoch, subject_generation, authority_revision, state hash)`; first-create, reset/rekey/ABA và idempotency;
+- full Note→Card legacy encoder cho **mọi** `CardProgress` field, NULL/float/time precision, last-event pointer, sibling Card mới/xóa, equivalent fan-in; phạm vi Algorithm được phép trong reversible window;
+- role của `StudyProgressHistoryFact` và `ReviewEvent` khi NOTE authority; versioned Trigger/composition/Algorithm metadata và detached history;
+- read selector/order với nhiều Cards cho một Note trước Phase 6; no-progress, burial, suspension, timezone/day boundary, learn-ahead, owned/source-install/local-added contexts;
+- wire mới: v3 hiện có semantic identity nhưng session Card vẫn pin `base_progress_revision`; chốt một version mới (đề xuất v4) hoặc chứng minh một contract tương đương **mà không đổi nghĩa issued v2/v3**;
+- authorization/initializer cho Algorithm switch, incomplete history, rollback khi target state không còn project losslessly;
+- MySQL lock/latency/storage/query plans và giới hạn cohort/batch dựa trên số đo, không hardcode từ local probe.
+
+## 5. Work packages và ownership
+
+| ID | Work package và phạm vi | Dependency | Output/acceptance cụ thể |
+|---|---|---|---|
+| P5-00 | **Entry preflight & mutation/read inventory.** Refresh SELECT-only production schema/head, exact counts, fan-in/quarantine, old/new hashes, lease/job/client versions, writer+reader call graph và transaction owners. | G5-0 để phê duyệt; investigation có thể chuẩn bị trước | Signed timestamped evidence; mọi row/path có disposition; không dùng startup mutating audit. |
+| P5-01 | **Authority ADR + migration contract.** Review hai physical và hai routing/rollback alternatives; chốt invariants/DDL/lock ordering/wire/external/history. | P5-00 | Accepted ADR với zero-data-loss Expand→Compare→Cutover→Contract strategy; no hidden decision deferred into code. |
+| P5-02 | **Additive enrollment/revision/codec storage.** Models + Alembic, schema verification, exact decoder, LEGACY default, safe boot. | P5-01; inert LEGACY-only physical slice có thể chuẩn bị trước full ADR | Hai bảng LEGACY-only đã có và pass SQLite/local MySQL cùng flags-off local `wsgi.py`; còn VPS pre-P5 upgrade, backup/restore và exact runtime decoder integration trước khi đóng. |
+| P5-03 | **Lossless Note→Card projection and reverse comparison.** Pure serializer/encoder, sibling vector, old/new golden vectors, lifecycle materialization, raw byte/hash verification. | P5-02 | **CORE COMPLETE / INERT:** [encoder + oracle contract](../../architecture/phase-5-p5-03-legacy-projection-contract-2026-09-21.md), 14 focused tests và disposable MySQL 8.0.40 1:N/fault/new/delete/reset round-trip pass. Unsafe f64/µs state fails closed. Overlay/import/rekey resolution remains P5-06; no NOTE routing/write is enabled. |
+| P5-04 | **One canonical mode-aware command.** Route direct REST/MCP and session/worker through one no-commit core; authoritative Note CAS, built-in Trigger, event/fact/receipt, legacy write-through. | P5-03 | **PARTIAL / LEGACY-ONLY:** [learner fence, subject CAS, live-Note sibling + compatibility resolvers and the composed existing-state event/state/token/projection/evidence/history command](../../architecture/phase-5-p5-04-canonical-command-2026-09-21.md) are implemented. The P5-05 wrapper now adds a durable atomic receipt and exact replay. MySQL proves commit/replay, token exclusion, Card-set phantom-insert exclusion and rollback; NOTE still fails closed. Missing-row/first-state handling, overlay authorization/side effects, route wiring, end-to-end duplicate/deadlock semantics and the remaining conflict/fault matrix remain open. |
+| P5-05 | **Wire, frontend and lease transition.** New frozen Note token/epoch envelope, dual decoders, worker job version pin, frontend storage/restore/replay, client negotiation. | P5-01 + P5-04 | **PARTIAL / RECEIPT FOUNDATION:** [migration 41 + generic authority receipt contract](../../architecture/phase-5-p5-05-authority-receipt-contract-2026-09-21.md) implement operation key, request fingerprint, exact response replay and atomic rollback for the inert existing-state command. v2/v3 pin/expiry, v4 envelope, route/worker integration and frontend persistence remain open. |
+| P5-06 | **External and lifecycle state-sync.** Adapt Anki/Connect snapshot/import, revlog, reset, delete, clone cutover/rekey, sibling Card creation to persisted authority route. | P5-04 | P1-02 conflict/force/no-op semantics retained; partial per-item savepoint atomicity; no source Note mutation; all affected sessions invalidated/fenced. |
+| P5-07 | **Canonical reads and differential audit.** Mode-aware study selection, due/count/order, session open/status, browse/dashboard/stats and integration readers; non-serving fixed-context compare. | P5-04 + P5-05 | Zero unexplained state/queue/order/due/availability differences for eligible cohorts; no NOTE read silently falls back to legacy; Card presentation multiplicity retained. |
+| P5-08 | **History/Algorithm switch seam.** Versioned scheduler facts, complete/incomplete history cut, exact initializer registry, CAS/idempotency for requested switch; fail-closed unsupported target. | P5-04 + P5-06 | No fabricated FSRS/other executable; new-only state cannot enter reversible cohort; history survives detached/rekey/import cases. |
+| P5-09 | **Disposable MySQL 8.0.46 rollout/rollback rehearsal.** Synthetic multi-user/overlay topology shaped by the latest data snapshot, generated concurrent read/write traffic, metadata locks, backup/restore, kill/restart, deferred P4-11 fault matrix and measured limits. No minimum live-user count. | P5-05..P5-08 | Reviewed commands, metrics, conservative abort thresholds, on-call forward repair and rollback proof; production canary only after G5-P. |
+| INT-03 | **Phase 5 development integration.** Combined tests/disposable-MySQL evidence, final read/write inventory and tracker. | P5-09 | Every canonical path uses correct mode in LEGACY and synthetic NOTE cohorts; full suite and audit pass; keep legacy storage/projection. |
+| P5-10 | **Production canary and sustained operation.** Deploy additive code/migration with LEGACY default, refresh backup/read-only evidence, enroll a tiny eligible learner cohort only after G5-P, monitor across 24h server lease plus pending job horizon, expand carefully and leave NOTE mode running with on-call/audit. | INT-03 + G5-P | Zero unexplained diff/split brain/stale acceptance; tested rollback available; runbook and telemetry handed to ops. Phase 5 final closeout at G5-F, not merely successful deploy. |
+
+### File map to verify during each package
+
+| Concern | Current concrete files / expected ownership |
+|---|---|
+| State schema/codec/CAS | `models/study_progress_subject.py`, `models/study_progress_state.py`, `models/study_progress_contributor.py`, `models/card_progress.py`, `migrations/versions/`, `app/services/study_progress_*`, `app/repositories/study_progress_*` |
+| Native command/session/worker | `app/services/study_service.py`, `study_session_service.py`, `study_worker_service.py`, `study_action_runtime.py`, `app/validators/study_session_wire.py`, `models/study_session*.py` |
+| Direct/MCP/Connect/import | `app/routes/flashcards/study.py`, `app/services/mcp/study_tools.py`, `app/services/anki_sync_service.py`, `app/services/connect/import_cards.py`, `app/services/share/cutover.py` |
+| Selection/due/analytics | `app/repositories/study_repository.py`, `stats_query_repository.py`, `app/services/dashboard_service.py`, browse/study repositories and API/presenter consumers found by P5-00 |
+| Frontend | `frontend/src/features/study/session/`, `hooks/useStudySession.ts`, `types.ts`; keep existing layout/colors and versioned restore behavior |
+| Operations | `app/settings.py`, `app/cli.py`, `wsgi_audit.py`, `scripts/run_tests.py`, disposable MySQL probes and docs/runbooks |
+
+P5-00 must refresh this map from actual callsites before code changes. A search-only inventory is supporting evidence, not proof that an indirect writer/reader was covered.
+
+## 6. Verification matrix
+
+| Scenario | Required proof before G5-W/G5-R/G5-P |
+|---|---|
+| Native direct/MCP/session/worker same Note | Concurrent Actions serialize at Note CAS; duplicate receipt replay no-op; stale Card/Note token typed conflict; exactly one event/fact per accepted Action. |
+| First state and sibling Card fan-in | Absent subject unique-key race, two Cards/one Note, different Template/StudyMode, new sibling after enrollment; all legacy projections equal one Note state. |
+| External snapshot/revlog | Modern base hash + local revision, explicit `force`, legacy timestamp tie, per-item savepoint, revlog history-only; native/external race has one outcome and no partial source ref/state. |
+| Lifecycle | Reset, Card/Template/Note/deck delete, clone rekey and installed-source/local-added identities versus active review/backfill; tombstone/generation and stale session behavior. |
+| Wire/leases | v2/v3 active, v3 disabled/enabled negotiation, proposed v4 restore, IndexedDB pending event, accepted worker job, lease expiry, cross-tab retry and epoch switch. |
+| Query parity | Fixed UTC + Asia/Tokyo contexts, day boundary, learn-ahead, suspension/burial, no-progress, due counts, order and dashboard/stat consumers; source clone and local-added context. |
+| Faults | Unique violation, forced deadlock/lock timeout, DB disconnect, JSON/size/hash failure, worker retry/DLQ, outbox/receipt failure, backup/restore, deployment restart; no split brain or lost accepted event. |
+| Rollback | Disable new issuance/enrollment, verify all NOTE states losslessly projected, fence to LEGACY, serve old session semantics without schema downgrade; if proof fails, forward repair only. |
+
+Per package, chạy `python scripts/run_tests.py --module study --backend-only` trước; mở rộng `connect_mcp,decks,flashcards,database,analytics,cli` theo file touched, rồi Study frontend tests, `npm --prefix frontend run typecheck` và lint. `python scripts/run_tests.py --changed` và `--all` chỉ ở INT-03/CI pre-release sau khi narrow suites xanh. MySQL tests dùng disposable instance đúng minor version/collation/SQL mode; SQLite không thay MySQL lock/DDL proof. UI/browser testing nếu cần dùng isolated Chrome profile theo `AGENTS.md`.
+
+## 7. Rollout states, stop và rollback
+
+| State | Enrollment | Write authority | Legacy write-through | Product read | Điều kiện tiến tới |
+|---|---|---|---|---|---|
+| S0 hiện tại | Không có / LEGACY | `CardProgress` | Phase 4 shadow tùy cờ, không authority | `CardProgress` | G5-0, G5-D |
+| S1 expanded | LEGACY | `CardProgress` | Chưa dùng | `CardProgress` | G5-E; migration/boot pass |
+| S2 comparison | LEGACY | `CardProgress` | NOTE encoder chạy diagnostic, không serve | `CardProgress` | G5-W/G5-R; zero unexplained |
+| S3 development rehearsal | Persisted NOTE cho cohort tổng hợp trên disposable/staging MySQL | Learner/Note state trong môi trường test | **Bắt buộc, atomic, full** | NOTE cho cohort test; production vẫn LEGACY | P5-09; fault/rollback proof |
+| S4 Phase 5 development exit | Code hỗ trợ NOTE; production vẫn LEGACY trong lúc preflight | Mode-aware theo enrollment | Giữ đầy đủ cho mọi NOTE write | Mode-aware, không mixed authority | INT-03, G5-P |
+| S5 production canary | Persisted NOTE cho cohort production đủ điều kiện | Learner/Note state cho cohort đó | **Bắt buộc, atomic, full** | NOTE cho cohort, LEGACY cho còn lại | G5-P; P5-10 theo dõi và rollback theo runbook |
+| S6 steady monitored cohort | NOTE tiếp tục chạy trên production, mở rộng theo số đo | NOTE cho cohort được enroll | Vẫn full trong rollback window | Mode-aware | G5-F; giữ audit/on-call, không xóa legacy |
+
+Hard stop khi có một accepted transition không project được về legacy, split-brain/epoch race, sai decoder, accepted stale session, lost event/receipt, mutation source clone, hoặc một unexplained reconciliation difference. P5-09 phải đo và chốt các ngưỡng định lượng cho p95/p99 latency, lock wait/deadlock, retry/DLQ, row/storage amplification, replica lag, batch/cohort size và abort window; **chưa có ngưỡng số đáng tin để ghi ở đây**. Thời gian qua SSH tunnel trong P4-11 không phải throughput capacity của VPS.
+
+Rollback ban đầu: dừng issuance/cohort mới, fence in-flight writes, kiểm tra projection/hash của toàn bộ NOTE cohort, chuyển persisted enrollment về LEGACY theo transaction nếu và chỉ nếu proof đầy đủ, rồi theo dõi audit. Không chỉ tắt `STUDY_PROGRESS_SHADOW_*`; chúng là cờ Phase 4 và không đảo authority của NOTE users. Nếu projection thiếu hoặc đã nhận new-only state, không phục hồi bằng legacy columns: giữ Note authority, sửa tiến tới hoặc dùng backup restore đã kiểm chứng theo quy trình được phê duyệt. Không downgrade schema hay xóa dữ liệu trong incident.
+
+## 8. Handoff và quyết định triển khai
+
+Mỗi task cần: baseline/evidence, diff và transaction owner, wire/schema/version impact, tests SQLite+MySQL, negative/fault matrix, rollback, known limits và reviewer. P5-01 đóng ADR; P5-09 phát hành runbook có **lệnh thực tế** và người chịu trách nhiệm sau khi rehearsal, thay vì coi các tên flag/CLI dự kiến trong kế hoạch này là đã tồn tại.
+
+Quyết định hiện tại: **GO cho tiếp tục P5-00/P5-01/P5-02 inert; NO-GO để bật Phase 5 authority trên production lúc này**. Chủ sản phẩm đã chỉ định production là đích rollout, không cần chờ đủ người dùng thật hay xin lại một chấp thuận mục tiêu mơ hồ. Nhưng P5-09/INT-03 phải xử lý rủi ro deferred và G5-P phải có bằng chứng vận hành cụ thể trước P5-10; không tự động commit/merge hoặc enable production authority khi gate chưa đạt.

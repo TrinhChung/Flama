@@ -42,6 +42,13 @@ class StudySessionCard(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     session = db.relationship("StudySession", back_populates="cards")
+    authority_pin = db.relationship(
+        "StudySessionAuthorityPin",
+        back_populates="session_card",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         db.UniqueConstraint(

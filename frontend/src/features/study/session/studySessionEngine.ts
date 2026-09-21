@@ -25,7 +25,9 @@ import type {
   StudySessionAccumulatedStats,
 } from './sessionStore'
 import {
+  STUDY_SESSION_SCHEMA_V4,
   reviewEventWireIdentity,
+  reviewEventWireIdentityV4,
   wireEnvelopeForSession,
 } from './wireContract'
 
@@ -205,17 +207,31 @@ export function applyLocalAnswer(
     Math.round(decision.scheduler_at_ms - serverAnchor),
   )
   const action = resolveReviewAction(rating)
-  const wireIdentity = reviewEventWireIdentity(
-    session.snapshot.schema_version,
-    session.snapshot.session_id,
-    action,
-    policy,
-  )
+  const eventId = crypto.randomUUID()
+  const wireIdentity = session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+    ? (() => {
+        if (!card.authority_pin) {
+          throw new Error('Study v4 card is missing its NOTE authority pin.')
+        }
+        return reviewEventWireIdentityV4(
+          session.snapshot.session_id,
+          eventId,
+          action,
+          policy,
+          card.authority_pin,
+        )
+      })()
+    : reviewEventWireIdentity(
+        session.snapshot.schema_version,
+        session.snapshot.session_id,
+        action,
+        policy,
+      )
   const eventSequence = (session.event_sequence
     ?? session.events.at(-1)?.sequence
     ?? 0) + 1
   const event: StudySessionEvent = {
-    event_id: crypto.randomUUID(),
+    event_id: eventId,
     sequence: eventSequence,
     card_id: card.card_id,
     rating,
@@ -239,8 +255,14 @@ export function applyLocalAnswer(
     { card_id: cardId, previous_state: previousState },
   ]
 
+  const reviewedNoteKey = card.authority_pin?.logical_note_key
   const nextSnapshotCards = session.snapshot.cards.map((row) => (
     row.card_id === cardId
+      || (
+        session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+        && reviewedNoteKey !== undefined
+        && row.authority_pin?.logical_note_key === reviewedNoteKey
+      )
       ? { ...row, state: decision.outcomes[rating] }
       : row
   ))
@@ -289,9 +311,16 @@ export function undoLocalAnswer(
   const remainingUndoHistory = undoHistory.slice(0, -1)
   const remainingEvents = session.events.slice(0, -1)
   const cardId = lastUndo.card_id
+  const undoneCard = session.snapshot.cards.find((row) => row.card_id === cardId)
+  const undoneNoteKey = undoneCard?.authority_pin?.logical_note_key
 
   const restoredCards = session.snapshot.cards.map((row) => (
     row.card_id === cardId
+      || (
+        session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+        && undoneNoteKey !== undefined
+        && row.authority_pin?.logical_note_key === undoneNoteKey
+      )
       ? { ...row, state: lastUndo.previous_state }
       : row
   ))
@@ -366,7 +395,9 @@ export function extractPendingBatch(
   const commitReason = options.reason ?? (isFinal ? 'auto_finish' : 'rollover')
 
   const batchTouchedCardIds = Array.from(new Set(batchEvents.map((e) => e.card_id)))
-  const finalStates = batchTouchedCardIds.map((cardId) => {
+  const finalStates = session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+    ? []
+    : batchTouchedCardIds.map((cardId) => {
     const card = session.snapshot.cards.find((row) => row.card_id === cardId)
     if (!card) throw new Error(`Missing touched card ${cardId}.`)
     return {
@@ -374,7 +405,7 @@ export function extractPendingBatch(
       base_revision: card.base_revision,
       state: card.state,
     }
-  })
+      })
 
   const wireEnvelope = wireEnvelopeForSession(session.snapshot.schema_version)
   const batchPayload = {
@@ -453,7 +484,9 @@ export function prepareCommit(
     resume_after_commit: Boolean(resumeAfterCommit),
     updated_at_ms: Date.now(),
   }
-  const finalStates = prepared.touched_card_ids.map((cardId) => {
+  const finalStates = prepared.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+    ? []
+    : prepared.touched_card_ids.map((cardId) => {
     const card = prepared.snapshot.cards.find((row) => row.card_id === cardId)
     if (!card) throw new Error(`Missing touched card ${cardId}.`)
     return {
@@ -461,7 +494,7 @@ export function prepareCommit(
       base_revision: card.base_revision,
       state: card.state,
     }
-  })
+      })
   return {
     session: prepared,
     payload: {

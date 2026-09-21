@@ -8,6 +8,10 @@ from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.repositories.study_repository import (
     apply_card_state_to_progress,
     card_state_from_progress,
@@ -280,8 +284,9 @@ def _record_native_review_transition(
     note_type_id: str | None = None,
     provenance: NativeReviewProvenance,
     payload_json: str,
+    event_session: Any | None = None,
 ) -> Any:
-    """Append one canonical native ReviewEvent and its in-transaction effects."""
+    """Append one canonical native ReviewEvent without other side effects."""
 
     updated_state = transition.state
     review_event = create_review_event_record(
@@ -339,15 +344,78 @@ def _record_native_review_transition(
         leeched_after=bool(updated_state.leeched),
         suspended_after=bool(updated_state.suspended),
         payload_json=payload_json,
-    )
-    _apply_review_side_effects(
-        user_id=user_id,
-        card=card,
-        transition=transition,
-        local_deck_id=local_deck_id,
-        reviewed_at=reviewed_at,
+        session=event_session,
     )
     return review_event
+
+
+def _prepare_native_review_event(
+    command: NativeReviewMutationInput,
+) -> tuple[int | None, str]:
+    normalized_duration_ms = normalize_review_duration(command.duration_ms)
+    payload_json = build_native_review_event_payload(
+        source_path=command.provenance.source_path,
+        runtime=command.transition.metadata(),
+        scheduler_config_hash=command.scheduler_config_hash,
+        client_payload=command.payload,
+        study_session_id=command.provenance.study_session_id,
+        client_event_id=command.provenance.client_event_id,
+        sequence_no=command.provenance.sequence_no,
+        request_id=command.provenance.request_id,
+        wire_schema_version=command.provenance.wire_schema_version,
+    )
+    return normalized_duration_ms, payload_json
+
+
+def stage_native_review_event(
+    command: NativeReviewMutationInput,
+    *,
+    session: Any | None = None,
+) -> ReviewEvent:
+    """Stage only the canonical ReviewEvent; never commit or run side effects.
+
+    NOTE authority composition uses this narrow primitive so the event ID can
+    participate in the same caller-owned transaction as state, compatibility
+    evidence and history. Existing native mutation paths continue to invoke
+    their legacy marketplace/leech side effects separately.
+    """
+
+    normalized_duration_ms, payload_json = _prepare_native_review_event(command)
+    return _record_native_review_transition(
+        user_id=int(command.user_id),
+        card=command.card,
+        current_state=command.current_state,
+        transition=command.transition,
+        reviewed_at=command.reviewed_at,
+        duration_ms=normalized_duration_ms,
+        review_mode=(
+            command.review_mode
+            or normalize_review_mode(command.current_state.type)
+        ),
+        local_deck_id=command.local_deck_id,
+        scheduler_preset_id=command.scheduler_preset_id,
+        scheduler_config_hash=command.scheduler_config_hash,
+        timezone_name=command.timezone_name,
+        deck_options=command.deck_options,
+        note_type_id=command.note_type_id,
+        provenance=command.provenance,
+        payload_json=payload_json,
+        event_session=session,
+    )
+
+
+def stage_native_review_side_effects(command: NativeReviewMutationInput) -> None:
+    """Stage leech and marketplace usage effects in the caller transaction."""
+
+    if not isinstance(command, NativeReviewMutationInput):
+        raise TypeError("Native review mutation input is required.")
+    _apply_review_side_effects(
+        user_id=int(command.user_id),
+        card=command.card,
+        transition=command.transition,
+        local_deck_id=command.local_deck_id,
+        reviewed_at=command.reviewed_at,
+    )
 
 
 def apply_native_review_mutation(
@@ -361,18 +429,7 @@ def apply_native_review_mutation(
     one-revision-per-batch contract.
     """
 
-    normalized_duration_ms = normalize_review_duration(command.duration_ms)
-    payload_json = build_native_review_event_payload(
-        source_path=command.provenance.source_path,
-        runtime=command.transition.metadata(),
-        scheduler_config_hash=command.scheduler_config_hash,
-        client_payload=command.payload,
-        study_session_id=command.provenance.study_session_id,
-        client_event_id=command.provenance.client_event_id,
-        sequence_no=command.provenance.sequence_no,
-        request_id=command.provenance.request_id,
-        wire_schema_version=command.provenance.wire_schema_version,
-    )
+    normalized_duration_ms, payload_json = _prepare_native_review_event(command)
 
     progress = None
     progress_revision = None
@@ -408,6 +465,7 @@ def apply_native_review_mutation(
         provenance=command.provenance,
         payload_json=payload_json,
     )
+    stage_native_review_side_effects(command)
     return NativeReviewMutationResult(
         review_event=review_event,
         progress=progress,
@@ -452,6 +510,10 @@ def execute_native_review_command(
         requested_scope_id=requested_scope_id,
     )
     try:
+        lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user.id),
+        )
         local_deck = (
             db.session.get(Deck, local_deck_id)
             if local_deck_id is not None
@@ -462,6 +524,9 @@ def execute_native_review_command(
             deck_id=local_deck_id,
             deck_obj=local_deck,
         )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise StudyReviewError(exc.code, str(exc), status=409) from exc
     except Exception:
         db.session.rollback()
         raise

@@ -11,6 +11,10 @@ from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.repositories.study_repository import is_progress_suspended
 from app.services import (
     study_artifact_service,
@@ -104,6 +108,27 @@ def process_single_study_batch(
         if is_batch_processed(batch_id):
             logger.info("Study batch %s already processed (cache hit); acknowledging.", batch_id)
             return {"status": "already_processed", "batch_id": batch_id}
+
+        try:
+            lock_study_authority_route(
+                db.session,
+                learner_user_id=user_id,
+            )
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            error_message = str(exc)
+            logger.error(
+                "Rejecting study batch %s at authority fence: %s",
+                batch_id,
+                error_message,
+            )
+            push_to_dlq(job_payload, error_message)
+            return {
+                "status": "authority_unavailable",
+                "error_code": exc.code,
+                "error": error_message,
+                "batch_id": batch_id,
+            }
 
         # Check DB idempotency via StudySessionBatch
         existing_batch = StudySessionBatch.query.filter_by(

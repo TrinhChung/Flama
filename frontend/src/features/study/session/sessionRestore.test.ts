@@ -140,6 +140,13 @@ type StoredEventFixture = {
   config_schema_version?: string
   config_hash?: string
   study_session_id?: string
+  authority_mode?: string
+  enrollment_epoch?: string
+  logical_note_key?: string
+  subject_generation?: string
+  base_authority_revision?: string
+  base_authority_state_hash?: string
+  operation_key?: string
 }
 
 function persistedSession() {
@@ -380,6 +387,69 @@ describe('persisted study session normalization', () => {
       action_contract_version: '1',
       config_hash: 'policy',
       study_session_id: stored.snapshot.session_id,
+    })
+  })
+
+  it('restores exact v4 Note pin and quarantines epoch or operation drift', () => {
+    const stored = persistedSession()
+    const eventId = stored.events[0].event_id
+    const pin = {
+      schema_version: 'study-note-authority-pin.v1' as const,
+      authority_mode: 'NOTE' as const,
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+    }
+    stored.snapshot = {
+      ...stored.snapshot,
+      schema_version: 'study-session.v4',
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      cards: stored.snapshot.cards.map((card) => ({
+        ...card,
+        authority_pin: pin,
+      })),
+    }
+    stored.events[0] = {
+      ...stored.events[0],
+      action_key: 'review.good',
+      action_contract_version: '1',
+      trigger_key: 'scheduler.review.good',
+      trigger_contract_version: '1',
+      algorithm_key: 'legacy-anki',
+      algorithm_version: '1.0.0',
+      config_schema_version: 'scheduler-config.v1',
+      config_hash: 'policy',
+      study_session_id: stored.snapshot.session_id,
+      ...pin,
+      operation_key: eventId,
+    }
+
+    const restored = normalizePersistedStudySession(stored)
+    expect(restored.status).toBe('restored')
+    if (restored.status !== 'restored') return
+    expect(restored.session.events[0]).toMatchObject({
+      operation_key: eventId,
+      base_authority_revision: '7',
+    })
+
+    const wrongOperation = structuredClone(stored)
+    wrongOperation.events[0].operation_key = 'another-operation'
+    expect(normalizePersistedStudySession(wrongOperation)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'EVENT_CONTRACT_MISMATCH' },
+    })
+
+    const wrongEpoch = structuredClone(stored)
+    if (wrongEpoch.snapshot.schema_version !== 'study-session.v4') {
+      throw new Error('Expected the v4 fixture to retain its schema.')
+    }
+    wrongEpoch.snapshot.enrollment_epoch = '4'
+    expect(normalizePersistedStudySession(wrongEpoch)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'MALFORMED_SESSION' },
     })
   })
 

@@ -432,6 +432,72 @@ def algorithm_state_hash(payload: Mapping[str, Any]) -> bytes:
     ).digest
 
 
+def serialize_card_state(state: CardState) -> CanonicalDocument:
+    """Encode one scheduler CardState with the registered legacy state codec."""
+
+    if not isinstance(state, CardState):
+        raise StudyProgressCodecError(
+            "INVALID_STATE_VALUE", "Algorithm State must be a CardState."
+        )
+    memory_payload = None
+    if state.memoryState is not None:
+        if not isinstance(state.memoryState, FsrsMemoryState):
+            raise StudyProgressCodecError(
+                "INVALID_STATE_VALUE", "memory_state must be an FsrsMemoryState."
+            )
+        memory_payload = {
+            "difficulty": encode_float(
+                state.memoryState.difficulty,
+                field_name="memory_state.difficulty",
+                normalize_zero=True,
+            ),
+            "stability": encode_float(
+                state.memoryState.stability,
+                field_name="memory_state.stability",
+                normalize_zero=True,
+            ),
+        }
+    document = state_document(
+        {
+            "due_at": (
+                encode_datetime(state.due, field_name="due_at")
+                if state.due is not None
+                else None
+            ),
+            "due_day": (
+                encode_integer(state.dueDay, field_name="due_day")
+                if state.dueDay is not None
+                else None
+            ),
+            "ease": encode_float(state.ease, field_name="ease", normalize_zero=True),
+            "interval_days": encode_float(
+                state.intervalDays,
+                field_name="interval_days",
+                normalize_zero=True,
+            ),
+            "lapses": encode_integer(state.lapses, field_name="lapses"),
+            "last_review_at": (
+                encode_datetime(state.lastReviewAt, field_name="last_review_at")
+                if state.lastReviewAt is not None
+                else None
+            ),
+            "leeched": state.leeched,
+            "memory_state": memory_payload,
+            "reps": encode_integer(state.reps, field_name="reps"),
+            "review_kind": state.reviewKind,
+            "scheduler_mode": state.schedulerMode,
+            "step_index": encode_integer(state.stepIndex, field_name="step_index"),
+            "suspended": state.suspended,
+            "suspension_reason": state.suspensionReason,
+            "type": state.type,
+        }
+    )
+    # Decode before returning so type, bounds and field vocabulary are checked
+    # by the same registered contract used for persisted authority state.
+    _decode_legacy_anki_state(document.payload)
+    return document
+
+
 def _decode_legacy_anki_state(payload: Mapping[str, Any]) -> CardState:
     expected_fields = {
         "type",

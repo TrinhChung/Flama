@@ -13,9 +13,15 @@ Tài liệu mô tả kiến trúc hiện hành và các tiêu chuẩn kỹ thu�
 | [`SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) | **Tổng quan kiến trúc toàn hệ thống** (React SPA, Flask REST API, Flama Connect, Flama Audio). |
 | [`FLAMA_PAYMENT_ARCHITECTURE.md`](architecture/FLAMA_PAYMENT_ARCHITECTURE.md) | **Kiến trúc thanh toán payOS** (Orders, PaymentAttempts, Webhook, Entitlements). |
 | [`CARD_TEMPLATE_SANDBOX_RENDERER.md`](architecture/CARD_TEMPLATE_SANDBOX_RENDERER.md) | **Cơ chế render iframe sandbox an toàn** cho custom card templates. |
-| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–3 và INT-01 hoàn tất, Phase 4 còn P4-11/INT-02. |
+| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–4 và INT-01/INT-02 hoàn tất cho pre-release development; production enablement còn gate riêng. |
 | [`phase-4-current-state-preflight-2026-09-10.md`](architecture/phase-4-current-state-preflight-2026-09-10.md) | P4-01 accepted audit/preflight; production head `20260913_000038`, zero drift và complete accounting. |
-| [`phase-4-reconciliation-rollout-rehearsal-2026-09-20.md`](architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md) | P4-10 writer/reconciliation evidence và P4-11 local rehearsal; production-matched gate vẫn mở. |
+| [`phase-4-reconciliation-rollout-rehearsal-2026-09-20.md`](architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md) | P4-10 reconciliation, local large-cohort và VPS small-cohort rehearsal; representative rollout gate vẫn mở. |
+| [`phase-4-p4-11-pre-release-closeout-2026-09-20.md`](architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) | P4-11 đóng có giới hạn để không chặn phát triển pre-release; production load/fault/limits được defer rõ tới P5-09, không coi là pass. |
+| [`phase-4-int02-closeout-2026-09-20.md`](architecture/phase-4-int02-closeout-2026-09-20.md) | Biên bản đóng Phase 4/INT-02: full backend/frontend test, MySQL local re-probe, authority boundary và P5 handoff. |
+| [`phase-5-authority-cutover-design-2026-09-20.md`](architecture/phase-5-authority-cutover-design-2026-09-20.md) | **Draft** cutover Phase 5: physical-schema slice đã chốt riêng; NOTE routing, wire và rollback còn gate. |
+| [`phase-5-p5-00-inventory-2026-09-21.md`](architecture/phase-5-p5-00-inventory-2026-09-21.md) | P5-00 snapshot và two-run production SELECT-only audit; Phase 4 preflight PASS, full audit WARN, NOTE authority chưa bật. |
+| [`phase-5-p5-03-legacy-projection-contract-2026-09-21.md`](architecture/phase-5-p5-03-legacy-projection-contract-2026-09-21.md) | P5-03 inert lossless encoder/comparator, field inventory và MySQL 1:N/fault/lifecycle round-trip proof. |
+| [`phase-5-p5-04-canonical-command-2026-09-21.md`](architecture/phase-5-p5-04-canonical-command-2026-09-21.md) | P5-04 first slice: LEGACY-only learner/enrollment fence across native direct/session/worker entrypoints; NOTE remains fail-closed. |
 | [`phase-4-schema-drift-remediation-2026-09-13.md`](architecture/phase-4-schema-drift-remediation-2026-09-13.md) | P4-01A design record cho independent batch-table migration, model/default parity và safe schema convergence. |
 | [`phase-4-progress-identity-fanin-revision-adr-2026-09-10.md`](architecture/phase-4-progress-identity-fanin-revision-adr-2026-09-10.md) | P4-02 accepted ADR cho learner/Note identity, fan-in, generation và lock order. |
 | [`phase-4-algorithm-state-availability-adr-2026-09-12.md`](architecture/phase-4-algorithm-state-availability-adr-2026-09-12.md) | P4-03 accepted ADR cho exact Algorithm State/raw codecs và context-aware availability. |
@@ -62,7 +68,11 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 |---|---|
 | [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
-| [`Study Decoupling Task Backlog`](task/decoupling/README.md) | Tracker task Phase 0–4, dependency, output, acceptance gate và rollback; P4-06 additive schema/codecs là task tiếp theo. |
+| [`Study Decoupling Task Backlog`](task/decoupling/README.md) | Tracker task Phase 0–4 và entry Phase 5; P4-11/INT-02 đã đóng cho phát triển, production gate vẫn mở. |
+| [`P5 execution plan — 2026-09-20`](task/decoupling/P5_EXECUTION_PLAN_2026-09-20.md) | Kế hoạch P5-00..P5-10/INT-03, gate, test, production canary và rollback; schema foundation LEGACY-only đang triển khai. |
+| [`P5 executive brief — 2026-09-21`](task/decoupling/P5_EXECUTIVE_BRIEF_2026-09-21.md) | Bản trình quản lý: mục tiêu, mốc, nguồn lực sơ bộ, production canary và hard stops. |
+| [`P5-00 inventory — 2026-09-21`](architecture/phase-5-p5-00-inventory-2026-09-21.md) | Kiểm kê code/schema P5, production SELECT-only preflight còn mở. |
+| [`P5 authority-fence ADR — 2026-09-21`](architecture/phase-5-authority-fence-adr-2026-09-21.md) | Quyết định hai bảng additive LEGACY-only; chưa cấp NOTE authority. |
 | [`P1/P2 closeout — 2026-09-08`](task/decoupling/completed/P1_P2_EXECUTION_CLOSEOUT_2026-09-08.md) | Handoff hoàn tất 8 task P1/P2, test evidence, async containment, v3 rollout và rollback. |
 | [`FLASHCARD_FOR_KIDS_PLAN.md`](plans/proposals/FLASHCARD_FOR_KIDS_PLAN.md) | Ý tưởng phát triển bộ flashcard chuyên biệt cho trẻ em. |
 | [`LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md`](plans/proposals/LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md) | **Đề xuất phân tích & gợi ý âm nghe nhầm đa ngôn ngữ (P3 - Low Priority)**: Dựa trên lịch sử nhập từ và từ gốc trong chế độ Dictation để tìm ra ma trận âm người dùng hay nghe nhầm (Tiếng Nhật, Tiếng Anh, Tiếng Hàn, Tiếng Trung, Tiếng Việt...). |

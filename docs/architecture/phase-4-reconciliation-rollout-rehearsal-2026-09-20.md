@@ -1,6 +1,6 @@
 # Phase 4 reconciliation and rollout rehearsal — 2026-09-20
 
-> Status: P4-10 locally complete; P4-11 and INT-02 are **not closed**.
+> Evidence status: P4-10 locally complete. P4-11 was later **closed for pre-release development only** by [risk-scoped decision](./phase-4-p4-11-pre-release-closeout-2026-09-20.md); the production-load/fault gaps below remain unproven. [INT-02 subsequently closed](./phase-4-int02-closeout-2026-09-20.md) after fresh full tests and a local MySQL re-probe.
 >
 > Authority: `CardProgress` only. Shadow write, backfill and compare flags remain default-off.
 >
@@ -182,7 +182,9 @@ revlog history-only, reset/delete lifecycle and native-vs-external race).
 All ran on separate disposable databases; they are a **subset** of P4-11's
 required fault matrix, not a full rehearsal pass.
 
-## Open P4-11 / INT-02 gates
+## Original P4-11 release-grade gaps and INT-02 gate
+
+The items below were open at evidence collection. The later P4-11 pre-release decision explicitly defers items 1–4 to the production-enablement/P5-09 gate; they are **not** passing results. Item 5's INT-02 test gate [subsequently passed](./phase-4-int02-closeout-2026-09-20.md).
 
 1. Extend the environment-matched **small** VPS rehearsal to a representative
    16,424-row, multi-user/overlay workload without treating SSH-tunnel timing
@@ -203,8 +205,9 @@ required fault matrix, not a full rehearsal pass.
    SELECT-only principal, then test immediate flags-off runtime rollback.
    The small VPS run passed this path; a reviewed representative
    backup/restore duration/checksum and release abort thresholds remain open.
-5. Only after P4-11 passes, run INT-02 `--changed` and `--all`, review all
-   uncommitted diffs and issue the Phase 5 go/no-go decision. No Phase 5
+5. After P4-11's risk-scoped pre-release closure, run INT-02 `--changed` and
+   `--all`, review the committed Phase 4 implementation and current worktree,
+   and issue the Phase 5 go/no-go decision. No Phase 5
    authority cutover follows automatically.
 
 The operational rollback remains: disable shadow write/compare/backfill,
