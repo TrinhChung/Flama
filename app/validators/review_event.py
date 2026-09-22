@@ -35,6 +35,7 @@ NATIVE_CLIENT_PAYLOAD_FIELDS = frozenset(
         "review_state_version",
         "selection_id",
         "install_id",
+        "operation_key",
     }
 )
 
@@ -297,6 +298,7 @@ def validate_native_client_payload(
         "review_state_version",
         "selection_id",
         "install_id",
+        "operation_key",
     ):
         value = payload.get(field)
         if value is not None and not isinstance(value, str):
@@ -305,6 +307,17 @@ def validate_native_client_payload(
                 f"{field} must be a string.",
                 field=field,
             )
+    operation_key = payload.get("operation_key")
+    if operation_key is not None and (
+        not operation_key.strip()
+        or operation_key != operation_key.strip()
+        or len(operation_key) > 128
+    ):
+        raise _payload_error(
+            "INVALID_AUTHORITY_OPERATION_KEY",
+            "operation_key must be a canonical non-empty string up to 128 characters.",
+            field="operation_key",
+        )
     scope_id = payload.get("scope_id")
     if scope_id is not None and (
         isinstance(scope_id, bool) or not isinstance(scope_id, (str, int))

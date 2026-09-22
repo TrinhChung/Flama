@@ -5,8 +5,8 @@ from __future__ import annotations
 import csv
 import json
 import re
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -284,6 +284,229 @@ def register_audit_cli_commands(app: Flask) -> None:
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
+
+    @app.cli.command("study-authority-enrollment")
+    @click.option(
+        "--user-id",
+        type=click.IntRange(1),
+        required=True,
+        help="Learner user ID whose persisted authority route will be checked.",
+    )
+    @click.option(
+        "--mode",
+        type=click.Choice(["NOTE", "LEGACY"], case_sensitive=False),
+        required=True,
+        help="Target authority mode.",
+    )
+    @click.option(
+        "--apply",
+        is_flag=True,
+        default=False,
+        help="Commit the fenced transition; default proves eligibility then rolls back.",
+    )
+    def study_authority_enrollment(user_id: int, mode: str, apply: bool) -> None:
+        """Prove and optionally switch one learner's study authority mode."""
+
+        from app.repositories.study_authority_repository import (
+            StudyAuthorityFenceError,
+        )
+        from app.services.study_authority_enrollment_service import (
+            StudyAuthorityEnrollmentError,
+            stage_legacy_authority_enrollment,
+            stage_note_authority_enrollment,
+        )
+
+        transition = (
+            stage_note_authority_enrollment
+            if mode.upper() == "NOTE"
+            else stage_legacy_authority_enrollment
+        )
+        if apply and mode.upper() == "NOTE":
+            if not bool(app.config.get("STUDY_WIRE_V4_ENABLED", False)):
+                raise click.ClickException(
+                    "NOTE_ENROLLMENT_DISABLED: STUDY_WIRE_V4_ENABLED must be true."
+                )
+            if bool(app.config.get("STUDY_ASYNC_BATCH_ENABLED", False)):
+                raise click.ClickException(
+                    "NOTE_ASYNC_UNAVAILABLE: disable STUDY_ASYNC_BATCH_ENABLED "
+                    "until the v4 rollover worker contract is implemented."
+                )
+        try:
+            result = transition(
+                db.session,
+                learner_user_id=user_id,
+                now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
+            )
+            payload = {
+                **asdict(result),
+                "applied": bool(apply),
+            }
+            if apply:
+                db.session.commit()
+            else:
+                db.session.rollback()
+        except (StudyAuthorityEnrollmentError, StudyAuthorityFenceError) as exc:
+            db.session.rollback()
+            code = getattr(exc, "code", "AUTHORITY_TRANSITION_FAILED")
+            raise click.ClickException(f"{code}: {exc}") from exc
+        click.echo(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+
+    @app.cli.command("study-authority-read-audit")
+    @click.option(
+        "--user-id",
+        type=click.IntRange(1),
+        required=True,
+        help="Learner user ID whose NOTE read projection will be compared.",
+    )
+    def study_authority_read_audit(user_id: int) -> None:
+        """Compare canonical NOTE queue semantics with the rollback projection."""
+
+        from app.repositories import study_repository
+        from app.repositories.study_authority_repository import (
+            StudyAuthorityFenceError,
+            lock_study_authority_route,
+        )
+        from app.services.scheduler_config_service import resolve_deck_options
+        from app.services.stats_overview import get_effective_timezone_name
+        from app.services.study_authority_read_service import (
+            StudyAuthorityReadError,
+            load_study_authority_card_reads,
+            summarize_study_authority_queue,
+        )
+        from models.card import Card
+        from models.note import Note
+        from models.user import User
+
+        observed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        try:
+            route = lock_study_authority_route(
+                db.session,
+                learner_user_id=user_id,
+                allow_note_authority=True,
+            )
+            if route.mode_code != "NOTE":
+                db.session.rollback()
+                click.echo(
+                    json.dumps(
+                        {
+                            "schema_version": "study-authority-read-audit.v1",
+                            "user_id": user_id,
+                            "authority_mode": route.mode_code,
+                            "status": "SKIP",
+                            "mismatches": [],
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                )
+                return
+            user = db.session.get(User, user_id)
+            timezone_name = get_effective_timezone_name(
+                getattr(user, "timezone", "UTC")
+            )
+            cards_query = Card.query.join(Note, Card.note_id == Note.id).filter(
+                Note.user_id == user_id
+            )
+            cards = cards_query.order_by(Card.id.asc()).all()
+            reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=tuple(cards),
+                now_utc=observed_at,
+                timezone_name=timezone_name,
+                deck_options_by_card_id={
+                    str(card.id): resolve_deck_options(
+                        user_id=user_id,
+                        deck_id=card.note.deck_id,
+                    )
+                    for card in cards
+                },
+            )
+            canonical = summarize_study_authority_queue(
+                cards=tuple(cards),
+                reads_by_card_id=reads,
+                learner_user_id=user_id,
+                now_utc=observed_at,
+                timezone_name=timezone_name,
+            )
+            legacy_counts = study_repository.query_study_queue_counts(
+                cards_query,
+                user_id=user_id,
+                now=observed_at,
+                timezone_name=timezone_name,
+            )
+            legacy_selected = study_repository.query_next_due_card_id(
+                cards_query,
+                user_id=user_id,
+                now=observed_at,
+                timezone_name=timezone_name,
+            )
+            legacy_pending = study_repository.query_pending_learning_summary(
+                cards_query,
+                user_id=user_id,
+                now=observed_at,
+                timezone_name=timezone_name,
+            )
+            mismatches: list[str] = []
+            canonical_counts = (
+                canonical.new_count,
+                canonical.learn_count,
+                canonical.due_count,
+            )
+            if canonical_counts != tuple(int(value) for value in legacy_counts):
+                mismatches.append("queue_counts")
+            if canonical.selected_card_id != legacy_selected:
+                mismatches.append("selected_card_id")
+            if (
+                canonical.pending_learning_count != int(legacy_pending[0])
+                or canonical.next_due_at != legacy_pending[1]
+            ):
+                mismatches.append("pending_learning")
+            payload = {
+                "schema_version": "study-authority-read-audit.v1",
+                "user_id": user_id,
+                "authority_mode": route.mode_code,
+                "enrollment_epoch": route.epoch,
+                "card_count": len(cards),
+                "status": "PASS" if not mismatches else "BLOCK",
+                "mismatches": mismatches,
+                "canonical": {
+                    "new": canonical.new_count,
+                    "learn": canonical.learn_count,
+                    "due": canonical.due_count,
+                    "selected_card_id": canonical.selected_card_id,
+                    "pending_learning_count": canonical.pending_learning_count,
+                    "next_due_at": (
+                        canonical.next_due_at.isoformat()
+                        if canonical.next_due_at is not None
+                        else None
+                    ),
+                },
+            }
+            db.session.rollback()
+        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+            db.session.rollback()
+            code = getattr(exc, "code", "AUTHORITY_READ_AUDIT_FAILED")
+            raise click.ClickException(f"{code}: {exc}") from exc
+        click.echo(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+        if mismatches:
+            raise click.ClickException(
+                "AUTHORITY_READ_PARITY_DIVERGED: canonical and rollback reads differ."
+            )
 
     @app.cli.command("study-progress-backfill")
     @click.option(

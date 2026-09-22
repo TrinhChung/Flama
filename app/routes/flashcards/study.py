@@ -12,7 +12,6 @@ from sqlalchemy.exc import OperationalError
 from models import db
 from models.flashcard import *
 from models.deck import Deck
-from models.card_progress import CardProgress
 from app.utils.permissions import is_admin_user
 
 # Import everything from core module so routes can use helpers
@@ -22,9 +21,6 @@ from app.repositories.deck_tree_query import (
     collect_subtree_ids as _collect_deck_subtree_ids,
 )
 from app.repositories.study_repository import (
-    card_state_from_progress as _card_state_from_progress,
-    apply_card_state_to_progress as _apply_card_state_to_progress,
-    is_progress_suspended as _is_progress_suspended,
     query_pending_learning_summary as _query_pending_learning_summary,
     query_next_due_card_id as _query_next_due_card_id,
     query_study_queue_counts as _query_study_queue_counts,
@@ -51,6 +47,12 @@ from app.validators import (
 from app.services.stats_overview import get_effective_timezone_name
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services import study_artifact_service
+from app.repositories.study_authority_repository import lock_study_authority_route
+from app.services.study_authority_read_service import (
+    load_study_authority_card_read,
+    load_study_authority_card_reads,
+    summarize_study_authority_queue,
+)
 from app.services import study_session_service
 from app.services.study_action_runtime import (
     compute_review_previews,
@@ -218,25 +220,67 @@ def _build_study_next_payload(
     timezone_name: str,
     client_render: bool = False,
 ):
-    new_count, learn_count, due_count = _query_study_queue_counts(
-        query,
-        user_id=current_user.id,
-        now=now,
-        timezone_name=timezone_name,
+    route = lock_study_authority_route(
+        db.session,
+        learner_user_id=int(current_user.id),
+        allow_note_authority=True,
     )
-    selected_card_id = _query_next_due_card_id(
-        query,
-        user_id=current_user.id,
-        now=now,
-        timezone_name=timezone_name,
-    )
-    if not selected_card_id:
-        pending_learning_count, next_due_at = _query_pending_learning_summary(
+    authority_reads = None
+    selected_cards_by_id = None
+    if route.mode_code == "NOTE":
+        cards = query.order_by(Card.id.asc()).all()
+        selected_cards_by_id = {str(card.id): card for card in cards}
+        deck_options_by_card_id = {
+            str(card.id): resolve_deck_options(
+                user_id=current_user.id,
+                deck_id=_effective_scheduler_deck_id(card, clone_scope),
+            )
+            for card in cards
+        }
+        authority_reads = load_study_authority_card_reads(
+            db.session,
+            learner_user_id=int(current_user.id),
+            cards=tuple(cards),
+            now_utc=now,
+            timezone_name=timezone_name,
+            deck_options_by_card_id=deck_options_by_card_id,
+        )
+        queue_summary = summarize_study_authority_queue(
+            cards=tuple(cards),
+            reads_by_card_id=authority_reads,
+            learner_user_id=int(current_user.id),
+            now_utc=now,
+            timezone_name=timezone_name,
+        )
+        new_count = queue_summary.new_count
+        learn_count = queue_summary.learn_count
+        due_count = queue_summary.due_count
+        selected_card_id = queue_summary.selected_card_id
+        pending_learning_count = queue_summary.pending_learning_count
+        next_due_at = queue_summary.next_due_at
+    else:
+        new_count, learn_count, due_count = _query_study_queue_counts(
             query,
             user_id=current_user.id,
             now=now,
             timezone_name=timezone_name,
         )
+        selected_card_id = _query_next_due_card_id(
+            query,
+            user_id=current_user.id,
+            now=now,
+            timezone_name=timezone_name,
+        )
+        pending_learning_count = 0
+        next_due_at = None
+    if not selected_card_id:
+        if route.mode_code == "LEGACY":
+            pending_learning_count, next_due_at = _query_pending_learning_summary(
+                query,
+                user_id=current_user.id,
+                now=now,
+                timezone_name=timezone_name,
+            )
         if pending_learning_count > 0:
             return {
                 "card_id": None,
@@ -245,6 +289,7 @@ def _build_study_next_payload(
                 "new_count": new_count,
                 "learn_count": learn_count,
                 "due_count": due_count,
+                "authority_mode": route.mode_code,
                 "next_due_at": (
                     f"{next_due_at.isoformat(timespec='seconds')}Z"
                     if next_due_at is not None
@@ -258,9 +303,14 @@ def _build_study_next_payload(
             "new_count": new_count,
             "learn_count": learn_count,
             "due_count": due_count,
+            "authority_mode": route.mode_code,
         }
 
-    selected_card = query.filter(Card.id == selected_card_id).first()
+    selected_card = (
+        selected_cards_by_id.get(selected_card_id)
+        if selected_cards_by_id is not None
+        else query.filter(Card.id == selected_card_id).first()
+    )
     if not selected_card:
         return {"card_id": None, "message": "Card not found."}
     if clone_scope is not None and not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card):
@@ -274,10 +324,21 @@ def _build_study_next_payload(
         }
 
     note = selected_card.note
-    progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=selected_card.id).first()
     deck_options = resolve_deck_options(
         user_id=current_user.id,
         deck_id=_effective_scheduler_deck_id(selected_card, clone_scope),
+    )
+    authority_read = (
+        authority_reads[selected_card_id]
+        if authority_reads is not None
+        else load_study_authority_card_read(
+            db.session,
+            learner_user_id=int(current_user.id),
+            card=selected_card,
+            now_utc=now,
+            timezone_name=timezone_name,
+            deck_options=deck_options,
+        )
     )
     effective_context = study_artifact_service.build_effective_study_card(
         card=selected_card,
@@ -321,11 +382,7 @@ def _build_study_next_payload(
             )
             visibility = "private"
         selection_id = uuid4().hex
-        state_version = study_artifact_service.review_state_version(
-            progress=progress,
-            deck_options=deck_options,
-            timezone_name=timezone_name,
-        )
+        state_version = authority_read.state_version
         return {
             "schema_version": study_artifact_service.MANIFEST_SCHEMA,
             "render_contract": "client_v1",
@@ -348,6 +405,8 @@ def _build_study_next_payload(
                 "visibility": visibility,
             },
             "review_state_version": state_version,
+            "authority_mode": authority_read.route.mode_code,
+            "authority_revision": authority_read.authority_revision,
             "intervals_ref": {
                 "state_version": state_version,
                 "url": url_for(
@@ -377,13 +436,7 @@ def _build_study_next_payload(
             "note_type_name": note.note_type.name if note and note.note_type else "",
         }
 
-    card_state = _card_state_from_progress(
-        progress,
-        now,
-        timezone_name=timezone_name,
-        user_id=current_user.id,
-        options=deck_options,
-    )
+    card_state = authority_read.state
     interval_preview = compute_review_previews(
         state=card_state,
         options=deck_options,
@@ -405,6 +458,8 @@ def _build_study_next_payload(
         "rendered_front_payload": rendered.get("front_renderer_payload"),
         "rendered_back_payload": rendered.get("back_renderer_payload"),
         "intervals_preview": interval_preview,
+        "authority_mode": authority_read.route.mode_code,
+        "authority_revision": authority_read.authority_revision,
         "new_count": new_count,
         "learn_count": learn_count,
         "due_count": due_count,
@@ -459,6 +514,17 @@ def _study_next_payload_for_scope(
         )
     except TemplateCompileError as exc:
         return {"card_id": None, "message": str(exc), "error": "TEMPLATE_COMPILE_ERROR"}
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code is None:
+            raise
+        db.session.rollback()
+        return {
+            "card_id": None,
+            "message": str(exc),
+            "error": str(code),
+            "authority_error_status": 409,
+        }
 
 
 
@@ -632,10 +698,6 @@ def study_intervals_preview(card_id: str):
     )
     if context is None:
         return _no_store_json({"error": "FIELD_NOT_FOUND", "message": "Card not found."}, 404)
-    progress = CardProgress.query.filter_by(
-        user_id=current_user.id,
-        card_id=context.card.id,
-    ).first()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     deck_options = resolve_deck_options(
         user_id=current_user.id,
@@ -644,11 +706,26 @@ def study_intervals_preview(card_id: str):
             context.clone_scope,
         ),
     )
-    state_version = study_artifact_service.review_state_version(
-        progress=progress,
-        deck_options=deck_options,
-        timezone_name=timezone_name,
-    )
+    now = datetime.utcnow()
+    try:
+        authority_read = load_study_authority_card_read(
+            db.session,
+            learner_user_id=int(current_user.id),
+            card=context.card,
+            now_utc=now,
+            timezone_name=timezone_name,
+            deck_options=deck_options,
+        )
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code is None:
+            raise
+        db.session.rollback()
+        return _no_store_json(
+            {"error": str(code), "message": str(exc)},
+            409,
+        )
+    state_version = authority_read.state_version
     requested_version = str(request.args.get("review_state_version") or "").strip()
     if requested_version and requested_version != state_version:
         return _no_store_json(
@@ -658,14 +735,7 @@ def study_intervals_preview(card_id: str):
             },
             409,
         )
-    now = datetime.utcnow()
-    card_state = _card_state_from_progress(
-        progress,
-        now,
-        timezone_name=timezone_name,
-        user_id=current_user.id,
-        options=deck_options,
-    )
+    card_state = authority_read.state
     preview = compute_review_previews(
         state=card_state,
         options=deck_options,
@@ -678,6 +748,8 @@ def study_intervals_preview(card_id: str):
             "selection_id": str(request.args.get("selection_id") or ""),
             "card_id": context.card.id,
             "review_state_version": state_version,
+            "authority_mode": authority_read.route.mode_code,
+            "authority_revision": authority_read.authority_revision,
             "intervals_preview": preview,
         }
     )
@@ -1001,6 +1073,12 @@ def study_next():
             "TEMPLATE_COMPILE_ERROR",
             payload.get("message") or "Template compile error.",
         )
+    if payload.get("authority_error_status"):
+        return _study_error(
+            str(payload.get("error") or "AUTHORITY_READ_FAILED"),
+            str(payload.get("message") or "Authority state could not be read."),
+            status=int(payload["authority_error_status"]),
+        )
     return _no_store_json(payload)
 
 @flashcards_bp.route("/api/study/cards/<card_id>/answer", methods=["POST"])
@@ -1096,6 +1174,14 @@ def study_answer(card_id: str):
         "next_card_url": next_card_url,
         "applied_interval": command_result.intervals_preview.get(rating),
     }
+    if command_result.authority_mode == "NOTE":
+        response_payload["authority"] = {
+            "mode": "NOTE",
+            "operation_key": command_result.operation_key,
+            "authority_revision": command_result.authority_revision,
+            "progress_revision": command_result.progress_revision,
+            "replayed": command_result.replayed,
+        }
     if client_render:
         response_payload["next_manifest"] = next_card_payload
     else:

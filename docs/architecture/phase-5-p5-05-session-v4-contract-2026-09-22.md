@@ -1,0 +1,39 @@
+# P5-05 — Study Session v4 and NOTE enrollment contract
+
+> Date: 2026-09-23 | Status: **implemented for eligible existing-state and wholly pristine local Notes; development-gated**. Production authority remains unchanged unless an operator explicitly enrolls a learner.
+
+## Delivered contract
+
+- Migration head `20260921_000043` admits persisted `LEGACY` and `NOTE` enrollment rows. It does not create enrollment rows or enable a cohort.
+- `study-session.v4` freezes one NOTE identity per session membership: enrollment epoch, logical Note key, subject generation, authority revision and semantic state hash. v2/v3 meanings are unchanged.
+- v4 issuance and synchronous commit lock the learner prefix, full subject vector, token/state and all sibling compatibility rows. Accepted actions atomically write the canonical Note state, advance the independent token, project every sibling `CardProgress`, refresh evidence, append `ReviewEvent` and history, persist receipts and native side effects.
+- Frontend negotiation offers v4 first and persists/restores its authority envelope. LEGACY learners fall back to v3/v2 even when the v4 feature flag is enabled.
+- Eligible direct REST and MCP review writes resolve the persisted authority route. NOTE learners use the same canonical command; LEGACY learners retain the established writer. A repeated direct `operation_key` with a different current-state request is rejected before another event is written.
+- Direct Study manifest/interval reads and MCP card/queue/count reads now resolve NOTE state and per-Card availability from the canonical subject vector. Queue counts, due selection and ordering no longer execute the legacy SQL selector for NOTE learners. The read boundary verifies the full compatibility projection and fails closed on missing or divergent state/availability evidence.
+- Eligible owned-local NOTE readers for Browse list/detail/tree, dashboard counts, overview/future-due statistics and the legacy study page use the same mode-aware boundary. Served NOTE counts, status and ordering are rebuilt from canonical availability instead of treating `CardProgress` as authority.
+- `flask study-authority-read-audit --user-id ID` performs a read-only, fixed-observation comparison between canonical NOTE results and the rollback compatibility projection. It reports a versioned JSON PASS/BLOCK verdict and never changes enrollment.
+- Explicit enrollment and rollback are transaction-neutral service operations. Both prove complete, exact legacy projection; fence the learner by incrementing epoch; reject an in-flight async batch; and cancel open leases. Rollback refuses any lossy or stale projection.
+- `flask study-authority-enrollment --user-id ID --mode NOTE|LEGACY` is dry-run by default. `--apply` is required to commit. Applying NOTE additionally requires `STUDY_WIRE_V4_ENABLED=true` and `STUDY_ASYNC_BATCH_ENABLED=false`; rollback to LEGACY remains available without those forward gates.
+
+## Safety boundary
+
+Enrollment accepts existing mirrored states with one complete compatibility row per active Card and wholly pristine owned Notes whose Cards all have no progress. Pristine enrollment creates or reuses a clean `NO_CURRENT_PROGRESS` subject, then materializes revision-zero canonical state and every sibling compatibility row atomically with complete empty history; a learner with no Notes may also enroll and roll back. A partially covered Note remains rejected because inheriting reviewed state into only the missing siblings would change legacy meaning. Logical-overlay installs, detached/quarantined/tombstoned subjects and unprojectable values also remain rejected. After enrollment, the primary owned-local REST and MCP single-Note create paths materialize the same complete shape with native provenance. Connect/Anki/import and bulk creation remain gated.
+
+Async v4 batches remain fail-closed. v4 synchronous commit is supported, but a rollover worker needs a cross-batch frozen-token contract before it can safely advance one Note more than once. Owned-local deck progress reset has a NOTE lifecycle command with full projection validation, generation/revision fencing, session cancellation, fresh canonical/compatibility reinitialization and rollback-on-fault, so study can resume immediately after reset. Primary owned-local REST/MCP Note creation materializes canonical state before the first review; REST/MCP single-Note and MCP batch Note deletion cancel sessions, remove compatibility/content, tombstone every affected subject and advance each ABA fence. Primary REST Template creation/deletion atomically adds or detaches the projected sibling on every affected owned Note, advances subject generation without fabricating an authority revision, cancels stale sessions and preserves exact semantic state. Owned-local deck deletion applies the same full-projection validation to every contained Note, cancels covered sessions, tombstones canonical state/evidence and removes deck content in one transaction; a stale projection rolls the entire operation back. External snapshot/import, overlay/shared reset/delete and archival, admin purge, note-type bulk delete/rekey and broad MCP template mutation remain P5-06 work. NOTE overlays, admin-wide Browse, remaining integration readers, production-shaped performance and the broader fixed-context differential matrix remain P5-07/P5-09 work.
+
+Legacy mirror and lifecycle entrypoints acquire the persisted learner fence even when the Phase 4 shadow flag is off. Unsupported routes therefore reject NOTE learners instead of silently mutating `CardProgress`; owned-local deck progress reset is the first explicitly supported NOTE lifecycle route.
+
+No production enrollment, deployment, commit or merge is performed by this implementation record.
+
+## Verification recorded on 2026-09-23
+
+- Study + Flashcards + Decks backend matrix: **729 tests passed across 69 suites** on the final lifecycle code.
+- Study Session API integration: **75 tests passed**.
+- Study Session + Flashcard API integration: **158 tests passed**.
+- Focused MCP Note/NoteType/security/image-crawl regression: **45 tests passed**.
+- Browse/analytics/decks/Connect-MCP backend expansion: **456 tests passed across 31 files**.
+- Connect/MCP + CLI backend matrix: **427 tests passed across 35 files**.
+- Frontend: TypeScript typecheck passed; v4 hook/wire/engine/restore set passed **72 tests across 4 files**.
+- Disposable local MySQL 8.0.40 probe passed upgrade `39→43`, NOTE constraint/routing, projection/CAS/receipt/history/locking checks, pristine multi-sibling enrollment/rollback, owned-local reset reinitialization, new-Note materialization/deletion, sibling add/remove topology fencing, downgrade `43→39`, re-upgrade and cleanup without modifying the configured database.
+
+The MySQL probe is schema/transaction evidence, not the P5-09 production-shaped load, fault or capacity gate.

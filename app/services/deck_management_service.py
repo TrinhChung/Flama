@@ -7,16 +7,20 @@ from typing import List, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from models import db
-from models.deck import Deck
-from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
-from models.card_progress import CardProgress
 from app.repositories import vocabulary_repository as vocabulary_ctrl
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.repositories.deck_tree_query import (
     collect_ancestor_ids as _collect_deck_ancestor_ids,
     collect_subtree_ids as _collect_deck_subtree_ids,
 )
 from app.services import study_progress_lifecycle_mirror_service
+from models import db
+from models.deck import Deck
+from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
+from models.card_progress import CardProgress
 from app.utils.deck_move_token import parse_deck_move_token
 
 UTC = timezone.utc
@@ -83,11 +87,22 @@ def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
 
 def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: bool = False) -> str:
     """Delete a local deck, or archive a shared source while preserving installs."""
+    authority_learner_id = int(deck_obj.owner_user_id or user_id)
+    authority_route = lock_study_authority_route(
+        db.session,
+        learner_user_id=authority_learner_id,
+        allow_note_authority=True,
+    )
     deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
 
     if purge:
         if not is_admin:
             raise ValueError("Only administrators can purge decks.")
+        if authority_route.mode_code == "NOTE":
+            raise StudyAuthorityFenceError(
+                "ADMIN_PURGE_NOT_READY",
+                "NOTE-authority deck purge requires a multi-learner lifecycle command.",
+            )
 
         from models.deck_change_request import DeckChangeRequest
         from models.review_event import ReviewEvent
@@ -187,6 +202,11 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
     )
 
     if marketplace_items or has_overlay_dependents or has_source_installs:
+        if authority_route.mode_code == "NOTE":
+            raise StudyAuthorityFenceError(
+                "SHARED_DECK_ARCHIVE_NOT_READY",
+                "NOTE-authority shared deck archival requires overlay-aware session fencing.",
+            )
         deleted_at = datetime.now(UTC).replace(tzinfo=None)
         Deck.query.filter(Deck.id.in_(deck_ids_to_delete)).update(
             {Deck.deleted_at: deleted_at},
@@ -213,21 +233,72 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
     if note_ids:
         card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
         card_ids = [str(row[0]) for row in card_rows if row and row[0]]
-        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-            db.session,
-            removed_card_ids=card_ids,
-            deleted_note_ids=note_ids,
-        )
+        if authority_route.mode_code == "NOTE":
+            other_owner = db.session.query(Note.id).filter(
+                Note.id.in_(note_ids),
+                Note.user_id != authority_learner_id,
+            ).first()
+            other_learner = db.session.query(CardProgress.user_id).filter(
+                CardProgress.card_id.in_(card_ids),
+                CardProgress.user_id != authority_learner_id,
+            ).first() if card_ids else None
+            if other_owner is not None or other_learner is not None:
+                raise StudyAuthorityFenceError(
+                    "MULTI_LEARNER_DELETE_NOT_READY",
+                    "NOTE-authority deck deletion cannot remove another learner's projection.",
+                )
+            from models.study_session import StudySession
+            from models.study_session_card import StudySessionCard
+
+            affected_session_ids = db.session.query(
+                StudySessionCard.session_id
+            ).filter(StudySessionCard.card_id.in_(card_ids))
+            open_sessions = (
+                StudySession.query.filter(
+                    StudySession.user_id == authority_learner_id,
+                    StudySession.status == "open",
+                    StudySession.id.in_(affected_session_ids),
+                )
+                .order_by(StudySession.id.asc())
+                .with_for_update()
+                .all()
+            )
+            for study_session in open_sessions:
+                study_session.status = "cancelled"
+            lifecycle_plan = (
+                study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
+                    db.session,
+                    route=authority_route,
+                    removed_card_ids=card_ids,
+                    skip_pristine=False,
+                )
+                if card_ids
+                else None
+            )
+        else:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=card_ids,
+                deleted_note_ids=note_ids,
+            )
         if card_ids:
             CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
                 synchronize_session=False
             )
-        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-            lifecycle_plan,
-            transition_code="TOMBSTONED_SUBJECT_DELETED",
-            source_path="deck.delete",
-            operation_key=f"deck-delete:{deck_obj.id}",
-        )
+        if authority_route.mode_code == "NOTE":
+            if lifecycle_plan is not None:
+                study_progress_lifecycle_mirror_service.finalize_note_authority_delete(
+                    lifecycle_plan,
+                    source_path="deck.delete",
+                    operation_key=f"deck-delete:{deck_obj.id}",
+                )
+        else:
+            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+                lifecycle_plan,
+                transition_code="TOMBSTONED_SUBJECT_DELETED",
+                source_path="deck.delete",
+                operation_key=f"deck-delete:{deck_obj.id}",
+            )
         if card_ids:
             Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
         Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
@@ -238,6 +309,11 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
 
 def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
     """Reset current-user progress, including logical-overlay source cards."""
+    authority_route = lock_study_authority_route(
+        db.session,
+        learner_user_id=int(user_id),
+        allow_note_authority=True,
+    )
     deck_ids = _collect_deck_subtree_ids(deck_obj.id)
     card_id_set = {
         str(row[0])
@@ -278,6 +354,12 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
             str(row[0]) for row in clone_rows if row and row[0]
         )
 
+    if authority_route.mode_code == "NOTE" and seen_scopes:
+        raise StudyAuthorityFenceError(
+            "OVERLAY_AUTHORITY_NOT_READY",
+            "NOTE-authority reset for logical-overlay cards is not implemented.",
+        )
+
     deleted_count = 0
     if card_id_set:
         from models.study_session import StudySession
@@ -299,20 +381,44 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
         for session in open_sessions:
             session.status = "cancelled"
 
-        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-            db.session,
-            removed_card_ids=card_id_set,
-            learner_user_ids=(user_id,),
+        if authority_route.mode_code == "NOTE":
+            lifecycle_plan = (
+                study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
+                    db.session,
+                    route=authority_route,
+                    removed_card_ids=card_id_set,
+                )
+            )
+        else:
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                db.session,
+                removed_card_ids=card_id_set,
+                learner_user_ids=(user_id,),
+            )
+        if authority_route.mode_code == "NOTE" and lifecycle_plan is None:
+            db.session.commit()
+            return 0
+        reset_card_ids = (
+            lifecycle_plan.removed_card_ids
+            if authority_route.mode_code == "NOTE"
+            else card_id_set
         )
         deleted_count = CardProgress.query.filter(
             CardProgress.user_id == user_id,
-            CardProgress.card_id.in_(sorted(card_id_set)),
+            CardProgress.card_id.in_(sorted(reset_card_ids)),
         ).delete(synchronize_session=False) or 0
-        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-            lifecycle_plan,
-            transition_code="TOMBSTONED_RESET",
-            source_path="deck.progress_reset",
-            operation_key=f"deck-reset:{deck_obj.id}:user:{user_id}",
-        )
+        if authority_route.mode_code == "NOTE":
+            study_progress_lifecycle_mirror_service.finalize_note_authority_reset(
+                lifecycle_plan,
+                source_path="deck.progress_reset",
+                operation_key=f"deck-reset:{deck_obj.id}:user:{user_id}",
+            )
+        else:
+            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+                lifecycle_plan,
+                transition_code="TOMBSTONED_RESET",
+                source_path="deck.progress_reset",
+                operation_key=f"deck-reset:{deck_obj.id}:user:{user_id}",
+            )
         db.session.commit()
     return deleted_count

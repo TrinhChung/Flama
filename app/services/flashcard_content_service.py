@@ -8,6 +8,10 @@ import logging
 from types import SimpleNamespace
 from typing import Any, Mapping
 
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.services import (
     deck_working_tree_service,
     flashcards_share_service,
@@ -650,16 +654,64 @@ def create_template(
         note_type=note_type,
         owner_user_id=user_id,
     )
-    template, error = flashcards_share_service.create_template(
-        note_type_id=note_type.id,
-        user_id=user_id,
-        payload=payload,
-    )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+        note_ids = [
+            str(row[0])
+            for row in db.session.query(Note.id)
+            .filter(
+                Note.note_type_id == note_type.id,
+                Note.user_id == int(user_id),
+            )
+            .order_by(Note.id.asc())
+            .all()
+            if row and row[0]
+        ]
+        expansion_plan = (
+            study_progress_lifecycle_mirror_service.prepare_note_authority_sibling_expansion(
+                db.session,
+                route=authority_route,
+                note_ids=note_ids,
+            )
+        )
+        template, error = flashcards_share_service.create_template(
+            note_type_id=note_type.id,
+            user_id=user_id,
+            payload=payload,
+            commit=False,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise ContentApiError(exc.code, str(exc), status=409) from exc
     if template is None:
+        db.session.rollback()
         raise ContentApiError(
             "VALIDATION_ERROR",
             error or "Unable to create template.",
         )
+    new_cards = (
+        Card.query.filter(
+            Card.template_id == template.id,
+            Card.note_id.in_(note_ids),
+        )
+        .order_by(Card.note_id.asc(), Card.id.asc())
+        .all()
+        if note_ids
+        else []
+    )
+    try:
+        study_progress_lifecycle_mirror_service.finalize_note_authority_sibling_expansion(
+            expansion_plan,
+            new_cards=new_cards,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise ContentApiError(exc.code, str(exc), status=409) from exc
+    db.session.commit()
     return marketplace_query_service.serialize_template(template)
 
 
@@ -753,6 +805,15 @@ def delete_template(
             "A note type requires at least one template.",
             status=409,
         )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise ContentApiError(exc.code, str(exc), status=409) from exc
     card_ids = [
         str(row[0])
         for row in db.session.query(Card.id)
@@ -760,20 +821,74 @@ def delete_template(
         .all()
         if row and row[0]
     ]
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=card_ids,
-    )
+    try:
+        if authority_route.mode_code == "NOTE":
+            other_owner_card = (
+                db.session.query(Card.id)
+                .join(Note, Card.note_id == Note.id)
+                .filter(
+                    Card.id.in_(card_ids),
+                    Note.user_id != int(user_id),
+                )
+                .first()
+                if card_ids
+                else None
+            )
+            other_learner = (
+                db.session.query(CardProgress.user_id)
+                .filter(
+                    CardProgress.card_id.in_(card_ids),
+                    CardProgress.user_id != int(user_id),
+                )
+                .first()
+                if card_ids
+                else None
+            )
+            if other_owner_card is not None or other_learner is not None:
+                db.session.rollback()
+                raise ContentApiError(
+                    "MULTI_LEARNER_DELETE_NOT_READY",
+                    "NOTE template deletion cannot remove another learner's Card projection.",
+                    status=409,
+                )
+            lifecycle_plan = (
+                study_progress_lifecycle_mirror_service.prepare_note_authority_sibling_removal(
+                    db.session,
+                    route=authority_route,
+                    removed_card_ids=card_ids,
+                )
+            )
+        else:
+            lifecycle_plan = (
+                study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+                    db.session,
+                    removed_card_ids=card_ids,
+                )
+            )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise ContentApiError(exc.code, str(exc), status=409) from exc
     if card_ids:
         CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
             synchronize_session=False
         )
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code="DETACHED_CONTRIBUTOR_DELETED",
-        source_path="flashcards.template_delete",
-        operation_key=f"template-delete:{template.id}",
-    )
+    if authority_route.mode_code == "NOTE":
+        try:
+            study_progress_lifecycle_mirror_service.finalize_note_authority_sibling_removal(
+                lifecycle_plan,
+                source_path="flashcards.template_delete",
+                operation_key=f"template-delete:{template.id}",
+            )
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise ContentApiError(exc.code, str(exc), status=409) from exc
+    else:
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="DETACHED_CONTRIBUTOR_DELETED",
+            source_path="flashcards.template_delete",
+            operation_key=f"template-delete:{template.id}",
+        )
     Card.query.filter_by(template_id=template.id).delete()
     db.session.delete(template)
     _audit(
@@ -1031,6 +1146,15 @@ def create_note(
             consistency_error,
             field="deck_id",
         )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise ContentApiError(exc.code, str(exc), status=409) from exc
     note = Note(
         note_type_id=note_type.id,
         user_id=user_id,
@@ -1050,6 +1174,18 @@ def create_note(
         note.field_values = committed_values
         db.session.flush()
     _create_cards(note)
+    db.session.flush()
+    cards = Card.query.filter_by(note_id=note.id).order_by(Card.id.asc()).all()
+    try:
+        study_progress_lifecycle_mirror_service.materialize_new_note_authority(
+            db.session,
+            route=authority_route,
+            note=note,
+            cards=cards,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise ContentApiError(exc.code, str(exc), status=409) from exc
     deck_working_tree_service.mark_note_fields_changed(
         note=note,
         field_names=(note.field_values or {}).keys(),
@@ -1069,7 +1205,6 @@ def create_note(
         {"note_id": note.id, "note_type_id": note.note_type_id},
     )
     db.session.flush()
-    cards = Card.query.filter_by(note_id=note.id).order_by(Card.id.asc()).all()
     card_ids = [str(card.id) for card in cards]
     db.session.commit()
     return {
@@ -1191,6 +1326,15 @@ def delete_note(*, user_id: int, note_id: str) -> dict[str, bool]:
             "Published shared notes cannot be hard-deleted because learner history must be preserved.",
             status=409,
         )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise ContentApiError(exc.code, str(exc), status=409) from exc
     deck_working_tree_service.mark_note_field_batches_changed(
         mutations=[
             {
@@ -1201,21 +1345,75 @@ def delete_note(*, user_id: int, note_id: str) -> dict[str, bool]:
         ],
     )
     card_ids = [str(card.id) for card in note.cards]
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=card_ids,
-        deleted_note_ids=(note.id,),
-    )
+    if authority_route.mode_code == "NOTE":
+        other_learner = db.session.query(CardProgress.user_id).filter(
+            CardProgress.card_id.in_(card_ids),
+            CardProgress.user_id != int(user_id),
+        ).first()
+        if other_learner is not None:
+            db.session.rollback()
+            raise ContentApiError(
+                "MULTI_LEARNER_DELETE_NOT_READY",
+                "NOTE delete cannot remove another learner's compatibility rows.",
+                status=409,
+            )
+        from models.study_session import StudySession
+        from models.study_session_card import StudySessionCard
+
+        affected_session_ids = db.session.query(
+            StudySessionCard.session_id
+        ).filter(StudySessionCard.card_id.in_(card_ids))
+        open_sessions = (
+            StudySession.query.filter(
+                StudySession.user_id == int(user_id),
+                StudySession.status == "open",
+                StudySession.id.in_(affected_session_ids),
+            )
+            .order_by(StudySession.id.asc())
+            .with_for_update()
+            .all()
+        )
+        for study_session in open_sessions:
+            study_session.status = "cancelled"
+        try:
+            lifecycle_plan = (
+                study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
+                    db.session,
+                    route=authority_route,
+                    removed_card_ids=card_ids,
+                    skip_pristine=False,
+                )
+            )
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise ContentApiError(exc.code, str(exc), status=409) from exc
+    else:
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=card_ids,
+            deleted_note_ids=(note.id,),
+        )
     if card_ids:
         CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
             synchronize_session=False
         )
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code="TOMBSTONED_SUBJECT_DELETED",
-        source_path="flashcards.note_delete",
-        operation_key=f"note-delete:{note.id}",
-    )
+    if authority_route.mode_code == "NOTE":
+        try:
+            study_progress_lifecycle_mirror_service.finalize_note_authority_delete(
+                lifecycle_plan,
+                source_path="flashcards.note_delete",
+                operation_key=f"note-delete:{note.id}",
+            )
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise ContentApiError(exc.code, str(exc), status=409) from exc
+    else:
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_SUBJECT_DELETED",
+            source_path="flashcards.note_delete",
+            operation_key=f"note-delete:{note.id}",
+        )
     db.session.delete(note)
     _audit(user_id, "note.delete", {"note_id": note.id})
     db.session.commit()

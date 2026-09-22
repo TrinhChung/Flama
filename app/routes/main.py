@@ -17,11 +17,13 @@ from app.services.anki_scheduler import (
 from app.services import mcp_access_token_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.support_checkout_service import (
     SupportCheckoutError,
     prepare_support_checkout,
 )
 from app.services.stats_overview import build_stats_overview
+from app.services.study_authority_read_service import StudyAuthorityReadError
 from app.services.stats_today_future import (
     build_today_future_stats,
     build_user_study_time_stats,
@@ -262,11 +264,15 @@ def stats_overview():
         if year < 1970 or year > 2100:
             return jsonify({"error": "VALIDATION_ERROR", "message": "year must be between 1970 and 2100."}), 400
 
-    payload = build_stats_overview(
-        user_id=current_user.id,
-        year=year,
-        timezone_name=getattr(current_user, "timezone", "UTC"),
-    )
+    try:
+        payload = build_stats_overview(
+            user_id=current_user.id,
+            year=year,
+            timezone_name=getattr(current_user, "timezone", "UTC"),
+        )
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc.code), "message": str(exc)}), 409
     return jsonify(payload)
 
 
@@ -295,15 +301,19 @@ def stats_today_future():
     if backlog not in {"0", "1", "true", "false", "yes", "no", "on", "off"}:
         return jsonify({"error": "VALIDATION_ERROR", "message": "backlog must be a boolean-like value."}), 400
 
-    payload = build_today_future_stats(
-        user_id=current_user.id,
-        timezone_name=getattr(current_user, "timezone", "UTC"),
-        scope=scope,
-        deck_id=deck_id,
-        history_range=history_range,
-        future_range=future_range,
-        backlog=backlog,
-    )
+    try:
+        payload = build_today_future_stats(
+            user_id=current_user.id,
+            timezone_name=getattr(current_user, "timezone", "UTC"),
+            scope=scope,
+            deck_id=deck_id,
+            history_range=history_range,
+            future_range=future_range,
+            backlog=backlog,
+        )
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc.code), "message": str(exc)}), 409
     return jsonify(payload)
 
 

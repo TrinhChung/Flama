@@ -14,6 +14,11 @@ UTC = timezone.utc
 
 from app.repositories import browse_card_repository
 from app.repositories import vocabulary_repository as vocabulary_ctrl
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
+from app.repositories import study_repository
 from app.repositories.study_repository import (
     LEARNING_QUEUE,
     NEW_QUEUE,
@@ -24,7 +29,17 @@ from app.repositories.study_repository import (
     normalized_queue_expr,
     review_due_expr,
 )
+from app.services.scheduler_config_service import (
+    resolve_deck_options,
+    resolve_scheduler_runtime_settings,
+)
 from app.services import study_progress_lifecycle_mirror_service
+from app.services.study_authority_read_service import (
+    StudyAuthorityCardRead,
+    StudyAuthorityReadError,
+    load_study_authority_card_read,
+    load_study_authority_card_reads,
+)
 from app.validators import (
     RequestValidationError,
     escape_like_pattern,
@@ -152,13 +167,118 @@ def build_browse_deck_tree(
     admin_mode: bool,
     timezone_name: str,
 ) -> dict[str, Any]:
-    return {
-        "tree": vocabulary_ctrl.build_browse_deck_tree_payload(
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+        tree = vocabulary_ctrl.build_browse_deck_tree_payload(
             user_id=user_id,
             admin_mode=admin_mode,
             timezone_name=timezone_name,
         )
-    }
+        if authority_route.mode_code == "NOTE":
+            if admin_mode:
+                raise StudyAuthorityReadError(
+                    "NOTE_ADMIN_BROWSE_UNAVAILABLE",
+                    "NOTE authority admin-wide Browse is not available.",
+                )
+            if DeckInstall.query.filter_by(
+                user_id=user_id,
+                clone_mode="logical_overlay",
+            ).first() is not None:
+                raise StudyAuthorityReadError(
+                    "OVERLAY_AUTHORITY_NOT_READY",
+                    "NOTE authority Browse does not yet support logical-overlay installs.",
+                )
+            deck_ids: set[int] = set()
+
+            def collect_deck_ids(nodes: list[dict[str, Any]]) -> None:
+                for node in nodes:
+                    deck_ids.add(int(node["id"]))
+                    collect_deck_ids(node.get("children", []))
+
+            collect_deck_ids(tree)
+            cards = (
+                Card.query.join(Note, Card.note_id == Note.id)
+                .filter(
+                    Note.user_id == user_id,
+                    Note.deck_id.in_(deck_ids),
+                )
+                .order_by(Card.id.asc())
+                .all()
+                if deck_ids
+                else []
+            )
+            now = _utcnow()
+            reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=tuple(cards),
+                now_utc=now,
+                timezone_name=timezone_name,
+                deck_options_by_card_id={
+                    str(card.id): resolve_deck_options(
+                        user_id=user_id,
+                        deck_id=card.note.deck_id,
+                    )
+                    for card in cards
+                },
+            )
+            runtime = resolve_scheduler_runtime_settings(user_id=user_id)
+            boundary_hour = int(runtime.day_boundary_hour_local)
+            direct_counts = {
+                deck_id: {"total": 0, "new": 0, "learn": 0, "due": 0}
+                for deck_id in deck_ids
+            }
+            for card in cards:
+                deck_id = int(card.note.deck_id)
+                bucket = direct_counts[deck_id]
+                bucket["total"] += 1
+                availability = reads[str(card.id)].availability
+                count_bucket = study_repository.counter_bucket_for_progress_values(
+                    queue=availability.normalized_queue,
+                    due_at=availability.due_at,
+                    due_day=availability.due_day,
+                    is_suspended=availability.is_suspended,
+                    is_buried=availability.is_buried,
+                    buried_until_day=availability.buried_until_day,
+                    now=now,
+                    timezone_name=timezone_name,
+                    day_boundary_hour_local=boundary_hour,
+                )
+                if count_bucket == NEW_QUEUE:
+                    bucket["new"] += 1
+                elif count_bucket == LEARNING_QUEUE:
+                    bucket["learn"] += 1
+                elif count_bucket == REVIEW_QUEUE:
+                    bucket["due"] += 1
+
+            def rebuild_counts(node: dict[str, Any]) -> dict[str, int]:
+                counts = dict(
+                    direct_counts.get(
+                        int(node["id"]),
+                        {"total": 0, "new": 0, "learn": 0, "due": 0},
+                    )
+                )
+                for child in node.get("children", []):
+                    child_counts = rebuild_counts(child)
+                    for key in ("total", "new", "learn", "due"):
+                        counts[key] += int(child_counts[key])
+                node["counts"] = counts
+                return counts
+
+            for root in tree:
+                rebuild_counts(root)
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        raise BrowseApiError(
+            str(exc),
+            status=409,
+            code=str(exc.code),
+        ) from exc
+    return {"tree": tree}
 
 
 def build_browse_decks(
@@ -194,6 +314,252 @@ def build_browse_decks(
 
     _flatten(tree)
     return {"decks": flat_items, "tree": tree}
+
+
+def _authority_progress_view(authority_read: StudyAuthorityCardRead) -> SimpleNamespace:
+    availability = authority_read.availability
+    return SimpleNamespace(
+        queue=availability.normalized_queue,
+        due_at=availability.due_at,
+        due_day=availability.due_day,
+    )
+
+
+def _load_mode_aware_browse_progress(
+    *,
+    user_id: int,
+    timezone_name: str,
+    card_obj: Card,
+    now_utc: datetime,
+):
+    try:
+        route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+        if route.mode_code == "NOTE":
+            if card_obj.note is None or int(card_obj.note.user_id) != int(user_id):
+                raise StudyAuthorityReadError(
+                    "NOTE_BROWSE_CONTEXT_UNAVAILABLE",
+                    "NOTE authority Browse cannot read a foreign source Card.",
+                )
+            authority_read = load_study_authority_card_read(
+                db.session,
+                learner_user_id=user_id,
+                card=card_obj,
+                now_utc=now_utc,
+                timezone_name=timezone_name,
+                deck_options=resolve_deck_options(
+                    user_id=user_id,
+                    deck_id=card_obj.note.deck_id,
+                ),
+            )
+            return _authority_progress_view(authority_read)
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        raise BrowseApiError(
+            str(exc),
+            status=409,
+            code=str(exc.code),
+        ) from exc
+    return browse_card_repository.load_browse_progress(
+        user_id=user_id,
+        card_id=card_obj.id,
+    )
+
+
+def _list_note_authority_browse_cards(
+    *,
+    user_id: int,
+    admin_mode: bool,
+    timezone_name: str,
+    scoped_ids: set[int],
+    selected_ids: set[int] | None,
+    deck_lookup: dict[int, str],
+    keyword: str,
+    tag: str,
+    status: str,
+    sort_by: str,
+    sort_dir: str,
+    page: int,
+    per_page: int,
+) -> dict[str, Any]:
+    if admin_mode:
+        raise BrowseApiError(
+            "NOTE authority admin-wide Browse is not available.",
+            status=409,
+            code="NOTE_ADMIN_BROWSE_UNAVAILABLE",
+        )
+    if DeckInstall.query.filter_by(
+        user_id=user_id,
+        clone_mode="logical_overlay",
+    ).first() is not None:
+        raise BrowseApiError(
+            "NOTE authority Browse does not yet support logical-overlay installs.",
+            status=409,
+            code="OVERLAY_AUTHORITY_NOT_READY",
+        )
+    effective_deck_ids = set(selected_ids if selected_ids is not None else scoped_ids)
+    if not effective_deck_ids:
+        return {
+            "items": [],
+            "page": page,
+            "per_page": per_page,
+            "total": 0,
+            "pages": 0,
+            "has_next": False,
+        }
+    query = (
+        Card.query.join(Note, Card.note_id == Note.id)
+        .filter(
+            Note.user_id == user_id,
+            Note.deck_id.in_(effective_deck_ids),
+        )
+        .options(
+            selectinload(Card.note)
+            .selectinload(Note.note_type)
+            .selectinload(NoteType.field_defs),
+            selectinload(Card.template),
+        )
+    )
+    if keyword:
+        keyword_like = f"%{escape_like_pattern(keyword.lower())}%"
+        query = query.filter(
+            func.lower(db.cast(Note.field_values, db.Text)).like(
+                keyword_like,
+                escape="\\",
+            )
+        )
+    if tag:
+        tag_like = f"%{escape_like_pattern(tag.lower())}%"
+        query = query.filter(
+            func.lower(db.cast(Note.tags, db.Text)).like(
+                tag_like,
+                escape="\\",
+            )
+        )
+    now = _utcnow()
+    cards = query.order_by(Card.id.asc()).all()
+    authority_reads = load_study_authority_card_reads(
+        db.session,
+        learner_user_id=user_id,
+        cards=tuple(cards),
+        now_utc=now,
+        timezone_name=timezone_name,
+        deck_options_by_card_id={
+            str(card.id): resolve_deck_options(
+                user_id=user_id,
+                deck_id=card.note.deck_id,
+            )
+            for card in cards
+        },
+    )
+    runtime = resolve_scheduler_runtime_settings(user_id=user_id)
+    boundary_hour = int(runtime.day_boundary_hour_local)
+
+    def visible_for_status(card: Card) -> bool:
+        availability = authority_reads[str(card.id)].availability
+        if availability.is_suspended:
+            return False
+        queue = study_repository.normalize_progress_queue(
+            availability.normalized_queue
+        )
+        if status == NEW_QUEUE:
+            return queue == NEW_QUEUE
+        if status == "learn":
+            return queue in {LEARNING_QUEUE, RELEARNING_QUEUE}
+        if status in {"due", REVIEW_QUEUE}:
+            return (
+                queue == REVIEW_QUEUE
+                and study_repository.study_bucket_for_progress_values(
+                    queue=queue,
+                    due_at=availability.due_at,
+                    due_day=availability.due_day,
+                    is_suspended=False,
+                    is_buried=False,
+                    buried_until_day=None,
+                    now=now,
+                    timezone_name=timezone_name,
+                    day_boundary_hour_local=boundary_hour,
+                )
+                == REVIEW_QUEUE
+            )
+        return True
+
+    cards = [card for card in cards if visible_for_status(card)]
+    cards.sort(
+        key=lambda card: (
+            card.updated_at or datetime.min,
+            str(card.id),
+        ),
+        reverse=True,
+    )
+    if sort_by == "deck":
+        cards.sort(
+            key=lambda card: str(
+                deck_lookup.get(int(card.note.deck_id or 0), "")
+            ).lower(),
+            reverse=sort_dir == "desc",
+        )
+    elif sort_by == "word":
+        cards.sort(
+            key=lambda card: str(
+                vocabulary_ctrl.note_display_triplet(card.note).get("word") or ""
+            ).lower(),
+            reverse=sort_dir == "desc",
+        )
+    else:
+        ascending = sort_dir != "desc"
+
+        def due_key(card: Card):
+            availability = authority_reads[str(card.id)].availability
+            queue = study_repository.normalize_progress_queue(
+                availability.normalized_queue
+            )
+            due_day = (
+                int(availability.due_day)
+                if queue == REVIEW_QUEUE and availability.due_day is not None
+                else None
+            )
+            due_at = availability.due_at
+            return (
+                due_day is None,
+                due_day if ascending and due_day is not None else -(due_day or 0),
+                due_at is None,
+                (
+                    due_at
+                    if ascending and due_at is not None
+                    else datetime.max - due_at
+                    if due_at is not None
+                    else datetime.min
+                ),
+            )
+
+        cards.sort(key=due_key)
+
+    total = len(cards)
+    offset = (page - 1) * per_page
+    page_cards = cards[offset : offset + per_page]
+    rows = [
+        vocabulary_ctrl.build_browse_row(
+            card,
+            deck_lookup,
+            now,
+            progress_obj=_authority_progress_view(authority_reads[str(card.id)]),
+            timezone_name=timezone_name,
+        )
+        for card in page_cards
+    ]
+    pages = (total + per_page - 1) // per_page if total else 0
+    return {
+        "items": rows,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": pages,
+        "has_next": page < pages,
+    }
 
 
 def list_browse_cards(
@@ -235,6 +601,19 @@ def list_browse_cards(
         per_page = max(1, min(500, int(query_args.get("per_page") or "100")))
     except (TypeError, ValueError) as exc:
         raise BrowseApiError("Invalid page/per_page") from exc
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise BrowseApiError(
+            str(exc),
+            status=409,
+            code=str(exc.code),
+        ) from exc
 
     def _empty_result() -> dict[str, Any]:
         return {
@@ -267,6 +646,31 @@ def list_browse_cards(
             )
         else:
             selected_ids = {selected_deck_id}
+
+    if authority_route.mode_code == "NOTE":
+        try:
+            return _list_note_authority_browse_cards(
+                user_id=user_id,
+                admin_mode=admin_mode,
+                timezone_name=timezone_name,
+                scoped_ids=scoped_ids,
+                selected_ids=selected_ids,
+                deck_lookup=deck_lookup,
+                keyword=keyword,
+                tag=tag,
+                status=status,
+                sort_by=sort_by,
+                sort_dir=sort_dir,
+                page=page,
+                per_page=per_page,
+            )
+        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+            db.session.rollback()
+            raise BrowseApiError(
+                str(exc),
+                status=409,
+                code=str(exc.code),
+            ) from exc
 
     progress_alias = aliased(CardProgress)
     progress_join = db.and_(
@@ -731,6 +1135,19 @@ def get_browse_card_detail(
 ) -> dict[str, Any]:
     from app.services import flashcards_share as share_ctrl
 
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise BrowseApiError(
+            str(exc),
+            status=409,
+            code=str(exc.code),
+        ) from exc
     card_obj = browse_card_repository.load_card_for_browse_update(card_id=card_id)
     if not card_obj:
         raise BrowseApiError("Card not found", status=404)
@@ -757,10 +1174,38 @@ def get_browse_card_detail(
             if local_name:
                 deck_lookup.setdefault(int(source_deck_id), local_name)
 
-    progress = browse_card_repository.load_browse_progress(
-        user_id=user_id,
-        card_id=card_obj.id,
-    )
+    if authority_route.mode_code == "NOTE":
+        if admin_mode or clone_scope is not None or card_obj.note.user_id != user_id:
+            raise BrowseApiError(
+                "NOTE authority Browse detail is unavailable for this Card context.",
+                status=409,
+                code="NOTE_BROWSE_CONTEXT_UNAVAILABLE",
+            )
+        try:
+            authority_read = load_study_authority_card_read(
+                db.session,
+                learner_user_id=user_id,
+                card=card_obj,
+                now_utc=_utcnow(),
+                timezone_name=timezone_name,
+                deck_options=resolve_deck_options(
+                    user_id=user_id,
+                    deck_id=card_obj.note.deck_id,
+                ),
+            )
+        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+            db.session.rollback()
+            raise BrowseApiError(
+                str(exc),
+                status=409,
+                code=str(exc.code),
+            ) from exc
+        progress = _authority_progress_view(authority_read)
+    else:
+        progress = browse_card_repository.load_browse_progress(
+            user_id=user_id,
+            card_id=card_obj.id,
+        )
     payload = vocabulary_ctrl.build_browse_card_detail(
         card_obj,
         deck_lookup,
@@ -1195,9 +1640,11 @@ def _update_owned_browse_card(
         user_id=user_id,
         admin_mode=admin_mode,
     )
-    progress = browse_card_repository.load_browse_progress(
+    progress = _load_mode_aware_browse_progress(
         user_id=user_id,
-        card_id=card_obj.id,
+        timezone_name=timezone_name,
+        card_obj=card_obj,
+        now_utc=now,
     )
     return {
         "success": True,
@@ -1229,11 +1676,13 @@ def _build_browse_detail_payload(
         user_id=user_id,
         admin_mode=admin_mode,
     )
-    progress = browse_card_repository.load_browse_progress(
-        user_id=user_id,
-        card_id=card_obj.id,
-    )
     now = _utcnow()
+    progress = _load_mode_aware_browse_progress(
+        user_id=user_id,
+        timezone_name=timezone_name,
+        card_obj=card_obj,
+        now_utc=now,
+    )
     return vocabulary_ctrl.build_browse_card_detail(
         card_obj,
         deck_lookup,

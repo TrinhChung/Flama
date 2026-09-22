@@ -12,6 +12,10 @@ from alembic.operations import Operations
 from sqlalchemy.exc import IntegrityError
 
 from app import create_app
+from app.services.study_authority_enrollment_service import (
+    stage_legacy_authority_enrollment,
+    stage_note_authority_enrollment,
+)
 from models import db
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.user import User
@@ -123,6 +127,34 @@ class StudyAuthorityNoteEnrollmentTests(unittest.TestCase):
             migration.upgrade()
         row = db.session.get(StudyAuthorityEnrollment, self.user_id)
         self.assertEqual(row.mode_code, "LEGACY")
+
+    def test_empty_learner_can_enroll_and_roll_back_without_subjects(self):
+        enrolled = stage_note_authority_enrollment(
+            db.session,
+            learner_user_id=self.user_id,
+            now_utc=datetime(2026, 9, 22, 8, 0, 0),
+        )
+        self.assertEqual(enrolled.mode_code, "NOTE")
+        self.assertEqual(enrolled.epoch, 1)
+        self.assertEqual(enrolled.subject_count, 0)
+        self.assertEqual(enrolled.card_count, 0)
+        db.session.commit()
+
+        rolled_back = stage_legacy_authority_enrollment(
+            db.session,
+            learner_user_id=self.user_id,
+            now_utc=datetime(2026, 9, 22, 8, 1, 0),
+        )
+        self.assertEqual(rolled_back.previous_mode, "NOTE")
+        self.assertEqual(rolled_back.mode_code, "LEGACY")
+        self.assertEqual(rolled_back.epoch, 2)
+        self.assertEqual(rolled_back.subject_count, 0)
+        self.assertEqual(rolled_back.card_count, 0)
+        db.session.commit()
+
+        enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
+        self.assertEqual(enrollment.mode_code, "LEGACY")
+        self.assertEqual(enrollment.epoch, 2)
 
 
 if __name__ == "__main__":

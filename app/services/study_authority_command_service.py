@@ -1,4 +1,4 @@
-"""Inert existing-state NOTE review command for the Phase 5 cutover.
+"""Existing-state NOTE review command for the Phase 5 cutover.
 
 The caller must acquire the learner, subject/token/state, sibling progress and
 compatibility locks in canonical order before invoking this command. The
@@ -6,9 +6,9 @@ command stages one native ReviewEvent, NOTE state/token mutation, full legacy
 projection, refreshed compatibility evidence and native history fact in the
 caller's transaction. It never commits or rolls back.
 
-This is intentionally not a product route: durable idempotency receipts,
-overlay authorization, marketplace/install side effects and first-state
-materialization remain later Phase 5 gates.
+Study Session v4 and eligible direct REST/MCP paths compose this primitive with
+durable receipts and native side effects. Overlay authorization, first-state
+materialization and external lifecycle state-sync remain later Phase 5 gates.
 """
 
 from __future__ import annotations

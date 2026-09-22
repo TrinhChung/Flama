@@ -1,9 +1,10 @@
-"""Transactional native-writer mirror for Phase 4 learner/Note progress.
+"""Transactional legacy-writer mirror and Phase 5 authority tripwire.
 
 The transaction owner calls ``prepare_native_mirror`` before taking any
 CardProgress lock and calls ``finalize_native_mirror`` after ReviewEvent ids and
-``last_review_event_id`` pointers have been flushed.  This module never commits
-or rolls back.  CardProgress and ReviewEvent remain authoritative in Phase 4.
+``last_review_event_id`` pointers have been flushed. This module never commits
+or rolls back. Every entrypoint first fences the learner and rejects NOTE so a
+legacy/external writer cannot bypass the canonical Phase 5 command.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from flask import current_app
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
+from app.repositories.study_authority_repository import lock_study_authority_route
 from app.repositories.study_progress_shadow_repository import (
     assert_subject_finalization_fence,
     lock_subjects_in_canonical_order,
@@ -211,15 +213,20 @@ def prepare_native_mirror(
 ) -> NativeMirrorPlan | None:
     """Lock affected learner/Note subjects and all current CardProgress siblings.
 
-    The function is a strict no-op while the feature flag is disabled.  With the
-    flag enabled, lock order is subject keys first and authoritative progress
-    rows second, both in canonical binary identity order.
+    The function always acquires the learner authority fence. It performs no
+    mirror writes while the feature flag is disabled. With the flag enabled,
+    lock order is subject keys first and compatibility progress rows second,
+    both in canonical binary identity order.
     """
 
+    learner_id = int(learner_user_id)
+    lock_study_authority_route(
+        session,
+        learner_user_id=learner_id,
+    )
     if not shadow_writes_enabled():
         return None
     prepared_at = _utc_naive(now_utc)
-    learner_id = int(learner_user_id)
     supplied_cards = tuple(cards)
     if not supplied_cards:
         return None
@@ -327,9 +334,6 @@ def prepare_mirror_scopes(
     would result from repeatedly calling ``prepare_native_mirror``.
     """
 
-    if not shadow_writes_enabled():
-        return ()
-    prepared_at = _utc_naive(now_utc)
     keys = sorted(
         {
             (int(learner_user_id), str(note_id))
@@ -340,6 +344,14 @@ def prepare_mirror_scopes(
     )
     if not keys:
         return ()
+    for learner_id in sorted({learner_id for learner_id, _note_id in keys}):
+        lock_study_authority_route(
+            session,
+            learner_user_id=learner_id,
+        )
+    if not shadow_writes_enabled():
+        return ()
+    prepared_at = _utc_naive(now_utc)
 
     subjects = lock_subjects_in_canonical_order(
         session,
@@ -436,6 +448,51 @@ def locked_progress_map(plan: NativeMirrorPlan | None) -> dict[str, CardProgress
     if plan is None:
         return {}
     return plan.locked_progress_by_card_id
+
+
+def compose_locked_lifecycle_plan(
+    session: Session,
+    *,
+    learner_user_id: int,
+    note_id: str,
+    subject: StudyProgressSubject,
+    cards: Iterable[Card],
+    progress_rows: Iterable[CardProgress],
+    prepared_at: datetime,
+) -> NativeMirrorPlan:
+    """Compose a mirror plan from an already locked authority vector."""
+
+    card_rows = tuple(cards)
+    progress = tuple(progress_rows)
+    current_contributors = load_current_contributors(
+        session,
+        subject_id=int(subject.id),
+        subject_generation=int(subject.subject_generation),
+        for_update=True,
+    )
+    return NativeMirrorPlan(
+        session=session,
+        learner_user_id=int(learner_user_id),
+        prepared_at=prepared_at,
+        subjects_by_note_id={
+            str(note_id): _PreparedSubject(
+                note_id=str(note_id),
+                subject=subject,
+                expected_generation=int(subject.subject_generation),
+                expected_mirror_revision=int(subject.mirror_revision),
+                shadow_progress_ids=frozenset(
+                    int(row.live_card_progress_id)
+                    for row in current_contributors
+                    if row.live_card_progress_id is not None
+                ),
+                authority_progress_ids=frozenset(int(row.id) for row in progress),
+            )
+        },
+        cards_by_id={str(card.id): card for card in card_rows},
+        locked_progress_by_card_id={
+            str(row.card_id): row for row in progress if row.card_id is not None
+        },
+    )
 
 
 def _decode_digest(value: str | bytes | None) -> bytes | None:

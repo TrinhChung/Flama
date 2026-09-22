@@ -1,4 +1,4 @@
-"""Durable replay receipt for the inert existing-state NOTE command.
+"""Durable replay receipt for the existing-state NOTE command.
 
 The caller must already hold the learner and subject lock prefix. Receipt
 lookup happens before NOTE CAS verification so an exact committed retry can

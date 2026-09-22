@@ -6,6 +6,10 @@ import json
 from typing import Any
 from sqlalchemy import or_
 
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.services import (
     flashcard_content_service,
     study_progress_lifecycle_mirror_service,
@@ -594,6 +598,21 @@ def update_note_type(
 ) -> dict[str, Any]:
     """Update a note type's schema, metadata, fields, or templates with data migration support."""
     nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
+
+    if templates is not None:
+        try:
+            lock_study_authority_route(
+                db.session,
+                learner_user_id=int(user_id),
+            )
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise RequestValidationError(
+                str(exc),
+                field="templates",
+                status=409,
+                code=exc.code,
+            ) from exc
 
     # The generic MCP note-type mutation rewrites fields/templates and cards
     # directly.  Shared decks require stable field/card identity plus release

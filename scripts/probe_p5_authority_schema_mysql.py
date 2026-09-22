@@ -54,6 +54,10 @@ from app.services.study_authority_receipt_service import (
     IdempotentExistingStateNoteReviewCommand,
     apply_idempotent_existing_state_note_review,
 )
+from app.services.study_authority_enrollment_service import (
+    stage_legacy_authority_enrollment,
+    stage_note_authority_enrollment,
+)
 from app.services.study_authority_write_service import (
     StudyAuthorityStateWrite,
     apply_study_authority_material_write,
@@ -74,6 +78,7 @@ from app.services.study_progress_shadow_codec import (
     serialize_raw_card_progress,
 )
 from app.services.study_progress_shadow_mapper import MappedCardProgress, map_card_progress
+from app.services import study_progress_lifecycle_mirror_service
 from app.services.study_service import (
     NativeReviewMutationInput,
     NativeReviewProvenance,
@@ -95,6 +100,7 @@ from models.study_progress_state import StudyProgressState
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_history_fact import StudyProgressHistoryFact
+from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_lineage_ref import StudyProgressLineageRef
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
@@ -274,6 +280,142 @@ def _assert_persisted_projection(expected: object) -> None:
                 f"MySQL round-trip changed projected Card {sibling.card_id}: "
                 f"{differing_fields!r}."
             )
+
+
+def _probe_pristine_enrollment() -> dict[str, str]:
+    """Prove pristine multi-sibling materialization and empty-history rollback."""
+
+    created_at = datetime(2026, 9, 22, 1, 0, 0)
+    user = User(
+        email="p5-pristine-enrollment@example.test",
+        username="p5-pristine-enrollment",
+    )
+    db.session.add(user)
+    db.session.flush()
+    user_id = int(user.id)
+    note_type = NoteType(
+        id="p5-pristine-note-type",
+        user_id=user_id,
+        name="P5 pristine enrollment probe",
+    )
+    template_a = Template(
+        id="p5-pristine-template-a",
+        note_type=note_type,
+        name="A",
+        position=0,
+    )
+    template_b = Template(
+        id="p5-pristine-template-b",
+        note_type=note_type,
+        name="B",
+        position=1,
+    )
+    deck = Deck(
+        owner_user_id=user_id,
+        note_type=note_type,
+        name="P5 pristine enrollment probe",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    db.session.add_all([note_type, template_a, template_b, deck])
+    db.session.flush()
+    note = Note(
+        id="p5-pristine-note",
+        note_type=note_type,
+        user_id=user_id,
+        deck_id=int(deck.id),
+        field_values={"Front": "pristine"},
+        tags=[],
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    cards = (
+        Card(
+            id="p5-pristine-card-a",
+            note=note,
+            template=template_a,
+            created_at=created_at,
+            updated_at=created_at,
+        ),
+        Card(
+            id="p5-pristine-card-b",
+            note=note,
+            template=template_b,
+            created_at=created_at,
+            updated_at=created_at,
+        ),
+    )
+    db.session.add_all([note, *cards])
+    db.session.commit()
+
+    enrolled = stage_note_authority_enrollment(
+        db.session,
+        learner_user_id=user_id,
+        now_utc=datetime(2026, 9, 22, 1, 1, 0),
+    )
+    if (
+        enrolled.mode_code != "NOTE"
+        or enrolled.epoch != 1
+        or enrolled.subject_count != 1
+        or enrolled.card_count != 2
+    ):
+        raise AssertionError("Pristine enrollment returned incomplete coverage.")
+    db.session.commit()
+    db.session.expire_all()
+
+    subject = StudyProgressSubject.query.filter_by(
+        learner_user_id=user_id,
+        live_note_id=str(note.id),
+    ).one()
+    token = db.session.get(StudyAuthoritySubjectToken, int(subject.id))
+    state = db.session.get(StudyProgressState, int(subject.id))
+    contributors = StudyProgressContributor.query.filter_by(
+        subject_id=int(subject.id),
+        contributor_status="ACTIVE",
+    ).all()
+    if (
+        str(subject.status_code) != "MIRRORED_EQUIVALENT_FANIN"
+        or int(subject.contributor_count) != 2
+        or token is None
+        or int(token.authority_revision) != 0
+        or state is None
+        or bytes(token.semantic_state_hash) != bytes(state.semantic_state_hash)
+        or CardProgress.query.filter_by(user_id=user_id).count() != 2
+        or len(contributors) != 2
+        or any(
+            row.current_provenance_code != "UNKNOWN_LEGACY"
+            or row.history_completeness_code != "HISTORY_NATIVE_COMPLETE"
+            for row in contributors
+        )
+        or StudyProgressAvailability.query.filter_by(
+            subject_id=int(subject.id),
+            subject_generation=1,
+        ).count()
+        != 2
+    ):
+        raise AssertionError("Pristine enrollment left MySQL authority divergence.")
+    db.session.rollback()
+
+    rolled_back = stage_legacy_authority_enrollment(
+        db.session,
+        learner_user_id=user_id,
+        now_utc=datetime(2026, 9, 22, 1, 2, 0),
+    )
+    if (
+        rolled_back.previous_mode != "NOTE"
+        or rolled_back.mode_code != "LEGACY"
+        or rolled_back.epoch != 2
+        or rolled_back.subject_count != 1
+        or rolled_back.card_count != 2
+    ):
+        raise AssertionError("Pristine enrollment rollback lost compatibility state.")
+    db.session.commit()
+    db.session.delete(db.session.get(User, user_id))
+    db.session.commit()
+    return {
+        "pristine_note_enrollment_materialization": "PASS",
+        "pristine_note_enrollment_rollback": "PASS",
+    }
 
 
 def _probe_projection_round_trip(user: User) -> dict[str, object]:
@@ -982,6 +1124,321 @@ def _probe_projection_round_trip(user: User) -> dict[str, object]:
     if after_replay_counts != before_replay_counts:
         raise AssertionError("Authority receipt replay created duplicate evidence.")
     db.session.rollback()
+
+    reset_plan = study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
+        db.session,
+        route=note_route,
+        removed_card_ids=(str(card_a.id), str(card_b.id)),
+        now_utc=datetime(2026, 9, 23, 2, 0, 0),
+    )
+    if reset_plan is None:
+        raise AssertionError("Reviewed NOTE state was incorrectly treated as reset-pristine.")
+    deleted_count = CardProgress.query.filter(
+        CardProgress.user_id == user_id,
+        CardProgress.card_id.in_((str(card_a.id), str(card_b.id))),
+    ).delete(synchronize_session=False)
+    if deleted_count != 2:
+        raise AssertionError("NOTE reset did not remove both old compatibility rows.")
+    reset_result = (
+        study_progress_lifecycle_mirror_service.finalize_note_authority_reset(
+            reset_plan,
+            source_path="deck.progress_reset",
+            operation_key="p5-mysql-note-reset",
+            now_utc=datetime(2026, 9, 23, 2, 0, 0),
+        )
+    )
+    if reset_result is None or reset_result.subject_count != 1:
+        raise AssertionError("NOTE reset did not rebuild one authority subject.")
+    db.session.commit()
+    db.session.expire_all()
+    reset_subject = db.session.get(StudyProgressSubject, cas_subject_id)
+    reset_token = db.session.get(StudyAuthoritySubjectToken, cas_subject_id)
+    reset_state = db.session.get(StudyProgressState, cas_subject_id)
+    reset_rows = CardProgress.query.filter(
+        CardProgress.user_id == user_id,
+        CardProgress.card_id.in_((str(card_a.id), str(card_b.id))),
+    ).all()
+    if (
+        reset_subject is None
+        or int(reset_subject.subject_generation) != 2
+        or int(reset_subject.mirror_revision) != 3
+        or not str(reset_subject.status_code).startswith("MIRRORED_")
+        or reset_token is None
+        or int(reset_token.subject_generation) != 2
+        or int(reset_token.authority_revision) != 2
+        or reset_state is None
+        or bytes(reset_token.semantic_state_hash)
+        != bytes(reset_state.semantic_state_hash)
+        or len(reset_rows) != 2
+        or any(str(row.queue) != "new" or int(row.revision) != 0 for row in reset_rows)
+    ):
+        raise AssertionError("Committed NOTE reset left state/token/projection divergence.")
+    contributor_statuses = sorted(
+        str(row.contributor_status)
+        for row in StudyProgressContributor.query.filter_by(
+            subject_id=cas_subject_id
+        ).all()
+    )
+    if contributor_statuses != ["ACTIVE", "ACTIVE", "TOMBSTONED", "TOMBSTONED"]:
+        raise AssertionError("NOTE reset did not fence prior contributor identities.")
+    if StudyProgressLifecycleEvent.query.filter_by(
+        subject_id=cas_subject_id,
+        transition_code="TOMBSTONED_RESET",
+    ).count() != 1:
+        raise AssertionError("NOTE reset did not append lifecycle evidence.")
+    db.session.rollback()
+
+    expansion_plan = (
+        study_progress_lifecycle_mirror_service.prepare_note_authority_sibling_expansion(
+            db.session,
+            route=note_route,
+            note_ids=(str(note.id),),
+            now_utc=datetime(2026, 9, 23, 2, 30, 0),
+        )
+    )
+    if expansion_plan is None:
+        raise AssertionError("NOTE sibling expansion did not lock its authority subject.")
+    expanded_card = Card(
+        id="p5-probe-card-expanded",
+        note_id=str(note.id),
+        template_id=str(template_c.id),
+        created_at=datetime(2026, 9, 23, 2, 30, 0),
+        updated_at=datetime(2026, 9, 23, 2, 30, 0),
+    )
+    db.session.add(expanded_card)
+    db.session.flush()
+    expansion_result = (
+        study_progress_lifecycle_mirror_service.finalize_note_authority_sibling_expansion(
+            expansion_plan,
+            new_cards=(expanded_card,),
+            now_utc=datetime(2026, 9, 23, 2, 30, 0),
+        )
+    )
+    if expansion_result is None or expansion_result.subject_count != 1:
+        raise AssertionError("NOTE sibling expansion did not rebuild one subject.")
+    db.session.commit()
+    db.session.expire_all()
+    expanded_subject = db.session.get(StudyProgressSubject, cas_subject_id)
+    expanded_token = db.session.get(StudyAuthoritySubjectToken, cas_subject_id)
+    expanded_state = db.session.get(StudyProgressState, cas_subject_id)
+    expanded_progress = CardProgress.query.filter(
+        CardProgress.user_id == user_id,
+        CardProgress.card_id.in_(
+            (str(card_a.id), str(card_b.id), str(expanded_card.id))
+        ),
+    ).all()
+    active_expanded_contributors = StudyProgressContributor.query.filter_by(
+        subject_id=cas_subject_id,
+        contributor_status="ACTIVE",
+    ).count()
+    if (
+        expanded_subject is None
+        or int(expanded_subject.subject_generation) != 3
+        or int(expanded_subject.mirror_revision) != 4
+        or int(expanded_subject.contributor_count) != 3
+        or expanded_token is None
+        or int(expanded_token.subject_generation) != 3
+        or int(expanded_token.authority_revision) != 2
+        or expanded_state is None
+        or bytes(expanded_token.semantic_state_hash)
+        != bytes(expanded_state.semantic_state_hash)
+        or len(expanded_progress) != 3
+        or len(
+            {
+                map_card_progress(
+                    row,
+                    card_created_at=db.session.get(Card, row.card_id).created_at,
+                ).semantic_state_hash
+                for row in expanded_progress
+            }
+        )
+        != 1
+        or active_expanded_contributors != 3
+        or StudyProgressAvailability.query.filter_by(
+            subject_id=cas_subject_id,
+            subject_generation=3,
+        ).count()
+        != 3
+    ):
+        raise AssertionError("NOTE sibling expansion left state/token/projection divergence.")
+    db.session.rollback()
+
+    removal_plan = (
+        study_progress_lifecycle_mirror_service.prepare_note_authority_sibling_removal(
+            db.session,
+            route=note_route,
+            removed_card_ids=(str(expanded_card.id),),
+            now_utc=datetime(2026, 9, 23, 2, 45, 0),
+        )
+    )
+    if removal_plan is None:
+        raise AssertionError("NOTE sibling removal did not lock its authority subject.")
+    removed_count = CardProgress.query.filter(
+        CardProgress.user_id == user_id,
+        CardProgress.card_id == str(expanded_card.id),
+    ).delete(synchronize_session=False)
+    if removed_count != 1:
+        raise AssertionError("NOTE sibling removal did not delete one projection row.")
+    removal_result = (
+        study_progress_lifecycle_mirror_service.finalize_note_authority_sibling_removal(
+            removal_plan,
+            source_path="flashcards.template_delete",
+            operation_key="p5-mysql-sibling-delete",
+            now_utc=datetime(2026, 9, 23, 2, 45, 0),
+        )
+    )
+    if removal_result is None or removal_result.subject_count != 1:
+        raise AssertionError("NOTE sibling removal did not rebuild one subject.")
+    db.session.delete(expanded_card)
+    db.session.commit()
+    db.session.expire_all()
+    removed_subject = db.session.get(StudyProgressSubject, cas_subject_id)
+    removed_token = db.session.get(StudyAuthoritySubjectToken, cas_subject_id)
+    removed_state = db.session.get(StudyProgressState, cas_subject_id)
+    remaining_progress = CardProgress.query.filter(
+        CardProgress.user_id == user_id,
+        CardProgress.card_id.in_((str(card_a.id), str(card_b.id))),
+    ).all()
+    if (
+        removed_subject is None
+        or int(removed_subject.subject_generation) != 4
+        or int(removed_subject.mirror_revision) != 5
+        or int(removed_subject.contributor_count) != 2
+        or removed_token is None
+        or int(removed_token.subject_generation) != 4
+        or int(removed_token.authority_revision) != 2
+        or removed_state is None
+        or bytes(removed_token.semantic_state_hash)
+        != bytes(removed_state.semantic_state_hash)
+        or len(remaining_progress) != 2
+        or StudyProgressContributor.query.filter_by(
+            subject_id=cas_subject_id,
+            contributor_status="ACTIVE",
+        ).count()
+        != 2
+        or StudyProgressAvailability.query.filter_by(
+            subject_id=cas_subject_id,
+            subject_generation=4,
+        ).count()
+        != 2
+        or StudyProgressLifecycleEvent.query.filter_by(
+            subject_id=cas_subject_id,
+            transition_code="DETACHED_CONTRIBUTOR_DELETED",
+        ).count()
+        != 1
+    ):
+        raise AssertionError("NOTE sibling removal left state/token/projection divergence.")
+    db.session.rollback()
+
+    new_note = Note(
+        id="p5-probe-new-note",
+        note_type=note_type,
+        user_id=user_id,
+        deck_id=int(deck.id),
+        field_values={"Front": "new-note"},
+        tags=[],
+        created_at=datetime(2026, 9, 23, 3, 0, 0),
+        updated_at=datetime(2026, 9, 23, 3, 0, 0),
+    )
+    new_cards = (
+        Card(
+            id="p5-probe-new-card-a",
+            note=new_note,
+            template=template_a,
+            created_at=datetime(2026, 9, 23, 3, 0, 0),
+            updated_at=datetime(2026, 9, 23, 3, 0, 0),
+        ),
+        Card(
+            id="p5-probe-new-card-b",
+            note=new_note,
+            template=template_b,
+            created_at=datetime(2026, 9, 23, 3, 0, 0),
+            updated_at=datetime(2026, 9, 23, 3, 0, 0),
+        ),
+    )
+    db.session.add_all([new_note, *new_cards])
+    db.session.flush()
+    materialized = (
+        study_progress_lifecycle_mirror_service.materialize_new_note_authority(
+            db.session,
+            route=note_route,
+            note=new_note,
+            cards=new_cards,
+            now_utc=datetime(2026, 9, 23, 3, 0, 0),
+        )
+    )
+    if materialized is None or materialized.subject_count != 1:
+        raise AssertionError("New NOTE materialization did not build one subject.")
+    db.session.commit()
+    db.session.expire_all()
+    new_subject = StudyProgressSubject.query.filter_by(
+        learner_user_id=user_id,
+        live_note_id=str(new_note.id),
+    ).one()
+    new_subject_id = int(new_subject.id)
+    new_card_ids = [str(card.id) for card in new_cards]
+    new_token = db.session.get(StudyAuthoritySubjectToken, int(new_subject.id))
+    new_state = db.session.get(StudyProgressState, int(new_subject.id))
+    if (
+        int(new_subject.subject_generation) != 1
+        or int(new_subject.mirror_revision) != 1
+        or new_token is None
+        or int(new_token.authority_revision) != 0
+        or new_state is None
+        or bytes(new_token.semantic_state_hash)
+        != bytes(new_state.semantic_state_hash)
+        or CardProgress.query.filter(
+            CardProgress.user_id == user_id,
+            CardProgress.card_id.in_([card.id for card in new_cards]),
+        ).count()
+        != 2
+    ):
+        raise AssertionError("New NOTE materialization left an incomplete projection.")
+    db.session.rollback()
+
+    delete_plan = study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
+        db.session,
+        route=note_route,
+        removed_card_ids=new_card_ids,
+        skip_pristine=False,
+        now_utc=datetime(2026, 9, 23, 4, 0, 0),
+    )
+    CardProgress.query.filter(
+        CardProgress.user_id == user_id,
+        CardProgress.card_id.in_(new_card_ids),
+    ).delete(synchronize_session=False)
+    deleted = study_progress_lifecycle_mirror_service.finalize_note_authority_delete(
+        delete_plan,
+        source_path="flashcards.note_delete",
+        operation_key="p5-mysql-note-delete",
+        now_utc=datetime(2026, 9, 23, 4, 0, 0),
+    )
+    if deleted.subject_count != 1:
+        raise AssertionError("NOTE delete did not tombstone one authority subject.")
+    db.session.delete(new_note)
+    db.session.commit()
+    db.session.expire_all()
+    deleted_subject = db.session.get(StudyProgressSubject, new_subject_id)
+    deleted_token = db.session.get(StudyAuthoritySubjectToken, new_subject_id)
+    if (
+        deleted_subject is None
+        or str(deleted_subject.status_code) != "TOMBSTONED_SUBJECT_DELETED"
+        or deleted_subject.live_note_id is not None
+        or int(deleted_subject.subject_generation) != 2
+        or int(deleted_subject.mirror_revision) != 2
+        or deleted_token is None
+        or int(deleted_token.subject_generation) != 2
+        or int(deleted_token.authority_revision) != 1
+        or deleted_token.semantic_state_hash is not None
+        or db.session.get(Note, "p5-probe-new-note") is not None
+        or CardProgress.query.filter(
+            CardProgress.user_id == user_id,
+            CardProgress.card_id.in_(new_card_ids),
+        ).count()
+        != 0
+    ):
+        raise AssertionError("NOTE delete left live content or authority state.")
+    db.session.rollback()
     return {
         "legacy_float32_guard": "PASS",
         "legacy_datetime0_guard": "PASS",
@@ -1000,6 +1457,11 @@ def _probe_projection_round_trip(user: User) -> dict[str, object]:
         "subject_canonical_command_commit": "PASS",
         "subject_command_receipt_commit": "PASS",
         "subject_command_receipt_replay": "PASS",
+        "subject_note_reset_reinitialization": "PASS",
+        "subject_new_note_materialization": "PASS",
+        "subject_new_sibling_materialization": "PASS",
+        "subject_deleted_sibling_materialization": "PASS",
+        "subject_owned_note_delete": "PASS",
     }
 
 
@@ -1217,6 +1679,7 @@ def run_probe() -> dict[str, object]:
             )
             db.session.commit()
             db.session.rollback()
+            pristine_evidence = _probe_pristine_enrollment()
             projection_evidence = _probe_projection_round_trip(user)
             _probe_absent_enrollment_lock(settings, database_name, user.id)
             route = lock_study_authority_route(
@@ -1251,6 +1714,7 @@ def run_probe() -> dict[str, object]:
                 "flags_off_wsgi_boot": "PASS",
                 "empty_downgrade_reupgrade": "PASS",
                 "configured_database_modified": False,
+                **pristine_evidence,
                 **projection_evidence,
             }
     finally:

@@ -8,14 +8,20 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
+from app.repositories.study_authority_repository import lock_study_authority_route
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
+from app.services.scheduler_config_service import resolve_deck_options
 from app.repositories.stats_query_repository import (
     query_active_review_days,
     query_daily_review_aggregates,
 )
 from app.repositories.review_event_repository import create_review_event_record
 from app.repositories.stats_query_repository import query_future_due_day_counts
+from models import db
+from models.card import Card
+from models.deck_install import DeckInstall
 from models.flashcard import ReviewEvent
+from models.note import Note
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -138,6 +144,65 @@ def _iter_days(start_day: date, end_day: date):
 
 def _round2(value: float) -> float:
     return round(float(value) + 1e-12, 2)
+
+
+def _canonical_future_due_day_counts(
+    *,
+    user_id: int,
+    timezone_name: str,
+    timezone_obj,
+    now_utc: datetime,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> dict[date, int]:
+    from app.services.study_authority_read_service import (
+        StudyAuthorityReadError,
+        load_study_authority_card_reads,
+    )
+
+    if DeckInstall.query.filter_by(
+        user_id=user_id,
+        clone_mode="logical_overlay",
+    ).first() is not None:
+        raise StudyAuthorityReadError(
+            "OVERLAY_AUTHORITY_NOT_READY",
+            "NOTE statistics reads do not yet support logical-overlay installs.",
+        )
+    cards = (
+        Card.query.join(Note, Card.note_id == Note.id)
+        .filter(Note.user_id == user_id)
+        .order_by(Card.id.asc())
+        .all()
+    )
+    reads = load_study_authority_card_reads(
+        db.session,
+        learner_user_id=user_id,
+        cards=tuple(cards),
+        now_utc=now_utc,
+        timezone_name=timezone_name,
+        deck_options_by_card_id={
+            str(card.id): resolve_deck_options(
+                user_id=user_id,
+                deck_id=card.note.deck_id,
+            )
+            for card in cards
+        },
+    )
+    by_day: dict[date, int] = {}
+    for card in cards:
+        availability = reads[str(card.id)].availability
+        due_at = availability.due_at
+        if (
+            due_at is None
+            or due_at < start_utc
+            or due_at >= end_utc
+            or availability.is_suspended
+        ):
+            continue
+        utc_moment = due_at if due_at.tzinfo else due_at.replace(tzinfo=UTC)
+        local_day = utc_moment.astimezone(timezone_obj).date()
+        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+    return by_day
 
 
 def _safe_int(value: Any) -> int:
@@ -274,6 +339,11 @@ def build_stats_overview(
     effective_timezone_name = get_effective_timezone_name(timezone_name)
     timezone_obj = _build_timezone_obj(effective_timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
+    authority_route = lock_study_authority_route(
+        db.session,
+        learner_user_id=user_id,
+        allow_note_authority=True,
+    )
     day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
     today_day_index = _day_index(
         now_utc_naive,
@@ -315,14 +385,24 @@ def build_stats_overview(
                 day_boundary_hour,
                 timezone_name=effective_timezone_name,
             )
-            due_day_map = query_future_due_day_counts(
-                user_id=user_id,
-                timezone_name=effective_timezone_name,
-                timezone_obj=timezone_obj,
-                start_utc=future_start_utc,
-                end_utc=year_end_utc,
-                day_boundary_hour_local=day_boundary_hour,
-            )
+            if authority_route.mode_code == "NOTE":
+                due_day_map = _canonical_future_due_day_counts(
+                    user_id=user_id,
+                    timezone_name=effective_timezone_name,
+                    timezone_obj=timezone_obj,
+                    now_utc=now_utc_naive,
+                    start_utc=future_start_utc,
+                    end_utc=year_end_utc,
+                )
+            else:
+                due_day_map = query_future_due_day_counts(
+                    user_id=user_id,
+                    timezone_name=effective_timezone_name,
+                    timezone_obj=timezone_obj,
+                    start_utc=future_start_utc,
+                    end_utc=year_end_utc,
+                    day_boundary_hour_local=day_boundary_hour,
+                )
 
     tomorrow_start_utc = _day_index_to_datetime(
         today_day_index + 1,

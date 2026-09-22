@@ -1,8 +1,8 @@
 """Transaction-neutral learner authority fence primitives for Phase 5.
 
-The current physical schema can persist only LEGACY.  This repository makes
-that fact explicit and fails closed if a NOTE or unknown row is observed.  It
-does not commit, switch enrollment, or select a Note authority implementation.
+Callers remain LEGACY-only by default. Explicit NOTE-capable paths must opt in,
+hold the same learner fence, and retain transaction ownership. This repository
+does not commit or switch enrollment.
 """
 
 from __future__ import annotations

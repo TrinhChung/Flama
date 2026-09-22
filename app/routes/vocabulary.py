@@ -27,6 +27,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.repositories.study_repository import (
     apply_card_state_to_progress as _apply_card_state_to_progress,
     card_state_from_progress as _card_state_from_progress,
@@ -39,6 +43,11 @@ from app.utils.permissions import is_admin_user
 from app.utils.redirects import resolve_safe_next_url
 from app.services import deck_management_service, flashcards_share_service
 from app.services.study_action_runtime import compute_review_previews
+from app.services.study_authority_read_service import (
+    StudyAuthorityReadError,
+    load_study_authority_card_reads,
+    summarize_study_authority_queue,
+)
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.stats_overview import get_effective_timezone_name
@@ -741,27 +750,75 @@ def study_deck(deck_id: int):
     cards = _query_study_cards_for_deck_ids(subtree_ids)
     now = _utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
-    card_ids = [card_obj.id for card_obj in cards]
-    progress_map = _load_card_progress_map(card_ids)
-
-    selected_card = _select_next_note_card(
-        cards,
-        progress_map,
-        now,
-        timezone_name=timezone_name,
-    )
-    due_new, due_learn, due_review = _count_due_note_cards(
-        cards,
-        progress_map,
-        now=now,
-        timezone_name=timezone_name,
-    )
-    pending_learning_count, next_learning_due_at = _summarize_pending_learning_cards(
-        cards,
-        progress_map,
-        now=now,
-        timezone_name=timezone_name,
-    )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(current_user.id),
+            allow_note_authority=True,
+        )
+        authority_reads = None
+        if authority_route.mode_code == "NOTE":
+            authority_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=int(current_user.id),
+                cards=tuple(cards),
+                now_utc=now,
+                timezone_name=timezone_name,
+                deck_options_by_card_id={
+                    str(card.id): resolve_deck_options(
+                        user_id=current_user.id,
+                        deck_id=getattr(card.note, "deck_id", None),
+                    )
+                    for card in cards
+                },
+            )
+            queue_summary = summarize_study_authority_queue(
+                cards=tuple(cards),
+                reads_by_card_id=authority_reads,
+                learner_user_id=int(current_user.id),
+                now_utc=now,
+                timezone_name=timezone_name,
+            )
+            selected_card = next(
+                (
+                    card
+                    for card in cards
+                    if str(card.id) == queue_summary.selected_card_id
+                ),
+                None,
+            )
+            due_new = queue_summary.new_count
+            due_learn = queue_summary.learn_count
+            due_review = queue_summary.due_count
+            pending_learning_count = queue_summary.pending_learning_count
+            next_learning_due_at = queue_summary.next_due_at
+            progress_map = {}
+        else:
+            card_ids = [card_obj.id for card_obj in cards]
+            progress_map = _load_card_progress_map(card_ids)
+            selected_card = _select_next_note_card(
+                cards,
+                progress_map,
+                now,
+                timezone_name=timezone_name,
+            )
+            due_new, due_learn, due_review = _count_due_note_cards(
+                cards,
+                progress_map,
+                now=now,
+                timezone_name=timezone_name,
+            )
+            pending_learning_count, next_learning_due_at = (
+                _summarize_pending_learning_cards(
+                    cards,
+                    progress_map,
+                    now=now,
+                    timezone_name=timezone_name,
+                )
+            )
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc.code), "message": str(exc)}), 409
 
     next_intervals_preview = None
     if selected_card:
@@ -769,12 +826,16 @@ def study_deck(deck_id: int):
             user_id=current_user.id,
             deck_id=getattr(selected_card.note, "deck_id", None),
         )
-        card_state = _card_state_from_progress(
-            progress_map.get(selected_card.id),
-            now,
-            timezone_name=timezone_name,
-            user_id=current_user.id,
-            options=deck_options,
+        card_state = (
+            authority_reads[str(selected_card.id)].state
+            if authority_reads is not None
+            else _card_state_from_progress(
+                progress_map.get(selected_card.id),
+                now,
+                timezone_name=timezone_name,
+                user_id=current_user.id,
+                options=deck_options,
+            )
         )
         next_intervals_preview = compute_review_previews(
             state=card_state,

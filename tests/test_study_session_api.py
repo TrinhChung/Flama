@@ -6,9 +6,8 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
-from sqlalchemy import text
-
 from app import create_app
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.anki_scheduler import _day_index, applyAnswer
 from app.services.study_progress_contract import MAPPER_VERSION
 from app.services.study_progress_shadow_mapper import (
@@ -28,12 +27,14 @@ from app.services.study_session_service import (
 )
 from app.services.study_authority_enrollment_service import (
     StudyAuthorityEnrollmentError,
+    stage_legacy_authority_enrollment,
     stage_note_authority_enrollment,
 )
 from app.services.study_session_config import (
     StudySessionConfigError,
     decode_study_session_config,
 )
+from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -50,10 +51,12 @@ from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
+from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_authority_pin import StudySessionAuthorityPin
+from models.study_session_batch import StudySessionBatch
 from models.template import Template
 from models.user import User
 
@@ -292,6 +295,691 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
 
+    def test_note_authority_deck_reset_reinitializes_state_and_invalidates_pin(self):
+        self._enable_existing_state_note_authority(epoch=7)
+        with self.app.app_context():
+            card_id = str(Card.query.join(Note, Card.note_id == Note.id).one().id)
+        reviewed = self.client.post(
+            f"/api/study/{card_id}/answer",
+            json={
+                "rating": "good",
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "operation_key": str(uuid4()),
+            },
+        )
+        self.assertEqual(reviewed.status_code, 200, reviewed.get_json())
+        snapshot = self._open_session_v4()
+
+        response = self.client.post(f"/api/decks/{self.deck_id}/progress-reset")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["deleted_progress_count"], 1)
+
+        with self.app.app_context():
+            self.assertEqual(CardProgress.query.count(), 1)
+            self.assertEqual(StudyProgressState.query.count(), 1)
+            self.assertEqual(StudyProgressAvailability.query.count(), 1)
+            subject = StudyProgressSubject.query.one()
+            token = StudyAuthoritySubjectToken.query.one()
+            contributors = StudyProgressContributor.query.order_by(
+                StudyProgressContributor.id.asc()
+            ).all()
+            lifecycle = StudyProgressLifecycleEvent.query.one()
+            session = db.session.get(StudySession, snapshot["session_id"])
+            self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
+            self.assertEqual(int(subject.subject_generation), 2)
+            self.assertEqual(int(subject.mirror_revision), 3)
+            self.assertEqual(int(subject.contributor_count), 1)
+            self.assertEqual(int(token.subject_generation), 2)
+            self.assertEqual(int(token.authority_revision), 2)
+            self.assertEqual(
+                bytes(token.semantic_state_hash),
+                bytes(StudyProgressState.query.one().semantic_state_hash),
+            )
+            self.assertEqual(len(contributors), 2)
+            self.assertEqual(contributors[0].contributor_status, "TOMBSTONED")
+            self.assertIsNone(contributors[0].live_card_progress_id)
+            self.assertEqual(contributors[1].contributor_status, "ACTIVE")
+            self.assertEqual(lifecycle.transition_code, "TOMBSTONED_RESET")
+            self.assertEqual(
+                (int(lifecycle.old_generation), int(lifecycle.new_generation)),
+                (1, 2),
+            )
+            self.assertEqual(session.status, "cancelled")
+
+        fresh = self._open_session_v4()
+        self.assertEqual(fresh["cards"][0]["state"]["type"], "new")
+        self.assertEqual(
+            fresh["cards"][0]["authority_pin"]["subject_generation"],
+            "2",
+        )
+
+        repeated = self.client.post(f"/api/decks/{self.deck_id}/progress-reset")
+        self.assertEqual(repeated.status_code, 200, repeated.get_json())
+        self.assertEqual(repeated.get_json()["deleted_progress_count"], 0)
+        with self.app.app_context():
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 1)
+
+        after_repeat = self._open_session_v4()
+        committed = self.client.post(
+            f"/api/study/sessions/{after_repeat['session_id']}/commit",
+            json=self._commit_payload(after_repeat),
+        )
+        self.assertEqual(committed.status_code, 200, committed.get_json())
+
+    def test_note_authority_deck_reset_rolls_back_stale_projection(self):
+        self._enable_existing_state_note_authority(epoch=7)
+        with self.app.app_context():
+            StudyProgressAvailability.query.one().normalized_queue = "review"
+            db.session.commit()
+
+        response = self.client.post(f"/api/decks/{self.deck_id}/progress-reset")
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "STALE_AUTHORITY_AVAILABILITY")
+
+        with self.app.app_context():
+            self.assertEqual(CardProgress.query.count(), 1)
+            self.assertEqual(StudyProgressState.query.count(), 1)
+            self.assertEqual(StudyProgressAvailability.query.count(), 1)
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(int(subject.subject_generation), 1)
+            self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
+
+    def test_note_authority_new_note_materializes_before_first_review(self):
+        self._enable_existing_state_note_authority(epoch=8)
+
+        created = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": self.note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {"Word": "犬"},
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+        new_card_id = created.get_json()["first_card_id"]
+
+        snapshot = self._open_session_v4()
+        self.assertEqual(len(snapshot["cards"]), 2)
+        new_card = next(
+            card for card in snapshot["cards"] if card["card_id"] == new_card_id
+        )
+        self.assertEqual(new_card["state"]["type"], "new")
+        self.assertEqual(new_card["authority_pin"]["base_authority_revision"], "0")
+
+        reviewed = self.client.post(
+            f"/api/study/{new_card_id}/answer",
+            json={
+                "rating": "good",
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "operation_key": str(uuid4()),
+            },
+        )
+        self.assertEqual(reviewed.status_code, 200, reviewed.get_json())
+        self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 1)
+
+        with self.app.app_context():
+            self.assertEqual(Note.query.count(), 2)
+            self.assertEqual(CardProgress.query.count(), 2)
+            self.assertEqual(StudyProgressSubject.query.count(), 2)
+            self.assertEqual(StudyProgressState.query.count(), 2)
+            self.assertEqual(StudyProgressContributor.query.count(), 2)
+            self.assertEqual(StudyProgressAvailability.query.count(), 2)
+            new_subject = StudyProgressSubject.query.filter_by(
+                live_note_id=created.get_json()["id"]
+            ).one()
+            new_token = db.session.get(
+                StudyAuthoritySubjectToken, int(new_subject.id)
+            )
+            self.assertEqual(int(new_subject.subject_generation), 1)
+            self.assertEqual(int(new_subject.mirror_revision), 2)
+            self.assertEqual(int(new_token.authority_revision), 1)
+            self.assertEqual(ReviewEvent.query.count(), 1)
+
+    def test_note_authority_mcp_note_create_and_delete_use_canonical_lifecycle(self):
+        self._enable_existing_state_note_authority(epoch=9)
+        with self.app.app_context():
+            from app.services.mcp.note_tools import create_note, delete_note
+
+            created = create_note(
+                user_id=self.user_id,
+                note_data={
+                    "deck_id": self.deck_id,
+                    "note_type_id": self.note_type_id,
+                    "fields": {"Word": "é³¥"},
+                },
+            )
+            new_note_id = created["note_id"]
+            new_subject = StudyProgressSubject.query.filter_by(
+                live_note_id=new_note_id
+            ).one()
+            new_contributor = StudyProgressContributor.query.filter_by(
+                subject_id=int(new_subject.id),
+                contributor_status="ACTIVE",
+            ).one()
+            self.assertEqual(
+                new_contributor.current_provenance_code, "NATIVE_MCP"
+            )
+            self.assertEqual(
+                new_contributor.history_completeness_code,
+                "HISTORY_NATIVE_COMPLETE",
+            )
+            self.assertEqual(int(new_subject.subject_generation), 1)
+            self.assertEqual(int(new_subject.mirror_revision), 1)
+
+            deleted = delete_note(
+                user_id=self.user_id,
+                note_id=new_note_id,
+                confirm=True,
+            )
+            self.assertTrue(deleted["success"])
+            db.session.expire_all()
+            tombstone = db.session.get(
+                StudyProgressSubject, int(new_subject.id)
+            )
+            token = db.session.get(
+                StudyAuthoritySubjectToken, int(new_subject.id)
+            )
+            self.assertIsNone(db.session.get(Note, new_note_id))
+            self.assertEqual(
+                tombstone.status_code, "TOMBSTONED_SUBJECT_DELETED"
+            )
+            self.assertEqual(int(tombstone.subject_generation), 2)
+            self.assertEqual(int(token.subject_generation), 2)
+            self.assertEqual(int(token.authority_revision), 1)
+
+    def test_note_authority_mcp_template_bulk_fails_closed_and_note_batch_deletes(self):
+        self._enable_existing_state_note_authority(epoch=10)
+        with self.app.app_context():
+            from app.services.mcp.note_tools import batch_delete_notes, create_note
+            from app.services.mcp.note_type_tools import update_note_type
+
+            with self.assertRaises(RequestValidationError) as failure:
+                update_note_type(
+                    user_id=self.user_id,
+                    note_type_id=self.note_type_id,
+                    templates={"added": [{"name": "Unsafe Card"}]},
+                )
+            self.assertEqual(
+                failure.exception.code,
+                "NOTE_AUTHORITY_UNAVAILABLE",
+            )
+            db.session.rollback()
+            self.assertEqual(Template.query.count(), 1)
+            self.assertEqual(Card.query.count(), 1)
+            first_note_id = str(Note.query.one().id)
+            second = create_note(
+                user_id=self.user_id,
+                note_data={
+                    "deck_id": self.deck_id,
+                    "note_type_id": self.note_type_id,
+                    "fields": {"Word": "é­š"},
+                },
+            )
+            deleted = batch_delete_notes(
+                user_id=self.user_id,
+                note_ids=[first_note_id, second["note_id"]],
+                confirm=True,
+            )
+            self.assertEqual(deleted["deleted_count"], 2)
+            self.assertEqual(deleted["deleted_cards_count"], 2)
+            self.assertEqual(Note.query.count(), 0)
+            self.assertEqual(Card.query.count(), 0)
+            self.assertEqual(CardProgress.query.count(), 0)
+            subjects = StudyProgressSubject.query.all()
+            self.assertEqual(len(subjects), 2)
+            self.assertTrue(
+                all(
+                    subject.status_code == "TOMBSTONED_SUBJECT_DELETED"
+                    and int(subject.subject_generation) == 2
+                    for subject in subjects
+                )
+            )
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 2)
+
+    def test_note_authority_new_template_materializes_exact_sibling(self):
+        _note_id, _state_hash = self._enable_existing_state_note_authority(epoch=11)
+        with self.app.app_context():
+            original_card_id = str(Card.query.one().id)
+        reviewed = self.client.post(
+            f"/api/study/{original_card_id}/answer",
+            json={
+                "rating": "good",
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "operation_key": str(uuid4()),
+            },
+        )
+        self.assertEqual(reviewed.status_code, 200, reviewed.get_json())
+        old_snapshot = self._open_session_v4()
+
+        created = self.client.post(
+            f"/api/note-types/{self.note_type_id}/templates",
+            json={
+                "name": "Card 2",
+                "front_html": "Reverse {{Word}}",
+                "back_html": "{{Word}}",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+        template_id = created.get_json()["id"]
+        self.assertEqual(created.get_json()["position"], 1)
+
+        with self.app.app_context():
+            cards = Card.query.order_by(Card.id.asc()).all()
+            self.assertEqual(len(cards), 2)
+            new_card = Card.query.filter_by(template_id=template_id).one()
+            new_card_id = str(new_card.id)
+            progress_rows = CardProgress.query.order_by(
+                CardProgress.card_id.asc()
+            ).all()
+            self.assertEqual(len(progress_rows), 2)
+            mapped = {
+                str(row.card_id): map_card_progress(
+                    row,
+                    card_created_at=db.session.get(Card, row.card_id).created_at,
+                )
+                for row in progress_rows
+            }
+            self.assertTrue(
+                all(isinstance(value, MappedCardProgress) for value in mapped.values())
+            )
+            self.assertEqual(
+                len({value.semantic_state_hash for value in mapped.values()}),
+                1,
+            )
+            subject = StudyProgressSubject.query.one()
+            token = StudyAuthoritySubjectToken.query.one()
+            state = StudyProgressState.query.one()
+            old_session = db.session.get(
+                StudySession, old_snapshot["session_id"]
+            )
+            self.assertEqual(int(subject.subject_generation), 2)
+            self.assertEqual(int(subject.mirror_revision), 3)
+            self.assertEqual(int(subject.contributor_count), 2)
+            self.assertEqual(subject.status_code, "MIRRORED_EQUIVALENT_FANIN_DISTINCT_LINEAGE")
+            self.assertEqual(int(token.subject_generation), 2)
+            self.assertEqual(int(token.authority_revision), 1)
+            self.assertEqual(
+                bytes(token.semantic_state_hash),
+                bytes(state.semantic_state_hash),
+            )
+            self.assertEqual(StudyProgressContributor.query.count(), 3)
+            self.assertEqual(
+                StudyProgressContributor.query.filter_by(
+                    contributor_status="ACTIVE"
+                ).count(),
+                2,
+            )
+            self.assertEqual(
+                StudyProgressContributor.query.filter_by(
+                    contributor_status="DETACHED"
+                ).count(),
+                1,
+            )
+            new_contributor = StudyProgressContributor.query.filter_by(
+                live_card_id=new_card_id,
+                contributor_status="ACTIVE",
+            ).one()
+            self.assertEqual(
+                new_contributor.current_provenance_code, "NATIVE_DIRECT"
+            )
+            self.assertEqual(
+                new_contributor.history_completeness_code,
+                "HISTORY_NATIVE_COMPLETE",
+            )
+            self.assertEqual(StudyProgressAvailability.query.count(), 2)
+            self.assertEqual(old_session.status, "cancelled")
+
+        previous_v4 = self.app.config["STUDY_WIRE_V4_ENABLED"]
+        self.app.config["STUDY_WIRE_V4_ENABLED"] = True
+        try:
+            fresh_response = self.client.post(
+                "/api/study/sessions",
+                json={
+                    "scope": "deck",
+                    "scope_id": self.deck_id,
+                    "composition_id": (
+                        f"comp:notetype:{self.note_type_id}:template:{template_id}"
+                    ),
+                    "accepted_session_schema_versions": ["study-session.v4"],
+                },
+            )
+        finally:
+            self.app.config["STUDY_WIRE_V4_ENABLED"] = previous_v4
+        self.assertEqual(
+            fresh_response.status_code, 201, fresh_response.get_json()
+        )
+        fresh = fresh_response.get_json()
+        self.assertEqual(fresh["cards"][0]["card_id"], new_card_id)
+        self.assertEqual(
+            fresh["cards"][0]["authority_pin"]["subject_generation"], "2"
+        )
+        self.assertEqual(
+            fresh["cards"][0]["authority_pin"]["base_authority_revision"], "1"
+        )
+        committed = self.client.post(
+            f"/api/study/sessions/{fresh['session_id']}/commit",
+            json=self._commit_payload(fresh),
+        )
+        self.assertEqual(committed.status_code, 200, committed.get_json())
+
+    def test_note_authority_new_template_rolls_back_stale_projection(self):
+        self._enable_existing_state_note_authority(epoch=12)
+        with self.app.app_context():
+            template_count = Template.query.count()
+            card_count = Card.query.count()
+            StudyProgressAvailability.query.one().normalized_queue = "review"
+            db.session.commit()
+
+        response = self.client.post(
+            f"/api/note-types/{self.note_type_id}/templates",
+            json={
+                "name": "Rejected Card",
+                "front_html": "{{Word}}",
+                "back_html": "{{Word}}",
+            },
+        )
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "STALE_AUTHORITY_AVAILABILITY")
+
+        with self.app.app_context():
+            self.assertEqual(Template.query.count(), template_count)
+            self.assertEqual(Card.query.count(), card_count)
+            self.assertEqual(CardProgress.query.count(), 1)
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(int(subject.subject_generation), 1)
+            self.assertEqual(int(subject.mirror_revision), 1)
+
+    def test_note_authority_template_delete_detaches_sibling_and_fences_pin(self):
+        self._enable_existing_state_note_authority(epoch=13)
+        created = self.client.post(
+            f"/api/note-types/{self.note_type_id}/templates",
+            json={
+                "name": "Disposable Card",
+                "front_html": "{{Word}}",
+                "back_html": "{{Word}}",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+        template_id = created.get_json()["id"]
+        with self.app.app_context():
+            removed_card_id = str(
+                Card.query.filter_by(template_id=template_id).one().id
+            )
+
+        previous_v4 = self.app.config["STUDY_WIRE_V4_ENABLED"]
+        self.app.config["STUDY_WIRE_V4_ENABLED"] = True
+        try:
+            open_response = self.client.post(
+                "/api/study/sessions",
+                json={
+                    "scope": "deck",
+                    "scope_id": self.deck_id,
+                    "composition_id": (
+                        f"comp:notetype:{self.note_type_id}:template:{template_id}"
+                    ),
+                    "accepted_session_schema_versions": ["study-session.v4"],
+                },
+            )
+        finally:
+            self.app.config["STUDY_WIRE_V4_ENABLED"] = previous_v4
+        self.assertEqual(open_response.status_code, 201, open_response.get_json())
+        snapshot = open_response.get_json()
+
+        deleted = self.client.delete(
+            f"/api/note-types/{self.note_type_id}/templates/{template_id}"
+        )
+        self.assertEqual(deleted.status_code, 200, deleted.get_json())
+        self.assertTrue(deleted.get_json()["success"])
+
+        with self.app.app_context():
+            self.assertIsNone(db.session.get(Template, template_id))
+            self.assertIsNone(db.session.get(Card, removed_card_id))
+            self.assertEqual(Template.query.count(), 1)
+            self.assertEqual(Card.query.count(), 1)
+            self.assertEqual(CardProgress.query.count(), 1)
+            subject = StudyProgressSubject.query.one()
+            token = StudyAuthoritySubjectToken.query.one()
+            state = StudyProgressState.query.one()
+            lifecycle = StudyProgressLifecycleEvent.query.one()
+            old_session = db.session.get(StudySession, snapshot["session_id"])
+            self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
+            self.assertEqual(int(subject.subject_generation), 3)
+            self.assertEqual(int(subject.mirror_revision), 3)
+            self.assertEqual(int(subject.contributor_count), 1)
+            self.assertEqual(int(token.subject_generation), 3)
+            self.assertEqual(int(token.authority_revision), 0)
+            self.assertEqual(
+                bytes(token.semantic_state_hash),
+                bytes(state.semantic_state_hash),
+            )
+            self.assertEqual(
+                StudyProgressContributor.query.filter_by(
+                    contributor_status="ACTIVE"
+                ).count(),
+                1,
+            )
+            self.assertEqual(StudyProgressAvailability.query.count(), 1)
+            self.assertEqual(
+                lifecycle.transition_code,
+                "DETACHED_CONTRIBUTOR_DELETED",
+            )
+            self.assertEqual(
+                (int(lifecycle.old_generation), int(lifecycle.new_generation)),
+                (2, 3),
+            )
+            self.assertEqual(old_session.status, "cancelled")
+            remaining_card_id = str(Card.query.one().id)
+
+        reviewed = self.client.post(
+            f"/api/study/{remaining_card_id}/answer",
+            json={
+                "rating": "good",
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "operation_key": str(uuid4()),
+            },
+        )
+        self.assertEqual(reviewed.status_code, 200, reviewed.get_json())
+        self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 1)
+
+    def test_note_authority_template_delete_rolls_back_stale_projection(self):
+        self._enable_existing_state_note_authority(epoch=14)
+        created = self.client.post(
+            f"/api/note-types/{self.note_type_id}/templates",
+            json={
+                "name": "Retained Card",
+                "front_html": "{{Word}}",
+                "back_html": "{{Word}}",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+        template_id = created.get_json()["id"]
+        with self.app.app_context():
+            StudyProgressAvailability.query.first().normalized_queue = "review"
+            db.session.commit()
+
+        response = self.client.delete(
+            f"/api/note-types/{self.note_type_id}/templates/{template_id}"
+        )
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "STALE_AUTHORITY_AVAILABILITY")
+
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Template, template_id))
+            self.assertEqual(Template.query.count(), 2)
+            self.assertEqual(Card.query.count(), 2)
+            self.assertEqual(CardProgress.query.count(), 2)
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(int(subject.subject_generation), 2)
+            self.assertEqual(int(subject.mirror_revision), 2)
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
+
+    def test_note_authority_new_template_expands_every_owned_note(self):
+        self._enable_existing_state_note_authority(epoch=15)
+        second_note = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": self.note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {"Word": "çŠ¬"},
+            },
+        )
+        self.assertEqual(second_note.status_code, 201, second_note.get_json())
+
+        created = self.client.post(
+            f"/api/note-types/{self.note_type_id}/templates",
+            json={
+                "name": "Card 2",
+                "front_html": "Reverse {{Word}}",
+                "back_html": "{{Word}}",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+
+        with self.app.app_context():
+            self.assertEqual(Note.query.count(), 2)
+            self.assertEqual(Template.query.count(), 2)
+            self.assertEqual(Card.query.count(), 4)
+            self.assertEqual(CardProgress.query.count(), 4)
+            subjects = StudyProgressSubject.query.order_by(
+                StudyProgressSubject.logical_note_key.asc()
+            ).all()
+            self.assertEqual(len(subjects), 2)
+            self.assertTrue(
+                all(int(subject.subject_generation) == 2 for subject in subjects)
+            )
+            self.assertTrue(
+                all(int(subject.mirror_revision) == 2 for subject in subjects)
+            )
+            self.assertTrue(
+                all(int(subject.contributor_count) == 2 for subject in subjects)
+            )
+            tokens = StudyAuthoritySubjectToken.query.all()
+            self.assertEqual(len(tokens), 2)
+            self.assertTrue(
+                all(int(token.subject_generation) == 2 for token in tokens)
+            )
+            self.assertTrue(
+                all(int(token.authority_revision) == 0 for token in tokens)
+            )
+            self.assertEqual(
+                StudyProgressContributor.query.filter_by(
+                    contributor_status="ACTIVE"
+                ).count(),
+                4,
+            )
+            self.assertEqual(StudyProgressAvailability.query.count(), 4)
+
+    def test_note_authority_owned_note_delete_tombstones_subject(self):
+        note_id, _state_hash = self._enable_existing_state_note_authority(epoch=16)
+        snapshot = self._open_session_v4()
+
+        deleted = self.client.delete(f"/api/notes/{note_id}")
+        self.assertEqual(deleted.status_code, 200, deleted.get_json())
+        self.assertTrue(deleted.get_json()["success"])
+
+        with self.app.app_context():
+            self.assertEqual(Note.query.count(), 0)
+            self.assertEqual(Card.query.count(), 0)
+            self.assertEqual(CardProgress.query.count(), 0)
+            self.assertEqual(StudyProgressState.query.count(), 0)
+            self.assertEqual(StudyProgressAvailability.query.count(), 0)
+            subject = StudyProgressSubject.query.one()
+            token = StudyAuthoritySubjectToken.query.one()
+            contributor = StudyProgressContributor.query.one()
+            lifecycle = StudyProgressLifecycleEvent.query.one()
+            study_session = db.session.get(StudySession, snapshot["session_id"])
+            self.assertEqual(subject.status_code, "TOMBSTONED_SUBJECT_DELETED")
+            self.assertIsNone(subject.live_note_id)
+            self.assertEqual(int(subject.subject_generation), 2)
+            self.assertEqual(int(subject.mirror_revision), 2)
+            self.assertEqual(int(subject.contributor_count), 0)
+            self.assertEqual(int(token.subject_generation), 2)
+            self.assertEqual(int(token.authority_revision), 1)
+            self.assertIsNone(token.semantic_state_hash)
+            self.assertEqual(contributor.contributor_status, "TOMBSTONED")
+            self.assertIsNone(contributor.live_card_progress_id)
+            self.assertIsNone(contributor.live_card_id)
+            self.assertEqual(
+                lifecycle.transition_code,
+                "TOMBSTONED_SUBJECT_DELETED",
+            )
+            self.assertEqual(study_session.status, "cancelled")
+
+    def test_note_authority_owned_deck_delete_tombstones_subject(self):
+        self._enable_existing_state_note_authority(epoch=17)
+        snapshot = self._open_session_v4()
+
+        deleted = self.client.delete(f"/api/decks/{self.deck_id}")
+        self.assertEqual(deleted.status_code, 200, deleted.get_json())
+        self.assertEqual(
+            deleted.get_json(),
+            {"deleted": True, "id": self.deck_id, "mode": "deleted"},
+        )
+
+        with self.app.app_context():
+            self.assertIsNone(db.session.get(Deck, self.deck_id))
+            self.assertEqual(Note.query.count(), 0)
+            self.assertEqual(Card.query.count(), 0)
+            self.assertEqual(CardProgress.query.count(), 0)
+            self.assertEqual(StudyProgressState.query.count(), 0)
+            self.assertEqual(StudyProgressAvailability.query.count(), 0)
+            subject = StudyProgressSubject.query.one()
+            token = StudyAuthoritySubjectToken.query.one()
+            contributor = StudyProgressContributor.query.one()
+            lifecycle = StudyProgressLifecycleEvent.query.one()
+            study_session = db.session.get(StudySession, snapshot["session_id"])
+            self.assertEqual(subject.status_code, "TOMBSTONED_SUBJECT_DELETED")
+            self.assertIsNone(subject.live_note_id)
+            self.assertEqual(int(subject.subject_generation), 2)
+            self.assertEqual(int(subject.mirror_revision), 2)
+            self.assertEqual(int(subject.contributor_count), 0)
+            self.assertEqual(int(token.subject_generation), 2)
+            self.assertEqual(int(token.authority_revision), 1)
+            self.assertIsNone(token.semantic_state_hash)
+            self.assertEqual(contributor.contributor_status, "TOMBSTONED")
+            self.assertIsNone(contributor.live_card_progress_id)
+            self.assertIsNone(contributor.live_card_id)
+            self.assertEqual(
+                lifecycle.transition_code,
+                "TOMBSTONED_SUBJECT_DELETED",
+            )
+            self.assertEqual(lifecycle.source_path, "deck.delete")
+            self.assertEqual(study_session.status, "cancelled")
+
+    def test_note_authority_owned_deck_delete_rolls_back_stale_projection(self):
+        self._enable_existing_state_note_authority(epoch=18)
+        snapshot = self._open_session_v4()
+        with self.app.app_context():
+            StudyProgressAvailability.query.one().normalized_queue = "review"
+            db.session.commit()
+
+        deleted = self.client.delete(f"/api/decks/{self.deck_id}")
+        self.assertEqual(deleted.status_code, 409, deleted.get_json())
+        self.assertEqual(
+            deleted.get_json()["error"],
+            "STALE_AUTHORITY_AVAILABILITY",
+        )
+
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Deck, self.deck_id))
+            self.assertEqual(Note.query.count(), 1)
+            self.assertEqual(Card.query.count(), 1)
+            self.assertEqual(CardProgress.query.count(), 1)
+            self.assertEqual(StudyProgressState.query.count(), 1)
+            self.assertEqual(StudyProgressAvailability.query.count(), 1)
+            subject = StudyProgressSubject.query.one()
+            study_session = db.session.get(StudySession, snapshot["session_id"])
+            self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
+            self.assertEqual(int(subject.subject_generation), 1)
+            self.assertEqual(int(subject.mirror_revision), 1)
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
+            self.assertEqual(study_session.status, "open")
+
     @staticmethod
     def _commit_payload(snapshot, *, commit_id=None):
         card = snapshot["cards"][0]
@@ -518,8 +1206,99 @@ class StudySessionApiTests(unittest.TestCase):
             )
             self.assertEqual(StudyAuthoritySubjectToken.query.count(), 1)
 
-    def test_note_enrollment_switch_rejects_incomplete_coverage(self):
+    def test_note_enrollment_switch_materializes_pristine_owned_note(self):
         with self.app.app_context():
+            result = stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 21, 9, 0, 0),
+            )
+            self.assertEqual(result.mode_code, "NOTE")
+            self.assertEqual(result.epoch, 1)
+            self.assertEqual(result.subject_count, 1)
+            self.assertEqual(result.card_count, 1)
+            db.session.commit()
+
+            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
+            subject = StudyProgressSubject.query.one()
+            token = StudyAuthoritySubjectToken.query.one()
+            contributor = StudyProgressContributor.query.one()
+            self.assertEqual(enrollment.mode_code, "NOTE")
+            self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
+            self.assertEqual(int(subject.subject_generation), 1)
+            self.assertEqual(int(subject.mirror_revision), 1)
+            self.assertEqual(int(token.authority_revision), 0)
+            self.assertEqual(
+                bytes(token.semantic_state_hash),
+                bytes(StudyProgressState.query.one().semantic_state_hash),
+            )
+            self.assertEqual(contributor.current_provenance_code, "UNKNOWN_LEGACY")
+            self.assertEqual(
+                contributor.history_completeness_code,
+                "HISTORY_NATIVE_COMPLETE",
+            )
+
+        snapshot = self._open_session_v4()
+        self.assertEqual(snapshot["authority_mode"], "NOTE")
+        self.assertEqual(snapshot["cards"][0]["state"]["type"], "new")
+        self.assertEqual(
+            snapshot["cards"][0]["authority_pin"]["base_authority_revision"],
+            "0",
+        )
+
+    def test_note_enrollment_switch_reuses_pristine_empty_subject(self):
+        with self.app.app_context():
+            note = Note.query.filter_by(user_id=self.user_id).one()
+            now = datetime(2026, 9, 21, 8, 0, 0)
+            subject = StudyProgressSubject(
+                learner_user_id=self.user_id,
+                logical_note_key=str(note.id).encode("utf-8"),
+                live_note_id=str(note.id),
+                subject_generation=1,
+                mirror_revision=0,
+                status_code="NO_CURRENT_PROGRESS",
+                contributor_count=0,
+                mapper_version=MAPPER_VERSION,
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(subject)
+            db.session.commit()
+            subject_id = int(subject.id)
+
+            result = stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 21, 9, 0, 0),
+            )
+            db.session.commit()
+
+            self.assertEqual(result.subject_count, 1)
+            self.assertEqual(StudyProgressSubject.query.count(), 1)
+            materialized = StudyProgressSubject.query.one()
+            self.assertEqual(int(materialized.id), subject_id)
+            self.assertEqual(materialized.status_code, "MIRRORED_SINGLE")
+            self.assertEqual(CardProgress.query.count(), 1)
+            self.assertEqual(StudyProgressState.query.count(), 1)
+            self.assertEqual(StudyProgressContributor.query.count(), 1)
+            self.assertEqual(StudyProgressAvailability.query.count(), 1)
+
+    def test_note_enrollment_switch_rejects_partially_covered_siblings(self):
+        self._enable_existing_state_note_authority(enroll=False)
+        with self.app.app_context():
+            note = Note.query.filter_by(user_id=self.user_id).one()
+            template = Template(
+                note_type_id=self.note_type_id,
+                name="Card 2",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                position=1,
+            )
+            db.session.add(template)
+            db.session.flush()
+            db.session.add(Card(note_id=note.id, template_id=template.id))
+            db.session.commit()
+
             with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
                 stage_note_authority_enrollment(
                     db.session,
@@ -534,6 +1313,233 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertIsNone(
                 db.session.get(StudyAuthorityEnrollment, self.user_id)
             )
+            self.assertEqual(CardProgress.query.count(), 1)
+            self.assertEqual(StudyProgressSubject.query.count(), 1)
+
+    def test_note_enrollment_pristine_materialization_rolls_back_atomically(self):
+        created = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": self.note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {"Word": "çŠ¬"},
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.get_json())
+
+        with self.app.app_context():
+            from app.services import study_progress_lifecycle_mirror_service
+
+            original = (
+                study_progress_lifecycle_mirror_service.materialize_new_note_authority
+            )
+            call_count = 0
+
+            def fail_second_materialization(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    raise StudyAuthorityFenceError(
+                        "INJECTED_ENROLLMENT_FAILURE",
+                        "Injected second pristine Note failure.",
+                    )
+                return original(*args, **kwargs)
+
+            with patch(
+                "app.services.study_authority_enrollment_service."
+                "study_progress_lifecycle_mirror_service."
+                "materialize_new_note_authority",
+                side_effect=fail_second_materialization,
+            ):
+                with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
+                    stage_note_authority_enrollment(
+                        db.session,
+                        learner_user_id=self.user_id,
+                        now_utc=datetime(2026, 9, 21, 9, 0, 0),
+                    )
+            self.assertEqual(
+                failure.exception.code,
+                "INJECTED_ENROLLMENT_FAILURE",
+            )
+            db.session.rollback()
+            self.assertIsNone(
+                db.session.get(StudyAuthorityEnrollment, self.user_id)
+            )
+            self.assertEqual(Note.query.count(), 2)
+            self.assertEqual(Card.query.count(), 2)
+            self.assertEqual(CardProgress.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.count(), 0)
+            self.assertEqual(StudyAuthoritySubjectToken.query.count(), 0)
+            self.assertEqual(StudyProgressState.query.count(), 0)
+            self.assertEqual(StudyProgressContributor.query.count(), 0)
+            self.assertEqual(StudyProgressAvailability.query.count(), 0)
+
+    def test_note_enrollment_switch_rejects_in_flight_async_batch(self):
+        self._enable_existing_state_note_authority(enroll=False)
+        legacy = self._open_session()
+        with self.app.app_context():
+            db.session.add(
+                StudySessionBatch(
+                    session_id=legacy["session_id"],
+                    user_id=self.user_id,
+                    batch_id=str(uuid4()),
+                    batch_sequence=1,
+                    event_count=1,
+                    status="processing",
+                    commit_reason="manual_exit",
+                    is_final=True,
+                    request_hash="sha256-" + "1" * 64,
+                    payload_json="{}",
+                    enqueued_at=datetime(2026, 9, 21, 9, 0, 0),
+                )
+            )
+            db.session.commit()
+
+            with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
+                stage_note_authority_enrollment(
+                    db.session,
+                    learner_user_id=self.user_id,
+                    now_utc=datetime(2026, 9, 21, 9, 30, 0),
+                )
+            self.assertEqual(failure.exception.code, "AUTHORITY_BATCH_IN_FLIGHT")
+            db.session.rollback()
+            self.assertIsNone(
+                db.session.get(StudyAuthorityEnrollment, self.user_id)
+            )
+            self.assertEqual(
+                db.session.get(StudySession, legacy["session_id"]).status,
+                "open",
+            )
+
+    def test_authority_enrollment_cli_is_dry_run_by_default(self):
+        self._enable_existing_state_note_authority(enroll=False)
+        runner = self.app.test_cli_runner()
+
+        dry_run = runner.invoke(
+            args=[
+                "study-authority-enrollment",
+                "--user-id",
+                str(self.user_id),
+                "--mode",
+                "NOTE",
+            ]
+        )
+        self.assertEqual(dry_run.exit_code, 0, dry_run.output)
+        dry_payload = json.loads(
+            next(line for line in dry_run.output.splitlines() if line.startswith("{"))
+        )
+        self.assertFalse(dry_payload["applied"])
+        with self.app.app_context():
+            self.assertIsNone(
+                db.session.get(StudyAuthorityEnrollment, self.user_id)
+            )
+            self.assertEqual(StudyAuthoritySubjectToken.query.count(), 0)
+
+        blocked = runner.invoke(
+            args=[
+                "study-authority-enrollment",
+                "--user-id",
+                str(self.user_id),
+                "--mode",
+                "NOTE",
+                "--apply",
+            ]
+        )
+        self.assertNotEqual(blocked.exit_code, 0, blocked.output)
+        self.assertIn("NOTE_ENROLLMENT_DISABLED", blocked.output)
+
+        previous_v4 = self.app.config["STUDY_WIRE_V4_ENABLED"]
+        self.app.config["STUDY_WIRE_V4_ENABLED"] = True
+        try:
+            applied = runner.invoke(
+                args=[
+                    "study-authority-enrollment",
+                    "--user-id",
+                    str(self.user_id),
+                    "--mode",
+                    "NOTE",
+                    "--apply",
+                ]
+            )
+        finally:
+            self.app.config["STUDY_WIRE_V4_ENABLED"] = previous_v4
+        self.assertEqual(applied.exit_code, 0, applied.output)
+        payload = json.loads(
+            next(line for line in applied.output.splitlines() if line.startswith("{"))
+        )
+        self.assertTrue(payload["applied"])
+        self.assertEqual(payload["mode_code"], "NOTE")
+        self.assertEqual(payload["epoch"], 1)
+        with self.app.app_context():
+            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
+            self.assertEqual(enrollment.mode_code, "NOTE")
+            self.assertEqual(enrollment.epoch, 1)
+
+        audit = runner.invoke(
+            args=[
+                "study-authority-read-audit",
+                "--user-id",
+                str(self.user_id),
+            ]
+        )
+        self.assertEqual(audit.exit_code, 0, audit.output)
+        audit_payload = json.loads(
+            next(line for line in audit.output.splitlines() if line.startswith("{"))
+        )
+        self.assertEqual(audit_payload["status"], "PASS")
+        self.assertEqual(audit_payload["authority_mode"], "NOTE")
+        self.assertEqual(audit_payload["mismatches"], [])
+
+    def test_note_enrollment_rollback_proves_projection_and_fences_epoch(self):
+        self._enable_existing_state_note_authority(epoch=4)
+        snapshot = self._open_session_v4()
+        with self.app.app_context():
+            result = stage_legacy_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 21, 9, 30, 0),
+            )
+            self.assertEqual(result.previous_mode, "NOTE")
+            self.assertEqual(result.previous_epoch, 4)
+            self.assertEqual(result.mode_code, "LEGACY")
+            self.assertEqual(result.epoch, 5)
+            self.assertEqual(result.subject_count, 1)
+            self.assertEqual(result.card_count, 1)
+            self.assertEqual(result.cancelled_session_count, 1)
+            db.session.commit()
+
+            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
+            self.assertEqual(enrollment.mode_code, "LEGACY")
+            self.assertEqual(enrollment.epoch, 5)
+            self.assertEqual(
+                db.session.get(StudySession, snapshot["session_id"]).status,
+                "cancelled",
+            )
+
+        legacy = self._open_session()
+        self.assertEqual(legacy["schema_version"], "study-session.v2")
+
+    def test_note_enrollment_rollback_rejects_stale_availability(self):
+        self._enable_existing_state_note_authority(epoch=7)
+        with self.app.app_context():
+            availability = StudyProgressAvailability.query.one()
+            availability.semantic_state_hash = b"\x99" * 32
+            db.session.commit()
+
+            with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
+                stage_legacy_authority_enrollment(
+                    db.session,
+                    learner_user_id=self.user_id,
+                    now_utc=datetime(2026, 9, 21, 9, 30, 0),
+                )
+            self.assertEqual(
+                failure.exception.code,
+                "STALE_AUTHORITY_AVAILABILITY",
+            )
+            db.session.rollback()
+            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
+            self.assertEqual(enrollment.mode_code, "NOTE")
+            self.assertEqual(enrollment.epoch, 7)
 
     def test_wire_v4_commit_uses_note_authority_receipt_and_replays(self):
         _note_id, base_hash = self._enable_existing_state_note_authority(epoch=5)
@@ -567,6 +1573,332 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(int(progress.revision), 1)
             session = db.session.get(StudySession, snapshot["session_id"])
             self.assertEqual(session.status, "committed")
+
+    def test_direct_rest_review_routes_through_note_authority(self):
+        self._enable_existing_state_note_authority(epoch=8)
+        with self.app.app_context():
+            card_id = str(Card.query.join(Note, Card.note_id == Note.id).one().id)
+        operation_key = str(uuid4())
+        response = self.client.post(
+            f"/api/study/{card_id}/answer",
+            json={
+                "rating": "good",
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "operation_key": operation_key,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        authority = response.get_json()["authority"]
+        self.assertEqual(authority["mode"], "NOTE")
+        self.assertEqual(authority["operation_key"], operation_key)
+        self.assertEqual(authority["authority_revision"], 1)
+        self.assertEqual(authority["progress_revision"], 1)
+        self.assertFalse(authority["replayed"])
+
+        duplicate = self.client.post(
+            f"/api/study/{card_id}/answer",
+            json={
+                "rating": "good",
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "operation_key": operation_key,
+            },
+        )
+        self.assertEqual(duplicate.status_code, 409, duplicate.get_json())
+        self.assertEqual(
+            duplicate.get_json()["error"],
+            "AUTHORITY_OPERATION_REUSED",
+        )
+
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 1)
+            self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 1)
+            token = StudyAuthoritySubjectToken.query.one()
+            self.assertEqual(int(token.authority_revision), 1)
+            progress = CardProgress.query.one()
+            self.assertEqual(int(progress.revision), 1)
+            self.assertEqual(int(progress.reps), 1)
+
+    def test_mcp_review_routes_through_note_authority(self):
+        self._enable_existing_state_note_authority(epoch=9)
+        with self.app.app_context():
+            from app.services.mcp.study_tools import (
+                get_card,
+                get_deck_stats,
+                get_study_queue,
+                submit_review,
+            )
+            from app.services.mcp.deck_tools import get_deck_tree
+
+            card_id = str(Card.query.join(Note, Card.note_id == Note.id).one().id)
+            detail = get_card(user_id=self.user_id, card_id=card_id)
+            self.assertEqual(detail["authority_mode"], "NOTE")
+            self.assertEqual(detail["authority_revision"], 0)
+            self.assertTrue(detail["review_state_version"].startswith("sha256-"))
+            with patch(
+                "app.services.mcp.study_tools.study_repository.query_study_queue_counts",
+                side_effect=AssertionError("legacy counts must not serve NOTE"),
+            ):
+                queue = get_study_queue(
+                    user_id=self.user_id,
+                    deck_id=self.deck_id,
+                    limit=10,
+                )
+            self.assertEqual(queue["queue_counts"]["authority_mode"], "NOTE")
+            self.assertEqual(len(queue["cards"]), 1)
+            self.assertEqual(queue["cards"][0]["authority_mode"], "NOTE")
+            self.assertEqual(queue["cards"][0]["authority_revision"], 0)
+            deck_stats = get_deck_stats(
+                user_id=self.user_id,
+                deck_id=self.deck_id,
+            )
+            self.assertEqual(deck_stats["authority_mode"], "NOTE")
+            self.assertEqual(deck_stats["young_cards"], 0)
+            self.assertEqual(deck_stats["mature_cards"], 0)
+            deck_tree = get_deck_tree(user_id=self.user_id)
+            self.assertEqual(deck_tree[0]["counts"]["new"], 1)
+            self.assertEqual(deck_tree[0]["counts"]["due"], 0)
+            response = submit_review(
+                user_id=self.user_id,
+                card_id=card_id,
+                rating="good",
+                duration_ms=250,
+            )
+            self.assertTrue(response["success"])
+            self.assertEqual(response["authority"]["mode"], "NOTE")
+            self.assertEqual(response["authority"]["authority_revision"], 1)
+            self.assertEqual(response["authority"]["progress_revision"], 1)
+            self.assertIsNotNone(response["authority"]["operation_key"])
+            self.assertEqual(ReviewEvent.query.count(), 1)
+            self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 1)
+
+    def test_direct_manifest_and_intervals_read_canonical_note_token(self):
+        self._enable_existing_state_note_authority(epoch=10)
+        manifest_response = self.client.get(
+            "/api/study/session/next",
+            query_string={"scope": "deck", "scope_id": self.deck_id},
+        )
+        self.assertEqual(
+            manifest_response.status_code,
+            200,
+            manifest_response.get_json(),
+        )
+        manifest = manifest_response.get_json()
+        self.assertEqual(manifest["authority_mode"], "NOTE")
+        self.assertEqual(manifest["authority_revision"], 0)
+        state_version = manifest["review_state_version"]
+
+        intervals = self.client.get(
+            f"/api/study/cards/{manifest['card_id']}/intervals-preview",
+            query_string={
+                "selection_id": manifest["selection_id"],
+                "review_state_version": state_version,
+            },
+        )
+        self.assertEqual(intervals.status_code, 200, intervals.get_json())
+        self.assertEqual(intervals.get_json()["authority_mode"], "NOTE")
+        self.assertEqual(intervals.get_json()["authority_revision"], 0)
+        self.assertEqual(intervals.get_json()["review_state_version"], state_version)
+
+        answer = self.client.post(
+            f"/api/study/cards/{manifest['card_id']}/answer",
+            json={
+                "rating": "good",
+                "scope": "deck",
+                "scope_id": self.deck_id,
+                "render_contract": "client_v1",
+                "review_state_version": state_version,
+                "operation_key": str(uuid4()),
+            },
+        )
+        self.assertEqual(answer.status_code, 200, answer.get_json())
+        self.assertEqual(answer.get_json()["authority"]["authority_revision"], 1)
+
+        stale = self.client.get(
+            f"/api/study/cards/{manifest['card_id']}/intervals-preview",
+            query_string={"review_state_version": state_version},
+        )
+        self.assertEqual(stale.status_code, 409, stale.get_json())
+        self.assertEqual(stale.get_json()["error"], "STALE_REVIEW_STATE")
+
+    def test_direct_note_queue_bypasses_legacy_sql_selection(self):
+        self._enable_existing_state_note_authority(epoch=12)
+        with (
+            patch(
+                "app.routes.flashcards.study._query_study_queue_counts",
+                side_effect=AssertionError("legacy counts must not serve NOTE"),
+            ),
+            patch(
+                "app.routes.flashcards.study._query_next_due_card_id",
+                side_effect=AssertionError("legacy order must not serve NOTE"),
+            ),
+        ):
+            response = self.client.get(
+                "/api/study/session/next",
+                query_string={"scope": "deck", "scope_id": self.deck_id},
+            )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertEqual(payload["authority_mode"], "NOTE")
+        self.assertEqual(payload["new_count"], 1)
+        self.assertEqual(payload["learn_count"], 0)
+        self.assertEqual(payload["due_count"], 0)
+
+    def test_dashboard_note_counts_are_rebuilt_from_canonical_availability(self):
+        self._enable_existing_state_note_authority(epoch=14)
+        with patch(
+            "app.services.dashboard_service._classify_progress_fast",
+            return_value=None,
+        ):
+            response = self.client.get("/api/dashboard")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertEqual(payload["summary"]["new"], 1)
+        self.assertEqual(payload["summary"]["learning"], 0)
+        self.assertEqual(payload["summary"]["due"], 0)
+        self.assertEqual(payload["summary"]["total_due"], 1)
+
+    def test_statistics_note_future_due_bypasses_legacy_progress_query(self):
+        self._enable_existing_state_note_authority(epoch=15)
+        with patch(
+            "app.services.stats_overview.query_future_due_day_counts",
+            side_effect=AssertionError("legacy future due must not serve NOTE"),
+        ):
+            response = self.client.get(
+                "/api/statistics/overview",
+                query_string={"year": 2026, "timezone": "Asia/Tokyo"},
+            )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertEqual(payload["year"], 2026)
+        self.assertEqual(payload["timezone"], "Asia/Tokyo")
+        self.assertEqual(len(payload["heatmap"]), 365)
+
+    def test_today_future_note_analytics_bypass_legacy_progress_queries(self):
+        self._enable_existing_state_note_authority(epoch=16)
+        with (
+            patch(
+                "app.services.stats_today_future.query_due_progress_rows",
+                side_effect=AssertionError("legacy due rows must not serve NOTE"),
+            ),
+            patch(
+                "app.services.stats_today_future.query_interval_days_rows",
+                side_effect=AssertionError("legacy daily load must not serve NOTE"),
+            ),
+        ):
+            response = self.client.get(
+                "/api/statistics/today-future",
+                query_string={
+                    "scope": "collection",
+                    "future_range": "30",
+                    "timezone": "Asia/Tokyo",
+                },
+            )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        payload = response.get_json()
+        self.assertEqual(payload["timezone"], "Asia/Tokyo")
+        self.assertEqual(payload["totals"]["total_reviews"], 0)
+        self.assertEqual(payload["totals"]["daily_load"], 0.0)
+
+    def test_browse_note_rows_and_detail_bypass_legacy_progress_reads(self):
+        self._enable_existing_state_note_authority(epoch=17)
+        with self.app.app_context():
+            card_id = str(Card.query.join(Note, Card.note_id == Note.id).one().id)
+        with (
+            patch(
+                "app.services.browse_card_service.load_card_progress_map",
+                side_effect=AssertionError("legacy Browse rows must not serve NOTE"),
+            ),
+            patch(
+                "app.repositories.browse_card_repository.load_browse_progress",
+                side_effect=AssertionError("legacy Browse detail must not serve NOTE"),
+            ),
+        ):
+            rows_response = self.client.get(
+                "/api/browse/cards",
+                query_string={"deck_id": self.deck_id, "sort_by": "due"},
+            )
+            detail_response = self.client.get(f"/api/browse/cards/{card_id}")
+        self.assertEqual(rows_response.status_code, 200, rows_response.get_json())
+        rows = rows_response.get_json()
+        self.assertEqual(rows["total"], 1)
+        self.assertEqual(rows["items"][0]["card_id"], card_id)
+        self.assertEqual(rows["items"][0]["queue"], "new")
+        self.assertEqual(detail_response.status_code, 200, detail_response.get_json())
+        self.assertEqual(detail_response.get_json()["card"]["queue"], "new")
+
+    def test_browse_note_deck_tree_rebuilds_canonical_counts(self):
+        self._enable_existing_state_note_authority(epoch=18)
+        legacy_tree = [
+            {
+                "id": self.deck_id,
+                "name": "Session Deck",
+                "path": "Session Deck",
+                "parent_id": None,
+                "note_type_id": self.note_type_id,
+                "note_type_name": "Session Type",
+                "note_type_ids": [self.note_type_id],
+                "note_type_names": ["Session Type"],
+                "has_mixed_note_types": False,
+                "counts": {"total": 999, "new": 0, "learn": 0, "due": 999},
+                "children": [],
+            }
+        ]
+        with patch(
+            "app.services.browse_card_service.vocabulary_ctrl.build_browse_deck_tree_payload",
+            return_value=legacy_tree,
+        ):
+            response = self.client.get("/api/browse/decks/tree")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        counts = response.get_json()["tree"][0]["counts"]
+        self.assertEqual(
+            counts,
+            {"total": 1, "new": 1, "learn": 0, "due": 0},
+        )
+
+    def test_legacy_study_deck_page_uses_note_authority_queue(self):
+        self._enable_existing_state_note_authority(epoch=19)
+        with patch(
+            "app.routes.vocabulary._load_card_progress_map",
+            side_effect=AssertionError("legacy Study page must not serve NOTE"),
+        ):
+            response = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
+        self.assertEqual(response.status_code, 200)
+
+    def test_direct_note_read_fails_closed_on_stale_canonical_availability(self):
+        self._enable_existing_state_note_authority(epoch=13)
+        with self.app.app_context():
+            availability = StudyProgressAvailability.query.one()
+            availability.is_suspended = True
+            db.session.commit()
+
+        response = self.client.get(
+            "/api/study/session/next",
+            query_string={"scope": "deck", "scope_id": self.deck_id},
+        )
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(
+            response.get_json()["error"],
+            "AUTHORITY_READ_PARITY_DIVERGED",
+        )
+
+    def test_direct_note_read_fails_closed_on_projection_divergence(self):
+        self._enable_existing_state_note_authority(epoch=11)
+        with self.app.app_context():
+            progress = CardProgress.query.one()
+            progress.reps = 99
+            db.session.commit()
+
+        response = self.client.get(
+            "/api/study/session/next",
+            query_string={"scope": "deck", "scope_id": self.deck_id},
+        )
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(
+            response.get_json()["error"],
+            "AUTHORITY_READ_PARITY_DIVERGED",
+        )
 
     def test_wire_v4_commit_chains_multiple_events_from_one_frozen_pin(self):
         self._enable_existing_state_note_authority(epoch=6)
@@ -835,6 +2167,20 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(
             oversized.get_json()["error"],
             "REVIEW_EVENT_PAYLOAD_STRING_TOO_LONG",
+        )
+
+        legacy_operation = self.client.post(
+            f"/api/study/{card_id}/answer",
+            json={**base_payload, "operation_key": str(uuid4())},
+        )
+        self.assertEqual(
+            legacy_operation.status_code,
+            422,
+            legacy_operation.get_json(),
+        )
+        self.assertEqual(
+            legacy_operation.get_json()["error"],
+            "AUTHORITY_OPERATION_KEY_UNAVAILABLE",
         )
 
         with self.app.app_context():

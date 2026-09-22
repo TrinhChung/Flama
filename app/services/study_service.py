@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
+    lock_study_authority_compatibility,
     lock_study_authority_route,
+    lock_study_authority_siblings,
 )
 from app.repositories.study_repository import (
     apply_card_state_to_progress,
@@ -65,6 +68,10 @@ class NativeReviewCommandResult:
     local_deck_id: int | None
     progress_revision: int
     scheduler_config_hash: str
+    authority_mode: str = "LEGACY"
+    authority_revision: int | None = None
+    operation_key: str | None = None
+    replayed: bool = False
 
 
 @dataclass(frozen=True)
@@ -473,6 +480,209 @@ def apply_native_review_mutation(
     )
 
 
+def _execute_note_authority_review_command(
+    *,
+    route: Any,
+    user: Any,
+    card: Card,
+    action: Any,
+    validated_payload: dict[str, Any],
+    clone_scope: flashcards_share_service.CloneDeckScope | None,
+    local_deck_id: int | None,
+    local_deck: Deck | None,
+    options: DeckOptions,
+    timezone_name: str,
+    require_review_state_version: bool,
+    review_state_version: str | None,
+    reviewed_at: datetime,
+    algorithm_key: str,
+    algorithm_version: str,
+    client_event_id: str | None,
+    review_mode: str | None,
+    source_path: str,
+) -> NativeReviewCommandResult:
+    """Execute one direct/MCP review through the canonical NOTE command."""
+
+    from app.services.study_authority_cas_service import (
+        StudyAuthorityCASExpectation,
+    )
+    from app.services.study_authority_command_service import (
+        ExistingStateNoteReviewCommand,
+    )
+    from app.services.study_authority_receipt_service import (
+        IdempotentExistingStateNoteReviewCommand,
+        apply_idempotent_existing_state_note_review,
+    )
+    from app.services.study_session_authority_pin_service import (
+        lock_study_session_authority_subjects,
+    )
+
+    if clone_scope is not None:
+        raise StudyReviewError(
+            "OVERLAY_AUTHORITY_NOT_READY",
+            "Direct NOTE reviews for logical-overlay installs require P5-06 routing.",
+        )
+    operation_key_value = validated_payload.get("operation_key")
+    operation_key = (
+        str(operation_key_value).strip()
+        if operation_key_value is not None
+        else str(client_event_id or uuid4())
+    )
+    if client_event_id is not None and operation_key_value is not None:
+        if operation_key != str(client_event_id):
+            raise StudyReviewError(
+                "AUTHORITY_OPERATION_PROVENANCE_MISMATCH",
+                "operation_key differs from the transport event identity.",
+                status=422,
+            )
+
+    authority_subjects = lock_study_session_authority_subjects(
+        db.session,
+        route=route,
+        logical_note_keys=[str(card.note_id)],
+        now_utc=reviewed_at,
+    )
+    note_key = str(card.note_id)
+    locked = authority_subjects.locked_by_logical_note_key[note_key]
+    current_state = authority_subjects.state_by_logical_note_key[note_key]
+    siblings = lock_study_authority_siblings(
+        db.session,
+        route=route,
+        locked=locked,
+        requested_card_id=str(card.id),
+    )
+    compatibility = lock_study_authority_compatibility(
+        db.session,
+        route=route,
+        locked=locked,
+        siblings=siblings,
+    )
+    locked_card = next(
+        sibling for sibling in siblings.cards if str(sibling.id) == str(card.id)
+    )
+    if require_review_state_version:
+        requested_version = str(review_state_version or "").strip()
+        current_version = study_artifact_service.note_authority_review_state_version(
+            enrollment_epoch=int(route.epoch),
+            logical_note_key=note_key,
+            subject_generation=int(locked.subject.subject_generation),
+            authority_revision=int(locked.token.authority_revision),
+            semantic_state_hash=bytes(locked.token.semantic_state_hash),
+            deck_options=options,
+            timezone_name=timezone_name,
+        )
+        if not requested_version or requested_version != current_version:
+            raise StudyReviewError(
+                "STALE_REVIEW_STATE",
+                "Review state changed; reload the study manifest.",
+            )
+    if bool(current_state.suspended):
+        raise StudyReviewError("CARD_SUSPENDED", "Card is suspended.")
+
+    intervals_preview = compute_review_previews(
+        state=current_state,
+        options=options,
+        now=reviewed_at,
+        timezone_name=timezone_name,
+        algorithm_key=algorithm_key,
+        algorithm_version=algorithm_version,
+    )
+    transition = execute_native_review_transition(
+        NativeReviewTransitionInput(
+            state=current_state,
+            deck_options=options,
+            reviewed_at=reviewed_at,
+            action=action,
+            timezone_name=timezone_name,
+            algorithm_key=algorithm_key,
+            algorithm_version=algorithm_version,
+        )
+    )
+    policy = build_scheduler_policy(
+        options=options,
+        timezone_name=timezone_name,
+        algorithm=transition.algorithm,
+    )
+    mutation = NativeReviewMutationInput(
+        user_id=int(user.id),
+        card=locked_card,
+        current_state=current_state,
+        transition=transition,
+        reviewed_at=reviewed_at,
+        duration_ms=validate_review_duration(validated_payload.get("duration_ms")),
+        review_mode=(review_mode or normalize_review_mode(current_state.type)),
+        payload=validated_payload,
+        local_deck_id=local_deck_id,
+        scheduler_preset_id=(
+            int(local_deck.scheduler_preset_id)
+            if local_deck is not None and local_deck.scheduler_preset_id is not None
+            else None
+        ),
+        scheduler_config_hash=policy["config_hash"],
+        timezone_name=timezone_name,
+        deck_options=options,
+        provenance=NativeReviewProvenance(
+            source_path=source_path,
+            client_event_id=client_event_id,
+            request_id=operation_key,
+        ),
+        progress_input=None,
+    )
+    expected = StudyAuthorityCASExpectation(
+        enrollment_epoch=int(route.epoch),
+        subject_generation=int(locked.subject.subject_generation),
+        authority_revision=int(locked.token.authority_revision),
+        semantic_state_hash=bytes(locked.token.semantic_state_hash),
+    )
+    applied = apply_idempotent_existing_state_note_review(
+        db.session,
+        command=IdempotentExistingStateNoteReviewCommand(
+            operation_key=operation_key,
+            command=ExistingStateNoteReviewCommand(
+                route=route,
+                locked=locked,
+                expected=expected,
+                siblings=siblings,
+                compatibility=compatibility,
+                review=mutation,
+                now_utc=reviewed_at,
+            ),
+        ),
+    )
+    if not applied.replayed:
+        stage_native_review_side_effects(mutation)
+        _append_audit(
+            user_id=int(user.id),
+            action="study.answer",
+            payload={
+                "card_id": str(card.id),
+                "rating": transition.action.rating,
+                "authority_mode": "NOTE",
+                "operation_key": operation_key,
+            },
+        )
+    projected_revisions = applied.response_payload.get("projected_card_revisions")
+    if not isinstance(projected_revisions, dict) or str(card.id) not in projected_revisions:
+        raise StudyReviewError(
+            "AUTHORITY_RECEIPT_CORRUPT",
+            "NOTE review receipt has no projected revision for the reviewed Card.",
+            status=500,
+        )
+    db.session.commit()
+    return NativeReviewCommandResult(
+        current_state=current_state,
+        transition=transition,
+        intervals_preview=intervals_preview,
+        local_deck_id=local_deck_id,
+        progress_revision=int(projected_revisions[str(card.id)]),
+        scheduler_config_hash=policy["config_hash"],
+        authority_mode="NOTE",
+        authority_revision=int(applied.response_payload["authority_revision_after"]),
+        operation_key=operation_key,
+        replayed=bool(applied.replayed),
+    )
+
+
 def execute_native_review_command(
     *,
     user: Any,
@@ -510,9 +720,10 @@ def execute_native_review_command(
         requested_scope_id=requested_scope_id,
     )
     try:
-        lock_study_authority_route(
+        authority_route = lock_study_authority_route(
             db.session,
             learner_user_id=int(user.id),
+            allow_note_authority=True,
         )
         local_deck = (
             db.session.get(Deck, local_deck_id)
@@ -532,6 +743,33 @@ def execute_native_review_command(
         raise
 
     try:
+        if authority_route.mode_code == "NOTE":
+            return _execute_note_authority_review_command(
+                route=authority_route,
+                user=user,
+                card=card,
+                action=action,
+                validated_payload=validated_payload,
+                clone_scope=clone_scope,
+                local_deck_id=local_deck_id,
+                local_deck=local_deck,
+                options=options,
+                timezone_name=timezone_name,
+                require_review_state_version=require_review_state_version,
+                review_state_version=review_state_version,
+                reviewed_at=reviewed_at.replace(microsecond=0),
+                algorithm_key=algorithm_key,
+                algorithm_version=algorithm_version,
+                client_event_id=client_event_id,
+                review_mode=review_mode,
+                source_path=source_path,
+            )
+        if "operation_key" in validated_payload:
+            raise StudyReviewError(
+                "AUTHORITY_OPERATION_KEY_UNAVAILABLE",
+                "operation_key is available only for NOTE authority reviews.",
+                status=422,
+            )
         mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
             db.session,
             learner_user_id=int(user.id),
@@ -688,6 +926,12 @@ def execute_native_review_command(
             progress_revision=int(progress.revision),
             scheduler_config_hash=policy["config_hash"],
         )
-    except Exception:
+    except StudyReviewError:
         db.session.rollback()
+        raise
+    except Exception as exc:
+        db.session.rollback()
+        code = getattr(exc, "code", None)
+        if code is not None:
+            raise StudyReviewError(str(code), str(exc), status=409) from exc
         raise

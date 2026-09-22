@@ -1,5 +1,7 @@
 # P5-05 — durable NOTE authority command receipt
 
+> Superseded implementation status: the receipt foundation is now integrated by [Study Session v4 and explicit enrollment/rollback](./phase-5-p5-05-session-v4-contract-2026-09-22.md). This file remains the detailed receipt design record.
+
 > Date: 2026-09-21 | Mode: IMPLEMENTED / INERT | Status: **PARTIAL**. The durable receipt foundation is complete for the existing-state NOTE command. Wire v4, frontend persistence/restore, worker pinning and product-route integration remain open. Migration 41 does not admit NOTE enrollment.
 
 ## Decision and scope
@@ -48,4 +50,4 @@ The product owner has approved eventual full NOTE enablement to prioritize relea
 - The registered study backend matrix passes **281 tests across 31 files** (279-run baseline plus the two final receipt failure cases, which also pass in the focused run).
 - Disposable MySQL **8.0.40** passes head `20260921_000041`, exact table contracts, empty 41→40→39 downgrade/re-upgrade, flags-off WSGI boot, receipt commit and exact replay with unchanged event/fact/receipt counts. The configured application database is not modified.
 
-P5-05 remains partial until the immutable Note/epoch wire envelope, v2/v3 lease behavior, worker job version pin, frontend durable restore/replay and route negotiation are implemented. P5-06 must still add authorization and required side effects. First-state materialization, cross-subject same-key race handling, deadlock/disconnect fault injection and the production-version rehearsal remain later gates. No commit, merge, deployment or production NOTE enablement is part of this slice.
+The immutable Note/epoch v4 envelope, v2/v3 fallback, frontend durable restore/replay, synchronous route integration and native side effects are now implemented. P5-05 remains open only for async v4 rollover worker semantics. First-state materialization, cross-subject same-key race handling, overlay/external lifecycle integration, broader fault injection and the production-version rehearsal remain later gates. No production NOTE enablement is authorized by this receipt record.

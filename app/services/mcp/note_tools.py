@@ -6,7 +6,15 @@ import logging
 import hashlib
 from typing import Any
 
-from app.services import note_sync_service, study_progress_lifecycle_mirror_service
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
+from app.services import (
+    flashcard_content_service,
+    note_sync_service,
+    study_progress_lifecycle_mirror_service,
+)
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.services.mcp.base import (
     _resolve_deck_for_user,
@@ -309,6 +317,19 @@ def create_note(
         note_type_id=note_data.get("note_type_id"),
         note_type_name=note_data.get("note_type_name"),
     )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            status=409,
+            code=exc.code,
+        ) from exc
 
     fields = note_data.get("fields", {})
     normalized_fields = normalize_anki_field_values(fields, tuple(note_type.field_defs))
@@ -360,10 +381,12 @@ def create_note(
         )
 
     created_cards: list[dict[str, Any]] = []
+    card_rows: list[Card] = []
     for template in templates:
         card = Card(note_id=note.id, template_id=template.id)
         db.session.add(card)
         db.session.flush()
+        card_rows.append(card)
         created_cards.append(
             {
                 "id": str(card.id),
@@ -371,6 +394,22 @@ def create_note(
                 "template_name": template.name,
             }
         )
+
+    try:
+        study_progress_lifecycle_mirror_service.materialize_new_note_authority(
+            db.session,
+            route=authority_route,
+            note=note,
+            cards=card_rows,
+            provenance_code="NATIVE_MCP",
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            status=409,
+            code=exc.code,
+        ) from exc
 
     from app.services import deck_working_tree_service
 
@@ -551,32 +590,18 @@ def delete_note(*, user_id: int, note_id: str, confirm: bool = False) -> dict[st
             ),
         }
 
-    deck_working_tree_service.mark_note_field_batches_changed(
-        mutations=[
-            {
-                "note": note,
-                "field_names": (note.field_values or {}).keys(),
-                "operation": "remove",
-            }
-        ],
-    )
-
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=card_ids,
-        deleted_note_ids=(note.id,),
-    )
-    if card_ids:
-        CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(synchronize_session=False)
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code="TOMBSTONED_SUBJECT_DELETED",
-        source_path="mcp.note_delete",
-        operation_key=f"mcp-note-delete:{note.id}",
-    )
-
-    db.session.delete(note)
-    db.session.commit()
+    try:
+        flashcard_content_service.delete_note(
+            user_id=user_id,
+            note_id=str(note.id),
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        raise RequestValidationError(
+            str(exc),
+            field="note_id",
+            status=exc.status,
+            code=exc.error,
+        ) from exc
 
     return {
         "success": True,
@@ -774,6 +799,31 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
             ),
         }
 
+    if not notes:
+        return {
+            "success": True,
+            "deleted_count": 0,
+            "deleted_cards_count": 0,
+            "deleted_note_ids": [],
+            "failed_note_ids": failed_ids,
+            "message": "KhÃ´ng cÃ³ note nÃ o Ä‘á»ƒ xÃ³a.",
+        }
+
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            field="note_ids",
+            status=409,
+            code=exc.code,
+        ) from exc
+
     deck_working_tree_service.mark_note_field_batches_changed(
         mutations=[
             {
@@ -785,20 +835,91 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
         ],
     )
 
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=all_card_ids,
-        deleted_note_ids=found_note_ids,
-    )
+    if authority_route.mode_code == "NOTE":
+        other_learner = (
+            CardProgress.query.filter(
+                CardProgress.card_id.in_(all_card_ids),
+                CardProgress.user_id != int(user_id),
+            ).first()
+            if all_card_ids
+            else None
+        )
+        if other_learner is not None:
+            db.session.rollback()
+            raise RequestValidationError(
+                "NOTE batch delete cannot remove another learner's compatibility rows.",
+                field="note_ids",
+                status=409,
+                code="MULTI_LEARNER_DELETE_NOT_READY",
+            )
+        from models.study_session import StudySession
+        from models.study_session_card import StudySessionCard
+
+        affected_session_ids = db.session.query(
+            StudySessionCard.session_id
+        ).filter(StudySessionCard.card_id.in_(all_card_ids))
+        open_sessions = (
+            StudySession.query.filter(
+                StudySession.user_id == int(user_id),
+                StudySession.status == "open",
+                StudySession.id.in_(affected_session_ids),
+            )
+            .order_by(StudySession.id.asc())
+            .with_for_update()
+            .all()
+        )
+        for study_session in open_sessions:
+            study_session.status = "cancelled"
+        try:
+            lifecycle_plan = (
+                study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
+                    db.session,
+                    route=authority_route,
+                    removed_card_ids=all_card_ids,
+                    skip_pristine=False,
+                )
+            )
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise RequestValidationError(
+                str(exc),
+                field="note_ids",
+                status=409,
+                code=exc.code,
+            ) from exc
+    else:
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=all_card_ids,
+            deleted_note_ids=found_note_ids,
+        )
     if all_card_ids:
         CardProgress.query.filter(CardProgress.card_id.in_(all_card_ids)).delete(synchronize_session=False)
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code="TOMBSTONED_SUBJECT_DELETED",
-        source_path="mcp.note_batch_delete",
-        operation_key="mcp-note-batch-delete:"
-        + hashlib.sha256("\n".join(sorted(found_note_ids)).encode("utf-8")).hexdigest(),
-    )
+    operation_key = "mcp-note-batch-delete:" + hashlib.sha256(
+        "\n".join(sorted(found_note_ids)).encode("utf-8")
+    ).hexdigest()
+    if authority_route.mode_code == "NOTE":
+        try:
+            study_progress_lifecycle_mirror_service.finalize_note_authority_delete(
+                lifecycle_plan,
+                source_path="mcp.note_batch_delete",
+                operation_key=operation_key,
+            )
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise RequestValidationError(
+                str(exc),
+                field="note_ids",
+                status=409,
+                code=exc.code,
+            ) from exc
+    else:
+        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+            lifecycle_plan,
+            transition_code="TOMBSTONED_SUBJECT_DELETED",
+            source_path="mcp.note_batch_delete",
+            operation_key=operation_key,
+        )
 
     for note in notes:
         db.session.delete(note)
