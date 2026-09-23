@@ -363,6 +363,7 @@ def apply_existing_state_note_review(
             ),
             before_state_hash=before_state_hash,
             after_state_hash=write_result.semantic_state_hash,
+            require_scheduler_grade=True,
         ),
         now_utc=command.now_utc,
     )

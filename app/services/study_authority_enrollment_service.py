@@ -28,6 +28,8 @@ from models.card import Card
 from models.card_progress import CardProgress
 from models.deck_install import DeckInstall
 from models.note import Note
+from models.payment_order import PaymentOrder
+from models.payment_order_item import PaymentOrderItem
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
@@ -231,10 +233,36 @@ def stage_note_authority_enrollment(
             DeckInstall.clone_mode == "logical_overlay",
         )
         .limit(1)
+        .with_for_update(read=True)
     ).scalar_one_or_none() is not None:
         raise _fail(
             "OVERLAY_AUTHORITY_NOT_READY",
             "NOTE enrollment for logical-overlay installs requires P5-06 routing.",
+        )
+    # Checkout takes the same User fence before creating an order. A pending
+    # paid-deck order could otherwise fulfill after enrollment and become an
+    # unusable overlay (or leave a paid order with a failed grant).
+    pending_deck_order = session.execute(
+        select(PaymentOrder.id)
+        .join(PaymentOrderItem, PaymentOrderItem.order_id == PaymentOrder.id)
+        .where(
+            PaymentOrder.user_id == learner_user_id,
+            PaymentOrderItem.product_type == "deck_marketplace_item",
+            (
+                PaymentOrder.status.in_(("pending_payment", "under_review"))
+                | (
+                    (PaymentOrder.status == "paid")
+                    & (PaymentOrder.grant_status != "completed")
+                )
+            ),
+        )
+        .limit(1)
+        .with_for_update(read=True)
+    ).scalar_one_or_none()
+    if pending_deck_order is not None:
+        raise _fail(
+            "PENDING_DECK_ORDER",
+            "NOTE enrollment must wait until paid-deck checkout and fulfillment settle.",
         )
 
     next_epoch = previous_epoch + 1

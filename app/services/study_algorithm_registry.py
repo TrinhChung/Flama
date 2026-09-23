@@ -9,7 +9,7 @@ separately from executable replay support.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from enum import Enum
 from typing import Protocol
@@ -21,6 +21,8 @@ from app.services.anki_scheduler import (
     applyAnswer,
     computeAnswerPreview,
 )
+from app.services.study_progress_contract import HISTORY_SCHEMA_VERSION
+from app.services.study_progress_shadow_codec import STATE_DECODERS, StateDecoderRegistry
 
 
 LEGACY_ANKI_ALGORITHM_KEY = "legacy-anki"
@@ -53,6 +55,7 @@ class AlgorithmResolutionPurpose(str, Enum):
     NEW_SESSION = "new-session"
     EXISTING_LEASE = "existing-lease"
     ACCEPTED_JOB = "accepted-job"
+    SWITCH_TARGET = "switch-target"
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,7 @@ class AlgorithmSupport:
     lifecycle_state: AlgorithmLifecycleState
     artifacts: AlgorithmArtifactSupport
     server_executable: bool
+    switch_initializer_registered: bool = False
 
     @property
     def new_session_allowed(self) -> bool:
@@ -95,6 +99,19 @@ class AlgorithmSupport:
     def history_read_allowed(self) -> bool:
         return self.artifacts.event_history_decoder
 
+    @property
+    def switch_target_allowed(self) -> bool:
+        """Registry readiness only; history/CAS/rollback gates remain separate."""
+
+        return (
+            self.server_executable
+            and self.lifecycle_state is AlgorithmLifecycleState.ACTIVE
+            and self.switch_initializer_registered
+            and self.artifacts.state_decoder
+            and self.artifacts.config_decoder
+            and self.artifacts.event_history_decoder
+        )
+
     def allows(self, purpose: AlgorithmResolutionPurpose) -> bool:
         if purpose is AlgorithmResolutionPurpose.NEW_SESSION:
             return self.new_session_allowed
@@ -102,6 +119,8 @@ class AlgorithmSupport:
             return self.existing_lease_allowed
         if purpose is AlgorithmResolutionPurpose.ACCEPTED_JOB:
             return self.accepted_job_allowed
+        if purpose is AlgorithmResolutionPurpose.SWITCH_TARGET:
+            return self.switch_target_allowed
         return False
 
     def as_dict(self) -> dict[str, object]:
@@ -115,6 +134,8 @@ class AlgorithmSupport:
             "existing_lease_allowed": self.existing_lease_allowed,
             "accepted_job_allowed": self.accepted_job_allowed,
             "history_read_allowed": self.history_read_allowed,
+            "switch_initializer_registered": self.switch_initializer_registered,
+            "switch_target_allowed": self.switch_target_allowed,
             "artifacts": asdict(self.artifacts),
         }
 
@@ -140,6 +161,25 @@ class StudyAlgorithmAdapter(Protocol):
         *,
         timezone_name: str,
     ) -> dict[Answer, dict[str, float | int | str | None]]: ...
+
+
+class StudyAlgorithmSwitchInitializer(Protocol):
+    """Target-owned initializer; invocation requires a separately frozen cut.
+
+    Registration alone never authorizes a switch. The eventual command must
+    verify the history cut, current-state CAS, idempotency and projection before
+    invoking this target-specific implementation.
+    """
+
+    identity: AlgorithmIdentity
+    state_storage_codec: str
+    history_schema_version: str
+
+    def decode_config(self, payload: object) -> object: ...
+
+    def decode_history_fact(self, payload: object) -> object: ...
+
+    def initialize(self, *, frozen_history_cut: object) -> object: ...
 
 
 class StudyAlgorithmNotFoundError(LookupError):
@@ -215,13 +255,21 @@ class LegacyAnkiAlgorithmAdapter:
 class _AlgorithmRegistration:
     support: AlgorithmSupport
     adapter: StudyAlgorithmAdapter | None
+    switch_initializer: StudyAlgorithmSwitchInitializer | None = None
+
+
+@dataclass(frozen=True)
+class StudyAlgorithmSwitchTarget:
+    adapter: StudyAlgorithmAdapter
+    initializer: StudyAlgorithmSwitchInitializer
 
 
 class StudyAlgorithmRegistry:
     """Exact-version registry with explicit issuance and drain semantics."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, state_decoders: StateDecoderRegistry | None = None) -> None:
         self._registrations: dict[tuple[str, str], _AlgorithmRegistration] = {}
+        self._state_decoders = state_decoders or STATE_DECODERS
 
     @staticmethod
     def _key(key: str, version: str) -> tuple[str, str]:
@@ -266,6 +314,75 @@ class StudyAlgorithmRegistry:
         registration = self._registrations.get(self._key(key, version))
         return registration.support if registration is not None else None
 
+    def register_switch_initializer(
+        self, initializer: StudyAlgorithmSwitchInitializer
+    ) -> None:
+        identity = initializer.identity
+        registry_key = self._key(identity.key, identity.version)
+        registration = self._registrations.get(registry_key)
+        if registration is None or registration.support.identity != identity:
+            raise ValueError(
+                "Switch initializer requires an exact registered Algorithm identity."
+            )
+        if registration.switch_initializer is not None:
+            raise ValueError(
+                "A switch initializer is already registered for this Algorithm."
+            )
+        if not callable(getattr(initializer, "initialize", None)):
+            raise ValueError("Switch initializer must provide an initialize method.")
+        if not callable(getattr(initializer, "decode_config", None)):
+            raise ValueError("Switch initializer must provide a config decoder.")
+        if not callable(getattr(initializer, "decode_history_fact", None)):
+            raise ValueError("Switch initializer must provide a history decoder.")
+        if initializer.history_schema_version != HISTORY_SCHEMA_VERSION:
+            raise ValueError(
+                "Switch initializer requires an exact history schema version."
+            )
+        if (
+            registration.support.lifecycle_state is not AlgorithmLifecycleState.ACTIVE
+            or registration.adapter is None
+        ):
+            raise ValueError(
+                "Only an active executable Algorithm can receive a switch initializer."
+            )
+        if not all(
+            (
+                registration.support.artifacts.state_decoder,
+                registration.support.artifacts.config_decoder,
+                registration.support.artifacts.event_history_decoder,
+            )
+        ):
+            raise ValueError(
+                "Switch initializer requires state, config and history decoders."
+            )
+        codec = str(initializer.state_storage_codec or "").strip()
+        if not codec or not self._state_decoders.has_decoder(
+            (identity.key, identity.version, identity.state_schema_version, codec)
+        ):
+            raise ValueError(
+                "Switch initializer requires an exact registered state decoder."
+            )
+        self._registrations[registry_key] = replace(
+            registration,
+            support=replace(registration.support, switch_initializer_registered=True),
+            switch_initializer=initializer,
+        )
+
+    def resolve_switch_target(self, key: str, version: str) -> StudyAlgorithmSwitchTarget:
+        adapter = self.resolve(
+            key, version, purpose=AlgorithmResolutionPurpose.SWITCH_TARGET
+        )
+        registration = self._registrations[self._key(key, version)]
+        initializer = registration.switch_initializer
+        if initializer is None:  # pragma: no cover - guarded by switch_target_allowed
+            raise StudyAlgorithmNotFoundError(
+                key,
+                version,
+                purpose=AlgorithmResolutionPurpose.SWITCH_TARGET,
+                reason="INITIALIZER_UNAVAILABLE",
+            )
+        return StudyAlgorithmSwitchTarget(adapter=adapter, initializer=initializer)
+
     def list_support(self) -> tuple[AlgorithmSupport, ...]:
         return tuple(
             registration.support
@@ -289,11 +406,16 @@ class StudyAlgorithmRegistry:
             )
         support = registration.support
         if not support.allows(purpose) or registration.adapter is None:
-            reason = (
-                "RETIRED"
-                if support.lifecycle_state is AlgorithmLifecycleState.RETIRED
-                else "PURPOSE_NOT_SUPPORTED"
-            )
+            if support.lifecycle_state is AlgorithmLifecycleState.RETIRED:
+                reason = "RETIRED"
+            elif (
+                purpose is AlgorithmResolutionPurpose.SWITCH_TARGET
+                and support.lifecycle_state is AlgorithmLifecycleState.ACTIVE
+                and not support.switch_initializer_registered
+            ):
+                reason = "INITIALIZER_UNAVAILABLE"
+            else:
+                reason = "PURPOSE_NOT_SUPPORTED"
             raise StudyAlgorithmNotFoundError(
                 normalized_key,
                 normalized_version,
@@ -350,6 +472,22 @@ def resolve_study_algorithm(
     purpose: AlgorithmResolutionPurpose = AlgorithmResolutionPurpose.EXISTING_LEASE,
 ) -> StudyAlgorithmAdapter:
     return _ALGORITHM_REGISTRY.resolve(key, version, purpose=purpose)
+
+
+def register_study_algorithm_switch_initializer(
+    initializer: StudyAlgorithmSwitchInitializer,
+) -> None:
+    """Register an exact target initializer; no production target is enabled yet."""
+
+    _ALGORITHM_REGISTRY.register_switch_initializer(initializer)
+
+
+def resolve_study_algorithm_switch_target(
+    key: str, version: str
+) -> StudyAlgorithmSwitchTarget:
+    """Resolve only targets with executable and exact decoder/initializer support."""
+
+    return _ALGORITHM_REGISTRY.resolve_switch_target(key, version)
 
 
 def get_study_algorithm_support(key: str, version: str) -> AlgorithmSupport | None:

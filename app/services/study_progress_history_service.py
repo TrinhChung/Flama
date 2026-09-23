@@ -23,6 +23,7 @@ from app.services.study_progress_contract import (
 from app.services.study_progress_shadow_codec import (
     canonical_document,
     canonical_typed_document,
+    StudyProgressCodecError,
 )
 from app.services.study_progress_shadow_mapper import encode_identity
 from app.validators.review_event import (
@@ -79,6 +80,7 @@ class NativeHistoryFactInput:
     history_completeness_code: str
     before_state_hash: str | bytes | None = None
     after_state_hash: str | bytes | None = None
+    require_scheduler_grade: bool = False
 
 
 @dataclass(frozen=True)
@@ -276,6 +278,25 @@ def append_native_history_fact(
         command.after_state_hash,
         field_name="after_state_hash",
     )
+    if command.require_scheduler_grade:
+        if not all(
+            (
+                before_state_hash,
+                after_state_hash,
+                scheduler_config_hash,
+                runtime.get("action_key"),
+                runtime.get("action_contract_version"),
+                runtime.get("trigger_key"),
+                runtime.get("trigger_contract_version"),
+                runtime.get("algorithm_key"),
+                runtime.get("algorithm_version"),
+                runtime.get("state_schema_version"),
+            )
+        ):
+            raise _fail(
+                "INCOMPLETE_SCHEDULER_HISTORY",
+                "NOTE authority history requires before/after hashes and exact runtime identities.",
+            )
     logical_note_key = bytes(subject.logical_note_key)
     if not logical_note_key:
         raise _fail("INVALID_HISTORY_CONTEXT", "Subject has no logical Note identity.")
@@ -314,6 +335,24 @@ def append_native_history_fact(
         .with_for_update()
     ).scalar_one_or_none()
     if existing is not None:
+        try:
+            stored_document = canonical_document(
+                existing.fact_payload,
+                too_large_code="STATE_PAYLOAD_TOO_LARGE",
+            )
+        except (StudyProgressCodecError, TypeError) as exc:
+            raise _fail(
+                "CORRUPT_HISTORY_FACT",
+                "Stored history fact payload cannot be verified.",
+            ) from exc
+        if (
+            stored_document.size != int(existing.fact_payload_size)
+            or stored_document.digest != bytes(existing.fact_payload_hash)
+        ):
+            raise _fail(
+                "CORRUPT_HISTORY_FACT",
+                "Stored history fact payload differs from its persisted digest.",
+            )
         if (
             existing.review_event_id != int(event.id)
             or bytes(existing.fact_payload_hash) != fact_document.digest
@@ -332,6 +371,8 @@ def append_native_history_fact(
             or existing.algorithm_version != algorithm_version
             or existing.state_schema_version != state_schema_version
             or existing.gap_reason_code != gap_reason_code
+            or existing.history_schema_version != HISTORY_SCHEMA_VERSION
+            or existing.storage_codec != STORAGE_CODEC
             or _utc_naive(existing.occurred_at) != occurred_at
             or (
                 bytes(existing.scheduler_config_hash)

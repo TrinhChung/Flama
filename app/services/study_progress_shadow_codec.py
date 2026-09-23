@@ -616,6 +616,13 @@ class StateDecoderRegistry:
             raise ValueError(f"State decoder {identity!r} is already registered.")
         self._decoders[identity] = decoder
 
+    def has_decoder(
+        self, identity: tuple[str, str, str, str]
+    ) -> bool:
+        """Check an exact persisted Algorithm/state/codec identity."""
+
+        return identity in self._decoders
+
     def decode(
         self,
         *,

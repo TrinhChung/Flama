@@ -3666,6 +3666,7 @@ from app.services.share.cutover import (  # noqa: E402
     cutover_clone_model_to_overlay_only,
     migrate_legacy_clone_install_to_overlay,
 )
+from app.services.share.helpers import _require_legacy_overlay_install_route  # noqa: E402
 
 
 def install_shared_deck_item_for_user(
@@ -3688,6 +3689,8 @@ def install_shared_deck_item_for_user(
             "Owner cannot install own deck item.",
             status=409,
         )
+
+    _require_legacy_overlay_install_route(user_id=user_id)
 
     existing = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=user_id).first()
     if existing:

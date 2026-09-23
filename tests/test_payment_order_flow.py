@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from app import create_app
-from app.services import flashcards_share_service
+from app.services import flashcards_share_service, payment_service
+from app.services.payment import checkout as payment_checkout
+from app.services.study_authority_enrollment_service import (
+    StudyAuthorityEnrollmentError,
+    stage_note_authority_enrollment,
+)
 from models import db
 from models.deck import Deck
 from models.deck_install import DeckInstall
@@ -18,6 +24,7 @@ from models.note_type_install import NoteTypeInstall
 from models.payment_entitlement import PaymentEntitlement
 from models.payment_order import PaymentOrder
 from models.payment_webhook_event import PaymentWebhookEvent
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.template import Template
 from models.user import User
 
@@ -364,6 +371,83 @@ class PaymentOrderFlowTests(unittest.TestCase):
                 1,
             )
             self.assertEqual(PaymentWebhookEvent.query.count(), 1)
+
+    def test_note_authority_paid_deck_checkout_stops_before_order_or_provider(self):
+        deck_item_id = self._create_deck_item(
+            pricing_mode="paid", price_amount_minor=75000
+        )
+        with self.app.app_context():
+            enrolled_at = datetime(2026, 9, 23)
+            db.session.add(
+                StudyAuthorityEnrollment(
+                    learner_user_id=self.buyer_id,
+                    mode_code="NOTE",
+                    epoch=1,
+                    created_at=enrolled_at,
+                    updated_at=enrolled_at,
+                )
+            )
+            db.session.commit()
+            item = db.session.get(DeckMarketplaceItem, deck_item_id)
+            for validate, error_type, code_attr in (
+                (payment_service._validate_deck_item_for_checkout, payment_service.PaymentServiceError, "error"),
+                (payment_checkout._validate_deck_item_for_checkout, payment_checkout.PaymentServiceError, "code"),
+            ):
+                with self.assertRaises(error_type) as failure:
+                    validate(item, user_id=self.buyer_id)
+                self.assertEqual(
+                    getattr(failure.exception, code_attr), "OVERLAY_AUTHORITY_NOT_READY"
+                )
+                db.session.rollback()
+
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session"
+        ) as provider_checkout:
+            response = self.client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            (response.get_json() or {}).get("error"), "OVERLAY_AUTHORITY_NOT_READY"
+        )
+        provider_checkout.assert_not_called()
+        with self.app.app_context():
+            self.assertEqual(PaymentOrder.query.count(), 0)
+            self.assertEqual(DeckInstall.query.count(), 0)
+
+    def test_pending_paid_deck_order_blocks_note_authority_enrollment(self):
+        deck_item_id = self._create_deck_item(
+            pricing_mode="paid", price_amount_minor=75000
+        )
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ):
+            checkout_response = self.client.post(
+                f"/api/shared/decks/{deck_item_id}/install"
+            )
+        self.assertEqual(checkout_response.status_code, 202)
+        order_id = (checkout_response.get_json() or {})["order"]["id"]
+
+        with self.app.app_context():
+            with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
+                stage_note_authority_enrollment(
+                    db.session,
+                    learner_user_id=self.buyer_id,
+                    now_utc=datetime(2026, 9, 23),
+                )
+            self.assertEqual(failure.exception.code, "PENDING_DECK_ORDER")
+            db.session.rollback()
+            self.assertEqual(StudyAuthorityEnrollment.query.count(), 0)
+
+            order = db.session.get(PaymentOrder, order_id)
+            order.status = "canceled"
+            db.session.commit()
+            enrolled = stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.buyer_id,
+                now_utc=datetime(2026, 9, 23),
+            )
+            self.assertEqual(enrolled.mode_code, "NOTE")
+            db.session.rollback()
 
     def test_paid_note_type_amount_mismatch_moves_order_to_manual_review_with_detail_message(self):
         note_type_id = self._create_note_type(pricing_mode="paid", price_amount_minor=65000)

@@ -20,6 +20,7 @@ from sqlalchemy.orm import joinedload
 
 from app.repositories import payment_repository
 from app.services import flashcards_share_service, support_donation_service
+from app.services.share.constants import DEFAULT_VISIBLE_PUBLISH_STATUSES
 from app.services.payment import config as payment_config
 from app.services.payment.provider import payos_provider
 from models import db
@@ -140,6 +141,18 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
             "Bạn không thể mua chính deck do mình phát hành.",
             status=409,
         )
+    # Fulfillment cannot install an overlay for NOTE learners yet. Reject
+    # before creating a payable order or contacting the provider.
+    from app.services.share.helpers import (
+        ShareControllerError,
+        _require_legacy_overlay_install_route,
+    )
+
+    try:
+        _require_legacy_overlay_install_route(user_id=user_id)
+    except ShareControllerError as exc:
+        raise PaymentServiceError(exc.error, exc.message, status=exc.status) from exc
+
     user = db.session.get(User, user_id)
     from app.services.marketplace_pricing_service import calculate_pricing_breakdown
 

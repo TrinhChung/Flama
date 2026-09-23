@@ -1042,6 +1042,16 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
             "Bạn không thể mua chính deck do mình phát hành.",
             status=409,
         )
+    from app.services.share.helpers import (
+        ShareControllerError,
+        _require_legacy_overlay_install_route,
+    )
+
+    try:
+        _require_legacy_overlay_install_route(user_id=user_id)
+    except ShareControllerError as exc:
+        raise PaymentServiceError(exc.error, exc.message, status=exc.status) from exc
+
     if deck_item.pricing_mode != "paid" or int(deck_item.price_amount_minor or 0) <= 0:
         raise PaymentServiceError(
             "PAYMENT_NOT_REQUIRED",

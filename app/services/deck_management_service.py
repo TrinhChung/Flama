@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -21,12 +22,163 @@ from models import db
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
 from models.card_progress import CardProgress
+from models.study_progress_contributor import StudyProgressContributor
+from models.study_progress_subject import StudyProgressSubject
 from app.utils.deck_move_token import parse_deck_move_token
 
 UTC = timezone.utc
 
 class DeckManagementError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class _DeckPurgeScope:
+    deck_ids: tuple[int, ...]
+    note_ids: tuple[str, ...]
+    card_ids: tuple[str, ...]
+    learner_user_ids: tuple[int, ...]
+
+
+def _current_deck_subtree_ids(root_deck_id: int) -> tuple[int, ...]:
+    """Rewalk the subtree with current InnoDB reads after locking its root."""
+    seen: set[int] = set()
+    frontier = {int(root_deck_id)}
+    while frontier:
+        current = frontier - seen
+        if not current:
+            break
+        rows = (
+            db.session.query(Deck.id)
+            .filter(Deck.id.in_(sorted(current)))
+            .order_by(Deck.id.asc())
+            .with_for_update()
+            .all()
+        )
+        present = {int(row.id) for row in rows}
+        if present != current:
+            raise StudyAuthorityFenceError(
+                "PURGE_SCOPE_CHANGED", "Deck subtree changed during purge admission."
+            )
+        seen.update(current)
+        frontier = {
+            int(row.id)
+            for row in db.session.query(Deck.id)
+            .filter(Deck.parent_id.in_(sorted(current)))
+            .order_by(Deck.id.asc())
+            .with_for_update()
+            .all()
+        }
+    return tuple(sorted(seen))
+
+
+def _deck_purge_scope(
+    deck_ids: tuple[int, ...], *, fallback_user_id: int, current_read: bool = False
+) -> _DeckPurgeScope:
+    """Discover study and install learners affected by an admin deck purge."""
+    from models.review_event import ReviewEvent
+    from models.study_session import StudySession
+    from models.study_session_card import StudySessionCard
+
+    def read(query):
+        return query.with_for_update() if current_read else query
+
+    learner_ids = {int(fallback_user_id)}
+
+    def collect_learner_ids(query) -> None:
+        learner_ids.update(int(row[0]) for row in read(query.distinct()).all())
+
+    note_ids_found: list[str] = []
+    for offset in range(0, len(deck_ids), 500):
+        deck_chunk = deck_ids[offset : offset + 500]
+        collect_learner_ids(
+            db.session.query(Deck.owner_user_id).filter(
+                Deck.id.in_(deck_chunk), Deck.owner_user_id.isnot(None)
+            )
+        )
+        note_rows = read(
+            db.session.query(Note.id, Note.user_id).filter(Note.deck_id.in_(deck_chunk))
+        ).all()
+        note_ids_found.extend(str(row.id) for row in note_rows)
+        learner_ids.update(int(row.user_id) for row in note_rows)
+        for install_query in (
+            db.session.query(DeckInstall.user_id).filter(
+                (DeckInstall.local_deck_id.in_(deck_chunk))
+                | (DeckInstall.source_deck_id.in_(deck_chunk))
+            ),
+            db.session.query(DeckInstall.user_id)
+            .join(DeckMarketplaceItem, DeckInstall.deck_item_id == DeckMarketplaceItem.id)
+            .filter(DeckMarketplaceItem.source_deck_id.in_(deck_chunk)),
+            db.session.query(DeckInstall.user_id)
+            .join(DeckCloneDeckMap, DeckCloneDeckMap.deck_install_id == DeckInstall.id)
+            .filter(
+                (DeckCloneDeckMap.local_deck_id.in_(deck_chunk))
+                | (DeckCloneDeckMap.source_deck_id.in_(deck_chunk))
+            ),
+        ):
+            collect_learner_ids(install_query)
+        collect_learner_ids(
+            db.session.query(StudySession.user_id).filter(
+                StudySession.local_deck_id.in_(deck_chunk)
+            )
+        )
+        collect_learner_ids(
+            db.session.query(StudySession.user_id)
+            .join(StudySessionCard, StudySessionCard.session_id == StudySession.id)
+            .filter(
+                (StudySessionCard.local_deck_id.in_(deck_chunk))
+                | (StudySessionCard.source_deck_id.in_(deck_chunk))
+            )
+        )
+        collect_learner_ids(
+            db.session.query(ReviewEvent.user_id).filter(
+                ReviewEvent.deck_id.in_(deck_chunk)
+            )
+        )
+
+    note_ids = tuple(sorted(note_ids_found))
+    card_ids_found: list[str] = []
+    for offset in range(0, len(note_ids), 500):
+        note_chunk = note_ids[offset : offset + 500]
+        card_rows = read(
+            db.session.query(Card.id).filter(Card.note_id.in_(note_chunk))
+        ).all()
+        card_ids_found.extend(str(row.id) for row in card_rows)
+        collect_learner_ids(
+            db.session.query(StudyProgressSubject.learner_user_id).filter(
+                (StudyProgressSubject.live_note_id.in_(note_chunk))
+                | StudyProgressSubject.logical_note_key.in_(
+                    [note_id.encode("utf-8") for note_id in note_chunk]
+                )
+            )
+        )
+    card_ids = tuple(sorted(card_ids_found))
+    for offset in range(0, len(card_ids), 500):
+        card_chunk = card_ids[offset : offset + 500]
+        collect_learner_ids(
+            db.session.query(CardProgress.user_id).filter(
+                CardProgress.card_id.in_(card_chunk)
+            )
+        )
+        collect_learner_ids(
+            db.session.query(StudyProgressSubject.learner_user_id)
+            .join(
+                StudyProgressContributor,
+                StudyProgressContributor.subject_id == StudyProgressSubject.id,
+            )
+            .filter(StudyProgressContributor.live_card_id.in_(card_chunk))
+        )
+        collect_learner_ids(
+            db.session.query(StudySession.user_id)
+            .join(StudySessionCard, StudySessionCard.session_id == StudySession.id)
+            .filter(StudySessionCard.card_id.in_(card_chunk))
+        )
+    return _DeckPurgeScope(
+        deck_ids=deck_ids,
+        note_ids=note_ids,
+        card_ids=card_ids,
+        learner_user_ids=tuple(sorted(learner_ids)),
+    )
 
 def create_decks_path(*, tokens: List[str], parent_id: Optional[int] = None) -> tuple[int, Optional[Deck]]:
     """Creates a path of decks under the given parent_id mapping tokens to deck names.
@@ -88,20 +240,49 @@ def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
 def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: bool = False) -> str:
     """Delete a local deck, or archive a shared source while preserving installs."""
     authority_learner_id = int(deck_obj.owner_user_id or user_id)
-    authority_route = lock_study_authority_route(
-        db.session,
-        learner_user_id=authority_learner_id,
-        allow_note_authority=True,
-    )
-    deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
 
     if purge:
         if not is_admin:
             raise ValueError("Only administrators can purge decks.")
-        if authority_route.mode_code == "NOTE":
+        with db.session.no_autoflush:
+            deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
+            scope = _deck_purge_scope(
+                tuple(deck_ids_to_delete), fallback_user_id=authority_learner_id
+            )
+        for learner_id in scope.learner_user_ids:
+            route = lock_study_authority_route(
+                db.session,
+                learner_user_id=learner_id,
+                allow_note_authority=True,
+            )
+            if route.mode_code == "NOTE":
+                raise StudyAuthorityFenceError(
+                    "ADMIN_PURGE_NOT_READY",
+                    "NOTE-authority deck purge requires a multi-learner lifecycle command.",
+                )
+        locked_deck = (
+            db.session.query(Deck)
+            .filter(Deck.id == deck_obj.id)
+            .with_for_update()
+            .populate_existing()
+            .one_or_none()
+        )
+        if locked_deck is None:
             raise StudyAuthorityFenceError(
-                "ADMIN_PURGE_NOT_READY",
-                "NOTE-authority deck purge requires a multi-learner lifecycle command.",
+                "PURGE_SCOPE_CHANGED", "Deck changed during purge admission."
+            )
+        current_deck_ids = _current_deck_subtree_ids(int(locked_deck.id))
+        if (
+            current_deck_ids != scope.deck_ids
+            or _deck_purge_scope(
+                current_deck_ids,
+                fallback_user_id=int(locked_deck.owner_user_id or user_id),
+                current_read=True,
+            ) != scope
+        ):
+            raise StudyAuthorityFenceError(
+                "PURGE_SCOPE_CHANGED",
+                "Deck purge scope changed while learner routes were locked.",
             )
 
         from models.deck_change_request import DeckChangeRequest
@@ -152,18 +333,14 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
         ).delete(synchronize_session=False)
 
         # 7. Collect and delete all notes and cards inside the deck subtree
-        note_rows = db.session.query(Note.id).filter(Note.deck_id.in_(deck_ids_to_delete)).all()
-        note_ids = [str(row[0]) for row in note_rows if row and row[0]]
-        if note_ids:
-            card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
-            card_ids = [str(row[0]) for row in card_rows if row and row[0]]
+        if scope.note_ids:
             lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
                 db.session,
-                removed_card_ids=card_ids,
-                deleted_note_ids=note_ids,
+                removed_card_ids=scope.card_ids,
+                deleted_note_ids=scope.note_ids,
             )
-            if card_ids:
-                CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
+            if scope.card_ids:
+                CardProgress.query.filter(CardProgress.card_id.in_(scope.card_ids)).delete(
                     synchronize_session=False
                 )
             study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
@@ -172,14 +349,21 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
                 source_path="deck.delete.purge",
                 operation_key=f"deck-purge:{deck_obj.id}",
             )
-            if card_ids:
-                Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
-            Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
+            if scope.card_ids:
+                Card.query.filter(Card.id.in_(scope.card_ids)).delete(synchronize_session=False)
+            Note.query.filter(Note.id.in_(scope.note_ids)).delete(synchronize_session=False)
 
         # 8. Delete the deck object itself
         db.session.delete(deck_obj)
         db.session.commit()
         return "purged"
+
+    authority_route = lock_study_authority_route(
+        db.session,
+        learner_user_id=authority_learner_id,
+        allow_note_authority=True,
+    )
+    deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
 
     marketplace_source_ids = set(deck_ids_to_delete)
     marketplace_source_ids.update(_collect_deck_ancestor_ids(deck_obj.id))
@@ -217,6 +401,19 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
             marketplace_item.archived_at = deleted_at
         db.session.commit()
         return "archived"
+
+    if authority_route.mode_code == "NOTE":
+        local_clone_map = db.session.query(DeckCloneDeckMap.id).filter(
+            DeckCloneDeckMap.local_deck_id.in_(deck_ids_to_delete)
+        ).first()
+        local_install = db.session.query(DeckInstall.id).filter(
+            DeckInstall.local_deck_id.in_(deck_ids_to_delete)
+        ).first()
+        if local_clone_map is not None or local_install is not None:
+            raise StudyAuthorityFenceError(
+                "OVERLAY_DELETE_NOT_READY",
+                "NOTE-authority installed clone deletion requires overlay lifecycle support.",
+            )
 
     install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
     if not is_admin:

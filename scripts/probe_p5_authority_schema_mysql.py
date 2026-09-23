@@ -7,7 +7,7 @@ application database is consulted for its default collation, not modified.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 import importlib
 import json
 import os
@@ -17,6 +17,7 @@ import secrets
 import subprocess
 import sys
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from dotenv import load_dotenv
 from flask_migrate import downgrade, stamp, upgrade
@@ -55,6 +56,7 @@ from app.services.study_authority_receipt_service import (
     apply_idempotent_existing_state_note_review,
 )
 from app.services.study_authority_enrollment_service import (
+    StudyAuthorityEnrollmentError,
     stage_legacy_authority_enrollment,
     stage_note_authority_enrollment,
 )
@@ -78,7 +80,15 @@ from app.services.study_progress_shadow_codec import (
     serialize_raw_card_progress,
 )
 from app.services.study_progress_shadow_mapper import MappedCardProgress, map_card_progress
-from app.services import study_progress_lifecycle_mirror_service
+from app.services import (
+    deck_management_service,
+    flashcard_content_service,
+    flashcards_share_service,
+    study_progress_lifecycle_mirror_service,
+)
+from app.services.share.helpers import ShareControllerError
+from app.services.share.cutover import cutover_clone_model_to_overlay_only
+from app.services.anki_sync_service import import_progress, import_reviews
 from app.services.study_service import (
     NativeReviewMutationInput,
     NativeReviewProvenance,
@@ -89,9 +99,18 @@ from app.services.anki_scheduler import default_deck_options
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
+from models.connect_import_session import ConnectImportSession
+from models.connect_review_event_ref import ConnectReviewEventRef
+from models.connect_source_card_ref import ConnectSourceCardRef
+from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
+from models.deck_clone_deck_map import DeckCloneDeckMap
+from models.deck_install import DeckInstall
+from models.deck_marketplace_item import DeckMarketplaceItem
 from models.note import Note
 from models.note_type import NoteType
+from models.payment_order import PaymentOrder
+from models.payment_order_item import PaymentOrderItem
 from models.review_event import ReviewEvent
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_authority_enrollment import StudyAuthorityEnrollment
@@ -348,6 +367,38 @@ def _probe_pristine_enrollment() -> dict[str, str]:
     db.session.add_all([note, *cards])
     db.session.commit()
 
+    pending_order = PaymentOrder(
+        user_id=user_id,
+        merchant_order_code="p5-pristine-pending-deck-order",
+        status="pending_payment",
+        grant_status="pending",
+    )
+    db.session.add(pending_order)
+    db.session.flush()
+    db.session.add(
+        PaymentOrderItem(
+            order_id=str(pending_order.id),
+            product_type="deck_marketplace_item",
+            product_ref_id="p5-pristine-paid-deck",
+            title_snapshot="Pending paid deck",
+        )
+    )
+    db.session.commit()
+    try:
+        stage_note_authority_enrollment(
+            db.session,
+            learner_user_id=user_id,
+            now_utc=datetime(2026, 9, 22, 1, 0, 30),
+        )
+    except StudyAuthorityEnrollmentError as exc:
+        if exc.code != "PENDING_DECK_ORDER":
+            raise AssertionError(f"MySQL pending-order fence returned {exc.code}.") from exc
+    else:
+        raise AssertionError("MySQL NOTE enrollment bypassed an unsettled deck order.")
+    db.session.rollback()
+    db.session.get(PaymentOrder, str(pending_order.id)).status = "canceled"
+    db.session.commit()
+
     enrolled = stage_note_authority_enrollment(
         db.session,
         learner_user_id=user_id,
@@ -396,6 +447,342 @@ def _probe_pristine_enrollment() -> dict[str, str]:
         raise AssertionError("Pristine enrollment left MySQL authority divergence.")
     db.session.rollback()
 
+    sync_session = ConnectImportSession(
+        id="p5-connect-snapshot-session",
+        user_id=user_id,
+        source="anki",
+        source_key=f"{user_id}:p5-connect-snapshot",
+        mode="strict",
+        status="uploading",
+        selected_decks=[],
+        note_type_bindings={},
+        blockers=[],
+        expires_at=datetime(2026, 10, 1, 0, 0, 0),
+    )
+    source_note = ConnectSourceNoteRef(
+        id="p5-connect-source-note",
+        user_id=user_id,
+        source_key=sync_session.source_key,
+        external_note_id="p5-external-note",
+        source_model_id="p5-external-model",
+        source_deck_path="P5 probe",
+        note_id=str(note.id),
+        content_hash="1" * 64,
+        last_session_id=sync_session.id,
+    )
+    db.session.add_all([sync_session, source_note])
+    db.session.commit()
+    snapshot = {
+        "externalNoteId": "p5-external-note",
+        "sourceCardId": "p5-external-card-a",
+        "ord": 0,
+        "snapshotHash": "a" * 64,
+        "baseSnapshotHash": None,
+        "type": 2,
+        "queue": 2,
+        "due": 50003,
+        "sourceToday": 50000,
+        "interval": 14,
+        "factor": 2500,
+        "reps": 2,
+        "lapses": 1,
+        "left": 0,
+    }
+    applied = import_progress(user_id, sync_session, [snapshot])[0]
+    if (
+        applied.get("state") != "applied"
+        or applied.get("code") != "PROGRESS_APPLIED"
+    ):
+        raise AssertionError(f"MySQL NOTE snapshot was not applied: {applied!r}")
+    db.session.commit()
+    db.session.expire_all()
+    subject = StudyProgressSubject.query.filter_by(
+        learner_user_id=user_id,
+        live_note_id=str(note.id),
+    ).one()
+    token = db.session.get(StudyAuthoritySubjectToken, int(subject.id))
+    progress_rows = CardProgress.query.filter_by(user_id=user_id).all()
+    source_card = ConnectSourceCardRef.query.filter_by(
+        user_id=user_id,
+        external_card_id="p5-external-card-a",
+    ).one()
+    contributors = StudyProgressContributor.query.filter_by(
+        subject_id=int(subject.id),
+        contributor_status="ACTIVE",
+    ).all()
+    if (
+        token is None
+        or int(token.authority_revision) != 1
+        or int(subject.mirror_revision) != 2
+        or len(progress_rows) != 2
+        or any(
+            int(row.revision) != 1
+            or row.interval_days != 14
+            or row.scheduler_mode != "anki"
+            for row in progress_rows
+        )
+        or source_card.snapshot_hash != "a" * 64
+        or int(source_card.applied_local_revision or -1) != 1
+        or len(contributors) != 2
+        or any(
+            row.current_provenance_code != "CONNECT_PROGRESS_SNAPSHOT"
+            or row.history_completeness_code != "HISTORY_MIXED_PARTIAL"
+            for row in contributors
+        )
+    ):
+        raise AssertionError("MySQL NOTE snapshot left canonical/projection divergence.")
+    db.session.rollback()
+
+    first_review_ms = int(
+        datetime(2026, 9, 22, 1, 30, tzinfo=timezone.utc).timestamp() * 1000
+    )
+    review = {
+        "sourceReviewId": first_review_ms,
+        "sourceCardId": "p5-external-card-a",
+        "ease": 3,
+        "type": 1,
+        "ivl": 14,
+        "lastIvl": 10,
+        "factor": 2500,
+        "time": 1200,
+    }
+    review_result = import_reviews(
+        user_id,
+        db.session.get(ConnectImportSession, sync_session.id),
+        [review],
+    )[0]
+    if review_result.get("state") != "imported":
+        raise AssertionError(f"MySQL NOTE revlog was not imported: {review_result!r}")
+    db.session.commit()
+    db.session.expire_all()
+    subject = StudyProgressSubject.query.filter_by(
+        learner_user_id=user_id,
+        live_note_id=str(note.id),
+    ).one()
+    token = db.session.get(StudyAuthoritySubjectToken, int(subject.id))
+    source_card = ConnectSourceCardRef.query.filter_by(
+        user_id=user_id,
+        external_card_id="p5-external-card-a",
+    ).one()
+    progress_rows = CardProgress.query.filter_by(user_id=user_id).all()
+    if (
+        token is None
+        or int(token.authority_revision) != 1
+        or int(subject.mirror_revision) != 2
+        or any(int(row.revision) != 1 or row.interval_days != 14 for row in progress_rows)
+        or ReviewEvent.query.filter_by(user_id=user_id).count() != 1
+        or ConnectReviewEventRef.query.filter_by(user_id=user_id).count() != 1
+        or StudyProgressHistoryFact.query.filter_by(learner_user_id=user_id).count()
+        != 1
+        or int(source_card.review_cursor or -1) != first_review_ms
+    ):
+        raise AssertionError("MySQL NOTE revlog changed current authority state.")
+    db.session.rollback()
+
+    second_review_ms = first_review_ms + 1000
+    with patch(
+        "app.services.study_progress_shadow_mirror_service.append_external_history_facts",
+        side_effect=RuntimeError("MySQL NOTE revlog fault injection"),
+    ):
+        failed_review = import_reviews(
+            user_id,
+            db.session.get(ConnectImportSession, sync_session.id),
+            [{**review, "sourceReviewId": second_review_ms}],
+        )[0]
+    if failed_review.get("state") != "failed" or not failed_review.get("cardAtomic"):
+        raise AssertionError(
+            f"MySQL NOTE revlog fault did not fail atomically: {failed_review!r}"
+        )
+    db.session.commit()
+    db.session.expire_all()
+    source_card = ConnectSourceCardRef.query.filter_by(
+        user_id=user_id,
+        external_card_id="p5-external-card-a",
+    ).one()
+    if (
+        ReviewEvent.query.filter_by(user_id=user_id).count() != 1
+        or ConnectReviewEventRef.query.filter_by(user_id=user_id).count() != 1
+        or StudyProgressHistoryFact.query.filter_by(learner_user_id=user_id).count()
+        != 1
+        or int(source_card.review_cursor or -1) != first_review_ms
+    ):
+        raise AssertionError("MySQL NOTE revlog savepoint did not roll back atomically.")
+    db.session.rollback()
+
+    with patch(
+        "app.services.study_progress_shadow_mirror_service.finalize_external_progress_mirror",
+        side_effect=RuntimeError("MySQL NOTE snapshot fault injection"),
+    ):
+        failed = import_progress(
+            user_id,
+            db.session.get(ConnectImportSession, sync_session.id),
+            [
+                {
+                    **snapshot,
+                    "snapshotHash": "b" * 64,
+                    "baseSnapshotHash": "a" * 64,
+                    "interval": 20,
+                }
+            ],
+        )[0]
+    if failed.get("code") != "PROGRESS_IMPORT_FAILED":
+        raise AssertionError(f"MySQL NOTE snapshot fault did not fail: {failed!r}")
+    db.session.commit()
+    db.session.expire_all()
+    subject = StudyProgressSubject.query.filter_by(
+        learner_user_id=user_id,
+        live_note_id=str(note.id),
+    ).one()
+    token = db.session.get(StudyAuthoritySubjectToken, int(subject.id))
+    source_card = ConnectSourceCardRef.query.filter_by(
+        user_id=user_id,
+        external_card_id="p5-external-card-a",
+    ).one()
+    progress_rows = CardProgress.query.filter_by(user_id=user_id).all()
+    if (
+        token is None
+        or int(token.authority_revision) != 1
+        or int(subject.mirror_revision) != 2
+        or source_card.snapshot_hash != "a" * 64
+        or any(int(row.revision) != 1 or row.interval_days != 14 for row in progress_rows)
+    ):
+        raise AssertionError("MySQL NOTE snapshot savepoint did not roll back atomically.")
+    db.session.rollback()
+
+    try:
+        flashcard_content_service.delete_note_type(
+            user_id=user_id,
+            note_type_id=str(note_type.id),
+            purge=True,
+            is_admin=True,
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        if exc.error != "ADMIN_PURGE_NOT_READY":
+            raise AssertionError(f"MySQL NOTE admin purge returned {exc.error}.") from exc
+    else:
+        raise AssertionError("MySQL NOTE admin purge bypassed the authority fence.")
+    if (
+        db.session.get(NoteType, str(note_type.id)) is None
+        or db.session.get(Note, str(note.id)) is None
+        or CardProgress.query.filter_by(user_id=user_id).count() != 2
+        or StudyProgressSubject.query.filter_by(learner_user_id=user_id).count() != 1
+    ):
+        raise AssertionError("MySQL NOTE admin purge changed content or progress.")
+    db.session.rollback()
+    try:
+        deck_management_service.delete_deck_subtree(
+            deck_obj=db.session.get(Deck, int(deck.id)),
+            user_id=user_id,
+            is_admin=True,
+            purge=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        if exc.code != "ADMIN_PURGE_NOT_READY":
+            raise AssertionError(f"MySQL NOTE deck purge returned {exc.code}.") from exc
+    else:
+        raise AssertionError("MySQL NOTE deck purge bypassed the authority fence.")
+    db.session.rollback()
+    if db.session.get(Deck, int(deck.id)) is None:
+        raise AssertionError("MySQL NOTE deck purge changed source content.")
+
+    source_clone_deck = Deck(owner_user_id=user_id, name="P5 cutover source")
+    local_clone_deck = Deck(owner_user_id=user_id, name="P5 cutover local")
+    db.session.add_all([source_clone_deck, local_clone_deck])
+    db.session.flush()
+    clone_item = DeckMarketplaceItem(
+        owner_user_id=user_id,
+        source_deck_id=int(source_clone_deck.id),
+        title="P5 cutover fence",
+        publish_status="private",
+    )
+    db.session.add(clone_item)
+    db.session.flush()
+    clone_install = DeckInstall(
+        deck_item_id=str(clone_item.id),
+        user_id=user_id,
+        local_deck_id=int(local_clone_deck.id),
+        source_deck_id=int(source_clone_deck.id),
+        source_owner_user_id=user_id,
+        clone_mode="legacy_copy",
+        installed_at=datetime(2026, 9, 22, 1, 1, 30),
+    )
+    db.session.add(clone_install)
+    db.session.flush()
+    cutover_summary = cutover_clone_model_to_overlay_only(fail_on_mismatch=False)
+    if (
+        cutover_summary["migrated"] != 0
+        or cutover_summary["failed"] != 1
+        or "NOTE_AUTHORITY_UNAVAILABLE" not in cutover_summary["errors"][0]["message"]
+        or str(clone_install.clone_mode) != "legacy_copy"
+        or DeckCloneDeckMap.query.filter_by(deck_install_id=clone_install.id).count() != 0
+        or CardProgress.query.filter_by(user_id=user_id).count() != 2
+    ):
+        raise AssertionError("MySQL NOTE clone cutover bypassed the early learner fence.")
+
+    other_owner = User(
+        email="p5-overlay-owner@example.test", username="p5-overlay-owner"
+    )
+    db.session.add(other_owner)
+    db.session.flush()
+    other_source = Deck(owner_user_id=int(other_owner.id), name="P5 overlay source")
+    db.session.add(other_source)
+    db.session.flush()
+    other_item = DeckMarketplaceItem(
+        owner_user_id=int(other_owner.id),
+        source_deck_id=int(other_source.id),
+        title="P5 NOTE overlay install fence",
+        publish_status="private",
+    )
+    db.session.add(other_item)
+    db.session.flush()
+    try:
+        flashcards_share_service.install_shared_deck_item_for_user(
+            other_item,
+            user_id=user_id,
+            publish_statuses_visible={"private"},
+        )
+    except ShareControllerError as exc:
+        if exc.error != "OVERLAY_AUTHORITY_NOT_READY":
+            raise AssertionError(f"MySQL NOTE overlay install returned {exc.error}.") from exc
+    else:
+        raise AssertionError("MySQL NOTE learner installed an unsupported overlay.")
+    if DeckInstall.query.filter_by(deck_item_id=other_item.id, user_id=user_id).count():
+        raise AssertionError("MySQL NOTE overlay install created an install row.")
+
+    local_clone_child = Deck(
+        owner_user_id=user_id,
+        parent_id=int(local_clone_deck.id),
+        name="P5 cutover local child",
+    )
+    db.session.add(local_clone_child)
+    db.session.flush()
+    db.session.add(
+        DeckCloneDeckMap(
+            deck_install_id=str(clone_install.id),
+            local_deck_id=int(local_clone_child.id),
+            source_deck_id=int(source_clone_deck.id),
+        )
+    )
+    db.session.flush()
+    for target in (local_clone_child, local_clone_deck):
+        try:
+            deck_management_service.delete_deck_subtree(
+                deck_obj=target,
+                user_id=user_id,
+                is_admin=False,
+            )
+        except StudyAuthorityFenceError as exc:
+            if exc.code != "OVERLAY_DELETE_NOT_READY":
+                raise AssertionError(f"MySQL NOTE overlay delete returned {exc.code}.") from exc
+        else:
+            raise AssertionError("MySQL NOTE learner deleted an installed clone node.")
+        if (
+            db.session.get(Deck, int(target.id)) is None
+            or db.session.get(DeckInstall, str(clone_install.id)) is None
+        ):
+            raise AssertionError("MySQL NOTE overlay delete changed clone ownership.")
+    db.session.rollback()
+
     rolled_back = stage_legacy_authority_enrollment(
         db.session,
         learner_user_id=user_id,
@@ -410,10 +797,44 @@ def _probe_pristine_enrollment() -> dict[str, str]:
     ):
         raise AssertionError("Pristine enrollment rollback lost compatibility state.")
     db.session.commit()
+    purged = flashcard_content_service.delete_note_type(
+        user_id=user_id,
+        note_type_id=str(note_type.id),
+        purge=True,
+        is_admin=True,
+    )
+    if (
+        not purged.get("purged")
+        or db.session.get(NoteType, str(note_type.id)) is not None
+        or db.session.get(Note, str(note.id)) is not None
+        or CardProgress.query.filter_by(user_id=user_id).count() != 0
+        or ReviewEvent.query.filter_by(note_type_id=str(note_type.id)).count() != 0
+    ):
+        raise AssertionError("MySQL LEGACY admin purge did not preserve the lifecycle contract.")
+    deck_purged = deck_management_service.delete_deck_subtree(
+        deck_obj=db.session.get(Deck, int(deck.id)),
+        user_id=user_id,
+        is_admin=True,
+        purge=True,
+    )
+    if deck_purged != "purged" or db.session.get(Deck, int(deck.id)) is not None:
+        raise AssertionError("MySQL LEGACY admin deck purge did not complete.")
     db.session.delete(db.session.get(User, user_id))
     db.session.commit()
     return {
         "pristine_note_enrollment_materialization": "PASS",
+        "note_enrollment_pending_deck_order_fence": "PASS",
+        "note_authority_connect_snapshot": "PASS",
+        "note_authority_connect_snapshot_rollback": "PASS",
+        "note_authority_connect_revlog_history_only": "PASS",
+        "note_authority_connect_revlog_rollback": "PASS",
+        "note_authority_admin_purge_early_fence": "PASS",
+        "legacy_admin_note_type_purge": "PASS",
+        "note_authority_admin_deck_purge_early_fence": "PASS",
+        "note_authority_clone_cutover_early_fence": "PASS",
+        "note_authority_overlay_install_early_fence": "PASS",
+        "note_authority_overlay_delete_early_fence": "PASS",
+        "legacy_admin_deck_purge": "PASS",
         "pristine_note_enrollment_rollback": "PASS",
     }
 

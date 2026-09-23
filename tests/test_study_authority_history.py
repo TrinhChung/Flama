@@ -597,6 +597,56 @@ class StudyAuthorityHistoryTests(unittest.TestCase):
             )
         self.assertEqual(conflict.exception.code, "HISTORY_IDENTITY_REUSED")
 
+    def test_history_replay_rejects_corrupt_persisted_payload(self):
+        _locked, _siblings, compatibility = self._locked_context()
+        event = self._event()
+        command = NativeHistoryFactInput(
+            learner_user_id=self.user_id,
+            subject=db.session.get(StudyProgressSubject, self.subject_id),
+            contributor=compatibility.contributor_by_card_id[self.card_id],
+            review_event=event,
+            history_completeness_code="HISTORY_NATIVE_COMPLETE",
+            before_state_hash=BEFORE_HASH,
+            after_state_hash=AFTER_HASH,
+        )
+        inserted = append_native_history_fact(
+            db.session, command=command, now_utc=INGESTED_AT
+        )
+        db.session.flush()
+        inserted.fact.fact_payload = {"rating": "tampered"}
+        with self.assertRaises(StudyProgressHistoryError) as conflict:
+            append_native_history_fact(
+                db.session, command=command, now_utc=INGESTED_AT
+            )
+        self.assertEqual(conflict.exception.code, "CORRUPT_HISTORY_FACT")
+
+    def test_note_authority_history_requires_scheduler_grade_hashes(self):
+        _locked, _siblings, compatibility = self._locked_context()
+        event = self._event()
+        base = NativeHistoryFactInput(
+            learner_user_id=self.user_id,
+            subject=db.session.get(StudyProgressSubject, self.subject_id),
+            contributor=compatibility.contributor_by_card_id[self.card_id],
+            review_event=event,
+            history_completeness_code="HISTORY_NATIVE_COMPLETE",
+            before_state_hash=BEFORE_HASH,
+            after_state_hash=AFTER_HASH,
+            require_scheduler_grade=True,
+        )
+        with self.assertRaises(StudyProgressHistoryError) as missing:
+            append_native_history_fact(
+                db.session,
+                command=replace(base, before_state_hash=None),
+                now_utc=INGESTED_AT,
+            )
+        self.assertEqual(missing.exception.code, "INCOMPLETE_SCHEDULER_HISTORY")
+        self.assertEqual(StudyProgressHistoryFact.query.count(), 0)
+
+        result = append_native_history_fact(
+            db.session, command=base, now_utc=INGESTED_AT
+        )
+        self.assertTrue(result.inserted)
+
     def test_missing_availability_fails_before_history_append(self):
         db.session.execute(
             sa.delete(StudyProgressAvailability).where(

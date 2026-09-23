@@ -24,6 +24,7 @@ from app.repositories import (
     study_repository,
     vocabulary_repository,
 )
+from app.repositories.study_authority_repository import lock_study_authority_route
 from app.services import (
     anki_scheduler,
     deck_working_tree_service,
@@ -754,6 +755,15 @@ def import_cards(
         materialized = None
         try:
             with db.session.begin_nested():
+                # Card/content import can change NoteType and Card topology. It
+                # remains LEGACY-only until that complete lifecycle command is
+                # available, but it must take the learner fence before source,
+                # content or progress rows so an enrollment switch cannot race
+                # a late failure.
+                lock_study_authority_route(
+                    db.session,
+                    learner_user_id=user_id,
+                )
                 (
                     note,
                     created,
