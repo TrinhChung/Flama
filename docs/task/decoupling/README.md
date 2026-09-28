@@ -1,8 +1,10 @@
 # Study decoupling task backlog
 
-> Status (2026-09-21): Phase 0–4 and INT-01/INT-02 are closed **for pre-release development**. Phase 5 has started with LEGACY-only storage; NOTE authority is not enabled. P4-11's production load/fault/limit deferrals remain mandatory before production cutover. `CardProgress` retains product authority and all shadow flags default off.
+> Status (2026-09-28): Phase 0–4 and INT-01/INT-02 are closed **for pre-release development**. Phase 5 has synchronous NOTE support and readiness-gated async admission/worker/status; no production cohort or flags were changed. [Checkpoint](../../architecture/phase-5-p5-05-session-v4-contract-2026-09-22.md) records browser online/offline/reopen, rollover and empty-final recovery. The normal-rating FLOAT failure is fixed with a negotiated/frozen NOTE write-storage profile (4,107 MySQL scalar samples). **Direct REST/MCP retry now restores the original receipt**, including after later answers or a lost COMMIT acknowledgment; MySQL-specific JSON preview precision is preserved as hash-bound text. Corrected local MySQL concurrency/retry scenarios pass; the checkpoint records the exact qualification scope. Broader numeric/browser qualification, Linux deploy rehearsal, remaining P5 writer/reader/switch code and release/canary gates remain open. [Release-first plan](./P5_EXECUTION_PLAN_2026-09-20.md): finish the **full Phase 5 code scope** before R0 ships with LEGACY default; R1 is the NOTE canary. Only extended migration-data/load rehearsal is deferred.
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
+
+Latest checkpoint (2026-09-28): Phase 5 now includes durable NOTE batch transport/worker recovery, numeric storage negotiation, exact direct REST/MCP replay, multi-learner template topology, and atomic NoteType/deck/content deletion. Shared-release template versioning, overlay enrollment/study and clone rekey remain fail-closed; P5-07/08/09/10 and the production canary remain open. Qualification includes the previously recorded **783 backend tests / 65 files**, **15 direct/numeric MySQL scenarios**, the later deck/NoteType lifecycle matrices, **268 frontend tests / 28 files**, and a production frontend build. This snapshot is committed locally on `develop`; it has not been pushed or enabled in production.
 >
 > Current update (2026-09-20): Phase 4 implementation through P4-10 is committed on `develop` at `263b65e`; P4-10 locally reconciled 16,424 synthetic rows with zero unexplained differences. The [P4-11 pre-release decision](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) accepted local large-row-count and isolated VPS MySQL 8.0.46 small-cohort evidence **only as a development dependency**. The [INT-02 closeout](../../architecture/phase-4-int02-closeout-2026-09-20.md) passed fresh full tests (1,267 backend, 2 skipped; 437 frontend) and a 1,002-row disposable MySQL re-probe. **Phase 4 is closed for pre-release development.** Representative multi-user/overlay load, remaining fault matrix and operational limits are deferred to P5-09 before production enablement, not passed. Shadow flags default off and product authority remains `CardProgress`. This update supersedes historical status lines below.
 >
@@ -14,7 +16,7 @@
 >
 > Latest Phase 4 plan: [2026-09-10 Phase 4 execution plan](./P4_EXECUTION_PLAN_2026-09-10.md) — correction, decision, additive shadow schema, mirror, backfill, reconciliation, and rollout rehearsal through INT-02.
 >
-> Phase 5 update (2026-09-21): [execution plan](./P5_EXECUTION_PLAN_2026-09-20.md), [partial P5-00 inventory with SELECT-only production audit](../../architecture/phase-5-p5-00-inventory-2026-09-21.md), [LEGACY-only physical-schema ADR](../../architecture/phase-5-authority-fence-adr-2026-09-21.md) and [complete inert P5-03 projection core](../../architecture/phase-5-p5-03-legacy-projection-contract-2026-09-21.md). Migration 40/storage foundation and exact encoder are implemented locally but NOTE runtime authority is not. The owner has chosen a production canary as the eventual rollout target; P5-09/G5-P technical gates and P4-11 deferred risks still apply, without a minimum live-user count.
+> Phase 5 update (2026-09-25): [execution plan](./P5_EXECUTION_PLAN_2026-09-20.md), [P5-00 inventory](../../architecture/phase-5-p5-00-inventory-2026-09-21.md), [physical-schema ADR](../../architecture/phase-5-authority-fence-adr-2026-09-21.md) and [projection contract](../../architecture/phase-5-p5-03-legacy-projection-contract-2026-09-21.md). Migrations 40–43 are present; migrations 44–45 and current Phase 5 changes remain uncommitted/release-unverified. Local MySQL 8.0.40 proves LEGACY batch duplicate serialization, uncertain-commit receipt handling and separate-process recovery with durable retries; NOTE/v4 async and continuous consumer remain open. Product priority is full code correctness and an early R0 release, followed by R1 canary. Full restore/large-load matrix no longer blocks R0/R1; full code paths, integration tests and MySQL NOTE rollback rehearsal still do.
 >
 > Phase 4 entry evidence: [2026-09-09 investigation](../../architecture/phase-4-entry-investigation-2026-09-09.md) — includes the P4-00 frozen-session blocker and current writer/storage inventory.
 >
@@ -37,6 +39,8 @@
 > Historical reviewed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — superseded for active work by the Phase 4 execution plan.
 >
 > Scope boundary: Phase 4 chỉ bổ sung derived shadow storage và reconciliation. `CardProgress` vẫn là operational read/write authority; authority cutover thuộc Phase 5 và cần authorization riêng.
+
+P5-06 continuation (2026-09-28): admin NoteType **and deck** purges now coordinate multiple NOTE/LEGACY learners atomically, tombstone canonical state, cancel affected sessions and preserve review/history rows. Deck purge still fails closed for a NOTE learner's installed clone node, uncovered NOTE progress and cardless canonical state. Content-delete/market-counter suites pass 20 tests, Decks + Flashcards + Marketplace pass 41 files, the content-delete MySQL probe passes 10/10 and the full authority-schema MySQL probe passes on 8.0.40 with cleanup confirmed. Shared-template/overlay/import/rekey and later P5 gates remain open.
 
 ## 1. Mục tiêu
 
@@ -181,16 +185,15 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 
 ### Phase 5 — Authority cutover (đang triển khai, chưa bật NOTE)
 
-[Detailed P5-00..P5-10/INT-03 task sequence](./P5_EXECUTION_PLAN_2026-09-20.md) is in progress. [INT-02 is closed](../../architecture/phase-4-int02-closeout-2026-09-20.md); P5-02 has an inert LEGACY-only two-table foundation, not a NOTE switch. The first reversible NOTE cohort still requires independent revision/CAS, full legacy write-through, wire/lock protocol and the P5-09 deferred-risk rehearsal. Production canary is the planned endpoint after technical gates, not an optional traffic-volume milestone.
+[Detailed P5-00..P5-10/INT-03 task sequence](./P5_EXECUTION_PLAN_2026-09-20.md) is in progress. [INT-02 is closed](../../architecture/phase-4-int02-closeout-2026-09-20.md). R0 requires the complete Phase 5 writer/reader/wire/history code matrix and full integration verification, then deploys with LEGACY default. R1 is the small NOTE production canary. R2 contains expanded migration/data/load proof only; async, overlay and Algorithm switch contract remain R0 code tasks.
 
 | ID | Trạng thái hiện tại | Bằng chứng / phần còn lại |
 |---|---|---|
-| P5-00 | **PARTIAL** | [Code/schema inventory and two-run production SELECT-only audit](../../architecture/phase-5-p5-00-inventory-2026-09-21.md): head 39, drift 0, preflight PASS, full audit WARN; còn old/new parity khi shadow rỗng, browser offline và indirect-path disposition. |
-| P5-01 | **PARTIAL** | [Physical-schema ADR](../../architecture/phase-5-authority-fence-adr-2026-09-21.md) chốt hai bảng inert và local MySQL learner-row fence; runtime suffix lock/CAS/wire/rollback còn mở. |
-| P5-02 | **IN PROGRESS / LOCAL VERIFIED** | Migration 40 LEGACY-only, 6 SQLite schema tests, disposable MySQL 8.0.40 39→40/downgrade/re-upgrade/CHECK/flags-off `wsgi.py` pass; VPS-version/backup còn mở. |
-| P5-03 | **CORE COMPLETE / INERT** | [Pure lossless encoder + comparison oracle](../../architecture/phase-5-p5-03-legacy-projection-contract-2026-09-21.md), 14 focused tests và disposable MySQL 8.0.40 1:N/fault/new/delete/reset round-trip pass. Overlay/import/rekey resolution thuộc P5-06; P5-04 atomic persistence chưa bắt đầu. |
-| P5-04 | **PARTIAL / LEGACY-ONLY** | [Canonical command first fenced slice](../../architecture/phase-5-p5-04-canonical-command-2026-09-21.md): shared User/enrollment prefix đã nối direct REST/MCP, session issuance/enqueue/commit và worker; NOTE vẫn fail-closed, CAS/atomic projection chưa triển khai. |
-| P5-05..P5-10 | **NOT STARTED** | Theo [execution plan](./P5_EXECUTION_PLAN_2026-09-20.md); NOTE production canary chỉ sau P5-09, INT-03 và G5-P. |
+| P5-00..P5-03 | **CORE / PREFLIGHT PARTIAL** | Inventory production 2026-09-21, learner-row fence và projection encoder đã có; R0 cần full code-path inventory, refresh head/backup và review additive migrations 40–45. |
+| P5-04..P5-07 | **RELEASE CODE PARTIAL** | Owned-local sync NOTE/v4, lifecycle, Connect snapshot/revlog, reader slice; batch NOTE đã có test-gated admission/worker/recovery/per-batch status. R0 còn session-status/restore/frontend async, continuous consumer, overlay, import/bulk/rekey và readers tương ứng. |
+| P5-08 | **HISTORY GUARD PARTIAL** | Exact history/hash/cut checks đang có; R0 cần hoàn thiện requested-switch CAS/idempotency/atomic contract và fail-closed target không có executable. |
+| P5-09 / INT-03 | **NEXT RELEASE GATES** | R0: full code/MySQL matrix, full tests/build, additive migration, flags-off boot/smoke và rollback proof. R1: fresh production preflight và NOTE canary. |
+| P5-10 | **NOT STARTED** | R0 production LEGACY release trước; R1 manually enrolled NOTE canary sau gate kỹ thuật. |
 
 ### Cross-phase integration
 
@@ -198,7 +201,7 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 |---|---|---|---|
 | INT-01 | [Phase 0–3 integration and closeout](./completed/INT-01_PHASE_0_3_INTEGRATION.md) | toàn bộ task trên | `COMPLETED`; combined verification, duplicate-boundary audit, tracker update |
 | INT-02 | [Phase 4 integration and exit gate](./INT-02_PHASE_4_INTEGRATION.md) | P4-00..P4-11 | **COMPLETED FOR PRE-RELEASE DEVELOPMENT**; [closeout](../../architecture/phase-4-int02-closeout-2026-09-20.md), full tests and zero unexplained local audit; production enablement not approved |
-| INT-03 | [Phase 5 development integration gate](./P5_EXECUTION_PLAN_2026-09-20.md) | P5-00..P5-09 after INT-02 | **PLANNED ONLY**; synthetic NOTE cohort, full suite and rollback proof. Final production closeout follows P5-10. |
+| INT-03 | [Phase 5 release integration gate](./P5_EXECUTION_PLAN_2026-09-20.md) | P5-00..P5-09 after INT-02 | **PLANNED ONLY**; full Phase 5 code matrix, full tests and MySQL NOTE rollback proof before R0. Final production closeout follows P5-10. |
 
 ## 5. Output bàn giao bắt buộc cho mọi task
 

@@ -57,6 +57,8 @@ export type PersistedStudySession = {
   batch_sequence?: number
   /** Highest event sequence allocated after accounting for local undo. */
   event_sequence?: number
+  /** Keeps the monotonic clock fence after acknowledged events leave the log. */
+  acknowledged_scheduler_offset_ms?: number
   /** Accepted batches waiting for a receipt to be reconciled locally. */
   in_flight_batches?: StudyBatchPayload[]
   updated_at_ms: number

@@ -419,13 +419,20 @@ def state_document(payload: Mapping[str, Any]) -> CanonicalDocument:
     return canonical_document(payload, too_large_code="STATE_PAYLOAD_TOO_LARGE")
 
 
-def algorithm_state_hash(payload: Mapping[str, Any]) -> bytes:
+def algorithm_state_hash(
+    payload: Mapping[str, Any],
+    *,
+    algorithm_key: str = ALGORITHM_KEY,
+    algorithm_version: str = ALGORITHM_VERSION,
+    state_schema_version: str = STATE_SCHEMA_VERSION,
+    storage_codec: str = STORAGE_CODEC,
+) -> bytes:
     envelope = {
-        "algorithm_key": ALGORITHM_KEY,
-        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_key": algorithm_key,
+        "algorithm_version": algorithm_version,
         "payload": dict(payload),
-        "state_schema_version": STATE_SCHEMA_VERSION,
-        "storage_codec": STORAGE_CODEC,
+        "state_schema_version": state_schema_version,
+        "storage_codec": storage_codec,
     }
     return canonical_document(
         envelope, too_large_code="STATE_PAYLOAD_TOO_LARGE"
@@ -647,7 +654,13 @@ class StateDecoderRegistry:
             )
         document = state_document(payload)
         _verify_document(document, expected_size=expected_size, expected_hash=None)
-        if expected_hash is not None and algorithm_state_hash(payload) != expected_hash:
+        if expected_hash is not None and algorithm_state_hash(
+            payload,
+            algorithm_key=algorithm_key,
+            algorithm_version=algorithm_version,
+            state_schema_version=state_schema_version,
+            storage_codec=storage_codec,
+        ) != expected_hash:
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Algorithm State digest does not match."
             )

@@ -27,6 +27,7 @@ class StudySessionBatch(db.Model):
     batch_id = db.Column(db.String(64), nullable=False, index=True)
     batch_sequence = db.Column(db.Integer, nullable=False, default=1)
     event_count = db.Column(db.Integer, nullable=False, default=0)
+    attempt_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     status = db.Column(db.String(20), nullable=False, default="enqueued", index=True)
     commit_reason = db.Column(db.String(32), nullable=True)
     is_final = db.Column(db.Boolean, nullable=False, default=False)

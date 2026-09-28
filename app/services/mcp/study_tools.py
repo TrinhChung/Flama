@@ -337,6 +337,7 @@ def submit_review(
     card_id: str,
     rating: str,
     duration_ms: int | None = None,
+    operation_key: str | None = None,
 ) -> dict[str, Any]:
     """Submit a review answer rating ('again', 'hard', 'good', 'easy') to update card schedule."""
     card = (
@@ -354,11 +355,12 @@ def submit_review(
 
     user = db.session.get(User, user_id)
     timezone_name = stats_overview.get_effective_timezone_name(getattr(user, "timezone", "UTC"))
-    mcp_event_id = str(uuid4())
+    mcp_event_id = operation_key if operation_key is not None else str(uuid4())
     service_payload = {
         "duration_ms": duration_ms,
-        "timezone": timezone_name,
     }
+    if operation_key is not None:
+        service_payload["operation_key"] = operation_key
     try:
         command_result = execute_native_review_command(
             user=user,
@@ -366,7 +368,9 @@ def submit_review(
             action=rating,
             payload=service_payload,
             clone_scope=None,
-            requested_scope_id=card.note.deck_id,
+            # MCP does not accept a scope/timezone override. Keep resolved
+            # server policy out of the caller-intent replay fingerprint.
+            requested_scope_id=None,
             timezone_name=timezone_name,
             client_event_id=mcp_event_id,
             source_path="native.mcp",

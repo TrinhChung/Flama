@@ -55,7 +55,7 @@ The caller must resolve the complete active sibling set under the learner/subjec
 
 ## MySQL representability boundary
 
-The local schema probe confirmed that all four legacy floating columns are MySQL `FLOAT` and the projected datetime columns are `DATETIME(0)`. Therefore arbitrary f64 values and microseconds cannot round-trip losslessly. The encoder rejects them with `UNPROJECTABLE_LEGACY_FLOAT` or `UNPROJECTABLE_LEGACY_TIMESTAMP`; it never silently rounds an already-authoritative Note state. P5-04 must produce a legacy-representable state before committing Note authority.
+The local schema probe confirmed that all four legacy floating columns are MySQL `FLOAT` and the projected datetime columns are `DATETIME(0)`. Therefore arbitrary f64 values and microseconds cannot round-trip losslessly. The encoder rejects them with `UNPROJECTABLE_LEGACY_FLOAT` or `UNPROJECTABLE_LEGACY_TIMESTAMP`; it never silently rounds an already-authoritative Note state. **2026-09-27 correction:** representability must match MySQL/PyMySQL's text read (binary32 followed by six significant decimal digits), not binary32 equality alone. The new [NOTE write-storage profile](phase-5-p5-05-session-v4-contract-2026-09-22.md#numeric-write-profile-implemented-broader-qualification-remains-open) produces representable fresh outputs before hashing/commit; frozen older leases retain their prior math. Historical raw/state payloads are unchanged.
 
 The disposable MySQL 8.0.40 probe now proves:
 

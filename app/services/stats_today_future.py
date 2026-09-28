@@ -27,14 +27,13 @@ from app.services.scheduler_config_service import (
 )
 from app.services.study_authority_read_service import (
     StudyAuthorityCardRead,
-    StudyAuthorityReadError,
     load_study_authority_card_reads,
 )
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
 from models import db
 from models.card import Card
-from models.deck_install import DeckInstall
+from models.card_progress import CardProgress
 from models.note import Note
 
 UTC = timezone.utc
@@ -322,16 +321,12 @@ def _load_canonical_scope_reads(
     now_utc: datetime,
     timezone_name: str,
 ) -> tuple[list[Card], dict[str, StudyAuthorityCardRead]]:
-    if DeckInstall.query.filter_by(
-        user_id=user_id,
-        clone_mode="logical_overlay",
-    ).first() is not None:
-        raise StudyAuthorityReadError(
-            "OVERLAY_AUTHORITY_NOT_READY",
-            "NOTE statistics reads do not yet support logical-overlay installs.",
-        )
-    query = Card.query.join(Note, Card.note_id == Note.id).filter(
-        Note.user_id == user_id
+    # Same row set as LEGACY `build_progress_rows_query`: every learner
+    # CardProgress (owned or logical-overlay source), scoped by Note deck.
+    # NOTE state projects all siblings; never-studied Notes carry no load.
+    query = Card.query.join(Note, Card.note_id == Note.id).join(
+        CardProgress,
+        db.and_(CardProgress.card_id == Card.id, CardProgress.user_id == user_id),
     )
     if scope_deck_ids is not None:
         if not scope_deck_ids:

@@ -159,6 +159,7 @@ def lock_study_authority_route(
             select(StudyAuthorityEnrollment)
             .where(StudyAuthorityEnrollment.learner_user_id == learner_id)
             .with_for_update(read=True)
+            .execution_options(populate_existing=True)
         ).scalar_one_or_none()
     if enrollment is None:
         return StudyAuthorityRoute(
@@ -194,6 +195,7 @@ def lock_study_authority_subject(
     route: StudyAuthorityRoute,
     subject: StudyProgressSubject,
     now_utc: datetime,
+    create_token_if_missing: bool = True,
 ) -> LockedStudyAuthoritySubject:
     """Lock/create the independent token, then lock and verify current state.
 
@@ -233,9 +235,14 @@ def lock_study_authority_subject(
         select(StudyAuthoritySubjectToken)
         .where(StudyAuthoritySubjectToken.subject_id == int(subject.id))
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     token_created = token is None
     if token is None:
+        if not create_token_if_missing:
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_TOKEN_REQUIRED", "Authority subject has no existing token."
+            )
         token = StudyAuthoritySubjectToken(
             subject_id=int(subject.id),
             subject_generation=generation,
@@ -251,6 +258,7 @@ def lock_study_authority_subject(
         select(StudyProgressState)
         .where(StudyProgressState.subject_id == int(subject.id))
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     state_hash = (
         _validate_hash(

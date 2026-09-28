@@ -369,199 +369,6 @@ def _load_mode_aware_browse_progress(
     )
 
 
-def _list_note_authority_browse_cards(
-    *,
-    user_id: int,
-    admin_mode: bool,
-    timezone_name: str,
-    scoped_ids: set[int],
-    selected_ids: set[int] | None,
-    deck_lookup: dict[int, str],
-    keyword: str,
-    tag: str,
-    status: str,
-    sort_by: str,
-    sort_dir: str,
-    page: int,
-    per_page: int,
-) -> dict[str, Any]:
-    if admin_mode:
-        raise BrowseApiError(
-            "NOTE authority admin-wide Browse is not available.",
-            status=409,
-            code="NOTE_ADMIN_BROWSE_UNAVAILABLE",
-        )
-    if DeckInstall.query.filter_by(
-        user_id=user_id,
-        clone_mode="logical_overlay",
-    ).first() is not None:
-        raise BrowseApiError(
-            "NOTE authority Browse does not yet support logical-overlay installs.",
-            status=409,
-            code="OVERLAY_AUTHORITY_NOT_READY",
-        )
-    effective_deck_ids = set(selected_ids if selected_ids is not None else scoped_ids)
-    if not effective_deck_ids:
-        return {
-            "items": [],
-            "page": page,
-            "per_page": per_page,
-            "total": 0,
-            "pages": 0,
-            "has_next": False,
-        }
-    query = (
-        Card.query.join(Note, Card.note_id == Note.id)
-        .filter(
-            Note.user_id == user_id,
-            Note.deck_id.in_(effective_deck_ids),
-        )
-        .options(
-            selectinload(Card.note)
-            .selectinload(Note.note_type)
-            .selectinload(NoteType.field_defs),
-            selectinload(Card.template),
-        )
-    )
-    if keyword:
-        keyword_like = f"%{escape_like_pattern(keyword.lower())}%"
-        query = query.filter(
-            func.lower(db.cast(Note.field_values, db.Text)).like(
-                keyword_like,
-                escape="\\",
-            )
-        )
-    if tag:
-        tag_like = f"%{escape_like_pattern(tag.lower())}%"
-        query = query.filter(
-            func.lower(db.cast(Note.tags, db.Text)).like(
-                tag_like,
-                escape="\\",
-            )
-        )
-    now = _utcnow()
-    cards = query.order_by(Card.id.asc()).all()
-    authority_reads = load_study_authority_card_reads(
-        db.session,
-        learner_user_id=user_id,
-        cards=tuple(cards),
-        now_utc=now,
-        timezone_name=timezone_name,
-        deck_options_by_card_id={
-            str(card.id): resolve_deck_options(
-                user_id=user_id,
-                deck_id=card.note.deck_id,
-            )
-            for card in cards
-        },
-    )
-    runtime = resolve_scheduler_runtime_settings(user_id=user_id)
-    boundary_hour = int(runtime.day_boundary_hour_local)
-
-    def visible_for_status(card: Card) -> bool:
-        availability = authority_reads[str(card.id)].availability
-        if availability.is_suspended:
-            return False
-        queue = study_repository.normalize_progress_queue(
-            availability.normalized_queue
-        )
-        if status == NEW_QUEUE:
-            return queue == NEW_QUEUE
-        if status == "learn":
-            return queue in {LEARNING_QUEUE, RELEARNING_QUEUE}
-        if status in {"due", REVIEW_QUEUE}:
-            return (
-                queue == REVIEW_QUEUE
-                and study_repository.study_bucket_for_progress_values(
-                    queue=queue,
-                    due_at=availability.due_at,
-                    due_day=availability.due_day,
-                    is_suspended=False,
-                    is_buried=False,
-                    buried_until_day=None,
-                    now=now,
-                    timezone_name=timezone_name,
-                    day_boundary_hour_local=boundary_hour,
-                )
-                == REVIEW_QUEUE
-            )
-        return True
-
-    cards = [card for card in cards if visible_for_status(card)]
-    cards.sort(
-        key=lambda card: (
-            card.updated_at or datetime.min,
-            str(card.id),
-        ),
-        reverse=True,
-    )
-    if sort_by == "deck":
-        cards.sort(
-            key=lambda card: str(
-                deck_lookup.get(int(card.note.deck_id or 0), "")
-            ).lower(),
-            reverse=sort_dir == "desc",
-        )
-    elif sort_by == "word":
-        cards.sort(
-            key=lambda card: str(
-                vocabulary_ctrl.note_display_triplet(card.note).get("word") or ""
-            ).lower(),
-            reverse=sort_dir == "desc",
-        )
-    else:
-        ascending = sort_dir != "desc"
-
-        def due_key(card: Card):
-            availability = authority_reads[str(card.id)].availability
-            queue = study_repository.normalize_progress_queue(
-                availability.normalized_queue
-            )
-            due_day = (
-                int(availability.due_day)
-                if queue == REVIEW_QUEUE and availability.due_day is not None
-                else None
-            )
-            due_at = availability.due_at
-            return (
-                due_day is None,
-                due_day if ascending and due_day is not None else -(due_day or 0),
-                due_at is None,
-                (
-                    due_at
-                    if ascending and due_at is not None
-                    else datetime.max - due_at
-                    if due_at is not None
-                    else datetime.min
-                ),
-            )
-
-        cards.sort(key=due_key)
-
-    total = len(cards)
-    offset = (page - 1) * per_page
-    page_cards = cards[offset : offset + per_page]
-    rows = [
-        vocabulary_ctrl.build_browse_row(
-            card,
-            deck_lookup,
-            now,
-            progress_obj=_authority_progress_view(authority_reads[str(card.id)]),
-            timezone_name=timezone_name,
-        )
-        for card in page_cards
-    ]
-    pages = (total + per_page - 1) // per_page if total else 0
-    return {
-        "items": rows,
-        "page": page,
-        "per_page": per_page,
-        "total": total,
-        "pages": pages,
-        "has_next": page < pages,
-    }
-
-
 def list_browse_cards(
     *,
     user_id: int,
@@ -647,30 +454,12 @@ def list_browse_cards(
         else:
             selected_ids = {selected_deck_id}
 
-    if authority_route.mode_code == "NOTE":
-        try:
-            return _list_note_authority_browse_cards(
-                user_id=user_id,
-                admin_mode=admin_mode,
-                timezone_name=timezone_name,
-                scoped_ids=scoped_ids,
-                selected_ids=selected_ids,
-                deck_lookup=deck_lookup,
-                keyword=keyword,
-                tag=tag,
-                status=status,
-                sort_by=sort_by,
-                sort_dir=sort_dir,
-                page=page,
-                per_page=per_page,
-            )
-        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-            db.session.rollback()
-            raise BrowseApiError(
-                str(exc),
-                status=409,
-                code=str(exc.code),
-            ) from exc
+    if authority_route.mode_code == "NOTE" and admin_mode:
+        raise BrowseApiError(
+            "NOTE authority admin-wide Browse is not available.",
+            status=409,
+            code="NOTE_ADMIN_BROWSE_UNAVAILABLE",
+        )
 
     progress_alias = aliased(CardProgress)
     progress_join = db.and_(
@@ -957,6 +746,44 @@ def list_browse_cards(
         )
 
     now = _utcnow()
+    authority_reads: Mapping[str, StudyAuthorityCardRead] | None = None
+    if authority_route.mode_code == "NOTE":
+        # Verify every visible candidate (owned and logical-overlay source)
+        # against canonical NOTE state before the shared status/sort SQL runs.
+        # A verified projection is value-equal to canonical availability and a
+        # never-studied Note has no row in either model; any divergence fails
+        # closed instead of silently serving CardProgress.
+        candidates = query.order_by(Card.id.asc()).all()
+        options_by_deck_id: dict[int | None, Any] = {}
+        deck_options_by_card_id: dict[str, Any] = {}
+        for candidate in candidates:
+            note_obj = candidate.note
+            # Overlay source Cards use the learner's mapped local deck options.
+            effective_deck_id = int(note_obj.deck_id) if note_obj.deck_id is not None else None
+            if effective_deck_id is not None and note_obj.user_id != user_id:
+                effective_deck_id = source_to_local_deck_id.get(effective_deck_id, effective_deck_id)
+            if effective_deck_id not in options_by_deck_id:
+                options_by_deck_id[effective_deck_id] = resolve_deck_options(
+                    user_id=user_id,
+                    deck_id=effective_deck_id,
+                )
+            deck_options_by_card_id[str(candidate.id)] = options_by_deck_id[effective_deck_id]
+        try:
+            authority_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=tuple(candidates),
+                now_utc=now,
+                timezone_name=timezone_name,
+                deck_options_by_card_id=deck_options_by_card_id,
+            )
+        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+            db.session.rollback()
+            raise BrowseApiError(
+                str(exc),
+                status=409,
+                code=str(exc.code),
+            ) from exc
     normalized_progress_queue = normalized_queue_expr(progress_alias)
     query = query.filter(active_progress_expr(progress_alias))
     if status == NEW_QUEUE:
@@ -1033,7 +860,7 @@ def list_browse_cards(
             )
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    progress_map = load_card_progress_map(
+    progress_map = {} if authority_reads is not None else load_card_progress_map(
         user_id=user_id,
         card_ids=[card_obj.id for card_obj in pagination.items],
     )
@@ -1096,7 +923,11 @@ def list_browse_cards(
             card_obj,
             deck_lookup,
             now,
-            progress_obj=progress_map.get(card_obj.id),
+            progress_obj=(
+                _authority_progress_view(authority_reads[str(card_obj.id)])
+                if authority_reads is not None
+                else progress_map.get(card_obj.id)
+            ),
             timezone_name=timezone_name,
         )
         if not admin_mode and card_obj.note and card_obj.note.user_id != user_id:
@@ -1223,6 +1054,56 @@ def get_browse_card_detail(
     return payload
 
 
+def _stage_browse_card_removal(
+    *,
+    user_id: int,
+    owner_user_ids,
+    card_ids,
+    deleted_note_ids,
+    source_path: str,
+    operation_key: str,
+) -> None:
+    """Fence every affected learner and retire their Card progress atomically.
+
+    NOTE learners keep one canonical Note state across a partial sibling
+    removal and are tombstoned when their Note loses its last Card.
+    """
+    from app.services import study_content_delete_service as content_delete
+
+    actor_user_ids = {int(user_id), *(int(value) for value in owner_user_ids if value)}
+    try:
+        authority_routes = content_delete.lock_content_delete_routes(
+            db.session,
+            actor_user_ids=actor_user_ids,
+            card_ids=card_ids,
+            deleted_note_ids=deleted_note_ids,
+        )
+        lifecycle_plan = content_delete.prepare_content_delete(
+            db.session,
+            routes=authority_routes,
+            card_ids=card_ids,
+            note_ids=deleted_note_ids,
+            cancel_legacy_sessions=False,
+        )
+        content_delete.verify_content_delete_scope(
+            db.session,
+            routes=authority_routes,
+            card_ids=card_ids,
+            deleted_note_ids=deleted_note_ids,
+        )
+        CardProgress.query.filter(CardProgress.card_id.in_(list(card_ids))).delete(
+            synchronize_session=False
+        )
+        content_delete.finalize_content_delete(
+            lifecycle_plan,
+            source_path=source_path,
+            operation_key=operation_key,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise BrowseApiError(str(exc), status=409, code=exc.code) from exc
+
+
 def delete_browse_card(
     *,
     user_id: int,
@@ -1259,21 +1140,11 @@ def delete_browse_card(
     note_will_be_deleted = (
         Card.query.filter(Card.note_id == note_id).count() == 1
     )
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=(card_obj.id,),
-        deleted_note_ids=((note_id,) if note_will_be_deleted else ()),
-    )
-    CardProgress.query.filter(CardProgress.card_id == card_obj.id).delete(
-        synchronize_session=False
-    )
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code=(
-            "TOMBSTONED_SUBJECT_DELETED"
-            if note_will_be_deleted
-            else "DETACHED_CONTRIBUTOR_DELETED"
-        ),
+    _stage_browse_card_removal(
+        user_id=user_id,
+        owner_user_ids=(card_obj.note.user_id,),
+        card_ids=(str(card_obj.id),),
+        deleted_note_ids=((str(note_id),) if note_will_be_deleted else ()),
         source_path="browse.card_delete",
         operation_key=f"browse-card-delete:{card_obj.id}",
     )
@@ -1355,20 +1226,11 @@ def delete_browse_cards_batch(
         if selected_ids == all_cards_by_note.get(note_id, set())
     }
     deleted_card_ids = {str(card_obj.id) for card_obj in cards_to_delete}
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=deleted_card_ids,
-        deleted_note_ids=deleted_note_ids,
-    )
-    CardProgress.query.filter(CardProgress.card_id.in_(sorted(deleted_card_ids))).delete(
-        synchronize_session=False
-    )
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code="DETACHED_CONTRIBUTOR_DELETED",
-        transition_by_note_id={
-            note_id: "TOMBSTONED_SUBJECT_DELETED" for note_id in deleted_note_ids
-        },
+    _stage_browse_card_removal(
+        user_id=user_id,
+        owner_user_ids={card_obj.note.user_id for card_obj in cards_to_delete if card_obj.note},
+        card_ids=sorted(deleted_card_ids),
+        deleted_note_ids=sorted(deleted_note_ids),
         source_path="browse.card_batch_delete",
         operation_key="browse-card-batch-delete:"
         + hashlib.sha256("\n".join(sorted(deleted_card_ids)).encode("utf-8")).hexdigest(),

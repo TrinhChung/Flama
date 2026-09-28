@@ -20,6 +20,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from dotenv import load_dotenv
+from flask import current_app
 from flask_migrate import downgrade, stamp, upgrade
 import pymysql
 import sqlalchemy as sa
@@ -48,6 +49,9 @@ from app.services.study_authority_cas_service import (
     StudyAuthorityCASExpectation,
     verify_study_authority_cas,
 )
+from app.services.study_algorithm_history_cut_service import (
+    freeze_study_algorithm_history_cut,
+)
 from app.services.study_authority_command_service import (
     ExistingStateNoteReviewCommand,
 )
@@ -59,6 +63,10 @@ from app.services.study_authority_enrollment_service import (
     StudyAuthorityEnrollmentError,
     stage_legacy_authority_enrollment,
     stage_note_authority_enrollment,
+)
+from app.services.study_authority_read_service import (
+    StudyAuthorityReadError,
+    load_study_authority_card_read,
 )
 from app.services.study_authority_write_service import (
     StudyAuthorityStateWrite,
@@ -96,6 +104,7 @@ from app.services.study_service import (
     execute_native_review_transition,
 )
 from app.services.anki_scheduler import default_deck_options
+from app.services.scheduler_config_service import resolve_deck_options
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -447,6 +456,70 @@ def _probe_pristine_enrollment() -> dict[str, str]:
         raise AssertionError("Pristine enrollment left MySQL authority divergence.")
     db.session.rollback()
 
+    for observed_at, timezone_name in (
+        ("2026-09-22T18:59:59Z", "Asia/Tokyo"),
+        ("2026-09-22T19:00:01Z", "Asia/Tokyo"),
+        ("2026-09-22T19:00:01Z", "UTC"),
+    ):
+        audit = current_app.test_cli_runner().invoke(
+            args=[
+                "study-authority-read-audit",
+                "--user-id", str(user_id),
+                "--observed-at-utc", observed_at,
+                "--timezone-name", timezone_name,
+            ]
+        )
+        if audit.exit_code:
+            raise AssertionError(
+                f"MySQL fixed-context NOTE read audit failed: {audit.output!r}"
+            ) from audit.exception
+        audit_payload = json.loads(audit.output)
+        if (
+            audit_payload.get("status") != "PASS"
+            or audit_payload.get("card_count") != 2
+            or audit_payload.get("timezone") != timezone_name
+            or audit_payload.get("observed_at_utc")
+            != observed_at.replace("Z", ".000000Z")
+        ):
+            raise AssertionError("MySQL NOTE read audit changed its fixed context.")
+
+    first_card = db.session.get(Card, "p5-pristine-card-a")
+    first_card_options = resolve_deck_options(user_id=user_id, deck_id=int(deck.id))
+    healthy_partial_read = load_study_authority_card_read(
+        db.session,
+        learner_user_id=user_id,
+        card=first_card,
+        now_utc=datetime(2026, 9, 22, 8, 0, 0),
+        timezone_name="UTC",
+        deck_options=first_card_options,
+    )
+    if healthy_partial_read.state.type != "new":
+        raise AssertionError("MySQL healthy 1:2 NOTE Card detail did not read state.")
+    db.session.rollback()
+    second_progress = CardProgress.query.filter_by(
+        user_id=user_id, card_id="p5-pristine-card-b"
+    ).one()
+    second_progress.queue = "review"
+    db.session.flush()
+    try:
+        load_study_authority_card_read(
+            db.session,
+            learner_user_id=user_id,
+            card=first_card,
+            now_utc=datetime(2026, 9, 22, 8, 0, 0),
+            timezone_name="UTC",
+            deck_options=first_card_options,
+        )
+    except StudyAuthorityReadError as exc:
+        if exc.code != "AUTHORITY_READ_PARITY_DIVERGED":
+            raise AssertionError(
+                f"MySQL partial Card read returned unexpected {exc.code}."
+            ) from exc
+    else:
+        raise AssertionError("MySQL partial NOTE Card read missed divergent sibling.")
+    finally:
+        db.session.rollback()
+
     sync_session = ConnectImportSession(
         id="p5-connect-snapshot-session",
         user_id=user_id,
@@ -649,41 +722,51 @@ def _probe_pristine_enrollment() -> dict[str, str]:
         raise AssertionError("MySQL NOTE snapshot savepoint did not roll back atomically.")
     db.session.rollback()
 
-    try:
+    # Both admin purges now tombstone NOTE state. Fault the last NOTE step and
+    # prove MySQL keeps content, projection and canonical state intact.
+    def purge_note_type() -> None:
         flashcard_content_service.delete_note_type(
             user_id=user_id,
             note_type_id=str(note_type.id),
             purge=True,
             is_admin=True,
         )
-    except flashcard_content_service.ContentApiError as exc:
-        if exc.error != "ADMIN_PURGE_NOT_READY":
-            raise AssertionError(f"MySQL NOTE admin purge returned {exc.error}.") from exc
-    else:
-        raise AssertionError("MySQL NOTE admin purge bypassed the authority fence.")
-    if (
-        db.session.get(NoteType, str(note_type.id)) is None
-        or db.session.get(Note, str(note.id)) is None
-        or CardProgress.query.filter_by(user_id=user_id).count() != 2
-        or StudyProgressSubject.query.filter_by(learner_user_id=user_id).count() != 1
-    ):
-        raise AssertionError("MySQL NOTE admin purge changed content or progress.")
-    db.session.rollback()
-    try:
+
+    def purge_deck() -> None:
         deck_management_service.delete_deck_subtree(
             deck_obj=db.session.get(Deck, int(deck.id)),
             user_id=user_id,
             is_admin=True,
             purge=True,
         )
-    except StudyAuthorityFenceError as exc:
-        if exc.code != "ADMIN_PURGE_NOT_READY":
-            raise AssertionError(f"MySQL NOTE deck purge returned {exc.code}.") from exc
-    else:
-        raise AssertionError("MySQL NOTE deck purge bypassed the authority fence.")
-    db.session.rollback()
-    if db.session.get(Deck, int(deck.id)) is None:
-        raise AssertionError("MySQL NOTE deck purge changed source content.")
+
+    for label, purge in (("admin", purge_note_type), ("deck", purge_deck)):
+        with patch(
+            "app.services.study_progress_lifecycle_mirror_service.finalize_note_authority_delete",
+            side_effect=RuntimeError(f"MySQL NOTE {label} purge fault injection"),
+        ):
+            try:
+                purge()
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError(f"MySQL NOTE {label} purge ignored fault injection.")
+        db.session.rollback()
+        db.session.expire_all()
+        subject = StudyProgressSubject.query.filter_by(learner_user_id=user_id).one()
+        token = db.session.get(StudyAuthoritySubjectToken, int(subject.id))
+        if (
+            db.session.get(NoteType, str(note_type.id)) is None
+            or db.session.get(Deck, int(deck.id)) is None
+            or db.session.get(Note, str(note.id)) is None
+            or CardProgress.query.filter_by(user_id=user_id).count() != 2
+            or db.session.get(StudyProgressState, int(subject.id)) is None
+            or subject.live_note_id != str(note.id)
+            or token is None
+            or int(token.authority_revision) != 1
+        ):
+            raise AssertionError(f"MySQL NOTE {label} purge fault left partial deletion.")
+        db.session.rollback()
 
     source_clone_deck = Deck(owner_user_id=user_id, name="P5 cutover source")
     local_clone_deck = Deck(owner_user_id=user_id, name="P5 cutover local")
@@ -823,14 +906,16 @@ def _probe_pristine_enrollment() -> dict[str, str]:
     db.session.commit()
     return {
         "pristine_note_enrollment_materialization": "PASS",
+        "note_authority_fixed_context_read_audit": "PASS",
+        "note_authority_partial_sibling_reader": "PASS",
         "note_enrollment_pending_deck_order_fence": "PASS",
         "note_authority_connect_snapshot": "PASS",
         "note_authority_connect_snapshot_rollback": "PASS",
         "note_authority_connect_revlog_history_only": "PASS",
         "note_authority_connect_revlog_rollback": "PASS",
-        "note_authority_admin_purge_early_fence": "PASS",
+        "note_authority_admin_note_type_purge_fault_rollback": "PASS",
         "legacy_admin_note_type_purge": "PASS",
-        "note_authority_admin_deck_purge_early_fence": "PASS",
+        "note_authority_admin_deck_purge_fault_rollback": "PASS",
         "note_authority_clone_cutover_early_fence": "PASS",
         "note_authority_overlay_install_early_fence": "PASS",
         "note_authority_overlay_delete_early_fence": "PASS",
@@ -1511,6 +1596,62 @@ def _probe_projection_round_trip(user: User) -> dict[str, object]:
         replay_compatibility,
         _unused_replay_projection,
     ) = prepare_authority_write()
+    history_cut = freeze_study_algorithm_history_cut(
+        db.session,
+        route=note_route,
+        locked=replay_locked,
+        expected=StudyAuthorityCASExpectation(
+            enrollment_epoch=0,
+            subject_generation=int(replay_locked.subject.subject_generation),
+            authority_revision=int(replay_locked.token.authority_revision),
+            semantic_state_hash=bytes(replay_locked.token.semantic_state_hash),
+        ),
+        siblings=replay_siblings,
+        compatibility=replay_compatibility,
+    )
+    if not history_cut.native_complete or len(history_cut.facts) != 1:
+        raise AssertionError(
+            f"Committed NOTE review history cut is incomplete: {history_cut.blocker_codes}"
+        )
+    db.session.expire_all()
+    reloaded_cut = freeze_study_algorithm_history_cut(
+        db.session,
+        route=note_route,
+        locked=replay_locked,
+        expected=StudyAuthorityCASExpectation(
+            enrollment_epoch=0,
+            subject_generation=int(replay_locked.subject.subject_generation),
+            authority_revision=int(replay_locked.token.authority_revision),
+            semantic_state_hash=bytes(replay_locked.token.semantic_state_hash),
+        ),
+        siblings=replay_siblings,
+        compatibility=replay_compatibility,
+    )
+    if reloaded_cut.cut_hash != history_cut.cut_hash:
+        raise AssertionError("NOTE history cut changed after MySQL ORM reload.")
+    for predicate, parameters, expected_index in (
+        (
+            "subject_id = :subject_id",
+            {"subject_id": cas_subject_id},
+            "ix_sp_history_subject_order",
+        ),
+        (
+            "learner_user_id = :user_id AND logical_note_key = :note_key",
+            {"user_id": user_id, "note_key": bytes(replay_locked.subject.logical_note_key)},
+            "ix_sp_history_learner_note_order",
+        ),
+    ):
+        plan = db.session.execute(
+            sa.text(
+                "EXPLAIN SELECT id FROM study_progress_history_facts "
+                f"FORCE INDEX (`{expected_index}`) WHERE {predicate} FOR UPDATE"
+            ),
+            parameters,
+        ).mappings().one()
+        if plan["key"] != expected_index:
+            raise AssertionError(
+                f"History-cut lock plan did not use {expected_index}: {plan['key']}"
+            )
     replay_card = next(
         card
         for card in replay_siblings.cards
@@ -1875,6 +2016,8 @@ def _probe_projection_round_trip(user: User) -> dict[str, object]:
         "subject_material_write_commit": "PASS",
         "subject_compatibility_evidence_commit": "PASS",
         "subject_history_fact_commit": "PASS",
+        "subject_history_cut_mysql": "PASS",
+        "history_cut_narrow_lock_plan": "PASS",
         "subject_canonical_command_commit": "PASS",
         "subject_command_receipt_commit": "PASS",
         "subject_command_receipt_replay": "PASS",
@@ -2002,6 +2145,12 @@ def run_probe() -> dict[str, object]:
         session_pin_migration = importlib.import_module(
             "migrations.versions.20260921_000042_add_study_session_authority_pins"
         )
+        history_index_migration = importlib.import_module(
+            "migrations.versions.20260924_000044_add_history_note_cut_index"
+        )
+        retry_migration = importlib.import_module(
+            "migrations.versions.20260925_000045_add_study_batch_attempt_count"
+        )
         migrations = (
             foundation_migration,
             receipt_migration,
@@ -2019,10 +2168,49 @@ def run_probe() -> dict[str, object]:
                 table for table in db.metadata.sorted_tables if table.name not in target_names
             ]
             db.metadata.create_all(bind=db.engine, tables=baseline_tables)
+            batch_migration = importlib.import_module(
+                "migrations.versions.20260913_000037_add_study_session_batches"
+            )
+            batch_contract_issues = batch_migration._existing_contract_issues(
+                sa.inspect(db.engine)
+            )
+            if batch_contract_issues:
+                raise AssertionError(
+                    f"create_all batch schema is not migration-37 compatible: {batch_contract_issues}"
+                )
+            # Metadata is the current model, so remove only the new index to
+            # reconstruct the actual head-39 starting schema in this probe DB.
+            history_index = next(
+                index
+                for index in StudyProgressHistoryFact.__table__.indexes
+                if index.name == history_index_migration.INDEX_NAME
+            )
+            history_index.drop(bind=db.engine)
+            # The runtime metadata includes revision 45, but the head-39
+            # baseline did not. Exercise the real additive column upgrade.
+            with db.engine.begin() as connection:
+                connection.execute(
+                    sa.text(
+                        "ALTER TABLE study_session_batches "
+                        "DROP COLUMN attempt_count"
+                    )
+                )
             stamp(revision="20260913_000039", directory="migrations")
             upgrade(directory="migrations")
 
             inspector = sa.inspect(db.engine)
+            history_indexes = {
+                item["name"]: item["column_names"]
+                for item in inspector.get_indexes(StudyProgressHistoryFact.__tablename__)
+            }
+            if history_indexes.get(history_index_migration.INDEX_NAME) != history_index_migration.INDEX_COLUMNS:
+                raise AssertionError("Migrated NOTE history-cut index is missing or malformed.")
+            if not any(
+                column["name"] == retry_migration.COLUMN_NAME
+                and not column["nullable"]
+                for column in inspector.get_columns(retry_migration.TABLE_NAME)
+            ):
+                raise AssertionError("Migrated durable study-batch retry count is missing.")
             with db.engine.connect() as connection:
                 for table in (
                     StudyAuthorityEnrollment.__table__,
@@ -2122,8 +2310,14 @@ def run_probe() -> dict[str, object]:
                 raise AssertionError("Empty-only downgrade left authority tables.")
             upgrade(directory="migrations")
             head = db.session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-            if head != "20260921_000043":
+            if head != "20260925_000045":
                 raise AssertionError(f"Unexpected migration head: {head}")
+            final_indexes = {
+                item["name"]: item["column_names"]
+                for item in sa.inspect(db.engine).get_indexes(StudyProgressHistoryFact.__tablename__)
+            }
+            if final_indexes.get(history_index_migration.INDEX_NAME) != history_index_migration.INDEX_COLUMNS:
+                raise AssertionError("History-cut index did not survive downgrade/re-upgrade.")
             return {
                 "status": "PASS",
                 "mysql_version": db.session.execute(sa.text("SELECT VERSION()")).scalar_one(),
@@ -2134,6 +2328,9 @@ def run_probe() -> dict[str, object]:
                 "legacy_route_repository_fence": "PASS",
                 "flags_off_wsgi_boot": "PASS",
                 "empty_downgrade_reupgrade": "PASS",
+                "history_note_cut_index_upgrade": "PASS",
+                "study_batch_attempt_count_upgrade": "PASS",
+                "study_batch_create_all_forward_compatibility": "PASS",
                 "configured_database_modified": False,
                 **pristine_evidence,
                 **projection_evidence,

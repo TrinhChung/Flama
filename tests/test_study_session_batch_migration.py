@@ -83,6 +83,18 @@ class StudySessionBatchMigrationTests(unittest.TestCase):
             ):
                 migration.upgrade()
 
+    def test_upgrade_rejects_malformed_forward_attempt_column(self):
+        with self.app.app_context(), db.engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE study_session_batches DROP COLUMN attempt_count"
+            )
+            connection.exec_driver_sql(
+                "ALTER TABLE study_session_batches ADD COLUMN attempt_count TEXT"
+            )
+            self._bind_operations(connection)
+            with self.assertRaisesRegex(RuntimeError, "attempt_count"):
+                migration.upgrade()
+
     def test_downgrade_preserves_table_and_rows(self):
         with self.app.app_context(), db.engine.begin() as connection:
             self._bind_operations(connection)

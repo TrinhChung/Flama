@@ -17,11 +17,15 @@ from app.services.study_progress_contract import (
 from app.services.study_progress_shadow_codec import (
     RAW_CARD_PROGRESS_FIELDS,
     STATE_DECODERS,
+    StateDecoderRegistry,
     StudyProgressCodecError,
+    algorithm_state_hash,
     canonical_typed_document,
     decode_raw_card_progress,
     serialize_raw_card_progress,
+    state_document,
 )
+from app.services.anki_scheduler import CardState
 from app.services.study_progress_shadow_mapper import (
     AvailabilityContext,
     MappedCardProgress,
@@ -173,6 +177,41 @@ class StudyProgressShadowCodecTests(unittest.TestCase):
                 expected_hash=b"x" * 32,
             )
         self.assertEqual(raised.exception.code, "STATE_HASH_MISMATCH")
+
+    def test_exact_decoder_hash_binds_nonlegacy_algorithm_identity(self):
+        identity = ("future-test", "2.0.0", "future-state.v1", "future-json.v1")
+        payload = {"test": "state"}
+        document = state_document(payload)
+        expected_hash = algorithm_state_hash(
+            payload,
+            algorithm_key=identity[0],
+            algorithm_version=identity[1],
+            state_schema_version=identity[2],
+            storage_codec=identity[3],
+        )
+        self.assertNotEqual(expected_hash, algorithm_state_hash(payload))
+        decoders = StateDecoderRegistry()
+        decoders.register(identity, lambda _payload: CardState(type="new"))
+        decoded = decoders.decode(
+            algorithm_key=identity[0],
+            algorithm_version=identity[1],
+            state_schema_version=identity[2],
+            storage_codec=identity[3],
+            payload=payload,
+            expected_size=document.size,
+            expected_hash=expected_hash,
+        )
+        self.assertEqual(decoded.type, "new")
+        with self.assertRaises(StudyProgressCodecError) as caught:
+            decoders.decode(
+                algorithm_key=identity[0],
+                algorithm_version=identity[1],
+                state_schema_version=identity[2],
+                storage_codec=identity[3],
+                payload=payload,
+                expected_hash=algorithm_state_hash(payload),
+            )
+        self.assertEqual(caught.exception.code, "STATE_HASH_MISMATCH")
 
     def test_contributor_identity_pointer_and_provenance_are_validated(self):
         source = golden_progress()

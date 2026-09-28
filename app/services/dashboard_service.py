@@ -1,7 +1,7 @@
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 UTC = timezone.utc
 
@@ -16,10 +16,7 @@ from app.repositories import study_repository
 from app.repositories.study_authority_repository import lock_study_authority_route
 from app.repositories.study_repository import default_deck_options, _today_day_index
 from app.services.scheduler_config_service import resolve_deck_options
-from app.services.study_authority_read_service import (
-    StudyAuthorityReadError,
-    load_study_authority_card_reads,
-)
+from app.services.study_authority_read_service import load_study_authority_card_reads
 from app.services.stats_overview import get_effective_timezone_name, _build_timezone_obj
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
@@ -27,6 +24,49 @@ from app.utils.permissions import is_admin_user
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _note_overlay_cards(
+    installs, *, visible_deck_ids: set[int]
+) -> tuple[list[tuple[Card, int]], Dict[int, str]]:
+    """Source Cards of each logical-overlay install, mapped to local decks.
+
+    Mirrors the LEGACY dashboard merge filters: mapped source decks, source
+    owner and install snapshot. Also returns the install NoteType per mapped
+    local deck, which LEGACY records even when no source Card is visible.
+    """
+    result: list[tuple[Card, int]] = []
+    note_type_by_local_deck: Dict[int, str] = {}
+    for install in installs:
+        if install.clone_mode != "logical_overlay" or not install.id or not install.local_deck_id:
+            continue
+        source_to_local = {
+            int(row.source_deck_id): int(row.local_deck_id)
+            for row in DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
+            .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
+            .all()
+            if row.source_deck_id is not None
+            and row.local_deck_id is not None
+            and int(row.local_deck_id) in visible_deck_ids
+        }
+        if not source_to_local:
+            continue
+        if install.source_note_type_id:
+            for local_deck_id in source_to_local.values():
+                note_type_by_local_deck.setdefault(local_deck_id, str(install.source_note_type_id))
+        query = Card.query.join(Note, Card.note_id == Note.id).filter(
+            Note.deck_id.in_(source_to_local.keys())
+        )
+        if install.source_owner_user_id is not None:
+            query = query.filter(Note.user_id == install.source_owner_user_id)
+        snapshot_at = install.base_snapshot_at or install.installed_at
+        if snapshot_at is not None:
+            query = query.filter(Note.created_at <= snapshot_at, Card.created_at <= snapshot_at)
+        for card in query.order_by(Card.id.asc()).all():
+            local_deck_id = source_to_local.get(int(card.note.deck_id))
+            if local_deck_id is not None:
+                result.append((card, local_deck_id))
+    return result, note_type_by_local_deck
 
 
 def _classify_progress_fast(
@@ -248,14 +288,6 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                         bucket["due"] += 1
 
     if authority_route.mode_code == "NOTE" and visible_deck_ids:
-        if any(
-            install.clone_mode == "logical_overlay"
-            for install in installs
-        ):
-            raise StudyAuthorityReadError(
-                "OVERLAY_AUTHORITY_NOT_READY",
-                "NOTE dashboard reads do not yet support logical-overlay installs.",
-            )
         canonical_cards = (
             Card.query.join(Note, Card.note_id == Note.id)
             .filter(
@@ -265,17 +297,29 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             .order_by(Card.id.asc())
             .all()
         )
-        deck_options_by_card_id = {
-            str(card.id): resolve_deck_options(
-                user_id=int(current_user.id),
-                deck_id=card.note.deck_id,
-            )
-            for card in canonical_cards
-        }
+        # Same logical-overlay scope as the LEGACY merge above: source Cards
+        # count under the learner's mapped local deck.
+        overlay_cards, overlay_note_types = (
+            ([], {})
+            if admin_mode
+            else _note_overlay_cards(installs, visible_deck_ids=set(visible_deck_ids))
+        )
+        counted_cards = [
+            (card, int(card.note.deck_id)) for card in canonical_cards
+        ] + overlay_cards
+        options_by_deck_id: Dict[int, Any] = {}
+        deck_options_by_card_id = {}
+        for card, deck_id in counted_cards:
+            if deck_id not in options_by_deck_id:
+                options_by_deck_id[deck_id] = resolve_deck_options(
+                    user_id=int(current_user.id),
+                    deck_id=deck_id,
+                )
+            deck_options_by_card_id.setdefault(str(card.id), options_by_deck_id[deck_id])
         authority_reads = load_study_authority_card_reads(
             db.session,
             learner_user_id=int(current_user.id),
-            cards=tuple(canonical_cards),
+            cards=tuple({str(card.id): card for card, _ in counted_cards}.values()),
             now_utc=now,
             timezone_name=timezone_name,
             deck_options_by_card_id=deck_options_by_card_id,
@@ -287,10 +331,14 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         deck_note_types = {}
         for card in canonical_cards:
             note = card.note
-            deck_id = int(note.deck_id)
-            if note.note_type_id and deck_id not in deck_note_types:
-                deck_note_types[deck_id] = str(note.note_type_id)
-            bucket = card_counts_by_deck[deck_id]
+            if note.note_type_id and int(note.deck_id) not in deck_note_types:
+                deck_note_types[int(note.deck_id)] = str(note.note_type_id)
+        for local_deck_id, source_note_type_id in overlay_note_types.items():
+            deck_note_types.setdefault(local_deck_id, source_note_type_id)
+        for card, deck_id in counted_cards:
+            bucket = card_counts_by_deck.setdefault(
+                deck_id, {"total": 0, "new": 0, "learn": 0, "due": 0}
+            )
             bucket["total"] += 1
             availability = authority_reads[str(card.id)].availability
             count_bucket = study_repository.counter_bucket_for_progress_values(

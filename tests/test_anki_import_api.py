@@ -6,12 +6,14 @@ import json
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app import create_app
 from app.services.study_authority_enrollment_service import (
     stage_note_authority_enrollment,
 )
+from app.services.connect.import_session import prepare_import_batch_context
 from app.services.study_progress_backfill_service import run_current_progress_backfill
 from app.services.study_progress_reconciliation_service import (
     build_study_progress_reconciliation,
@@ -1143,6 +1145,42 @@ class AnkiImportApiTests(unittest.TestCase):
                 post_review_revision,
             )
 
+        status_payload = {"notes": [{
+            "ankiNoteId": 3101,
+            "contentHash": "3" * 64,
+            "cards": [{"sourceCardId": 4101, "snapshotHash": "e" * 64}],
+        }]}
+        healthy_status = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json=status_payload,
+        )
+        self.assertEqual(healthy_status.status_code, 200, healthy_status.get_json())
+        self.assertEqual(
+            healthy_status.get_json()["notes"][0]["cards"][0]["progressState"],
+            "local_changed",
+        )
+
+        # The request mentions only one source Card. A divergent sibling must
+        # still invalidate the entire NOTE cursor before incremental sync.
+        with self.app.app_context():
+            sibling = CardProgress.query.filter(
+                CardProgress.user_id == self.admin_id,
+                CardProgress.card_id != ConnectSourceCardRef.query.filter_by(
+                    user_id=self.admin_id,
+                    external_card_id="4101",
+                ).one().card_id,
+            ).one()
+            sibling.reps = int(sibling.reps or 0) + 1
+            db.session.commit()
+        divergent_status = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json=status_payload,
+        )
+        self.assertEqual(divergent_status.status_code, 409, divergent_status.get_json())
+        self.assertEqual(
+            divergent_status.get_json()["error"], "AUTHORITY_READ_PARITY_DIVERGED"
+        )
+
     def test_note_authority_revlog_is_history_only_and_card_atomic(self):
         self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
         self._login()
@@ -1306,6 +1344,56 @@ class AnkiImportApiTests(unittest.TestCase):
                 int(StudyAuthoritySubjectToken.query.one().authority_revision),
                 baseline["authority_revision"],
             )
+
+    def test_card_import_batch_context_fences_learner_before_deck_lookup(self):
+        order = []
+
+        def record_fence(*_args, **kwargs):
+            self.assertEqual(kwargs["learner_user_id"], self.admin_id)
+            self.assertTrue(kwargs["allow_note_authority"])
+            order.append("learner")
+
+        def record_decks(_user_id):
+            order.append("decks")
+            return []
+
+        with self.app.app_context(), patch(
+            "app.services.connect.import_session.lock_study_authority_route",
+            side_effect=record_fence,
+        ), patch(
+            "app.services.connect.import_session._accessible_note_types",
+            return_value=[],
+        ), patch(
+            "app.services.connect.import_session._owned_decks",
+            side_effect=record_decks,
+        ):
+            prepare_import_batch_context(
+                user_id=self.admin_id,
+                session=SimpleNamespace(note_type_bindings={}),
+                cards=[],
+            )
+        self.assertEqual(order, ["learner", "decks"])
+
+    def test_note_authority_import_session_cannot_relocate_existing_deck(self):
+        self._login()
+        self._create_session()
+        with self.app.app_context():
+            stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.admin_id,
+                now_utc=datetime(2026, 9, 23, 3, 0, 0),
+            )
+            db.session.commit()
+        payload = self._session_payload()
+        payload["selectedDecks"] = ["Renamed"]
+        payload["decks"][0]["targetPath"] = "Renamed"
+        response = self.client.post(
+            "/api/flashcards/import/anki/sessions", json=payload
+        )
+        self.assertEqual(response.status_code, 400, response.get_json())
+        self.assertIn("NOTE authority", str(response.get_json()))
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Deck, self.deck_id).name, "Inbox")
 
     def test_note_authority_legacy_card_import_fails_before_content_mutation(self):
         self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True

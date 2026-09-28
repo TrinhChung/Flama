@@ -126,24 +126,17 @@ class MarketCounterDeletionTests(unittest.TestCase):
         self.assertEqual(source.active_usage_count, 0)
         self.assertIsNone(db.session.get(NoteTypeInstall, install_id))
 
-    def test_note_authority_owner_purge_fails_before_deleting_empty_note_type(self):
+    def test_note_authority_owner_can_purge_empty_note_type(self):
         note_type = NoteType(user_id=self.owner.id, name="NOTE owner")
         db.session.add(note_type)
         db.session.commit()
         note_type_id = note_type.id
         self._enroll_note_authority(self.owner.id)
 
-        with self.assertRaises(flashcard_content_service.ContentApiError) as failure:
-            flashcard_content_service.delete_note_type(
-                user_id=self.learner.id,
-                note_type_id=note_type_id,
-                purge=True,
-                is_admin=True,
-            )
-
-        self.assertEqual(failure.exception.error, "ADMIN_PURGE_NOT_READY")
-        self.assertEqual(failure.exception.status, 409)
-        self.assertIsNotNone(db.session.get(NoteType, note_type_id))
+        result = flashcard_content_service.delete_note_type(
+            user_id=self.learner.id, note_type_id=note_type_id, purge=True, is_admin=True)
+        self.assertTrue(result["purged"])
+        self.assertIsNone(db.session.get(NoteType, note_type_id))
 
     def test_note_authority_shared_card_learner_purge_preserves_all_rows(self):
         source, installed, install = self._note_type_install()
@@ -177,7 +170,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
                 is_admin=True,
             )
 
-        self.assertEqual(failure.exception.error, "ADMIN_PURGE_NOT_READY")
+        self.assertEqual(failure.exception.error, "INCOMPLETE_AUTHORITY_COVERAGE")
         self.assertIsNotNone(db.session.get(NoteType, source_id))
         self.assertIsNotNone(db.session.get(Note, note_id))
         self.assertIsNotNone(db.session.get(Card, card_id))
@@ -318,7 +311,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
             db.session.refresh(item)
             self.assertEqual(item.install_count, 1)
 
-    def test_deck_purge_fences_note_authority_shared_card_learner_early(self):
+    def test_deck_purge_rejects_note_learner_progress_without_canonical_subject(self):
         source_type = NoteType(user_id=self.owner.id, name="Deck source type")
         source_deck = Deck(
             name="Deck source", owner_user_id=self.owner.id, note_type=source_type
@@ -380,8 +373,8 @@ class MarketCounterDeletionTests(unittest.TestCase):
                 purge=True,
             )
 
-        self.assertEqual(failure.exception.code, "ADMIN_PURGE_NOT_READY")
-        db.session.rollback()
+        self.assertEqual(failure.exception.code, "INCOMPLETE_AUTHORITY_COVERAGE")
+        self.assertFalse(db.session().in_transaction())
         self.assertIsNotNone(db.session.get(Deck, deck_id))
         self.assertIsNotNone(db.session.get(Note, note_id))
         self.assertIsNotNone(db.session.get(Card, card_id))
@@ -391,7 +384,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
         db.session.refresh(item)
         self.assertEqual((item.install_count, item.active_usage_count), (1, 1))
 
-    def test_admin_purges_fence_note_authority_clone_session_without_progress(self):
+    def _note_authority_clone_session_without_progress(self) -> tuple[str, int, int]:
         source_type = NoteType(user_id=self.owner.id, name="Session source type")
         source_deck = Deck(
             name="Session source", owner_user_id=self.owner.id, note_type=source_type
@@ -443,28 +436,33 @@ class MarketCounterDeletionTests(unittest.TestCase):
             session.id,
         )
         self._enroll_note_authority(self.learner.id)
+        return source_type_id, source_deck_id, session_id
 
-        with self.assertRaises(StudyAuthorityFenceError) as deck_failure:
-            deck_management_service.delete_deck_subtree(
-                deck_obj=source_deck,
-                user_id=self.owner.id,
-                is_admin=True,
-                purge=True,
-            )
-        self.assertEqual(deck_failure.exception.code, "ADMIN_PURGE_NOT_READY")
-        db.session.rollback()
+    def test_admin_deck_purge_cancels_note_authority_clone_session_without_progress(self):
+        _, source_deck_id, session_id = self._note_authority_clone_session_without_progress()
 
-        with self.assertRaises(flashcard_content_service.ContentApiError) as type_failure:
-            flashcard_content_service.delete_note_type(
-                user_id=self.owner.id,
-                note_type_id=source_type_id,
-                purge=True,
-                is_admin=True,
-            )
-        self.assertEqual(type_failure.exception.error, "ADMIN_PURGE_NOT_READY")
+        result = deck_management_service.delete_deck_subtree(
+            deck_obj=db.session.get(Deck, source_deck_id),
+            user_id=self.owner.id,
+            is_admin=True,
+            purge=True,
+        )
+        self.assertEqual(result, "purged")
+        self.assertIsNone(db.session.get(Deck, source_deck_id))
+        self.assertEqual(Card.query.count(), 0)
+        self.assertEqual(db.session.get(StudySession, session_id).status, "cancelled")
+
+    def test_admin_note_type_purge_cancels_note_authority_clone_session_without_progress(self):
+        source_type_id, source_deck_id, session_id = (
+            self._note_authority_clone_session_without_progress()
+        )
+
+        result = flashcard_content_service.delete_note_type(
+            user_id=self.owner.id, note_type_id=source_type_id, purge=True, is_admin=True)
+        self.assertTrue(result["purged"])
         self.assertIsNotNone(db.session.get(Deck, source_deck_id))
-        self.assertIsNotNone(db.session.get(NoteType, source_type_id))
-        self.assertIsNotNone(db.session.get(StudySession, session_id))
+        self.assertIsNone(db.session.get(NoteType, source_type_id))
+        self.assertEqual(db.session.get(StudySession, session_id).status, "cancelled")
 
 
 if __name__ == "__main__":

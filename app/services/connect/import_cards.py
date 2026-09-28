@@ -24,7 +24,10 @@ from app.repositories import (
     study_repository,
     vocabulary_repository,
 )
-from app.repositories.study_authority_repository import lock_study_authority_route
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.services import (
     anki_scheduler,
     deck_working_tree_service,
@@ -32,11 +35,18 @@ from app.services import (
     flashcards_share,
     flashcards_share_service,
     flama_connect_media_service,
+    stats_overview,
     study_progress_lifecycle_mirror_service,
     study_progress_shadow_mirror_service,
     study_service,
 )
 from app.services.anki_content_normalizer import normalize_anki_field_values
+from app.services.scheduler_config_service import resolve_deck_options
+from app.services.study_authority_read_service import (
+    StudyAuthorityReadError,
+    load_study_authority_card_reads,
+)
+from app.services.study_progress_shadow_codec import StudyProgressCodecError
 from app.validators.flashcard_input import RequestValidationError, validate_note_create_request
 
 from models import db
@@ -68,6 +78,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
 from models.review_event import ReviewEvent
+from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
 
@@ -734,6 +745,14 @@ def import_cards(
     cards = params.get("cards")
     if not isinstance(cards, list) or len(cards) > MAX_NOTES_PER_REQUEST:
         raise ConnectError(f"cards must be an array with at most {MAX_NOTES_PER_REQUEST} entries")
+    # Also cover direct callers that pass an already prepared batch context.
+    # This shared prefix lock survives all per-card savepoints and preserves
+    # the learner -> Deck -> content ordering for the entire import call.
+    lock_study_authority_route(
+        db.session,
+        learner_user_id=user_id,
+        allow_note_authority=True,
+    )
     if batch_context is None:
         batch_context = prepare_import_batch_context(
             user_id=user_id,
@@ -843,11 +862,130 @@ def get_import_status(user_id: int, session_id: object) -> dict[str, Any]:
 
 
 
+class ConnectAuthorityReadError(ConnectError):
+    """A NOTE import-status read cannot trust its compatibility cursor."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status = 409
+
+
+def _verify_note_authority_import_status(
+    *,
+    user_id: int,
+    requested_cards: dict[str, list[dict[str, Any]]],
+    refs_by_external_id: dict[str, ConnectSourceNoteRef],
+    card_refs_by_external_id: dict[str, ConnectSourceCardRef],
+) -> None:
+    """Validate every sibling before exposing a NOTE source-progress cursor."""
+
+    note_ids: set[str] = set()
+    matched_refs: list[tuple[ConnectSourceCardRef, str]] = []
+    for external_note_id, cards in requested_cards.items():
+        for requested_card in cards:
+            card_ref = card_refs_by_external_id.get(requested_card["sourceCardId"])
+            if card_ref is None or card_ref.external_note_id != external_note_id:
+                continue
+            note_ref = refs_by_external_id.get(external_note_id)
+            if note_ref is None or not note_ref.note_id:
+                raise ConnectAuthorityReadError(
+                    "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                    "NOTE import card has no source Note mapping.",
+                )
+            note_ids.add(str(note_ref.note_id))
+            matched_refs.append((card_ref, str(note_ref.note_id)))
+    if not matched_refs:
+        return
+
+    notes = (
+        Note.query.options(selectinload(Note.cards))
+        .filter(Note.user_id == user_id, Note.id.in_(sorted(note_ids)))
+        .all()
+    )
+    notes_by_id = {str(note.id): note for note in notes}
+    if set(notes_by_id) != note_ids or any(not note.cards for note in notes):
+        raise ConnectAuthorityReadError(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "NOTE import source Note or its Card siblings are missing.",
+        )
+    card_ids_by_note_id = {
+        note_id: {str(card.id) for card in note.cards}
+        for note_id, note in notes_by_id.items()
+    }
+    for card_ref, note_id in matched_refs:
+        if str(card_ref.card_id) not in card_ids_by_note_id[note_id]:
+            raise ConnectAuthorityReadError(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                "NOTE import source Card mapping differs from its Note.",
+            )
+
+    subject_by_note_key = {
+        bytes(subject.logical_note_key): subject
+        for subject in StudyProgressSubject.query.filter(
+            StudyProgressSubject.learner_user_id == user_id,
+            StudyProgressSubject.logical_note_key.in_(
+                sorted(note_id.encode("utf-8") for note_id in note_ids)
+            ),
+        ).all()
+    }
+    for note in notes:
+        subject = subject_by_note_key.get(str(note.id).encode("utf-8"))
+        if (
+            subject is None
+            or str(subject.live_note_id or "") != str(note.id)
+            or int(subject.contributor_count) != len(note.cards)
+        ):
+            raise ConnectAuthorityReadError(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                "NOTE import Card topology differs from its canonical subject.",
+            )
+
+    user = db.session.get(User, user_id)
+    timezone_name = stats_overview.get_effective_timezone_name(
+        getattr(user, "timezone", "UTC")
+    )
+    options_by_deck_id: dict[int | None, anki_scheduler.DeckOptions] = {}
+    cards: list[Card] = []
+    deck_options_by_card_id: dict[str, anki_scheduler.DeckOptions] = {}
+    for note in notes:
+        if note.deck_id not in options_by_deck_id:
+            options_by_deck_id[note.deck_id] = resolve_deck_options(
+                user_id=user_id, deck_id=note.deck_id
+            )
+        for card in note.cards:
+            cards.append(card)
+            deck_options_by_card_id[str(card.id)] = options_by_deck_id[note.deck_id]
+    try:
+        load_study_authority_card_reads(
+            db.session,
+            learner_user_id=user_id,
+            cards=tuple(cards),
+            now_utc=datetime.now(UTC).replace(tzinfo=None),
+            timezone_name=timezone_name,
+            deck_options_by_card_id=deck_options_by_card_id,
+        )
+    except (
+        StudyAuthorityFenceError,
+        StudyAuthorityReadError,
+        StudyProgressCodecError,
+    ) as exc:
+        raise ConnectAuthorityReadError(exc.code, str(exc)) from exc
+
+
 def get_import_note_statuses(
     user_id: int,
     session_id: object,
     notes: object,
 ) -> dict[str, Any]:
+    try:
+        route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        raise ConnectAuthorityReadError(exc.code, str(exc)) from exc
     session = _get_import_session(user_id, session_id, require_ready=True)
     if not isinstance(notes, list) or len(notes) > 1000:
         raise ConnectError("notes must be an array with at most 1000 entries")
@@ -905,6 +1043,13 @@ def get_import_note_statuses(
         ConnectSourceCardRef.external_card_id.in_(requested_card_ids),
     ).all() if requested_card_ids else []
     card_refs_by_external_id = {row.external_card_id: row for row in card_refs}
+    if route.mode_code == "NOTE":
+        _verify_note_authority_import_status(
+            user_id=user_id,
+            requested_cards=requested_cards,
+            refs_by_external_id=refs_by_external_id,
+            card_refs_by_external_id=card_refs_by_external_id,
+        )
     orphan_review_card_ids = {
         row[0]
         for row in db.session.query(ConnectReviewEventRef.external_card_id)

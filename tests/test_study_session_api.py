@@ -30,6 +30,11 @@ from app.services.study_authority_enrollment_service import (
     stage_legacy_authority_enrollment,
     stage_note_authority_enrollment,
 )
+from app.services.scheduler_config_service import resolve_deck_options
+from app.services.study_authority_read_service import (
+    StudyAuthorityReadError,
+    load_study_authority_card_read,
+)
 from app.services.study_session_config import (
     StudySessionConfigError,
     decode_study_session_config,
@@ -158,12 +163,15 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
 
-    def _enable_existing_state_note_authority(self, *, epoch=1, enroll=True):
+    def _enable_existing_state_note_authority(
+        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None
+    ):
         with self.app.app_context():
-            note = Note.query.filter_by(
+            note_query = Note.query.filter_by(
                 user_id=self.user_id,
                 deck_id=self.deck_id,
-            ).one()
+            )
+            note = note_query.filter_by(id=note_id).one() if note_id else note_query.one()
             now = datetime(2026, 9, 21, 8, 0, 0)
             card = Card.query.filter_by(note_id=note.id).one()
             progress = CardProgress(
@@ -185,6 +193,8 @@ class StudySessionApiTests(unittest.TestCase):
                     created_at=now,
                     updated_at=now,
                 )
+            for field_name, value in (initial_progress or {}).items():
+                setattr(progress, field_name, value)
             db.session.add(progress)
             db.session.flush()
             mapped = map_card_progress(progress, card_created_at=card.created_at)
@@ -490,25 +500,19 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(int(token.subject_generation), 2)
             self.assertEqual(int(token.authority_revision), 1)
 
-    def test_note_authority_mcp_template_bulk_fails_closed_and_note_batch_deletes(self):
+    def test_note_authority_mcp_template_bulk_expands_and_note_batch_deletes(self):
         self._enable_existing_state_note_authority(epoch=10)
         with self.app.app_context():
             from app.services.mcp.note_tools import batch_delete_notes, create_note
             from app.services.mcp.note_type_tools import update_note_type
 
-            with self.assertRaises(RequestValidationError) as failure:
-                update_note_type(
-                    user_id=self.user_id,
-                    note_type_id=self.note_type_id,
-                    templates={"added": [{"name": "Unsafe Card"}]},
-                )
-            self.assertEqual(
-                failure.exception.code,
-                "NOTE_AUTHORITY_UNAVAILABLE",
+            update_note_type(
+                user_id=self.user_id,
+                note_type_id=self.note_type_id,
+                templates={"added": [{"name": "Additional Card"}]},
             )
-            db.session.rollback()
-            self.assertEqual(Template.query.count(), 1)
-            self.assertEqual(Card.query.count(), 1)
+            self.assertEqual(Template.query.count(), 2)
+            self.assertEqual(Card.query.count(), 2)
             first_note_id = str(Note.query.one().id)
             second = create_note(
                 user_id=self.user_id,
@@ -524,7 +528,7 @@ class StudySessionApiTests(unittest.TestCase):
                 confirm=True,
             )
             self.assertEqual(deleted["deleted_count"], 2)
-            self.assertEqual(deleted["deleted_cards_count"], 2)
+            self.assertEqual(deleted["deleted_cards_count"], 4)
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Card.query.count(), 0)
             self.assertEqual(CardProgress.query.count(), 0)
@@ -533,7 +537,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertTrue(
                 all(
                     subject.status_code == "TOMBSTONED_SUBJECT_DELETED"
-                    and int(subject.subject_generation) == 2
+                    and int(subject.subject_generation) == (3 if bytes(subject.logical_note_key).decode() == first_note_id else 2)
                     for subject in subjects
                 )
             )
@@ -1435,6 +1439,20 @@ class StudySessionApiTests(unittest.TestCase):
             )
             self.assertEqual(StudyAuthoritySubjectToken.query.count(), 0)
 
+        skipped_audit = runner.invoke(
+            args=[
+                "study-authority-read-audit",
+                "--user-id", str(self.user_id),
+                "--observed-at-utc", "2026-09-21T18:30:00+09:00",
+                "--timezone-name", "UTC+09:00",
+            ]
+        )
+        self.assertEqual(skipped_audit.exit_code, 0, skipped_audit.output)
+        skipped_payload = json.loads(skipped_audit.output)
+        self.assertEqual(skipped_payload["status"], "SKIP")
+        self.assertEqual(skipped_payload["timezone"], "UTC+09:00")
+        self.assertEqual(skipped_payload["observed_at_utc"], "2026-09-21T09:30:00.000000Z")
+
         blocked = runner.invoke(
             args=[
                 "study-authority-enrollment",
@@ -1489,6 +1507,273 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(audit_payload["status"], "PASS")
         self.assertEqual(audit_payload["authority_mode"], "NOTE")
         self.assertEqual(audit_payload["mismatches"], [])
+
+        for timezone_name in ("UTC", "Asia/Tokyo", "UTC+09:00"):
+            fixed_audit = runner.invoke(
+                args=[
+                    "study-authority-read-audit",
+                    "--user-id",
+                    str(self.user_id),
+                    "--observed-at-utc",
+                    "2026-09-21T18:30:00+09:00",
+                    "--timezone-name",
+                    timezone_name,
+                ]
+            )
+            self.assertEqual(fixed_audit.exit_code, 0, fixed_audit.output)
+            fixed_payload = json.loads(
+                next(
+                    line for line in fixed_audit.output.splitlines()
+                    if line.startswith("{")
+                )
+            )
+            self.assertEqual(fixed_payload["status"], "PASS")
+            self.assertEqual(fixed_payload["observed_at_utc"], "2026-09-21T09:30:00.000000Z")
+            self.assertEqual(fixed_payload["timezone"], timezone_name)
+
+        for option, value, error_code in (
+            ("--observed-at-utc", "2026-09-21T09:30:00", "INVALID_AUDIT_TIME"),
+            ("--observed-at-utc", "not-a-time", "INVALID_AUDIT_TIME"),
+            ("--timezone-name", "Not/A_Timezone", "INVALID_AUDIT_TIMEZONE"),
+        ):
+            invalid = runner.invoke(
+                args=[
+                    "study-authority-read-audit",
+                    "--user-id",
+                    str(self.user_id),
+                    option,
+                    value,
+                ]
+            )
+            self.assertNotEqual(invalid.exit_code, 0)
+            self.assertIn(error_code, invalid.output)
+
+    def test_note_read_audit_tracks_tokyo_study_day_boundary(self):
+        due_day = datetime(2026, 9, 23).date().toordinal()
+        self._enable_existing_state_note_authority(
+            initial_progress={
+                "queue": "review",
+                "due_day": due_day,
+                "due_at": datetime(2026, 9, 22, 19, 0, 0),
+                "interval_days": 1,
+                "interval_days_raw": 1.0,
+                "reps": 1,
+            }
+        )
+        runner = self.app.test_cli_runner()
+        for observed_at, timezone_name, expected_due in (
+            ("2026-09-22T18:59:59Z", "Asia/Tokyo", 0),
+            ("2026-09-22T19:00:01Z", "Asia/Tokyo", 1),
+            ("2026-09-22T19:00:01Z", "UTC", 0),
+        ):
+            audit = runner.invoke(
+                args=[
+                    "study-authority-read-audit",
+                    "--user-id", str(self.user_id),
+                    "--observed-at-utc", observed_at,
+                    "--timezone-name", timezone_name,
+                ]
+            )
+            self.assertEqual(audit.exit_code, 0, audit.output)
+            payload = json.loads(audit.output)
+            self.assertEqual(payload["status"], "PASS")
+            self.assertEqual(payload["mismatches"], [])
+            self.assertEqual(payload["canonical"]["due"], expected_due)
+            self.assertEqual(
+                payload["canonical"]["selected_card_id"] is not None,
+                bool(expected_due),
+            )
+
+    def test_note_read_audit_rejects_uncovered_cardless_note(self):
+        self._enable_existing_state_note_authority()
+        with self.app.app_context():
+            db.session.add(
+                Note(
+                    note_type_id=self.note_type_id,
+                    user_id=self.user_id,
+                    deck_id=self.deck_id,
+                    field_values={"Word": "uncovered"},
+                    tags=[],
+                )
+            )
+            db.session.commit()
+
+        audit = self.app.test_cli_runner().invoke(
+            args=["study-authority-read-audit", "--user-id", str(self.user_id)]
+        )
+        self.assertNotEqual(audit.exit_code, 0)
+        self.assertIn("INCOMPLETE_AUTHORITY_COVERAGE", audit.output)
+
+    def test_note_read_audit_compares_learn_ahead_order(self):
+        self._enable_existing_state_note_authority(
+            initial_progress={
+                "queue": "learning",
+                "due_at": datetime(2026, 9, 23, 10, 0, 30),
+                "step_index": 1,
+            }
+        )
+        audit = self.app.test_cli_runner().invoke(
+            args=[
+                "study-authority-read-audit",
+                "--user-id", str(self.user_id),
+                "--observed-at-utc", "2026-09-23T10:00:00Z",
+                "--timezone-name", "UTC",
+            ]
+        )
+        self.assertEqual(audit.exit_code, 0, audit.output)
+        payload = json.loads(audit.output)
+        self.assertEqual(payload["status"], "PASS")
+        self.assertEqual(payload["canonical"]["learn"], 1)
+        self.assertIsNotNone(payload["canonical"]["selected_card_id"])
+
+        with patch(
+            "app.repositories.study_repository.query_study_card_order",
+            return_value=((), ()),
+        ):
+            incomplete_order_audit = self.app.test_cli_runner().invoke(
+                args=[
+                    "study-authority-read-audit",
+                    "--user-id", str(self.user_id),
+                    "--observed-at-utc", "2026-09-23T10:00:00Z",
+                    "--timezone-name", "UTC",
+                ]
+            )
+        self.assertNotEqual(incomplete_order_audit.exit_code, 0)
+        incomplete_payload = json.loads(incomplete_order_audit.output.splitlines()[0])
+        self.assertEqual(incomplete_payload["mismatches"], ["learn_ahead_order"])
+
+    def test_note_read_audit_orders_mixed_review_due_day_like_legacy_sql(self):
+        with self.app.app_context():
+            first_note_id = str(Note.query.filter_by(user_id=self.user_id).one().id)
+            template = Template.query.filter_by(note_type_id=self.note_type_id).one()
+            second_note = Note(
+                note_type_id=self.note_type_id,
+                user_id=self.user_id,
+                deck_id=self.deck_id,
+                field_values={"Word": "second"},
+                tags=[],
+            )
+            db.session.add(second_note)
+            db.session.flush()
+            db.session.add(Card(note_id=str(second_note.id), template_id=str(template.id)))
+            db.session.commit()
+            second_note_id = str(second_note.id)
+
+        self._enable_existing_state_note_authority(
+            enroll=False,
+            note_id=first_note_id,
+            initial_progress={
+                "queue": "review",
+                "due_day": datetime(2026, 9, 22).date().toordinal(),
+                "due_at": datetime(2026, 9, 22, 12, 0, 0),
+                "interval_days": 1,
+                "interval_days_raw": 1.0,
+                "reps": 1,
+            },
+        )
+        self._enable_existing_state_note_authority(
+            enroll=False,
+            note_id=second_note_id,
+            initial_progress={
+                "queue": "review",
+                "due_day": None,
+                "due_at": datetime(2026, 9, 21, 12, 0, 0),
+                "interval_days": 1,
+                "interval_days_raw": 1.0,
+                "reps": 1,
+            },
+        )
+        with self.app.app_context():
+            stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 23, 10, 0, 0),
+            )
+            db.session.commit()
+            first_card_id = str(Card.query.filter_by(note_id=first_note_id).one().id)
+
+        audit = self.app.test_cli_runner().invoke(
+            args=[
+                "study-authority-read-audit",
+                "--user-id", str(self.user_id),
+                "--observed-at-utc", "2026-09-23T10:00:00Z",
+                "--timezone-name", "UTC",
+            ]
+        )
+        self.assertEqual(audit.exit_code, 0, audit.output)
+        payload = json.loads(audit.output)
+        self.assertEqual(payload["status"], "PASS")
+        self.assertEqual(payload["canonical"]["due"], 2)
+        self.assertEqual(payload["canonical"]["selected_card_id"], first_card_id)
+
+        with patch(
+            "app.repositories.study_repository.query_study_card_order",
+            return_value=((first_card_id,), ()),
+        ):
+            incomplete_order_audit = self.app.test_cli_runner().invoke(
+                args=[
+                    "study-authority-read-audit",
+                    "--user-id", str(self.user_id),
+                    "--observed-at-utc", "2026-09-23T10:00:00Z",
+                    "--timezone-name", "UTC",
+                ]
+            )
+        self.assertNotEqual(incomplete_order_audit.exit_code, 0)
+        incomplete_payload = json.loads(incomplete_order_audit.output.splitlines()[0])
+        self.assertEqual(incomplete_payload["mismatches"], ["due_order"])
+
+    def test_note_single_card_read_rejects_divergent_unrequested_sibling(self):
+        with self.app.app_context():
+            note = Note.query.filter_by(user_id=self.user_id).one()
+            template = Template(
+                note_type_id=self.note_type_id,
+                name="Second card",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                position=1,
+            )
+            db.session.add(template)
+            db.session.flush()
+            db.session.add(Card(note_id=str(note.id), template_id=str(template.id)))
+            db.session.commit()
+
+            stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 22, 8, 0, 0),
+            )
+            db.session.commit()
+            cards = Card.query.filter_by(note_id=str(note.id)).order_by(Card.id).all()
+            deck_options = resolve_deck_options(
+                user_id=self.user_id, deck_id=self.deck_id
+            )
+            healthy_read = load_study_authority_card_read(
+                db.session,
+                learner_user_id=self.user_id,
+                card=cards[0],
+                now_utc=datetime(2026, 9, 22, 8, 0, 0),
+                timezone_name="UTC",
+                deck_options=deck_options,
+            )
+            self.assertEqual(healthy_read.state.type, "new")
+            db.session.rollback()
+            sibling_progress = CardProgress.query.filter_by(
+                user_id=self.user_id, card_id=str(cards[1].id)
+            ).one()
+            sibling_progress.queue = "review"
+            db.session.commit()
+
+            with self.assertRaises(StudyAuthorityReadError) as failure:
+                load_study_authority_card_read(
+                    db.session,
+                    learner_user_id=self.user_id,
+                    card=cards[0],
+                    now_utc=datetime(2026, 9, 22, 8, 0, 0),
+                    timezone_name="UTC",
+                    deck_options=deck_options,
+                )
+            self.assertEqual(failure.exception.code, "AUTHORITY_READ_PARITY_DIVERGED")
+            db.session.rollback()
 
     def test_note_enrollment_rollback_proves_projection_and_fences_epoch(self):
         self._enable_existing_state_note_authority(epoch=4)
@@ -1605,11 +1890,10 @@ class StudySessionApiTests(unittest.TestCase):
                 "operation_key": operation_key,
             },
         )
-        self.assertEqual(duplicate.status_code, 409, duplicate.get_json())
-        self.assertEqual(
-            duplicate.get_json()["error"],
-            "AUTHORITY_OPERATION_REUSED",
-        )
+        self.assertEqual(duplicate.status_code, 200, duplicate.get_json())
+        self.assertTrue(duplicate.get_json()["authority"]["replayed"])
+        self.assertEqual(duplicate.get_json()["authority"]["authority_revision"], 1)
+        self.assertEqual(duplicate.get_json()["applied_interval"], response.get_json()["applied_interval"])
 
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 1)

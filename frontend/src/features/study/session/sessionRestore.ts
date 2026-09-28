@@ -284,7 +284,7 @@ function normalizeBatch(
     || value.session_token !== snapshot.session_token
     || value.snapshot_hash !== snapshot.snapshot_hash
     || !Array.isArray(value.events)
-    || value.events.length === 0
+    || (value.events.length === 0 && !(snapshot.schema_version === 'study-session.v4' && value.is_final === true))
   ) {
     return quarantine(
       'BATCH_CONTRACT_MISMATCH',
@@ -376,7 +376,7 @@ function normalizeBatch(
         state: item.state as SchedulerCardState,
       })
     }
-    if (seen.size !== touched.size) {
+    if (snapshot.schema_version === 'study-session.v4' ? seen.size !== 0 : seen.size !== touched.size) {
       return quarantine(
         'BATCH_CONTRACT_MISMATCH',
         `Stored in-flight batch ${index + 1} is missing final states.`,
@@ -416,6 +416,12 @@ export function normalizePersistedStudySession(
     return quarantine('MALFORMED_SESSION', 'Stored study session is malformed.')
   }
   const snapshotValue = value.snapshot
+  if (snapshotValue.batch_transport !== undefined && (
+    snapshotValue.schema_version !== 'study-session.v4'
+    || snapshotValue.batch_transport !== 'study-note-batch-transport.v1'
+  )) {
+    return quarantine('BATCH_CONTRACT_MISMATCH', 'Stored batch transport was not negotiated for this wire version.')
+  }
   const policies = snapshotValue.policies
   const templates = snapshotValue.templates
   const contents = snapshotValue.contents
@@ -788,9 +794,18 @@ export function normalizePersistedStudySession(
   }
 
   const eventIds = new Set<string>()
+  const finalBatchIndex = inFlightBatches.findIndex((batch) => batch.is_final)
+  if (finalBatchIndex >= 0 && (finalBatchIndex !== inFlightBatches.length - 1 || events.length > 0)) {
+    return quarantine('BATCH_CONTRACT_MISMATCH', 'Stored actions follow a final batch.')
+  }
   let previousSequence: number | null = null
   let previousOffset: number | null = null
   const leaseDurationMs = expiresAtMs - serverNowMs
+  const acknowledgedOffset = value.acknowledged_scheduler_offset_ms ?? 0
+  if (!isNonNegativeInteger(acknowledgedOffset) || acknowledgedOffset > leaseDurationMs) {
+    return quarantine('EVENT_TIME_INVALID', 'Stored acknowledged clock fence is outside the lease.')
+  }
+  previousOffset = acknowledgedOffset
   for (const event of retainedEvents) {
     if (eventIds.has(event.event_id)) {
       return quarantine(
@@ -957,6 +972,7 @@ export function normalizePersistedStudySession(
       resume_after_commit: value.resume_after_commit ?? false,
       batch_sequence: hasBatchSequence ? value.batch_sequence as number : 0,
       event_sequence: eventSequence,
+      acknowledged_scheduler_offset_ms: acknowledgedOffset,
       in_flight_batches: inFlightBatches,
       updated_at_ms: updatedAtMs ?? Date.now(),
     },

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -19,6 +19,18 @@ from app.repositories.study_authority_repository import (
     lock_study_authority_subject,
 )
 from app.services.study_authority_cas_service import StudyAuthorityCASExpectation
+from app.services.study_algorithm_history_cut_service import (
+    StudyAlgorithmHistoryCutError,
+    freeze_study_algorithm_history_cut,
+)
+from app.services.study_algorithm_registry import (
+    StudyAlgorithmNotFoundError,
+    StudyAlgorithmSwitchTarget,
+)
+from app.services.study_algorithm_switch_preflight_service import (
+    StudyAlgorithmSwitchPreflightError,
+    preflight_study_algorithm_switch,
+)
 from app.services.study_authority_command_service import (
     ExistingStateNoteReviewCommand,
     StudyAuthorityCommandError,
@@ -46,12 +58,14 @@ from app.services.study_progress_contract import MAPPER_VERSION
 from app.services.study_progress_shadow_codec import (
     STATE_DECODERS,
     serialize_raw_card_progress,
+    state_document,
 )
 from app.services.study_progress_history_service import (
     NativeHistoryFactInput,
     StudyProgressHistoryError,
     append_native_history_fact,
 )
+from app.services.mcp.note_tools import get_note as mcp_get_note
 from app.services.study_progress_reconciliation_service import (
     build_study_progress_reconciliation,
 )
@@ -68,6 +82,7 @@ from app.services.study_service import (
 )
 from app.services.anki_scheduler import default_deck_options
 from app.validators.review_event import build_native_review_event_payload
+from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -76,6 +91,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_history_fact import StudyProgressHistoryFact
@@ -390,7 +406,13 @@ class StudyAuthorityHistoryTests(unittest.TestCase):
         assert isinstance(mapped, MappedCardProgress)
         return mapped
 
-    def _existing_state_command(self) -> ExistingStateNoteReviewCommand:
+    def _existing_state_command(
+        self,
+        *,
+        reviewed_at: datetime = REVIEWED_AT,
+        now_utc: datetime = INGESTED_AT,
+        request_id: str = "authority-command-request",
+    ) -> ExistingStateNoteReviewCommand:
         locked, siblings, compatibility = self._locked_context()
         state = locked.state
         assert state is not None
@@ -408,7 +430,7 @@ class StudyAuthorityHistoryTests(unittest.TestCase):
             NativeReviewTransitionInput(
                 state=current_state,
                 deck_options=options,
-                reviewed_at=REVIEWED_AT,
+                reviewed_at=reviewed_at,
                 action="good",
                 timezone_name="UTC",
             )
@@ -419,7 +441,7 @@ class StudyAuthorityHistoryTests(unittest.TestCase):
             card=card,
             current_state=current_state,
             transition=transition,
-            reviewed_at=REVIEWED_AT,
+            reviewed_at=reviewed_at,
             duration_ms=420,
             payload=None,
             local_deck_id=int(card.note.deck_id),
@@ -430,7 +452,7 @@ class StudyAuthorityHistoryTests(unittest.TestCase):
             review_mode="deck",
             provenance=NativeReviewProvenance(
                 source_path="native.rest",
-                request_id="authority-command-request",
+                request_id=request_id,
             ),
         )
         return ExistingStateNoteReviewCommand(
@@ -439,13 +461,13 @@ class StudyAuthorityHistoryTests(unittest.TestCase):
             expected=StudyAuthorityCASExpectation(
                 enrollment_epoch=7,
                 subject_generation=1,
-                authority_revision=0,
+                authority_revision=int(locked.token.authority_revision),
                 semantic_state_hash=bytes(locked.token.semantic_state_hash),
             ),
             siblings=siblings,
             compatibility=compatibility,
             review=review,
-            now_utc=INGESTED_AT,
+            now_utc=now_utc,
         )
 
     def _relock_existing_state_command(
@@ -570,6 +592,440 @@ class StudyAuthorityHistoryTests(unittest.TestCase):
         self.assertEqual(bytes(inserted.fact.before_state_hash), BEFORE_HASH)
         self.assertEqual(bytes(inserted.fact.after_state_hash), AFTER_HASH)
         self.assertEqual(inserted.fact.provenance_code, "NATIVE_DIRECT")
+
+    def _history_cut(self, *, expected_revision=None, expected_hash=None):
+        locked, siblings, compatibility = self._locked_context()
+        return freeze_study_algorithm_history_cut(
+            db.session,
+            route=self._route(),
+            locked=locked,
+            expected=StudyAuthorityCASExpectation(
+                enrollment_epoch=7,
+                subject_generation=int(locked.subject.subject_generation),
+                authority_revision=(
+                    int(locked.token.authority_revision)
+                    if expected_revision is None
+                    else expected_revision
+                ),
+                semantic_state_hash=(
+                    bytes(locked.token.semantic_state_hash)
+                    if expected_hash is None
+                    else expected_hash
+                ),
+            ),
+            siblings=siblings,
+            compatibility=compatibility,
+        )
+
+    def test_history_cut_freezes_pristine_note_and_rejects_stale_cas(self):
+        first = self._history_cut()
+        second = self._history_cut()
+        self.assertTrue(first.native_complete)
+        self.assertEqual(first.facts, ())
+        self.assertEqual(first.cut_hash, second.cut_hash)
+        stored_state = db.session.get(StudyProgressState, self.subject_id)
+        document = state_document(stored_state.state_payload)
+        self.assertEqual(first.current_state_payload_bytes, document.encoded)
+        self.assertEqual(first.current_state_payload_hash, document.digest)
+        self.assertEqual(
+            first.current_algorithm_state_hash,
+            bytes(stored_state.algorithm_state_hash),
+        )
+        with self.assertRaisesRegex(ValueError, "revision changed"):
+            self._history_cut(expected_revision=4)
+
+    def test_history_cut_binds_contributor_metadata_outside_progress_hash(self):
+        before = self._history_cut()
+        contributor = db.session.get(
+            StudyProgressContributor,
+            self.contributor_id_by_card[self.card_id],
+        )
+        contributor.updated_at += timedelta(microseconds=1)
+        after = self._history_cut()
+        self.assertTrue(after.native_complete, after.blocker_codes)
+        self.assertNotEqual(before.cut_hash, after.cut_hash)
+
+    def test_history_cut_marks_unrecorded_review_event_incomplete(self):
+        self._event()
+        cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertIn("REVIEW_EVENT_COVERAGE_UNPROVEN", cut.blocker_codes)
+        self.assertIn("STATE_HASH_CHAIN_GAP", cut.blocker_codes)
+
+    def test_history_cut_rejects_corrupt_fact_payload(self):
+        _locked, _siblings, compatibility = self._locked_context()
+        event = self._event()
+        result = append_native_history_fact(
+            db.session,
+            command=NativeHistoryFactInput(
+                learner_user_id=self.user_id,
+                subject=db.session.get(StudyProgressSubject, self.subject_id),
+                contributor=compatibility.contributor_by_card_id[self.card_id],
+                review_event=event,
+                history_completeness_code="HISTORY_NATIVE_COMPLETE",
+                before_state_hash=BEFORE_HASH,
+                after_state_hash=AFTER_HASH,
+            ),
+            now_utc=INGESTED_AT,
+        )
+        db.session.flush()
+        result.fact.fact_payload = {"rating": "tampered"}
+        with self.assertRaises(StudyAlgorithmHistoryCutError) as caught:
+            self._history_cut()
+        self.assertEqual(caught.exception.code, "CORRUPT_HISTORY_FACT")
+
+    def test_history_cut_rejects_missing_fact_digest_with_typed_error(self):
+        _locked, _siblings, compatibility = self._locked_context()
+        result = append_native_history_fact(
+            db.session,
+            command=NativeHistoryFactInput(
+                learner_user_id=self.user_id,
+                subject=db.session.get(StudyProgressSubject, self.subject_id),
+                contributor=compatibility.contributor_by_card_id[self.card_id],
+                review_event=self._event(),
+                history_completeness_code="HISTORY_NATIVE_COMPLETE",
+                before_state_hash=BEFORE_HASH,
+                after_state_hash=AFTER_HASH,
+            ),
+            now_utc=INGESTED_AT,
+        )
+        db.session.flush()
+        result.fact.fact_identity_hash = None
+        with db.session.no_autoflush:
+            with self.assertRaises(StudyAlgorithmHistoryCutError) as caught:
+                self._history_cut()
+        self.assertEqual(caught.exception.code, "CORRUPT_HISTORY_FACT")
+
+    def test_history_cut_marks_partial_contributor_incomplete(self):
+        contributor = db.session.get(
+            StudyProgressContributor,
+            self.contributor_id_by_card[self.card_id],
+        )
+        contributor.history_completeness_code = "HISTORY_IMPORTED_PARTIAL"
+        cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertIn("CONTRIBUTOR_HISTORY_INCOMPLETE", cut.blocker_codes)
+
+    def test_history_cut_marks_non_mirrored_subject_incomplete(self):
+        subject = db.session.get(StudyProgressSubject, self.subject_id)
+        subject.status_code = "QUARANTINED_STATE_DIVERGENCE"
+        cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertIn("SUBJECT_STATUS_UNSAFE", cut.blocker_codes)
+
+    def test_history_cut_preserves_canonical_note_review_fact(self):
+        command = self._existing_state_command()
+        with patch("app.services.study_service._apply_review_side_effects"):
+            result = apply_existing_state_note_review(
+                db.session, command=command
+            )
+        db.session.flush()
+        cut = self._history_cut()
+        self.assertTrue(cut.native_complete, cut.blocker_codes)
+        self.assertEqual(len(cut.facts), 1)
+        self.assertEqual(len(cut.review_events), 1)
+        self.assertEqual(cut.facts[0].id, int(result.history.fact.id))
+        self.assertEqual(
+            cut.facts[0].after_state_hash,
+            result.write.semantic_state_hash,
+        )
+
+    def test_history_cut_preserves_consecutive_native_review_chain(self):
+        with patch("app.services.study_service._apply_review_side_effects"):
+            first = apply_existing_state_note_review(
+                db.session, command=self._existing_state_command()
+            )
+        db.session.flush()
+        with patch("app.services.study_service._apply_review_side_effects"):
+            second = apply_existing_state_note_review(
+                db.session,
+                command=self._existing_state_command(
+                    reviewed_at=REVIEWED_AT + timedelta(days=1),
+                    now_utc=INGESTED_AT + timedelta(days=1),
+                    request_id="authority-command-request-2",
+                ),
+            )
+        db.session.flush()
+
+        cut = self._history_cut()
+        self.assertTrue(cut.native_complete, cut.blocker_codes)
+        self.assertEqual(len(cut.facts), 2)
+        self.assertEqual(len(cut.review_events), 2)
+        self.assertEqual(cut.facts[0].id, int(first.history.fact.id))
+        self.assertEqual(cut.facts[1].id, int(second.history.fact.id))
+        self.assertEqual(
+            cut.facts[0].after_state_hash,
+            cut.facts[1].before_state_hash,
+        )
+        self.assertEqual(
+            cut.facts[1].after_state_hash,
+            cut.semantic_state_hash,
+        )
+
+        first.history.fact.after_state_hash = b"\x55" * 32
+        cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertIn("STATE_HASH_CHAIN_GAP", cut.blocker_codes)
+
+    def test_history_cut_binds_exact_review_event_payload(self):
+        event = self._event()
+        before = self._history_cut()
+        event.payload_json += " "
+        after = self._history_cut()
+        self.assertNotEqual(before.cut_hash, after.cut_hash)
+        self.assertEqual(len(after.review_events), 1)
+
+    def test_history_cut_binds_review_event_columns_outside_fact_payload(self):
+        with patch("app.services.study_service._apply_review_side_effects"):
+            result = apply_existing_state_note_review(
+                db.session, command=self._existing_state_command()
+            )
+        db.session.flush()
+        before = self._history_cut()
+        self.assertTrue(before.native_complete, before.blocker_codes)
+
+        result.review_event.duration_ms += 1
+        after = self._history_cut()
+        self.assertTrue(after.native_complete, after.blocker_codes)
+        self.assertEqual(before.review_events[0].payload_bytes, after.review_events[0].payload_bytes)
+        self.assertNotEqual(before.review_events[0].row_hash, after.review_events[0].row_hash)
+        self.assertNotEqual(before.cut_hash, after.cut_hash)
+
+    def test_history_cut_catches_detached_fact_and_runtime_drift(self):
+        _locked, _siblings, compatibility = self._locked_context()
+        event = self._event()
+        result = append_native_history_fact(
+            db.session,
+            command=NativeHistoryFactInput(
+                learner_user_id=self.user_id,
+                subject=db.session.get(StudyProgressSubject, self.subject_id),
+                contributor=compatibility.contributor_by_card_id[self.card_id],
+                review_event=event,
+                history_completeness_code="HISTORY_NATIVE_COMPLETE",
+                before_state_hash=BEFORE_HASH,
+                after_state_hash=AFTER_HASH,
+            ),
+            now_utc=INGESTED_AT,
+        )
+        db.session.flush()
+        result.fact.subject_id = None
+        result.fact.action_key = "review.again"
+        cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertEqual(len(cut.facts), 1)
+        self.assertIn("FACT_LINKAGE_INCOMPLETE", cut.blocker_codes)
+        self.assertIn("FACT_RUNTIME_MISMATCH", cut.blocker_codes)
+
+    def test_history_cut_catches_review_event_column_drift(self):
+        command = self._existing_state_command()
+        with patch("app.services.study_service._apply_review_side_effects"):
+            result = apply_existing_state_note_review(
+                db.session, command=command
+            )
+        db.session.flush()
+        result.review_event.rating = "again"
+        cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertIn("FACT_EVENT_PAYLOAD_MISMATCH", cut.blocker_codes)
+
+    def test_history_cut_rejects_wrong_sibling_contributor_and_fact_identity(self):
+        command = self._existing_state_command()
+        with patch("app.services.study_service._apply_review_side_effects"):
+            result = apply_existing_state_note_review(
+                db.session, command=command
+            )
+        db.session.flush()
+        fact = result.history.fact
+        other_card_id = next(
+            card_id for card_id in self.contributor_id_by_card
+            if card_id != self.card_id
+        )
+        fact.contributor_id = self.contributor_id_by_card[other_card_id]
+        fact.fact_identity_hash = b"\x77" * 32
+        # Subject-index branch must still catch a fact whose Note key drifted.
+        fact.logical_note_key = b"wrong-note-key"
+        cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertIn("FACT_LINKAGE_INCOMPLETE", cut.blocker_codes)
+        self.assertIn("FACT_IDENTITY_MISMATCH", cut.blocker_codes)
+
+    def test_history_cut_hash_binds_source_operation_key(self):
+        command = self._existing_state_command()
+        with patch("app.services.study_service._apply_review_side_effects"):
+            result = apply_existing_state_note_review(
+                db.session, command=command
+            )
+        db.session.flush()
+        before = self._history_cut()
+        result.history.fact.source_operation_key = b"changed-operation"
+        after = self._history_cut()
+        self.assertNotEqual(before.cut_hash, after.cut_hash)
+        self.assertIn("FACT_OPERATION_MISMATCH", after.blocker_codes)
+
+    def test_history_cut_requires_source_history_decoder(self):
+        command = self._existing_state_command()
+        with patch("app.services.study_service._apply_review_side_effects"):
+            apply_existing_state_note_review(db.session, command=command)
+        db.session.flush()
+        with patch(
+            "app.services.study_algorithm_history_cut_service."
+            "get_study_algorithm_support",
+            return_value=None,
+        ):
+            cut = self._history_cut()
+        self.assertFalse(cut.native_complete)
+        self.assertIn("SOURCE_HISTORY_DECODER_UNAVAILABLE", cut.blocker_codes)
+
+    def test_mcp_get_note_uses_canonical_note_state_and_rejects_projection_drift(self):
+        db.session.add(
+            StudyAuthorityEnrollment(
+                learner_user_id=self.user_id,
+                mode_code="NOTE",
+                epoch=7,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            )
+        )
+        command = self._existing_state_command()
+        with patch("app.services.study_service._apply_review_side_effects"):
+            apply_existing_state_note_review(db.session, command=command)
+        db.session.flush()
+        note_id = str(db.session.get(StudyProgressSubject, self.subject_id).live_note_id)
+        result = mcp_get_note(user_id=self.user_id, note_id=note_id)
+        reviewed = next(card for card in result["cards"] if card["card_id"] == self.card_id)
+        stored_state = db.session.get(StudyProgressState, self.subject_id)
+        state = STATE_DECODERS.decode(
+            algorithm_key=stored_state.algorithm_key,
+            algorithm_version=stored_state.algorithm_version,
+            state_schema_version=stored_state.state_schema_version,
+            storage_codec=stored_state.storage_codec,
+            payload=stored_state.state_payload,
+            expected_size=stored_state.state_payload_size,
+            expected_hash=bytes(stored_state.algorithm_state_hash),
+        )
+        self.assertEqual(reviewed["reps"], state.reps)
+        self.assertEqual(reviewed["interval_days"], float(state.intervalDays or 0))
+        progress = command.siblings.progress_by_card_id[self.card_id]
+        progress.reps += 1
+        with self.assertRaises(RequestValidationError) as caught:
+            mcp_get_note(user_id=self.user_id, note_id=note_id)
+        self.assertEqual(caught.exception.code, "AUTHORITY_READ_PARITY_DIVERGED")
+
+    def test_mcp_get_note_rejects_incomplete_note_topology(self):
+        db.session.add(
+            StudyAuthorityEnrollment(
+                learner_user_id=self.user_id,
+                mode_code="NOTE",
+                epoch=7,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            )
+        )
+        subject = db.session.get(StudyProgressSubject, self.subject_id)
+        subject.contributor_count += 1
+        with self.assertRaises(RequestValidationError) as caught:
+            mcp_get_note(user_id=self.user_id, note_id=str(subject.live_note_id))
+        self.assertEqual(caught.exception.code, "INCOMPLETE_AUTHORITY_COMPATIBILITY")
+
+    def test_mcp_get_note_rejects_note_without_cards_in_note_mode(self):
+        db.session.add(
+            StudyAuthorityEnrollment(
+                learner_user_id=self.user_id,
+                mode_code="NOTE",
+                epoch=7,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            )
+        )
+        existing = db.session.get(
+            Note,
+            db.session.get(StudyProgressSubject, self.subject_id).live_note_id,
+        )
+        empty_note = Note(
+            note_type_id=existing.note_type_id,
+            user_id=self.user_id,
+            deck_id=existing.deck_id,
+            field_values={"Front": "empty"},
+            tags=[],
+            created_at=CREATED_AT,
+            updated_at=CREATED_AT,
+        )
+        db.session.add(empty_note)
+        db.session.flush()
+        with self.assertRaises(RequestValidationError) as caught:
+            mcp_get_note(user_id=self.user_id, note_id=str(empty_note.id))
+        self.assertEqual(caught.exception.code, "INCOMPLETE_AUTHORITY_COMPATIBILITY")
+
+    def _switch_preflight(self, *, target_key="future", target_version="1"):
+        locked, siblings, compatibility = self._locked_context()
+        return preflight_study_algorithm_switch(
+            db.session,
+            route=self._route(),
+            locked=locked,
+            expected=StudyAuthorityCASExpectation(
+                enrollment_epoch=7,
+                subject_generation=int(locked.subject.subject_generation),
+                authority_revision=int(locked.token.authority_revision),
+                semantic_state_hash=bytes(locked.token.semantic_state_hash),
+            ),
+            siblings=siblings,
+            compatibility=compatibility,
+            target_key=target_key,
+            target_version=target_version,
+        )
+
+    def test_switch_preflight_requires_complete_history_before_target_resolution(self):
+        self._event()
+        with self.assertRaises(StudyAlgorithmSwitchPreflightError) as caught:
+            self._switch_preflight()
+        self.assertEqual(caught.exception.code, "INCOMPLETE_ALGORITHM_HISTORY")
+        self.assertIn("REVIEW_EVENT_COVERAGE_UNPROVEN", caught.exception.blockers)
+
+    def test_switch_preflight_rejects_unapproved_reviewed_history_policy(self):
+        with patch("app.services.study_service._apply_review_side_effects"):
+            apply_existing_state_note_review(
+                db.session, command=self._existing_state_command()
+            )
+        db.session.flush()
+        self.assertTrue(self._history_cut().native_complete)
+        with patch(
+            "app.services.study_algorithm_switch_preflight_service."
+            "resolve_study_algorithm_switch_target"
+        ) as resolve_target:
+            with self.assertRaises(StudyAlgorithmSwitchPreflightError) as caught:
+                self._switch_preflight()
+        self.assertEqual(caught.exception.code, "ALGORITHM_HISTORY_POLICY_UNAPPROVED")
+        self.assertEqual(
+            caught.exception.blockers,
+            ("FIRST_STATE_BASELINE_UNPROVEN", "HISTORICAL_CONFIG_UNPROVEN"),
+        )
+        resolve_target.assert_not_called()
+
+    def test_switch_preflight_rejects_unregistered_and_same_target(self):
+        with self.assertRaises(StudyAlgorithmNotFoundError) as unavailable:
+            self._switch_preflight()
+        self.assertEqual(unavailable.exception.reason, "UNKNOWN_VERSION")
+        with self.assertRaises(StudyAlgorithmSwitchPreflightError) as current:
+            self._switch_preflight(
+                target_key="legacy-anki", target_version="1.0.0"
+            )
+        self.assertEqual(current.exception.code, "ALGORITHM_ALREADY_ACTIVE")
+
+    def test_switch_preflight_returns_fresh_cut_without_mutating_state(self):
+        fake_target = StudyAlgorithmSwitchTarget(
+            adapter=SimpleNamespace(identity="future"),
+            initializer=SimpleNamespace(identity="future"),
+        )
+        with patch(
+            "app.services.study_algorithm_switch_preflight_service."
+            "resolve_study_algorithm_switch_target",
+            return_value=fake_target,
+        ):
+            preflight = self._switch_preflight()
+        self.assertIs(preflight.target, fake_target)
+        self.assertTrue(preflight.history_cut.native_complete)
+        self.assertEqual(preflight.history_cut.authority_revision, 0)
+        self.assertEqual(ReviewEvent.query.count(), 0)
 
     def test_history_replay_with_different_state_hash_fails_closed(self):
         _locked, _siblings, compatibility = self._locked_context()

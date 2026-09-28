@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 import unittest
 
 from app.connect import create_connect_app
@@ -117,6 +118,42 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
     # -----------------------------------------------------------------------
     # 1. List and Get Schema
     # -----------------------------------------------------------------------
+
+    def test_note_authority_template_add_and_remove_through_jsonrpc(self):
+        from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+        from models.study_progress_state import StudyProgressState
+        from models.study_authority_subject_token import StudyAuthoritySubjectToken
+
+        with self.app.app_context():
+            deck = Deck(owner_user_id=self.user_id, name="NOTE topology")
+            db.session.add(deck)
+            db.session.flush()
+            note = Note(user_id=self.user_id, deck_id=deck.id, note_type_id=self.note_type_id,
+                field_values={"Word": "test", "Meaning": "test"})
+            db.session.add(note)
+            db.session.flush()
+            db.session.add(Card(note_id=note.id, template_id=self.template_id))
+            db.session.commit()
+            stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
+                now_utc=datetime.now(timezone.utc).replace(tzinfo=None))
+            db.session.commit()
+            original_hash = bytes(StudyProgressState.query.one().semantic_state_hash)
+
+        added = self._call_tool("update_note_type", {"note_type_id": self.note_type_id,
+            "templates": {"added": [{"name": "Reverse"}, {"name": "Listening"}]}})
+        self.assertEqual(len(added["templates"]), 3)
+        changes = {"removed": ["Recognition"]}
+        preview = self._call_tool("preview_note_type_update", {
+            "note_type_id": self.note_type_id, "templates": changes})
+        removed = self._call_tool("update_note_type", {"note_type_id": self.note_type_id,
+            "templates": changes, "preview_id": preview["preview_id"], "confirm": True})
+        self.assertEqual({row["name"] for row in removed["templates"]}, {"Reverse", "Listening"})
+        with self.app.app_context():
+            self.assertEqual(Card.query.count(), 2)
+            self.assertEqual(CardProgress.query.count(), 2)
+            self.assertEqual(Template.query.filter_by(is_default=True).count(), 1)
+            self.assertEqual(bytes(StudyProgressState.query.one().semantic_state_hash), original_hash)
+            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, 0)
 
     def test_list_note_types(self):
         with self.app.app_context():

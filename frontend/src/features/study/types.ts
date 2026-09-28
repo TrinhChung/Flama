@@ -200,6 +200,10 @@ type StudySessionSnapshotBase = {
   scheduler_algorithm: string
   algorithm_version: string
   queue_contract_version: string
+  /** Issued only when the server has negotiated a ready NOTE batch consumer. */
+  batch_transport?: 'study-note-batch-transport.v1'
+  /** Frozen numeric output precision. Missing means the pre-profile evaluator. */
+  storage_profile?: 'note-mysql-float-text.v1'
   composition_contract_version?: 'applied-composition.compat.v1'
   selected_composition_id?: string
   selected_composition?: AppliedComposition
@@ -307,6 +311,34 @@ export type StudyBatchReceipt = {
   batch_id: string
   event_count: number
   enqueued_at: string
+  batch_sequence?: number
+  receipt?: StudyNoteBatchCommitReceipt
+}
+
+export type StudyNoteBatchCommitReceipt = Extract<
+  StudySessionCommitReceipt, { schema_version: 'study-commit-receipt.v2' }
+> & {
+  batch_receipt_schema_version: 'study-note-batch-receipt.v1'
+  batch_id: string
+  batch_sequence: number
+  request_hash: string
+  receipt_hash: string
+  is_final: boolean
+  cumulative_event_count: number
+}
+
+export type StudyBatchStatus = {
+  schema_version: 'study-batch-status.v1'
+  session_id: string
+  batch_id: string
+  batch_sequence: number
+  status: 'enqueued' | 'completed' | 'failed'
+  event_count: number
+  attempt_count: number
+  is_final: boolean
+  processed_at: string | null
+  receipt?: StudyNoteBatchCommitReceipt
+  error_code?: string
 }
 
 type StudySessionCommitReceiptBase = {
@@ -338,6 +370,17 @@ export type StudySessionStatus = {
   session_id: string
   status: 'open' | 'committed' | 'expired' | 'cancelled'
   stale?: boolean
+  stale_reason?: string
+  batch_stream?: {
+    schema_version: 'study-note-batch-stream.v1'
+    admitted_batch_count: number
+    last_completed_batch_sequence: number
+    completed_event_count: number
+    pending_batch_count: number
+    failed_batch_id: string | null
+    final_batch_id: string | null
+    final_batch_status: 'enqueued' | 'completed' | 'failed' | null
+  }
   expires_at: string
   committed_at: string | null
 }

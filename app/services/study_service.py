@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -37,6 +37,11 @@ from app.services.study_action_runtime import (
 )
 from app.services.study_algorithm_registry import DEFAULT_ALGORITHM_IDENTITY
 from app.services.study_policy_service import build_scheduler_policy
+from app.services.study_note_storage_precision import (
+    NOTE_STORAGE_PROFILE,
+    StudyStoragePrecisionError,
+    normalize_note_transition_state,
+)
 from app.validators.review_event import (
     ReviewEventPayloadError,
     build_native_review_event_payload,
@@ -109,6 +114,7 @@ class NativeReviewTransitionInput:
     algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version
     trigger_key: str | None = None
     trigger_contract_version: str | None = None
+    storage_profile: str | None = None
 
 
 @dataclass(frozen=True)
@@ -155,7 +161,9 @@ def execute_native_review_transition(
 ) -> ReviewTransitionResult:
     """Execute the exact-version native scheduler without persistence effects."""
 
-    return execute_review_action(
+    if command.storage_profile not in (None, NOTE_STORAGE_PROFILE):
+        raise StudyReviewError("UNSUPPORTED_STORAGE_PROFILE", "Unknown review storage profile.")
+    result = execute_review_action(
         state=command.state,
         options=command.deck_options,
         now=command.reviewed_at,
@@ -166,6 +174,16 @@ def execute_native_review_transition(
         trigger_key=command.trigger_key,
         trigger_contract_version=command.trigger_contract_version,
     )
+    if command.storage_profile == NOTE_STORAGE_PROFILE:
+        try:
+            return replace(
+                result,
+                state=normalize_note_transition_state(result.state),
+                storage_profile=NOTE_STORAGE_PROFILE,
+            )
+        except StudyStoragePrecisionError as exc:
+            raise StudyReviewError(exc.code, str(exc)) from exc
+    return result
 
 
 def _compute_days_late(
@@ -489,6 +507,7 @@ def _execute_note_authority_review_command(
     validated_payload: dict[str, Any],
     clone_scope: flashcards_share_service.CloneDeckScope | None,
     local_deck_id: int | None,
+    requested_scope_id: int | None,
     local_deck: Deck | None,
     options: DeckOptions,
     timezone_name: str,
@@ -516,12 +535,18 @@ def _execute_note_authority_review_command(
     from app.services.study_session_authority_pin_service import (
         lock_study_session_authority_subjects,
     )
+    from app.services.study_action_runtime import resolve_review_action
+    from app.services.study_direct_note_replay_service import (
+        direct_note_request_fingerprint, read_direct_note_replay,
+    )
 
-    if clone_scope is not None:
-        raise StudyReviewError(
-            "OVERLAY_AUTHORITY_NOT_READY",
-            "Direct NOTE reviews for logical-overlay installs require P5-06 routing.",
-        )
+    from app.services.study_note_pristine_service import (
+        classify_note_authority_keys,
+        materialize_pristine_notes,
+    )
+
+    # Logical-overlay source Notes use the same learner/Note subject; the
+    # caller already resolved and authorized the install scope.
     operation_key_value = validated_payload.get("operation_key")
     operation_key = (
         str(operation_key_value).strip()
@@ -536,14 +561,59 @@ def _execute_note_authority_review_command(
                 status=422,
             )
 
+    note_key = str(card.note_id)
+    _stateful, pristine = classify_note_authority_keys(
+        db.session,
+        learner_user_id=int(user.id),
+        note_ids=[note_key],
+    )
+    if pristine:
+        # First review of a never-studied Note: the client saw the pristine
+        # NEW read, so verify that version before materializing its state.
+        if require_review_state_version:
+            requested_version = str(review_state_version or "").strip()
+            if not requested_version or requested_version != (
+                study_artifact_service.pristine_note_review_state_version(
+                    enrollment_epoch=int(route.epoch),
+                    logical_note_key=note_key,
+                    deck_options=options,
+                    timezone_name=timezone_name,
+                )
+            ):
+                raise StudyReviewError(
+                    "STALE_REVIEW_STATE",
+                    "Review state changed; reload the study manifest.",
+                )
+        materialize_pristine_notes(
+            db.session,
+            route=route,
+            cards=(card,),
+            starting_ease_by_note_id={note_key: float(options.startingEase)},
+            provenance_code=(
+                "NATIVE_MCP" if str(source_path).startswith("mcp") else "NATIVE_DIRECT"
+            ),
+            now_utc=reviewed_at,
+        )
     authority_subjects = lock_study_session_authority_subjects(
         db.session,
         route=route,
-        logical_note_keys=[str(card.note_id)],
+        logical_note_keys=[note_key],
         now_utc=reviewed_at,
     )
-    note_key = str(card.note_id)
     locked = authority_subjects.locked_by_logical_note_key[note_key]
+    direct_fingerprint = direct_note_request_fingerprint(
+        learner_user_id=int(user.id), card_id=str(card.id),
+        action_key=resolve_review_action(action).action_key, client_payload=validated_payload,
+        requested_scope_id=requested_scope_id, require_review_state_version=require_review_state_version,
+        review_state_version=review_state_version, algorithm_key=algorithm_key,
+        algorithm_version=algorithm_version, client_event_id=client_event_id,
+        review_mode=review_mode, source_path=source_path,
+    )
+    replay = read_direct_note_replay(db.session, route=route, locked=locked,
+        card_id=str(card.id), operation_key=operation_key, request_fingerprint=direct_fingerprint)
+    if replay is not None:
+        db.session.rollback()  # Release read locks; replay stages no new writes.
+        return replay
     current_state = authority_subjects.state_by_logical_note_key[note_key]
     siblings = lock_study_authority_siblings(
         db.session,
@@ -560,7 +630,8 @@ def _execute_note_authority_review_command(
     locked_card = next(
         sibling for sibling in siblings.cards if str(sibling.id) == str(card.id)
     )
-    if require_review_state_version:
+    # A first-state review was already checked against its pristine version.
+    if require_review_state_version and not pristine:
         requested_version = str(review_state_version or "").strip()
         current_version = study_artifact_service.note_authority_review_state_version(
             enrollment_epoch=int(route.epoch),
@@ -596,6 +667,7 @@ def _execute_note_authority_review_command(
             timezone_name=timezone_name,
             algorithm_key=algorithm_key,
             algorithm_version=algorithm_version,
+            storage_profile=NOTE_STORAGE_PROFILE,
         )
     )
     policy = build_scheduler_policy(
@@ -638,6 +710,8 @@ def _execute_note_authority_review_command(
         db.session,
         command=IdempotentExistingStateNoteReviewCommand(
             operation_key=operation_key,
+            direct_request_fingerprint=direct_fingerprint,
+            direct_previews=intervals_preview,
             command=ExistingStateNoteReviewCommand(
                 route=route,
                 locked=locked,
@@ -752,6 +826,7 @@ def execute_native_review_command(
                 validated_payload=validated_payload,
                 clone_scope=clone_scope,
                 local_deck_id=local_deck_id,
+                requested_scope_id=requested_scope_id,
                 local_deck=local_deck,
                 options=options,
                 timezone_name=timezone_name,

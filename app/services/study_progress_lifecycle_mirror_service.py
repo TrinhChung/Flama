@@ -851,6 +851,70 @@ def materialize_new_note_authority(
         raise StudyAuthorityFenceError(
             "WRONG_LEARNER", "New Note is outside the fenced learner scope."
         )
+    return _materialize_note_authority(
+        session,
+        route=route,
+        note=note,
+        cards=cards,
+        provenance_code=provenance_code,
+        now_utc=now_utc,
+        starting_ease=None,
+    )
+
+
+def materialize_pristine_note_authority(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    note: Note,
+    cards: Iterable[Card],
+    starting_ease: float,
+    provenance_code: str = "NATIVE_DIRECT",
+    now_utc: datetime | None = None,
+) -> mirror.NativeMirrorResult | None:
+    """First-state materialization of a pristine Note on its first write.
+
+    The caller authorizes the learner's access context (owned Note or a
+    logical-overlay source Note) and supplies the starting ease of the deck
+    options that LEGACY would have used for the first review.
+    """
+
+    if route.mode_code != "NOTE" or note.id is None:
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_MODE_CONFLICT", "First-state materialization requires NOTE."
+        )
+    materialized_at = _utc_naive(now_utc)
+    from app.repositories.study_progress_shadow_repository import ensure_and_lock_subject
+
+    # Idempotent create-or-lock closes the concurrent first-state key race.
+    ensure_and_lock_subject(
+        session,
+        learner_user_id=route.learner_user_id,
+        logical_note_key=str(note.id),
+        live_note_id=str(note.id),
+        now_utc=materialized_at,
+    )
+    return _materialize_note_authority(
+        session,
+        route=route,
+        note=note,
+        cards=cards,
+        provenance_code=provenance_code,
+        now_utc=materialized_at,
+        starting_ease=float(starting_ease),
+    )
+
+
+def _materialize_note_authority(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    note: Note,
+    cards: Iterable[Card],
+    provenance_code: str,
+    now_utc: datetime | None,
+    starting_ease: float | None,
+) -> mirror.NativeMirrorResult:
     card_rows = tuple(sorted(cards, key=lambda card: str(card.id).encode("utf-8")))
     if not card_rows or any(
         card.id is None or str(card.note_id) != str(note.id) for card in card_rows
@@ -939,14 +1003,15 @@ def materialize_new_note_authority(
             "Pristine Note authority subject has contributor evidence.",
         )
 
-    from app.services.scheduler_config_service import resolve_deck_options
+    if starting_ease is None:
+        from app.services.scheduler_config_service import resolve_deck_options
 
-    starting_ease = float(
-        resolve_deck_options(
-            user_id=route.learner_user_id,
-            deck_id=note.deck_id,
-        ).startingEase
-    )
+        starting_ease = float(
+            resolve_deck_options(
+                user_id=route.learner_user_id,
+                deck_id=note.deck_id,
+            ).startingEase
+        )
     for card in card_rows:
         session.add(
             CardProgress(
@@ -1191,10 +1256,13 @@ def finalize_note_authority_sibling_expansion(
     *,
     new_cards: Iterable[Card],
     now_utc: datetime | None = None,
+    provenance_code: str = "NATIVE_DIRECT",
 ) -> mirror.NativeMirrorResult | None:
     """Attach one exact compatibility sibling per prepared Note and fence pins."""
 
     card_rows = tuple(new_cards)
+    if provenance_code not in {"NATIVE_DIRECT", "NATIVE_MCP"}:
+        raise StudyAuthorityFenceError("INVALID_AUTHORITY_SOURCE", "Sibling creation provenance is invalid.")
     if plan is None:
         if card_rows:
             return None
@@ -1284,7 +1352,7 @@ def finalize_note_authority_sibling_expansion(
             review_events=(),
             external_contexts={
                 str(new_card.id): mirror.ExternalProgressMirrorContext(
-                    provenance_code="NATIVE_DIRECT",
+                    provenance_code=provenance_code,
                     history_completeness_code="HISTORY_NATIVE_COMPLETE",
                 )
             },

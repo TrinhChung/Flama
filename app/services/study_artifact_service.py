@@ -286,6 +286,33 @@ def note_authority_review_state_version(
     )
 
 
+PRISTINE_NOTE_STATE_MARKER = hashlib.sha256(b"flama.note-authority.pristine.v1").digest()
+
+
+def pristine_note_review_state_version(
+    *,
+    enrollment_epoch: int,
+    logical_note_key: str,
+    deck_options: Any,
+    timezone_name: str,
+) -> str:
+    """Version a never-studied NOTE read before its first-state materialization.
+
+    Generation/revision 0 and the marker hash cannot collide with a
+    materialized subject (generation >= 1 and a real semantic state hash).
+    """
+
+    return note_authority_review_state_version(
+        enrollment_epoch=enrollment_epoch,
+        logical_note_key=logical_note_key,
+        subject_generation=0,
+        authority_revision=0,
+        semantic_state_hash=PRISTINE_NOTE_STATE_MARKER,
+        deck_options=deck_options,
+        timezone_name=timezone_name,
+    )
+
+
 def _same_effective_base(context: EffectiveStudyCard) -> bool:
     base_defs = serialize_field_defs(list(context.note.note_type.field_defs))
     return (

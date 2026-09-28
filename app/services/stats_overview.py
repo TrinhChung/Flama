@@ -19,9 +19,8 @@ from app.repositories.review_event_repository import create_review_event_record
 from app.repositories.stats_query_repository import query_future_due_day_counts
 from models import db
 from models.card import Card
-from models.deck_install import DeckInstall
+from models.card_progress import CardProgress
 from models.flashcard import ReviewEvent
-from models.note import Note
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -155,22 +154,16 @@ def _canonical_future_due_day_counts(
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, int]:
-    from app.services.study_authority_read_service import (
-        StudyAuthorityReadError,
-        load_study_authority_card_reads,
-    )
+    from app.services.study_authority_read_service import load_study_authority_card_reads
 
-    if DeckInstall.query.filter_by(
-        user_id=user_id,
-        clone_mode="logical_overlay",
-    ).first() is not None:
-        raise StudyAuthorityReadError(
-            "OVERLAY_AUTHORITY_NOT_READY",
-            "NOTE statistics reads do not yet support logical-overlay installs.",
-        )
+    # LEGACY counts every learner CardProgress row (owned and logical-overlay
+    # source Cards). Under NOTE a Note with state projects every sibling, and
+    # a never-studied Note has no due date, so the same row set is exact.
     cards = (
-        Card.query.join(Note, Card.note_id == Note.id)
-        .filter(Note.user_id == user_id)
+        Card.query.join(
+            CardProgress,
+            db.and_(CardProgress.card_id == Card.id, CardProgress.user_id == user_id),
+        )
         .order_by(Card.id.asc())
         .all()
     )

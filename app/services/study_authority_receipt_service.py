@@ -34,6 +34,8 @@ from app.services.study_progress_shadow_mapper import encode_identity
 from app.services.study_service import normalize_review_duration
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 
+DIRECT_REPLAY_SCHEMA = "study-direct-note-replay.v1"
+
 
 class StudyAuthorityReceiptError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
@@ -45,6 +47,8 @@ class StudyAuthorityReceiptError(RuntimeError):
 class IdempotentExistingStateNoteReviewCommand:
     operation_key: str
     command: ExistingStateNoteReviewCommand
+    direct_request_fingerprint: bytes | None = None
+    direct_previews: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -60,10 +64,30 @@ class _ReceiptIdentity:
     operation_key: bytes
     operation_key_hash: bytes
     request_fingerprint: bytes
+    request_payload: Mapping[str, Any]
 
 
 def _fail(code: str, message: str) -> StudyAuthorityReceiptError:
     return StudyAuthorityReceiptError(code, message)
+
+
+def _direct_transport_material(command: IdempotentExistingStateNoteReviewCommand) -> dict[str, Any]:
+    if command.direct_request_fingerprint is None and command.direct_previews is None:
+        return {}
+    if (
+        not isinstance(command.direct_request_fingerprint, bytes)
+        or len(command.direct_request_fingerprint) != 32
+        or not isinstance(command.direct_previews, Mapping)
+        or set(command.direct_previews) != {"again", "hard", "good", "easy"}
+        or command.command.review.provenance.source_path not in {"native.rest", "native.mcp"}
+    ):
+        raise _fail("INVALID_AUTHORITY_RECEIPT", "Direct replay context is invalid.")
+    previews = canonical_document(command.direct_previews, too_large_code="AUTHORITY_RESPONSE_TOO_LARGE")
+    return {"direct_transport": {
+        "schema_version": DIRECT_REPLAY_SCHEMA,
+        "input_fingerprint": command.direct_request_fingerprint.hex(),
+        "previews_hash": previews.digest.hex(),
+    }}
 
 
 def _build_receipt_identity(
@@ -164,6 +188,7 @@ def _build_receipt_identity(
                     "request_id": provenance.request_id,
                     "wire_schema_version": provenance.wire_schema_version,
                 },
+                **_direct_transport_material(command),
             },
             too_large_code="AUTHORITY_REQUEST_TOO_LARGE",
         )
@@ -173,6 +198,7 @@ def _build_receipt_identity(
         operation_key=encoded_key,
         operation_key_hash=hashlib.sha256(encoded_key).digest(),
         request_fingerprint=fingerprint.digest,
+        request_payload=fingerprint.payload,
     )
 
 
@@ -192,6 +218,7 @@ def _locked_replay(
             == identity.operation_key_hash,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if receipt is None:
         return None
@@ -286,6 +313,19 @@ def _stage_receipt(
         )
     try:
         payload = _response_payload(command, result)
+        if command.direct_request_fingerprint is not None:
+            # Preserve the original canonical command, not a command rebuilt
+            # from the newer Note state/time when the HTTP acknowledgment is lost.
+            payload["direct_replay"] = {
+                "schema_version": DIRECT_REPLAY_SCHEMA,
+                "request": dict(identity.request_payload),
+                # MySQL JSON's numeric text conversion can change an f64 bit
+                # (e.g. 330 / 86400). Preserve exact preview JSON as text;
+                # the original command binds its canonical digest separately.
+                "intervals_preview_json": canonical_document(
+                    command.direct_previews, too_large_code="AUTHORITY_RESPONSE_TOO_LARGE",
+                ).encoded.decode("utf-8"),
+            }
         response = canonical_document(
             payload,
             too_large_code="AUTHORITY_RESPONSE_TOO_LARGE",
@@ -349,3 +389,14 @@ def apply_idempotent_existing_state_note_review(
         response_payload=response,
         applied=applied,
     )
+
+
+def require_existing_note_review_receipt(
+    session: Session, *, command: IdempotentExistingStateNoteReviewCommand,
+) -> StudyAuthorityCommandReceipt:
+    """Verify a replay fingerprint without ever applying a missing command."""
+    identity = _build_receipt_identity(command)
+    receipt = _locked_replay(session, command=command, identity=identity)
+    if receipt is None:
+        raise _fail("AUTHORITY_RECEIPT_MISSING", "A completed batch command has no receipt.")
+    return receipt

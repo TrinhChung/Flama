@@ -37,6 +37,9 @@ def _read_package() -> bytes:
 
 def _error(exc: Exception):
     message = str(exc)
+    authority_code = getattr(exc, "code", None)
+    if getattr(exc, "status", None) == 409 and isinstance(authority_code, str):
+        return error_response(authority_code, message, status=409)
     lowered = message.lower()
     if "was not found" in lowered:
         code, status = "NOT_FOUND", 404

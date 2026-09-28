@@ -89,6 +89,13 @@ class StudyProgressHistoryFact(db.Model):
         db.Index(
             "ix_sp_history_learner_order", "learner_user_id", "occurred_at", "id"
         ),
+        db.Index(
+            "ix_sp_history_learner_note_order",
+            "learner_user_id",
+            "logical_note_key",
+            "occurred_at",
+            "id",
+        ),
         db.Index("ix_sp_history_ingested", "ingested_at", "id"),
         db.Index("ix_sp_history_review_event", "review_event_id"),
         db.CheckConstraint(

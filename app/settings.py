@@ -240,13 +240,16 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         "REDIS_SOCKET_TIMEOUT_SECONDS": coerce_int_env(
             "REDIS_SOCKET_TIMEOUT_SECONDS", default=1
         ),
-        # Async Study batches remain opt-in until their worker lifecycle,
-        # schema migration and durable receipt reconciliation are deployed.
-        # The synchronous commit path is the production-safe default.
+        # Opt-in only: real admission additionally requires a live compatible
+        # continuous consumer in the same explicit namespace/database pool.
+        # Existing accepted work drains independently of this issuance switch.
         "STUDY_ASYNC_BATCH_ENABLED": coerce_bool_env(
             "STUDY_ASYNC_BATCH_ENABLED",
             default=False,
         ),
+        # Empty preserves the legacy test/manual queue, but a continuous worker
+        # requires explicit isolation. Changing it does not remove DB admissions.
+        "STUDY_QUEUE_NAMESPACE": os.getenv("STUDY_QUEUE_NAMESPACE", "").strip(),
         # Wire v3 creation is negotiated per client and enabled only after all
         # HTTP/worker consumers have dual readers. Existing v2 readers remain.
         "STUDY_WIRE_V3_ENABLED": coerce_bool_env(

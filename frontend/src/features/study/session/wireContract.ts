@@ -125,7 +125,13 @@ export function reviewEventWireIdentityV4(
       policy,
     ),
     authority_mode: 'NOTE' as const,
-    ...pin,
+    // Snapshot pins carry their own schema tag (and may gain metadata). Only
+    // the action identity belongs on the strict backend review-event wire.
+    enrollment_epoch: pin.enrollment_epoch,
+    logical_note_key: pin.logical_note_key,
+    subject_generation: pin.subject_generation,
+    base_authority_revision: pin.base_authority_revision,
+    base_authority_state_hash: pin.base_authority_state_hash,
     operation_key: operationKey,
   }
 }

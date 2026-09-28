@@ -11,7 +11,6 @@ from app.repositories.study_authority_repository import (
 from app.services.study_progress_shadow_codec import (
     STATE_DECODERS,
     StudyProgressCodecError,
-    algorithm_state_hash,
     state_document,
 )
 
@@ -130,12 +129,6 @@ def verify_study_authority_cas(
             if document.size != int(state.state_payload_size):
                 raise StudyProgressCodecError(
                     "STATE_HASH_MISMATCH", "Stored state size does not match."
-                )
-            if algorithm_state_hash(document.payload) != bytes(
-                state.algorithm_state_hash
-            ):
-                raise StudyProgressCodecError(
-                    "STATE_HASH_MISMATCH", "Stored Algorithm State hash does not match."
                 )
             STATE_DECODERS.decode(
                 algorithm_key=str(state.algorithm_key),

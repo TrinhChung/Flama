@@ -153,10 +153,10 @@ def load_study_authority_card_reads(
         learner_user_id=learner_user_id,
         allow_note_authority=True,
     )
-    card_by_id = {str(item.id): item for item in cards}
-    if not card_by_id:
+    requested_card_by_id = {str(item.id): item for item in cards}
+    if not requested_card_by_id:
         return MappingProxyType({})
-    if set(card_by_id) != set(deck_options_by_card_id):
+    if set(requested_card_by_id) != set(deck_options_by_card_id):
         raise ValueError("Every authority read Card requires frozen deck options.")
     if route.mode_code == "LEGACY":
         progress_by_card_id = {
@@ -164,7 +164,7 @@ def load_study_authority_card_reads(
             for row in session.query(CardProgress)
             .filter(
                 CardProgress.user_id == learner_user_id,
-                CardProgress.card_id.in_(sorted(card_by_id)),
+                CardProgress.card_id.in_(sorted(requested_card_by_id)),
             )
             .all()
         }
@@ -187,22 +187,85 @@ def load_study_authority_card_reads(
                     progress=progress_by_card_id.get(card_id),
                     authority_revision=None,
                     availability=_availability_from_legacy(
-                        card=card_by_id[card_id],
+                        card=requested_card_by_id[card_id],
                         progress=progress_by_card_id.get(card_id),
                         now_utc=now_utc,
                     ),
                 )
-                for card_id in sorted(card_by_id)
+                for card_id in sorted(requested_card_by_id)
             }
         )
 
-    logical_note_keys = sorted({str(card.note_id) for card in card_by_id.values()})
+    from app.repositories.study_authority_repository import StudyAuthorityFenceError
+    from app.services.study_artifact_service import pristine_note_review_state_version
+    from app.services.study_note_pristine_service import classify_note_authority_keys
+
+    try:
+        stateful_keys, pristine_keys = classify_note_authority_keys(
+            session,
+            learner_user_id=learner_user_id,
+            note_ids={str(card.note_id) for card in requested_card_by_id.values()},
+        )
+    except StudyAuthorityFenceError as exc:
+        raise StudyAuthorityReadError(exc.code, str(exc)) from exc
+    # Never-studied Notes read exactly like LEGACY Cards without progress.
+    result: dict[str, StudyAuthorityCardRead] = {
+        card_id: StudyAuthorityCardRead(
+            route=route,
+            state=card_state_from_progress(
+                None,
+                now_utc,
+                timezone_name=timezone_name,
+                user_id=learner_user_id,
+                options=deck_options_by_card_id[card_id],
+            ),
+            state_version=pristine_note_review_state_version(
+                enrollment_epoch=route.epoch,
+                logical_note_key=str(card.note_id),
+                deck_options=deck_options_by_card_id[card_id],
+                timezone_name=timezone_name,
+            ),
+            progress=None,
+            authority_revision=0,
+            availability=_availability_from_legacy(
+                card=card,
+                progress=None,
+                now_utc=now_utc,
+            ),
+        )
+        for card_id, card in sorted(requested_card_by_id.items())
+        if str(card.note_id) in pristine_keys
+    }
+    requested_card_by_id = {
+        card_id: card
+        for card_id, card in requested_card_by_id.items()
+        if str(card.note_id) in stateful_keys
+    }
+    if not requested_card_by_id:
+        return MappingProxyType(result)
+    logical_note_keys = sorted(stateful_keys)
     subjects = lock_study_session_authority_subjects(
         session,
         route=route,
         logical_note_keys=logical_note_keys,
         now_utc=now_utc,
     )
+    # A Card detail or a scoped list may request only one Card from a Note.
+    # Verify every live sibling before returning any NOTE authority read;
+    # otherwise a divergent, unrequested sibling can be silently ignored.
+    sibling_cards = tuple(
+        session.execute(
+            select(Card)
+            .where(Card.note_id.in_(logical_note_keys))
+            .order_by(Card.id.asc())
+        ).scalars()
+    )
+    card_by_id = {str(card.id): card for card in sibling_cards}
+    if not set(requested_card_by_id).issubset(card_by_id):
+        raise StudyAuthorityReadError(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "NOTE read Card is missing from the live sibling vector.",
+        )
     progress_by_card_id = {
         str(row.card_id): row
         for row in session.query(CardProgress)
@@ -226,7 +289,6 @@ def load_study_authority_card_reads(
             select(StudyProgressContributor)
             .where(
                 StudyProgressContributor.subject_id.in_(sorted(subject_by_id)),
-                StudyProgressContributor.live_card_id.in_(sorted(card_by_id)),
                 StudyProgressContributor.contributor_status == "ACTIVE",
             )
             .order_by(StudyProgressContributor.id.asc())
@@ -238,9 +300,17 @@ def load_study_authority_card_reads(
         for row in contributors
         if row.live_card_id is not None
     }
+    contributor_count_by_subject_id = {subject_id: 0 for subject_id in subject_by_id}
+    for contributor in contributors:
+        contributor_count_by_subject_id[int(contributor.subject_id)] += 1
     if (
         len(contributors) != len(card_by_id)
         or set(contributor_by_card_id) != set(card_by_id)
+        or any(
+            contributor_count_by_subject_id[subject_id]
+            != int(locked.subject.contributor_count)
+            for subject_id, locked in subject_by_id.items()
+        )
     ):
         raise StudyAuthorityReadError(
             "INCOMPLETE_AUTHORITY_COMPATIBILITY",
@@ -270,7 +340,6 @@ def load_study_authority_card_reads(
             "INCOMPLETE_AUTHORITY_COMPATIBILITY",
             "NOTE read has no complete canonical availability vector.",
         )
-    result: dict[str, StudyAuthorityCardRead] = {}
     for card_id in sorted(card_by_id):
         card = card_by_id[card_id]
         logical_note_key = str(card.note_id)
@@ -320,6 +389,8 @@ def load_study_authority_card_reads(
                 "AUTHORITY_READ_PARITY_DIVERGED",
                 f"Card {card_id} canonical availability evidence is stale.",
             )
+        if card_id not in requested_card_by_id:
+            continue
         result[card_id] = StudyAuthorityCardRead(
             route=route,
             state=subjects.state_by_logical_note_key[logical_note_key],
@@ -336,7 +407,7 @@ def load_study_authority_card_reads(
             authority_revision=int(locked.token.authority_revision),
             availability=_availability_from_canonical(availability_row),
         )
-    return MappingProxyType(result)
+    return MappingProxyType(dict(sorted(result.items())))
 
 
 def summarize_study_authority_queue(
@@ -457,17 +528,11 @@ def summarize_study_authority_queue(
 
     def review_key(card_id: str):
         availability = reads_by_card_id[card_id].availability
-        return (
-            study_repository._resolve_review_due_day(
-                due_at=availability.due_at,
-                due_day=availability.due_day,
-                now=now_utc,
-                timezone_name=timezone_name,
-                day_boundary_hour_local=boundary_hour,
-            ),
-            availability.due_at or datetime.max,
-            availability.card_created_at,
-            availability.card_order_key,
+        return study_repository.review_selection_order_key(
+            due_day=availability.due_day,
+            due_at=availability.due_at,
+            card_created_at=availability.card_created_at,
+            card_order_key=availability.card_order_key,
         )
 
     due_relearn.sort(key=learning_key)

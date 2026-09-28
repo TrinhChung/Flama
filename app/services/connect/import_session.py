@@ -24,6 +24,7 @@ from app.repositories import (
     study_repository,
     vocabulary_repository,
 )
+from app.repositories.study_authority_repository import lock_study_authority_route
 from app.services import (
     anki_scheduler,
     deck_working_tree_service,
@@ -367,7 +368,16 @@ def prepare_import_batch_context(
     session: ConnectImportSession,
     cards: list[dict[str, Any]],
 ) -> ImportBatchContext:
-    """Load immutable package-level lookup state once instead of once per note."""
+    """Load package lookups after the learner fence, before any Deck row lock."""
+
+    # The context takes Deck FOR UPDATE locks below. Every card-import path
+    # must first hold the same learner prefix lock used by enrollment, even
+    # though NOTE rows still fail per-card in the legacy content writer.
+    lock_study_authority_route(
+        db.session,
+        learner_user_id=int(user_id),
+        allow_note_authority=True,
+    )
 
     bindings = dict(session.note_type_bindings or {})
     target_note_type_ids = {
@@ -473,6 +483,15 @@ def _upsert_note_type_ref(
 
 
 def create_import_session(user_id: int, params: dict[str, Any]) -> dict[str, Any]:
+    # Session creation may auto-create NoteTypes/Decks or rebind source Decks.
+    # Hold the learner prefix before those mutations so enrollment cannot
+    # overtake this package setup transaction. NOTE card content is still
+    # rejected later by the legacy per-card import writer.
+    authority_route = lock_study_authority_route(
+        db.session,
+        learner_user_id=int(user_id),
+        allow_note_authority=True,
+    )
     mode = str(params.get("mode") or "strict").strip()
     if mode not in IMPORT_SESSION_MODES:
         raise ConnectError("mode must be strict or auto_sync_missing")
@@ -599,6 +618,10 @@ def create_import_session(user_id: int, params: dict[str, Any]) -> dict[str, Any
                 and referenced.deleted_at is None
                 and desired is None
             ):
+                if authority_route.mode_code == "NOTE":
+                    raise ConnectError(
+                        "NOTE authority cannot relocate an existing source Deck during import."
+                    )
                 tokens = [token.strip() for token in target_path.split("::") if token.strip()]
                 if not tokens:
                     raise ConnectError("decks manifest contains an invalid target path")

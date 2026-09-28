@@ -485,13 +485,13 @@ def review_due_expr(
     )
 
 
-def query_next_due_card_id(
+def _ordered_study_card_queries(
     query,
     *,
     user_id: int,
     now: datetime,
     timezone_name: str = "UTC",
-) -> str | None:
+):
     runtime = resolve_scheduler_runtime_settings(user_id=user_id)
     day_boundary_hour = int(runtime.day_boundary_hour_local)
     learn_ahead_seconds = int(runtime.learn_ahead_seconds)
@@ -553,7 +553,7 @@ def query_next_due_card_id(
         ),
         else_=None,
     )
-    row = (
+    due_query = (
         query.outerjoin(progress_alias, progress_join)
         .filter(active_progress_expr(progress_alias, today_day_index=today_day_index), is_due_expr)
         .order_by(
@@ -566,35 +566,64 @@ def query_next_due_card_id(
             Card.id.asc(),
         )
         .with_entities(Card.id)
-        .first()
     )
-    if not row:
-        learn_ahead_cutoff = _learn_ahead_cutoff(
-            now=now,
-            learn_ahead_seconds=learn_ahead_seconds,
+    learn_ahead_cutoff = _learn_ahead_cutoff(
+        now=now,
+        learn_ahead_seconds=learn_ahead_seconds,
+    )
+    ahead_query = (
+        query.outerjoin(progress_alias, progress_join)
+        .filter(
+            active_progress_expr(progress_alias, today_day_index=today_day_index),
+            normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]),
+            progress_alias.due_day.is_(None),
+            progress_alias.due_at.isnot(None),
+            progress_alias.due_at > now,
+            progress_alias.due_at <= learn_ahead_cutoff,
         )
-        row = (
-            query.outerjoin(progress_alias, progress_join)
-            .filter(
-                active_progress_expr(progress_alias, today_day_index=today_day_index),
-                normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]),
-                progress_alias.due_day.is_(None),
-                progress_alias.due_at.isnot(None),
-                progress_alias.due_at > now,
-                progress_alias.due_at <= learn_ahead_cutoff,
-            )
-            .order_by(
-                queue_priority.asc(),
-                progress_alias.due_at.asc(),
-                Card.created_at.asc(),
-                Card.id.asc(),
-            )
-            .with_entities(Card.id)
-            .first()
+        .order_by(
+            queue_priority.asc(),
+            progress_alias.due_at.asc(),
+            Card.created_at.asc(),
+            Card.id.asc(),
         )
-        if not row:
-            return None
-    return str(row[0])
+        .with_entities(Card.id)
+    )
+    return due_query, ahead_query
+
+
+def query_next_due_card_id(
+    query,
+    *,
+    user_id: int,
+    now: datetime,
+    timezone_name: str = "UTC",
+) -> str | None:
+    due_query, ahead_query = _ordered_study_card_queries(
+        query, user_id=user_id, now=now, timezone_name=timezone_name
+    )
+    row = due_query.first()
+    if row is None:
+        row = ahead_query.first()
+    return str(row[0]) if row is not None else None
+
+
+def query_study_card_order(
+    query,
+    *,
+    user_id: int,
+    now: datetime,
+    timezone_name: str = "UTC",
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Audit-only full SQL order using the same predicates as the serving picker."""
+
+    due_query, ahead_query = _ordered_study_card_queries(
+        query, user_id=user_id, now=now, timezone_name=timezone_name
+    )
+    return (
+        tuple(str(row[0]) for row in due_query.all()),
+        tuple(str(row[0]) for row in ahead_query.all()),
+    )
 
 
 def load_card_progress_map(*, user_id: int, card_ids: list[str]) -> dict[str, CardProgress]:
@@ -605,6 +634,25 @@ def load_card_progress_map(*, user_id: int, card_ids: list[str]) -> dict[str, Ca
         CardProgress.card_id.in_(card_ids),
     ).all()
     return {row.card_id: row for row in rows if row.card_id}
+
+
+def review_selection_order_key(
+    *,
+    due_day: int | None,
+    due_at: datetime | None,
+    card_created_at: datetime | None,
+    card_order_key: str | bytes,
+):
+    """Mirror the review ORDER BY of ``query_next_due_card_id`` for loaded reads."""
+
+    return (
+        due_day is None,
+        int(due_day) if due_day is not None else 0,
+        due_at is None,
+        due_at or datetime.max,
+        card_created_at or datetime.max,
+        card_order_key,
+    )
 
 
 def select_next_due_card_from_loaded(
@@ -632,19 +680,11 @@ def select_next_due_card_from_loaded(
 
     def _review_sort_key(card_obj: Card):
         progress = progress_map.get(card_obj.id)
-        review_due_day = _resolve_review_due_day(
-            due_at=progress.due_at if progress is not None else None,
+        return review_selection_order_key(
             due_day=progress.due_day if progress is not None else None,
-            now=now,
-            timezone_name=timezone_name,
-            day_boundary_hour_local=day_boundary_hour,
-        )
-        due_at = progress.due_at if progress is not None else None
-        return (
-            review_due_day,
-            due_at or datetime.max,
-            card_obj.created_at or datetime.max,
-            card_obj.id,
+            due_at=progress.due_at if progress is not None else None,
+            card_created_at=card_obj.created_at,
+            card_order_key=card_obj.id,
         )
 
     for card_obj in cards:

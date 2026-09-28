@@ -354,7 +354,7 @@ def ensure_backward_compatible_schema() -> None:
                 sa.text("UPDATE card_progress SET is_suspended = 0 WHERE is_suspended IS NULL")
             )
             schema_changed = True
-        _ensure_column(
+        added_interval_days_raw = _ensure_column(
             "card_progress",
             "interval_days_raw",
             "ALTER TABLE card_progress ADD COLUMN interval_days_raw FLOAT NULL",
@@ -428,12 +428,16 @@ def ensure_backward_compatible_schema() -> None:
             "last_review_event_id",
             "ALTER TABLE card_progress ADD COLUMN last_review_event_id INTEGER NULL",
         )
-        db.session.execute(
-            sa.text(
-                "UPDATE card_progress SET interval_days_raw = interval_days "
-                "WHERE interval_days_raw IS NULL AND interval_days IS NOT NULL"
+        if added_interval_days_raw:
+            # This is a one-time legacy column initialization, not a runtime
+            # repair writer. An existing NOTE compatibility projection must
+            # never be silently changed during app boot.
+            db.session.execute(
+                sa.text(
+                    "UPDATE card_progress SET interval_days_raw = interval_days "
+                    "WHERE interval_days_raw IS NULL AND interval_days IS NOT NULL"
+                )
             )
-        )
 
         _ensure_index(
             "card_progress",

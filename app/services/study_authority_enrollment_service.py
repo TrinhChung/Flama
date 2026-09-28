@@ -31,6 +31,8 @@ from models.note import Note
 from models.payment_order import PaymentOrder
 from models.payment_order_item import PaymentOrderItem
 from models.study_authority_enrollment import StudyAuthorityEnrollment
+from models.study_progress_contributor import StudyProgressContributor
+from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_batch import StudySessionBatch
@@ -535,6 +537,37 @@ def stage_legacy_authority_enrollment(
             .with_for_update()
         ).scalars()
     )
+    # A Note deleted under NOTE authority leaves a retired tombstone with no
+    # live Note, state or contributor; there is nothing to project back.
+    retired_ids = [
+        int(subject.id)
+        for subject in subjects
+        if str(subject.status_code) == "TOMBSTONED_SUBJECT_DELETED"
+        and subject.live_note_id is None
+    ]
+    if retired_ids:
+        residual_state = session.execute(
+            select(StudyProgressState.subject_id)
+            .where(StudyProgressState.subject_id.in_(retired_ids))
+            .limit(1)
+            .with_for_update()
+        ).scalar_one_or_none()
+        residual_contributor = session.execute(
+            select(StudyProgressContributor.id)
+            .where(
+                StudyProgressContributor.subject_id.in_(retired_ids),
+                StudyProgressContributor.contributor_status == "ACTIVE",
+            )
+            .limit(1)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if residual_state is not None or residual_contributor is not None:
+            raise _fail(
+                "AUTHORITY_SUBJECT_NOT_READY",
+                "A deleted NOTE subject still holds canonical state or contributors.",
+            )
+        retired = set(retired_ids)
+        subjects = tuple(subject for subject in subjects if int(subject.id) not in retired)
     if not subjects:
         owned_card_id = session.execute(
             select(Card.id)

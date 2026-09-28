@@ -291,11 +291,16 @@ class StudyAuthorityProjectionEncoderTests(unittest.TestCase):
 
     def test_state_must_round_trip_through_legacy_mysql_float_and_datetime(self):
         baseline = _baseline(_progress("card-a"), event_id=101)
+        _encode(baseline, target_overrides={"ease_factor": 2.35})
         with self.assertRaises(LegacyProjectionEncodingError) as float_failure:
-            _encode(baseline, target_overrides={"ease_factor": 2.35})
+            _encode(baseline, target_overrides={"ease_factor": 2.3500001})
         self.assertEqual(
             float_failure.exception.code, "UNPROJECTABLE_LEGACY_FLOAT"
         )
+        # Binary32-exact is insufficient: MySQL text rounds this to 1.01562.
+        with self.assertRaises(LegacyProjectionEncodingError) as binary32_failure:
+            _encode(baseline, target_overrides={"ease_factor": 1.015625})
+        self.assertEqual(binary32_failure.exception.code, "UNPROJECTABLE_LEGACY_FLOAT")
 
         with self.assertRaises(LegacyProjectionEncodingError) as time_failure:
             _encode(

@@ -79,6 +79,37 @@ describe('Study Session wire contracts', () => {
     )).toThrow(/v4 NOTE authority/)
   })
 
+  it('projects full snapshot pins onto the exact v4 event identity', () => {
+    const pin = {
+      schema_version: 'study-note-authority-pin.v1',
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+      future_snapshot_metadata: 'not-an-event-field',
+    }
+    const identity = reviewEventWireIdentityV4(
+      'session-1', 'operation-1', resolveReviewAction('good'), policy, pin,
+    )
+    expect(identity).toEqual({
+      ...reviewEventWireIdentity(
+        STUDY_SESSION_SCHEMA_V3, 'session-1', resolveReviewAction('good'), policy,
+      ),
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+      operation_key: 'operation-1',
+    })
+    expect(validateReviewEventWireIdentityV4({
+      ...identity, event_id: 'operation-1', rating: 'good',
+    }, { sessionId: 'session-1', policy, authority: pin }).rating).toBe('good')
+  })
+
   it('builds mandatory v3 identity from the pinned session and policy', () => {
     expect(reviewEventWireIdentity(
       STUDY_SESSION_SCHEMA_V3,

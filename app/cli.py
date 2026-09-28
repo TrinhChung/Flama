@@ -365,7 +365,21 @@ def register_cli_commands(app: Flask) -> None:
         required=True,
         help="Learner user ID whose NOTE read projection will be compared.",
     )
-    def study_authority_read_audit(user_id: int) -> None:
+    @click.option(
+        "--observed-at-utc",
+        type=str,
+        default=None,
+        help="Fixed ISO-8601 instant with UTC offset; default is current UTC time.",
+    )
+    @click.option(
+        "--timezone-name",
+        type=str,
+        default=None,
+        help="Supported timezone name/offset for fixed-context comparison; default is learner timezone.",
+    )
+    def study_authority_read_audit(
+        user_id: int, observed_at_utc: str | None, timezone_name: str | None
+    ) -> None:
         """Compare canonical NOTE queue semantics with the rollback projection."""
 
         from app.repositories import study_repository
@@ -374,22 +388,54 @@ def register_cli_commands(app: Flask) -> None:
             lock_study_authority_route,
         )
         from app.services.scheduler_config_service import resolve_deck_options
-        from app.services.stats_overview import get_effective_timezone_name
+        from app.services.study_progress_contract import SUBJECT_STATUSES
+        from app.services.stats_overview import (
+            get_effective_timezone_name,
+            normalize_timezone_name,
+        )
         from app.services.study_authority_read_service import (
             StudyAuthorityReadError,
             load_study_authority_card_reads,
             summarize_study_authority_queue,
         )
         from models.card import Card
+        from models.deck_install import DeckInstall
         from models.note import Note
+        from models.study_progress_subject import StudyProgressSubject
         from models.user import User
 
-        observed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if observed_at_utc is None:
+            observed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        else:
+            try:
+                parsed_at = datetime.fromisoformat(
+                    observed_at_utc.strip().replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise click.ClickException(
+                    "INVALID_AUDIT_TIME: expected an ISO-8601 instant with UTC offset."
+                ) from exc
+            if parsed_at.tzinfo is None:
+                raise click.ClickException(
+                    "INVALID_AUDIT_TIME: a UTC offset is required."
+                )
+            observed_at = parsed_at.astimezone(timezone.utc).replace(tzinfo=None)
+        if timezone_name is not None:
+            normalized_timezone = normalize_timezone_name(timezone_name)
+            if normalized_timezone is None:
+                raise click.ClickException(
+                    "INVALID_AUDIT_TIMEZONE: expected a supported timezone name or offset."
+                )
+            timezone_name = normalized_timezone
         try:
             route = lock_study_authority_route(
                 db.session,
                 learner_user_id=user_id,
                 allow_note_authority=True,
+            )
+            user = db.session.get(User, user_id)
+            timezone_name = timezone_name or get_effective_timezone_name(
+                getattr(user, "timezone", "UTC")
             )
             if route.mode_code != "NOTE":
                 db.session.rollback()
@@ -398,6 +444,8 @@ def register_cli_commands(app: Flask) -> None:
                         {
                             "schema_version": "study-authority-read-audit.v1",
                             "user_id": user_id,
+                            "observed_at_utc": observed_at.isoformat(timespec="microseconds") + "Z",
+                            "timezone": timezone_name,
                             "authority_mode": route.mode_code,
                             "status": "SKIP",
                             "mismatches": [],
@@ -407,14 +455,45 @@ def register_cli_commands(app: Flask) -> None:
                     )
                 )
                 return
-            user = db.session.get(User, user_id)
-            timezone_name = get_effective_timezone_name(
-                getattr(user, "timezone", "UTC")
-            )
+            if DeckInstall.query.filter_by(
+                user_id=user_id, clone_mode="logical_overlay"
+            ).first() is not None:
+                raise StudyAuthorityReadError(
+                    "OVERLAY_AUTHORITY_NOT_READY",
+                    "NOTE read audit cannot omit installed overlay Cards.",
+                )
+            owned_note_ids = {
+                str(note_id).encode("utf-8")
+                for (note_id,) in db.session.query(Note.id)
+                .filter(Note.user_id == user_id)
+                .all()
+            }
             cards_query = Card.query.join(Note, Card.note_id == Note.id).filter(
                 Note.user_id == user_id
             )
             cards = cards_query.order_by(Card.id.asc()).all()
+            card_note_ids = {str(card.note_id).encode("utf-8") for card in cards}
+            active_subject_keys = {
+                bytes(logical_note_key)
+                for (logical_note_key,) in db.session.query(
+                    StudyProgressSubject.logical_note_key
+                )
+                .filter(
+                    StudyProgressSubject.learner_user_id == user_id,
+                    StudyProgressSubject.status_code.in_(
+                        tuple(
+                            status for status in SUBJECT_STATUSES
+                            if status.startswith("MIRRORED_")
+                        )
+                    ),
+                )
+                .all()
+            }
+            if owned_note_ids != card_note_ids or owned_note_ids != active_subject_keys:
+                raise StudyAuthorityReadError(
+                    "INCOMPLETE_AUTHORITY_COVERAGE",
+                    "NOTE read audit requires every owned Note, Card and active subject.",
+                )
             reads = load_study_authority_card_reads(
                 db.session,
                 learner_user_id=user_id,
@@ -454,6 +533,14 @@ def register_cli_commands(app: Flask) -> None:
                 now=observed_at,
                 timezone_name=timezone_name,
             )
+            legacy_due_order, legacy_ahead_order = (
+                study_repository.query_study_card_order(
+                    cards_query,
+                    user_id=user_id,
+                    now=observed_at,
+                    timezone_name=timezone_name,
+                )
+            )
             mismatches: list[str] = []
             canonical_counts = (
                 canonical.new_count,
@@ -464,6 +551,10 @@ def register_cli_commands(app: Flask) -> None:
                 mismatches.append("queue_counts")
             if canonical.selected_card_id != legacy_selected:
                 mismatches.append("selected_card_id")
+            if canonical.due_card_ids != legacy_due_order:
+                mismatches.append("due_order")
+            if canonical.learn_ahead_card_ids != legacy_ahead_order:
+                mismatches.append("learn_ahead_order")
             if (
                 canonical.pending_learning_count != int(legacy_pending[0])
                 or canonical.next_due_at != legacy_pending[1]
@@ -472,6 +563,8 @@ def register_cli_commands(app: Flask) -> None:
             payload = {
                 "schema_version": "study-authority-read-audit.v1",
                 "user_id": user_id,
+                "observed_at_utc": observed_at.isoformat(timespec="microseconds") + "Z",
+                "timezone": timezone_name,
                 "authority_mode": route.mode_code,
                 "enrollment_epoch": route.epoch,
                 "card_count": len(cards),

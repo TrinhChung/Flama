@@ -4,6 +4,8 @@ import {
   ClientAlgorithmContractError,
   ClientAlgorithmUnavailableError,
 } from '../scheduler/algorithmRegistry'
+import { normalizePersistedStudySession } from './sessionRestore'
+import { canonicalDigest } from './canonicalDigest'
 import {
   acknowledgeBatchReceipt,
   applyLocalAnswer,
@@ -251,6 +253,96 @@ describe('local study session engine', () => {
       ...rolloverCommit,
       resume_after_commit: false,
     })).toBe(false)
+  })
+
+  it('keeps 50 review offsets monotonic when the client clock moves backwards', () => {
+    let eventId = 0
+    vi.stubGlobal('crypto', {
+      randomUUID: () => `00000000-0000-4000-8000-${String(++eventId).padStart(12, '0')}`,
+    })
+    const sessionSnapshot = snapshotWithCards(50)
+    sessionSnapshot.session_id = '11111111-1111-4111-8111-111111111111'
+    let local = createPersistedSession(sessionSnapshot)
+    const anchor = Date.parse(local.snapshot.server_now_utc)
+
+    for (let index = 1; index <= 50; index += 1) {
+      const cardId = `card-${index}`
+      const regressedTime = anchor + 1000 - index
+      const decision = decisionForCard(local, cardId, regressedTime)
+      local = applyLocalAnswer(local, cardId, 'easy', decision, 200)
+    }
+
+    expect(local.events).toHaveLength(50)
+    expect(local.events.map((event) => event.scheduler_offset_ms))
+      .toEqual(Array(50).fill(999))
+    expect(normalizePersistedStudySession(local, local.scope_key).status)
+      .toBe('restored')
+    expect(prepareCommit(local, { reason: 'rollover' }).payload.events)
+      .toHaveLength(50)
+  })
+
+  it('recomputes a stale preview at the clamped event time', () => {
+    let eventId = 0
+    vi.stubGlobal('crypto', {
+      randomUUID: () => `00000000-0000-4000-8000-${String(++eventId).padStart(12, '0')}`,
+    })
+    let local = createPersistedSession(snapshotWithCards(2))
+    const anchor = Date.parse(local.snapshot.server_now_utc)
+    local = applyLocalAnswer(
+      local,
+      'card-1',
+      'easy',
+      decisionForCard(local, 'card-1', anchor + 1000),
+      200,
+    )
+    const stalePreview = decisionForCard(
+      { ...local, events: [] },
+      'card-2',
+      anchor + 900,
+    )
+    const expected = decisionForCard(local, 'card-2', anchor + 1000)
+    const answered = applyLocalAnswer(local, 'card-2', 'easy', stalePreview, 200)
+
+    expect(answered.events[1].scheduler_offset_ms).toBe(1000)
+    expect(answered.snapshot.cards[1].state).toEqual(expected.outcomes.easy)
+  })
+
+  it('computes scheduler outcomes at the same integer millisecond sent on the wire', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    const local = createPersistedSession(snapshot())
+    const anchor = Date.parse(local.snapshot.server_now_utc)
+    const decision = decisionForCard(local, 'card-1', anchor + 1000.8)
+    const answered = applyLocalAnswer(local, 'card-1', 'good', decision, 200)
+
+    expect(decision.scheduler_at_ms).toBe(anchor + 1001)
+    expect(answered.events[0].scheduler_offset_ms).toBe(1001)
+    expect(answered.snapshot.cards[0].state).toEqual(decision.outcomes.good)
+  })
+
+  it('preserves the event-time floor while an earlier batch is in flight', () => {
+    let id = 0
+    vi.stubGlobal('crypto', {
+      randomUUID: () => `00000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
+    })
+    let local = createPersistedSession(snapshotWithCards(2))
+    const anchor = Date.parse(local.snapshot.server_now_utc)
+    local = applyLocalAnswer(
+      local,
+      'card-1',
+      'easy',
+      decisionForCard(local, 'card-1', anchor + 1000),
+      200,
+    )
+    const extracted = extractPendingBatch(local, 1)
+    expect(extracted).not.toBeNull()
+    if (!extracted) return
+
+    const decision = decisionForCard(extracted.session, 'card-2', anchor + 900)
+    const answered = applyLocalAnswer(extracted.session, 'card-2', 'easy', decision, 200)
+    expect(answered.events[0].scheduler_offset_ms).toBe(1000)
+    expect(answered.in_flight_batches?.[0].events[0].scheduler_offset_ms).toBe(1000)
   })
 
   it.each<Rating>(['again', 'hard', 'good'])(
@@ -547,6 +639,49 @@ describe('local study session engine', () => {
     expect(extractPendingBatch(answered)?.batch.schema_version).toBe('study-batch.v2')
   })
 
+  it('keeps unprofiled v4 math unchanged and rejects unknown profiles', () => {
+    const base = snapshot()
+    base.cards[0].state = { ...base.cards[0].state, type: 'review', ease: 2.2, interval_days: 5 }
+    const old: StudySessionSnapshot = { ...base, schema_version: 'study-session.v4',
+      authority_mode: 'NOTE', enrollment_epoch: '1' }
+    const now = Date.parse(old.server_now_utc)
+    const legacy = decisionForCard(createPersistedSession(old), 'card-1', now)
+    const current = decisionForCard(createPersistedSession({ ...old,
+      storage_profile: 'note-mysql-float-text.v1' }), 'card-1', now)
+    expect(legacy.outcomes.hard.ease).toBe(2.2 - 0.15)
+    expect(current.outcomes.hard.ease).toBe(2.05)
+    expect(() => createPersistedSession({ ...old, storage_profile: 'unknown' } as unknown as StudySessionSnapshot))
+      .toThrow(/storage profile/)
+    expect(() => createPersistedSession({ ...base, storage_profile: 'note-mysql-float-text.v1' }))
+      .toThrow(/storage profile/)
+  })
+
+  it('normalizes repeated NOTE ratings before local state and retry storage', () => {
+    const base = snapshotWithCards(2)
+    const pin = {
+      schema_version: 'study-note-authority-pin.v1' as const, authority_mode: 'NOTE' as const,
+      enrollment_epoch: '1', logical_note_key: 'note-key', subject_generation: '1',
+      base_authority_revision: '0', base_authority_state_hash: '11'.repeat(32),
+    }
+    let local = createPersistedSession({ ...base, schema_version: 'study-session.v4',
+      authority_mode: 'NOTE', enrollment_epoch: '1',
+      storage_profile: 'note-mysql-float-text.v1',
+      cards: base.cards.map((card) => ({ ...card, authority_pin: pin })),
+    })
+    const ratings: Rating[] = ['easy', 'hard', 'hard', 'hard', 'again', 'good', 'easy', 'good']
+    const expectedEase = [2.5, 2.35, 2.2, 2.05, 1.85, 1.85, 2, 2]
+    const now = Date.parse(local.snapshot.server_now_utc)
+    ratings.forEach((rating, index) => {
+      local = applyLocalAnswer(local, 'card-1', rating,
+        decisionForCard(local, 'card-1', now + (index + 1) * 1000 + 283), 500)
+      expect(local.snapshot.cards[0].state.ease).toBe(expectedEase[index])
+      expect(local.snapshot.cards[1].state).toEqual(local.snapshot.cards[0].state)
+    })
+    expect(local.events.map((event) => event.rating)).toEqual(ratings)
+    expect(extractPendingBatch(local)?.batch.events).toEqual(local.events)
+    expect(undoLocalAnswer(local)?.session.snapshot.cards[0].state.ease).toBe(2)
+  })
+
   it('emits frozen v4 Note identity and updates sibling presentation Cards together', () => {
     let id = 0
     vi.stubGlobal('crypto', {
@@ -575,13 +710,14 @@ describe('local study session engine', () => {
       local,
       'card-1',
       'good',
-      decisionForCard(local, 'card-1', now + 1000),
+      decisionForCard(local, 'card-1', now + 1283),
       500,
     )
 
     expect(answered.events[0]).toMatchObject({
       event_id: '00000000-0000-4000-8000-000000000001',
       operation_key: '00000000-0000-4000-8000-000000000001',
+      scheduler_offset_ms: 1000,
       authority_mode: 'NOTE',
       enrollment_epoch: '3',
       logical_note_key: 'note-key',
@@ -589,6 +725,9 @@ describe('local study session engine', () => {
       base_authority_revision: '7',
       base_authority_state_hash: '11'.repeat(32),
     })
+    expect(answered.events[0]).not.toHaveProperty('schema_version')
+    expect(prepareCommit(answered).payload.events[0]).not.toHaveProperty('schema_version')
+    expect(extractPendingBatch(answered)?.batch.events[0]).not.toHaveProperty('schema_version')
     expect(answered.snapshot.cards[1].state).toEqual(
       answered.snapshot.cards[0].state,
     )
@@ -600,6 +739,36 @@ describe('local study session engine', () => {
       schema_version: 'study-batch.v3',
       final_states: [],
     })
+
+    const extracted = extractPendingBatch(answered)!
+    expect(() => acknowledgeBatchReceipt(extracted.session, extracted.batch.batch_id)).toThrow(/receipt/)
+    expect(() => acknowledgeBatchReceipt(extracted.session, extracted.batch.batch_id, {
+      schema_version: 'study-batch-receipt.v1', status: 'enqueued',
+    })).toThrow(/receipt/)
+    const receipt = {
+      schema_version: 'study-commit-receipt.v2', authority_mode: 'NOTE', enrollment_epoch: '3',
+      batch_receipt_schema_version: 'study-note-batch-receipt.v1', success: true,
+      session_id: local.snapshot.session_id, batch_id: extracted.batch.batch_id,
+      commit_id: extracted.batch.batch_id, batch_sequence: 1, commit_reason: 'rollover',
+      is_final: false, applied_event_count: 1, cumulative_event_count: 1,
+      updated_cards: [], rating_counts: { again: 0, hard: 0, good: 1, easy: 0 },
+      committed_at: '2026-02-22T09:00:01Z', request_hash: canonicalDigest(extracted.batch),
+      receipt_hash: `sha256-${'11'.repeat(32)}`,
+    }
+    for (const changed of [
+      { batch_id: 'wrong' }, { session_id: 'wrong' }, { request_hash: 'wrong' },
+      { applied_event_count: 0 }, { enrollment_epoch: '4' }, { cumulative_event_count: 2 },
+      { is_final: true }, { receipt_hash: 'invalid' },
+    ]) {
+      expect(() => acknowledgeBatchReceipt(extracted.session, extracted.batch.batch_id, {
+        ...receipt, ...changed,
+      })).toThrow(/receipt/)
+    }
+    expect(extracted.session.in_flight_batches).toHaveLength(1)
+    const acknowledged = acknowledgeBatchReceipt(extracted.session, extracted.batch.batch_id, receipt)
+    expect(acknowledged.in_flight_batches).toHaveLength(0)
+    expect(acknowledged.snapshot).toEqual(extracted.session.snapshot)
+    expect(() => prepareCommit(acknowledged)).toThrow(/batch stream/)
 
     const undone = undoLocalAnswer(answered)
     expect(undone?.session.snapshot.cards[0].state.type).toBe('new')

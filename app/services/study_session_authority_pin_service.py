@@ -145,6 +145,7 @@ def lock_study_session_authority_subjects(
     route: StudyAuthorityRoute,
     logical_note_keys: Sequence[str],
     now_utc: datetime,
+    create_token_if_missing: bool = True,
 ) -> LockedStudySessionAuthoritySubjects:
     """Lock/decode the complete existing-state NOTE vector for v4 issuance."""
 
@@ -190,6 +191,7 @@ def lock_study_session_authority_subjects(
             )
             .order_by(StudyProgressSubject.logical_note_key.asc())
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalars()
     )
     subject_by_encoded_key = {
@@ -217,6 +219,7 @@ def lock_study_session_authority_subjects(
                 route=route,
                 subject=subject,
                 now_utc=now_utc,
+                create_token_if_missing=create_token_if_missing,
             )
         except Exception as exc:
             if getattr(exc, "code", None):
@@ -373,6 +376,7 @@ def lock_study_session_authority_pins(
         )
         .order_by(StudySessionAuthorityPin.session_card_id.asc())
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalars().all()
     if len(pins) != len(membership_by_id):
         raise _fail(

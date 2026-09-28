@@ -20,6 +20,10 @@ from app.services.study_authority_projection_comparator import (
     compare_note_legacy_projection,
 )
 from app.services.study_progress_contract import RAW_SCHEMA_VERSION, STORAGE_CODEC
+from app.services.study_note_storage_precision import (
+    StudyStoragePrecisionError,
+    legacy_float_round_trip,
+)
 from app.services.study_progress_shadow_codec import (
     STATE_DECODERS,
     CanonicalDocument,
@@ -180,8 +184,8 @@ def _require_exact_legacy_float(value: float, *, field_name: str) -> None:
     """Reject f64 state that cannot survive the legacy MySQL FLOAT columns."""
 
     try:
-        stored = struct.unpack(">f", struct.pack(">f", value))[0]
-    except (OverflowError, struct.error) as exc:
+        stored = legacy_float_round_trip(value)
+    except StudyStoragePrecisionError as exc:
         raise _fail(
             "UNPROJECTABLE_LEGACY_FLOAT",
             f"{field_name} exceeds legacy MySQL FLOAT range.",

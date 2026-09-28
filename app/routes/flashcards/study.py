@@ -901,6 +901,8 @@ def study_session_open():
             composition_selection=composition_selection,
             wire_schema_version=wire_schema_version,
             legacy_wire_schema_version=legacy_wire_schema_version,
+            accepted_batch_schema_versions=payload.get("accepted_batch_schema_versions"),
+            accepted_note_storage_profiles=payload.get("accepted_note_storage_profiles"),
         )
     except StudyCompositionError as exc:
         db.session.rollback()
@@ -940,6 +942,21 @@ def study_session_status(session_id: str):
 
 
 @flashcards_bp.route(
+    "/api/study/sessions/<session_id>/batch/<batch_id>",
+    methods=["GET"],
+)
+@login_required
+def study_session_batch_status(session_id: str, batch_id: str):
+    from app.services.study_note_batch_transport_service import get_study_session_batch_status
+
+    try:
+        result = get_study_session_batch_status(user=current_user, session_id=session_id, batch_id=batch_id)
+    except study_session_service.StudySessionError as exc:
+        return _no_store_json({"error": exc.code, "message": str(exc)}, exc.status)
+    return _no_store_json(result)
+
+
+@flashcards_bp.route(
     "/api/study/sessions/<session_id>/batch",
     methods=["POST"],
 )
@@ -950,8 +967,8 @@ def study_session_batch(session_id: str):
             {
                 "error": "ASYNC_BATCH_DISABLED",
                 "message": (
-                    "Asynchronous Study batches are disabled; use the "
-                    "synchronous commit endpoint."
+                    "New asynchronous Study batches are disabled; retain "
+                    "pending batch work and retry later."
                 ),
             },
             503,
@@ -1012,8 +1029,8 @@ def study_session_commit(session_id: str):
             {
                 "error": "ASYNC_BATCH_DISABLED",
                 "message": (
-                    "Asynchronous Study batches are disabled; retry as a "
-                    "synchronous commit."
+                    "New asynchronous Study batches are disabled; retain "
+                    "pending batch work and retry later."
                 ),
             },
             503,

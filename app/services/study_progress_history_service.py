@@ -21,6 +21,7 @@ from app.services.study_progress_contract import (
     STORAGE_CODEC,
 )
 from app.services.study_progress_shadow_codec import (
+    CanonicalDocument,
     canonical_document,
     canonical_typed_document,
     StudyProgressCodecError,
@@ -181,6 +182,38 @@ def native_review_event_provenance(
     return provenance_code, provenance, runtime
 
 
+def native_review_fact_document(event: ReviewEvent) -> CanonicalDocument:
+    """Rebuild the exact v1 fact payload from immutable ReviewEvent columns."""
+
+    if event.id is None:
+        raise _fail(
+            "UNFLUSHED_REVIEW_EVENT", "ReviewEvent needs an ID for history evidence."
+        )
+    material = {field: getattr(event, field) for field in _HISTORY_PAYLOAD_FIELDS}
+    material["review_event_id"] = int(event.id)
+    return canonical_typed_document(
+        material, too_large_code="STATE_PAYLOAD_TOO_LARGE"
+    )
+
+
+def native_review_fact_operation_key(
+    event: ReviewEvent, provenance: dict[str, Any]
+) -> bytes:
+    """Rebuild the persisted source operation identity for one native fact."""
+
+    operation_key = (
+        provenance.get("request_id")
+        or provenance.get("client_event_id")
+        or provenance.get("study_session_id")
+        or f"review-event:{event.id}"
+    )
+    return encode_identity(
+        str(operation_key),
+        max_bytes=512,
+        field_name="source_operation_key",
+    )
+
+
 def append_native_history_fact(
     session: Session,
     *,
@@ -258,14 +291,7 @@ def append_native_history_fact(
         {"review_event_id": str(event.id), "source": "review_events"},
         too_large_code="STATE_PAYLOAD_TOO_LARGE",
     ).digest
-    fact_material = {
-        field: getattr(event, field) for field in _HISTORY_PAYLOAD_FIELDS
-    }
-    fact_material["review_event_id"] = int(event.id)
-    fact_document = canonical_typed_document(
-        fact_material,
-        too_large_code="STATE_PAYLOAD_TOO_LARGE",
-    )
+    fact_document = native_review_fact_document(event)
     scheduler_config_hash = _decode_digest(
         event.scheduler_config_hash,
         field_name="scheduler_config_hash",
@@ -305,17 +331,7 @@ def append_native_history_fact(
         max_bytes=256,
         field_name="logical_card_key",
     )
-    operation_key = (
-        provenance.get("request_id")
-        or provenance.get("client_event_id")
-        or provenance.get("study_session_id")
-        or f"review-event:{event.id}"
-    )
-    source_operation_key = encode_identity(
-        str(operation_key),
-        max_bytes=512,
-        field_name="source_operation_key",
-    )
+    source_operation_key = native_review_fact_operation_key(event, provenance)
     occurred_at = _utc_naive(event.reviewed_at)
     action_key = str(runtime.get("action_key") or "") or None
     action_version = str(runtime.get("action_contract_version") or "") or None

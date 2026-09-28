@@ -47,6 +47,11 @@ EXPECTED_COLUMNS: dict[str, tuple[str, int | None, bool]] = {
     "updated_at": ("datetime", None, False),
 }
 
+# New installations may run create_all() from a newer model before traversing
+# this historical repair. Accept only this exact, known additive extension;
+# revision 45 still owns adding it to an older table.
+FORWARD_COMPATIBLE_COLUMNS = {"attempt_count"}
+
 EXPECTED_INDEXES: dict[str, tuple[str, ...]] = {
     "ix_study_session_batches_session_id": ("session_id",),
     "ix_study_session_batches_user_id": ("user_id",),
@@ -102,7 +107,7 @@ def _existing_contract_issues(inspector: sa.Inspector) -> list[str]:
     actual_names = set(reflected_columns)
     if missing := sorted(expected_names - actual_names):
         issues.append(f"missing columns: {', '.join(missing)}")
-    if unexpected := sorted(actual_names - expected_names):
+    if unexpected := sorted(actual_names - expected_names - FORWARD_COMPATIBLE_COLUMNS):
         issues.append(f"unexpected columns: {', '.join(unexpected)}")
 
     for name in sorted(expected_names & actual_names):
@@ -121,6 +126,15 @@ def _existing_contract_issues(inspector: sa.Inspector) -> list[str]:
             )
         if row.get("default") is not None:
             issues.append(f"column {name} has unexpected server default")
+
+    if "attempt_count" in reflected_columns:
+        row = reflected_columns["attempt_count"]
+        if (
+            _type_signature(row["type"]) != ("integer", None)
+            or bool(row.get("nullable"))
+            or str(row.get("default")).strip("()'\" ") != "0"
+        ):
+            issues.append("column attempt_count is not INTEGER NOT NULL DEFAULT 0")
 
     primary_key = tuple(
         (inspector.get_pk_constraint(TABLE_NAME) or {}).get(

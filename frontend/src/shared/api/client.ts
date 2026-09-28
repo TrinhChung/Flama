@@ -156,13 +156,16 @@ async function apiFetch(
 
     if (error instanceof TypeError) {
       const isFormDataUpload = init.body instanceof FormData
-      if (!isFormDataUpload) {
+      const browserOffline = typeof navigator !== 'undefined' && navigator.onLine === false
+      if (!isFormDataUpload && !browserOffline) {
         reportBackendUnavailable()
       }
       throw new ApiError(
         isFormDataUpload
           ? 'Tải lên tệp thất bại do lỗi kết nối tới máy chủ.'
-          : 'Không thể kết nối tới máy chủ.',
+          : browserOffline
+            ? 'Bạn đang ngoại tuyến. Hãy kết nối lại để đồng bộ tiến độ.'
+            : 'Không thể kết nối tới máy chủ.',
         0,
         isFormDataUpload ? 'UPLOAD_NETWORK_ERROR' : 'BACKEND_UNAVAILABLE',
       )
