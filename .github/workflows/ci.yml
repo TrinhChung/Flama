@@ -280,6 +280,15 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p1_02_mysql_concurrency.py
 
+      - name: Run NOTE analytics read-only contract on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_p5_analytics_mysql.py
+
   deploy:
     needs: [changes, frontend, backend, spa-contract, redis-contract, mysql-contract]
     if: >-

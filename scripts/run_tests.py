@@ -499,9 +499,11 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/stats_*.py",
             "app/services/dashboard_service.py",
             "app/repositories/stats_query_repository.py",
+            "app/repositories/note_analytics_read_repository.py",
         ],
         "backend_tests": [
             "tests/test_deck_aggregation_service.py",
+            "tests/test_note_analytics_read.py",
             "tests/test_stats_overview.py",
             "tests/test_stats_study_time.py",
             "tests/test_stats_today_future.py",
@@ -777,6 +779,15 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "requirements.txt",
     "scripts/probe_p1_02_mysql_concurrency.py",
     "tests/test_marketplace_taxonomy_migration.py",
+    # Analytics run in a READ ONLY MySQL transaction that SQLite cannot emulate.
+    "app/api/v1/analytics/**",
+    "app/services/study_analytics_read_service.py",
+    "app/services/deck_aggregation_service.py",
+    "app/services/dashboard_service.py",
+    "app/services/stats_overview.py",
+    "app/repositories/note_analytics_read_repository.py",
+    "scripts/probe_p5_analytics_mysql.py",
+    "tests/test_note_analytics_read.py",
 )
 
 DEPLOY_RUNTIME_SOURCE_PATTERNS = (

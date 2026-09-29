@@ -1,35 +1,36 @@
-"""Tests for the database-level deck aggregation service seam (Phương án 3).
+"""Tests for the single-query deck aggregation seam used by the dashboard.
 
-Verifies:
-1. R1: Direct owned notes and Logical Overlay marketplace shared decks aggregation.
-2. R2: Decoupled seam architecture over compatibility projection `card_progress`.
-3. R3: Phase 6 Decision D6-04 note-level counting (count_by_note=True) vs card-level counting.
-4. R4: Pure SQL aggregation without loading Card/Note entities into Python memory.
-5. R5: Non-locking execution (no FOR UPDATE) and fail-closed authority checks.
+LEGACY rows come from ``card_progress``; NOTE rows (canonical availability and
+fail-closed evidence checks) are covered with real writers in
+``test_note_analytics_read.py``. Buckets must match
+``study_repository.counter_bucket_for_progress_values``.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
+import random
 import unittest
 from uuid import uuid4
 
 from app import create_app
-from app.services.deck_aggregation_service import (
-    aggregate_deck_study_counts,
-    check_note_authority_integrity,
-)
-from app.services.study_authority_read_service import StudyAuthorityReadError
+from app.repositories.study_repository import _today_day_index, counter_bucket_for_progress_values
+from app.services.anki_scheduler import _day_index_to_datetime
+from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
 
 UTC = timezone.utc
+
+
+def _next_day_start(today_day: int) -> datetime:
+    """Start of the next study day for a UTC learner with a midnight boundary."""
+    return datetime.combine(date.fromordinal(today_day + 1), datetime.min.time())
 
 
 class DeckAggregationServiceTests(unittest.TestCase):
@@ -177,8 +178,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 db.session,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[self.owned_deck_id],
-                now_utc=now_utc,
                 today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
                 is_note_mode=False,
             )
 
@@ -245,8 +246,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 db.session,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[self.local_deck_id],
-                now_utc=now_utc,
                 today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
                 is_note_mode=False,
             )
 
@@ -256,87 +257,6 @@ class DeckAggregationServiceTests(unittest.TestCase):
             self.assertEqual(local_counts["learn"], 0)
             self.assertEqual(local_counts["total"], 2)
             self.assertEqual(note_types.get(self.local_deck_id), "shared-nt-123")
-
-    def test_decision_d6_04_note_level_vs_card_level_counting(self):
-        """Test R3: Multi-template note counts as 1 in note mode, but N in card mode."""
-        with self.app.app_context():
-            now_utc = datetime(2026, 9, 29, 12, 0, 0)
-            today_day = now_utc.date().toordinal()
-
-            # Note with 3 sibling cards (3 templates)
-            note_multi, cards_multi = self._create_note_and_cards(
-                user_id=self.learner_id,
-                deck_id=self.owned_deck_id,
-                card_count=3,
-            )
-
-            # All 3 sibling cards are due review today
-            for c in cards_multi:
-                self._add_progress(
-                    user_id=self.learner_id,
-                    card_id=c.id,
-                    queue="review",
-                    due_day=today_day,
-                )
-            db.session.commit()
-
-            # In NOTE mode with count_by_note=True: counts as 1 Due Note
-            counts_note, _ = aggregate_deck_study_counts(
-                db.session,
-                learner_user_id=self.learner_id,
-                visible_deck_ids=[self.owned_deck_id],
-                now_utc=now_utc,
-                today_day_index=today_day,
-                is_note_mode=True,
-                count_by_note=True,
-            )
-            self.assertEqual(counts_note[self.owned_deck_id]["due"], 1)
-            self.assertEqual(counts_note[self.owned_deck_id]["total"], 3)
-
-            # In LEGACY mode or count_by_note=False: counts as 3 Due Cards
-            counts_card, _ = aggregate_deck_study_counts(
-                db.session,
-                learner_user_id=self.learner_id,
-                visible_deck_ids=[self.owned_deck_id],
-                now_utc=now_utc,
-                today_day_index=today_day,
-                is_note_mode=False,
-                count_by_note=False,
-            )
-            self.assertEqual(counts_card[self.owned_deck_id]["due"], 3)
-            self.assertEqual(counts_card[self.owned_deck_id]["total"], 3)
-
-    def test_note_authority_integrity_fail_closed(self):
-        """Test R5: Fail-closed when a subject is missing an authority token."""
-        with self.app.app_context():
-            # Create a subject without a token
-            subject = StudyProgressSubject(
-                learner_user_id=self.learner_id,
-                logical_note_key=b"note-test-key-1234567890",
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-            )
-            db.session.add(subject)
-            db.session.commit()
-
-            # Integrity check must raise StudyAuthorityReadError
-            with self.assertRaises(StudyAuthorityReadError) as ctx:
-                check_note_authority_integrity(db.session, learner_user_id=self.learner_id)
-            self.assertEqual(ctx.exception.code, "AUTHORITY_TOKEN_REQUIRED")
-
-            # Now add token -> check must pass
-            token = StudyAuthoritySubjectToken(
-                subject_id=subject.id,
-                subject_generation=1,
-                authority_revision=0,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-            )
-            db.session.add(token)
-            db.session.commit()
-
-            # Must not raise
-            check_note_authority_integrity(db.session, learner_user_id=self.learner_id)
 
     def test_empty_visible_decks_returns_empty(self):
         """Test that empty visible_deck_ids returns immediately without error."""
@@ -348,8 +268,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 db.session,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[],
-                now_utc=now_utc,
                 today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
                 is_note_mode=False,
             )
             self.assertEqual(counts, {})
@@ -404,8 +324,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 db.session,
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[self.local_deck_id],
-                now_utc=now_utc,
                 today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
                 is_note_mode=False,
             )
 
@@ -436,8 +356,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     db.session,
                     learner_user_id=self.learner_id,
                     visible_deck_ids=[self.owned_deck_id],
-                    now_utc=now_utc,
                     today_day_index=today_day,
+                    day_cutoff_utc=_next_day_start(today_day),
                     is_note_mode=True,
                 )
             finally:
@@ -471,99 +391,6 @@ class DeckAggregationServiceTests(unittest.TestCase):
             self.assertEqual(owned_node.due_count, 1)
             self.assertEqual(total_new, 2)
             self.assertEqual(total_due, 1)
-
-    def test_note_authority_fail_closed_on_dashboard_aggregation(self):
-        """Test R5 & NOTE authority invariant: Dashboard aggregation fails closed if token is missing."""
-        with self.app.app_context():
-            now_utc = datetime(2026, 9, 29, 12, 0, 0)
-            today_day = now_utc.date().toordinal()
-
-            # Create a subject without a token for this learner
-            subject = StudyProgressSubject(
-                learner_user_id=self.learner_id,
-                logical_note_key=b"corrupted-note-key-without-token",
-                created_at=now_utc,
-                updated_at=now_utc,
-            )
-            db.session.add(subject)
-            db.session.commit()
-
-            # aggregate_deck_study_counts with is_note_mode=True must raise StudyAuthorityReadError
-            with self.assertRaises(StudyAuthorityReadError) as ctx:
-                aggregate_deck_study_counts(
-                    db.session,
-                    learner_user_id=self.learner_id,
-                    visible_deck_ids=[self.owned_deck_id],
-                    now_utc=now_utc,
-                    today_day_index=today_day,
-                    is_note_mode=True,
-                )
-            self.assertEqual(ctx.exception.code, "AUTHORITY_TOKEN_REQUIRED")
-
-    def test_study_note_count_enabled_config_flag(self):
-        """Test R3: STUDY_NOTE_COUNT_ENABLED config flag enables Note-level counting in build_dashboard_data."""
-        from app.services.dashboard_service import build_dashboard_data
-        from models.study_authority_enrollment import StudyAuthorityEnrollment
-
-        with self.app.app_context():
-            user = db.session.get(User, self.learner_id)
-            now_utc = datetime(2026, 9, 29, 12, 0, 0)
-            today_day = now_utc.date().toordinal()
-
-            # Enroll user in NOTE mode
-            enrollment = StudyAuthorityEnrollment(
-                learner_user_id=self.learner_id,
-                mode_code="NOTE",
-                epoch=1,
-                created_at=now_utc,
-                updated_at=now_utc,
-            )
-            db.session.add(enrollment)
-
-            # Create 1 note with 3 sibling cards
-            note, cards = self._create_note_and_cards(
-                user_id=self.learner_id,
-                deck_id=self.owned_deck_id,
-                card_count=3,
-            )
-            subject = StudyProgressSubject(
-                learner_user_id=self.learner_id,
-                logical_note_key=str(note.id).encode("utf-8"),
-                created_at=now_utc,
-                updated_at=now_utc,
-            )
-            db.session.add(subject)
-            db.session.flush()
-
-            token = StudyAuthoritySubjectToken(
-                subject_id=subject.id,
-                subject_generation=1,
-                authority_revision=0,
-                created_at=now_utc,
-                updated_at=now_utc,
-            )
-            db.session.add(token)
-
-            for c in cards:
-                self._add_progress(
-                    user_id=self.learner_id,
-                    card_id=c.id,
-                    queue="review",
-                    due_day=today_day,
-                )
-            db.session.commit()
-
-            # When STUDY_NOTE_COUNT_ENABLED is False (default): counts 3 cards
-            with self.app.test_request_context():
-                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = False
-                rows, _, _, total_due, _ = build_dashboard_data(user)
-                self.assertEqual(total_due, 3)
-
-            # When STUDY_NOTE_COUNT_ENABLED is True: counts 1 Note (Decision D6-04)
-            with self.app.test_request_context():
-                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = True
-                rows, _, _, total_due, _ = build_dashboard_data(user)
-                self.assertEqual(total_due, 1)
 
     def test_multi_author_nested_subdecks_marketplace_overlay(self):
         """Test Open Issue 3: Complex nested subdecks from multiple marketplace authors with overlapping template IDs."""
@@ -708,8 +535,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     db.session,
                     learner_user_id=self.learner_id,
                     visible_deck_ids=[self.owned_deck_id],
-                    now_utc=now_utc,
                     today_day_index=today_day,
+                    day_cutoff_utc=_next_day_start(today_day),
                     is_note_mode=False,
                 )
                 self.assertIn(self.owned_deck_id, counts)
@@ -743,6 +570,382 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 "START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY"
             )
             mock_session.rollback.assert_called()
+
+    def test_empty_decks_and_unattached_notes(self):
+        """Test edge cases: empty decks, unattached notes (deck_id=None), and invisible decks."""
+        with self.app.app_context():
+            now_utc = datetime(2026, 9, 29, 12, 0, 0)
+            today_day = now_utc.date().toordinal()
+
+            # Empty deck
+            empty_deck = Deck(name="Empty Deck", owner_user_id=self.learner_id)
+            db.session.add(empty_deck)
+            db.session.flush()
+
+            # Note with deck_id=None (e.g. unattached/orphaned)
+            self._create_note_and_cards(user_id=self.learner_id, deck_id=None, card_count=2)
+
+            db.session.commit()
+
+            # Query empty deck
+            counts, note_types = aggregate_deck_study_counts(
+                db.session,
+                learner_user_id=self.learner_id,
+                visible_deck_ids=[empty_deck.id],
+                today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
+                is_note_mode=False,
+            )
+            self.assertEqual(counts[empty_deck.id], {"total": 0, "new": 0, "learn": 0, "due": 0})
+            self.assertNotIn(empty_deck.id, note_types)
+
+            # Query with empty visible_deck_ids list
+            empty_res, empty_nt = aggregate_deck_study_counts(
+                db.session,
+                learner_user_id=self.learner_id,
+                visible_deck_ids=[],
+                today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
+                is_note_mode=False,
+            )
+            self.assertEqual(empty_res, {})
+            self.assertEqual(empty_nt, {})
+
+    def test_custom_day_boundary_hour_and_day_cutoff_parity(self):
+        """Test R4: Parity around day boundary hour local and review card with due_day=None."""
+        from unittest.mock import patch
+        from app.services.dashboard_service import build_dashboard_data
+        from models.user_scheduler_settings import UserSchedulerSettings
+
+        with self.app.app_context():
+            user = db.session.get(User, self.learner_id)
+            user.timezone = "Asia/Tokyo"
+            # Set custom boundary hour to 6 AM (default is 4 AM)
+            setting = UserSchedulerSettings(
+                user_id=self.learner_id,
+                day_boundary_hour_local=6,
+                learn_ahead_seconds=1200,
+            )
+            db.session.add(setting)
+
+            # Test time: 2026-09-30 19:30:00 UTC = 2026-10-01 04:30:00 Tokyo time
+            # If boundary_hour were default (4), this would be Day D+1 (04:30 >= 04:00).
+            # But with custom boundary_hour (6), it is still Day D (04:30 < 06:00)!
+            now_utc = datetime(2026, 9, 30, 19, 30, 0)
+
+            # Create a review card with due_day=None and due_at = 2026-09-30 20:00:00 UTC (05:00 Tokyo time)
+            # This is before 06:00 Tokyo time, so it belongs to Day D!
+            _, cards = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+            self._add_progress(
+                user_id=self.learner_id,
+                card_id=cards[0].id,
+                queue="review",
+                due_day=None,
+                due_at=datetime(2026, 9, 30, 20, 0, 0),
+            )
+            db.session.commit()
+
+            with self.app.test_request_context():
+                with patch("app.services.dashboard_service._utcnow", return_value=now_utc):
+                    rows, total_new, total_learn, total_due, _ = build_dashboard_data(user)
+                    # Should be due on today's study day because due_at is before tomorrow's 6 AM boundary!
+                    self.assertEqual(total_due, 1)
+
+    def test_corrupted_and_null_due_dates(self):
+        """Test robust handling of NULL/corrupted due dates across queues."""
+        with self.app.app_context():
+            now_utc = datetime(2026, 9, 29, 12, 0, 0)
+            today_day = now_utc.date().toordinal()
+
+            # 1. Review with both due_day=None and due_at=None -> treated as due today
+            _, c1 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+            self._add_progress(user_id=self.learner_id, card_id=c1[0].id, queue="review", due_day=None, due_at=None)
+
+            # 2. queue=None -> treated as "new"
+            _, c2 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+            self._add_progress(user_id=self.learner_id, card_id=c2[0].id, queue=None)
+
+            # 3. Negative due_day=-5 -> overdue, treated as due review
+            _, c3 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+            self._add_progress(user_id=self.learner_id, card_id=c3[0].id, queue="review", due_day=-5)
+
+            # 4. Learning with due_at=None -> treated as learn
+            _, c4 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+            self._add_progress(user_id=self.learner_id, card_id=c4[0].id, queue="learning", due_at=None)
+
+            db.session.commit()
+
+            counts, _ = aggregate_deck_study_counts(
+                db.session,
+                learner_user_id=self.learner_id,
+                visible_deck_ids=[self.owned_deck_id],
+                today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
+                is_note_mode=False,
+            )
+            d = counts[self.owned_deck_id]
+            self.assertEqual(d["total"], 4)
+            self.assertEqual(d["due"], 2)     # c1 (null dates) & c3 (negative due_day)
+            self.assertEqual(d["new"], 1)     # c2 (queue=None)
+            self.assertEqual(d["learn"], 1)   # c4 (learning with due_at=None)
+
+    def test_large_dataset_40k_cards_uses_constant_statements(self):
+        """R4: 40,000 Cards aggregate correctly without per-Card statements."""
+        from sqlalchemy import event
+
+        with self.app.app_context():
+            now_utc = datetime(2026, 9, 29, 12, 0, 0)
+            today_day = now_utc.date().toordinal()
+
+            # Fast bulk-insert 40,000 notes and cards via raw Core table insert
+            note_table = Note.__table__
+            card_table = Card.__table__
+            progress_table = CardProgress.__table__
+
+            notes_data = []
+            cards_data = []
+            progress_data = []
+
+            # 40,000 cards:
+            # 10,000 new (no progress)
+            # 10,000 new (with progress queue='new')
+            # 5,000 learning
+            # 10,000 review due today
+            # 5,000 review future (due today + 7)
+            total_cards = 40000
+            for i in range(total_cards):
+                nid = f"bench-note-{i}"
+                cid = f"bench-card-{i}"
+                notes_data.append({
+                    "id": nid,
+                    "user_id": self.learner_id,
+                    "deck_id": self.owned_deck_id,
+                    "note_type_id": "general-nt",
+                    "field_values": {},
+                    "tags": [],
+                    "created_at": now_utc,
+                    "updated_at": now_utc,
+                })
+                cards_data.append({
+                    "id": cid,
+                    "note_id": nid,
+                    "template_id": "tmpl-1",
+                    "created_at": now_utc,
+                    "updated_at": now_utc,
+                })
+                if i < 10000:
+                    pass  # no progress row
+                elif i < 20000:
+                    progress_data.append({
+                        "user_id": self.learner_id,
+                        "card_id": cid,
+                        "queue": "new",
+                        "due_day": None,
+                        "due_at": None,
+                        "is_suspended": False,
+                        "is_buried": False,
+                    })
+                elif i < 25000:
+                    progress_data.append({
+                        "user_id": self.learner_id,
+                        "card_id": cid,
+                        "queue": "learning",
+                        "due_day": None,
+                        "due_at": now_utc,
+                        "is_suspended": False,
+                        "is_buried": False,
+                    })
+                elif i < 35000:
+                    progress_data.append({
+                        "user_id": self.learner_id,
+                        "card_id": cid,
+                        "queue": "review",
+                        "due_day": today_day,
+                        "due_at": now_utc,
+                        "is_suspended": False,
+                        "is_buried": False,
+                    })
+                else:
+                    progress_data.append({
+                        "user_id": self.learner_id,
+                        "card_id": cid,
+                        "queue": "review",
+                        "due_day": today_day + 7,
+                        "due_at": now_utc,
+                        "is_suspended": False,
+                        "is_buried": False,
+                    })
+
+            db.session.execute(note_table.insert(), notes_data)
+            db.session.execute(card_table.insert(), cards_data)
+            if progress_data:
+                db.session.execute(progress_table.insert(), progress_data)
+            db.session.commit()
+
+            statements = []
+
+            def count_statement(conn, cursor, statement, parameters, context, executemany):
+                statements.append(statement)
+
+            event.listen(db.engine, "before_cursor_execute", count_statement)
+            try:
+                counts, _ = aggregate_deck_study_counts(
+                    db.session,
+                    learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.owned_deck_id],
+                    today_day_index=today_day,
+                    day_cutoff_utc=_next_day_start(today_day),
+                    is_note_mode=False,
+                )
+            finally:
+                event.remove(db.engine, "before_cursor_execute", count_statement)
+
+            d = counts[self.owned_deck_id]
+            self.assertEqual(d["total"], 40000)
+            self.assertEqual(d["new"], 20000)
+            self.assertEqual(d["learn"], 5000)
+            self.assertEqual(d["due"], 10000)
+            # Installs, aggregate and note types: the statement count never grows with Cards.
+            self.assertLessEqual(len(statements), 3, statements)
+
+    def test_counts_match_counter_bucket_helper_around_boundaries(self):
+        """R3: SQL buckets equal the Study helper for every queue/due/bury combination."""
+        queues = ["new", "learning", "relearning", "learn", "review", " Review ", "", "weird"]
+        contexts = [
+            ("UTC", 0, datetime(2026, 9, 29, 12, 0, 0)),
+            ("Asia/Tokyo", 4, datetime(2026, 9, 29, 18, 59, 59)),
+            ("America/Los_Angeles", 23, datetime(2026, 11, 1, 9, 30, 0)),
+            ("Asia/Ho_Chi_Minh", 4, datetime(2026, 9, 29, 21, 0, 0)),
+        ]
+        rng = random.Random(20260930)
+        with self.app.app_context():
+            for timezone_name, boundary, now_utc in contexts:
+                with self.subTest(timezone=timezone_name, boundary=boundary):
+                    CardProgress.query.delete()
+                    Card.query.delete()
+                    Note.query.delete()
+                    today = _today_day_index(
+                        now=now_utc, timezone_name=timezone_name, day_boundary_hour_local=boundary
+                    )
+                    cutoff = _day_index_to_datetime(today + 1, boundary, timezone_name=timezone_name)
+                    due_ats = [None, cutoff - timedelta(seconds=1), cutoff, cutoff + timedelta(seconds=1),
+                        now_utc - timedelta(hours=30), now_utc + timedelta(minutes=5)]
+                    expected = {"new": 0, "learn": 0, "due": 0}
+                    for index in range(120):
+                        _, cards = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+                        if index % 12 == 0:
+                            bucket = counter_bucket_for_progress_values(queue=None, due_at=None, due_day=None,
+                                now=now_utc, timezone_name=timezone_name, day_boundary_hour_local=boundary)
+                        else:
+                            values = dict(
+                                queue=rng.choice(queues),
+                                due_day=rng.choice([None, None, today - 1, today, today + 1]),
+                                due_at=rng.choice(due_ats),
+                                is_suspended=rng.random() < 0.1,
+                                is_buried=rng.random() < 0.2,
+                                buried_until_day=rng.choice([None, today - 1, today, today + 1]),
+                            )
+                            self._add_progress(user_id=self.learner_id, card_id=cards[0].id, **values)
+                            bucket = counter_bucket_for_progress_values(now=now_utc, timezone_name=timezone_name,
+                                day_boundary_hour_local=boundary, **values)
+                        if bucket == "learning":
+                            expected["learn"] += 1
+                        elif bucket == "review":
+                            expected["due"] += 1
+                        elif bucket == "new":
+                            expected["new"] += 1
+                    db.session.commit()
+                    counts, _ = aggregate_deck_study_counts(
+                        db.session,
+                        learner_user_id=self.learner_id,
+                        visible_deck_ids=[self.owned_deck_id],
+                        today_day_index=today,
+                        day_cutoff_utc=cutoff,
+                        is_note_mode=False,
+                    )
+                    got = counts[self.owned_deck_id]
+                    self.assertEqual({key: got[key] for key in expected}, expected)
+                    self.assertEqual(got["total"], 120)
+
+    def _install_overlay_with_source_card(self, *, note_type_id="shared-nt"):
+        now_utc = datetime(2026, 9, 29, 12, 0, 0)
+        install = DeckInstall(id=str(uuid4()), deck_item_id=f"item-{uuid4()}", user_id=self.learner_id,
+            local_deck_id=self.local_deck_id, source_deck_id=self.source_deck_id,
+            source_owner_user_id=self.author_id, clone_mode="logical_overlay",
+            source_note_type_id=note_type_id, installed_at=now_utc)
+        db.session.add(install)
+        db.session.flush()
+        db.session.add(DeckCloneDeckMap(id=str(uuid4()), deck_install_id=install.id,
+            local_deck_id=self.local_deck_id, source_deck_id=self.source_deck_id))
+        self._create_note_and_cards(user_id=self.author_id, deck_id=self.source_deck_id,
+            created_at=now_utc - timedelta(hours=1))
+        db.session.commit()
+        return now_utc.date().toordinal()
+
+    def test_admin_never_counts_overlay_sources_in_either_mode(self):
+        """R5: admin dashboards skip logical-overlay sources, LEGACY and NOTE alike."""
+        with self.app.app_context():
+            today_day = self._install_overlay_with_source_card()
+            for is_note_mode in (False, True):
+                counts, note_types = aggregate_deck_study_counts(
+                    db.session,
+                    learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.local_deck_id],
+                    today_day_index=today_day,
+                    day_cutoff_utc=_next_day_start(today_day),
+                    is_note_mode=is_note_mode,
+                    admin_mode=True,
+                )
+                self.assertEqual(counts[self.local_deck_id]["total"], 0)
+                self.assertNotIn(self.local_deck_id, note_types)
+                learner_counts, _ = aggregate_deck_study_counts(
+                    db.session,
+                    learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.local_deck_id],
+                    today_day_index=today_day,
+                    day_cutoff_utc=_next_day_start(today_day),
+                    is_note_mode=is_note_mode,
+                )
+                self.assertEqual(learner_counts[self.local_deck_id]["total"], 1)
+
+    def test_owned_note_type_wins_over_install_and_oldest_note_type_is_stable(self):
+        """R6: owned Notes decide the deck Note type first, oldest Note type first."""
+        with self.app.app_context():
+            today_day = self._install_overlay_with_source_card(note_type_id="install-nt")
+            self._create_note_and_cards(user_id=self.learner_id, deck_id=self.local_deck_id,
+                note_type_id="z-older-nt", created_at=datetime(2026, 1, 1))
+            self._create_note_and_cards(user_id=self.learner_id, deck_id=self.local_deck_id,
+                note_type_id="a-newer-nt", created_at=datetime(2026, 5, 1))
+            db.session.commit()
+            for _ in range(3):
+                _, note_types = aggregate_deck_study_counts(
+                    db.session,
+                    learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.local_deck_id],
+                    today_day_index=today_day,
+                    day_cutoff_utc=_next_day_start(today_day),
+                    is_note_mode=False,
+                )
+                self.assertEqual(note_types[self.local_deck_id], "z-older-nt")
+
+    def test_note_mode_ignores_pristine_subject_without_token(self):
+        """A never-studied subject needs no token (the locking reader never read it either)."""
+        with self.app.app_context():
+            note, _cards = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+            db.session.add(StudyProgressSubject(learner_user_id=self.learner_id,
+                logical_note_key=str(note.id).encode("utf-8"), live_note_id=str(note.id),
+                created_at=datetime.utcnow(), updated_at=datetime.utcnow()))
+            db.session.commit()
+            today_day = datetime(2026, 9, 29).toordinal()
+            counts, _ = aggregate_deck_study_counts(
+                db.session,
+                learner_user_id=self.learner_id,
+                visible_deck_ids=[self.owned_deck_id],
+                today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
+                is_note_mode=True,
+            )
+            self.assertEqual(counts[self.owned_deck_id], {"total": 1, "new": 1, "learn": 0, "due": 0})
 
 
 if __name__ == "__main__":

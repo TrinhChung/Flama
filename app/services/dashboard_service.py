@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
 UTC = timezone.utc
@@ -11,46 +11,17 @@ from flask import url_for
 from models import db
 from models.deck import Deck
 from app.repositories.study_authority_repository import read_study_authority_route
-from app.repositories.study_repository import default_deck_options, _today_day_index
+from app.repositories.study_repository import _today_day_index
+from app.services.anki_scheduler import _day_index_to_datetime
 from app.services.deck_aggregation_service import aggregate_deck_study_counts
-from app.services.stats_overview import get_effective_timezone_name, _build_timezone_obj
+from app.services.scheduler_config_service import resolve_day_boundary_hour_local
+from app.services.stats_overview import get_effective_timezone_name
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-def _classify_progress_fast(
-    progress_queue: str | None,
-    progress_due_at: datetime | None,
-    progress_due_day: int | None,
-    progress_is_suspended: bool | None,
-    today_day_index: int,
-    timezone_obj,
-    boundary_hour: int,
-) -> str | None:
-    if progress_is_suspended:
-        return None
-    queue = (progress_queue or "new").strip().lower()
-    if queue == "new":
-        return "new"
-    if queue in ("learn", "learning", "relearning"):
-        return "learning"
-    if queue == "review":
-        if progress_due_day is not None:
-            r_due_day = int(progress_due_day)
-        elif progress_due_at is not None:
-            utc_moment = progress_due_at if progress_due_at.tzinfo else progress_due_at.replace(tzinfo=UTC)
-            local_moment = utc_moment.astimezone(timezone_obj).replace(tzinfo=None)
-            r_due_day = (local_moment - timedelta(hours=boundary_hour)).date().toordinal()
-        else:
-            r_due_day = today_day_index
-        if r_due_day <= today_day_index:
-            return "review"
-        return None
-    return "new"
 
 
 @dataclass
@@ -74,8 +45,8 @@ class DeckNode:
 def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, bool]:
     admin_mode = is_admin_user(current_user)
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
-    timezone_obj = _build_timezone_obj(timezone_name)
-    boundary_hour = int(default_deck_options().dayBoundaryHourLocal)
+    # Same study-day boundary as the learner's Study queue counts.
+    boundary_hour = resolve_day_boundary_hour_local(user_id=int(current_user.id))
     now = _utcnow()
     authority_route = read_study_authority_route(
         db.session,
@@ -86,22 +57,27 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         timezone_name=timezone_name,
         day_boundary_hour_local=boundary_hour,
     )
+    # A review with only due_at is due today iff it is before the next study day.
+    day_cutoff_utc = _day_index_to_datetime(
+        today_day_index + 1,
+        boundary_hour,
+        timezone_name=timezone_name,
+    )
 
     from app.repositories.deck_tree_query import collect_accessible_decks
     decks = collect_accessible_decks(user_id=current_user.id, admin_mode=admin_mode)
 
     visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
-    is_note_mode = authority_route.mode_code == "NOTE"
     card_counts_by_deck, deck_note_types = aggregate_deck_study_counts(
         db.session,
         learner_user_id=int(current_user.id),
         visible_deck_ids=visible_deck_ids,
-        now_utc=now,
         today_day_index=today_day_index,
-        is_note_mode=is_note_mode,
+        day_cutoff_utc=day_cutoff_utc,
+        is_note_mode=authority_route.mode_code == "NOTE",
         admin_mode=admin_mode,
     )
-    
+
     by_parent: Dict[int, List[Deck]] = {}
     for deck in decks:
         # parent_id might be None, safely use a dict

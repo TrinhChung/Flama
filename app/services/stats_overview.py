@@ -156,15 +156,41 @@ def _canonical_future_due_day_counts(
     end_utc: datetime,
     day_boundary_hour_local: int,
 ) -> dict[date, int]:
-    from app.services.deck_aggregation_service import check_note_authority_integrity
-    from models.study_progress_availability import StudyProgressAvailability
-    from models.study_progress_subject import StudyProgressSubject
+    """NOTE future-due days from canonical availability, LEGACY semantics.
+
+    Same row set and day mapping as ``query_future_due_day_counts`` (every
+    learner Card with a due value, not suspended; overdue counts today).
+    Divergent NOTE evidence raises; there is no ``card_progress`` fallback.
+    """
+    from app.repositories import note_analytics_read_repository as note_reads
     from app.repositories.stats_query_repository import (
         _progress_due_local_day,
         _utc_to_business_day,
     )
+    from app.services.study_authority_read_service import StudyAuthorityReadError
 
-    check_note_authority_integrity(db.session, learner_user_id=user_id)
+    scope = note_reads.learner_note_scope(learner_user_id=user_id)
+    rows = note_reads.note_card_rows(scope, learner_user_id=user_id).subquery("rows")
+    # One pass: every violating Card plus every due, unsuspended Card.
+    fetched = db.session.execute(
+        select(rows.c.violation, rows.c.due_at, rows.c.due_day, rows.c.queue).where(
+            or_(
+                rows.c.violation > 0,
+                and_(
+                    or_(rows.c.due_at.isnot(None), rows.c.due_day.isnot(None)),
+                    or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
+                ),
+            )
+        )
+    ).all()
+    worst = max((int(row[0] or 0) for row in fetched), default=0)
+    if not worst:
+        worst = note_reads.subject_vector_violation(
+            db.session, scope=scope, learner_user_id=user_id
+        )
+    error = note_reads.violation_error(worst)
+    if error is not None:
+        raise StudyAuthorityReadError(*error)
 
     start_local_day = _utc_to_business_day(
         start_utc,
@@ -177,54 +203,7 @@ def _canonical_future_due_day_counts(
         day_boundary_hour_local=day_boundary_hour_local,
     )
 
-    # Fast non-locking query on canonical NOTE authority availability
-    avail_rows = db.session.execute(
-        select(
-            StudyProgressAvailability.due_at,
-            StudyProgressAvailability.due_day,
-            StudyProgressAvailability.normalized_queue,
-        )
-        .select_from(StudyProgressAvailability)
-        .join(
-            StudyProgressSubject,
-            and_(
-                StudyProgressSubject.id == StudyProgressAvailability.subject_id,
-                StudyProgressSubject.subject_generation
-                == StudyProgressAvailability.subject_generation,
-            ),
-        )
-        .where(
-            StudyProgressSubject.learner_user_id == user_id,
-            or_(
-                StudyProgressAvailability.due_at.isnot(None),
-                StudyProgressAvailability.due_day.isnot(None),
-            ),
-            or_(
-                StudyProgressAvailability.is_suspended.is_(False),
-                StudyProgressAvailability.is_suspended.is_(None),
-            ),
-        )
-    ).all()
-
-    if not avail_rows:
-        # Fallback to compatibility projection card_progress for test fixtures or unmirrored rows
-        avail_rows = db.session.execute(
-            select(
-                CardProgress.due_at,
-                CardProgress.due_day,
-                CardProgress.queue,
-            ).where(
-                CardProgress.user_id == user_id,
-                or_(
-                    CardProgress.due_at.isnot(None),
-                    CardProgress.due_day.isnot(None),
-                ),
-                or_(
-                    CardProgress.is_suspended.is_(False),
-                    CardProgress.is_suspended.is_(None),
-                ),
-            )
-        ).all()
+    avail_rows = [(due_at, due_day, queue) for _violation, due_at, due_day, queue in fetched]
 
     by_day: dict[date, int] = {}
     for due_at, due_day, queue_value in avail_rows:

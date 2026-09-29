@@ -1,67 +1,131 @@
-"""Database-level aggregation seam for deck-level study counts.
+"""Single-query deck study counts for the dashboard.
 
-Architecture & Decoupling Seam:
-- Phase 5 (Current): Executes a single non-locking database-level aggregation query
-  leveraging the indexed `card_progress` compatibility projection (ix_card_progress_user_queue_due_day).
-  Unifies user-owned notes and Marketplace shared decks (Logical Overlay) mapped to local decks.
-- Phase 6 (Decision D6-04): In NOTE mode (`is_note_mode=True`), counts New / Learn / Due
-  at the NOTE level using `COUNT(DISTINCT note_id)` to avoid multi-template sibling inflation.
-  In LEGACY mode (`is_note_mode=False`), counts at the CARD level using `COUNT(DISTINCT card_id)`.
-- Phase 9 Readiness: This service provides an isolated seam. When `card_progress` is contracted
-  and removed in Phase 9, this seam can be transitioned to native NOTE availability
-  (`study_progress_availability` / `study_progress_subjects`) or rollup counters (`deck_counters`)
-  without breaking dashboard or analytics callers.
+LEGACY learners count their ``CardProgress`` rows. NOTE learners count the
+canonical availability of each Card (``note_analytics_read_repository``) and
+fail closed with the locking reader's codes on divergent NOTE evidence; the
+rollback projection is never a NOTE count source. Both modes count per Card:
+Note-level counting (D6-04) belongs to Phase 6.
+
+Buckets match ``study_repository.counter_bucket_for_progress_values``. The
+queries take no locks, so they may run inside ``analytics_read_transaction()``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
-from sqlalchemy import and_, case, func, or_, select, union_all
+from sqlalchemy import and_, case, func, literal, not_, or_, select, union_all
 from sqlalchemy.orm import Session
 
-from models import db
+from app.repositories import note_analytics_read_repository as note_reads
+from app.services.study_authority_read_service import StudyAuthorityReadError
 from models.card import Card
 from models.card_progress import CardProgress
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
-from models.study_progress_subject import StudyProgressSubject
-from app.services.study_authority_read_service import StudyAuthorityReadError
+
+_LEARNING_QUEUES = ("learn", "learning", "relearning")
 
 
-@dataclass(frozen=True)
-class DeckStudyCounts:
-    total: int = 0
-    new: int = 0
-    learn: int = 0
-    due: int = 0
+def _deck_note_types(
+    session: Session,
+    *,
+    learner_user_id: int,
+    visible_deck_ids: list[int],
+    overlay_types: list[tuple[int, str]],
+) -> Dict[int, str]:
+    """Owned Notes first (oldest Note type per deck), then install note types."""
 
-
-def check_note_authority_integrity(session: Session, *, learner_user_id: int) -> None:
-    """Fast non-locking check for Phase 5 NOTE authority token integrity.
-
-    Verifies that all subjects for this learner have authority tokens without
-    loading note entities or iterating in Python memory.
-    """
-    missing_token = session.execute(
-        select(StudyProgressSubject.id)
-        .outerjoin(
-            StudyAuthoritySubjectToken,
-            StudyAuthoritySubjectToken.subject_id == StudyProgressSubject.id,
-        )
+    rows = session.execute(
+        select(Note.deck_id, Note.note_type_id, func.min(Note.created_at))
         .where(
-            StudyProgressSubject.learner_user_id == learner_user_id,
-            StudyAuthoritySubjectToken.subject_id.is_(None),
+            Note.user_id == learner_user_id,
+            Note.deck_id.in_(visible_deck_ids),
+            Note.note_type_id.isnot(None),
         )
-        .limit(1)
-    ).scalar_one_or_none()
-    if missing_token is not None:
-        raise StudyAuthorityReadError(
-            "AUTHORITY_TOKEN_REQUIRED",
-            "NOTE analytics requires an existing token.",
+        .group_by(Note.deck_id, Note.note_type_id)
+    ).all()
+    note_types: Dict[int, str] = {}
+    # MIN(created_at) is a datetime on MySQL but ISO text on SQLite; both sort as text.
+    for deck_id, note_type_id, _first_at in sorted(
+        rows, key=lambda row: (int(row[0]), str(row[2] or ""), str(row[1]))
+    ):
+        note_types.setdefault(int(deck_id), str(note_type_id))
+    for deck_id, note_type_id in overlay_types:
+        note_types.setdefault(deck_id, note_type_id)
+    return note_types
+
+
+def _overlay_scope(
+    session: Session,
+    *,
+    learner_user_id: int,
+    visible_deck_ids: list[int],
+):
+    """Logical-overlay source Cards under the learner's mapped local decks."""
+
+    installs = session.execute(
+        select(DeckInstall.id, DeckInstall.source_note_type_id)
+        .where(
+            DeckInstall.user_id == learner_user_id,
+            DeckInstall.clone_mode == "logical_overlay",
+            DeckInstall.local_deck_id.isnot(None),
         )
+        .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
+    ).all()
+    if not installs:
+        return None, []
+    visible = set(visible_deck_ids)
+    local_decks_by_install = defaultdict(list)
+    has_mapped_source = False
+    for install_id, local_deck_id, source_deck_id in session.execute(
+        select(
+            DeckCloneDeckMap.deck_install_id,
+            DeckCloneDeckMap.local_deck_id,
+            DeckCloneDeckMap.source_deck_id,
+        )
+        .where(DeckCloneDeckMap.deck_install_id.in_([str(row[0]) for row in installs]))
+        .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
+    ).all():
+        if local_deck_id is None or int(local_deck_id) not in visible:
+            continue
+        local_decks_by_install[str(install_id)].append(int(local_deck_id))
+        has_mapped_source = has_mapped_source or source_deck_id is not None
+    overlay_types = [
+        (local_deck_id, str(note_type_id))
+        for install_id, note_type_id in installs
+        if note_type_id
+        for local_deck_id in local_decks_by_install[str(install_id)]
+    ]
+    if not has_mapped_source:
+        return None, overlay_types
+    snapshot_at = func.coalesce(DeckInstall.base_snapshot_at, DeckInstall.installed_at)
+    overlay = (
+        select(
+            DeckCloneDeckMap.local_deck_id.label("deck_id"),
+            Card.id.label("card_id"),
+            Card.note_id.label("note_id"),
+        )
+        .select_from(Card)
+        .join(Note, Card.note_id == Note.id)
+        .join(DeckCloneDeckMap, DeckCloneDeckMap.source_deck_id == Note.deck_id)
+        .join(DeckInstall, DeckInstall.id == DeckCloneDeckMap.deck_install_id)
+        .where(
+            DeckInstall.user_id == learner_user_id,
+            DeckInstall.clone_mode == "logical_overlay",
+            DeckCloneDeckMap.local_deck_id.in_(visible_deck_ids),
+            or_(
+                DeckInstall.source_owner_user_id.is_(None),
+                Note.user_id == DeckInstall.source_owner_user_id,
+            ),
+            or_(
+                snapshot_at.is_(None),
+                and_(Note.created_at <= snapshot_at, Card.created_at <= snapshot_at),
+            ),
+        )
+    )
+    return overlay, overlay_types
 
 
 def aggregate_deck_study_counts(
@@ -69,289 +133,130 @@ def aggregate_deck_study_counts(
     *,
     learner_user_id: int,
     visible_deck_ids: list[int],
-    now_utc: datetime,
     today_day_index: int,
+    day_cutoff_utc: datetime,
     is_note_mode: bool,
     admin_mode: bool = False,
-    count_by_note: bool | None = None,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
-    """Aggregate New, Learn, Due counts per deck for the learner.
+    """Count total/new/learn/due Cards per visible deck (subtrees are summed by the caller).
 
-    Returns:
-        (counts_by_deck, note_types_by_deck)
-        where counts_by_deck maps int(deck_id) -> {"total": int, "new": int, "learn": int, "due": int}
-        and note_types_by_deck maps int(deck_id) -> note_type_id_string
+    ``day_cutoff_utc`` is the start of the learner's next study day (naive UTC):
+    a review with only ``due_at`` is due today exactly when it is before it.
+    Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
     """
+
     if not visible_deck_ids:
         return {}, {}
 
-    if is_note_mode:
-        check_note_authority_integrity(session, learner_user_id=learner_user_id)
-
-    if count_by_note is not None:
-        should_count_by_note = bool(count_by_note)
-    else:
-        try:
-            from flask import current_app, has_app_context
-
-            if has_app_context():
-                should_count_by_note = is_note_mode and bool(
-                    current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)
-                )
-            else:
-                should_count_by_note = False
-        except (ImportError, RuntimeError):
-            should_count_by_note = False
-
-    card_counts_by_deck: Dict[int, Dict[str, int]] = {
-        int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
-        for deck_id in visible_deck_ids
-    }
-    deck_note_types: Dict[int, str] = {}
-
-    # Query logical overlay installs for marketplace shared decks
-    logical_installs: list[DeckInstall] = []
-    install_ids: list[str] = []
-    map_rows: list[DeckCloneDeckMap] = []
-    source_to_local_all: dict[int, int] = {}
-
-    if not admin_mode or is_note_mode:
-        logical_installs = (
-            session.execute(
-                select(DeckInstall)
-                .where(
-                    DeckInstall.user_id == learner_user_id,
-                    DeckInstall.clone_mode == "logical_overlay",
-                    DeckInstall.local_deck_id.isnot(None),
-                )
-                .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
-            )
-            .scalars()
-            .all()
-        )
-        if logical_installs:
-            install_ids = [
-                str(inst.id) for inst in logical_installs if inst.id is not None
-            ]
-            if install_ids:
-                map_rows = (
-                    session.execute(
-                        select(DeckCloneDeckMap).where(
-                            DeckCloneDeckMap.deck_install_id.in_(install_ids)
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                for inst in logical_installs:
-                    if inst.source_note_type_id:
-                        for m_row in map_rows:
-                            if (
-                                str(m_row.deck_install_id) == str(inst.id)
-                                and m_row.local_deck_id is not None
-                                and int(m_row.local_deck_id) in visible_deck_ids
-                            ):
-                                deck_note_types.setdefault(
-                                    int(m_row.local_deck_id),
-                                    str(inst.source_note_type_id),
-                                )
-                for m_row in map_rows:
-                    if (
-                        m_row.source_deck_id is not None
-                        and m_row.local_deck_id is not None
-                        and int(m_row.local_deck_id) in visible_deck_ids
-                    ):
-                        source_to_local_all[int(m_row.source_deck_id)] = int(
-                            m_row.local_deck_id
-                        )
-
-    # Resolve note_type_id for owned decks if not yet set
-    missing_deck_ids = [
-        did for did in visible_deck_ids if did not in deck_note_types
-    ]
-    if missing_deck_ids:
-        nt_rows = session.execute(
-            select(Note.deck_id, Note.note_type_id)
-            .where(
-                Note.user_id == learner_user_id,
-                Note.deck_id.in_(missing_deck_ids),
-                Note.note_type_id.isnot(None),
-            )
-            .group_by(Note.deck_id, Note.note_type_id)
-        ).all()
-        for did, ntid in nt_rows:
-            if did is not None and ntid:
-                deck_note_types.setdefault(int(did), str(ntid))
-
-    # Base select 1: Directly owned cards
-    owned_select = (
+    owned = (
         select(
             Note.deck_id.label("deck_id"),
             Card.id.label("card_id"),
             Card.note_id.label("note_id"),
-            CardProgress.id.label("progress_id"),
-            CardProgress.queue.label("queue"),
-            CardProgress.due_day.label("due_day"),
-            CardProgress.due_at.label("due_at"),
-            CardProgress.is_suspended.label("is_suspended"),
-            CardProgress.is_buried.label("is_buried"),
-            CardProgress.buried_until_day.label("buried_until_day"),
         )
         .select_from(Card)
         .join(Note, Card.note_id == Note.id)
-        .outerjoin(
-            CardProgress,
-            and_(
-                CardProgress.card_id == Card.id,
-                CardProgress.user_id == learner_user_id,
-            ),
-        )
         .where(
             Note.user_id == learner_user_id,
             Note.deck_id.in_(visible_deck_ids),
         )
     )
+    # Admins see every deck but, as before, never count logical-overlay sources.
+    overlay, overlay_types = (
+        (None, [])
+        if admin_mode
+        else _overlay_scope(
+            session,
+            learner_user_id=learner_user_id,
+            visible_deck_ids=visible_deck_ids,
+        )
+    )
+    scope = (union_all(owned, overlay) if overlay is not None else owned).subquery("counted_cards")
 
-    if source_to_local_all and install_ids:
-        # Base select 2: Logical overlay cards mapped to local_deck_id
-        overlay_select = (
+    if is_note_mode:
+        rows = note_reads.note_card_rows(scope, learner_user_id=learner_user_id).subquery("rows")
+    else:
+        rows = (
             select(
-                DeckCloneDeckMap.local_deck_id.label("deck_id"),
-                Card.id.label("card_id"),
-                Card.note_id.label("note_id"),
-                CardProgress.id.label("progress_id"),
+                scope.c.deck_id,
+                scope.c.card_id,
                 CardProgress.queue.label("queue"),
                 CardProgress.due_day.label("due_day"),
                 CardProgress.due_at.label("due_at"),
                 CardProgress.is_suspended.label("is_suspended"),
                 CardProgress.is_buried.label("is_buried"),
                 CardProgress.buried_until_day.label("buried_until_day"),
+                literal(0).label("violation"),
             )
-            .select_from(Card)
-            .join(Note, Card.note_id == Note.id)
-            .join(
-                DeckCloneDeckMap,
-                DeckCloneDeckMap.source_deck_id == Note.deck_id,
-            )
-            .join(
-                DeckInstall,
-                DeckInstall.id == DeckCloneDeckMap.deck_install_id,
-            )
-            .outerjoin(
-                CardProgress,
-                and_(
-                    CardProgress.card_id == Card.id,
-                    CardProgress.user_id == learner_user_id,
-                ),
-            )
-            .where(
-                DeckInstall.user_id == learner_user_id,
-                DeckInstall.clone_mode == "logical_overlay",
-                DeckCloneDeckMap.local_deck_id.in_(visible_deck_ids),
-                or_(
-                    DeckInstall.source_owner_user_id.is_(None),
-                    Note.user_id == DeckInstall.source_owner_user_id,
-                ),
-                or_(
-                    and_(
-                        DeckInstall.base_snapshot_at.is_(None),
-                        DeckInstall.installed_at.is_(None),
-                    ),
-                    and_(
-                        Note.created_at
-                        <= func.coalesce(
-                            DeckInstall.base_snapshot_at,
-                            DeckInstall.installed_at,
-                        ),
-                        Card.created_at
-                        <= func.coalesce(
-                            DeckInstall.base_snapshot_at,
-                            DeckInstall.installed_at,
-                        ),
-                    ),
-                ),
-            )
+            .select_from(scope)
+            .outerjoin(CardProgress, and_(
+                CardProgress.card_id == scope.c.card_id,
+                CardProgress.user_id == learner_user_id,
+            ))
+            .subquery("rows")
         )
-        combined_cards = union_all(owned_select, overlay_select).subquery(
-            "combined_cards"
-        )
-    else:
-        combined_cards = owned_select.subquery("combined_cards")
 
-    # Fast SQL classification conditions
-    is_active = or_(
-        combined_cards.c.progress_id.is_(None),
-        and_(
-            or_(
-                combined_cards.c.is_suspended.is_(False),
-                combined_cards.c.is_suspended.is_(None),
-            ),
-            or_(
-                combined_cards.c.is_buried.is_(False),
-                combined_cards.c.is_buried.is_(None),
-                combined_cards.c.buried_until_day < today_day_index,
-            ),
-        ),
+    # A Card without progress/state has NULL columns and reads as active NEW.
+    is_active = and_(
+        or_(rows.c.is_suspended.is_(None), rows.c.is_suspended.is_(False)),
+        not_(and_(
+            rows.c.is_buried.is_(True),
+            or_(rows.c.buried_until_day.is_(None), rows.c.buried_until_day >= today_day_index),
+        )),
     )
-
-    norm_queue = func.lower(func.coalesce(combined_cards.c.queue, "new"))
-
-    is_new = and_(
+    queue = func.lower(func.trim(func.coalesce(rows.c.queue, "new")))
+    is_learning = queue.in_(_LEARNING_QUEUES)
+    is_review = queue == "review"
+    is_new = and_(is_active, not_(is_learning), not_(is_review))
+    is_learn = and_(is_active, is_learning)
+    is_due = and_(
         is_active,
-        or_(combined_cards.c.progress_id.is_(None), norm_queue == "new"),
-    )
-
-    is_learn = and_(
-        is_active,
-        norm_queue.in_(["learn", "learning", "relearning"]),
-    )
-
-    is_due_review = and_(
-        is_active,
-        norm_queue == "review",
+        is_review,
         or_(
-            combined_cards.c.due_day <= today_day_index,
+            rows.c.due_day <= today_day_index,
             and_(
-                combined_cards.c.due_day.is_(None),
-                or_(
-                    combined_cards.c.due_at.is_(None),
-                    combined_cards.c.due_at <= now_utc,
-                ),
+                rows.c.due_day.is_(None),
+                or_(rows.c.due_at.is_(None), rows.c.due_at < day_cutoff_utc),
             ),
         ),
     )
-
-    # Phase 6 Decision D6-04: NOTE learner counts at NOTE level; LEGACY counts at CARD level
-    target_id = (
-        combined_cards.c.note_id if should_count_by_note else combined_cards.c.card_id
-    )
-
-    agg_query = (
+    aggregated = session.execute(
         select(
-            combined_cards.c.deck_id,
-            func.count(func.distinct(combined_cards.c.card_id)).label("total"),
-            func.count(
-                func.distinct(case((is_new, target_id), else_=None))
-            ).label("new"),
-            func.count(
-                func.distinct(case((is_learn, target_id), else_=None))
-            ).label("learn"),
-            func.count(
-                func.distinct(case((is_due_review, target_id), else_=None))
-            ).label("due"),
-        )
-        .group_by(combined_cards.c.deck_id)
-    )
+            rows.c.deck_id,
+            func.count(func.distinct(rows.c.card_id)),
+            func.count(func.distinct(case((is_new, rows.c.card_id), else_=None))),
+            func.count(func.distinct(case((is_learn, rows.c.card_id), else_=None))),
+            func.count(func.distinct(case((is_due, rows.c.card_id), else_=None))),
+            func.max(rows.c.violation),
+        ).group_by(rows.c.deck_id)
+    ).all()
 
-    rows = session.execute(agg_query).all()
-    for row in rows:
-        did = row[0]
-        if did is not None and int(did) in card_counts_by_deck:
-            card_counts_by_deck[int(did)] = {
-                "total": int(row[1] or 0),
-                "new": int(row[2] or 0),
-                "learn": int(row[3] or 0),
-                "due": int(row[4] or 0),
+    if is_note_mode:
+        worst = max((int(row[5] or 0) for row in aggregated), default=0)
+        if not worst:
+            worst = note_reads.subject_vector_violation(
+                session, scope=scope, learner_user_id=learner_user_id
+            )
+        error = note_reads.violation_error(worst)
+        if error is not None:
+            raise StudyAuthorityReadError(*error)
+
+    counts: Dict[int, Dict[str, int]] = {
+        int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
+        for deck_id in visible_deck_ids
+    }
+    for deck_id, total, new, learn, due, _violation in aggregated:
+        if deck_id is not None and int(deck_id) in counts:
+            counts[int(deck_id)] = {
+                "total": int(total or 0),
+                "new": int(new or 0),
+                "learn": int(learn or 0),
+                "due": int(due or 0),
             }
-
-    return card_counts_by_deck, deck_note_types
+    note_types = _deck_note_types(
+        session,
+        learner_user_id=learner_user_id,
+        visible_deck_ids=visible_deck_ids,
+        overlay_types=overlay_types,
+    )
+    return counts, note_types

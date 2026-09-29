@@ -206,9 +206,6 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             os.getenv("MEDIA_PROXY_USE_XACCEL", "0").strip().lower() in {"1", "true", "yes", "on"}
         ),
         "FLASHCARD_MEDIA_SCANNER": None,
-        "STUDY_NOTE_COUNT_ENABLED": coerce_bool_env(
-            "STUDY_NOTE_COUNT_ENABLED", default=False
-        ),
         "PAYMENTS_ENABLED": coerce_bool_env(
             "PAYMENTS_ENABLED",
             default=coerce_bool_env("PAYMENTS_V1_ENABLED", default=False),

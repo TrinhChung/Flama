@@ -16,7 +16,9 @@ def analytics_read_transaction():
 
     Called only after authentication/timezone updates, before analytics work.
     Reuse the request session/connection pool slot instead of opening a second
-    connection per request. Reject pending writes rather than discarding them.
+    connection per request. Reject pending writes rather than discarding them;
+    already flushed but uncommitted writes would be rolled back silently, so the
+    caller must commit (as the timezone update does) before entering.
     Never use this boundary inside a writer or the Study session transaction.
     """
     session = db.session()

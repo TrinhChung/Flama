@@ -2038,11 +2038,12 @@ class StudySessionApiTests(unittest.TestCase):
 
     def test_dashboard_note_counts_are_rebuilt_from_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=14)
-        with patch(
-            "app.services.dashboard_service._classify_progress_fast",
-            return_value=None,
-        ):
-            response = self.client.get("/api/dashboard")
+        with self.app.app_context():
+            # Projection content drift (no revision bump) must not change NOTE counts.
+            progress = CardProgress.query.filter_by(user_id=self.user_id).one()
+            progress.queue, progress.due_day = "review", 0
+            db.session.commit()
+        response = self.client.get("/api/dashboard")
         self.assertEqual(response.status_code, 200, response.get_json())
         payload = response.get_json()
         self.assertEqual(payload["summary"]["new"], 1)
