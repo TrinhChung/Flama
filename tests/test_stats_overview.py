@@ -13,6 +13,9 @@ from models.flashcard import ReviewEvent
 from models.user import User
 from models.deck import Deck
 from models.card_progress import CardProgress
+from models.study_authority_enrollment import StudyAuthorityEnrollment
+from models.study_progress_subject import StudyProgressSubject
+from models.study_authority_subject_token import StudyAuthoritySubjectToken
 
 
 class StatsOverviewTests(unittest.TestCase):
@@ -322,6 +325,98 @@ class StatsOverviewTests(unittest.TestCase):
             self.assertEqual(today_point["cards"], 0)
             self.assertEqual(today_point["source"], "reviewed")
             self.assertFalse(today_point["is_future"])
+
+    def test_note_authority_mode_never_falls_back_to_projection_rows(self):
+        """R9: NOTE future due comes only from canonical availability, never card_progress."""
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            db.session.add(StudyAuthorityEnrollment(
+                learner_user_id=self.user_id, mode_code="NOTE", epoch=1,
+                created_at=now_utc, updated_at=now_utc))
+            for hour in range(5):
+                self._add_progress(due_at=datetime(2026, 1, 12, 8 + hour, 0, 0))
+            db.session.commit()
+
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=now_utc,
+            )
+            self.assertEqual(self._heatmap_day(payload, "2026-01-12")["cards"], 0)
+
+    def test_note_authority_mode_pristine_subject_without_token_is_not_an_error(self):
+        """K2: a never-studied subject needs no token; the locking reader created them lazily."""
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            db.session.add_all([
+                StudyAuthorityEnrollment(
+                    learner_user_id=self.user_id, mode_code="NOTE", epoch=1,
+                    created_at=now_utc, updated_at=now_utc),
+                StudyProgressSubject(
+                    learner_user_id=self.user_id, logical_note_key=b"note-missing-token-key",
+                    created_at=now_utc, updated_at=now_utc),
+            ])
+            db.session.commit()
+
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=now_utc,
+            )
+            self.assertEqual(payload["year"], 2026)
+
+    def test_note_authority_mode_non_locking(self):
+        """Test R5: Verify no 'FOR UPDATE' queries run during NOTE overview."""
+        from sqlalchemy import event
+
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            enrollment = StudyAuthorityEnrollment(
+                learner_user_id=self.user_id,
+                mode_code="NOTE",
+                epoch=1,
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            subject = StudyProgressSubject(
+                learner_user_id=self.user_id,
+                logical_note_key=b"note-non-locking-key",
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            db.session.add_all([enrollment, subject])
+            db.session.flush()
+
+            token = StudyAuthoritySubjectToken(
+                subject_id=subject.id,
+                subject_generation=1,
+                authority_revision=0,
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            db.session.add(token)
+            db.session.commit()
+
+            executed_clauses = []
+
+            def before_execute(conn, clause, multiparams, params, options):
+                if getattr(clause, "_for_update_arg", None) is not None:
+                    executed_clauses.append(clause)
+
+            event.listen(db.engine, "before_execute", before_execute)
+            try:
+                build_stats_overview(
+                    user_id=self.user_id,
+                    year=2026,
+                    timezone_name="UTC",
+                    now_utc=now_utc,
+                )
+            finally:
+                event.remove(db.engine, "before_execute", before_execute)
+
+            self.assertEqual(executed_clauses, [], "Found unexpected locking queries in overview!")
 
 
 if __name__ == "__main__":

@@ -164,7 +164,7 @@ class StudySessionApiTests(unittest.TestCase):
         return response.get_json()
 
     def _enable_existing_state_note_authority(
-        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None
+        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token: bool | None = None
     ):
         with self.app.app_context():
             note_query = Note.query.filter_by(
@@ -275,6 +275,13 @@ class StudySessionApiTests(unittest.TestCase):
                 ]
             )
             expected_hash = mapped.semantic_state_hash.hex()
+            should_include_token = bool(enroll if include_token is None else include_token)
+            if should_include_token:
+                db.session.add(StudyAuthoritySubjectToken(
+                    subject_id=int(subject.id), subject_generation=1,
+                    authority_revision=0, semantic_state_hash=mapped.semantic_state_hash,
+                    created_at=now, updated_at=now,
+                ))
             if enroll:
                 db.session.add(
                     StudyAuthorityEnrollment(
@@ -791,7 +798,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 1)
 
     def test_note_authority_template_delete_rolls_back_stale_projection(self):
-        self._enable_existing_state_note_authority(epoch=14)
+        self._enable_existing_state_note_authority(epoch=14, include_token=True)
         created = self.client.post(
             f"/api/note-types/{self.note_type_id}/templates",
             json={
@@ -823,7 +830,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_note_authority_new_template_expands_every_owned_note(self):
-        self._enable_existing_state_note_authority(epoch=15)
+        self._enable_existing_state_note_authority(epoch=15, include_token=True)
         second_note = self.client.post(
             "/api/notes",
             json={
@@ -2031,11 +2038,12 @@ class StudySessionApiTests(unittest.TestCase):
 
     def test_dashboard_note_counts_are_rebuilt_from_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=14)
-        with patch(
-            "app.services.dashboard_service._classify_progress_fast",
-            return_value=None,
-        ):
-            response = self.client.get("/api/dashboard")
+        with self.app.app_context():
+            # Projection content drift (no revision bump) must not change NOTE counts.
+            progress = CardProgress.query.filter_by(user_id=self.user_id).one()
+            progress.queue, progress.due_day = "review", 0
+            db.session.commit()
+        response = self.client.get("/api/dashboard")
         self.assertEqual(response.status_code, 200, response.get_json())
         payload = response.get_json()
         self.assertEqual(payload["summary"]["new"], 1)

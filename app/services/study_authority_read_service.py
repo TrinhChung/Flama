@@ -116,6 +116,54 @@ def _availability_from_canonical(
     )
 
 
+def validate_study_authority_projection(*, card, locked, progress, contributor, availability_row):
+    """Validate a full sibling projection without taking locks or writing."""
+    card_id = str(card.id)
+    mapped = map_card_progress(
+        progress,
+        card_created_at=card.created_at,
+        card_order_key=card_id,
+    )
+    if (
+        not isinstance(mapped, MappedCardProgress)
+        or mapped.semantic_state_hash
+        != bytes(locked.state.semantic_state_hash)
+    ):
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} compatibility projection differs from NOTE state.",
+        )
+    projected = mapped.availability
+    if (
+        int(contributor.subject_id) != int(locked.subject.id)
+        or int(contributor.subject_generation)
+        != int(locked.subject.subject_generation)
+        or int(contributor.live_card_progress_id or 0) != int(progress.id or 0)
+        or int(contributor.card_progress_revision) != int(progress.revision)
+        or int(availability_row.subject_id) != int(locked.subject.id)
+        or int(availability_row.subject_generation)
+        != int(locked.subject.subject_generation)
+        or availability_row.projection_version != projected.projection_version
+        or availability_row.normalized_queue != projected.normalized_queue
+        or availability_row.due_at != projected.due_at
+        or availability_row.due_day != projected.due_day
+        or bool(availability_row.is_suspended) != projected.is_suspended
+        or bool(availability_row.is_buried) != projected.is_buried
+        or availability_row.buried_until_day != projected.buried_until_day
+        or availability_row.card_created_at != projected.card_created_at
+        or bytes(availability_row.card_order_key) != projected.card_order_key
+        or availability_row.state_schema_version
+        != projected.state_schema_version
+        or bytes(availability_row.semantic_state_hash)
+        != projected.semantic_state_hash
+    ):
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} canonical availability evidence is stale.",
+        )
+    return _availability_from_canonical(availability_row)
+
+
 def load_study_authority_card_read(
     session: Session,
     *,
@@ -347,48 +395,10 @@ def load_study_authority_card_reads(
         progress = progress_by_card_id[card_id]
         contributor = contributor_by_card_id[card_id]
         availability_row = availability_by_contributor_id[int(contributor.id)]
-        mapped = map_card_progress(
-            progress,
-            card_created_at=card.created_at,
-            card_order_key=card_id,
+        availability = validate_study_authority_projection(
+            card=card, locked=locked, progress=progress,
+            contributor=contributor, availability_row=availability_row,
         )
-        if (
-            not isinstance(mapped, MappedCardProgress)
-            or mapped.semantic_state_hash
-            != bytes(locked.state.semantic_state_hash)
-        ):
-            raise StudyAuthorityReadError(
-                "AUTHORITY_READ_PARITY_DIVERGED",
-                f"Card {card_id} compatibility projection differs from NOTE state.",
-            )
-        projected = mapped.availability
-        if (
-            int(contributor.subject_id) != int(locked.subject.id)
-            or int(contributor.subject_generation)
-            != int(locked.subject.subject_generation)
-            or int(contributor.live_card_progress_id or 0) != int(progress.id or 0)
-            or int(contributor.card_progress_revision) != int(progress.revision)
-            or int(availability_row.subject_id) != int(locked.subject.id)
-            or int(availability_row.subject_generation)
-            != int(locked.subject.subject_generation)
-            or availability_row.projection_version != projected.projection_version
-            or availability_row.normalized_queue != projected.normalized_queue
-            or availability_row.due_at != projected.due_at
-            or availability_row.due_day != projected.due_day
-            or bool(availability_row.is_suspended) != projected.is_suspended
-            or bool(availability_row.is_buried) != projected.is_buried
-            or availability_row.buried_until_day != projected.buried_until_day
-            or availability_row.card_created_at != projected.card_created_at
-            or bytes(availability_row.card_order_key) != projected.card_order_key
-            or availability_row.state_schema_version
-            != projected.state_schema_version
-            or bytes(availability_row.semantic_state_hash)
-            != projected.semantic_state_hash
-        ):
-            raise StudyAuthorityReadError(
-                "AUTHORITY_READ_PARITY_DIVERGED",
-                f"Card {card_id} canonical availability evidence is stale.",
-            )
         if card_id not in requested_card_by_id:
             continue
         result[card_id] = StudyAuthorityCardRead(
@@ -405,7 +415,7 @@ def load_study_authority_card_reads(
             ),
             progress=None,
             authority_revision=int(locked.token.authority_revision),
-            availability=_availability_from_canonical(availability_row),
+            availability=availability,
         )
     return MappingProxyType(dict(sorted(result.items())))
 

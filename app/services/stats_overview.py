@@ -7,8 +7,10 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy import and_, or_, select
+
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
-from app.repositories.study_authority_repository import lock_study_authority_route
+from app.repositories.study_authority_repository import read_study_authority_route
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.services.scheduler_config_service import resolve_deck_options
 from app.repositories.stats_query_repository import (
@@ -150,51 +152,74 @@ def _canonical_future_due_day_counts(
     user_id: int,
     timezone_name: str,
     timezone_obj,
-    now_utc: datetime,
     start_utc: datetime,
     end_utc: datetime,
+    day_boundary_hour_local: int,
 ) -> dict[date, int]:
-    from app.services.study_authority_read_service import load_study_authority_card_reads
+    """NOTE future-due days from canonical availability, LEGACY semantics.
 
-    # LEGACY counts every learner CardProgress row (owned and logical-overlay
-    # source Cards). Under NOTE a Note with state projects every sibling, and
-    # a never-studied Note has no due date, so the same row set is exact.
-    cards = (
-        Card.query.join(
-            CardProgress,
-            db.and_(CardProgress.card_id == Card.id, CardProgress.user_id == user_id),
-        )
-        .order_by(Card.id.asc())
-        .all()
+    Same row set and day mapping as ``query_future_due_day_counts`` (every
+    learner Card with a due value, not suspended; overdue counts today).
+    Divergent NOTE evidence raises; there is no ``card_progress`` fallback.
+    """
+    from app.repositories import note_analytics_read_repository as note_reads
+    from app.repositories.stats_query_repository import (
+        _progress_due_local_day,
+        _utc_to_business_day,
     )
-    reads = load_study_authority_card_reads(
-        db.session,
-        learner_user_id=user_id,
-        cards=tuple(cards),
-        now_utc=now_utc,
-        timezone_name=timezone_name,
-        deck_options_by_card_id={
-            str(card.id): resolve_deck_options(
-                user_id=user_id,
-                deck_id=card.note.deck_id,
+    from app.services.study_authority_read_service import StudyAuthorityReadError
+
+    scope = note_reads.learner_note_scope(learner_user_id=user_id)
+    rows = note_reads.note_card_rows(scope, learner_user_id=user_id).subquery("rows")
+    # One pass: every violating Card plus every due, unsuspended Card.
+    fetched = db.session.execute(
+        select(rows.c.violation, rows.c.due_at, rows.c.due_day, rows.c.queue).where(
+            or_(
+                rows.c.violation > 0,
+                and_(
+                    or_(rows.c.due_at.isnot(None), rows.c.due_day.isnot(None)),
+                    or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
+                ),
             )
-            for card in cards
-        },
+        )
+    ).all()
+    worst = max((int(row[0] or 0) for row in fetched), default=0)
+    if not worst:
+        worst = note_reads.subject_vector_violation(
+            db.session, scope=scope, learner_user_id=user_id
+        )
+    error = note_reads.violation_error(worst)
+    if error is not None:
+        raise StudyAuthorityReadError(*error)
+
+    start_local_day = _utc_to_business_day(
+        start_utc,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
     )
+    end_local_day = _utc_to_business_day(
+        end_utc,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+    )
+
+    avail_rows = [(due_at, due_day, queue) for _violation, due_at, due_day, queue in fetched]
+
     by_day: dict[date, int] = {}
-    for card in cards:
-        availability = reads[str(card.id)].availability
-        due_at = availability.due_at
-        if (
-            due_at is None
-            or due_at < start_utc
-            or due_at >= end_utc
-            or availability.is_suspended
-        ):
+    for due_at, due_day, queue_value in avail_rows:
+        local_day = _progress_due_local_day(
+            due_at=due_at,
+            due_day=due_day,
+            queue_value=queue_value,
+            timezone_name=timezone_name,
+            day_boundary_hour_local=day_boundary_hour_local,
+        )
+        if local_day is None:
             continue
-        utc_moment = due_at if due_at.tzinfo else due_at.replace(tzinfo=UTC)
-        local_day = utc_moment.astimezone(timezone_obj).date()
-        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+        if local_day < start_local_day:
+            by_day[start_local_day] = _safe_int(by_day.get(start_local_day)) + 1
+        elif local_day < end_local_day:
+            by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
     return by_day
 
 
@@ -332,10 +357,9 @@ def build_stats_overview(
     effective_timezone_name = get_effective_timezone_name(timezone_name)
     timezone_obj = _build_timezone_obj(effective_timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    authority_route = lock_study_authority_route(
+    authority_route = read_study_authority_route(
         db.session,
         learner_user_id=user_id,
-        allow_note_authority=True,
     )
     day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
     today_day_index = _day_index(
@@ -383,9 +407,9 @@ def build_stats_overview(
                     user_id=user_id,
                     timezone_name=effective_timezone_name,
                     timezone_obj=timezone_obj,
-                    now_utc=now_utc_naive,
                     start_utc=future_start_utc,
                     end_utc=year_end_utc,
+                    day_boundary_hour_local=day_boundary_hour,
                 )
             else:
                 due_day_map = query_future_due_day_counts(

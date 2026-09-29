@@ -22,6 +22,7 @@ from app.services.stats_today_future import (
     build_user_study_time_stats,
 )
 from app.services.study_authority_read_service import StudyAuthorityReadError
+from app.services.study_analytics_read_service import analytics_read_transaction
 
 
 analytics_bp = Blueprint("api_v1_analytics", __name__)
@@ -42,7 +43,9 @@ def _resolve_request_timezone() -> str:
 @login_required
 def dashboard():
     try:
-        return jsonify(build_dashboard_payload(current_user))
+        with analytics_read_transaction():
+            payload = build_dashboard_payload(current_user)
+        return jsonify(payload)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         return error_response(
@@ -82,11 +85,12 @@ def statistics_overview():
 
     resolved_tz = _resolve_request_timezone()
     try:
-        payload = build_stats_overview(
-            user_id=current_user.id,
-            year=year,
-            timezone_name=resolved_tz,
-        )
+        with analytics_read_transaction():
+            payload = build_stats_overview(
+                user_id=current_user.id,
+                year=year,
+                timezone_name=resolved_tz,
+            )
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         return error_response(
