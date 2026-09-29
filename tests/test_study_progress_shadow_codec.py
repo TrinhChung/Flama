@@ -240,6 +240,33 @@ class StudyProgressShadowCodecTests(unittest.TestCase):
                 lineage_vector_hash=b"l" * 32,
             )
 
+    def test_unassigned_zero_ease_is_lossless_but_negative_quarantines(self):
+        # Anki imports keep factor 0 on ungraduated cards; the scheduler falls
+        # back to startingEase, so the codec must carry it without quarantine.
+        mapped = map_card_progress(
+            golden_progress(queue="learning", ease_factor=0.0),
+            card_created_at=datetime(2025, 12, 1),
+        )
+        self.assertIsInstance(mapped, MappedCardProgress)
+        assert isinstance(mapped, MappedCardProgress)
+        decoded = STATE_DECODERS.decode(
+            algorithm_key=ALGORITHM_KEY,
+            algorithm_version=ALGORITHM_VERSION,
+            state_schema_version=STATE_SCHEMA_VERSION,
+            storage_codec=STORAGE_CODEC,
+            payload=mapped.state.payload,
+            expected_size=mapped.state.size,
+            expected_hash=mapped.algorithm_state_hash,
+        )
+        self.assertEqual(decoded.ease, 0.0)
+
+        negative = map_card_progress(
+            golden_progress(ease_factor=-0.5), card_created_at=datetime(2025, 12, 1)
+        )
+        self.assertIsInstance(negative, MappingFailure)
+        assert isinstance(negative, MappingFailure)
+        self.assertEqual(negative.code, "INVALID_STATE_VALUE")
+
     def test_unknown_queue_partial_memory_and_nonfinite_values_quarantine(self):
         cases = (
             (golden_progress(queue="NEW"), "UNSUPPORTED_QUEUE"),
