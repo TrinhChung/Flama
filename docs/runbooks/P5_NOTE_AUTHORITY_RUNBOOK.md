@@ -56,7 +56,14 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
 ### 4.1 Backfill shadow
 1. Thêm `STUDY_PROGRESS_SHADOW_WRITE_ENABLED=1` và `STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED=1` vào `/etc/flama/flama.env`; `systemctl restart flama.service flama-connect.service`. Từ đây mọi writer LEGACY ghi mirror cùng transaction.
 2. Thử khô: `flama_cli study-progress-backfill` → đọc `source_count`, `quarantined_count`, `unresolvable_count`.
-3. Chạy thật: `flama_cli study-progress-backfill --apply` tới khi JSON có `"complete": true`. Nếu bị ngắt, chạy lại `flama_cli study-progress-backfill --apply --run-id <run_id>`.
+3. Chạy thật: backfill ghi commit của code vào run, mà thư mục release là `git archive` (không có `.git`), nên truyền SHA của release qua `FLAMA_BUILD_COMMIT` (tên thư mục release chính là SHA):
+   ```bash
+   rel=$(basename "$(readlink -f /opt/flama/current)")
+   systemd-run --quiet --wait --collect --pipe --property=User=flama --property=Group=flama \
+     --property=WorkingDirectory=/opt/flama/current --property=EnvironmentFile=/etc/flama/flama.env \
+     --setenv=FLAMA_BUILD_COMMIT="$rel" /opt/flama/venv/bin/flask --app wsgi.py study-progress-backfill --apply
+   ```
+   Chạy tới khi JSON có `"complete": true`. Nếu bị ngắt, thêm `--run-id <run_id>` với cùng `FLAMA_BUILD_COMMIT`.
 4. **Dừng** nếu `quarantined_count` hoặc `unresolvable_count` khác 0: các learner đó sẽ không enroll được; ghi mẫu trong `samples` và xử lý riêng, không sửa dữ liệu bằng tay.
 
 ### 4.2 Bật v4 và enroll
@@ -67,7 +74,7 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
      flama_cli study-authority-enrollment --user-id "$id" --mode NOTE >/dev/null || echo "DRY-RUN FAIL user=$id"
    done
    ```
-3. Enroll thật:
+3. Enroll thật. Learner lớn chạy lâu (2026-09-29: learner 39.282 subject mất khoảng 12 phút) và bị khoá route suốt transaction, nên chạy vòng lặp bằng `nohup … > log &` trên VPS thay vì giữ một phiên SSH có timeout:
    ```bash
    for id in $(flama_cli study-authority-learners --mode LEGACY); do
      flama_cli study-authority-enrollment --user-id "$id" --mode NOTE --apply || echo "ENROLL FAIL user=$id"
