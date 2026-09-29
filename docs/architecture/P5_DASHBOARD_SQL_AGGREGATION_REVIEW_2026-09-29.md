@@ -2,6 +2,8 @@
 
 > Ngày: 2026-09-29. Phạm vi: review 6 commit sửa truy vấn dashboard/overview (`5fe7755`, `0806a6d`, `4f1e496`, `1f95790`, `97f357e`, `e5e92aa`) so với gốc `9510d11`, đối chiếu với báo cáo điều tra [P5_DASHBOARD_TIMEOUT_USER1_2026-09-29.md](P5_DASHBOARD_TIMEOUT_USER1_2026-09-29.md). Trạng thái được đánh giá tại HEAD `e5e92aa`. Tài liệu này chỉ mô tả phát hiện, nguyên nhân và phương án sửa; **chưa sửa code ứng dụng**. Các đoạn code trong mục 4–5 là phác thảo để định hướng, chưa được chạy.
 
+> **Cập nhật 2026-09-30:** kế hoạch đã được rà soát lại theo kế hoạch decoupling ([mục 7](#7-rà-soát-kế-hoạch-và-điều-chỉnh-theo-decoupling-2026-09-30)) và bước 1–4 đã triển khai ([mục 8](#8-kết-quả-triển-khai-2026-09-30)). Mục 1–6 dưới đây giữ nguyên như lúc review `e5e92aa`.
+
 ## 1. Kết luận
 
 **Chưa nên merge ở HEAD `e5e92aa`.**
@@ -50,7 +52,7 @@ Thứ tự sửa đề xuất ở [mục 5](#5-kế-hoạch-sửa-đề-xuất).
 - **MySQL 8.0 thật** (Docker `mysql:8.0`, cấu hình mặc định): chạy lại các test NOTE có sẵn trong `tests/test_study_session_api.py` bằng một lớp con đổi `SQLALCHEMY_DATABASE_URI`. Chạy trên gốc `9510d11`, trên `1f95790` (trước bản sửa R1) và trên `e5e92aa`. Ngoài ra chạy SQL thủ công để xác nhận hành vi `READ ONLY` với `FOR SHARE`/`FOR UPDATE`.
 - **Probe hành vi (SQLite, dùng fixture có sẵn):** làm lệch riêng `card_progress` của learner NOTE, rồi gọi `/api/dashboard` và `/api/statistics/overview`. So từng trường hợp phân loại giữa `aggregate_deck_study_counts` và `study_repository.counter_bucket_for_progress_values`.
 - **Benchmark:** seed MySQL ở quy mô user 1 (1.527 deck, 39.282 note/card/progress, cùng phân bố queue 24.056 NEW / 1.844 learning / 220 relearning / 13.162 review, `field_values` khoảng 1,3 KB/note), đo `aggregate_deck_study_counts` tại `1f95790`.
-- Script tái hiện ở [Phụ lục](#7-phụ-lục-tái-hiện).
+- Script tái hiện ở [Phụ lục](#9-phụ-lục-tái-hiện).
 
 **Giới hạn:**
 
@@ -454,7 +456,49 @@ Theo ranh giới kiến trúc trong `AGENTS.md`: query nằm ở `app/repositori
 6. Số query của mỗi request không tăng theo số card, đo bằng listener `before_cursor_execute` trên cohort 1k và 40k. Ghi lại con số thực tế làm baseline.
 7. Ở cohort khoảng 40k: p95 mỗi API dưới 2 giây khi chạy đơn và dưới 5 giây khi dashboard và overview chạy đồng thời (giữ nguyên mục tiêu của báo cáo điều tra).
 
-## 7. Phụ lục: tái hiện
+## 7. Rà soát kế hoạch và điều chỉnh theo decoupling (2026-09-30)
+
+Kế hoạch mục 5 đúng hướng và giữ nguyên thứ tự. Phương án A (đếm từ canonical availability) khớp [P5 plan](../task/decoupling/P5_EXECUTION_PLAN_2026-09-20.md) §3: learner NOTE đọc state/availability chuẩn, còn `card_progress` chỉ là projection để rollback và sẽ bị bỏ ở Phase 9. Sáu điểm dưới đây điều chỉnh kế hoạch sau khi đối chiếu với code và kế hoạch decoupling.
+
+| # | Điểm | Quyết định | Lý do |
+|---|---|---|---|
+| K1 | Tier 2 (A.3): so hash nội dung `card_progress` với state | **Chọn A.3 phương án 1**: dashboard/overview không tính lại hash; lệch nội dung của bản sao tương thích do `study-authority-read-audit` phát hiện | Số hiển thị lấy từ NOTE chuẩn nên đúng theo authority kể cả khi bản sao lệch. Vẫn giữ trong request các kiểm tra liên kết với `card_progress` (I4 có dòng, I7 cùng id/revision) vì chúng rẻ và phát hiện writer quên chiếu. Runbook P5 ghi lịch chạy audit. |
+| K2 | I1 khi **thiếu** token | **Không coi là vi phạm**; chỉ so generation/hash khi token tồn tại | Reader khóa cũ (`lock_study_authority_subject`, `create_token_if_missing=True`) tự tạo token từ state rồi trả 200. Reader analytics không được ghi, và thiếu token không phải là lệch dữ liệu: writer kế tiếp sẽ tạo token. Trả 409 ở đây là hồi quy so với `9510d11`. |
+| K3 | Đếm theo Note (`count_by_note`, `STUDY_NOTE_COUNT_ENABLED`) | **Gỡ khỏi bản sửa này** | D6-04 thuộc [Phase 6](../task/decoupling/P6_EXECUTION_PLAN_2026-09-29.md) và chưa được duyệt; bất biến #9 của [thiết kế P5](phase-5-authority-cutover-design-2026-09-20.md) cấm gộp Card trước Phase 6. Làm ở P6-06 sau khi D6-04 được duyệt. |
+| K4 | R11 (ngữ nghĩa future-due của overview NOTE) | **NOTE = LEGACY** (`_progress_due_local_day`, thẻ quá hạn dồn vào hôm nay) | Mục tiêu reader parity NOTE↔LEGACY của P5-07. Bản NOTE ở `9510d11` lệch LEGACY. Có test so hai chế độ trên cùng dữ liệu. |
+| K5 | Tra subject theo khóa | Join `logical_note_key = CAST(note_id AS BINARY)` (index `uq_sp_subject_user_note`), không join theo `live_note_id` | Join theo `live_note_id` bỏ sót subject bị detach; reader cũ tìm theo logical key rồi mới báo `DETACHED_AUTHORITY_SUBJECT` (I3). |
+| K6 | R3a trong bản nháp chưa commit | Dùng `due_at < mốc đầu ngày học kế tiếp` (so sánh ngặt) | `_day_index(due_at) <= today` ⇔ `due_at < next_day_start`; bản nháp dùng `<=`, lệch đúng tại thời điểm biên. Giữ việc lấy day boundary theo từng user (bản nháp): khớp route học (`resolve_scheduler_runtime_settings`). |
+
+Phạm vi chưa đổi: các reader khóa còn lại (`stats_today_future`, Browse list/tree, `/api/study/next`, trang học deck, MCP study tools, mở phiên v4 tối đa 5.000 thẻ) để PR riêng ở bước 7. Access log production từ 28/09 cho thấy endpoint nặng được dùng là `/api/dashboard` và `/api/statistics/overview`; các endpoint còn lại cần đo trước khi sửa.
+
+## 8. Kết quả triển khai (2026-09-30)
+
+Đã triển khai bước 1–4 của mục 5 theo các điều chỉnh K1–K6.
+
+| ID | Trạng thái | Thay đổi |
+|---|---|---|
+| R2, R10, R12 | **Đã sửa** | `app/repositories/note_analytics_read_repository.py` (mới): `note_card_rows()` lấy availability của contributor `ACTIVE` theo từng Card và tính mã vi phạm I1–I9 bằng một biểu thức SQL; `subject_vector_violation()` kiểm I5. Mã lỗi trùng reader khóa, route trả 409. `check_note_authority_integrity` bị xóa. |
+| R3 | **Đã sửa** | Queue `lower(trim(...))`, queue lạ/rỗng tính là NEW, review chỉ có `due_at` so ngặt với mốc đầu ngày học kế tiếp. Test ngẫu nhiên 480 Card × 4 bối cảnh (UTC, Tokyo, Los Angeles ngày đổi DST, Hồ Chí Minh; boundary 0/4/23) khớp `counter_bucket_for_progress_values`. |
+| R5, R6 | **Đã sửa** | Admin không cộng overlay ở cả hai chế độ; Note type lấy từ Note sở hữu cũ nhất trước, rồi mới tới install. |
+| R7 | **Đã sửa** | `tests/test_note_analytics_read.py` (17 test, dữ liệu dựng bằng writer NOTE thật: 11 lỗi tiêm, không khóa/không ghi, NOTE = LEGACY cho deck sở hữu và deck cài overlay từ marketplace). `scripts/probe_p5_analytics_mysql.py` chạy bộ này trên MySQL thật, trong transaction `READ ONLY`; đã thêm vào job `mysql-contract` và `MYSQL_CONTRACT_SOURCE_PATTERNS`. |
+| R8 | **Đã sửa** | Xóa `_classify_progress_fast`, `timezone_obj`, docstring sai; ghi giả định "đã flush nhưng chưa commit" trong `analytics_read_transaction`. `count_by_note` và `STUDY_NOTE_COUNT_ENABLED` bị gỡ (K3). |
+| R9, R11 | **Đã sửa** | Overview NOTE không còn fallback `card_progress`; đọc một lượt (vi phạm + dòng có due); ngữ nghĩa ngày = LEGACY, có test so hai chế độ trên cùng dữ liệu. |
+
+**Kiểm chứng:**
+
+- MySQL 8.0.40 local, DB tạm: `probe_p5_analytics_mysql.py` 17/17 PASS, không có lỗi 1792.
+- **Production, chỉ đọc, chưa deploy:** chạy code của working tree từ thư mục tạm trên VPS, bằng `create_app` với mọi cờ `STARTUP_*` tắt, bên trong `analytics_read_transaction()`.
+
+| Learner | Dashboard trước | Dashboard sau | Overview sau | Ba request đồng thời (2 dashboard + overview) |
+|---|---|---|---|---|
+| User 1 (39.282 Card) | 119,5 s | 1,9 s (10 câu SQL) | 1,6–1,8 s (7 câu SQL) | tối đa 3,6 s mỗi request |
+| User 4 | 14,3 s | 0,7–0,8 s | 0,3–0,4 s | — |
+
+  Số đếm của user 1 (new 24.056, learn 2.064, due 12.898) bằng kết quả audit lúc enroll. Trên toàn bộ deck của user 1 và user 4, số đếm theo NOTE bằng đúng số đếm theo `card_progress`, tức projection đang khớp.
+
+**Còn lại:** bước 5 (chạy câu SQL R10 không còn cần, vì K2 cho phép thiếu token; ghi lịch audit vào runbook P5) và bước 7 (các reader khóa còn lại, frontend F4, telemetry).
+
+## 9. Phụ lục: tái hiện
 
 ### A. Hành vi `READ ONLY` trên MySQL 8.0
 

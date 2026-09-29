@@ -101,7 +101,7 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
 | `NOTE_ENROLLMENT_DISABLED` | CLI chạy với `STUDY_WIRE_V4_ENABLED` tắt | Kiểm tra env ở bước 4.2.1 |
 
 ### 4.4 Theo dõi sau R1 (hằng ngày trong tuần đầu)
-- Chạy lại vòng audit ở 4.2.4.
+- Chạy lại vòng audit ở 4.2.4, và **luôn chạy sau mỗi lần deploy**. Từ 2026-09-30, dashboard/overview đọc availability NOTE không khóa và chỉ kiểm liên kết với `card_progress` (có dòng, cùng id/revision); việc so **nội dung** bản sao tương thích với state chỉ còn do `study-authority-read-audit` đảm nhận ([review K1](../architecture/P5_DASHBOARD_SQL_AGGREGATION_REVIEW_2026-09-29.md#7-rà-soát-kế-hoạch-và-điều-chỉnh-theo-decoupling-2026-09-30)). Audit dùng reader khóa: learner lớn (khoảng 39 nghìn Card) mất vài phút và bị khóa trong lúc đó, nên chạy lúc ít tải.
 - Log ứng dụng: `AUTHORITY_READ_PARITY_DIVERGED`, `STALE_AUTHORITY_*`, `INCOMPLETE_AUTHORITY_*`, `ALGORITHM_IDENTITY_*`, `CONTENT_SCOPE_CHANGED` (mã cuối là xung đột đồng thời, người dùng thử lại được — chỉ đáng lo nếu lặp lại), `New learner … stays LEGACY` (tài khoản mới không vào được NOTE; enroll bằng CLI).
 - MySQL: lock wait/deadlock tăng bất thường.
 
