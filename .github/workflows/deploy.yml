@@ -367,6 +367,10 @@ jobs:
           test -f "$managed_env_payload_path"
           mkdir -p "$release_dir"
           tar -xzf "$archive_path" -C "$release_dir"
+          # /api/health reports this stamp. The frontend deploy refuses to
+          # publish a SPA until the live backend serves its API; a rollback
+          # switches the symlink and therefore the reported release with it.
+          printf '%s\n' "$RELEASE_ID" > "$release_dir/REVISION"
           cp -p "$environment_file" "$desired_environment_file"
           python3 "$release_dir/deploy/sync_managed_env.py" apply \
             --env-file "$desired_environment_file" \

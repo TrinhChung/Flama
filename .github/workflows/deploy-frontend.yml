@@ -1,0 +1,84 @@
+name: Deploy Flama Frontend to Cloudflare Pages
+
+# CI calls this only after the backend release is live (or has nothing new),
+# so the SPA never reaches users ahead of the API it calls. The Pages project
+# must keep "automatic production branch deployments" disabled; otherwise
+# Cloudflare still publishes every master push before the backend is ready.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: flama-cloudflare-pages-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: Flama
+    timeout-minutes: 15
+
+    env:
+      RELEASE_ID: ${{ github.sha }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+      # Vite embeds these public values at build time.
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://be-flama.stmtp.com/api' }}
+      VITE_FLAMA_CONNECT_URL: ${{ vars.VITE_FLAMA_CONNECT_URL }}
+      VITE_FLAMA_MCP_URL: ${{ vars.VITE_FLAMA_MCP_URL }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # The release gate diffs the live backend commit against this one.
+          fetch-depth: 0
+
+      - name: Validate Cloudflare Pages configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -Eeuo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_PAGES_PROJECT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is empty. Configure it in the Flama GitHub Environment."
+              exit 1
+            fi
+          done
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build React SPA
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build:ci
+
+      # Checked right before publishing: the backend deploy may have failed,
+      # rolled back, or never run for this commit (a superseded CI run).
+      - name: Require the live backend to serve this frontend
+        run: |
+          python scripts/check_backend_release.py \
+            --health-url "${VITE_API_BASE_URL%/}/health" \
+            --target-sha "$RELEASE_ID"
+
+      - name: Publish to Cloudflare Pages
+        working-directory: frontend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@4 pages deploy dist \
+            --project-name="$CLOUDFLARE_PAGES_PROJECT" \
+            --branch="$GITHUB_REF_NAME" \
+            --commit-hash="$RELEASE_ID"

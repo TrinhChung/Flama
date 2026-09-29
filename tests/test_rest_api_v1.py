@@ -1,5 +1,7 @@
 """Integration coverage for the REST API used by the SPA migration."""
 
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -64,10 +66,27 @@ class RestApiV1Tests(unittest.TestCase):
         return response
 
     def test_health_reports_application_and_database_readiness(self):
-        response = self.client.get("/api/health")
+        with patch(
+            "app.api.v1.health._RELEASE_FILE",
+            Path(tempfile.gettempdir()) / "flama-missing-revision-file",
+        ):
+            response = self.client.get("/api/health")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"status": "ok"})
+        self.assertEqual(response.get_json(), {"status": "ok", "release": None})
+
+    def test_health_reports_the_stamped_release_commit(self):
+        release = "0123456789abcdef0123456789abcdef01234567"
+        with tempfile.TemporaryDirectory() as directory:
+            revision_file = Path(directory) / "REVISION"
+            with patch("app.api.v1.health._RELEASE_FILE", revision_file):
+                revision_file.write_text(f"{release}\n", encoding="utf-8")
+                stamped = self.client.get("/api/health").get_json()
+                revision_file.write_text("not-a-commit\n", encoding="utf-8")
+                malformed = self.client.get("/api/health").get_json()
+
+        self.assertEqual(stamped, {"status": "ok", "release": release})
+        self.assertEqual(malformed, {"status": "ok", "release": None})
 
     def test_health_fails_when_authoritative_redis_is_unavailable(self):
         self.app.config["RATE_LIMIT_BACKEND"] = "redis"
