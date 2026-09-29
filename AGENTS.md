@@ -79,6 +79,7 @@
 
 ## Agent Files & Multi-Agent Framework
 - Multi-Agent Orchestration Architecture documentation: `docs/architecture/MULTI_AGENT_COLLABORATION.md`.
+- Repo-local skills live in `skills/` (source of truth). `.claude/skills/` mirrors them for Claude Code: after editing `skills/`, run `python scripts/sync_claude_skills.py` (the pre-commit hook does it for staged skill changes, and `tests/test_claude_skills_sync.py` fails on drift). Never edit the mirror directly. `.claude/skills/mysql` is vendored and lives only there.
 - Use `$flama-agent-orchestrator` when managing complex full-stack features requiring cross-layer coordination across Frontend, Backend, and Database subagents.
 - Use `$flama-frontend-architecture` when refactoring, decomposing, or building React SPA components in `frontend/src/`, enforcing Feature-Sliced Design (FSD), extracting custom hooks, consolidating reusable UI primitives, and preserving Zero Visual Regression.
 - Use `$flama-backend-architecture` when building or refactoring Flask REST APIs (`app/api/`), service logic (`app/services/`), repositories (`app/repositories/`), validators (`app/validators/`), Anki scheduling, or Flama Connect protocol.
