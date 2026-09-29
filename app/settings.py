@@ -262,6 +262,12 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "STUDY_WIRE_V4_ENABLED",
             default=False,
         ),
+        # New accounts start in NOTE authority (requires wire v4, async off).
+        # Off by default; existing learners are enrolled through the CLI.
+        "STUDY_NEW_LEARNER_NOTE_ENABLED": coerce_bool_env(
+            "STUDY_NEW_LEARNER_NOTE_ENABLED",
+            default=False,
+        ),
         # Phase 4 shadow progress remains inert until each later rollout gate
         # is approved independently.  None of these flags grants read authority.
         "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": coerce_bool_env(

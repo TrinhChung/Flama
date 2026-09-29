@@ -69,6 +69,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "backend_tests": [
             "tests/test_auth_security.py",
             "tests/test_google_auth.py",
+            "tests/test_study_new_learner_note_enrollment.py",
             "tests/test_password_reset_api.py",
             "tests/test_student_email_verification.py",
             "tests/test_transactional_email_service.py",
@@ -147,6 +148,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_progress_shadow_schema.py",
             "tests/test_study_authority_schema.py",
             "tests/test_study_authority_note_enrollment.py",
+            "tests/test_study_new_learner_note_enrollment.py",
             "tests/test_study_authority_receipt.py",
             "tests/test_study_authority_projection_comparator.py",
             "tests/test_study_authority_projection_encoder.py",

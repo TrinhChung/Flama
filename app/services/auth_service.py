@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from app.services.study_authority_enrollment_service import (
+    enroll_new_learner_note_authority,
+)
 from app.services.user_roles import ensure_default_user_roles
 from models import db
 from models.user import User
@@ -21,5 +24,6 @@ def register_user_and_commit(email: str, username: str, password: str) -> User:
         user.is_admin = existing_user_count == 0
     user.set_password(password)
     db.session.add(user)
+    enroll_new_learner_note_authority(db.session, user=user)
     db.session.commit()
     return user
