@@ -46,6 +46,14 @@ class NoteAnalyticsReadTests(unittest.TestCase):
         self.assertEqual(response.status_code, expected, response.get_json())
         return response.get_json()
 
+    def _stable_dashboard(self):
+        # Deck move tokens are signed with a per-second timestamp; drop them.
+        def strip(row):
+            return {**{key: value for key, value in row.items() if "move_" not in key},
+                "children": [strip(child) for child in row["children"]]}
+        body = self._dashboard()
+        return {**body, "items": [strip(row) for row in body["items"]]}
+
     def _overview(self, expected=200):
         response = self.client.get("/api/statistics/overview", query_string={"year": _now().year})
         self.assertEqual(response.status_code, expected, response.get_json())
@@ -201,13 +209,13 @@ class NoteAnalyticsReadTests(unittest.TestCase):
             "rating": "again", "operation_key": str(uuid4()), "duration_ms": 400,
             "scope": "deck", "scope_id": self.local_deck_id})
         self.assertEqual(response.status_code, 200, response.get_json())
-        note_view = (self._dashboard(), self._overview())
+        note_view = (self._stable_dashboard(), self._overview())
         installed = [row for row in note_view[0]["items"] if row["deck_id"] == self.local_deck_id]
         self.assertEqual([row["learn_count"] for row in installed], [2], note_view[0]["items"])
         with self.app.app_context():
             stage_legacy_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=_now())
             db.session.commit()
-        self.assertEqual((self._dashboard(), self._overview()), note_view)
+        self.assertEqual((self._stable_dashboard(), self._overview()), note_view)
 
 
 if __name__ == "__main__":
