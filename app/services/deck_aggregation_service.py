@@ -85,6 +85,9 @@ def aggregate_deck_study_counts(
     if not visible_deck_ids:
         return {}, {}
 
+    if is_note_mode:
+        check_note_authority_integrity(session, learner_user_id=learner_user_id)
+
     if count_by_note is not None:
         should_count_by_note = bool(count_by_note)
     else:

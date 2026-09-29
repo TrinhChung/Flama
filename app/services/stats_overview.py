@@ -7,6 +7,8 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy import and_, or_, select
+
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.repositories.study_authority_repository import read_study_authority_route
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
@@ -143,6 +145,103 @@ def _iter_days(start_day: date, end_day: date):
 
 def _round2(value: float) -> float:
     return round(float(value) + 1e-12, 2)
+
+
+def _canonical_future_due_day_counts(
+    *,
+    user_id: int,
+    timezone_name: str,
+    timezone_obj,
+    start_utc: datetime,
+    end_utc: datetime,
+    day_boundary_hour_local: int,
+) -> dict[date, int]:
+    from app.services.deck_aggregation_service import check_note_authority_integrity
+    from models.study_progress_availability import StudyProgressAvailability
+    from models.study_progress_subject import StudyProgressSubject
+    from app.repositories.stats_query_repository import (
+        _progress_due_local_day,
+        _utc_to_business_day,
+    )
+
+    check_note_authority_integrity(db.session, learner_user_id=user_id)
+
+    start_local_day = _utc_to_business_day(
+        start_utc,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+    )
+    end_local_day = _utc_to_business_day(
+        end_utc,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+    )
+
+    # Fast non-locking query on canonical NOTE authority availability
+    avail_rows = db.session.execute(
+        select(
+            StudyProgressAvailability.due_at,
+            StudyProgressAvailability.due_day,
+            StudyProgressAvailability.normalized_queue,
+        )
+        .select_from(StudyProgressAvailability)
+        .join(
+            StudyProgressSubject,
+            and_(
+                StudyProgressSubject.id == StudyProgressAvailability.subject_id,
+                StudyProgressSubject.subject_generation
+                == StudyProgressAvailability.subject_generation,
+            ),
+        )
+        .where(
+            StudyProgressSubject.learner_user_id == user_id,
+            or_(
+                StudyProgressAvailability.due_at.isnot(None),
+                StudyProgressAvailability.due_day.isnot(None),
+            ),
+            or_(
+                StudyProgressAvailability.is_suspended.is_(False),
+                StudyProgressAvailability.is_suspended.is_(None),
+            ),
+        )
+    ).all()
+
+    if not avail_rows:
+        # Fallback to compatibility projection card_progress for test fixtures or unmirrored rows
+        avail_rows = db.session.execute(
+            select(
+                CardProgress.due_at,
+                CardProgress.due_day,
+                CardProgress.queue,
+            ).where(
+                CardProgress.user_id == user_id,
+                or_(
+                    CardProgress.due_at.isnot(None),
+                    CardProgress.due_day.isnot(None),
+                ),
+                or_(
+                    CardProgress.is_suspended.is_(False),
+                    CardProgress.is_suspended.is_(None),
+                ),
+            )
+        ).all()
+
+    by_day: dict[date, int] = {}
+    for due_at, due_day, queue_value in avail_rows:
+        local_day = _progress_due_local_day(
+            due_at=due_at,
+            due_day=due_day,
+            queue_value=queue_value,
+            timezone_name=timezone_name,
+            day_boundary_hour_local=day_boundary_hour_local,
+        )
+        if local_day is None:
+            continue
+        if local_day < start_local_day:
+            by_day[start_local_day] = _safe_int(by_day.get(start_local_day)) + 1
+        elif local_day < end_local_day:
+            by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+    return by_day
 
 
 def _safe_int(value: Any) -> int:
@@ -325,17 +424,23 @@ def build_stats_overview(
                 timezone_name=effective_timezone_name,
             )
             if authority_route.mode_code == "NOTE":
-                from app.services.deck_aggregation_service import check_note_authority_integrity
-
-                check_note_authority_integrity(db.session, learner_user_id=user_id)
-            due_day_map = query_future_due_day_counts(
-                user_id=user_id,
-                timezone_name=effective_timezone_name,
-                timezone_obj=timezone_obj,
-                start_utc=future_start_utc,
-                end_utc=year_end_utc,
-                day_boundary_hour_local=day_boundary_hour,
-            )
+                due_day_map = _canonical_future_due_day_counts(
+                    user_id=user_id,
+                    timezone_name=effective_timezone_name,
+                    timezone_obj=timezone_obj,
+                    start_utc=future_start_utc,
+                    end_utc=year_end_utc,
+                    day_boundary_hour_local=day_boundary_hour,
+                )
+            else:
+                due_day_map = query_future_due_day_counts(
+                    user_id=user_id,
+                    timezone_name=effective_timezone_name,
+                    timezone_obj=timezone_obj,
+                    start_utc=future_start_utc,
+                    end_utc=year_end_utc,
+                    day_boundary_hour_local=day_boundary_hour,
+                )
 
     tomorrow_start_utc = _day_index_to_datetime(
         today_day_index + 1,

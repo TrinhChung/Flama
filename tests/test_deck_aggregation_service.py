@@ -472,6 +472,278 @@ class DeckAggregationServiceTests(unittest.TestCase):
             self.assertEqual(total_new, 2)
             self.assertEqual(total_due, 1)
 
+    def test_note_authority_fail_closed_on_dashboard_aggregation(self):
+        """Test R5 & NOTE authority invariant: Dashboard aggregation fails closed if token is missing."""
+        with self.app.app_context():
+            now_utc = datetime(2026, 9, 29, 12, 0, 0)
+            today_day = now_utc.date().toordinal()
+
+            # Create a subject without a token for this learner
+            subject = StudyProgressSubject(
+                learner_user_id=self.learner_id,
+                logical_note_key=b"corrupted-note-key-without-token",
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            db.session.add(subject)
+            db.session.commit()
+
+            # aggregate_deck_study_counts with is_note_mode=True must raise StudyAuthorityReadError
+            with self.assertRaises(StudyAuthorityReadError) as ctx:
+                aggregate_deck_study_counts(
+                    db.session,
+                    learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.owned_deck_id],
+                    now_utc=now_utc,
+                    today_day_index=today_day,
+                    is_note_mode=True,
+                )
+            self.assertEqual(ctx.exception.code, "AUTHORITY_TOKEN_REQUIRED")
+
+    def test_study_note_count_enabled_config_flag(self):
+        """Test R3: STUDY_NOTE_COUNT_ENABLED config flag enables Note-level counting in build_dashboard_data."""
+        from app.services.dashboard_service import build_dashboard_data
+        from models.study_authority_enrollment import StudyAuthorityEnrollment
+
+        with self.app.app_context():
+            user = db.session.get(User, self.learner_id)
+            now_utc = datetime(2026, 9, 29, 12, 0, 0)
+            today_day = now_utc.date().toordinal()
+
+            # Enroll user in NOTE mode
+            enrollment = StudyAuthorityEnrollment(
+                learner_user_id=self.learner_id,
+                mode_code="NOTE",
+                epoch=1,
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            db.session.add(enrollment)
+
+            # Create 1 note with 3 sibling cards
+            note, cards = self._create_note_and_cards(
+                user_id=self.learner_id,
+                deck_id=self.owned_deck_id,
+                card_count=3,
+            )
+            subject = StudyProgressSubject(
+                learner_user_id=self.learner_id,
+                logical_note_key=str(note.id).encode("utf-8"),
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            db.session.add(subject)
+            db.session.flush()
+
+            token = StudyAuthoritySubjectToken(
+                subject_id=subject.id,
+                subject_generation=1,
+                authority_revision=0,
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            db.session.add(token)
+
+            for c in cards:
+                self._add_progress(
+                    user_id=self.learner_id,
+                    card_id=c.id,
+                    queue="review",
+                    due_day=today_day,
+                )
+            db.session.commit()
+
+            # When STUDY_NOTE_COUNT_ENABLED is False (default): counts 3 cards
+            with self.app.test_request_context():
+                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = False
+                rows, _, _, total_due, _ = build_dashboard_data(user)
+                self.assertEqual(total_due, 3)
+
+            # When STUDY_NOTE_COUNT_ENABLED is True: counts 1 Note (Decision D6-04)
+            with self.app.test_request_context():
+                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = True
+                rows, _, _, total_due, _ = build_dashboard_data(user)
+                self.assertEqual(total_due, 1)
+
+    def test_multi_author_nested_subdecks_marketplace_overlay(self):
+        """Test Open Issue 3: Complex nested subdecks from multiple marketplace authors with overlapping template IDs."""
+        from app.services.dashboard_service import build_dashboard_data
+
+        with self.app.app_context():
+            now_utc = datetime(2026, 9, 29, 12, 0, 0)
+            today_day = now_utc.date().toordinal()
+
+            # Author 2
+            author2 = User(username="author2", email="author2@example.com")
+            author2.set_password("pass")
+            db.session.add(author2)
+            db.session.flush()
+
+            # Author 1 Deck Hierarchy: Parent A -> Child A1 -> Grandchild A2
+            src_a = Deck(name="Source A (N5)", owner_user_id=self.author_id)
+            db.session.add(src_a)
+            db.session.flush()
+            src_a1 = Deck(name="Source A1 (Kanji)", owner_user_id=self.author_id, parent_id=src_a.id)
+            db.session.add(src_a1)
+            db.session.flush()
+            src_a2 = Deck(name="Source A2 (Vocab)", owner_user_id=self.author_id, parent_id=src_a1.id)
+            db.session.add(src_a2)
+            db.session.flush()
+
+            # Author 2 Deck Hierarchy: Parent B -> Child B1
+            src_b = Deck(name="Source B (N4)", owner_user_id=author2.id)
+            db.session.add(src_b)
+            db.session.flush()
+            src_b1 = Deck(name="Source B1 (Grammar)", owner_user_id=author2.id, parent_id=src_b.id)
+            db.session.add(src_b1)
+            db.session.flush()
+
+            # Learner Local Decks: L_A -> L_A1 -> L_A2
+            local_a = Deck(name="Local A", owner_user_id=self.learner_id)
+            db.session.add(local_a)
+            db.session.flush()
+            local_a1 = Deck(name="Local A1", owner_user_id=self.learner_id, parent_id=local_a.id)
+            db.session.add(local_a1)
+            db.session.flush()
+            local_a2 = Deck(name="Local A2", owner_user_id=self.learner_id, parent_id=local_a1.id)
+            db.session.add(local_a2)
+            db.session.flush()
+
+            # Learner Local Decks: L_B -> L_B1
+            local_b = Deck(name="Local B", owner_user_id=self.learner_id)
+            db.session.add(local_b)
+            db.session.flush()
+            local_b1 = Deck(name="Local B1", owner_user_id=self.learner_id, parent_id=local_b.id)
+            db.session.add(local_b1)
+            db.session.flush()
+
+            # Install 1 (Author 1 Deck A)
+            inst_a = DeckInstall(
+                id=str(uuid4()),
+                deck_item_id="item-a",
+                user_id=self.learner_id,
+                local_deck_id=local_a.id,
+                source_deck_id=src_a.id,
+                source_owner_user_id=self.author_id,
+                clone_mode="logical_overlay",
+                source_note_type_id="nt-author1",
+                installed_at=now_utc,
+            )
+            db.session.add(inst_a)
+            db.session.flush()
+            db.session.add_all([
+                DeckCloneDeckMap(deck_install_id=inst_a.id, source_deck_id=src_a.id, local_deck_id=local_a.id),
+                DeckCloneDeckMap(deck_install_id=inst_a.id, source_deck_id=src_a1.id, local_deck_id=local_a1.id),
+                DeckCloneDeckMap(deck_install_id=inst_a.id, source_deck_id=src_a2.id, local_deck_id=local_a2.id),
+            ])
+
+            # Install 2 (Author 2 Deck B)
+            inst_b = DeckInstall(
+                id=str(uuid4()),
+                deck_item_id="item-b",
+                user_id=self.learner_id,
+                local_deck_id=local_b.id,
+                source_deck_id=src_b.id,
+                source_owner_user_id=author2.id,
+                clone_mode="logical_overlay",
+                source_note_type_id="nt-author2",
+                installed_at=now_utc,
+            )
+            db.session.add(inst_b)
+            db.session.flush()
+            db.session.add_all([
+                DeckCloneDeckMap(deck_install_id=inst_b.id, source_deck_id=src_b.id, local_deck_id=local_b.id),
+                DeckCloneDeckMap(deck_install_id=inst_b.id, source_deck_id=src_b1.id, local_deck_id=local_b1.id),
+            ])
+
+            # Notes in Author 1 decks (overlapping template IDs: tmpl-1)
+            _, cards_a = self._create_note_and_cards(user_id=self.author_id, deck_id=src_a.id, created_at=now_utc - timedelta(days=1))
+            _, cards_a1 = self._create_note_and_cards(user_id=self.author_id, deck_id=src_a1.id, created_at=now_utc - timedelta(days=1))
+            _, cards_a2 = self._create_note_and_cards(user_id=self.author_id, deck_id=src_a2.id, created_at=now_utc - timedelta(days=1))
+
+            # Notes in Author 2 decks (SAME overlapping template ID: tmpl-1)
+            _, cards_b = self._create_note_and_cards(user_id=author2.id, deck_id=src_b.id, created_at=now_utc - timedelta(days=1))
+            _, cards_b1 = self._create_note_and_cards(user_id=author2.id, deck_id=src_b1.id, created_at=now_utc - timedelta(days=1))
+
+            # Progress for learner:
+            # - cards_a2: due today
+            self._add_progress(user_id=self.learner_id, card_id=cards_a2[0].id, queue="review", due_day=today_day)
+            # - cards_b1: learn
+            self._add_progress(user_id=self.learner_id, card_id=cards_b1[0].id, queue="learning")
+            # Other cards: unstudied (NEW)
+            db.session.commit()
+
+            learner_user = db.session.get(User, self.learner_id)
+            with self.app.test_request_context():
+                nodes, total_new, total_learn, total_due, _ = build_dashboard_data(learner_user)
+
+            node_a = next(n for n in nodes if n.deck_id == local_a.id)
+            node_b = next(n for n in nodes if n.deck_id == local_b.id)
+
+            # Subtree counts roll up cleanly:
+            # Local A subtree (A, A1, A2): total=3, new=2 (A, A1), due=1 (A2), learn=0
+            self.assertEqual(node_a.new_count, 2)
+            self.assertEqual(node_a.due_count, 1)
+            self.assertEqual(node_a.learn_count, 0)
+            self.assertEqual(node_a.note_type_id, "nt-author1")
+
+            # Local B subtree (B, B1): total=2, new=1 (B), learn=1 (B1), due=0
+            self.assertEqual(node_b.new_count, 1)
+            self.assertEqual(node_b.learn_count, 1)
+            self.assertEqual(node_b.due_count, 0)
+            self.assertEqual(node_b.note_type_id, "nt-author2")
+
+    def test_analytics_read_transaction_isolation_and_write_safety(self):
+        """Test R5 & Open Issue 2: Verify analytics_read_transaction contract, dirty write rejection, and MySQL snapshot."""
+        from unittest.mock import MagicMock, patch
+        from app.services.study_analytics_read_service import analytics_read_transaction
+
+        now_utc = datetime(2026, 9, 29, 12, 0, 0)
+        today_day = now_utc.date().toordinal()
+
+        with self.app.app_context():
+            # 1. Clean execution under read transaction
+            with analytics_read_transaction():
+                counts, _ = aggregate_deck_study_counts(
+                    db.session,
+                    learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.owned_deck_id],
+                    now_utc=now_utc,
+                    today_day_index=today_day,
+                    is_note_mode=False,
+                )
+                self.assertIn(self.owned_deck_id, counts)
+
+            # 2. Reject pending writes
+            pending_note = Note(user_id=self.learner_id, deck_id=self.owned_deck_id, field_values={})
+            db.session.add(pending_note)
+            with self.assertRaises(RuntimeError) as ctx:
+                with analytics_read_transaction():
+                    pass
+            self.assertIn("Analytics must start after pending writes are resolved", str(ctx.exception))
+            db.session.rollback()
+
+            # 3. Test MySQL dialect path executes START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY
+            mock_conn = MagicMock()
+            mock_session = MagicMock()
+            mock_session.new = set()
+            mock_session.dirty = set()
+            mock_session.deleted = set()
+            mock_session.get_bind.return_value.dialect.name = "mysql"
+            mock_session.connection.return_value = mock_conn
+
+            with patch("app.services.study_analytics_read_service.db.session", return_value=mock_session):
+                with analytics_read_transaction():
+                    pass
+
+            mock_session.connection.assert_called_once_with(
+                execution_options={"isolation_level": "REPEATABLE READ"}
+            )
+            mock_conn.exec_driver_sql.assert_called_once_with(
+                "START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY"
+            )
+            mock_session.rollback.assert_called()
+
 
 if __name__ == "__main__":
     unittest.main()

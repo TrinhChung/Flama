@@ -164,7 +164,7 @@ class StudySessionApiTests(unittest.TestCase):
         return response.get_json()
 
     def _enable_existing_state_note_authority(
-        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token=False
+        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token: bool | None = None
     ):
         with self.app.app_context():
             note_query = Note.query.filter_by(
@@ -275,7 +275,8 @@ class StudySessionApiTests(unittest.TestCase):
                 ]
             )
             expected_hash = mapped.semantic_state_hash.hex()
-            if include_token:
+            should_include_token = bool(enroll if include_token is None else include_token)
+            if should_include_token:
                 db.session.add(StudyAuthoritySubjectToken(
                     subject_id=int(subject.id), subject_generation=1,
                     authority_revision=0, semantic_state_hash=mapped.semantic_state_hash,
