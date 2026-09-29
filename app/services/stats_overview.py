@@ -8,7 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
-from app.repositories.study_authority_repository import lock_study_authority_route
+from app.repositories.study_authority_repository import read_study_authority_route
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.services.scheduler_config_service import resolve_deck_options
 from app.repositories.stats_query_repository import (
@@ -145,59 +145,6 @@ def _round2(value: float) -> float:
     return round(float(value) + 1e-12, 2)
 
 
-def _canonical_future_due_day_counts(
-    *,
-    user_id: int,
-    timezone_name: str,
-    timezone_obj,
-    now_utc: datetime,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[date, int]:
-    from app.services.study_authority_read_service import load_study_authority_card_reads
-
-    # LEGACY counts every learner CardProgress row (owned and logical-overlay
-    # source Cards). Under NOTE a Note with state projects every sibling, and
-    # a never-studied Note has no due date, so the same row set is exact.
-    cards = (
-        Card.query.join(
-            CardProgress,
-            db.and_(CardProgress.card_id == Card.id, CardProgress.user_id == user_id),
-        )
-        .order_by(Card.id.asc())
-        .all()
-    )
-    reads = load_study_authority_card_reads(
-        db.session,
-        learner_user_id=user_id,
-        cards=tuple(cards),
-        now_utc=now_utc,
-        timezone_name=timezone_name,
-        deck_options_by_card_id={
-            str(card.id): resolve_deck_options(
-                user_id=user_id,
-                deck_id=card.note.deck_id,
-            )
-            for card in cards
-        },
-    )
-    by_day: dict[date, int] = {}
-    for card in cards:
-        availability = reads[str(card.id)].availability
-        due_at = availability.due_at
-        if (
-            due_at is None
-            or due_at < start_utc
-            or due_at >= end_utc
-            or availability.is_suspended
-        ):
-            continue
-        utc_moment = due_at if due_at.tzinfo else due_at.replace(tzinfo=UTC)
-        local_day = utc_moment.astimezone(timezone_obj).date()
-        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
-    return by_day
-
-
 def _safe_int(value: Any) -> int:
     try:
         return int(value or 0)
@@ -332,10 +279,9 @@ def build_stats_overview(
     effective_timezone_name = get_effective_timezone_name(timezone_name)
     timezone_obj = _build_timezone_obj(effective_timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    authority_route = lock_study_authority_route(
+    authority_route = read_study_authority_route(
         db.session,
         learner_user_id=user_id,
-        allow_note_authority=True,
     )
     day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
     today_day_index = _day_index(
@@ -379,23 +325,17 @@ def build_stats_overview(
                 timezone_name=effective_timezone_name,
             )
             if authority_route.mode_code == "NOTE":
-                due_day_map = _canonical_future_due_day_counts(
-                    user_id=user_id,
-                    timezone_name=effective_timezone_name,
-                    timezone_obj=timezone_obj,
-                    now_utc=now_utc_naive,
-                    start_utc=future_start_utc,
-                    end_utc=year_end_utc,
-                )
-            else:
-                due_day_map = query_future_due_day_counts(
-                    user_id=user_id,
-                    timezone_name=effective_timezone_name,
-                    timezone_obj=timezone_obj,
-                    start_utc=future_start_utc,
-                    end_utc=year_end_utc,
-                    day_boundary_hour_local=day_boundary_hour,
-                )
+                from app.services.deck_aggregation_service import check_note_authority_integrity
+
+                check_note_authority_integrity(db.session, learner_user_id=user_id)
+            due_day_map = query_future_due_day_counts(
+                user_id=user_id,
+                timezone_name=effective_timezone_name,
+                timezone_obj=timezone_obj,
+                start_utc=future_start_utc,
+                end_utc=year_end_utc,
+                day_boundary_hour_local=day_boundary_hour,
+            )
 
     tomorrow_start_utc = _day_index_to_datetime(
         today_day_index + 1,
