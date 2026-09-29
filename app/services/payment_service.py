@@ -1044,11 +1044,11 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
         )
     from app.services.share.helpers import (
         ShareControllerError,
-        _require_legacy_overlay_install_route,
+        _fence_overlay_install_route,
     )
 
     try:
-        _require_legacy_overlay_install_route(user_id=user_id)
+        _fence_overlay_install_route(user_id=user_id)
     except ShareControllerError as exc:
         raise PaymentServiceError(exc.error, exc.message, status=exc.status) from exc
 

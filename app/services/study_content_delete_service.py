@@ -22,7 +22,6 @@ from app.repositories.study_authority_repository import (
 from app.services import study_progress_lifecycle_mirror_service as lifecycle
 from models.card import Card
 from models.card_progress import CardProgress
-from models.note import Note
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
@@ -263,8 +262,9 @@ def lock_content_expansion_routes(session, *, actor_user_ids, note_ids):
 def prepare_content_expansion(session, *, routes, note_ids, now_utc=None):
     """Lock every NOTE learner's affected subjects before new Cards are created.
 
-    A NOTE learner is planned for the Notes it owns, holds canonical state on,
-    or has compatibility progress on (the latter fails closed without state).
+    A NOTE learner is planned for the Notes it holds canonical state on or has
+    compatibility progress on (the latter fails closed without state). A
+    never-studied (pristine) Note needs no row: its new sibling is pristine too.
     """
     note_ids = tuple(sorted({str(value) for value in note_ids}))
     card_note = _card_note_ids(session, _note_card_ids(session, note_ids))
@@ -274,8 +274,6 @@ def prepare_content_expansion(session, *, routes, note_ids, now_utc=None):
             continue
         targets = set()
         for chunk in _chunks(note_ids):
-            targets.update(str(value) for value in session.execute(
-                select(Note.id).where(Note.id.in_(chunk), Note.user_id == route.learner_user_id)).scalars())
             targets.update(bytes(key).decode("utf-8") for key in session.execute(
                 select(StudyProgressSubject.logical_note_key).join(
                     StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id

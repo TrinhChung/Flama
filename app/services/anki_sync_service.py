@@ -382,6 +382,25 @@ def _apply_note_authority_progress_snapshot(
 
     control = _progress_snapshot_control(record)
     previous_snapshot_hash = source_card.snapshot_hash
+    from app.services.scheduler_config_service import resolve_deck_options
+    from app.services.study_note_pristine_service import materialize_pristine_notes
+
+    # A never-studied Note (for example one created by this import) gets its
+    # revision-zero NEW state first; the snapshot then applies through CAS.
+    materialize_pristine_notes(
+        db.session,
+        route=route,
+        cards=(requested_card,),
+        starting_ease_by_note_id={
+            str(requested_card.note_id): float(
+                resolve_deck_options(
+                    user_id=session.user_id,
+                    deck_id=requested_card.note.deck_id,
+                ).startingEase
+            )
+        },
+        now_utc=now_utc,
+    )
     locked_subjects = lock_study_session_authority_subjects(
         db.session,
         route=route,

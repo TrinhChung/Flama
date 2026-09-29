@@ -231,10 +231,14 @@ def finalize_study_authority_evidence(
     siblings: LockedStudyAuthoritySiblings,
     compatibility: LockedStudyAuthorityCompatibility,
     write_result: StudyAuthorityWriteResult,
-    review_event: ReviewEvent,
+    review_event: ReviewEvent | None,
     now_utc: datetime,
 ) -> StudyAuthorityEvidenceResult:
-    """Refresh all existing compatibility evidence after a NOTE material write."""
+    """Refresh all existing compatibility evidence after a NOTE material write.
+
+    ``review_event`` is None only for a non-review write (a requested
+    Algorithm switch): every contributor keeps its provenance and pointer.
+    """
 
     if not isinstance(route, StudyAuthorityRoute) or route.mode_code != "NOTE":
         raise _fail(
@@ -247,7 +251,9 @@ def finalize_study_authority_evidence(
         )
     subject = locked.subject
     state = locked.state
-    if subject.id is None or state is None or review_event.id is None:
+    if subject.id is None or state is None or (
+        review_event is not None and review_event.id is None
+    ):
         raise _fail(
             "UNFLUSHED_AUTHORITY_EVIDENCE",
             "Subject, state and ReviewEvent must be persisted before finalization.",
@@ -267,13 +273,13 @@ def finalize_study_authority_evidence(
             "AUTHORITY_CONTEXT_DIVERGED",
             "Evidence inputs do not describe one fenced learner/Note subject.",
         )
-    if int(review_event.user_id) != route.learner_user_id:
+    if review_event is not None and int(review_event.user_id) != route.learner_user_id:
         raise _fail(
             "HISTORY_LEARNER_MISMATCH",
             "ReviewEvent belongs to another learner.",
         )
-    event_card_id = str(review_event.card_id or "")
-    if event_card_id not in siblings.progress_by_card_id:
+    event_card_id = str(review_event.card_id or "") if review_event is not None else None
+    if review_event is not None and event_card_id not in siblings.progress_by_card_id:
         raise _fail(
             "CARD_OUTSIDE_AUTHORITY_SUBJECT",
             "ReviewEvent Card is outside the locked authority subject.",
@@ -327,17 +333,19 @@ def finalize_study_authority_evidence(
             "AUTHORITY_CONTEXT_DIVERGED",
             "Material-write result does not contain the locked sibling rows.",
         )
-    if progress_by_card_id[event_card_id].last_review_event_id != int(review_event.id):
-        raise _fail(
-            "AUTHORITY_EVENT_POINTER_MISMATCH",
-            "The reviewed Card projection does not point to its ReviewEvent.",
-        )
-    try:
-        new_provenance_code, _provenance, _runtime = native_review_event_provenance(
-            review_event
-        )
-    except StudyProgressHistoryError as exc:
-        raise _fail(exc.code, str(exc)) from exc
+    new_provenance_code = None
+    if review_event is not None:
+        if progress_by_card_id[event_card_id].last_review_event_id != int(review_event.id):
+            raise _fail(
+                "AUTHORITY_EVENT_POINTER_MISMATCH",
+                "The reviewed Card projection does not point to its ReviewEvent.",
+            )
+        try:
+            new_provenance_code, _provenance, _runtime = native_review_event_provenance(
+                review_event
+            )
+        except StudyProgressHistoryError as exc:
+            raise _fail(exc.code, str(exc)) from exc
 
     pointer_ids = sorted(
         {
@@ -359,7 +367,7 @@ def finalize_study_authority_evidence(
         if pointer_ids
         else {}
     )
-    if event_by_id.get(int(review_event.id)) is not review_event:
+    if review_event is not None and event_by_id.get(int(review_event.id)) is not review_event:
         raise _fail(
             "AUTHORITY_EVENT_DIVERGED",
             "ReviewEvent identity changed before evidence finalization.",

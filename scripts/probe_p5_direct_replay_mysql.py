@@ -36,6 +36,8 @@ from tests.test_study_direct_note_replay import StudyDirectNoteReplayTests
 from tests.test_study_note_batch import StudyNoteBatchTests
 from tests.test_study_note_templates import StudyNoteTemplateTests
 from tests.test_study_content_delete import StudyContentDeleteTests
+from tests.test_study_note_overlay import StudyNoteOverlayTests
+from tests.test_study_algorithm_switch import StudyAlgorithmSwitchTests
 
 PROBE_NAME_PATTERN = re.compile(r"^flama_p5_direct_probe_[0-9]+_[a-f0-9]{8}$")
 
@@ -97,6 +99,61 @@ def _concurrent_answers(case, *, conflicting):
         case.assertEqual(sorted(body["authority"]["replayed"] for _, body in results), [False, True])
         case.assertEqual(results[0][1]["intervals_preview"], results[1][1]["intervals_preview"])
     case._counts()
+
+
+def _concurrent_first_state_answers(case):
+    """Two first reviews of one pristine overlay Note race on real MySQL locks."""
+    from uuid import uuid4
+
+    from app.services import study_service
+    from models.card_progress import CardProgress
+    from models.review_event import ReviewEvent
+    from models.study_authority_subject_token import StudyAuthoritySubjectToken
+    from models.study_progress_subject import StudyProgressSubject
+
+    case._install_overlay()
+    barrier = threading.Barrier(2, timeout=15)
+    counter_lock = threading.Lock()
+    arrivals = 0
+    original_lock = study_service.lock_study_authority_route
+
+    def synchronized_lock(*args, **kwargs):
+        nonlocal arrivals
+        with counter_lock:
+            arrivals += 1
+            should_wait = arrivals <= 2
+        if should_wait:
+            barrier.wait()
+        return original_lock(*args, **kwargs)
+
+    def request(_index):
+        client = case.app.test_client()
+        with client.session_transaction() as login:
+            login["_user_id"], login["_fresh"] = str(case.user_id), True
+        response = client.post(f"/api/study/{case.source_card_ids[0]}/answer", json={
+            "rating": "good", "operation_key": str(uuid4()), "duration_ms": 400,
+            "scope": "deck", "scope_id": case.local_deck_id})
+        return response.status_code, response.get_json()
+
+    with patch.object(study_service, "lock_study_authority_route", side_effect=synchronized_lock):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(request, index) for index in range(2)]
+            results = [future.result(timeout=60) for future in futures]
+    succeeded = [body for status, body in results if status == 200]
+    # The loser either serializes behind the materialization and applies a
+    # second review, or gets a typed conflict; never a split first state.
+    case.assertTrue(succeeded, results)
+    case.assertTrue(all(status in (200, 409) for status, _ in results), results)
+    with case.app.app_context():
+        subjects = StudyProgressSubject.query.filter_by(
+            learner_user_id=case.user_id, logical_note_key=case.source_note_id.encode()).all()
+        case.assertEqual(len(subjects), 1)
+        token = StudyAuthoritySubjectToken.query.filter_by(subject_id=subjects[0].id).one()
+        case.assertEqual(int(token.authority_revision), len(succeeded))
+        case.assertEqual(
+            ReviewEvent.query.filter(ReviewEvent.card_id.in_(case.source_card_ids)).count(), len(succeeded))
+        case.assertEqual(
+            CardProgress.query.filter(CardProgress.card_id.in_(case.source_card_ids)).count(), 2)
 
 
 def _template_preview_race(case, *, change_count):
@@ -171,7 +228,8 @@ def _template_preview_race(case, *, change_count):
         case.assertIsNotNone(Template.query.filter_by(name="Card 0").one_or_none())
 
 
-def run_probe(*, templates_only=False, content_delete_only=False, test_name=None):
+def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=False, switch_only=False,
+              test_name=None):
     load_dotenv(ROOT_DIR / ".env")
     settings = _connection_settings()
     name = f"flama_p5_direct_probe_{os.getpid()}_{secrets.token_hex(4)}"
@@ -223,12 +281,36 @@ def run_probe(*, templates_only=False, content_delete_only=False, test_name=None
             def setUpClass(cls):
                 cls.app = app
 
+        class MySQLNoteOverlayTests(StudyNoteOverlayTests):
+            @classmethod
+            def setUpClass(cls):
+                cls.app = app
+
+            def test_concurrent_first_state_answers_on_pristine_overlay_note(self):
+                _concurrent_first_state_answers(self)
+
+        class MySQLAlgorithmSwitchTests(StudyAlgorithmSwitchTests):
+            @classmethod
+            def setUpClass(cls):
+                cls.app = app
+
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteTemplateTests)
-        report["scope"] = "note-templates" if templates_only else "direct-replay-numeric-templates-content-delete"
+        report["scope"] = (
+            "note-templates" if templates_only
+            else "direct-replay-numeric-templates-content-delete-overlay-switch"
+        )
         if content_delete_only:
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLContentDeleteTests)
             report["scope"] = "content-delete"
+        elif overlay_only:
+            suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteOverlayTests)
+            report["scope"] = "note-overlay"
+        elif switch_only:
+            suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLAlgorithmSwitchTests)
+            report["scope"] = "algorithm-switch"
         elif not templates_only:
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLAlgorithmSwitchTests))
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteOverlayTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLContentDeleteTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLDirectReplayTests))
             suite.addTests(MySQLNumericReplayTests(name) for name in (
@@ -268,9 +350,12 @@ if __name__ == "__main__":
     scope = parser.add_mutually_exclusive_group()
     scope.add_argument("--templates-only", action="store_true", help="Run only the NOTE template lifecycle scenarios.")
     scope.add_argument("--content-delete-only", action="store_true", help="Run only the multi-learner content deletion scenarios.")
+    scope.add_argument("--overlay-only", action="store_true", help="Run only the NOTE logical-overlay / pristine-Note scenarios.")
+    scope.add_argument("--switch-only", action="store_true", help="Run only the requested Algorithm switch scenarios.")
     parser.add_argument("--test-name", help="Run scenarios whose test ID contains this string.")
     args = parser.parse_args()
-    report = run_probe(templates_only=args.templates_only, content_delete_only=args.content_delete_only, test_name=args.test_name)
+    report = run_probe(templates_only=args.templates_only, content_delete_only=args.content_delete_only,
+        overlay_only=args.overlay_only, switch_only=args.switch_only, test_name=args.test_name)
     print(json.dumps(report, sort_keys=True))
     if report["status"] != "PASS":
         raise SystemExit(1)

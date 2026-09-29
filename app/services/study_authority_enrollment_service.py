@@ -19,6 +19,11 @@ from app.repositories.study_authority_repository import (
     lock_study_authority_subject,
 )
 from app.services import study_progress_lifecycle_mirror_service
+from app.services.study_progress_contract import (
+    ALGORITHM_KEY,
+    ALGORITHM_VERSION,
+    STATE_SCHEMA_VERSION,
+)
 from app.services.study_progress_shadow_mapper import (
     MappedCardProgress,
     MappingFailure,
@@ -74,6 +79,17 @@ def _verify_lossless_legacy_projection(
         raise _fail(
             "AUTHORITY_STATE_REQUIRED",
             "Authority transition requires an existing Note state.",
+        )
+    if (
+        str(state.algorithm_key),
+        str(state.algorithm_version),
+        str(state.state_schema_version),
+    ) != (ALGORITHM_KEY, ALGORITHM_VERSION, STATE_SCHEMA_VERSION):
+        # LEGACY can only serve legacy-anki state; a switched Note is
+        # forward-only until its own Algorithm switches it back.
+        raise _fail(
+            "ROLLBACK_ALGORITHM_NOT_LEGACY",
+            "A Note on another Algorithm cannot be served by LEGACY authority.",
         )
     subject = locked.subject
     expected_cards = set(siblings.card_ids)
@@ -228,18 +244,22 @@ def stage_note_authority_enrollment(
             "INVALID_AUTHORITY_ENROLLMENT",
             "Existing learner authority enrollment is invalid.",
         )
+    # Logical-overlay installs are supported: installed source Notes use the
+    # (learner, source Note) subject and never-studied ones read as pristine.
+    # A legacy full-copy install still awaits the startup clone cutover, whose
+    # progress rekey is only defined for LEGACY learners.
     if session.execute(
         select(DeckInstall.id)
         .where(
             DeckInstall.user_id == learner_user_id,
-            DeckInstall.clone_mode == "logical_overlay",
+            DeckInstall.clone_mode != "logical_overlay",
         )
         .limit(1)
         .with_for_update(read=True)
     ).scalar_one_or_none() is not None:
         raise _fail(
-            "OVERLAY_AUTHORITY_NOT_READY",
-            "NOTE enrollment for logical-overlay installs requires P5-06 routing.",
+            "CLONE_CUTOVER_PENDING",
+            "NOTE enrollment requires every deck install to be cut over to logical overlay.",
         )
     # Checkout takes the same User fence before creating an order. A pending
     # paid-deck order could otherwise fulfill after enrollment and become an

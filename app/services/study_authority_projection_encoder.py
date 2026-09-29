@@ -255,7 +255,19 @@ def _decode_state(
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Stored Algorithm State size does not match."
             )
-        if algorithm_state_hash(document.payload) != expected_algorithm_state_hash:
+        identity = (algorithm_key, algorithm_version, state_schema_version, storage_codec)
+        # An unknown identity is reported as such before its hash is checked.
+        if not STATE_DECODERS.has_decoder(identity):
+            raise StudyProgressCodecError(
+                "STATE_DECODER_UNAVAILABLE", f"No decoder is registered for {identity!r}."
+            )
+        if algorithm_state_hash(
+            document.payload,
+            algorithm_key=algorithm_key,
+            algorithm_version=algorithm_version,
+            state_schema_version=state_schema_version,
+            storage_codec=storage_codec,
+        ) != expected_algorithm_state_hash:
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Stored Algorithm State hash does not match."
             )

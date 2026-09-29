@@ -327,9 +327,11 @@ def register_cli_commands(app: Flask) -> None:
                     "NOTE_ENROLLMENT_DISABLED: STUDY_WIRE_V4_ENABLED must be true."
                 )
             if bool(app.config.get("STUDY_ASYNC_BATCH_ENABLED", False)):
+                # Canary policy (P5-10): enroll on the synchronous v4 path;
+                # enable async only after the Linux worker rehearsal passes.
                 raise click.ClickException(
                     "NOTE_ASYNC_UNAVAILABLE: disable STUDY_ASYNC_BATCH_ENABLED "
-                    "until the v4 rollover worker contract is implemented."
+                    "for NOTE canary enrollment until the worker rehearsal passes."
                 )
         try:
             result = transition(
@@ -399,7 +401,6 @@ def register_cli_commands(app: Flask) -> None:
             summarize_study_authority_queue,
         )
         from models.card import Card
-        from models.deck_install import DeckInstall
         from models.note import Note
         from models.study_progress_subject import StudyProgressSubject
         from models.user import User
@@ -455,24 +456,12 @@ def register_cli_commands(app: Flask) -> None:
                     )
                 )
                 return
-            if DeckInstall.query.filter_by(
-                user_id=user_id, clone_mode="logical_overlay"
-            ).first() is not None:
-                raise StudyAuthorityReadError(
-                    "OVERLAY_AUTHORITY_NOT_READY",
-                    "NOTE read audit cannot omit installed overlay Cards.",
-                )
             owned_note_ids = {
                 str(note_id).encode("utf-8")
                 for (note_id,) in db.session.query(Note.id)
                 .filter(Note.user_id == user_id)
                 .all()
             }
-            cards_query = Card.query.join(Note, Card.note_id == Note.id).filter(
-                Note.user_id == user_id
-            )
-            cards = cards_query.order_by(Card.id.asc()).all()
-            card_note_ids = {str(card.note_id).encode("utf-8") for card in cards}
             active_subject_keys = {
                 bytes(logical_note_key)
                 for (logical_note_key,) in db.session.query(
@@ -489,10 +478,25 @@ def register_cli_commands(app: Flask) -> None:
                 )
                 .all()
             }
-            if owned_note_ids != card_note_ids or owned_note_ids != active_subject_keys:
+            # Audit vector: every owned Card (never-studied Notes read as
+            # pristine NEW) plus every Card of a Note the learner holds state
+            # on, including logical-overlay source Notes and uninstalled ones.
+            cards_query = Card.query.join(Note, Card.note_id == Note.id).filter(
+                db.or_(
+                    Note.user_id == user_id,
+                    Card.note_id.in_(
+                        sorted(key.decode("utf-8") for key in active_subject_keys)
+                    ),
+                )
+            )
+            cards = cards_query.order_by(Card.id.asc()).all()
+            card_note_ids = {str(card.note_id).encode("utf-8") for card in cards}
+            if not owned_note_ids.issubset(card_note_ids) or not active_subject_keys.issubset(
+                card_note_ids
+            ):
                 raise StudyAuthorityReadError(
                     "INCOMPLETE_AUTHORITY_COVERAGE",
-                    "NOTE read audit requires every owned Note, Card and active subject.",
+                    "NOTE read audit requires Cards for every owned Note and active subject.",
                 )
             reads = load_study_authority_card_reads(
                 db.session,

@@ -18,6 +18,7 @@ from app.repositories.deck_tree_query import (
     collect_subtree_ids as _collect_deck_subtree_ids,
 )
 from app.services import study_progress_lifecycle_mirror_service
+from app.services.scheduler_config_service import resolve_deck_options
 from models import db
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
@@ -237,29 +238,6 @@ def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
     deck_obj.position = vocabulary_ctrl.next_deck_position(new_parent_id)
     db.session.commit()
 
-def _note_learner_clone_node_in_subtree(
-    deck_ids: tuple[int, ...], learner_ids: tuple[int, ...]
-) -> bool:
-    """Return whether a NOTE learner's installed clone node would be purged."""
-    for offset in range(0, len(deck_ids), 500):
-        deck_chunk = deck_ids[offset : offset + 500]
-        for query in (
-            db.session.query(DeckInstall.id).filter(
-                DeckInstall.user_id.in_(learner_ids),
-                DeckInstall.local_deck_id.in_(deck_chunk),
-            ),
-            db.session.query(DeckCloneDeckMap.id)
-            .join(DeckInstall, DeckCloneDeckMap.deck_install_id == DeckInstall.id)
-            .filter(
-                DeckInstall.user_id.in_(learner_ids),
-                DeckCloneDeckMap.local_deck_id.in_(deck_chunk),
-            ),
-        ):
-            if query.with_for_update().first() is not None:
-                return True
-    return False
-
-
 def _purge_deck_subtree(*, deck_obj: Deck, user_id: int, authority_learner_id: int) -> str:
     with db.session.no_autoflush:
         deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
@@ -300,18 +278,8 @@ def _purge_deck_subtree(*, deck_obj: Deck, user_id: int, authority_learner_id: i
             "PURGE_SCOPE_CHANGED",
             "Deck purge scope changed while learner routes were locked.",
         )
-    note_learner_ids = tuple(
-        route.learner_user_id for route in authority_routes if route.mode_code == "NOTE"
-    )
-    # Removing a NOTE learner's installed clone node would leave its overlay
-    # source state live without an install, as in the non-purge delete path.
-    if note_learner_ids and _note_learner_clone_node_in_subtree(
-        scope.deck_ids, note_learner_ids
-    ):
-        raise StudyAuthorityFenceError(
-            "OVERLAY_DELETE_NOT_READY",
-            "NOTE-authority installed clone purge requires overlay lifecycle support.",
-        )
+    # A purged installed clone node keeps its learners' overlay source state,
+    # exactly as LEGACY keeps their source CardProgress rows.
 
     from models.deck_change_request import DeckChangeRequest
     from models.review_event import ReviewEvent
@@ -435,16 +403,13 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
     )
 
     if marketplace_items or has_overlay_dependents or has_source_installs:
-        authority_route = lock_study_authority_route(
+        # Archival changes no progress or state in either authority mode;
+        # installers keep studying the archived source through their overlay.
+        lock_study_authority_route(
             db.session,
             learner_user_id=authority_learner_id,
             allow_note_authority=True,
         )
-        if authority_route.mode_code == "NOTE":
-            raise StudyAuthorityFenceError(
-                "SHARED_DECK_ARCHIVE_NOT_READY",
-                "NOTE-authority shared deck archival requires overlay-aware session fencing.",
-            )
         deleted_at = datetime.now(UTC).replace(tzinfo=None)
         Deck.query.filter(Deck.id.in_(deck_ids_to_delete)).update(
             {Deck.deleted_at: deleted_at},
@@ -479,19 +444,9 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
         for route in authority_routes
         if route.learner_user_id == authority_learner_id
     )
-    if authority_route.mode_code == "NOTE":
-        local_clone_map = db.session.query(DeckCloneDeckMap.id).filter(
-            DeckCloneDeckMap.local_deck_id.in_(deck_ids_to_delete)
-        ).first()
-        local_install = db.session.query(DeckInstall.id).filter(
-            DeckInstall.local_deck_id.in_(deck_ids_to_delete)
-        ).first()
-        if local_clone_map is not None or local_install is not None:
-            raise StudyAuthorityFenceError(
-                "OVERLAY_DELETE_NOT_READY",
-                "NOTE-authority installed clone deletion requires overlay lifecycle support.",
-            )
-
+    # Deleting an installed clone node removes the install/map rows and the
+    # learner's local Notes; its overlay source state stays, as LEGACY keeps
+    # source CardProgress rows, and is reused if the deck is installed again.
     install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
     if not is_admin:
         install_query = install_query.filter(DeckInstall.user_id == user_id)
@@ -567,6 +522,7 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
     from app.services import flashcards_share
 
     seen_scopes: set[tuple[str, int]] = set()
+    overlay_local_deck_by_note_id: dict[str, int] = {}
     for local_deck_id in sorted(
         {int(item) for item in deck_ids if item is not None}
     ):
@@ -585,18 +541,49 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
         seen_scopes.add(scope_key)
         clone_rows = (
             flashcards_share.query_clone_scope_cards(clone_scope)
-            .with_entities(Card.id)
+            .with_entities(Card.id, Note.id, Note.deck_id, Note.user_id)
             .all()
         )
-        card_id_set.update(
-            str(row[0]) for row in clone_rows if row and row[0]
-        )
+        for card_id, note_id, source_deck_id, note_owner_id in clone_rows:
+            if not card_id:
+                continue
+            card_id_set.add(str(card_id))
+            if note_owner_id is not None and int(note_owner_id) == int(user_id):
+                continue  # Local-added Notes keep their own deck options.
+            overlay_local_deck_by_note_id.setdefault(
+                str(note_id),
+                int(
+                    (clone_scope.source_to_local_deck_id or {}).get(int(source_deck_id or 0))
+                    or clone_scope.install.local_deck_id
+                ),
+            )
 
-    if authority_route.mode_code == "NOTE" and seen_scopes:
-        raise StudyAuthorityFenceError(
-            "OVERLAY_AUTHORITY_NOT_READY",
-            "NOTE-authority reset for logical-overlay cards is not implemented.",
+    starting_ease_by_note_id: dict[str, float] = {}
+    if authority_route.mode_code == "NOTE" and card_id_set:
+        # NOTE state is per Note, so a reset covers every sibling of each
+        # affected Note (including an overlay sibling outside the install
+        # snapshot). Overlay source Notes restart with the learner's mapped
+        # local deck options, exactly as a LEGACY first review would.
+        note_ids = {
+            str(row[0])
+            for row in db.session.query(Card.note_id)
+            .filter(Card.id.in_(sorted(card_id_set)))
+            .distinct()
+            .all()
+        }
+        card_id_set.update(
+            str(row[0])
+            for row in db.session.query(Card.id)
+            .filter(Card.note_id.in_(sorted(note_ids)))
+            .all()
         )
+        options_by_deck_id: dict[int, float] = {}
+        for note_id, local_deck_id in overlay_local_deck_by_note_id.items():
+            if local_deck_id not in options_by_deck_id:
+                options_by_deck_id[local_deck_id] = float(
+                    resolve_deck_options(user_id=int(user_id), deck_id=local_deck_id).startingEase
+                )
+            starting_ease_by_note_id[note_id] = options_by_deck_id[local_deck_id]
 
     deleted_count = 0
     if card_id_set:
@@ -625,6 +612,7 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
                     db.session,
                     route=authority_route,
                     removed_card_ids=card_id_set,
+                    starting_ease_by_note_id=starting_ease_by_note_id,
                 )
             )
         else:

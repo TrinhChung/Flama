@@ -99,7 +99,14 @@ def _validate_next_state(
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Next state size does not match its payload."
             )
-        if algorithm_state_hash(document.payload) != state_write.algorithm_state_hash:
+        # The Algorithm State hash binds the exact persisted identity.
+        if algorithm_state_hash(
+            document.payload,
+            algorithm_key=state_write.algorithm_key,
+            algorithm_version=state_write.algorithm_version,
+            state_schema_version=state_write.state_schema_version,
+            storage_codec=state_write.storage_codec,
+        ) != state_write.algorithm_state_hash:
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Next Algorithm State hash does not match."
             )
@@ -225,12 +232,17 @@ def apply_study_authority_material_write(
     siblings: LockedStudyAuthoritySiblings,
     projection: EncodedLegacyProjection,
     now_utc: datetime,
+    allow_algorithm_identity_change: bool = False,
 ) -> StudyAuthorityWriteResult:
     """Stage one existing-state NOTE transition and projection; never commit.
 
     Event, scheduler-grade history fact and idempotency receipt are deliberately
     outside this slice.  A future canonical command must stage those objects in
     the same caller-owned transaction before exposing this helper to routing.
+
+    Only the requested Algorithm switch sets ``allow_algorithm_identity_change``:
+    a new exact Algorithm identity is material even when the projected
+    scheduling semantics are unchanged.
     """
 
     verified = verify_study_authority_cas(
@@ -245,7 +257,24 @@ def apply_study_authority_material_write(
             "First-state materialization requires the complete contributor command.",
         )
     state_payload, semantic_hash = _validate_next_state(next_state, projection)
-    if semantic_hash == verified.semantic_state_hash:
+    current_identity = (
+        str(locked.state.algorithm_key),
+        str(locked.state.algorithm_version),
+        str(locked.state.state_schema_version),
+        str(locked.state.storage_codec),
+    )
+    next_identity = (
+        next_state.algorithm_key,
+        next_state.algorithm_version,
+        next_state.state_schema_version,
+        next_state.storage_codec,
+    )
+    if next_identity != current_identity and not allow_algorithm_identity_change:
+        raise _fail(
+            "ALGORITHM_IDENTITY_CHANGE_UNAUTHORIZED",
+            "Only a requested Algorithm switch may change the state identity.",
+        )
+    if semantic_hash == verified.semantic_state_hash and next_identity == current_identity:
         raise _fail(
             "NON_MATERIAL_AUTHORITY_WRITE",
             "An unchanged state must not advance the authority revision.",

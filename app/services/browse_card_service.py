@@ -14,6 +14,7 @@ UTC = timezone.utc
 
 from app.repositories import browse_card_repository
 from app.repositories import vocabulary_repository as vocabulary_ctrl
+from app.repositories.logical_overlay_scope_repository import logical_overlay_cards
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_route,
@@ -179,19 +180,6 @@ def build_browse_deck_tree(
             timezone_name=timezone_name,
         )
         if authority_route.mode_code == "NOTE":
-            if admin_mode:
-                raise StudyAuthorityReadError(
-                    "NOTE_ADMIN_BROWSE_UNAVAILABLE",
-                    "NOTE authority admin-wide Browse is not available.",
-                )
-            if DeckInstall.query.filter_by(
-                user_id=user_id,
-                clone_mode="logical_overlay",
-            ).first() is not None:
-                raise StudyAuthorityReadError(
-                    "OVERLAY_AUTHORITY_NOT_READY",
-                    "NOTE authority Browse does not yet support logical-overlay installs.",
-                )
             deck_ids: set[int] = set()
 
             def collect_deck_ids(nodes: list[dict[str, Any]]) -> None:
@@ -200,31 +188,45 @@ def build_browse_deck_tree(
                     collect_deck_ids(node.get("children", []))
 
             collect_deck_ids(tree)
-            cards = (
-                Card.query.join(Note, Card.note_id == Note.id)
-                .filter(
-                    Note.user_id == user_id,
-                    Note.deck_id.in_(deck_ids),
-                )
-                .order_by(Card.id.asc())
-                .all()
-                if deck_ids
-                else []
+            # Same scope as the LEGACY tree: admin-wide counts every Note in the
+            # visible decks (with the admin's own state); a learner counts owned
+            # Notes plus logical-overlay source Cards under their local deck.
+            owned_query = Card.query.join(Note, Card.note_id == Note.id).filter(
+                Note.deck_id.in_(deck_ids)
             )
+            if not admin_mode:
+                owned_query = owned_query.filter(Note.user_id == user_id)
+            owned_cards = owned_query.order_by(Card.id.asc()).all() if deck_ids else []
+            overlay_cards, _ = ([], None) if admin_mode else logical_overlay_cards(
+                DeckInstall.query.filter(
+                    DeckInstall.user_id == user_id,
+                    DeckInstall.clone_mode == "logical_overlay",
+                    DeckInstall.local_deck_id.isnot(None),
+                )
+                .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
+                .all(),
+                visible_deck_ids=deck_ids,
+            )
+            counted_cards = [
+                (card, int(card.note.deck_id)) for card in owned_cards
+            ] + overlay_cards
             now = _utcnow()
+            options_by_deck_id: dict[int, Any] = {}
+            deck_options_by_card_id: dict[str, Any] = {}
+            for card, deck_id in counted_cards:
+                if deck_id not in options_by_deck_id:
+                    options_by_deck_id[deck_id] = resolve_deck_options(
+                        user_id=user_id,
+                        deck_id=deck_id,
+                    )
+                deck_options_by_card_id.setdefault(str(card.id), options_by_deck_id[deck_id])
             reads = load_study_authority_card_reads(
                 db.session,
                 learner_user_id=user_id,
-                cards=tuple(cards),
+                cards=tuple({str(card.id): card for card, _ in counted_cards}.values()),
                 now_utc=now,
                 timezone_name=timezone_name,
-                deck_options_by_card_id={
-                    str(card.id): resolve_deck_options(
-                        user_id=user_id,
-                        deck_id=card.note.deck_id,
-                    )
-                    for card in cards
-                },
+                deck_options_by_card_id=deck_options_by_card_id,
             )
             runtime = resolve_scheduler_runtime_settings(user_id=user_id)
             boundary_hour = int(runtime.day_boundary_hour_local)
@@ -232,9 +234,10 @@ def build_browse_deck_tree(
                 deck_id: {"total": 0, "new": 0, "learn": 0, "due": 0}
                 for deck_id in deck_ids
             }
-            for card in cards:
-                deck_id = int(card.note.deck_id)
-                bucket = direct_counts[deck_id]
+            for card, deck_id in counted_cards:
+                bucket = direct_counts.setdefault(
+                    deck_id, {"total": 0, "new": 0, "learn": 0, "due": 0}
+                )
                 bucket["total"] += 1
                 availability = reads[str(card.id)].availability
                 count_bucket = study_repository.counter_bucket_for_progress_values(
@@ -331,6 +334,7 @@ def _load_mode_aware_browse_progress(
     timezone_name: str,
     card_obj: Card,
     now_utc: datetime,
+    admin_mode: bool = False,
 ):
     try:
         route = lock_study_authority_route(
@@ -339,11 +343,31 @@ def _load_mode_aware_browse_progress(
             allow_note_authority=True,
         )
         if route.mode_code == "NOTE":
-            if card_obj.note is None or int(card_obj.note.user_id) != int(user_id):
+            if card_obj.note is None:
                 raise StudyAuthorityReadError(
                     "NOTE_BROWSE_CONTEXT_UNAVAILABLE",
-                    "NOTE authority Browse cannot read a foreign source Card.",
+                    "NOTE authority Browse cannot read a Card without a Note.",
                 )
+            options_deck_id = card_obj.note.deck_id
+            if int(card_obj.note.user_id) != int(user_id) and not admin_mode:
+                # Only a visible logical-overlay source Card may be read.
+                from app.services import flashcards_share as share_ctrl
+
+                clone_scope = share_ctrl.resolve_clone_scope_for_card(
+                    user_id=user_id,
+                    card_obj=card_obj,
+                )
+                if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
+                    scope=clone_scope,
+                    card_obj=card_obj,
+                ):
+                    raise StudyAuthorityReadError(
+                        "NOTE_BROWSE_CONTEXT_UNAVAILABLE",
+                        "NOTE authority Browse cannot read a foreign source Card.",
+                    )
+                options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
+                    int(card_obj.note.deck_id or 0)
+                ) or clone_scope.install.local_deck_id
             authority_read = load_study_authority_card_read(
                 db.session,
                 learner_user_id=user_id,
@@ -352,7 +376,7 @@ def _load_mode_aware_browse_progress(
                 timezone_name=timezone_name,
                 deck_options=resolve_deck_options(
                     user_id=user_id,
-                    deck_id=card_obj.note.deck_id,
+                    deck_id=options_deck_id,
                 ),
             )
             return _authority_progress_view(authority_read)
@@ -454,13 +478,6 @@ def list_browse_cards(
         else:
             selected_ids = {selected_deck_id}
 
-    if authority_route.mode_code == "NOTE" and admin_mode:
-        raise BrowseApiError(
-            "NOTE authority admin-wide Browse is not available.",
-            status=409,
-            code="NOTE_ADMIN_BROWSE_UNAVAILABLE",
-        )
-
     progress_alias = aliased(CardProgress)
     progress_join = db.and_(
         progress_alias.card_id == Card.id,
@@ -477,6 +494,7 @@ def list_browse_cards(
     clone_scopes = []
     clone_scope_conditions: list[tuple[Any, Any]] = []
     owned_visibility_condition = None
+    source_to_local_deck_id: dict[int, int] = {}
     if admin_mode:
         if selected_ids:
             query = query.filter(Note.deck_id.in_(selected_ids))
@@ -486,7 +504,6 @@ def list_browse_cards(
             return _empty_result()
     else:
         local_scope_ids = set(selected_ids or scoped_ids)
-        source_to_local_deck_id: dict[int, int] = {}
 
         if selected_ids is not None:
             scope_candidates = sorted(local_scope_ids)
@@ -1006,12 +1023,18 @@ def get_browse_card_detail(
                 deck_lookup.setdefault(int(source_deck_id), local_name)
 
     if authority_route.mode_code == "NOTE":
-        if admin_mode or clone_scope is not None or card_obj.note.user_id != user_id:
+        # Admin-wide detail reads the admin's own state on any Card, as LEGACY.
+        if not admin_mode and clone_scope is None and card_obj.note.user_id != user_id:
             raise BrowseApiError(
                 "NOTE authority Browse detail is unavailable for this Card context.",
                 status=409,
                 code="NOTE_BROWSE_CONTEXT_UNAVAILABLE",
             )
+        options_deck_id = card_obj.note.deck_id
+        if clone_scope is not None:
+            options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
+                int(card_obj.note.deck_id or 0)
+            ) or clone_scope.install.local_deck_id
         try:
             authority_read = load_study_authority_card_read(
                 db.session,
@@ -1021,7 +1044,7 @@ def get_browse_card_detail(
                 timezone_name=timezone_name,
                 deck_options=resolve_deck_options(
                     user_id=user_id,
-                    deck_id=card_obj.note.deck_id,
+                    deck_id=options_deck_id,
                 ),
             )
         except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
@@ -1507,6 +1530,7 @@ def _update_owned_browse_card(
         timezone_name=timezone_name,
         card_obj=card_obj,
         now_utc=now,
+        admin_mode=admin_mode,
     )
     return {
         "success": True,
@@ -1544,6 +1568,7 @@ def _build_browse_detail_payload(
         timezone_name=timezone_name,
         card_obj=card_obj,
         now_utc=now,
+        admin_mode=admin_mode,
     )
     return vocabulary_ctrl.build_browse_card_detail(
         card_obj,

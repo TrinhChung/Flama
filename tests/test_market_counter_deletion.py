@@ -220,7 +220,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
         self.assertEqual(item.active_usage_count, 0)
         self.assertIsNone(db.session.get(DeckInstall, install_id))
 
-    def test_note_authority_cannot_install_overlay_from_either_service_entrypoint(self):
+    def test_note_authority_installs_overlay_like_legacy_from_both_entrypoints(self):
         source_deck = Deck(name="Source", owner_user_id=self.owner.id)
         source_type = NoteType(user_id=self.owner.id, name="Source type")
         db.session.add_all([source_deck, source_type])
@@ -229,37 +229,38 @@ class MarketCounterDeletionTests(unittest.TestCase):
             owner_user_id=self.owner.id,
             source_deck_id=source_deck.id,
             source_note_type_id=source_type.id,
-            title="NOTE install fence",
+            title="NOTE install",
             publish_status="published",
         )
-        db.session.add(item)
+        legacy = User(username="legacy-installer", email="legacy-installer@example.com")
+        db.session.add_all([item, legacy])
         db.session.commit()
         self._enroll_note_authority(self.learner.id)
+
+        def outcome(install, user_id):
+            try:
+                install(item, user_id=user_id)
+                db.session.commit()
+            except Exception as exc:  # Two ShareControllerError classes exist.
+                db.session.rollback()
+                if not hasattr(exc, "error"):
+                    raise
+                return ("error", exc.error)
+            return ("installed", DeckInstall.query.filter_by(user_id=user_id).count())
 
         for install in (
             modular_install_shared_deck,
             flashcards_share_service.install_shared_deck_item_for_user,
         ):
-            with self.assertRaises(ShareControllerError) as failure:
-                install(item, user_id=self.learner.id)
-            self.assertEqual(failure.exception.error, "OVERLAY_AUTHORITY_NOT_READY")
-            db.session.rollback()
-            self.assertEqual(
-                DeckInstall.query.filter_by(user_id=self.learner.id).count(), 0
-            )
-            db.session.refresh(item)
-            self.assertEqual(item.install_count, 0)
+            DeckInstall.query.delete()
+            db.session.commit()
+            legacy_outcome = outcome(install, legacy.id)
+            note_outcome = outcome(install, self.learner.id)
+            # Overlay install no longer depends on the learner's authority mode.
+            self.assertNotEqual(note_outcome, ("error", "OVERLAY_AUTHORITY_NOT_READY"))
+            self.assertEqual(note_outcome, legacy_outcome)
 
-        payload, error, field, status = modular_install_shared_deck_item(
-            item.id, self.learner.id, {"published"}
-        )
-        self.assertIsNone(payload)
-        self.assertIsNone(field)
-        self.assertEqual(status, 409)
-        self.assertIn("NOTE authority", error)
-        self.assertEqual(DeckInstall.query.filter_by(user_id=self.learner.id).count(), 0)
-
-    def test_note_authority_cannot_delete_installed_clone_root_or_mapped_child(self):
+    def test_note_authority_deletes_installed_clone_child_then_root(self):
         source_deck = Deck(name="Source", owner_user_id=self.owner.id)
         local_root = Deck(name="Installed", owner_user_id=self.learner.id)
         db.session.add_all([source_deck, local_root])
@@ -297,19 +298,20 @@ class MarketCounterDeletionTests(unittest.TestCase):
         db.session.commit()
         self._enroll_note_authority(self.learner.id)
 
-        for target in (local_child, local_root):
-            with self.assertRaises(StudyAuthorityFenceError) as failure:
+        install_id, child_id, root_id = install.id, local_child.id, local_root.id
+        for target_id in (child_id, root_id):
+            self.assertEqual(
                 deck_management_service.delete_deck_subtree(
-                    deck_obj=target,
+                    deck_obj=db.session.get(Deck, target_id),
                     user_id=self.learner.id,
                     is_admin=False,
-                )
-            self.assertEqual(failure.exception.code, "OVERLAY_DELETE_NOT_READY")
-            db.session.rollback()
-            self.assertIsNotNone(db.session.get(Deck, target.id))
-            self.assertIsNotNone(db.session.get(DeckInstall, install.id))
-            db.session.refresh(item)
-            self.assertEqual(item.install_count, 1)
+                ),
+                "deleted",
+            )
+            self.assertIsNone(db.session.get(Deck, target_id))
+        self.assertIsNone(db.session.get(DeckInstall, install_id))
+        db.session.refresh(item)
+        self.assertEqual(item.install_count, 0)
 
     def test_deck_purge_rejects_note_learner_progress_without_canonical_subject(self):
         source_type = NoteType(user_id=self.owner.id, name="Deck source type")

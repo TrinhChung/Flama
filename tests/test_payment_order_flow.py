@@ -372,7 +372,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
             )
             self.assertEqual(PaymentWebhookEvent.query.count(), 1)
 
-    def test_note_authority_paid_deck_checkout_stops_before_order_or_provider(self):
+    def test_note_authority_paid_deck_checkout_and_fulfillment_install_overlay(self):
         deck_item_id = self._create_deck_item(
             pricing_mode="paid", price_amount_minor=75000
         )
@@ -389,29 +389,37 @@ class PaymentOrderFlowTests(unittest.TestCase):
             )
             db.session.commit()
             item = db.session.get(DeckMarketplaceItem, deck_item_id)
-            for validate, error_type, code_attr in (
-                (payment_service._validate_deck_item_for_checkout, payment_service.PaymentServiceError, "error"),
-                (payment_checkout._validate_deck_item_for_checkout, payment_checkout.PaymentServiceError, "code"),
+            # Both checkout validators take the learner fence but accept NOTE.
+            for validate in (
+                payment_service._validate_deck_item_for_checkout,
+                payment_checkout._validate_deck_item_for_checkout,
             ):
-                with self.assertRaises(error_type) as failure:
-                    validate(item, user_id=self.buyer_id)
-                self.assertEqual(
-                    getattr(failure.exception, code_attr), "OVERLAY_AUTHORITY_NOT_READY"
-                )
+                validate(item, user_id=self.buyer_id)
                 db.session.rollback()
 
         with patch(
-            "app.services.payment.provider.payos_provider.create_checkout_session"
-        ) as provider_checkout:
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ):
             response = self.client.post(f"/api/shared/decks/{deck_item_id}/install")
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(
-            (response.get_json() or {}).get("error"), "OVERLAY_AUTHORITY_NOT_READY"
-        )
-        provider_checkout.assert_not_called()
+        self.assertEqual(response.status_code, 202, response.get_json())
+        order_id = ((response.get_json() or {}).get("order") or {}).get("id")
+        self.assertTrue(order_id)
+        with patch(
+            "app.services.payment.provider.payos_provider.verify_webhook_payload",
+            return_value=self._build_success_webhook_payload(order_id, event_id="evt-note-deck"),
+        ):
+            webhook = self.client.post(
+                "/api/payments/providers/payos/webhook",
+                data=b"{}",
+                content_type="application/json",
+            )
+        self.assertEqual((webhook.get_json() or {}).get("status"), "processed")
         with self.app.app_context():
-            self.assertEqual(PaymentOrder.query.count(), 0)
-            self.assertEqual(DeckInstall.query.count(), 0)
+            self.assertEqual(
+                DeckInstall.query.filter_by(deck_item_id=deck_item_id, user_id=self.buyer_id).count(),
+                1,
+            )
 
     def test_pending_paid_deck_order_blocks_note_authority_enrollment(self):
         deck_item_id = self._create_deck_item(

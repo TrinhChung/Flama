@@ -84,7 +84,7 @@ logger = logging.getLogger(__name__)
 
 from app.services.share.helpers import (
     ShareControllerError,
-    _require_legacy_overlay_install_route,
+    _fence_overlay_install_route,
     _audit,
     _elapsed_ms,
     _increment_counter,
@@ -282,7 +282,7 @@ def install_shared_deck_item_for_user(
             status=409,
         )
 
-    _require_legacy_overlay_install_route(user_id=user_id)
+    _fence_overlay_install_route(user_id=user_id)
 
     existing = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=user_id).first()
     if existing:

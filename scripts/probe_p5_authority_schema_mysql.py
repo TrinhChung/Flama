@@ -94,7 +94,6 @@ from app.services import (
     flashcards_share_service,
     study_progress_lifecycle_mirror_service,
 )
-from app.services.share.helpers import ShareControllerError
 from app.services.share.cutover import cutover_clone_model_to_overlay_only
 from app.services.anki_sync_service import import_progress, import_reviews
 from app.services.study_service import (
@@ -818,17 +817,21 @@ def _probe_pristine_enrollment() -> dict[str, str]:
     )
     db.session.add(other_item)
     db.session.flush()
+    # NOTE learners install logical overlays like LEGACY learners; an item
+    # without a release still stops at the release gate, not the fence.
     try:
         flashcards_share_service.install_shared_deck_item_for_user(
             other_item,
             user_id=user_id,
             publish_statuses_visible={"private"},
         )
-    except ShareControllerError as exc:
-        if exc.error != "OVERLAY_AUTHORITY_NOT_READY":
-            raise AssertionError(f"MySQL NOTE overlay install returned {exc.error}.") from exc
+    except Exception as exc:  # legacy/modular services use distinct error classes
+        if getattr(exc, "error", None) != "DECK_RELEASE_NOT_READY":
+            raise AssertionError(
+                f"MySQL NOTE overlay install returned {getattr(exc, 'error', exc)!r}."
+            ) from exc
     else:
-        raise AssertionError("MySQL NOTE learner installed an unsupported overlay.")
+        raise AssertionError("MySQL NOTE overlay install skipped the release gate.")
     if DeckInstall.query.filter_by(deck_item_id=other_item.id, user_id=user_id).count():
         raise AssertionError("MySQL NOTE overlay install created an install row.")
 
@@ -847,23 +850,21 @@ def _probe_pristine_enrollment() -> dict[str, str]:
         )
     )
     db.session.flush()
-    for target in (local_clone_child, local_clone_deck):
-        try:
-            deck_management_service.delete_deck_subtree(
-                deck_obj=target,
-                user_id=user_id,
-                is_admin=False,
-            )
-        except StudyAuthorityFenceError as exc:
-            if exc.code != "OVERLAY_DELETE_NOT_READY":
-                raise AssertionError(f"MySQL NOTE overlay delete returned {exc.code}.") from exc
-        else:
-            raise AssertionError("MySQL NOTE learner deleted an installed clone node.")
-        if (
-            db.session.get(Deck, int(target.id)) is None
-            or db.session.get(DeckInstall, str(clone_install.id)) is None
-        ):
-            raise AssertionError("MySQL NOTE overlay delete changed clone ownership.")
+    # Deleting an installed clone node removes install/map rows and keeps the
+    # learner's source state, exactly as LEGACY keeps source CardProgress.
+    clone_install_id = str(clone_install.id)
+    for target_id in (int(local_clone_child.id), int(local_clone_deck.id)):
+        deleted = deck_management_service.delete_deck_subtree(
+            deck_obj=db.session.get(Deck, target_id),
+            user_id=user_id,
+            is_admin=False,
+        )
+        if deleted != "deleted" or db.session.get(Deck, target_id) is not None:
+            raise AssertionError("MySQL NOTE learner could not delete an installed clone node.")
+    if db.session.get(DeckInstall, clone_install_id) is not None:
+        raise AssertionError("MySQL NOTE clone-root delete kept its install row.")
+    if CardProgress.query.filter_by(user_id=user_id).count() != 2:
+        raise AssertionError("MySQL NOTE clone-node delete changed owned progress.")
     db.session.rollback()
 
     rolled_back = stage_legacy_authority_enrollment(
@@ -917,8 +918,8 @@ def _probe_pristine_enrollment() -> dict[str, str]:
         "legacy_admin_note_type_purge": "PASS",
         "note_authority_admin_deck_purge_fault_rollback": "PASS",
         "note_authority_clone_cutover_early_fence": "PASS",
-        "note_authority_overlay_install_early_fence": "PASS",
-        "note_authority_overlay_delete_early_fence": "PASS",
+        "note_authority_overlay_install_like_legacy": "PASS",
+        "note_authority_overlay_clone_node_delete": "PASS",
         "legacy_admin_deck_purge": "PASS",
         "pristine_note_enrollment_rollback": "PASS",
     }

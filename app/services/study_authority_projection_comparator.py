@@ -113,7 +113,19 @@ def compare_note_legacy_projection(
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Stored Algorithm State size does not match."
             )
-        expected_algorithm_hash = algorithm_state_hash(expected_state.payload)
+        identity = (algorithm_key, algorithm_version, state_schema_version, storage_codec)
+        # An unknown identity is reported as such before its hash is checked.
+        if not STATE_DECODERS.has_decoder(identity):
+            raise StudyProgressCodecError(
+                "STATE_DECODER_UNAVAILABLE", f"No decoder is registered for {identity!r}."
+            )
+        expected_algorithm_hash = algorithm_state_hash(
+            expected_state.payload,
+            algorithm_key=algorithm_key,
+            algorithm_version=algorithm_version,
+            state_schema_version=state_schema_version,
+            storage_codec=storage_codec,
+        )
         if expected_algorithm_hash != expected_algorithm_state_hash:
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Stored Algorithm State hash does not match."

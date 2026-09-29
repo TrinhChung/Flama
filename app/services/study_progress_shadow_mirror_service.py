@@ -20,7 +20,10 @@ from flask import current_app
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
-from app.repositories.study_authority_repository import lock_study_authority_route
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.repositories.study_progress_shadow_repository import (
     assert_subject_finalization_fence,
     lock_subjects_in_canonical_order,
@@ -932,6 +935,17 @@ def _upsert_state(
     if row is None:
         row = StudyProgressState(subject_id=int(subject.id), created_at=now_utc)
         session.add(row)
+    elif (
+        str(row.algorithm_key),
+        str(row.algorithm_version),
+        str(row.state_schema_version),
+    ) != (mapped.algorithm_key, mapped.algorithm_version, mapped.state_schema_version):
+        # CardProgress always maps to legacy-anki. A Note switched to another
+        # Algorithm must not be silently reverted by a mirror/lifecycle write.
+        raise StudyAuthorityFenceError(
+            "ALGORITHM_IDENTITY_MIRROR_CONFLICT",
+            "A switched Note's Algorithm cannot be rewritten from legacy progress.",
+        )
     row.subject_generation = generation
     row.mirror_revision = mirror_revision
     row.algorithm_key = mapped.algorithm_key

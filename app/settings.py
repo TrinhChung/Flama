@@ -256,8 +256,8 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "STUDY_WIRE_V3_ENABLED",
             default=False,
         ),
-        # Wire v4 is NOTE-authority-only. Negotiation fails closed at session
-        # issuance until the dedicated Note-token issuer is wired end to end.
+        # Wire v4 is NOTE-authority-only (Note-token leases). Off by default;
+        # it must be enabled before any learner is enrolled in NOTE (R1).
         "STUDY_WIRE_V4_ENABLED": coerce_bool_env(
             "STUDY_WIRE_V4_ENABLED",
             default=False,

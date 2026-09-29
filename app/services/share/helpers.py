@@ -245,23 +245,21 @@ class ShareControllerError(Exception):
         self.error = error
 
 
-def _require_legacy_overlay_install_route(*, user_id: int) -> None:
-    """Fence install against NOTE enrollment until overlay subjects are canonical."""
+def _fence_overlay_install_route(*, user_id: int) -> None:
+    """Serialize a logical-overlay install/checkout with authority mode switches.
+
+    Both modes are supported: under NOTE, installed source Notes are
+    (learner, source Note) subjects that read as pristine until first study.
+    """
 
     try:
-        route = lock_study_authority_route(
+        lock_study_authority_route(
             db.session,
             learner_user_id=int(user_id),
             allow_note_authority=True,
         )
     except StudyAuthorityFenceError as exc:
         raise ShareControllerError(str(exc), status=409, error=exc.code) from exc
-    if route.mode_code == "NOTE":
-        raise ShareControllerError(
-            "Shared deck installation is unavailable for NOTE authority until overlay lifecycle is supported.",
-            status=409,
-            error="OVERLAY_AUTHORITY_NOT_READY",
-        )
 
 
 def make_unique_note_type_name(user_id: int, base_name: str) -> str:

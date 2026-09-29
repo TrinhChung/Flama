@@ -227,7 +227,7 @@ class StudyContentDeleteTests(unittest.TestCase):
             self.assertEqual(db.session.get(StudySession, session_id).status, "cancelled")
             self.assertEqual(StudyProgressState.query.count(), 0)
 
-    def test_deck_purge_rejects_note_learner_installed_clone_node(self):
+    def test_deck_purge_of_note_learner_clone_node_removes_install_only(self):
         with self.app.app_context():
             self._add_learners()
             source = Deck.query.filter_by(name="Other learner").one()
@@ -239,14 +239,14 @@ class StudyContentDeleteTests(unittest.TestCase):
                 local_deck_id=self.deck_id, source_deck_id=source.id,
                 source_owner_user_id=source.owner_user_id))
             db.session.commit()
-            with self.assertRaises(StudyAuthorityFenceError) as failure:
-                self._purge_deck(self.deck_id)
-            self.assertEqual(failure.exception.code, "OVERLAY_DELETE_NOT_READY")
-            self.assertFalse(db.session().in_transaction())
-            self.assertIsNotNone(db.session.get(Deck, self.deck_id))
-            self.assertEqual(DeckInstall.query.count(), 1)
-            self.assertEqual(CardProgress.query.count(), 5)
-            self.assertEqual(StudyProgressState.query.count(), 2)
+            self.assertEqual(self._purge_deck(self.deck_id), "purged")
+            self.assertIsNone(db.session.get(Deck, self.deck_id))
+            self.assertEqual(DeckInstall.query.count(), 0)
+            # The purged Notes are tombstoned; the install source stays live.
+            self.assertEqual(StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one().status_code,
+                "TOMBSTONED_SUBJECT_DELETED")
+            self.assertEqual(StudyProgressState.query.count(), 1)
+            self.assertIsNotNone(Deck.query.filter_by(name="Other learner").one_or_none())
 
     def _open_session(self, learner_id, card_id):
         study_session = StudySession(user_id=learner_id, scope_type="deck", scope_id=str(self.deck_id),

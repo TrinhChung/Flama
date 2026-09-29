@@ -164,6 +164,76 @@ def _reconcile_note_cards(
 
 
 
+def _reconcile_note_authority_cards(
+    *,
+    user_id: int,
+    note: Note,
+    note_type: NoteType,
+    is_new_note: bool,
+    preserve_released_history: bool | None,
+    operation_key: str,
+) -> None:
+    """Template reconcile under NOTE: add siblings first, then remove.
+
+    Every learner holding state on the Note keeps one canonical state; a new
+    sibling copies it and a removed sibling only shrinks the projection.
+    """
+    from app.services import study_content_delete_service as content_topology
+
+    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+    if not templates:
+        raise ConnectError("model has no card template")
+    expected_ids = {template.id for template in templates}
+    existing_by_template = {card.template_id: card for card in note.cards}
+    if expected_ids == set(existing_by_template):
+        return
+    if not is_new_note:
+        from app.services import deck_working_tree_service
+
+        must_preserve_history = (
+            deck_working_tree_service.note_has_shared_release_dependents(note)
+            if preserve_released_history is None
+            else preserve_released_history
+        )
+        if must_preserve_history:
+            raise ConnectError(
+                "cannot change card templates for a released shared note; "
+                "template-aware deck releases are required to preserve study history"
+            )
+    note_ids = (str(note.id),)
+    routes = content_topology.lock_content_delete_routes(
+        db.session,
+        actor_user_ids=(user_id,),
+        card_ids=[str(card.id) for card in note.cards],
+        deleted_note_ids=(),
+    )
+    for template in templates:
+        if template.id in existing_by_template:
+            continue
+        expansion = content_topology.prepare_content_expansion(
+            db.session, routes=routes, note_ids=note_ids)
+        content_topology.verify_content_expansion_scope(db.session, routes=routes, note_ids=note_ids)
+        new_card = Card(note_id=note.id, template_id=template.id)
+        db.session.add(new_card)
+        db.session.flush()
+        content_topology.finalize_content_expansion(expansion, new_cards=(new_card,))
+    removed_ids = [
+        str(card.id) for card in note.cards if card.template_id not in expected_ids
+    ]
+    if removed_ids:
+        plan = content_topology.prepare_content_delete(
+            db.session, routes=routes, card_ids=removed_ids, note_ids=(),
+            cancel_legacy_sessions=False)
+        content_topology.verify_content_delete_scope(
+            db.session, routes=routes, card_ids=removed_ids, deleted_note_ids=())
+        CardProgress.query.filter(CardProgress.card_id.in_(removed_ids)).delete(
+            synchronize_session=False)
+        content_topology.finalize_content_delete(
+            plan, source_path="connect.import_cards.reconcile", operation_key=operation_key)
+        Card.query.filter(Card.id.in_(removed_ids)).delete(synchronize_session=False)
+    db.session.expire(note, ["cards"])
+
+
 def _migrate_cards_progress(
     user_id: int,
     note: Note,
@@ -624,34 +694,63 @@ def _upsert_import_card(
     else:
         deck_ref.source_path = source_deck_path
         deck_ref.deck_id = prepared.deck.id
-    expected_template_ids = {template.id for template in prepared.note_type.templates}
-    removed_cards = tuple(
-        card for card in note.cards if card.template_id not in expected_template_ids
-    )
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+    authority_route = lock_study_authority_route(
         db.session,
-        removed_card_ids=(card.id for card in removed_cards),
+        learner_user_id=user_id,
+        allow_note_authority=True,
     )
-    if removed_cards:
-        CardProgress.query.filter(
-            CardProgress.card_id.in_([str(card.id) for card in removed_cards])
-        ).delete(synchronize_session=False)
-    _reconcile_note_cards(
-        note,
-        prepared.note_type,
-        is_new_note=created,
-        preserve_released_history=preserve_released_history,
-    )
-    if lifecycle_plan is not None:
-        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-            lifecycle_plan,
-            transition_code="DETACHED_CONTRIBUTOR_DELETED",
-            source_path="connect.import_cards.reconcile",
-            operation_key=f"{session.id}:{external_note_id}:template-reconcile",
+    reconcile_operation_key = f"{session.id}:{external_note_id}:template-reconcile"
+    if authority_route.mode_code == "NOTE":
+        _reconcile_note_authority_cards(
+            user_id=user_id,
+            note=note,
+            note_type=prepared.note_type,
+            is_new_note=created,
+            preserve_released_history=preserve_released_history,
+            operation_key=reconcile_operation_key,
         )
+    else:
+        expected_template_ids = {template.id for template in prepared.note_type.templates}
+        removed_cards = tuple(
+            card for card in note.cards if card.template_id not in expected_template_ids
+        )
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=(card.id for card in removed_cards),
+        )
+        if removed_cards:
+            CardProgress.query.filter(
+                CardProgress.card_id.in_([str(card.id) for card in removed_cards])
+            ).delete(synchronize_session=False)
+        _reconcile_note_cards(
+            note,
+            prepared.note_type,
+            is_new_note=created,
+            preserve_released_history=preserve_released_history,
+        )
+        if lifecycle_plan is not None:
+            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+                lifecycle_plan,
+                transition_code="DETACHED_CONTRIBUTOR_DELETED",
+                source_path="connect.import_cards.reconcile",
+                operation_key=reconcile_operation_key,
+            )
     cards_progress_payload = card_data.get("cardsProgress")
     progress_results: list[dict[str, Any]] = []
-    if cards_progress_payload:
+    if cards_progress_payload and authority_route.mode_code == "NOTE":
+        # Per-Card legacy progress cannot express one learner/Note state.
+        # Content is imported; progress must arrive as a Note snapshot.
+        if not isinstance(cards_progress_payload, list) or len(cards_progress_payload) > 100:
+            raise ConnectError("cardsProgress must be an array with at most 100 entries")
+        progress_results = [
+            {
+                "ord": item.get("ord") if isinstance(item, dict) else None,
+                "state": "unsupported",
+                "code": "NOTE_SNAPSHOT_REQUIRED",
+            }
+            for item in cards_progress_payload
+        ]
+    elif cards_progress_payload:
         progress_results = _migrate_cards_progress(
             user_id,
             note,
@@ -775,13 +874,13 @@ def import_cards(
         try:
             with db.session.begin_nested():
                 # Card/content import can change NoteType and Card topology. It
-                # remains LEGACY-only until that complete lifecycle command is
-                # available, but it must take the learner fence before source,
-                # content or progress rows so an enrollment switch cannot race
-                # a late failure.
+                # takes the learner fence before source, content or progress
+                # rows so an enrollment switch cannot race a late failure; NOTE
+                # topology goes through the multi-learner coordinator.
                 lock_study_authority_route(
                     db.session,
                     learner_user_id=user_id,
+                    allow_note_authority=True,
                 )
                 (
                     note,

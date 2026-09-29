@@ -13,6 +13,7 @@ from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 from models.deck import Deck
 from models.card_progress import CardProgress
 from app.repositories import study_repository
+from app.repositories.logical_overlay_scope_repository import logical_overlay_cards
 from app.repositories.study_authority_repository import lock_study_authority_route
 from app.repositories.study_repository import default_deck_options, _today_day_index
 from app.services.scheduler_config_service import resolve_deck_options
@@ -24,49 +25,6 @@ from app.utils.permissions import is_admin_user
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-def _note_overlay_cards(
-    installs, *, visible_deck_ids: set[int]
-) -> tuple[list[tuple[Card, int]], Dict[int, str]]:
-    """Source Cards of each logical-overlay install, mapped to local decks.
-
-    Mirrors the LEGACY dashboard merge filters: mapped source decks, source
-    owner and install snapshot. Also returns the install NoteType per mapped
-    local deck, which LEGACY records even when no source Card is visible.
-    """
-    result: list[tuple[Card, int]] = []
-    note_type_by_local_deck: Dict[int, str] = {}
-    for install in installs:
-        if install.clone_mode != "logical_overlay" or not install.id or not install.local_deck_id:
-            continue
-        source_to_local = {
-            int(row.source_deck_id): int(row.local_deck_id)
-            for row in DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
-            .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
-            .all()
-            if row.source_deck_id is not None
-            and row.local_deck_id is not None
-            and int(row.local_deck_id) in visible_deck_ids
-        }
-        if not source_to_local:
-            continue
-        if install.source_note_type_id:
-            for local_deck_id in source_to_local.values():
-                note_type_by_local_deck.setdefault(local_deck_id, str(install.source_note_type_id))
-        query = Card.query.join(Note, Card.note_id == Note.id).filter(
-            Note.deck_id.in_(source_to_local.keys())
-        )
-        if install.source_owner_user_id is not None:
-            query = query.filter(Note.user_id == install.source_owner_user_id)
-        snapshot_at = install.base_snapshot_at or install.installed_at
-        if snapshot_at is not None:
-            query = query.filter(Note.created_at <= snapshot_at, Card.created_at <= snapshot_at)
-        for card in query.order_by(Card.id.asc()).all():
-            local_deck_id = source_to_local.get(int(card.note.deck_id))
-            if local_deck_id is not None:
-                result.append((card, local_deck_id))
-    return result, note_type_by_local_deck
 
 
 def _classify_progress_fast(
@@ -302,7 +260,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         overlay_cards, overlay_note_types = (
             ([], {})
             if admin_mode
-            else _note_overlay_cards(installs, visible_deck_ids=set(visible_deck_ids))
+            else logical_overlay_cards(installs, visible_deck_ids=set(visible_deck_ids))
         )
         counted_cards = [
             (card, int(card.note.deck_id)) for card in canonical_cards

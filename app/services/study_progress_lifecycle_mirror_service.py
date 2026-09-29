@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -299,8 +299,13 @@ def prepare_note_authority_reset(
     removed_card_ids: Iterable[str],
     skip_pristine: bool = True,
     now_utc: datetime | None = None,
+    starting_ease_by_note_id: Mapping[str, float] | None = None,
 ) -> NoteAuthorityResetPlan | None:
-    """Lock an owned-local NOTE reset without depending on the Phase 4 flag."""
+    """Lock a NOTE reset without depending on the Phase 4 flag.
+
+    ``starting_ease_by_note_id`` supplies the deck options LEGACY would use
+    for a logical-overlay source Note (the learner's mapped local deck).
+    """
 
     if not isinstance(route, StudyAuthorityRoute) or route.mode_code != "NOTE":
         raise StudyAuthorityFenceError(
@@ -436,12 +441,15 @@ def prepare_note_authority_reset(
         from app.services.scheduler_config_service import resolve_deck_options
 
         note_deck_id = siblings.cards[0].note.deck_id
-        starting_ease = float(
-            resolve_deck_options(
-                user_id=route.learner_user_id,
-                deck_id=note_deck_id,
-            ).startingEase
-        )
+        if starting_ease_by_note_id is not None and note_id in starting_ease_by_note_id:
+            starting_ease = float(starting_ease_by_note_id[note_id])
+        else:
+            starting_ease = float(
+                resolve_deck_options(
+                    user_id=route.learner_user_id,
+                    deck_id=note_deck_id,
+                ).startingEase
+            )
         if skip_pristine and all(
             _is_pristine_reset_progress(row, starting_ease=starting_ease)
             for row in progress_rows
