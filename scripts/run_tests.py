@@ -494,11 +494,14 @@ MODULES: dict[str, dict[str, list[str]]] = {
     "analytics": {
         "source_patterns": [
             "app/api/v1/analytics/**",
+            "app/services/deck_aggregation_service.py",
+            "app/services/study_analytics_read_service.py",
             "app/services/stats_*.py",
             "app/services/dashboard_service.py",
             "app/repositories/stats_query_repository.py",
         ],
         "backend_tests": [
+            "tests/test_deck_aggregation_service.py",
             "tests/test_stats_overview.py",
             "tests/test_stats_study_time.py",
             "tests/test_stats_today_future.py",
