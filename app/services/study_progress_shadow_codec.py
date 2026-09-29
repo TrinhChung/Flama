@@ -603,9 +603,10 @@ def _decode_legacy_anki_state(payload: Mapping[str, Any]) -> CardState:
             raise StudyProgressCodecError(
                 "INVALID_STATE_VALUE", f"{field_name} must be non-negative."
             )
-    if state.ease <= 0:
+    # 0 means "not assigned yet" (Anki factor 0), which the scheduler accepts.
+    if state.ease < 0:
         raise StudyProgressCodecError(
-            "INVALID_STATE_VALUE", "ease must be positive."
+            "INVALID_STATE_VALUE", "ease must be non-negative."
         )
     return state
 

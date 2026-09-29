@@ -239,8 +239,10 @@ def map_card_progress(
         interval_days = _finite_float(
             interval_source, field_name="interval_days", nonnegative=True
         )
+        # 0 is Anki's "not assigned yet" factor for ungraduated imports; the
+        # legacy scheduler falls back to startingEase and resets on graduation.
         ease = _finite_float(
-            getattr(progress, "ease_factor"), field_name="ease_factor", positive=True
+            getattr(progress, "ease_factor"), field_name="ease_factor", nonnegative=True
         )
 
         memory_stability = getattr(progress, "memory_stability")
