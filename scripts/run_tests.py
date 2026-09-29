@@ -500,6 +500,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/dashboard_service.py",
             "app/repositories/stats_query_repository.py",
             "app/repositories/note_analytics_read_repository.py",
+            "scripts/probe_p5_analytics_mysql.py",
         ],
         "backend_tests": [
             "tests/test_deck_aggregation_service.py",
