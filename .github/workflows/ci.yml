@@ -60,6 +60,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      dist_artifact_id: ${{ steps.upload_dist.outputs.artifact-id }}
 
     defaults:
       run:
@@ -107,11 +109,19 @@ jobs:
       - name: Build
         run: npm run build:ci
 
+      # Actions storage: the build is only handed to spa-contract, which
+      # deletes it after use. Source maps (~70% of dist) are not needed there.
       - name: Upload React build
+        id: upload_dist
+        if: needs.changes.outputs.spa_contract == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: frontend/dist
+          path: |
+            frontend/dist
+            !frontend/dist/**/*.map
+          if-no-files-found: error
+          compression-level: 9
           retention-days: 1
 
   backend:
@@ -157,6 +167,9 @@ jobs:
       needs.changes.outputs.spa_contract == 'true' &&
       needs.frontend.result == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
 
     steps:
       - name: Checkout
@@ -185,6 +198,16 @@ jobs:
           SECRET_KEY: ci-secret
           FLAMA_REQUIRE_REAL_SPA_ARTIFACT: '1'
         run: python -m unittest tests.test_spa_artifact_contract
+
+      # Free the storage now instead of holding it until retention expires.
+      # A failed cleanup must not fail validation; retention-days remains.
+      - name: Delete consumed React build artifact
+        if: always() && needs.frontend.outputs.dist_artifact_id != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.frontend.outputs.dist_artifact_id }}
+        run: gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID"
 
   redis-contract:
     needs: changes
