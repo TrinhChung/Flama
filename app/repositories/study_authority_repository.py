@@ -128,6 +128,27 @@ def _decode_route(
     )
 
 
+def read_study_authority_route(session: Session, *, learner_user_id: int) -> StudyAuthorityRoute:
+    """Resolve authority from the analytics snapshot, without a writer fence.
+
+    Read-only summaries may represent an earlier committed epoch. They must
+    read enrollment and all its evidence from one consistent snapshot, and
+    must never use this route to admit writes or issue Study session pins.
+    """
+    learner_id = _positive_learner_id(learner_user_id)
+    enrollment = session.execute(
+        select(StudyAuthorityEnrollment)
+        .where(StudyAuthorityEnrollment.learner_user_id == learner_id)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if enrollment is None:
+        return StudyAuthorityRoute(learner_id, "LEGACY", 0, False)
+    return _decode_route(
+        learner_user_id=learner_id, mode_code=enrollment.mode_code,
+        epoch=enrollment.epoch, persisted=True, allow_note_authority=True,
+    )
+
+
 def lock_study_authority_route(
     session: Session,
     *,

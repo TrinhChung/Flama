@@ -164,7 +164,7 @@ class StudySessionApiTests(unittest.TestCase):
         return response.get_json()
 
     def _enable_existing_state_note_authority(
-        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None
+        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token=False
     ):
         with self.app.app_context():
             note_query = Note.query.filter_by(
@@ -275,6 +275,12 @@ class StudySessionApiTests(unittest.TestCase):
                 ]
             )
             expected_hash = mapped.semantic_state_hash.hex()
+            if include_token:
+                db.session.add(StudyAuthoritySubjectToken(
+                    subject_id=int(subject.id), subject_generation=1,
+                    authority_revision=0, semantic_state_hash=mapped.semantic_state_hash,
+                    created_at=now, updated_at=now,
+                ))
             if enroll:
                 db.session.add(
                     StudyAuthorityEnrollment(
@@ -791,7 +797,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 1)
 
     def test_note_authority_template_delete_rolls_back_stale_projection(self):
-        self._enable_existing_state_note_authority(epoch=14)
+        self._enable_existing_state_note_authority(epoch=14, include_token=True)
         created = self.client.post(
             f"/api/note-types/{self.note_type_id}/templates",
             json={
@@ -823,7 +829,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_note_authority_new_template_expands_every_owned_note(self):
-        self._enable_existing_state_note_authority(epoch=15)
+        self._enable_existing_state_note_authority(epoch=15, include_token=True)
         second_note = self.client.post(
             "/api/notes",
             json={
