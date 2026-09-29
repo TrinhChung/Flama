@@ -7,6 +7,10 @@ from typing import Any
 from uuid import uuid4
 
 from app.repositories import study_repository, vocabulary_repository
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.services import stats_overview
 from app.services.flashcard_renderer import render_template_pair
 from app.services.mcp.base import _resolve_deck_for_user
@@ -14,6 +18,11 @@ from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_action_runtime import (
     compute_review_previews,
     execute_review_action,
+)
+from app.services.study_authority_read_service import (
+    load_study_authority_card_read,
+    load_study_authority_card_reads,
+    summarize_study_authority_queue,
 )
 from app.services.study_service import (
     StudyReviewError,
@@ -36,6 +45,20 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
     now = datetime.utcnow()
     user = db.session.get(User, user_id)
     timezone_name = str(getattr(user, "timezone", "UTC") or "UTC")
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            field="user_id",
+            status=409,
+            code=exc.code,
+        ) from exc
 
     scoped_decks = vocabulary_repository.collect_accessible_browse_decks(
         user_id=user_id,
@@ -53,23 +76,67 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
             "new_cards": 0,
             "review_cards": 0,
             "learn_cards": 0,
+            "authority_mode": authority_route.mode_code,
         }
 
     cards_query = db.session.query(Card).join(Note, Card.note_id == Note.id).filter(
         Note.user_id == user_id, Note.deck_id.in_(deck_ids)
     )
-    new_count, learn_count, due_count = study_repository.query_study_queue_counts(
-        cards_query,
-        user_id=user_id,
-        now=now,
-        timezone_name=timezone_name,
-    )
+    if authority_route.mode_code == "NOTE":
+        cards = cards_query.order_by(Card.id.asc()).all()
+        options_by_card_id = {
+            str(card.id): resolve_deck_options(
+                user_id=user_id,
+                deck_id=card.note.deck_id,
+            )
+            for card in cards
+        }
+        try:
+            authority_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=tuple(cards),
+                now_utc=now,
+                timezone_name=timezone_name,
+                deck_options_by_card_id=options_by_card_id,
+            )
+            summary = summarize_study_authority_queue(
+                cards=tuple(cards),
+                reads_by_card_id=authority_reads,
+                learner_user_id=user_id,
+                now_utc=now,
+                timezone_name=timezone_name,
+            )
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if code is None:
+                raise
+            db.session.rollback()
+            raise RequestValidationError(
+                str(exc),
+                field="card_id",
+                status=409,
+                code=str(code),
+            ) from exc
+        new_count = summary.new_count
+        learn_count = summary.learn_count
+        due_count = summary.due_count
+    else:
+        new_count, learn_count, due_count = (
+            study_repository.query_study_queue_counts(
+                cards_query,
+                user_id=user_id,
+                now=now,
+                timezone_name=timezone_name,
+            )
+        )
 
     return {
         "total_due": new_count + learn_count + due_count,
         "new_cards": new_count,
         "review_cards": due_count,
         "learn_cards": learn_count,
+        "authority_mode": authority_route.mode_code,
     }
 
 
@@ -99,46 +166,57 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
 
     # Fetch candidate cards
     candidate_cards = cards_query.all()
+    deck_options_by_card_id = {
+        str(card.id): resolve_deck_options(
+            user_id=user_id,
+            deck_id=card.note.deck_id,
+        )
+        for card in candidate_cards
+        if card.note is not None
+    }
+    try:
+        authority_reads = load_study_authority_card_reads(
+            db.session,
+            learner_user_id=user_id,
+            cards=tuple(
+                card for card in candidate_cards if card.note is not None
+            ),
+            now_utc=now,
+            timezone_name=timezone_name,
+            deck_options_by_card_id=deck_options_by_card_id,
+        )
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code is None:
+            raise
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            field="card_id",
+            status=409,
+            code=str(code),
+        ) from exc
+    queue_summary = summarize_study_authority_queue(
+        cards=tuple(card for card in candidate_cards if card.note is not None),
+        reads_by_card_id=authority_reads,
+        learner_user_id=user_id,
+        now_utc=now,
+        timezone_name=timezone_name,
+    )
+    candidate_by_id = {str(card.id): card for card in candidate_cards}
     actionable_cards: list[dict[str, Any]] = []
 
-    for card in candidate_cards:
+    for card_id in queue_summary.due_card_ids:
         if len(actionable_cards) >= limit:
             break
+        card = candidate_by_id[card_id]
         note = card.note
         if not note or not note.note_type:
             continue
 
-        progress = CardProgress.query.filter_by(card_id=card.id, user_id=user_id).first()
-        deck_options = resolve_deck_options(user_id=user_id, deck_id=note.deck_id)
-        card_state = study_repository.card_state_from_progress(
-            progress,
-            now,
-            timezone_name=timezone_name,
-            user_id=user_id,
-            options=deck_options,
-        )
-
-        # Check if due/actionable
-        is_actionable = False
-        if card_state.type == "new":
-            is_actionable = True
-        elif card_state.type in ("learning", "relearning"):
-            if card_state.due is None or card_state.due <= now:
-                is_actionable = True
-        elif card_state.type == "review":
-            if card_state.dueDay is not None:
-                today_idx = study_repository._today_day_index(
-                    now=now,
-                    timezone_name=timezone_name,
-                    day_boundary_hour_local=deck_options.dayBoundaryHourLocal,
-                )
-                if card_state.dueDay <= today_idx:
-                    is_actionable = True
-            elif card_state.due is not None and card_state.due <= now:
-                is_actionable = True
-
-        if not is_actionable:
-            continue
+        deck_options = deck_options_by_card_id[str(card.id)]
+        authority_read = authority_reads[str(card.id)]
+        card_state = authority_read.state
 
         intervals_preview = compute_review_previews(
             state=card_state,
@@ -161,6 +239,9 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
                 "deck_id": int(note.deck_id) if note.deck_id else None,
                 "template_name": card.template.name if card.template else None,
                 "queue": card_state.type,
+                "authority_mode": authority_read.route.mode_code,
+                "authority_revision": authority_read.authority_revision,
+                "review_state_version": authority_read.state_version,
                 "front_html": rendered.get("front_html"),
                 "back_html": rendered.get("back_html"),
                 "fields": dict(note.field_values or {}),
@@ -192,16 +273,28 @@ def get_card(*, user_id: int, card_id: str) -> dict[str, Any]:
     user = db.session.get(User, user_id)
     timezone_name = stats_overview.get_effective_timezone_name(getattr(user, "timezone", "UTC"))
     now = datetime.utcnow()
-    progress = CardProgress.query.filter_by(card_id=card.id, user_id=user_id).first()
     deck_options = resolve_deck_options(user_id=user_id, deck_id=card.note.deck_id)
-
-    card_state = study_repository.card_state_from_progress(
-        progress,
-        now,
-        timezone_name=timezone_name,
-        user_id=user_id,
-        options=deck_options,
-    )
+    try:
+        authority_read = load_study_authority_card_read(
+            db.session,
+            learner_user_id=user_id,
+            card=card,
+            now_utc=now,
+            timezone_name=timezone_name,
+            deck_options=deck_options,
+        )
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code is None:
+            raise
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            field="card_id",
+            status=409,
+            code=str(code),
+        ) from exc
+    card_state = authority_read.state
     intervals_preview = compute_review_previews(
         state=card_state,
         options=deck_options,
@@ -222,6 +315,9 @@ def get_card(*, user_id: int, card_id: str) -> dict[str, Any]:
         "template_id": str(card.template_id),
         "template_name": card.template.name if card.template else None,
         "queue": card_state.type,
+        "authority_mode": authority_read.route.mode_code,
+        "authority_revision": authority_read.authority_revision,
+        "review_state_version": authority_read.state_version,
         "reps": int(card_state.reps or 0),
         "lapses": int(card_state.lapses or 0),
         "interval_days": float(card_state.intervalDays or 0),
@@ -241,6 +337,7 @@ def submit_review(
     card_id: str,
     rating: str,
     duration_ms: int | None = None,
+    operation_key: str | None = None,
 ) -> dict[str, Any]:
     """Submit a review answer rating ('again', 'hard', 'good', 'easy') to update card schedule."""
     card = (
@@ -258,11 +355,12 @@ def submit_review(
 
     user = db.session.get(User, user_id)
     timezone_name = stats_overview.get_effective_timezone_name(getattr(user, "timezone", "UTC"))
-    mcp_event_id = str(uuid4())
+    mcp_event_id = operation_key if operation_key is not None else str(uuid4())
     service_payload = {
         "duration_ms": duration_ms,
-        "timezone": timezone_name,
     }
+    if operation_key is not None:
+        service_payload["operation_key"] = operation_key
     try:
         command_result = execute_native_review_command(
             user=user,
@@ -270,7 +368,9 @@ def submit_review(
             action=rating,
             payload=service_payload,
             clone_scope=None,
-            requested_scope_id=card.note.deck_id,
+            # MCP does not accept a scope/timezone override. Keep resolved
+            # server policy out of the caller-intent replay fingerprint.
+            requested_scope_id=None,
             timezone_name=timezone_name,
             client_event_id=mcp_event_id,
             source_path="native.mcp",
@@ -286,7 +386,7 @@ def submit_review(
     current_state = command_result.current_state
     updated_state = command_result.transition.state
 
-    return {
+    response = {
         "success": True,
         "card_id": str(card.id),
         "rating": rating,
@@ -298,6 +398,15 @@ def submit_review(
         "lapses": int(updated_state.lapses or 0),
         "ease_factor": float(updated_state.ease or 2.5),
     }
+    if command_result.authority_mode == "NOTE":
+        response["authority"] = {
+            "mode": "NOTE",
+            "operation_key": command_result.operation_key,
+            "authority_revision": command_result.authority_revision,
+            "progress_revision": command_result.progress_revision,
+            "replayed": command_result.replayed,
+        }
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -331,12 +440,52 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
     young_count = 0
     mature_count = 0
     if card_ids:
-        progresses = CardProgress.query.filter(
-            CardProgress.user_id == user_id, CardProgress.card_id.in_(card_ids)
-        ).all()
-        for p in progresses:
-            if p.queue == "review":
-                if float(p.interval_days or 0) >= 21:
+        if due_counts["authority_mode"] == "NOTE":
+            try:
+                authority_reads = load_study_authority_card_reads(
+                    db.session,
+                    learner_user_id=user_id,
+                    cards=tuple(cards),
+                    now_utc=datetime.utcnow(),
+                    timezone_name=stats_overview.get_effective_timezone_name(
+                        getattr(db.session.get(User, user_id), "timezone", "UTC")
+                    ),
+                    deck_options_by_card_id={
+                        str(card.id): resolve_deck_options(
+                            user_id=user_id,
+                            deck_id=card.note.deck_id,
+                        )
+                        for card in cards
+                    },
+                )
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                if code is None:
+                    raise
+                db.session.rollback()
+                raise RequestValidationError(
+                    str(exc),
+                    field="card_id",
+                    status=409,
+                    code=str(code),
+                ) from exc
+            progress_states = [read.state for read in authority_reads.values()]
+            for state in progress_states:
+                if state.type != "review":
+                    continue
+                if float(state.intervalDays or 0) >= 21:
+                    mature_count += 1
+                else:
+                    young_count += 1
+        else:
+            progresses = CardProgress.query.filter(
+                CardProgress.user_id == user_id,
+                CardProgress.card_id.in_(card_ids),
+            ).all()
+            for progress in progresses:
+                if progress.queue != "review":
+                    continue
+                if float(progress.interval_days or 0) >= 21:
                     mature_count += 1
                 else:
                     young_count += 1
@@ -352,6 +501,7 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
         "total_due_today": due_counts["total_due"],
         "young_cards": young_count,
         "mature_cards": mature_count,
+        "authority_mode": due_counts["authority_mode"],
     }
 
 

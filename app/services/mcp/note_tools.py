@@ -4,10 +4,25 @@ from __future__ import annotations
 
 import logging
 import hashlib
+from datetime import datetime, timezone
 from typing import Any
 
-from app.services import note_sync_service, study_progress_lifecycle_mirror_service
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
+from app.services import (
+    flashcard_content_service,
+    note_sync_service,
+    study_progress_lifecycle_mirror_service,
+)
 from app.services.anki_content_normalizer import normalize_anki_field_values
+from app.services.scheduler_config_service import resolve_deck_options
+from app.services.study_authority_read_service import (
+    StudyAuthorityReadError,
+    load_study_authority_card_reads,
+)
+from app.services import stats_overview
 from app.services.mcp.base import (
     _resolve_deck_for_user,
     _resolve_note_type_for_user,
@@ -20,6 +35,8 @@ from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
+from models.study_progress_subject import StudyProgressSubject
+from models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +102,17 @@ def list_notes(
 
 def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
     """Get full details of a single flashcard note with cards and learning state."""
+    try:
+        route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc), field="note_id", status=409, code=exc.code
+        ) from exc
     note = Note.query.filter_by(id=note_id, user_id=user_id).first()
     if note is None:
         raise RequestValidationError(
@@ -96,21 +124,83 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
 
     deck = Deck.query.filter_by(id=note.deck_id).first() if note.deck_id else None
     note_type = note.note_type
+    authority_reads = None
+    if route.mode_code == "NOTE":
+        if not note.cards:
+            db.session.rollback()
+            raise RequestValidationError(
+                "NOTE detail has no canonical Card siblings.",
+                field="note_id",
+                status=409,
+                code="INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            )
+        user = db.session.get(User, user_id)
+        timezone_name = stats_overview.get_effective_timezone_name(
+            getattr(user, "timezone", "UTC")
+        )
+        options = resolve_deck_options(user_id=user_id, deck_id=note.deck_id)
+        try:
+            authority_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=tuple(note.cards),
+                now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
+                timezone_name=timezone_name,
+                deck_options_by_card_id={str(card.id): options for card in note.cards},
+            )
+            subject = StudyProgressSubject.query.filter_by(
+                learner_user_id=user_id,
+                logical_note_key=str(note.id).encode("utf-8"),
+            ).one_or_none()
+            if (
+                subject is None
+                or str(subject.live_note_id or "") != str(note.id)
+                or int(subject.contributor_count) != len(note.cards)
+            ):
+                raise StudyAuthorityReadError(
+                    "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                    "NOTE detail Card topology differs from its canonical subject.",
+                )
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if code is None:
+                raise
+            db.session.rollback()
+            raise RequestValidationError(
+                str(exc), field="note_id", status=409, code=str(code)
+            ) from exc
 
     cards_data: list[dict[str, Any]] = []
     for card in note.cards:
-        progress = CardProgress.query.filter_by(card_id=card.id, user_id=user_id).first()
+        if authority_reads is not None:
+            read = authority_reads[str(card.id)]
+            queue = read.availability.normalized_queue
+            reps = int(read.state.reps or 0)
+            lapses = int(read.state.lapses or 0)
+            interval_days = float(read.state.intervalDays or 0)
+            ease_factor = float(read.state.ease or 2.5)
+            due_at = read.availability.due_at
+        else:
+            progress = CardProgress.query.filter_by(
+                card_id=card.id, user_id=user_id
+            ).first()
+            queue = progress.queue if progress else "new"
+            reps = int(progress.reps or 0) if progress else 0
+            lapses = int(progress.lapses or 0) if progress else 0
+            interval_days = float(progress.interval_days or 0) if progress else 0.0
+            ease_factor = float(progress.ease_factor or 2.5) if progress else 2.5
+            due_at = progress.due_at if progress else None
         cards_data.append(
             {
                 "card_id": str(card.id),
                 "template_id": str(card.template_id),
                 "template_name": card.template.name if card.template else None,
-                "queue": progress.queue if progress else "new",
-                "reps": int(progress.reps or 0) if progress else 0,
-                "lapses": int(progress.lapses or 0) if progress else 0,
-                "interval_days": float(progress.interval_days or 0) if progress else 0.0,
-                "ease_factor": float(progress.ease_factor or 2.5) if progress else 2.5,
-                "due_at": progress.due_at.isoformat() if progress and progress.due_at else None,
+                "queue": queue,
+                "reps": reps,
+                "lapses": lapses,
+                "interval_days": interval_days,
+                "ease_factor": ease_factor,
+                "due_at": due_at.isoformat() if due_at else None,
             }
         )
 
@@ -309,6 +399,19 @@ def create_note(
         note_type_id=note_data.get("note_type_id"),
         note_type_name=note_data.get("note_type_name"),
     )
+    try:
+        authority_route = lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            status=409,
+            code=exc.code,
+        ) from exc
 
     fields = note_data.get("fields", {})
     normalized_fields = normalize_anki_field_values(fields, tuple(note_type.field_defs))
@@ -360,10 +463,12 @@ def create_note(
         )
 
     created_cards: list[dict[str, Any]] = []
+    card_rows: list[Card] = []
     for template in templates:
         card = Card(note_id=note.id, template_id=template.id)
         db.session.add(card)
         db.session.flush()
+        card_rows.append(card)
         created_cards.append(
             {
                 "id": str(card.id),
@@ -371,6 +476,22 @@ def create_note(
                 "template_name": template.name,
             }
         )
+
+    try:
+        study_progress_lifecycle_mirror_service.materialize_new_note_authority(
+            db.session,
+            route=authority_route,
+            note=note,
+            cards=card_rows,
+            provenance_code="NATIVE_MCP",
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            status=409,
+            code=exc.code,
+        ) from exc
 
     from app.services import deck_working_tree_service
 
@@ -551,32 +672,18 @@ def delete_note(*, user_id: int, note_id: str, confirm: bool = False) -> dict[st
             ),
         }
 
-    deck_working_tree_service.mark_note_field_batches_changed(
-        mutations=[
-            {
-                "note": note,
-                "field_names": (note.field_values or {}).keys(),
-                "operation": "remove",
-            }
-        ],
-    )
-
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=card_ids,
-        deleted_note_ids=(note.id,),
-    )
-    if card_ids:
-        CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(synchronize_session=False)
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code="TOMBSTONED_SUBJECT_DELETED",
-        source_path="mcp.note_delete",
-        operation_key=f"mcp-note-delete:{note.id}",
-    )
-
-    db.session.delete(note)
-    db.session.commit()
+    try:
+        flashcard_content_service.delete_note(
+            user_id=user_id,
+            note_id=str(note.id),
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        raise RequestValidationError(
+            str(exc),
+            field="note_id",
+            status=exc.status,
+            code=exc.error,
+        ) from exc
 
     return {
         "success": True,
@@ -774,31 +881,68 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
             ),
         }
 
-    deck_working_tree_service.mark_note_field_batches_changed(
-        mutations=[
-            {
-                "note": note,
-                "field_names": (note.field_values or {}).keys(),
-                "operation": "remove",
-            }
-            for note in notes
-        ],
-    )
+    if not notes:
+        return {
+            "success": True,
+            "deleted_count": 0,
+            "deleted_cards_count": 0,
+            "deleted_note_ids": [],
+            "failed_note_ids": failed_ids,
+            "message": "KhÃ´ng cÃ³ note nÃ o Ä‘á»ƒ xÃ³a.",
+        }
 
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-        db.session,
-        removed_card_ids=all_card_ids,
-        deleted_note_ids=found_note_ids,
-    )
-    if all_card_ids:
-        CardProgress.query.filter(CardProgress.card_id.in_(all_card_ids)).delete(synchronize_session=False)
-    study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-        lifecycle_plan,
-        transition_code="TOMBSTONED_SUBJECT_DELETED",
-        source_path="mcp.note_batch_delete",
-        operation_key="mcp-note-batch-delete:"
-        + hashlib.sha256("\n".join(sorted(found_note_ids)).encode("utf-8")).hexdigest(),
-    )
+    from app.services import study_content_delete_service as content_delete
+
+    deleted_note_ids = tuple(sorted(found_note_ids))
+    operation_key = "mcp-note-batch-delete:" + hashlib.sha256(
+        "\n".join(deleted_note_ids).encode("utf-8")
+    ).hexdigest()
+    # Every learner holding state on these Cards is fenced and planned together.
+    try:
+        authority_routes = content_delete.lock_content_delete_routes(
+            db.session,
+            actor_user_ids=(int(user_id),),
+            card_ids=all_card_ids,
+            deleted_note_ids=deleted_note_ids,
+        )
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=[
+                {
+                    "note": note,
+                    "field_names": (note.field_values or {}).keys(),
+                    "operation": "remove",
+                }
+                for note in notes
+            ],
+        )
+        lifecycle_plan = content_delete.prepare_content_delete(
+            db.session,
+            routes=authority_routes,
+            card_ids=all_card_ids,
+            note_ids=deleted_note_ids,
+            cancel_legacy_sessions=False,
+        )
+        content_delete.verify_content_delete_scope(
+            db.session,
+            routes=authority_routes,
+            card_ids=all_card_ids,
+            deleted_note_ids=deleted_note_ids,
+        )
+        if all_card_ids:
+            CardProgress.query.filter(CardProgress.card_id.in_(all_card_ids)).delete(synchronize_session=False)
+        content_delete.finalize_content_delete(
+            lifecycle_plan,
+            source_path="mcp.note_batch_delete",
+            operation_key=operation_key,
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            field="note_ids",
+            status=409,
+            code=exc.code,
+        ) from exc
 
     for note in notes:
         db.session.delete(note)

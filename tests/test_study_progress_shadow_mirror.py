@@ -8,11 +8,13 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app import create_app
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services import (
     browse_card_service,
     deck_management_service,
     flashcard_content_service,
     study_progress_lifecycle_mirror_service,
+    study_progress_shadow_mirror_service,
     study_service,
     study_session_service,
 )
@@ -36,6 +38,7 @@ from models.study_progress_lineage_ref import StudyProgressLineageRef
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.template import Template
 from models.user import User
 
@@ -190,6 +193,41 @@ class StudyProgressShadowMirrorTests(unittest.TestCase):
         self.assertEqual(ReviewEvent.query.count(), 1)
         self.assertEqual(StudyProgressSubject.query.count(), 0)
         self.assertEqual(StudyProgressHistoryFact.query.count(), 0)
+
+    def test_legacy_mirror_entrypoints_fail_closed_for_note_enrollment(self):
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = False
+        db.session.add(
+            StudyAuthorityEnrollment(
+                learner_user_id=self.user_id,
+                mode_code="NOTE",
+                epoch=1,
+                created_at=datetime(2026, 9, 13, 9, 0, 0),
+                updated_at=datetime(2026, 9, 13, 9, 0, 0),
+            )
+        )
+        db.session.commit()
+
+        with self.assertRaises(StudyAuthorityFenceError) as native_failure:
+            study_progress_shadow_mirror_service.prepare_native_mirror(
+                db.session,
+                learner_user_id=self.user_id,
+                cards=(db.session.get(Card, self.card_id),),
+            )
+        self.assertEqual(
+            native_failure.exception.code,
+            "NOTE_AUTHORITY_UNAVAILABLE",
+        )
+        db.session.rollback()
+
+        with self.assertRaises(StudyAuthorityFenceError) as lifecycle_failure:
+            study_progress_shadow_mirror_service.prepare_mirror_scopes(
+                db.session,
+                subject_keys=((self.user_id, self.note_id),),
+            )
+        self.assertEqual(
+            lifecycle_failure.exception.code,
+            "NOTE_AUTHORITY_UNAVAILABLE",
+        )
 
     def test_direct_first_create_mirrors_state_pointer_and_history_atomically(self):
         self._review(self.card_id)

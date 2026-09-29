@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories import flashcards_share_repository, vocabulary_repository
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services import deck_management_service, flashcards_share_service
 from models import db
 from models.deck import Deck
@@ -275,6 +276,9 @@ def delete_deck(
             is_admin=admin_mode,
             purge=purge,
         )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise DeckApiError(exc.code, str(exc), status=409) from exc
     except SQLAlchemyError as exc:
         db.session.rollback()
         raise DeckApiError(
@@ -303,6 +307,9 @@ def reset_deck_progress(
                 user_id=user_id,
             )
         )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise DeckApiError(exc.code, str(exc), status=409) from exc
     except SQLAlchemyError as exc:
         db.session.rollback()
         raise DeckApiError(

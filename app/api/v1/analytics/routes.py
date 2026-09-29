@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 
 from models import db
 from app.api.common import error_response, optional_int_query
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.rest_api_service import (
     build_dashboard_payload,
     build_statistics_bootstrap_payload,
@@ -20,6 +21,7 @@ from app.services.stats_today_future import (
     build_today_future_stats,
     build_user_study_time_stats,
 )
+from app.services.study_authority_read_service import StudyAuthorityReadError
 
 
 analytics_bp = Blueprint("api_v1_analytics", __name__)
@@ -39,7 +41,15 @@ def _resolve_request_timezone() -> str:
 @analytics_bp.get("/dashboard")
 @login_required
 def dashboard():
-    return jsonify(build_dashboard_payload(current_user))
+    try:
+        return jsonify(build_dashboard_payload(current_user))
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        return error_response(
+            str(exc.code),
+            str(exc),
+            status=409,
+        )
 
 
 @analytics_bp.get("/statistics")
@@ -71,13 +81,20 @@ def statistics_overview():
         )
 
     resolved_tz = _resolve_request_timezone()
-    return jsonify(
-        build_stats_overview(
+    try:
+        payload = build_stats_overview(
             user_id=current_user.id,
             year=year,
             timezone_name=resolved_tz,
         )
-    )
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        return error_response(
+            str(exc.code),
+            str(exc),
+            status=409,
+        )
+    return jsonify(payload)
 
 
 @analytics_bp.get("/statistics/today-future")
@@ -117,8 +134,8 @@ def statistics_today_future():
             )
 
     resolved_tz = _resolve_request_timezone()
-    return jsonify(
-        build_today_future_stats(
+    try:
+        payload = build_today_future_stats(
             user_id=current_user.id,
             timezone_name=resolved_tz,
             scope=scope,
@@ -127,7 +144,14 @@ def statistics_today_future():
             future_range=future_range,
             backlog=backlog,
         )
-    )
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        return error_response(
+            str(exc.code),
+            str(exc),
+            status=409,
+        )
+    return jsonify(payload)
 
 
 @analytics_bp.get("/statistics/study-time")

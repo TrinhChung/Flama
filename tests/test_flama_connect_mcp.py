@@ -927,6 +927,63 @@ class FlamaConnectMcpTests(unittest.TestCase):
                 0,
             )
 
+    def _submit_with_operation_key(self, operation_key, **changes):
+        return self._post_mcp({
+            "jsonrpc": "2.0", "id": 271, "method": "tools/call",
+            "params": {"name": "submit_review", "arguments": {
+                "card_id": str(self.card_id), "rating": "easy", "duration_ms": 500,
+                "operation_key": operation_key, **changes,
+            }},
+        }, token=self.api_token_str)
+
+    def test_submit_review_note_operation_key_replays_original_result(self):
+        from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+        from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
+        from models.study_authority_subject_token import StudyAuthoritySubjectToken
+
+        with self.app.app_context():
+            stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
+                now_utc=datetime.utcnow())
+            db.session.commit()
+        first = self._submit_with_operation_key("mcp-retry-1")
+        self.assertEqual(first.status_code, 200, first.get_json())
+        original = first.get_json()["result"]["structuredContent"]
+        self.assertFalse(original["authority"]["replayed"])
+        second = self._submit_with_operation_key("mcp-retry-2", rating="hard")
+        self.assertEqual(second.status_code, 200, second.get_json())
+        # Server-side timezone changes must not turn the identical caller
+        # request into a new operation or require the scheduler to run again.
+        with self.app.app_context():
+            db.session.get(User, self.user_id).timezone = "Asia/Tokyo"
+            db.session.commit()
+        with patch("app.services.study_service.execute_native_review_transition",
+                side_effect=AssertionError("re-evaluated a committed answer")):
+            repeated = self._submit_with_operation_key("mcp-retry-1")
+        self.assertEqual(repeated.status_code, 200, repeated.get_json())
+        self.assertEqual(repeated.get_json()["result"]["structuredContent"], {
+            **original, "authority": {**original["authority"], "replayed": True},
+        })
+        for changed in ({"rating": "good"}, {"duration_ms": 501}):
+            conflict = self._submit_with_operation_key("mcp-retry-1", **changed)
+            self.assertEqual(conflict.status_code, 409, conflict.get_json())
+            self.assertEqual(conflict.get_json()["error"]["data"]["code"], "AUTHORITY_OPERATION_REUSED")
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 2)
+            self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 2)
+            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, 2)
+
+    def test_submit_review_operation_key_is_note_only_and_validated(self):
+        response = self._submit_with_operation_key("legacy-must-not-promise-replay")
+        self.assertEqual(response.status_code, 422, response.get_json())
+        self.assertEqual(response.get_json()["error"]["data"]["code"], "AUTHORITY_OPERATION_KEY_UNAVAILABLE")
+        for key in ("", " spaces ", "x" * 37, "x" * 129, 42, True, {}, []):
+            with self.subTest(key=key):
+                response = self._submit_with_operation_key(key)
+                self.assertEqual(response.status_code, 400, response.get_json())
+                self.assertEqual(response.get_json()["error"]["data"]["code"], "INVALID_PARAMS")
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 0)
+
     # -----------------------------------------------------------------------
     # Statistics Tests
     # -----------------------------------------------------------------------

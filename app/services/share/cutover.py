@@ -28,6 +28,10 @@ from app.repositories.deck_tree_query import (
     collect_ancestor_ids,
     collect_subtree_ids,
 )
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.services import (
     deck_release_service,
     deck_working_tree_service,
@@ -269,6 +273,17 @@ def _assert_cutover_note_equivalence(
 def migrate_legacy_clone_install_to_overlay(
     install: DeckInstall,
 ) -> dict[str, int]:
+    # This cutover rewrites CardProgress/card identities and removes copied
+    # Notes. Hold the learner fence before even building a clone map or overlay.
+    try:
+        lock_study_authority_route(db.session, learner_user_id=install.user_id)
+    except StudyAuthorityFenceError as exc:
+        raise ShareControllerError(
+            f"Install {install.id}: clone cutover is unavailable for this learner ({exc.code}).",
+            status=409,
+            error="CLONE_CUTOVER_NOT_READY",
+        ) from exc
+
     deck_item = db.session.get(DeckMarketplaceItem, install.deck_item_id)
     source_deck_id = install.source_deck_id or (deck_item.source_deck_id if deck_item else None)
     if source_deck_id is None:

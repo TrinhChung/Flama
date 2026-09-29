@@ -10,9 +10,11 @@ import type {
   StudySessionCommitReceipt,
   StudySessionSnapshot,
   StudySessionStatus,
+  StudySessionEvent,
 } from '../types'
 import { fetchStudyScopeCompositions } from '../api'
 import type { SchedulerDecision } from '../scheduler/types'
+import { NOTE_STORAGE_PROFILE } from '../scheduler/noteStoragePrecision'
 import {
   applyCommitReceipt,
   applyLocalAnswer,
@@ -39,6 +41,8 @@ import type {
 } from '../session/sessionStore'
 import { patchRenderContext } from '../renderer/clientRenderer'
 import { canonicalDigest } from '../session/canonicalDigest'
+import { hasUnacknowledgedStudyWork } from '../session/batchReceipt'
+import { flushNoteBatchStream, sendNoteBatchOnExit, usesNoteBatchTransport } from '../session/noteBatchTransport'
 import {
   useStudySessionLease,
   waitForNextOperationCheck,
@@ -69,11 +73,32 @@ type SessionMutationOwner = Readonly<{
 function isCommitReceipt(value: unknown): value is StudySessionCommitReceipt {
   if (!value || typeof value !== 'object') return false
   const receipt = value as Partial<StudySessionCommitReceipt>
-  return receipt.schema_version === 'study-commit-receipt.v1'
+  return (
+    receipt.schema_version === 'study-commit-receipt.v1'
+    || receipt.schema_version === 'study-commit-receipt.v2'
+  )
     && receipt.success === true
     && typeof receipt.session_id === 'string'
     && typeof receipt.commit_id === 'string'
     && Array.isArray(receipt.updated_cards)
+}
+
+function requireMatchingCommitReceipt(value: unknown, session: PersistedStudySession) {
+  if (
+    !isCommitReceipt(value)
+    || value.session_id !== session.snapshot.session_id
+    || value.commit_id !== session.commit_id
+    || value.applied_event_count !== session.events.length
+    || value.commit_reason !== session.commit_reason
+    || (session.snapshot.schema_version === 'study-session.v4' && (
+      value.schema_version !== 'study-commit-receipt.v2'
+      || value.authority_mode !== 'NOTE'
+      || value.enrollment_epoch !== session.snapshot.enrollment_epoch
+    ))
+  ) {
+    throw new ApiError('Chưa nhận được xác nhận lưu hợp lệ. Dữ liệu vẫn được giữ để thử lại.', 502, 'INVALID_COMMIT_RECEIPT')
+  }
+  return value
 }
 
 function openSnapshot(userId: number, deckId: string, compositionId: string) {
@@ -88,9 +113,12 @@ function openSnapshot(userId: number, deckId: string, compositionId: string) {
       scope_id: deckId,
       composition_id: compositionId,
       accepted_session_schema_versions: [
+        'study-session.v4',
         'study-session.v3',
         'study-session.v2',
       ],
+      accepted_batch_schema_versions: ['study-batch.v3'],
+      accepted_note_storage_profiles: [NOTE_STORAGE_PROFILE],
     },
   ).finally(() => {
     openingRequests.delete(key)
@@ -113,8 +141,13 @@ export function useStudySession(deckId: string | null) {
   const [scopeName, setScopeName] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<StudySessionCommitReceipt | null>(null)
   const [tick, setTick] = useState(0)
+  const [onlineRetrySequence, setOnlineRetrySequence] = useState(0)
+  const finalizedSessionRef = useRef<string | null>(null)
 
   const clockRef = useRef<{
+    sessionId: string
+    openedClientAtMs: number
+    serverNowUtc: string
     serverAtMs: number
     performanceAtMs: number
   } | null>(null)
@@ -124,6 +157,15 @@ export function useStudySession(deckId: string | null) {
   const sessionDurableRef = useRef(true)
   const exitFlushRef = useRef<string | null>(null)
   const recoveryAttemptRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const retryPendingCommit = () => {
+      recoveryAttemptRef.current = null
+      setOnlineRetrySequence((value) => value + 1)
+    }
+    window.addEventListener('online', retryPendingCommit)
+    return () => window.removeEventListener('online', retryPendingCommit)
+  }, [])
 
   const currentScopeKey = useMemo(() => (
     deckId && userId !== null ? scopeKey(userId, 'deck', deckId) : null
@@ -143,11 +185,20 @@ export function useStudySession(deckId: string | null) {
       clockRef.current = null
       return
     }
+    const clock = clockRef.current
+    if (
+      clock?.sessionId === next.snapshot.session_id
+      && clock.openedClientAtMs === next.opened_client_at_ms
+      && clock.serverNowUtc === next.snapshot.server_now_utc
+    ) return
     const elapsedWall = Math.max(
       0,
       Date.now() - next.opened_client_at_ms,
     )
     clockRef.current = {
+      sessionId: next.snapshot.session_id,
+      openedClientAtMs: next.opened_client_at_ms,
+      serverNowUtc: next.snapshot.server_now_utc,
       serverAtMs: Date.parse(next.snapshot.server_now_utc) + elapsedWall,
       performanceAtMs: performance.now(),
     }
@@ -271,7 +322,7 @@ export function useStudySession(deckId: string | null) {
           ? Date.parse(restored.snapshot.expires_at)
           : 0
         let active = restored
-        if (active && expiresAt <= Date.now()) {
+        if (active && expiresAt <= Date.now() && !hasUnacknowledgedStudyWork(active)) {
           await removeStudySessionIfMatches(
             key,
             active.snapshot.session_id,
@@ -286,7 +337,7 @@ export function useStudySession(deckId: string | null) {
               `/api/study/sessions/${activeSessionId}`,
             )
             if (!isThisLease()) return
-            if (serverSession.status !== 'open' || (serverSession.stale && active.events.length === 0)) {
+            if (!hasUnacknowledgedStudyWork(active) && (serverSession.status !== 'open' || serverSession.stale)) {
               await removeStudySessionIfMatches(
                 key,
                 activeSessionId,
@@ -296,7 +347,7 @@ export function useStudySession(deckId: string | null) {
             }
           } catch (caught) {
             if (!isThisLease()) return
-            if (caught instanceof ApiError && caught.code === 'SESSION_NOT_FOUND') {
+            if (caught instanceof ApiError && caught.code === 'SESSION_NOT_FOUND' && active && !hasUnacknowledgedStudyWork(active)) {
               await removeStudySessionIfMatches(
                 key,
                 activeSessionId,
@@ -525,14 +576,46 @@ export function useStudySession(deckId: string | null) {
       if (!active || !isThisLease() || !hasLeaseRef.current) {
         throw new Error('Study session lease is not held by this window.')
       }
+      if (finalizedSessionRef.current === active.snapshot.session_id) return null
+      if (usesNoteBatchTransport(active)) {
+        const flushed = await flushNoteBatchStream(active, {
+          checkOwner: () => {
+            if (!isThisLease() || !hasLeaseRef.current) throw new DOMException('Study lease changed.', 'AbortError')
+          },
+          persist: async (next) => {
+            activateSession(next)
+            sessionDurableRef.current = await saveStudySession(next)
+            return sessionDurableRef.current
+          },
+        }, options)
+        if (!isThisLease() || !hasLeaseRef.current) return flushed.receipt
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
+          queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
+          queryClient.invalidateQueries({ queryKey: ['stats'] }),
+        ])
+        if (!isThisLease() || !hasLeaseRef.current) return flushed.receipt
+        if (flushed.receipt?.is_final) {
+          await removeStudySessionIfMatches(active.scope_key, active.snapshot.session_id)
+          if (!isThisLease() || !hasLeaseRef.current) return flushed.receipt
+          finalizedSessionRef.current = active.snapshot.session_id
+          setReceipt(flushed.receipt)
+        } else {
+          setReceipt(null)
+        }
+        activateSession(flushed.session)
+        setError(null)
+        return flushed.receipt
+      }
       const prepared = prepareCommit(active, options)
       if (isThisLease()) activateSession(prepared.session)
       sessionDurableRef.current = await saveStudySession(prepared.session)
-      const result = await appApi.mutate<StudySessionCommitReceipt>(
+      const response = await appApi.mutate<unknown>(
         `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
         'POST',
         prepared.payload,
       )
+      const result = requireMatchingCommitReceipt(response, prepared.session)
       if (!isThisLease()) return result
       const batchReviews = prepared.session.events.length
       const batchDurationMs = prepared.session.events.reduce(
@@ -605,7 +688,7 @@ export function useStudySession(deckId: string | null) {
         if (!isThisLease()) return caught.details
         const pending = sessionRef.current
         if (pending) {
-          const result = caught.details
+          const result = requireMatchingCommitReceipt(caught.details, pending)
           const batchReviews = pending.events.length
           const batchDurationMs = pending.events.reduce(
             (sum, ev) => sum + (ev.duration_ms || 0),
@@ -692,7 +775,9 @@ export function useStudySession(deckId: string | null) {
 
   useEffect(() => {
     if (!session || !view || busy || receipt || !hasLease) return
-    if (session.status === 'pending_commit') {
+    if (session.status === 'pending_commit' || (
+      usesNoteBatchTransport(session) && Boolean(session.in_flight_batches?.length)
+    )) {
       const recoveryKey = [
         session.snapshot.session_id,
         session.commit_id,
@@ -715,7 +800,16 @@ export function useStudySession(deckId: string | null) {
         resumeAfterCommit: false,
       }).catch(() => {})
     }
-  }, [busy, commit, hasLease, receipt, session, view])
+  }, [busy, commit, hasLease, onlineRetrySequence, receipt, session, view])
+
+  useEffect(() => {
+    if (!hasLease || busy || receipt || !(error instanceof ApiError) || error.code !== 'BATCH_PENDING') return
+    const timer = window.setTimeout(() => {
+      recoveryAttemptRef.current = null
+      setOnlineRetrySequence((value) => value + 1)
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [busy, error, hasLease, receipt])
 
   const flushOnExit = useCallback(() => {
     const controller = leaseControllerRef.current
@@ -731,7 +825,23 @@ export function useStudySession(deckId: string | null) {
         owner = await waitForMutation('page-exit', controller)
         if (!owner || controller.signal.aborted) return
         const active = sessionRef.current
-        if (!active || active.events.length === 0) return
+        if (!active || finalizedSessionRef.current === active.snapshot.session_id) return
+        if (usesNoteBatchTransport(active)) {
+          await sendNoteBatchOnExit(active, {
+            checkOwner: () => {
+              if (controller.signal.aborted || !ownedLeaseControllersRef.current.has(controller)) {
+                throw new DOMException('Study lease changed.', 'AbortError')
+              }
+            },
+            persist: async (next) => {
+              if (leaseControllerRef.current === controller) sessionRef.current = next
+              sessionDurableRef.current = await saveStudySession(next)
+              return sessionDurableRef.current
+            },
+          })
+          return
+        }
+        if (active.events.length === 0) return
         const prepared = prepareCommit(active, {
           reason: active.status === 'pending_commit'
             ? active.commit_reason ?? undefined
@@ -750,11 +860,12 @@ export function useStudySession(deckId: string | null) {
           sessionRef.current = prepared.session
         }
         sessionDurableRef.current = await saveStudySession(prepared.session)
-        await appApi.mutateKeepalive<StudySessionCommitReceipt>(
+        const response = await appApi.mutateKeepalive<unknown>(
           `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
           'POST',
           prepared.payload,
         )
+        requireMatchingCommitReceipt(response, prepared.session)
         await removeStudySessionIfMatches(
           prepared.session.scope_key,
           prepared.session.snapshot.session_id,
@@ -1023,7 +1134,10 @@ export function useStudySession(deckId: string | null) {
       || !hasLeaseRef.current
       || mutationOwnerRef.current
     ) return
-    if (!force && (sessionRef.current?.events.length ?? 0) > 0) {
+    const beforeReload = sessionRef.current
+    if (!force && beforeReload && finalizedSessionRef.current !== beforeReload.snapshot.session_id && (
+      hasUnacknowledgedStudyWork(beforeReload) || usesNoteBatchTransport(beforeReload)
+    )) {
       const committed = await commit({ reason: 'manual_exit' })
       if (!committed) return
     }
@@ -1164,22 +1278,27 @@ export function useStudySession(deckId: string | null) {
       easy_count: 0,
     }
     // If the session is active and has uncommitted events, combine with accumulated
-    const isUncommitted = session?.status === 'active' && Boolean(session?.events?.length)
+    const pendingEvents = session && usesNoteBatchTransport(session) && !receipt
+      ? [...(session.in_flight_batches ?? []).flatMap<StudySessionEvent>((batch) => batch.events), ...session.events]
+      : session?.events ?? []
+    const isUncommitted = session && !receipt && (
+      session.status === 'active' || usesNoteBatchTransport(session)
+    ) && pendingEvents.length > 0
     if (!isUncommitted || !session) return acc
-    const batchDurationMs = session.events.reduce((sum, ev) => sum + (ev.duration_ms || 0), 0)
-    const batchAgain = session.events.filter((ev) => ev.rating === 'again').length
-    const batchHard = session.events.filter((ev) => ev.rating === 'hard').length
-    const batchGood = session.events.filter((ev) => ev.rating === 'good').length
-    const batchEasy = session.events.filter((ev) => ev.rating === 'easy').length
+    const batchDurationMs = pendingEvents.reduce((sum, ev) => sum + (ev.duration_ms || 0), 0)
+    const batchAgain = pendingEvents.filter((ev) => ev.rating === 'again').length
+    const batchHard = pendingEvents.filter((ev) => ev.rating === 'hard').length
+    const batchGood = pendingEvents.filter((ev) => ev.rating === 'good').length
+    const batchEasy = pendingEvents.filter((ev) => ev.rating === 'easy').length
     return {
-      total_reviews: acc.total_reviews + session.events.length,
+      total_reviews: acc.total_reviews + pendingEvents.length,
       total_duration_ms: acc.total_duration_ms + batchDurationMs,
       again_count: acc.again_count + batchAgain,
       hard_count: acc.hard_count + batchHard,
       good_count: acc.good_count + batchGood,
       easy_count: acc.easy_count + batchEasy,
     }
-  }, [session])
+  }, [receipt, session])
 
   return {
     session,

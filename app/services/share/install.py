@@ -84,6 +84,7 @@ logger = logging.getLogger(__name__)
 
 from app.services.share.helpers import (
     ShareControllerError,
+    _fence_overlay_install_route,
     _audit,
     _elapsed_ms,
     _increment_counter,
@@ -146,12 +147,12 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             )
 
         try:
-            install_result = flashcards_share.install_shared_deck_item_for_user(
+            install_result = install_shared_deck_item_for_user(
                 deck_item,
                 user_id=user_id,
                 publish_statuses_visible=publish_statuses_visible,
             )
-        except flashcards_share.ShareControllerError as exc:
+        except ShareControllerError as exc:
             db.session.rollback()
             _log_shared_deck_install_performance(
                 deck_item_id=performance_deck_item_id,
@@ -180,7 +181,7 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             raise
         except OperationalError as exc:
             db.session.rollback()
-            if flashcards_share._is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
                 logger.warning(
                     "Deadlock while installing shared deck "
                     "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
@@ -191,7 +192,7 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
                 )
                 time.sleep(0.05 * attempt)
                 continue
-            if flashcards_share._is_mysql_deadlock(exc):
+            if _is_mysql_deadlock(exc):
                 return None, SHARED_DECK_INSTALL_DEADLOCK_MESSAGE, None, 409
             raise
 
@@ -228,7 +229,7 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             raise
         except OperationalError as exc:
             db.session.rollback()
-            if flashcards_share._is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
                 logger.warning(
                     "Deadlock while committing shared deck install "
                     "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
@@ -239,7 +240,7 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
                 )
                 time.sleep(0.05 * attempt)
                 continue
-            if flashcards_share._is_mysql_deadlock(exc):
+            if _is_mysql_deadlock(exc):
                 return None, SHARED_DECK_INSTALL_DEADLOCK_MESSAGE, None, 409
             raise
 
@@ -280,6 +281,8 @@ def install_shared_deck_item_for_user(
             "Owner cannot install own deck item.",
             status=409,
         )
+
+    _fence_overlay_install_route(user_id=user_id)
 
     existing = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=user_id).first()
     if existing:

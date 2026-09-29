@@ -3,8 +3,11 @@ import { resolveReviewAction } from '../interactions/reviewInteraction'
 import {
   STUDY_SESSION_SCHEMA_V2,
   STUDY_SESSION_SCHEMA_V3,
+  STUDY_SESSION_SCHEMA_V4,
+  reviewEventWireIdentityV4,
   reviewEventWireIdentity,
   validateReviewEventWireIdentity,
+  validateReviewEventWireIdentityV4,
   wireEnvelopeForSession,
 } from './wireContract'
 
@@ -25,9 +28,86 @@ describe('Study Session wire contracts', () => {
       commitSchema: 'study-commit.v2',
       batchSchema: 'study-batch.v2',
     })
+    expect(wireEnvelopeForSession(STUDY_SESSION_SCHEMA_V4)).toMatchObject({
+      commitSchema: 'study-commit.v3',
+      batchSchema: 'study-batch.v3',
+      requiresNoteAuthorityIdentity: true,
+    })
     expect(() => wireEnvelopeForSession('study-session.latest')).toThrow(
       /Unsupported Study Session schema/,
     )
+  })
+
+  it('builds and validates exact v4 NOTE authority identity', () => {
+    const authority = {
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+    }
+    const event = {
+      event_id: 'operation-1',
+      rating: 'good',
+      ...reviewEventWireIdentityV4(
+        'session-1',
+        'operation-1',
+        resolveReviewAction('good'),
+        policy,
+        authority,
+      ),
+    }
+    expect(validateReviewEventWireIdentityV4(event, {
+      sessionId: 'session-1',
+      policy,
+      authority,
+    }).rating).toBe('good')
+    expect(() => validateReviewEventWireIdentityV4(
+      { ...event, operation_key: 'operation-2' },
+      { sessionId: 'session-1', policy, authority },
+    )).toThrow(/operation_key/)
+    expect(() => reviewEventWireIdentityV4(
+      'session-1',
+      'operation-1',
+      resolveReviewAction('good'),
+      policy,
+      { ...authority, base_authority_revision: '07' },
+    )).toThrow(/not canonical/)
+    expect(() => validateReviewEventWireIdentity(
+      event,
+      { schema: STUDY_SESSION_SCHEMA_V3, sessionId: 'session-1', policy },
+    )).toThrow(/v4 NOTE authority/)
+  })
+
+  it('projects full snapshot pins onto the exact v4 event identity', () => {
+    const pin = {
+      schema_version: 'study-note-authority-pin.v1',
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+      future_snapshot_metadata: 'not-an-event-field',
+    }
+    const identity = reviewEventWireIdentityV4(
+      'session-1', 'operation-1', resolveReviewAction('good'), policy, pin,
+    )
+    expect(identity).toEqual({
+      ...reviewEventWireIdentity(
+        STUDY_SESSION_SCHEMA_V3, 'session-1', resolveReviewAction('good'), policy,
+      ),
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+      operation_key: 'operation-1',
+    })
+    expect(validateReviewEventWireIdentityV4({
+      ...identity, event_id: 'operation-1', rating: 'good',
+    }, { sessionId: 'session-1', policy, authority: pin }).rating).toBe('good')
   })
 
   it('builds mandatory v3 identity from the pinned session and policy', () => {

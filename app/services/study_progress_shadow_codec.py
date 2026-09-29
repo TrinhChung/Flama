@@ -419,17 +419,90 @@ def state_document(payload: Mapping[str, Any]) -> CanonicalDocument:
     return canonical_document(payload, too_large_code="STATE_PAYLOAD_TOO_LARGE")
 
 
-def algorithm_state_hash(payload: Mapping[str, Any]) -> bytes:
+def algorithm_state_hash(
+    payload: Mapping[str, Any],
+    *,
+    algorithm_key: str = ALGORITHM_KEY,
+    algorithm_version: str = ALGORITHM_VERSION,
+    state_schema_version: str = STATE_SCHEMA_VERSION,
+    storage_codec: str = STORAGE_CODEC,
+) -> bytes:
     envelope = {
-        "algorithm_key": ALGORITHM_KEY,
-        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_key": algorithm_key,
+        "algorithm_version": algorithm_version,
         "payload": dict(payload),
-        "state_schema_version": STATE_SCHEMA_VERSION,
-        "storage_codec": STORAGE_CODEC,
+        "state_schema_version": state_schema_version,
+        "storage_codec": storage_codec,
     }
     return canonical_document(
         envelope, too_large_code="STATE_PAYLOAD_TOO_LARGE"
     ).digest
+
+
+def serialize_card_state(state: CardState) -> CanonicalDocument:
+    """Encode one scheduler CardState with the registered legacy state codec."""
+
+    if not isinstance(state, CardState):
+        raise StudyProgressCodecError(
+            "INVALID_STATE_VALUE", "Algorithm State must be a CardState."
+        )
+    memory_payload = None
+    if state.memoryState is not None:
+        if not isinstance(state.memoryState, FsrsMemoryState):
+            raise StudyProgressCodecError(
+                "INVALID_STATE_VALUE", "memory_state must be an FsrsMemoryState."
+            )
+        memory_payload = {
+            "difficulty": encode_float(
+                state.memoryState.difficulty,
+                field_name="memory_state.difficulty",
+                normalize_zero=True,
+            ),
+            "stability": encode_float(
+                state.memoryState.stability,
+                field_name="memory_state.stability",
+                normalize_zero=True,
+            ),
+        }
+    document = state_document(
+        {
+            "due_at": (
+                encode_datetime(state.due, field_name="due_at")
+                if state.due is not None
+                else None
+            ),
+            "due_day": (
+                encode_integer(state.dueDay, field_name="due_day")
+                if state.dueDay is not None
+                else None
+            ),
+            "ease": encode_float(state.ease, field_name="ease", normalize_zero=True),
+            "interval_days": encode_float(
+                state.intervalDays,
+                field_name="interval_days",
+                normalize_zero=True,
+            ),
+            "lapses": encode_integer(state.lapses, field_name="lapses"),
+            "last_review_at": (
+                encode_datetime(state.lastReviewAt, field_name="last_review_at")
+                if state.lastReviewAt is not None
+                else None
+            ),
+            "leeched": state.leeched,
+            "memory_state": memory_payload,
+            "reps": encode_integer(state.reps, field_name="reps"),
+            "review_kind": state.reviewKind,
+            "scheduler_mode": state.schedulerMode,
+            "step_index": encode_integer(state.stepIndex, field_name="step_index"),
+            "suspended": state.suspended,
+            "suspension_reason": state.suspensionReason,
+            "type": state.type,
+        }
+    )
+    # Decode before returning so type, bounds and field vocabulary are checked
+    # by the same registered contract used for persisted authority state.
+    _decode_legacy_anki_state(document.payload)
+    return document
 
 
 def _decode_legacy_anki_state(payload: Mapping[str, Any]) -> CardState:
@@ -550,6 +623,13 @@ class StateDecoderRegistry:
             raise ValueError(f"State decoder {identity!r} is already registered.")
         self._decoders[identity] = decoder
 
+    def has_decoder(
+        self, identity: tuple[str, str, str, str]
+    ) -> bool:
+        """Check an exact persisted Algorithm/state/codec identity."""
+
+        return identity in self._decoders
+
     def decode(
         self,
         *,
@@ -574,7 +654,13 @@ class StateDecoderRegistry:
             )
         document = state_document(payload)
         _verify_document(document, expected_size=expected_size, expected_hash=None)
-        if expected_hash is not None and algorithm_state_hash(payload) != expected_hash:
+        if expected_hash is not None and algorithm_state_hash(
+            payload,
+            algorithm_key=algorithm_key,
+            algorithm_version=algorithm_version,
+            state_schema_version=state_schema_version,
+            storage_codec=storage_codec,
+        ) != expected_hash:
             raise StudyProgressCodecError(
                 "STATE_HASH_MISMATCH", "Algorithm State digest does not match."
             )

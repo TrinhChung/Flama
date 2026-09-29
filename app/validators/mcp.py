@@ -766,10 +766,21 @@ def validate_submit_review_arguments(arguments: Any) -> dict[str, Any]:
         except (TypeError, ValueError):
             duration_ms = None
 
+    operation_key = arguments.get("operation_key")
+    if operation_key is not None and (
+        not isinstance(operation_key, str) or not operation_key
+        or operation_key != operation_key.strip() or len(operation_key) > 36
+    ):
+        raise RequestValidationError(
+            "operation_key must be a canonical non-empty string up to 36 characters (a UUID is recommended).",
+            field="operation_key", status=400, code="INVALID_PARAMS",
+        )
+
     return {
         "card_id": str(card_id).strip(),
         "rating": rating,
         "duration_ms": duration_ms,
+        **({"operation_key": operation_key} if operation_key is not None else {}),
     }
 
 

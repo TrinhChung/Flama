@@ -75,6 +75,8 @@ jobs:
           REDIS_URL: ${{ vars.REDIS_URL || 'redis://127.0.0.1:6379/0' }}
           REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS: ${{ vars.REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS || '1' }}
           REDIS_SOCKET_TIMEOUT_SECONDS: ${{ vars.REDIS_SOCKET_TIMEOUT_SECONDS || '1' }}
+          STUDY_QUEUE_NAMESPACE: ${{ vars.STUDY_QUEUE_NAMESPACE || 'flama-production' }}
+          STUDY_ASYNC_BATCH_ENABLED: ${{ vars.STUDY_ASYNC_BATCH_ENABLED || '0' }}
           RATE_LIMIT_BACKEND: ${{ vars.RATE_LIMIT_BACKEND || 'redis' }}
           RATE_LIMIT_KEY_PREFIX: ${{ vars.RATE_LIMIT_KEY_PREFIX || 'flama:v1' }}
           RATE_LIMIT_DAILY_ENABLED: ${{ vars.RATE_LIMIT_DAILY_ENABLED || 'true' }}
@@ -265,12 +267,34 @@ jobs:
             fi
 
             echo "Deployment failed after activation; restoring the previous release." >&2
+            # Quiesce request writers before inspecting durable state. Leave the
+            # new consumer/environment/release intact if rollback is unsafe, so
+            # accepted work can drain and an operator can audit/rollback NOTE.
+            if ! systemctl stop flama.service flama-connect.service; then
+              echo "Automatic rollback blocked: HTTP/Connect writers did not stop." >&2
+              return
+            fi
+            if ! systemd-run --quiet --wait --collect --pipe \
+              --unit="flama-study-rollback-check-$RELEASE_ID" \
+              --property=User=flama \
+              --property=Group=flama \
+              --property="WorkingDirectory=$release_dir" \
+              --property="EnvironmentFile=$environment_file" \
+              "$PROJECT_DIR/venv/bin/python" study_worker.py --check-code-rollback --writers-quiesced; then
+              echo "Automatic rollback blocked: retain this release/consumer and resolve the reported Study gate before restoring code." >&2
+              return
+            fi
+            if ! systemctl stop flama-study-worker.service; then
+              echo "Automatic rollback blocked: the Study consumer did not stop." >&2
+              return
+            fi
             if [ -f "$environment_backup_file" ]; then
               cp -p "$environment_backup_file" "$environment_file"
             fi
 
             if [ -n "$previous_release" ] && [ -d "$previous_release" ]; then
               previous_connect_available=0
+              previous_worker_available=0
               if [ -f "$previous_release/deploy/flama.service" ]; then
                 install -m 0644 \
                   "$previous_release/deploy/flama.service" \
@@ -282,8 +306,19 @@ jobs:
                   /etc/systemd/system/flama-connect.service
                 previous_connect_available=1
               fi
+              if [ -f "$previous_release/deploy/flama-study-worker.service" ]; then
+                install -m 0644 \
+                  "$previous_release/deploy/flama-study-worker.service" \
+                  /etc/systemd/system/flama-study-worker.service
+                previous_worker_available=1
+              fi
               ln -sfn "$previous_release" "$PROJECT_DIR/current"
               systemctl daemon-reload || true
+              if [ "$previous_worker_available" -eq 1 ]; then
+                systemctl restart flama-study-worker.service || true
+              else
+                systemctl disable flama-study-worker.service || true
+              fi
               systemctl restart flama.service || true
               if [ "$previous_connect_available" -eq 1 ]; then
                 systemctl restart flama-connect.service || true
@@ -309,6 +344,7 @@ jobs:
 
             systemctl stop flama.service || true
             systemctl stop flama-connect.service || true
+            systemctl disable flama-study-worker.service || true
             echo "No previous release was available; stopped flama.service." >&2
           }
 
@@ -331,6 +367,10 @@ jobs:
           test -f "$managed_env_payload_path"
           mkdir -p "$release_dir"
           tar -xzf "$archive_path" -C "$release_dir"
+          # /api/health reports this stamp. The frontend deploy refuses to
+          # publish a SPA until the live backend serves its API; a rollback
+          # switches the symlink and therefore the reported release with it.
+          printf '%s\n' "$RELEASE_ID" > "$release_dir/REVISION"
           cp -p "$environment_file" "$desired_environment_file"
           python3 "$release_dir/deploy/sync_managed_env.py" apply \
             --env-file "$desired_environment_file" \
@@ -364,6 +404,7 @@ jobs:
             "$PROJECT_DIR/venv/bin/flask" --app wsgi.py bootstrap-admin-sync
           install -m 0644 "$release_dir/deploy/flama.service" /etc/systemd/system/flama.service
           install -m 0644 "$release_dir/deploy/flama-connect.service" /etc/systemd/system/flama-connect.service
+          install -m 0644 "$release_dir/deploy/flama-study-worker.service" /etc/systemd/system/flama-study-worker.service
 
           previous_release="$(readlink -f "$PROJECT_DIR/current" 2>/dev/null || true)"
           case "$previous_release" in
@@ -379,6 +420,10 @@ jobs:
 
           cp -p "$environment_file" "$environment_backup_file"
           cp -p "$environment_file" /etc/flama/flama.env.bak
+          # Stop the previous consumer under its original environment before
+          # changing the symlink/namespace; DB admissions survive the handoff.
+          systemctl daemon-reload
+          systemctl stop flama-study-worker.service
           activation_started=1
           mv -f "$desired_environment_file" "$environment_file"
           ln -sfn "$release_dir" "$PROJECT_DIR/current"
@@ -386,6 +431,8 @@ jobs:
           systemctl daemon-reload
           systemctl enable flama.service
           systemctl enable flama-connect.service
+          systemctl enable flama-study-worker.service
+          systemctl restart flama-study-worker.service
           systemctl restart flama.service
           systemctl restart flama-connect.service
 
@@ -393,7 +440,15 @@ jobs:
             if curl --fail --silent --show-error --max-time 5 \
               http://127.0.0.1:4789/api/health >/dev/null \
               && curl --fail --silent --show-error --max-time 5 \
-              http://127.0.0.1:4790/healthz >/dev/null; then
+              http://127.0.0.1:4790/healthz >/dev/null \
+              && systemctl is-active --quiet flama-study-worker.service \
+              && systemd-run --quiet --wait --collect --pipe \
+                --unit="flama-study-ready-$RELEASE_ID-$attempt" \
+                --property=User=flama \
+                --property=Group=flama \
+                --property="WorkingDirectory=$release_dir" \
+                --property="EnvironmentFile=$environment_file" \
+                "$PROJECT_DIR/venv/bin/python" study_worker.py --check-ready; then
               touch "$release_dir/.deployment_succeeded"
               deployment_succeeded=1
               python3 "$release_dir/deploy/prune_releases.py" \
@@ -402,6 +457,7 @@ jobs:
                 --keep 2 || echo "Warning: failed to prune old releases." >&2
               systemctl --no-pager --full status flama.service || true
               systemctl --no-pager --full status flama-connect.service || true
+              systemctl --no-pager --full status flama-study-worker.service || true
               exit 0
             fi
             sleep 3
@@ -409,8 +465,10 @@ jobs:
 
           systemctl --no-pager --full status flama.service || true
           systemctl --no-pager --full status flama-connect.service || true
+          systemctl --no-pager --full status flama-study-worker.service || true
           journalctl -u flama.service -n 100 --no-pager || true
           journalctl -u flama-connect.service -n 100 --no-pager || true
+          journalctl -u flama-study-worker.service -n 100 --no-pager || true
           exit 1
           REMOTE_SCRIPT
 

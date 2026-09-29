@@ -1,9 +1,10 @@
-"""Transactional native-writer mirror for Phase 4 learner/Note progress.
+"""Transactional legacy-writer mirror and Phase 5 authority tripwire.
 
 The transaction owner calls ``prepare_native_mirror`` before taking any
 CardProgress lock and calls ``finalize_native_mirror`` after ReviewEvent ids and
-``last_review_event_id`` pointers have been flushed.  This module never commits
-or rolls back.  CardProgress and ReviewEvent remain authoritative in Phase 4.
+``last_review_event_id`` pointers have been flushed. This module never commits
+or rolls back. Every entrypoint first fences the learner and rejects NOTE so a
+legacy/external writer cannot bypass the canonical Phase 5 command.
 """
 
 from __future__ import annotations
@@ -19,6 +20,10 @@ from flask import current_app
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.repositories.study_progress_shadow_repository import (
     assert_subject_finalization_fence,
     lock_subjects_in_canonical_order,
@@ -31,6 +36,11 @@ from app.services.study_progress_contract import (
     PROVENANCE_CODES,
     RAW_SCHEMA_VERSION,
     STORAGE_CODEC,
+)
+from app.services.study_progress_history_service import (
+    NativeHistoryFactInput,
+    StudyProgressHistoryError,
+    append_native_history_fact,
 )
 from app.services.study_progress_shadow_codec import (
     canonical_document,
@@ -206,15 +216,20 @@ def prepare_native_mirror(
 ) -> NativeMirrorPlan | None:
     """Lock affected learner/Note subjects and all current CardProgress siblings.
 
-    The function is a strict no-op while the feature flag is disabled.  With the
-    flag enabled, lock order is subject keys first and authoritative progress
-    rows second, both in canonical binary identity order.
+    The function always acquires the learner authority fence. It performs no
+    mirror writes while the feature flag is disabled. With the flag enabled,
+    lock order is subject keys first and compatibility progress rows second,
+    both in canonical binary identity order.
     """
 
+    learner_id = int(learner_user_id)
+    lock_study_authority_route(
+        session,
+        learner_user_id=learner_id,
+    )
     if not shadow_writes_enabled():
         return None
     prepared_at = _utc_naive(now_utc)
-    learner_id = int(learner_user_id)
     supplied_cards = tuple(cards)
     if not supplied_cards:
         return None
@@ -322,9 +337,6 @@ def prepare_mirror_scopes(
     would result from repeatedly calling ``prepare_native_mirror``.
     """
 
-    if not shadow_writes_enabled():
-        return ()
-    prepared_at = _utc_naive(now_utc)
     keys = sorted(
         {
             (int(learner_user_id), str(note_id))
@@ -335,6 +347,14 @@ def prepare_mirror_scopes(
     )
     if not keys:
         return ()
+    for learner_id in sorted({learner_id for learner_id, _note_id in keys}):
+        lock_study_authority_route(
+            session,
+            learner_user_id=learner_id,
+        )
+    if not shadow_writes_enabled():
+        return ()
+    prepared_at = _utc_naive(now_utc)
 
     subjects = lock_subjects_in_canonical_order(
         session,
@@ -431,6 +451,51 @@ def locked_progress_map(plan: NativeMirrorPlan | None) -> dict[str, CardProgress
     if plan is None:
         return {}
     return plan.locked_progress_by_card_id
+
+
+def compose_locked_lifecycle_plan(
+    session: Session,
+    *,
+    learner_user_id: int,
+    note_id: str,
+    subject: StudyProgressSubject,
+    cards: Iterable[Card],
+    progress_rows: Iterable[CardProgress],
+    prepared_at: datetime,
+) -> NativeMirrorPlan:
+    """Compose a mirror plan from an already locked authority vector."""
+
+    card_rows = tuple(cards)
+    progress = tuple(progress_rows)
+    current_contributors = load_current_contributors(
+        session,
+        subject_id=int(subject.id),
+        subject_generation=int(subject.subject_generation),
+        for_update=True,
+    )
+    return NativeMirrorPlan(
+        session=session,
+        learner_user_id=int(learner_user_id),
+        prepared_at=prepared_at,
+        subjects_by_note_id={
+            str(note_id): _PreparedSubject(
+                note_id=str(note_id),
+                subject=subject,
+                expected_generation=int(subject.subject_generation),
+                expected_mirror_revision=int(subject.mirror_revision),
+                shadow_progress_ids=frozenset(
+                    int(row.live_card_progress_id)
+                    for row in current_contributors
+                    if row.live_card_progress_id is not None
+                ),
+                authority_progress_ids=frozenset(int(row.id) for row in progress),
+            )
+        },
+        cards_by_id={str(card.id): card for card in card_rows},
+        locked_progress_by_card_id={
+            str(row.card_id): row for row in progress if row.card_id is not None
+        },
+    )
 
 
 def _decode_digest(value: str | bytes | None) -> bytes | None:
@@ -870,6 +935,17 @@ def _upsert_state(
     if row is None:
         row = StudyProgressState(subject_id=int(subject.id), created_at=now_utc)
         session.add(row)
+    elif (
+        str(row.algorithm_key),
+        str(row.algorithm_version),
+        str(row.state_schema_version),
+    ) != (mapped.algorithm_key, mapped.algorithm_version, mapped.state_schema_version):
+        # CardProgress always maps to legacy-anki. A Note switched to another
+        # Algorithm must not be silently reverted by a mirror/lifecycle write.
+        raise StudyAuthorityFenceError(
+            "ALGORITHM_IDENTITY_MIRROR_CONFLICT",
+            "A switched Note's Algorithm cannot be rewritten from legacy progress.",
+        )
     row.subject_generation = generation
     row.mirror_revision = mirror_revision
     row.algorithm_key = mapped.algorithm_key
@@ -926,94 +1002,32 @@ def _append_history_facts(
         contributor = contributors_by_progress_id.get(int(progress.id))
         if contributor is None:
             raise _fail("Native mirror history cannot resolve its contributor.")
-        provenance_code, provenance, runtime = _event_provenance(event)
-        fact_identity = canonical_document(
-            {"review_event_id": str(event.id), "source": "review_events"},
-            too_large_code="STATE_PAYLOAD_TOO_LARGE",
-        ).digest
-        existing = session.execute(
-            select(StudyProgressHistoryFact)
-            .where(
-                StudyProgressHistoryFact.learner_user_id == plan.learner_user_id,
-                StudyProgressHistoryFact.fact_identity_hash == fact_identity,
-            )
-            .with_for_update()
-        ).scalar_one_or_none()
-
-        fact_material = {
-            field: getattr(event, field)
-            for field in _HISTORY_PAYLOAD_FIELDS
-        }
-        fact_material["review_event_id"] = int(event.id)
-        fact = canonical_typed_document(
-            fact_material,
-            too_large_code="STATE_PAYLOAD_TOO_LARGE",
-        )
-        if existing is not None:
-            if (
-                existing.review_event_id != int(event.id)
-                or bytes(existing.fact_payload_hash) != fact.digest
-            ):
-                raise _fail("History fact identity was reused with different evidence.")
-            continue
-
-        operation_key = (
-            provenance.get("request_id")
-            or provenance.get("client_event_id")
-            or provenance.get("study_session_id")
-            or f"review-event:{event.id}"
-        )
-        source_operation_key = encode_identity(
-            str(operation_key),
-            max_bytes=512,
-            field_name="source_operation_key",
+        expected_logical_card_key = encode_identity(
+            str(event.card_id), max_bytes=256, field_name="logical_card_key"
         )
         note_id = str(card.note_id)
         completeness = completeness_by_progress_id[int(progress.id)]
-        session.add(
-            StudyProgressHistoryFact(
-                learner_user_id=plan.learner_user_id,
-                subject_id=int(contributor.subject_id),
-                logical_note_key=note_id.encode("utf-8"),
-                subject_generation=generation_by_note[note_id],
-                contributor_id=int(contributor.id),
-                logical_card_key=encode_identity(
-                    str(event.card_id), max_bytes=256, field_name="logical_card_key"
+        try:
+            result = append_native_history_fact(
+                session,
+                command=NativeHistoryFactInput(
+                    learner_user_id=plan.learner_user_id,
+                    subject=plan.subjects_by_note_id[note_id].subject,
+                    contributor=contributor,
+                    review_event=event,
+                    history_completeness_code=completeness,
+                    before_state_hash=history.before_state_hash,
+                    after_state_hash=history.after_state_hash,
                 ),
-                review_event_id=int(event.id),
-                fact_identity_hash=fact_identity,
-                history_schema_version=HISTORY_SCHEMA_VERSION,
-                storage_codec=STORAGE_CODEC,
-                occurred_at=_utc_naive(event.reviewed_at),
-                ingested_at=now_utc,
-                provenance_code=provenance_code,
-                source_operation_key=source_operation_key,
-                action_key=str(runtime.get("action_key") or "") or None,
-                action_version=(
-                    str(runtime.get("action_contract_version") or "") or None
-                ),
-                review_kind=str(event.review_kind or "") or None,
-                algorithm_key=str(runtime.get("algorithm_key") or "") or None,
-                algorithm_version=(
-                    str(runtime.get("algorithm_version") or "") or None
-                ),
-                state_schema_version=(
-                    str(runtime.get("state_schema_version") or "") or None
-                ),
-                scheduler_config_hash=_decode_digest(event.scheduler_config_hash),
-                before_state_hash=_decode_digest(history.before_state_hash),
-                after_state_hash=_decode_digest(history.after_state_hash),
-                history_completeness_code=completeness,
-                gap_reason_code=(
-                    None if completeness == "HISTORY_NATIVE_COMPLETE" else "LEGACY_GAP"
-                ),
-                fact_payload=fact.payload,
-                fact_payload_size=fact.size,
-                fact_payload_hash=fact.digest,
-                created_at=now_utc,
+                now_utc=now_utc,
             )
-        )
-        inserted += 1
+        except StudyProgressHistoryError as exc:
+            raise _fail(str(exc)) from exc
+        if bytes(result.fact.logical_card_key) != expected_logical_card_key:
+            raise _fail("Native history fact Card identity changed during append.")
+        if int(result.fact.subject_generation) != generation_by_note[note_id]:
+            raise _fail("Native history fact generation changed during append.")
+        inserted += int(result.inserted)
     return inserted
 
 

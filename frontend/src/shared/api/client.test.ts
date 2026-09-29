@@ -9,10 +9,15 @@ import {
   getCsrfToken,
   setCsrfToken,
 } from './client'
+import {
+  clearBackendUnavailable,
+  subscribeBackendUnavailable,
+} from './backendAvailability'
 
 describe('apiJsonKeepalive', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    clearBackendUnavailable()
     setCsrfToken('')
     document.head.replaceChildren()
     document.cookie = 'csrf_token=; Max-Age=0; path=/'
@@ -343,6 +348,25 @@ describe('apiJsonKeepalive', () => {
       code: 'UPLOAD_NETWORK_ERROR',
       message: 'Tải lên tệp thất bại do lỗi kết nối tới máy chủ.',
     })
+  })
+
+  it('keeps an offline study request out of the server-maintenance redirect', async () => {
+    const unavailable = vi.fn()
+    const unsubscribe = subscribeBackendUnavailable(unavailable)
+    vi.stubGlobal('navigator', { onLine: false })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(apiRequest('/api/study/sessions/session-1/commit', {
+      method: 'POST',
+      body: JSON.stringify({ events: [] }),
+    })).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 0,
+      code: 'BACKEND_UNAVAILABLE',
+      message: 'Bạn đang ngoại tuyến. Hãy kết nối lại để đồng bộ tiến độ.',
+    })
+    expect(unavailable).not.toHaveBeenCalled()
+    unsubscribe()
   })
 })
 

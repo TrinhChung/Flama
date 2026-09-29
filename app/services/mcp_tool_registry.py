@@ -952,6 +952,7 @@ def _call_submit_review(*, user_id: int, arguments: dict[str, Any]) -> dict[str,
             card_id=arguments["card_id"],
             rating=arguments["rating"],
             duration_ms=arguments.get("duration_ms"),
+            operation_key=arguments.get("operation_key"),
         )
     )
 
@@ -959,13 +960,14 @@ def _call_submit_review(*, user_id: int, arguments: dict[str, Any]) -> dict[str,
 SUBMIT_REVIEW_TOOL = McpToolDefinition(
     name=mcp_tool_service.SUBMIT_REVIEW_TOOL_NAME,
     title="Submit Card Review Answer",
-    description="Submit a review answer rating ('again', 'hard', 'good', 'easy') for a flashcard, recalculating its spaced-repetition schedule using Flama's canonical Anki/FSRS scheduler.",
+    description="Submit a review answer rating ('again', 'hard', 'good', 'easy') using Flama's registered scheduler. For NOTE authority, reuse an operation_key only when retrying the same answer; identical retries return the original result.",
     input_schema={
         "type": "object",
         "properties": {
             "card_id": {"type": "string", "description": "UUID or ID of the card reviewed"},
             "rating": {"type": "string", "enum": ["again", "hard", "good", "easy"], "description": "Review rating button selected"},
             "duration_ms": {"type": ["integer", "null"], "description": "Optional response time in milliseconds"},
+            "operation_key": {"type": ["string", "null"], "minLength": 1, "maxLength": 36, "description": "Optional stable retry identity for NOTE authority only (UUID recommended); use a new key for each new answer. LEGACY rejects this field."},
         },
         "required": ["card_id", "rating"],
         "additionalProperties": False,

@@ -5,6 +5,7 @@ import type {
 } from '../types'
 import { computeDecision } from './legacyEngine'
 import type { SchedulerDecision } from './types'
+import { NOTE_STORAGE_PROFILE } from './noteStoragePrecision'
 
 export const LEGACY_ANKI_ALGORITHM = Object.freeze({
   key: 'legacy-anki',
@@ -294,6 +295,12 @@ export function listClientAlgorithmSupport() {
 export function validateSnapshotAlgorithmContract(
   snapshot: StudySessionSnapshot,
 ) {
+  if (snapshot.storage_profile !== undefined && (
+    snapshot.schema_version !== 'study-session.v4'
+    || snapshot.storage_profile !== NOTE_STORAGE_PROFILE
+  )) {
+    throw new ClientAlgorithmContractError('Unsupported NOTE storage profile.')
+  }
   const sessionAlgorithm = resolveClientAlgorithm(
     snapshot.scheduler_algorithm,
     snapshot.algorithm_version,

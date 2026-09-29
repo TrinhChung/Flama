@@ -43,6 +43,7 @@ jobs:
       redis_contract: ${{ steps.plan.outputs.redis_contract }}
       mysql_contract: ${{ steps.plan.outputs.mysql_contract }}
       deploy: ${{ steps.plan.outputs.deploy }}
+      frontend_deploy: ${{ steps.plan.outputs.frontend_deploy }}
 
     steps:
       - name: Checkout
@@ -107,13 +108,6 @@ jobs:
       - name: Build
         run: npm run build:ci
 
-      - name: Upload React build
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-          retention-days: 1
-
   backend:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
@@ -162,11 +156,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download React build
-        uses: actions/download-artifact@v4
+      # Build the SPA in this job instead of passing an artifact: CI uses no
+      # Actions artifact storage, so an exhausted quota cannot block it.
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          name: frontend-dist
-          path: frontend/dist
+          node-version: '22.22.2'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build React SPA
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build:ci
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -285,4 +288,21 @@ jobs:
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.deploy == 'true'
     uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+
+  # Backend first, SPA second: a SPA published ahead of its backend calls
+  # endpoints that do not exist yet. `!cancelled()` lets a frontend-only push
+  # continue past the skipped backend deploy; a failed one blocks the SPA.
+  deploy-frontend:
+    needs: [changes, frontend, backend, spa-contract, redis-contract, mysql-contract, deploy]
+    if: >-
+      !cancelled() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.changes.outputs.frontend_deploy == 'true' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      needs.frontend.result == 'success' &&
+      (needs.deploy.result == 'success' || needs.changes.outputs.deploy != 'true')
+    uses: ./.github/workflows/deploy-frontend.yml
     secrets: inherit

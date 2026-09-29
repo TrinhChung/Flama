@@ -49,26 +49,30 @@ def _voicevox_error(exc: browse_voicevox_service.BrowseVoiceVoxError):
 @login_required
 def browse_decks_tree():
     user_id, admin_mode, timezone_name = _context()
-    return jsonify(
-        browse_card_service.build_browse_deck_tree(
+    try:
+        payload = browse_card_service.build_browse_deck_tree(
             user_id=user_id,
             admin_mode=admin_mode,
             timezone_name=timezone_name,
         )
-    )
+    except browse_card_service.BrowseApiError as exc:
+        return _browse_error(exc)
+    return jsonify(payload)
 
 
 @browse_bp.get("/decks")
 @login_required
 def browse_decks():
     user_id, admin_mode, timezone_name = _context()
-    return jsonify(
-        browse_card_service.build_browse_decks(
+    try:
+        payload = browse_card_service.build_browse_decks(
             user_id=user_id,
             admin_mode=admin_mode,
             timezone_name=timezone_name,
         )
-    )
+    except browse_card_service.BrowseApiError as exc:
+        return _browse_error(exc)
+    return jsonify(payload)
 
 
 @browse_bp.get("/cards")

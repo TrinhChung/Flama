@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json
 import logging
+import os
 import time
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -15,6 +16,11 @@ from flask import current_app
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload
+
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 
 from app.repositories import (
     deck_change_request_repository,
@@ -237,6 +243,23 @@ class ShareControllerError(Exception):
         self.status = status
         self.field = field
         self.error = error
+
+
+def _fence_overlay_install_route(*, user_id: int) -> None:
+    """Serialize a logical-overlay install/checkout with authority mode switches.
+
+    Both modes are supported: under NOTE, installed source Notes are
+    (learner, source Note) subjects that read as pristine until first study.
+    """
+
+    try:
+        lock_study_authority_route(
+            db.session,
+            learner_user_id=int(user_id),
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        raise ShareControllerError(str(exc), status=409, error=exc.code) from exc
 
 
 def make_unique_note_type_name(user_id: int, base_name: str) -> str:

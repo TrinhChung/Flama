@@ -336,6 +336,33 @@ class TestCounterLogic(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected.id, "review-overdue")
 
+    def test_loaded_review_order_matches_sql_when_due_day_is_missing(self):
+        cards = [
+            SimpleNamespace(id="explicit-day", created_at=self.now),
+            SimpleNamespace(id="missing-day", created_at=self.now),
+        ]
+        progress_map = {
+            "explicit-day": CardProgress(
+                user_id=1,
+                card_id="explicit-day",
+                queue="review",
+                due_day=self.today_idx - 1,
+                due_at=self.now - timedelta(hours=1),
+            ),
+            "missing-day": CardProgress(
+                user_id=1,
+                card_id="missing-day",
+                queue="review",
+                due_day=None,
+                due_at=self.now - timedelta(days=3),
+            ),
+        }
+
+        selected = select_next_due_card_from_loaded(cards, progress_map, now=self.now)
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.id, "explicit-day")
+
 
 if __name__ == '__main__':
     unittest.main()

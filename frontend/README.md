@@ -36,23 +36,44 @@ proxy namespace này tới Flask ở `http://127.0.0.1:4789`.
 
 ## Deploy Cloudflare Pages
 
-Thiết lập project Pages với:
+Production **không** để Cloudflare Pages tự build khi push `master`. Nếu Pages tự
+build, SPA mới lên trong vài chục giây trong khi backend còn đang chạy CI,
+migrate hoặc đã rollback, và màn hình mới gọi vào API chưa tồn tại.
 
-- Root directory: `frontend`
-- Build command: `npm run build`
-- Build output directory: `dist`
+Luồng hiện tại (`.github/workflows/ci.yml`):
 
-Trong **Settings → Environment variables**, thêm cho Production:
+1. CI validate toàn bộ.
+2. `deploy.yml` deploy backend lên VPS và ghi commit vào `REVISION`;
+   `/api/health` trả về `release` là commit đó.
+3. `deploy-frontend.yml` build SPA, chạy `scripts/check_backend_release.py`
+   rồi mới `wrangler pages deploy`. Gate chặn publish nếu backend đang live còn
+   thiếu thay đổi runtime nào (`app/`, `models/`, `migrations/`...) tính đến
+   commit frontend. Backend deploy fail hoặc rollback thì frontend giữ nguyên
+   bản cũ.
 
-```text
-VITE_API_BASE_URL=https://api.example.com/api
-```
+Cấu hình một lần:
 
-Thay `api.example.com` bằng origin public của Flask. Có thể dùng giá trị backend
-staging riêng trong môi trường Preview. Biến này được Vite nhúng vào bundle lúc
-build nên không được chứa secret, API key hoặc thông tin đăng nhập. Frontend tự
-suy ra backend origin từ URL này cho các asset Flask như
-`/static/js/card_renderer_host.js`.
+- Cloudflare Pages → project → **Settings → Builds & deployments → Branch
+  control**: bỏ chọn **Enable automatic production branch deployments**
+  (preview branch giữ nguyên nếu cần).
+- GitHub Environment `Flama`:
+  - secret `CLOUDFLARE_API_TOKEN` (quyền *Account → Cloudflare Pages → Edit*);
+  - variable (hoặc secret) `CLOUDFLARE_ACCOUNT_ID`;
+  - variable `CLOUDFLARE_PAGES_PROJECT` = tên project Pages;
+  - variable `VITE_API_BASE_URL` (mặc định `https://be-flama.stmtp.com/api`),
+    tuỳ chọn `VITE_FLAMA_CONNECT_URL`, `VITE_FLAMA_MCP_URL`.
+
+`VITE_*` được Vite nhúng vào bundle lúc build nên không được chứa secret, API
+key hoặc thông tin đăng nhập. Frontend tự suy ra backend origin từ
+`VITE_API_BASE_URL` cho các asset Flask như `/static/js/card_renderer_host.js`.
+
+Deploy lại thủ công: chạy workflow **Deploy Flama Frontend to Cloudflare
+Pages** trên `master`; gate vẫn áp dụng.
+
+Vì backend luôn lên trước, trong vài phút giữa hai bước (và với tab người dùng
+đang mở) SPA cũ vẫn gọi backend mới. Thay đổi API phải tương thích ngược với SPA
+trước đó: thêm endpoint/field mới trước, chỉ xoá cái cũ ở release sau khi SPA
+không còn dùng.
 
 Khi Pages và Flask khác origin, backend vẫn phải:
 

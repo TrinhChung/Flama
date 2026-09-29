@@ -7,7 +7,9 @@ from typing import Any
 from app.repositories import vocabulary_repository
 from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
 from app.services import flashcards_share_service
+from app.services import browse_card_service
 from app.services.deck_management_service import delete_deck_subtree
+from app.services.stats_overview import get_effective_timezone_name
 from app.services.mcp.base import (
     _build_deck_full_path,
     _compact_description,
@@ -20,6 +22,7 @@ from models.card import Card
 from models.deck import Deck
 from models.note import Note
 from models.note_type import NoteType
+from models.user import User
 
 # 1. Deck Operations
 # ---------------------------------------------------------------------------
@@ -61,10 +64,22 @@ def list_my_decks(*, user_id: int) -> list[dict[str, Any]]:
 
 def get_deck_tree(*, user_id: int) -> list[dict[str, Any]]:
     """Return the hierarchical deck tree structure for the user."""
-    return vocabulary_repository.build_browse_deck_tree_payload(
-        user_id=user_id,
-        admin_mode=False,
-    )
+    user = db.session.get(User, user_id)
+    try:
+        return browse_card_service.build_browse_deck_tree(
+            user_id=user_id,
+            admin_mode=False,
+            timezone_name=get_effective_timezone_name(
+                getattr(user, "timezone", "UTC")
+            ),
+        )["tree"]
+    except browse_card_service.BrowseApiError as exc:
+        raise RequestValidationError(
+            str(exc),
+            field="user_id",
+            status=exc.status,
+            code=exc.code or "BROWSE_AUTHORITY_READ_FAILED",
+        ) from exc
 
 
 def get_deck(*, user_id: int, deck_id: int) -> dict[str, Any]:

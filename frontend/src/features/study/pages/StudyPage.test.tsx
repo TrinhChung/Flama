@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   answer: vi.fn(),
   undo: vi.fn(),
   commit: vi.fn(),
+  reloadSession: vi.fn(),
   prepareDecision: vi.fn(),
   updateCardContent: vi.fn(),
   getBootstrap: vi.fn(),
@@ -60,6 +61,7 @@ vi.mock('../hooks/useStudySession', () => ({
     answer: mocks.answer,
     undo: mocks.undo,
     commit: mocks.commit,
+    reloadSession: mocks.reloadSession,
     requestTakeover: mocks.requestTakeover,
     updateCardContent: mocks.updateCardContent,
   }),
@@ -249,6 +251,31 @@ describe('StudyPage undo interactions', () => {
 
     expect(zEvent.defaultPrevented).toBe(true)
     expect(mocks.undo).toHaveBeenCalledOnce()
+  })
+
+  it('reloads normally without passing the click event as the force flag', async () => {
+    setupActiveStudy()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    const moreButton = container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')
+    expect(moreButton).not.toBeNull()
+    await act(async () => {
+      moreButton?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }))
+      moreButton?.click()
+    })
+    const reloadItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+      (item) => item.querySelector('svg.lucide-rotate-ccw'),
+    )
+    expect(reloadItem).not.toBeUndefined()
+    await act(async () => {
+      reloadItem?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    expect(mocks.reloadSession).toHaveBeenCalledExactlyOnceWith()
   })
 
   it('triggers undo via clicking the Hoàn tác button in StudyBottomBar', async () => {
@@ -620,10 +647,14 @@ describe('StudyPage exit confirmation and completion card gating', () => {
     expect(mocks.blockerState.proceed).toHaveBeenCalledOnce()
   })
 
-  it('renders StudyCompletionCard only when session is complete for today', async () => {
+  it.each([
+    ['complete_today', 'auto_finish'],
+    ['active', 'page_exit'],
+    ['waiting', 'manual_exit'],
+  ])('shows the final receipt instead of a spinner for %s / %s', async (sessionState, commitReason) => {
     mocks.sessionHookData = {
       session: {
-        status: 'committed',
+        status: 'pending_commit',
         snapshot: {
           session_id: 'session-1',
           scope: { name: 'Test Deck' },
@@ -634,14 +665,14 @@ describe('StudyPage exit confirmation and completion card gating', () => {
         card: null,
         template: null,
         content: null,
-        counts: { new: 0, learning: 0, due: 0 },
-        session_state: 'complete_today',
+        counts: { new: sessionState === 'active' ? 10 : 0, learning: sessionState === 'waiting' ? 1 : 0, due: 0 },
+        session_state: sessionState,
       } as any,
       receipt: {
         schema_version: 'study-commit-receipt.v1',
         session_id: 'session-1',
         commit_id: 'commit-finish',
-        commit_reason: 'auto_finish',
+        commit_reason: commitReason,
         applied_event_count: 10,
         updated_cards: [],
         rating_counts: { again: 1, hard: 1, good: 6, easy: 2 },
@@ -664,6 +695,13 @@ describe('StudyPage exit confirmation and completion card gating', () => {
 
     expect(container?.textContent).toContain('Đã đồng bộ phiên học')
     expect(container?.textContent).toContain('Về Dashboard')
+    expect(container?.textContent).not.toContain('Đang đồng bộ phiên học')
+    const shortcut = new KeyboardEvent('keydown', {
+      key: 'f', code: 'KeyF', bubbles: true, cancelable: true,
+    })
+    await act(async () => { window.dispatchEvent(shortcut) })
+    expect(shortcut.defaultPrevented).toBe(false)
+    expect(mocks.requestFullscreen).not.toHaveBeenCalled()
   })
 })
 

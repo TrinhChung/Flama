@@ -22,12 +22,19 @@ from app.services.study_action_runtime import (
 
 SESSION_SCHEMA_V2 = "study-session.v2"
 SESSION_SCHEMA_V3 = "study-session.v3"
+SESSION_SCHEMA_V4 = "study-session.v4"
 COMMIT_SCHEMA_V1 = "study-commit.v1"
 COMMIT_SCHEMA_V2 = "study-commit.v2"
+COMMIT_SCHEMA_V3 = "study-commit.v3"
 BATCH_SCHEMA_V1 = "study-batch.v1"
 BATCH_SCHEMA_V2 = "study-batch.v2"
+BATCH_SCHEMA_V3 = "study-batch.v3"
 
-SUPPORTED_SESSION_SCHEMAS = (SESSION_SCHEMA_V2, SESSION_SCHEMA_V3)
+SUPPORTED_SESSION_SCHEMAS = (
+    SESSION_SCHEMA_V2,
+    SESSION_SCHEMA_V3,
+    SESSION_SCHEMA_V4,
+)
 
 
 class StudyWireContractError(ValueError):
@@ -45,6 +52,27 @@ class StudyWireEnvelopeContract:
     commit_schema: str
     batch_schema: str
     requires_semantic_identity: bool
+    requires_note_authority_identity: bool
+
+
+@dataclass(frozen=True)
+class StudyNoteAuthorityWireIdentity:
+    enrollment_epoch: str
+    logical_note_key: str
+    subject_generation: str
+    base_authority_revision: str
+    base_authority_state_hash: str
+
+    def event_fields(self, *, operation_key: str) -> dict[str, str]:
+        return {
+            "authority_mode": "NOTE",
+            "enrollment_epoch": self.enrollment_epoch,
+            "logical_note_key": self.logical_note_key,
+            "subject_generation": self.subject_generation,
+            "base_authority_revision": self.base_authority_revision,
+            "base_authority_state_hash": self.base_authority_state_hash,
+            "operation_key": operation_key,
+        }
 
 
 _ENVELOPE_CONTRACTS = {
@@ -53,12 +81,21 @@ _ENVELOPE_CONTRACTS = {
         commit_schema=COMMIT_SCHEMA_V1,
         batch_schema=BATCH_SCHEMA_V1,
         requires_semantic_identity=False,
+        requires_note_authority_identity=False,
     ),
     SESSION_SCHEMA_V3: StudyWireEnvelopeContract(
         session_schema=SESSION_SCHEMA_V3,
         commit_schema=COMMIT_SCHEMA_V2,
         batch_schema=BATCH_SCHEMA_V2,
         requires_semantic_identity=True,
+        requires_note_authority_identity=False,
+    ),
+    SESSION_SCHEMA_V4: StudyWireEnvelopeContract(
+        session_schema=SESSION_SCHEMA_V4,
+        commit_schema=COMMIT_SCHEMA_V3,
+        batch_schema=BATCH_SCHEMA_V3,
+        requires_semantic_identity=True,
+        requires_note_authority_identity=True,
     ),
 }
 
@@ -81,6 +118,7 @@ def select_session_schema(
     accepted_versions: Any,
     *,
     v3_enabled: bool,
+    v4_enabled: bool = False,
 ) -> str:
     """Negotiate a new snapshot without breaking clients that only know v2."""
 
@@ -90,6 +128,8 @@ def select_session_schema(
         if not isinstance(raw_version, str):
             continue
         version = raw_version.strip()
+        if version == SESSION_SCHEMA_V4 and v4_enabled:
+            return SESSION_SCHEMA_V4
         if version == SESSION_SCHEMA_V3 and v3_enabled:
             return SESSION_SCHEMA_V3
         if version == SESSION_SCHEMA_V2:
@@ -146,6 +186,98 @@ _V3_REQUIRED_FIELDS = (
 _V3_ONLY_FIELDS = tuple(
     field for field in _V3_REQUIRED_FIELDS if field not in _V2_SEMANTIC_FIELDS
 )
+_V4_AUTHORITY_FIELDS = (
+    "authority_mode",
+    "enrollment_epoch",
+    "logical_note_key",
+    "subject_generation",
+    "base_authority_revision",
+    "base_authority_state_hash",
+    "operation_key",
+)
+_V4_REQUIRED_FIELDS = (*_V3_REQUIRED_FIELDS, *_V4_AUTHORITY_FIELDS)
+
+
+def _canonical_decimal(value: Any, *, field: str, minimum: int) -> str:
+    if isinstance(value, bool):
+        raise StudyWireContractError(
+            "WIRE_CONTRACT_MISMATCH",
+            f"NOTE authority {field} must be a canonical decimal string.",
+        )
+    text = "" if value is None else str(value)
+    if not text.isascii() or not text.isdecimal() or str(int(text)) != text:
+        raise StudyWireContractError(
+            "WIRE_CONTRACT_MISMATCH",
+            f"NOTE authority {field} must be a canonical decimal string.",
+        )
+    if int(text) < minimum:
+        raise StudyWireContractError(
+            "WIRE_CONTRACT_MISMATCH",
+            f"NOTE authority {field} is below its allowed minimum.",
+        )
+    return text
+
+
+def build_note_authority_wire_identity(
+    *,
+    enrollment_epoch: Any,
+    logical_note_key: Any,
+    subject_generation: Any,
+    base_authority_revision: Any,
+    base_authority_state_hash: Any,
+) -> StudyNoteAuthorityWireIdentity:
+    if isinstance(logical_note_key, bytes):
+        try:
+            note_key = logical_note_key.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise StudyWireContractError(
+                "WIRE_CONTRACT_MISMATCH",
+                "NOTE authority logical_note_key must be canonical UTF-8.",
+            ) from exc
+    else:
+        note_key = logical_note_key
+    if (
+        not isinstance(note_key, str)
+        or not note_key
+        or note_key != note_key.strip()
+        or len(note_key.encode("utf-8")) > 144
+    ):
+        raise StudyWireContractError(
+            "WIRE_CONTRACT_MISMATCH",
+            "NOTE authority logical_note_key is invalid.",
+        )
+    if isinstance(base_authority_state_hash, bytes):
+        state_hash = base_authority_state_hash.hex()
+    else:
+        state_hash = str(base_authority_state_hash or "")
+    if (
+        len(state_hash) != 64
+        or state_hash.lower() != state_hash
+        or any(char not in "0123456789abcdef" for char in state_hash)
+    ):
+        raise StudyWireContractError(
+            "WIRE_CONTRACT_MISMATCH",
+            "NOTE authority state hash must be 32-byte lowercase hex.",
+        )
+    return StudyNoteAuthorityWireIdentity(
+        enrollment_epoch=_canonical_decimal(
+            enrollment_epoch,
+            field="enrollment_epoch",
+            minimum=1,
+        ),
+        logical_note_key=note_key,
+        subject_generation=_canonical_decimal(
+            subject_generation,
+            field="subject_generation",
+            minimum=1,
+        ),
+        base_authority_revision=_canonical_decimal(
+            base_authority_revision,
+            field="base_authority_revision",
+            minimum=0,
+        ),
+        base_authority_state_hash=state_hash,
+    )
 
 
 def _required_string(
@@ -188,6 +320,7 @@ def validate_review_event_wire_contract(
     algorithm_version: str,
     policy: Mapping[str, Any],
     event_index: int,
+    note_authority: StudyNoteAuthorityWireIdentity | None = None,
 ) -> ReviewActionContract:
     """Validate one event against an explicitly selected v2 or v3 decoder."""
 
@@ -201,16 +334,32 @@ def validate_review_event_wire_contract(
                 "ACTION_CONTRACT_MISMATCH",
                 f"Event {event_index} has partial v2 semantic metadata.",
             )
-        if any(field in raw_event for field in _V3_ONLY_FIELDS):
+        if any(
+            field in raw_event
+            for field in (*_V3_ONLY_FIELDS, *_V4_AUTHORITY_FIELDS)
+        ):
             raise StudyWireContractError(
                 "WIRE_CONTRACT_MISMATCH",
-                f"Event {event_index} mixes v3 identity fields into a v2 session.",
+                f"Event {event_index} mixes v3/v4 identity fields into a v2 session.",
             )
         if not present:
             return action
     else:
-        for field in _V3_REQUIRED_FIELDS:
+        required_fields = (
+            _V4_REQUIRED_FIELDS
+            if contract.requires_note_authority_identity
+            else _V3_REQUIRED_FIELDS
+        )
+        for field in required_fields:
             _required_string(raw_event, field, event_index=event_index)
+        if (
+            not contract.requires_note_authority_identity
+            and any(field in raw_event for field in _V4_AUTHORITY_FIELDS)
+        ):
+            raise StudyWireContractError(
+                "WIRE_CONTRACT_MISMATCH",
+                f"Event {event_index} mixes v4 authority fields into a v3 session.",
+            )
 
     expected = {
         "action_key": action.action_key,
@@ -228,6 +377,18 @@ def validate_review_event_wire_contract(
                 "study_session_id": str(session_id),
             }
         )
+    if contract.requires_note_authority_identity:
+        if not isinstance(note_authority, StudyNoteAuthorityWireIdentity):
+            raise StudyWireContractError(
+                "WIRE_CONTRACT_MISMATCH",
+                f"Event {event_index} has no server-pinned NOTE authority identity.",
+            )
+        operation_key = _required_string(
+            raw_event,
+            "event_id",
+            event_index=event_index,
+        )
+        expected.update(note_authority.event_fields(operation_key=operation_key))
 
     for field, expected_value in expected.items():
         supplied = raw_event.get(field)

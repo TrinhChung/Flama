@@ -4,11 +4,13 @@
 >
 > Priority: P0 deployment gate
 >
-> Status: IN PROGRESS — local large-cohort and isolated VPS small-cohort rehearsals pass; representative production-matched gate open
+> Status: **CLOSED FOR PRE-RELEASE DEVELOPMENT (risk-scoped acceptance, 2026-09-20)**. Production enablement gate remains open; see the [decision record](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md).
 >
 > Dependency: P4-10
 >
 > Primary lane: Database operations / Deployment evidence
+
+The owner's pre-release/low-user premise narrows this task's **development dependency**. It does not turn the untested production-scale and fault cases below into passing evidence. [INT-02 subsequently closed for development](../../architecture/phase-4-int02-closeout-2026-09-20.md), but no Phase 4 shadow flag or Phase 5 authority may be enabled in production by this closeout.
 
 ## Mục tiêu
 
@@ -40,7 +42,7 @@ Chứng minh migration, flags-off restart, atomic mirror, bounded backfill, reco
 - Recommended production batch/cohort limits grounded in measurements.
 - Rollout/rollback runbook and go/no-go verdict for INT-02.
 
-## Acceptance
+## Original release-grade acceptance (not fully demonstrated)
 
 - Migration-only upgrade works and flags-off restart is behaviorally unchanged.
 - All concurrency/failure tests preserve authoritative atomicity and produce no trusted stale mirror.
@@ -48,6 +50,10 @@ Chứng minh migration, flags-off restart, atomic mirror, bounded backfill, reco
 - Full reconciliation has zero unexplained difference.
 - Flag disable restores CardProgress-only runtime without schema downgrade.
 - Production apply remains a separate explicit operation.
+
+## Accepted pre-release development gate
+
+The [risk-scoped closeout](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) accepts the already recorded local representative-**row-count** and VPS version/collation-matched **small-cohort** migration, checksum backup/restore, flags-off restart, bounded backfill/resume, SELECT-only zero-diff reconciliation, indexed lookup and partial two-connection/fault evidence. This closes P4-11 as a dependency for `INT-02`, **not** as a production rollout pass. Production-shaped multi-user/overlay load, metadata-lock/capacity measurement, complete fault matrix and quantitative abort limits are deferred to P5-09 and must be done before production shadow enablement or NOTE authority enrollment. The original acceptance above remains the record of what was waived, not a claim of completion.
 
 ## Verification
 
@@ -87,11 +93,11 @@ delete races, native fan-in/fault/lock timeout, and external lifecycle with
 native–external race. Each used synthetic model-generated core tables, not a
 production data copy. Post-check again found no temporary database/principal.
 
-This does **not** close P4-11. The 16,424-row local cohort ran on MySQL 8.0.40;
+At the time of this rehearsal, this did **not** meet the original release-grade P4-11 gate. The 16,424-row local cohort ran on MySQL 8.0.40;
 the VPS cohort is small and one-user, with tunnel-dominated timings. A
 representative, version-matched cohort, the remaining fault/race matrix,
 metadata-lock/load measurements, release limits and reviewed go/no-go remain
-open. No production application write or authority cutover was performed.
+open. No production application write or authority cutover was performed. The later pre-release closure and explicit deferrals are recorded in the [decision record](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md).
 
 ## Rollback
 

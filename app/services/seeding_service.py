@@ -24,6 +24,10 @@ from app.repositories import (
     study_repository,
     vocabulary_repository,
 )
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.services import (
     anki_scheduler,
     flashcard_content_service,
@@ -198,6 +202,18 @@ def _seed_vocabulary_data(
         raise click.ClickException(
             "No user found. Create at least one user before running vocab-seed."
         )
+
+    # The seed package creates and replaces whole Note/Card subtrees. Keep the
+    # learner fence through its one final commit; NOTE lifecycle materialization
+    # is not implemented for this bulk import path yet.
+    try:
+        lock_study_authority_route(
+            db.session,
+            learner_user_id=int(target_user.id),
+        )
+    except StudyAuthorityFenceError as exc:
+        db.session.rollback()
+        raise click.ClickException(f"{exc.code}: {exc}") from exc
 
     note_type, template = ensure_legacy_note_type(db.session, target_user.id)
     quiz_note_type, quiz_template = ensure_quiz_note_type(db.session, target_user.id)

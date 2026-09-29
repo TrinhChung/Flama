@@ -40,6 +40,7 @@ from models.field_def import FieldDef
 from models.template import Template
 from models.card_progress import CardProgress
 from models.study_progress_contributor import StudyProgressContributor
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_subject import StudyProgressSubject
 from sqlalchemy import event
@@ -2281,6 +2282,111 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                     cutover_service.cutover_clone_model_to_overlay_only(
                         fail_on_mismatch=True
                     )
+
+    def test_cutover_rejects_note_learner_before_clone_map_or_progress_mutation(self):
+        with self.app.app_context():
+            learner = User(
+                username="note-cutover-learner",
+                email="note-cutover-learner@example.com",
+                is_admin=False,
+            )
+            learner.set_password("password")
+            source = Deck(name="NOTE cutover source", owner_user_id=self.user_id)
+            db.session.add_all([learner, source])
+            db.session.flush()
+            local = Deck(name="NOTE cutover local", owner_user_id=learner.id)
+            item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=source.id,
+                title="NOTE cutover item",
+                description="Cutover authority fence",
+                primary_category="General",
+                tags=[],
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="private",
+            )
+            db.session.add_all([local, item])
+            db.session.flush()
+            note_type = NoteType(user_id=learner.id, name="NOTE cutover type")
+            template = Template(
+                note_type=note_type,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                position=0,
+                is_default=True,
+            )
+            note = Note(
+                note_type=note_type,
+                user_id=learner.id,
+                deck_id=local.id,
+                field_values={"Word": "retained"},
+            )
+            card = Card(note=note, template=template)
+            db.session.add_all([note_type, template, note, card])
+            db.session.flush()
+            db.session.add(
+                CardProgress(
+                    user_id=learner.id,
+                    card_id=card.id,
+                    queue="review",
+                    due_at=datetime.utcnow(),
+                    interval_days=3,
+                    revision=4,
+                )
+            )
+            install = DeckInstall(
+                deck_item_id=item.id,
+                user_id=learner.id,
+                local_deck_id=local.id,
+                source_deck_id=source.id,
+                source_owner_user_id=self.user_id,
+                clone_mode="legacy_copy",
+                installed_at=datetime.utcnow(),
+            )
+            db.session.add_all(
+                [
+                    install,
+                    StudyAuthorityEnrollment(
+                        learner_user_id=learner.id,
+                        mode_code="NOTE",
+                        epoch=1,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow(),
+                    ),
+                ]
+            )
+            db.session.commit()
+
+            summary = cutover_service.cutover_clone_model_to_overlay_only(
+                fail_on_mismatch=False
+            )
+            self.assertEqual((summary["migrated"], summary["failed"]), (0, 1))
+            self.assertEqual(summary["errors"][0]["status"], 409)
+            self.assertIn("NOTE_AUTHORITY_UNAVAILABLE", summary["errors"][0]["message"])
+            self.assertEqual(DeckInstall.query.get(install.id).clone_mode, "legacy_copy")
+            self.assertEqual(
+                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id).count(), 0
+            )
+            self.assertIsNotNone(db.session.get(Note, note.id))
+            self.assertEqual(
+                CardProgress.query.filter_by(user_id=learner.id, card_id=card.id)
+                .one()
+                .revision,
+                4,
+            )
+
+            with self.assertRaises(ShareControllerError) as failure:
+                cutover_service.cutover_clone_model_to_overlay_only(
+                    fail_on_mismatch=True
+                )
+            self.assertEqual(failure.exception.error, "CLONE_CUTOVER_NOT_READY")
+            self.assertEqual(DeckInstall.query.get(install.id).clone_mode, "legacy_copy")
+            self.assertEqual(
+                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id).count(), 0
+            )
 
     def test_cutover_progress_rekey_and_merge_revision_contract(self):
         with self.app.app_context():

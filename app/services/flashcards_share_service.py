@@ -250,7 +250,13 @@ def create_note_type(
     return note_type, None, None
 
 
-def create_template(note_type_id: str, user_id: int, payload: dict) -> tuple[Template | None, str | None]:
+def create_template(
+    note_type_id: str,
+    user_id: int,
+    payload: dict,
+    *,
+    commit: bool = True,
+) -> tuple[Template | None, str | None]:
     note_type = db.session.get(NoteType, note_type_id)
     if not note_type:
         return None, "Note type not found."
@@ -260,14 +266,16 @@ def create_template(note_type_id: str, user_id: int, payload: dict) -> tuple[Tem
     back_html = (payload.get("back_html") or "{{Word}}").strip()
     shared_css = (payload.get("shared_css") or "").strip()
     
-    max_pos = db.session.query(db.func.max(Template.position)).filter_by(note_type_id=note_type.id).scalar() or -1
+    max_pos = db.session.query(db.func.max(Template.position)).filter_by(
+        note_type_id=note_type.id
+    ).scalar()
     template = Template(
         note_type_id=note_type.id,
         name=name,
         front_html=front_html,
         back_html=back_html,
         shared_css=shared_css,
-        position=max_pos + 1,
+        position=(int(max_pos) + 1) if max_pos is not None else 0,
         is_default=False,
     )
     db.session.add(template)
@@ -275,9 +283,12 @@ def create_template(note_type_id: str, user_id: int, payload: dict) -> tuple[Tem
     notes = Note.query.filter_by(note_type_id=note_type.id, user_id=user_id).all()
     for note in notes:
         db.session.add(Card(note_id=note.id, template_id=template.id))
-        
+
     _audit(user_id, "template.create", {"note_type_id": note_type.id, "template_id": template.id})
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
     return template, None
 
 
@@ -3655,6 +3666,7 @@ from app.services.share.cutover import (  # noqa: E402
     cutover_clone_model_to_overlay_only,
     migrate_legacy_clone_install_to_overlay,
 )
+from app.services.share.helpers import _fence_overlay_install_route  # noqa: E402
 
 
 def install_shared_deck_item_for_user(
@@ -3677,6 +3689,8 @@ def install_shared_deck_item_for_user(
             "Owner cannot install own deck item.",
             status=409,
         )
+
+    _fence_overlay_install_route(user_id=user_id)
 
     existing = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=user_id).first()
     if existing:

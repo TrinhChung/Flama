@@ -1,0 +1,25 @@
+[Unit]
+Description=Flama durable Study batch consumer
+After=network-online.target mysql.service redis-server.service
+Wants=network-online.target mysql.service redis-server.service
+
+[Service]
+Type=simple
+User=flama
+Group=flama
+WorkingDirectory=/opt/flama/current
+EnvironmentFile=/etc/flama/flama.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/flama/venv/bin/python study_worker.py
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=150
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/flama
+
+[Install]
+WantedBy=multi-user.target

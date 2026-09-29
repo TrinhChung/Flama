@@ -7,14 +7,18 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from app.services.study_note_storage_precision import NOTE_STORAGE_PROFILE
+
 
 SESSION_CONFIG_SNAPSHOT_SCHEMA = "study-session-config.v2"
+NOTE_SESSION_CONFIG_SNAPSHOT_SCHEMA = "study-session-config.v3"
 _SESSION_CONFIG_SCHEMA_PREFIX = "study-session-config."
 _CURRENT_WRAPPER_KEYS = {
     "policies",
     "selected_composition_id",
     "selected_composition",
     "composition_binding",
+    "storage_profile",
 }
 _POLICY_MATERIAL_KEYS = (
     "algorithm_key",
@@ -165,6 +169,7 @@ class DecodedStudySessionConfig:
     selected_composition: dict[str, Any] | None
     composition_binding: dict[str, Any] | None
     legacy: bool
+    storage_profile: str | None = None
 
 
 def encode_study_session_config(
@@ -172,7 +177,10 @@ def encode_study_session_config(
     policies: dict[str, Any],
     selected_composition: dict[str, Any],
     composition_binding: dict[str, Any],
+    storage_profile: str | None = None,
 ) -> str:
+    if storage_profile not in (None, NOTE_STORAGE_PROFILE):
+        raise StudySessionConfigError("Unsupported NOTE storage profile.")
     composition_id = str(selected_composition.get("composition_id") or "").strip()
     if not composition_id:
         raise StudySessionConfigError("Selected composition id is required.")
@@ -189,6 +197,8 @@ def encode_study_session_config(
         "selected_composition": selected_composition,
         "composition_binding": composition_binding,
     }
+    if storage_profile is not None:
+        payload.update(schema_version=NOTE_SESSION_CONFIG_SNAPSHOT_SCHEMA, storage_profile=storage_profile)
     return json.dumps(
         payload,
         ensure_ascii=False,
@@ -218,7 +228,7 @@ def decode_study_session_config(raw: str | None) -> DecodedStudySessionConfig:
             composition_binding=None,
             legacy=True,
         )
-    if schema_version != SESSION_CONFIG_SNAPSHOT_SCHEMA:
+    if schema_version not in (SESSION_CONFIG_SNAPSHOT_SCHEMA, NOTE_SESSION_CONFIG_SNAPSHOT_SCHEMA):
         if isinstance(schema_version, str) and schema_version.startswith(
             _SESSION_CONFIG_SCHEMA_PREFIX
         ):
@@ -229,6 +239,11 @@ def decode_study_session_config(raw: str | None) -> DecodedStudySessionConfig:
             "Stored study session config schema is malformed."
         )
 
+    storage_profile = parsed.get("storage_profile")
+    if (
+        schema_version == NOTE_SESSION_CONFIG_SNAPSHOT_SCHEMA and storage_profile != NOTE_STORAGE_PROFILE
+    ) or (schema_version == SESSION_CONFIG_SNAPSHOT_SCHEMA and "storage_profile" in parsed):
+        raise StudySessionConfigError("Stored NOTE storage profile is missing or unsupported.")
     policies = _validate_policy_map(parsed.get("policies"))
     selected_id, selected, binding = _validate_composition_material(
         selected_id=parsed.get("selected_composition_id"),
@@ -241,6 +256,7 @@ def decode_study_session_config(raw: str | None) -> DecodedStudySessionConfig:
         selected_composition=selected,
         composition_binding=binding,
         legacy=False,
+        storage_profile=storage_profile,
     )
 
 

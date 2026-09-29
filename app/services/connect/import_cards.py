@@ -24,6 +24,10 @@ from app.repositories import (
     study_repository,
     vocabulary_repository,
 )
+from app.repositories.study_authority_repository import (
+    StudyAuthorityFenceError,
+    lock_study_authority_route,
+)
 from app.services import (
     anki_scheduler,
     deck_working_tree_service,
@@ -31,11 +35,18 @@ from app.services import (
     flashcards_share,
     flashcards_share_service,
     flama_connect_media_service,
+    stats_overview,
     study_progress_lifecycle_mirror_service,
     study_progress_shadow_mirror_service,
     study_service,
 )
 from app.services.anki_content_normalizer import normalize_anki_field_values
+from app.services.scheduler_config_service import resolve_deck_options
+from app.services.study_authority_read_service import (
+    StudyAuthorityReadError,
+    load_study_authority_card_reads,
+)
+from app.services.study_progress_shadow_codec import StudyProgressCodecError
 from app.validators.flashcard_input import RequestValidationError, validate_note_create_request
 
 from models import db
@@ -67,6 +78,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
 from models.review_event import ReviewEvent
+from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
 
@@ -150,6 +162,76 @@ def _reconcile_note_cards(
         if template.id not in existing_by_template:
             db.session.add(Card(note_id=note.id, template_id=template.id))
 
+
+
+def _reconcile_note_authority_cards(
+    *,
+    user_id: int,
+    note: Note,
+    note_type: NoteType,
+    is_new_note: bool,
+    preserve_released_history: bool | None,
+    operation_key: str,
+) -> None:
+    """Template reconcile under NOTE: add siblings first, then remove.
+
+    Every learner holding state on the Note keeps one canonical state; a new
+    sibling copies it and a removed sibling only shrinks the projection.
+    """
+    from app.services import study_content_delete_service as content_topology
+
+    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+    if not templates:
+        raise ConnectError("model has no card template")
+    expected_ids = {template.id for template in templates}
+    existing_by_template = {card.template_id: card for card in note.cards}
+    if expected_ids == set(existing_by_template):
+        return
+    if not is_new_note:
+        from app.services import deck_working_tree_service
+
+        must_preserve_history = (
+            deck_working_tree_service.note_has_shared_release_dependents(note)
+            if preserve_released_history is None
+            else preserve_released_history
+        )
+        if must_preserve_history:
+            raise ConnectError(
+                "cannot change card templates for a released shared note; "
+                "template-aware deck releases are required to preserve study history"
+            )
+    note_ids = (str(note.id),)
+    routes = content_topology.lock_content_delete_routes(
+        db.session,
+        actor_user_ids=(user_id,),
+        card_ids=[str(card.id) for card in note.cards],
+        deleted_note_ids=(),
+    )
+    for template in templates:
+        if template.id in existing_by_template:
+            continue
+        expansion = content_topology.prepare_content_expansion(
+            db.session, routes=routes, note_ids=note_ids)
+        content_topology.verify_content_expansion_scope(db.session, routes=routes, note_ids=note_ids)
+        new_card = Card(note_id=note.id, template_id=template.id)
+        db.session.add(new_card)
+        db.session.flush()
+        content_topology.finalize_content_expansion(expansion, new_cards=(new_card,))
+    removed_ids = [
+        str(card.id) for card in note.cards if card.template_id not in expected_ids
+    ]
+    if removed_ids:
+        plan = content_topology.prepare_content_delete(
+            db.session, routes=routes, card_ids=removed_ids, note_ids=(),
+            cancel_legacy_sessions=False)
+        content_topology.verify_content_delete_scope(
+            db.session, routes=routes, card_ids=removed_ids, deleted_note_ids=())
+        CardProgress.query.filter(CardProgress.card_id.in_(removed_ids)).delete(
+            synchronize_session=False)
+        content_topology.finalize_content_delete(
+            plan, source_path="connect.import_cards.reconcile", operation_key=operation_key)
+        Card.query.filter(Card.id.in_(removed_ids)).delete(synchronize_session=False)
+    db.session.expire(note, ["cards"])
 
 
 def _migrate_cards_progress(
@@ -612,34 +694,63 @@ def _upsert_import_card(
     else:
         deck_ref.source_path = source_deck_path
         deck_ref.deck_id = prepared.deck.id
-    expected_template_ids = {template.id for template in prepared.note_type.templates}
-    removed_cards = tuple(
-        card for card in note.cards if card.template_id not in expected_template_ids
-    )
-    lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+    authority_route = lock_study_authority_route(
         db.session,
-        removed_card_ids=(card.id for card in removed_cards),
+        learner_user_id=user_id,
+        allow_note_authority=True,
     )
-    if removed_cards:
-        CardProgress.query.filter(
-            CardProgress.card_id.in_([str(card.id) for card in removed_cards])
-        ).delete(synchronize_session=False)
-    _reconcile_note_cards(
-        note,
-        prepared.note_type,
-        is_new_note=created,
-        preserve_released_history=preserve_released_history,
-    )
-    if lifecycle_plan is not None:
-        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-            lifecycle_plan,
-            transition_code="DETACHED_CONTRIBUTOR_DELETED",
-            source_path="connect.import_cards.reconcile",
-            operation_key=f"{session.id}:{external_note_id}:template-reconcile",
+    reconcile_operation_key = f"{session.id}:{external_note_id}:template-reconcile"
+    if authority_route.mode_code == "NOTE":
+        _reconcile_note_authority_cards(
+            user_id=user_id,
+            note=note,
+            note_type=prepared.note_type,
+            is_new_note=created,
+            preserve_released_history=preserve_released_history,
+            operation_key=reconcile_operation_key,
         )
+    else:
+        expected_template_ids = {template.id for template in prepared.note_type.templates}
+        removed_cards = tuple(
+            card for card in note.cards if card.template_id not in expected_template_ids
+        )
+        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
+            db.session,
+            removed_card_ids=(card.id for card in removed_cards),
+        )
+        if removed_cards:
+            CardProgress.query.filter(
+                CardProgress.card_id.in_([str(card.id) for card in removed_cards])
+            ).delete(synchronize_session=False)
+        _reconcile_note_cards(
+            note,
+            prepared.note_type,
+            is_new_note=created,
+            preserve_released_history=preserve_released_history,
+        )
+        if lifecycle_plan is not None:
+            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
+                lifecycle_plan,
+                transition_code="DETACHED_CONTRIBUTOR_DELETED",
+                source_path="connect.import_cards.reconcile",
+                operation_key=reconcile_operation_key,
+            )
     cards_progress_payload = card_data.get("cardsProgress")
     progress_results: list[dict[str, Any]] = []
-    if cards_progress_payload:
+    if cards_progress_payload and authority_route.mode_code == "NOTE":
+        # Per-Card legacy progress cannot express one learner/Note state.
+        # Content is imported; progress must arrive as a Note snapshot.
+        if not isinstance(cards_progress_payload, list) or len(cards_progress_payload) > 100:
+            raise ConnectError("cardsProgress must be an array with at most 100 entries")
+        progress_results = [
+            {
+                "ord": item.get("ord") if isinstance(item, dict) else None,
+                "state": "unsupported",
+                "code": "NOTE_SNAPSHOT_REQUIRED",
+            }
+            for item in cards_progress_payload
+        ]
+    elif cards_progress_payload:
         progress_results = _migrate_cards_progress(
             user_id,
             note,
@@ -733,6 +844,14 @@ def import_cards(
     cards = params.get("cards")
     if not isinstance(cards, list) or len(cards) > MAX_NOTES_PER_REQUEST:
         raise ConnectError(f"cards must be an array with at most {MAX_NOTES_PER_REQUEST} entries")
+    # Also cover direct callers that pass an already prepared batch context.
+    # This shared prefix lock survives all per-card savepoints and preserves
+    # the learner -> Deck -> content ordering for the entire import call.
+    lock_study_authority_route(
+        db.session,
+        learner_user_id=user_id,
+        allow_note_authority=True,
+    )
     if batch_context is None:
         batch_context = prepare_import_batch_context(
             user_id=user_id,
@@ -754,6 +873,15 @@ def import_cards(
         materialized = None
         try:
             with db.session.begin_nested():
+                # Card/content import can change NoteType and Card topology. It
+                # takes the learner fence before source, content or progress
+                # rows so an enrollment switch cannot race a late failure; NOTE
+                # topology goes through the multi-learner coordinator.
+                lock_study_authority_route(
+                    db.session,
+                    learner_user_id=user_id,
+                    allow_note_authority=True,
+                )
                 (
                     note,
                     created,
@@ -833,11 +961,130 @@ def get_import_status(user_id: int, session_id: object) -> dict[str, Any]:
 
 
 
+class ConnectAuthorityReadError(ConnectError):
+    """A NOTE import-status read cannot trust its compatibility cursor."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status = 409
+
+
+def _verify_note_authority_import_status(
+    *,
+    user_id: int,
+    requested_cards: dict[str, list[dict[str, Any]]],
+    refs_by_external_id: dict[str, ConnectSourceNoteRef],
+    card_refs_by_external_id: dict[str, ConnectSourceCardRef],
+) -> None:
+    """Validate every sibling before exposing a NOTE source-progress cursor."""
+
+    note_ids: set[str] = set()
+    matched_refs: list[tuple[ConnectSourceCardRef, str]] = []
+    for external_note_id, cards in requested_cards.items():
+        for requested_card in cards:
+            card_ref = card_refs_by_external_id.get(requested_card["sourceCardId"])
+            if card_ref is None or card_ref.external_note_id != external_note_id:
+                continue
+            note_ref = refs_by_external_id.get(external_note_id)
+            if note_ref is None or not note_ref.note_id:
+                raise ConnectAuthorityReadError(
+                    "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                    "NOTE import card has no source Note mapping.",
+                )
+            note_ids.add(str(note_ref.note_id))
+            matched_refs.append((card_ref, str(note_ref.note_id)))
+    if not matched_refs:
+        return
+
+    notes = (
+        Note.query.options(selectinload(Note.cards))
+        .filter(Note.user_id == user_id, Note.id.in_(sorted(note_ids)))
+        .all()
+    )
+    notes_by_id = {str(note.id): note for note in notes}
+    if set(notes_by_id) != note_ids or any(not note.cards for note in notes):
+        raise ConnectAuthorityReadError(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "NOTE import source Note or its Card siblings are missing.",
+        )
+    card_ids_by_note_id = {
+        note_id: {str(card.id) for card in note.cards}
+        for note_id, note in notes_by_id.items()
+    }
+    for card_ref, note_id in matched_refs:
+        if str(card_ref.card_id) not in card_ids_by_note_id[note_id]:
+            raise ConnectAuthorityReadError(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                "NOTE import source Card mapping differs from its Note.",
+            )
+
+    subject_by_note_key = {
+        bytes(subject.logical_note_key): subject
+        for subject in StudyProgressSubject.query.filter(
+            StudyProgressSubject.learner_user_id == user_id,
+            StudyProgressSubject.logical_note_key.in_(
+                sorted(note_id.encode("utf-8") for note_id in note_ids)
+            ),
+        ).all()
+    }
+    for note in notes:
+        subject = subject_by_note_key.get(str(note.id).encode("utf-8"))
+        if (
+            subject is None
+            or str(subject.live_note_id or "") != str(note.id)
+            or int(subject.contributor_count) != len(note.cards)
+        ):
+            raise ConnectAuthorityReadError(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                "NOTE import Card topology differs from its canonical subject.",
+            )
+
+    user = db.session.get(User, user_id)
+    timezone_name = stats_overview.get_effective_timezone_name(
+        getattr(user, "timezone", "UTC")
+    )
+    options_by_deck_id: dict[int | None, anki_scheduler.DeckOptions] = {}
+    cards: list[Card] = []
+    deck_options_by_card_id: dict[str, anki_scheduler.DeckOptions] = {}
+    for note in notes:
+        if note.deck_id not in options_by_deck_id:
+            options_by_deck_id[note.deck_id] = resolve_deck_options(
+                user_id=user_id, deck_id=note.deck_id
+            )
+        for card in note.cards:
+            cards.append(card)
+            deck_options_by_card_id[str(card.id)] = options_by_deck_id[note.deck_id]
+    try:
+        load_study_authority_card_reads(
+            db.session,
+            learner_user_id=user_id,
+            cards=tuple(cards),
+            now_utc=datetime.now(UTC).replace(tzinfo=None),
+            timezone_name=timezone_name,
+            deck_options_by_card_id=deck_options_by_card_id,
+        )
+    except (
+        StudyAuthorityFenceError,
+        StudyAuthorityReadError,
+        StudyProgressCodecError,
+    ) as exc:
+        raise ConnectAuthorityReadError(exc.code, str(exc)) from exc
+
+
 def get_import_note_statuses(
     user_id: int,
     session_id: object,
     notes: object,
 ) -> dict[str, Any]:
+    try:
+        route = lock_study_authority_route(
+            db.session,
+            learner_user_id=user_id,
+            allow_note_authority=True,
+        )
+    except StudyAuthorityFenceError as exc:
+        raise ConnectAuthorityReadError(exc.code, str(exc)) from exc
     session = _get_import_session(user_id, session_id, require_ready=True)
     if not isinstance(notes, list) or len(notes) > 1000:
         raise ConnectError("notes must be an array with at most 1000 entries")
@@ -895,6 +1142,13 @@ def get_import_note_statuses(
         ConnectSourceCardRef.external_card_id.in_(requested_card_ids),
     ).all() if requested_card_ids else []
     card_refs_by_external_id = {row.external_card_id: row for row in card_refs}
+    if route.mode_code == "NOTE":
+        _verify_note_authority_import_status(
+            user_id=user_id,
+            requested_cards=requested_cards,
+            refs_by_external_id=refs_by_external_id,
+            card_refs_by_external_id=card_refs_by_external_id,
+        )
     orphan_review_card_ids = {
         row[0]
         for row in db.session.query(ConnectReviewEventRef.external_card_id)

@@ -18,14 +18,18 @@ import {
   summarizePendingIntradayLearning,
 } from '../scheduler/queue'
 import type { SchedulerDecision } from '../scheduler/types'
+import { NOTE_STORAGE_PROFILE, normalizeNoteDecision } from '../scheduler/noteStoragePrecision'
 import { resolveReviewAction } from '../interactions/reviewInteraction'
+import { requireNoteBatchReceipt } from './batchReceipt'
 import type {
   PersistedStudySession,
   StudyCommitReason,
   StudySessionAccumulatedStats,
 } from './sessionStore'
 import {
+  STUDY_SESSION_SCHEMA_V4,
   reviewEventWireIdentity,
+  reviewEventWireIdentityV4,
   wireEnvelopeForSession,
 } from './wireContract'
 
@@ -177,12 +181,32 @@ export function decisionForCard(
   const card = session.snapshot.cards.find((row) => row.card_id === cardId)
   if (!card) throw new Error('Card is not part of the active session.')
   const { algorithm, policy } = resolveCardAlgorithm(session.snapshot, card)
-  return algorithm.computeDecision(
+  const previousOffset = latestSchedulerOffset(session)
+  const serverAnchor = Date.parse(session.snapshot.server_now_utc)
+  const clampedTime = Math.max(
+    Math.round(schedulerAtMs),
+    serverAnchor,
+    serverAnchor + (previousOffset ?? 0),
+  )
+  const decision = algorithm.computeDecision(
     card,
     policy,
-    schedulerAtMs,
+    // Match NOTE server replay/direct reviews while legacy DATETIME(0)
+    // projection is mandatory. Legacy v2/v3 retain their millisecond clock.
+    session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+      ? Math.floor(clampedTime / 1000) * 1000
+      : clampedTime,
     session.snapshot.timezone,
   )
+  return session.snapshot.storage_profile === NOTE_STORAGE_PROFILE
+    ? normalizeNoteDecision(decision)
+    : decision
+}
+
+function latestSchedulerOffset(session: PersistedStudySession): number | null {
+  const lastEvent = session.events.at(-1)
+    ?? session.in_flight_batches?.at(-1)?.events.at(-1)
+  return Math.max(lastEvent?.scheduler_offset_ms ?? 0, session.acknowledged_scheduler_offset_ms ?? 0)
 }
 
 export function applyLocalAnswer(
@@ -192,7 +216,7 @@ export function applyLocalAnswer(
   decision: SchedulerDecision,
   durationMs: number,
 ) {
-  if (session.status !== 'active') {
+  if (session.status !== 'active' || session.in_flight_batches?.some((batch) => batch.is_final)) {
     throw new Error('Study session is waiting to be committed.')
   }
   const card = session.snapshot.cards.find((row) => row.card_id === cardId)
@@ -203,19 +227,40 @@ export function applyLocalAnswer(
   const schedulerOffset = Math.max(
     0,
     Math.round(decision.scheduler_at_ms - serverAnchor),
+    latestSchedulerOffset(session) ?? 0,
   )
+  // A preview may predate a wall-clock adjustment or contain fractional ms.
+  // Recompute at the exact wire timestamp so replay and final state agree.
+  const answerDecision = session.snapshot.schema_version !== STUDY_SESSION_SCHEMA_V4
+    && decision.scheduler_at_ms === serverAnchor + schedulerOffset
+    ? decision
+    : decisionForCard(session, cardId, serverAnchor + schedulerOffset)
   const action = resolveReviewAction(rating)
-  const wireIdentity = reviewEventWireIdentity(
-    session.snapshot.schema_version,
-    session.snapshot.session_id,
-    action,
-    policy,
-  )
+  const eventId = crypto.randomUUID()
+  const wireIdentity = session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+    ? (() => {
+        if (!card.authority_pin) {
+          throw new Error('Study v4 card is missing its NOTE authority pin.')
+        }
+        return reviewEventWireIdentityV4(
+          session.snapshot.session_id,
+          eventId,
+          action,
+          policy,
+          card.authority_pin,
+        )
+      })()
+    : reviewEventWireIdentity(
+        session.snapshot.schema_version,
+        session.snapshot.session_id,
+        action,
+        policy,
+      )
   const eventSequence = (session.event_sequence
     ?? session.events.at(-1)?.sequence
     ?? 0) + 1
   const event: StudySessionEvent = {
-    event_id: crypto.randomUUID(),
+    event_id: eventId,
     sequence: eventSequence,
     card_id: card.card_id,
     rating,
@@ -239,9 +284,15 @@ export function applyLocalAnswer(
     { card_id: cardId, previous_state: previousState },
   ]
 
+  const reviewedNoteKey = card.authority_pin?.logical_note_key
   const nextSnapshotCards = session.snapshot.cards.map((row) => (
     row.card_id === cardId
-      ? { ...row, state: decision.outcomes[rating] }
+      || (
+        session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+        && reviewedNoteKey !== undefined
+        && row.authority_pin?.logical_note_key === reviewedNoteKey
+      )
+      ? { ...row, state: answerDecision.outcomes[rating] }
       : row
   ))
   const nextQueue = nextSnapshotCards.map((c) => ({
@@ -251,7 +302,7 @@ export function applyLocalAnswer(
   }))
   const nextSelected = selectNextCard(
     nextQueue,
-    decision.scheduler_at_ms,
+    answerDecision.scheduler_at_ms,
     session.snapshot.timezone,
     session.snapshot.day_boundary_hour_local,
     session.snapshot.learn_ahead_seconds,
@@ -289,9 +340,16 @@ export function undoLocalAnswer(
   const remainingUndoHistory = undoHistory.slice(0, -1)
   const remainingEvents = session.events.slice(0, -1)
   const cardId = lastUndo.card_id
+  const undoneCard = session.snapshot.cards.find((row) => row.card_id === cardId)
+  const undoneNoteKey = undoneCard?.authority_pin?.logical_note_key
 
   const restoredCards = session.snapshot.cards.map((row) => (
     row.card_id === cardId
+      || (
+        session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+        && undoneNoteKey !== undefined
+        && row.authority_pin?.logical_note_key === undoneNoteKey
+      )
       ? { ...row, state: lastUndo.previous_state }
       : row
   ))
@@ -353,7 +411,9 @@ export function extractPendingBatch(
     isFinal?: boolean
   } = {},
 ): ExtractedBatchResult | null {
-  if (session.events.length === 0) return null
+  const noteBatch = session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+  if (session.in_flight_batches?.some((batch) => batch.is_final)) return null
+  if (session.events.length === 0 && !(noteBatch && options.isFinal)) return null
 
   const batchCount = Math.min(session.events.length, Math.max(1, limit))
   const batchEvents = session.events.slice(0, batchCount)
@@ -362,11 +422,13 @@ export function extractPendingBatch(
 
   const batchId = crypto.randomUUID()
   const nextSeq = (session.batch_sequence ?? 0) + 1
-  const isFinal = Boolean(options.isFinal)
-  const commitReason = options.reason ?? (isFinal ? 'auto_finish' : 'rollover')
+  const isFinal = Boolean(options.isFinal) && remainingEvents.length === 0
+  const commitReason = noteBatch && !isFinal ? 'rollover' : options.reason ?? (isFinal ? 'auto_finish' : 'rollover')
 
   const batchTouchedCardIds = Array.from(new Set(batchEvents.map((e) => e.card_id)))
-  const finalStates = batchTouchedCardIds.map((cardId) => {
+  const finalStates = session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+    ? []
+    : batchTouchedCardIds.map((cardId) => {
     const card = session.snapshot.cards.find((row) => row.card_id === cardId)
     if (!card) throw new Error(`Missing touched card ${cardId}.`)
     return {
@@ -374,7 +436,7 @@ export function extractPendingBatch(
       base_revision: card.base_revision,
       state: card.state,
     }
-  })
+      })
 
   const wireEnvelope = wireEnvelopeForSession(session.snapshot.schema_version)
   const batchPayload = {
@@ -421,13 +483,22 @@ export function extractPendingBatch(
 export function acknowledgeBatchReceipt(
   session: PersistedStudySession,
   batchId: string,
+  receipt?: unknown,
 ): PersistedStudySession {
+  const batch = session.in_flight_batches?.find((item) => item.batch_id === batchId)
+  if (session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4 && batch) {
+    requireNoteBatchReceipt(session, batch, receipt)
+  }
   const remainingInFlight = (session.in_flight_batches ?? []).filter(
     (b) => b.batch_id !== batchId,
   )
   return {
     ...session,
     in_flight_batches: remainingInFlight,
+    acknowledged_scheduler_offset_ms: Math.max(
+      session.acknowledged_scheduler_offset_ms ?? 0,
+      batch?.events.at(-1)?.scheduler_offset_ms ?? 0,
+    ),
     updated_at_ms: Date.now(),
   }
 }
@@ -439,6 +510,9 @@ export function prepareCommit(
     resumeAfterCommit?: boolean
   } = {},
 ) {
+  if (session.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4 && (session.batch_sequence ?? 0) > 0) {
+    throw new Error('Phiên NOTE đã có batch phải hoàn tất qua batch stream, không thể chuyển sang commit đồng bộ.')
+  }
   const commitId = session.commit_id ?? crypto.randomUUID()
   const resumeAfterCommit = options.resumeAfterCommit
     ?? session.resume_after_commit
@@ -453,7 +527,9 @@ export function prepareCommit(
     resume_after_commit: Boolean(resumeAfterCommit),
     updated_at_ms: Date.now(),
   }
-  const finalStates = prepared.touched_card_ids.map((cardId) => {
+  const finalStates = prepared.snapshot.schema_version === STUDY_SESSION_SCHEMA_V4
+    ? []
+    : prepared.touched_card_ids.map((cardId) => {
     const card = prepared.snapshot.cards.find((row) => row.card_id === cardId)
     if (!card) throw new Error(`Missing touched card ${cardId}.`)
     return {
@@ -461,7 +537,7 @@ export function prepareCommit(
       base_revision: card.base_revision,
       state: card.state,
     }
-  })
+      })
   return {
     session: prepared,
     payload: {

@@ -6,9 +6,14 @@ import json
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app import create_app
+from app.services.study_authority_enrollment_service import (
+    stage_note_authority_enrollment,
+)
+from app.services.connect.import_session import prepare_import_batch_context
 from app.services.study_progress_backfill_service import run_current_progress_backfill
 from app.services.study_progress_reconciliation_service import (
     build_study_progress_reconciliation,
@@ -18,6 +23,7 @@ from models.card import Card
 from models.connect_import_session import ConnectImportSession
 from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_card_ref import ConnectSourceCardRef
+from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
@@ -29,7 +35,9 @@ from models.review_event import ReviewEvent
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_lineage_ref import StudyProgressLineageRef
+from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
+from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.user import User
 from models.user_role import UserRole
 
@@ -934,6 +942,563 @@ class AnkiImportApiTests(unittest.TestCase):
         )
         self.assertEqual(changed.status_code, 200, changed.get_json())
         self.assertEqual(changed.get_json()["notes"][0]["state"], "changed")
+
+    def test_note_authority_progress_snapshot_projects_all_siblings_atomically(self):
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
+        self._login()
+        session_id = self._create_session()["importSessionId"]
+        note_record = {
+            "ankiNoteId": 3101,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "3" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "authority", "Meaning": "snapshot"},
+                "tags": ["note-authority-snapshot"],
+            },
+        }
+        card_result = self._upload_package(session_id, "cards", 0, [note_record])
+        self.assertTrue(card_result["results"][0]["imported"])
+
+        with self.app.app_context():
+            note = Note.query.filter_by(user_id=self.admin_id).one()
+            sibling_template = Template(
+                note_type_id=note.note_type_id,
+                name="Authority sibling",
+                front_html="{{Meaning}}",
+                back_html="{{Word}}",
+                position=1,
+            )
+            db.session.add(sibling_template)
+            db.session.flush()
+            db.session.add(Card(note_id=note.id, template_id=sibling_template.id))
+            db.session.flush()
+            enrollment = stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.admin_id,
+                now_utc=datetime(2026, 9, 23, 9, 0, 0),
+            )
+            self.assertEqual((enrollment.subject_count, enrollment.card_count), (1, 2))
+            db.session.commit()
+
+        snapshot_a = {
+            "externalNoteId": 3101,
+            "sourceCardId": 4101,
+            "ord": 0,
+            "snapshotHash": "a" * 64,
+            "baseSnapshotHash": None,
+            "type": 2,
+            "queue": 2,
+            "due": 50003,
+            "sourceToday": 50000,
+            "interval": 14,
+            "factor": 2500,
+            "reps": 2,
+            "lapses": 1,
+            "left": 0,
+        }
+        first = self._upload_package(session_id, "progress", 0, [snapshot_a])["results"][0]
+        self.assertEqual((first["state"], first["code"]), ("applied", "PROGRESS_APPLIED"))
+        with self.app.app_context():
+            rows = CardProgress.query.filter_by(user_id=self.admin_id).order_by(
+                CardProgress.card_id.asc()
+            ).all()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(
+                {(row.interval_days, row.scheduler_mode, int(row.revision)) for row in rows},
+                {(14, "anki", 1)},
+            )
+            subject = StudyProgressSubject.query.one()
+            token = StudyAuthoritySubjectToken.query.one()
+            state = StudyProgressState.query.one()
+            self.assertEqual((subject.subject_generation, subject.mirror_revision), (1, 2))
+            self.assertEqual(int(token.authority_revision), 1)
+            self.assertEqual(bytes(token.semantic_state_hash), bytes(state.semantic_state_hash))
+            contributors = StudyProgressContributor.query.order_by(
+                StudyProgressContributor.logical_card_key.asc()
+            ).all()
+            self.assertEqual(len(contributors), 2)
+            self.assertEqual(
+                {row.current_provenance_code for row in contributors},
+                {"CONNECT_PROGRESS_SNAPSHOT"},
+            )
+            self.assertEqual(
+                {row.history_completeness_code for row in contributors},
+                {"HISTORY_MIXED_PARTIAL"},
+            )
+
+        semantic_replay = self._upload_package(
+            session_id,
+            "progress",
+            1,
+            [
+                {
+                    **snapshot_a,
+                    "snapshotHash": "e" * 64,
+                    "baseSnapshotHash": "a" * 64,
+                }
+            ],
+        )["results"][0]
+        self.assertEqual(
+            (semantic_replay["state"], semantic_replay["code"]),
+            ("applied", "PROGRESS_APPLIED"),
+        )
+        with self.app.app_context():
+            rows = CardProgress.query.filter_by(user_id=self.admin_id).all()
+            self.assertEqual({int(row.revision) for row in rows}, {1})
+            self.assertEqual(int(StudyAuthoritySubjectToken.query.one().authority_revision), 1)
+            self.assertEqual(int(StudyProgressSubject.query.one().mirror_revision), 3)
+            source_a = ConnectSourceCardRef.query.filter_by(
+                user_id=self.admin_id,
+                external_card_id="4101",
+            ).one()
+            self.assertEqual(source_a.snapshot_hash, "e" * 64)
+
+        snapshot_b = {
+            **snapshot_a,
+            "sourceCardId": 4102,
+            "ord": 1,
+            "snapshotHash": "b" * 64,
+            "interval": 20,
+        }
+        second = self._upload_package(session_id, "progress", 2, [snapshot_b])["results"][0]
+        self.assertEqual((second["state"], second["code"]), ("applied", "PROGRESS_APPLIED"))
+        with self.app.app_context():
+            rows = CardProgress.query.filter_by(user_id=self.admin_id).all()
+            self.assertEqual(
+                {(row.interval_days, int(row.revision)) for row in rows},
+                {(20, 2)},
+            )
+            refs = ConnectSourceCardRef.query.filter_by(user_id=self.admin_id).all()
+            self.assertEqual(len(refs), 2)
+            self.assertEqual({int(row.applied_local_revision) for row in refs}, {2})
+            self.assertEqual(int(StudyAuthoritySubjectToken.query.one().authority_revision), 2)
+
+        with patch(
+            "app.services.study_progress_shadow_mirror_service.finalize_external_progress_mirror",
+            side_effect=RuntimeError("NOTE external mirror fault injection"),
+        ):
+            failed = self._upload_package(
+                session_id,
+                "progress",
+                3,
+                [
+                    {
+                        **snapshot_a,
+                        "snapshotHash": "c" * 64,
+                        "baseSnapshotHash": "e" * 64,
+                        "interval": 30,
+                    }
+                ],
+            )["results"][0]
+        self.assertEqual(failed["code"], "PROGRESS_IMPORT_FAILED")
+        with self.app.app_context():
+            rows = CardProgress.query.filter_by(user_id=self.admin_id).all()
+            self.assertEqual(
+                {(row.interval_days, int(row.revision)) for row in rows},
+                {(20, 2)},
+            )
+            source_a = ConnectSourceCardRef.query.filter_by(
+                user_id=self.admin_id,
+                external_card_id="4101",
+            ).one()
+            self.assertEqual(source_a.snapshot_hash, "e" * 64)
+            self.assertEqual(int(StudyAuthoritySubjectToken.query.one().authority_revision), 2)
+
+            from app.services import study_service
+
+            reviewed_card = db.session.get(Card, source_a.card_id)
+            study_service.execute_native_review_command(
+                user=db.session.get(User, self.admin_id),
+                card=reviewed_card,
+                action="good",
+                payload={"duration_ms": 100},
+                clone_scope=None,
+                requested_scope_id=int(reviewed_card.note.deck_id),
+                timezone_name="UTC",
+                now=datetime(2026, 9, 23, 10, 0, 0),
+            )
+            post_review_revision = int(
+                StudyAuthoritySubjectToken.query.one().authority_revision
+            )
+
+        local_conflict = self._upload_package(
+            session_id,
+            "progress",
+            4,
+            [
+                {
+                    **snapshot_a,
+                    "snapshotHash": "d" * 64,
+                    "baseSnapshotHash": "e" * 64,
+                    "interval": 40,
+                }
+            ],
+        )["results"][0]
+        self.assertEqual(local_conflict["code"], "LOCAL_PROGRESS_CHANGED")
+        with self.app.app_context():
+            self.assertEqual(
+                int(StudyAuthoritySubjectToken.query.one().authority_revision),
+                post_review_revision,
+            )
+
+        status_payload = {"notes": [{
+            "ankiNoteId": 3101,
+            "contentHash": "3" * 64,
+            "cards": [{"sourceCardId": 4101, "snapshotHash": "e" * 64}],
+        }]}
+        healthy_status = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json=status_payload,
+        )
+        self.assertEqual(healthy_status.status_code, 200, healthy_status.get_json())
+        self.assertEqual(
+            healthy_status.get_json()["notes"][0]["cards"][0]["progressState"],
+            "local_changed",
+        )
+
+        # The request mentions only one source Card. A divergent sibling must
+        # still invalidate the entire NOTE cursor before incremental sync.
+        with self.app.app_context():
+            sibling = CardProgress.query.filter(
+                CardProgress.user_id == self.admin_id,
+                CardProgress.card_id != ConnectSourceCardRef.query.filter_by(
+                    user_id=self.admin_id,
+                    external_card_id="4101",
+                ).one().card_id,
+            ).one()
+            sibling.reps = int(sibling.reps or 0) + 1
+            db.session.commit()
+        divergent_status = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json=status_payload,
+        )
+        self.assertEqual(divergent_status.status_code, 409, divergent_status.get_json())
+        self.assertEqual(
+            divergent_status.get_json()["error"], "AUTHORITY_READ_PARITY_DIVERGED"
+        )
+
+    def test_note_authority_revlog_is_history_only_and_card_atomic(self):
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
+        self._login()
+        session_id = self._create_session()["importSessionId"]
+        note_record = {
+            "ankiNoteId": 3201,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "4" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "authority", "Meaning": "revlog"},
+                "tags": ["note-authority-revlog"],
+            },
+        }
+        card_result = self._upload_package(session_id, "cards", 0, [note_record])
+        self.assertTrue(card_result["results"][0]["imported"])
+        with self.app.app_context():
+            enrollment = stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.admin_id,
+                now_utc=datetime(2026, 9, 22, 8, 0, 0),
+            )
+            self.assertEqual((enrollment.subject_count, enrollment.card_count), (1, 1))
+            db.session.commit()
+
+        snapshot = {
+            "externalNoteId": 3201,
+            "sourceCardId": 4201,
+            "ord": 0,
+            "snapshotHash": "f" * 64,
+            "baseSnapshotHash": None,
+            "type": 2,
+            "queue": 2,
+            "due": 50003,
+            "sourceToday": 50000,
+            "interval": 14,
+            "factor": 2500,
+            "reps": 2,
+            "lapses": 1,
+            "left": 0,
+        }
+        progress_result = self._upload_package(
+            session_id,
+            "progress",
+            0,
+            [snapshot],
+        )["results"][0]
+        self.assertEqual(progress_result["code"], "PROGRESS_APPLIED")
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            token = StudyAuthoritySubjectToken.query.one()
+            state = StudyProgressState.query.one()
+            subject = StudyProgressSubject.query.one()
+            baseline = {
+                "progress_revision": int(progress.revision),
+                "interval_days": progress.interval_days,
+                "last_review_event_id": progress.last_review_event_id,
+                "last_reviewed_at": progress.last_reviewed_at,
+                "authority_revision": int(token.authority_revision),
+                "semantic_hash": bytes(token.semantic_state_hash),
+                "state_hash": bytes(state.semantic_state_hash),
+                "mirror_revision": int(subject.mirror_revision),
+            }
+
+        first_ms = int(datetime(2026, 9, 22, 9, tzinfo=timezone.utc).timestamp() * 1000)
+        second_ms = int(datetime(2026, 9, 22, 10, tzinfo=timezone.utc).timestamp() * 1000)
+        reviews = [
+            {
+                "sourceReviewId": first_ms,
+                "sourceCardId": 4201,
+                "ease": 3,
+                "type": 1,
+                "ivl": 10,
+                "lastIvl": 5,
+                "factor": 2500,
+                "time": 1200,
+            },
+            {
+                "sourceReviewId": second_ms,
+                "sourceCardId": 4201,
+                "ease": 2,
+                "type": 1,
+                "ivl": 14,
+                "lastIvl": 10,
+                "factor": 2450,
+                "time": 2300,
+            },
+        ]
+        imported = self._upload_package(session_id, "reviews", 0, reviews)
+        self.assertEqual(
+            [row["state"] for row in imported["results"]],
+            ["imported", "imported"],
+        )
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            token = StudyAuthoritySubjectToken.query.one()
+            state = StudyProgressState.query.one()
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(int(progress.revision), baseline["progress_revision"])
+            self.assertEqual(progress.interval_days, baseline["interval_days"])
+            self.assertEqual(
+                progress.last_review_event_id,
+                baseline["last_review_event_id"],
+            )
+            self.assertEqual(progress.last_reviewed_at, baseline["last_reviewed_at"])
+            self.assertEqual(int(token.authority_revision), baseline["authority_revision"])
+            self.assertEqual(bytes(token.semantic_state_hash), baseline["semantic_hash"])
+            self.assertEqual(bytes(state.semantic_state_hash), baseline["state_hash"])
+            self.assertEqual(int(subject.mirror_revision), baseline["mirror_revision"])
+            self.assertEqual(ReviewEvent.query.count(), 2)
+            self.assertEqual(ConnectReviewEventRef.query.count(), 2)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 2)
+            self.assertEqual(
+                {row.provenance_code for row in StudyProgressHistoryFact.query.all()},
+                {"CONNECT_REVLOG"},
+            )
+            self.assertEqual(
+                StudyProgressContributor.query.one().history_completeness_code,
+                "HISTORY_MIXED_PARTIAL",
+            )
+            self.assertEqual(
+                ConnectSourceCardRef.query.one().review_cursor,
+                second_ms,
+            )
+
+        replay = self._upload_package(session_id, "reviews", 1, reviews)
+        self.assertEqual(
+            [row["state"] for row in replay["results"]],
+            ["unchanged", "unchanged"],
+        )
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 2)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 2)
+
+        fault_review = [
+            {
+                **reviews[1],
+                "sourceReviewId": second_ms + 1000,
+            }
+        ]
+        with patch(
+            "app.services.study_progress_shadow_mirror_service.append_external_history_facts",
+            side_effect=RuntimeError("NOTE revlog fault injection"),
+        ):
+            failed = self._upload_package(
+                session_id,
+                "reviews",
+                2,
+                fault_review,
+            )["results"][0]
+        self.assertEqual((failed["state"], failed["cardAtomic"]), ("failed", True))
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 2)
+            self.assertEqual(ConnectReviewEventRef.query.count(), 2)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 2)
+            self.assertEqual(ConnectSourceCardRef.query.one().review_cursor, second_ms)
+            self.assertEqual(
+                int(StudyAuthoritySubjectToken.query.one().authority_revision),
+                baseline["authority_revision"],
+            )
+
+    def test_card_import_batch_context_fences_learner_before_deck_lookup(self):
+        order = []
+
+        def record_fence(*_args, **kwargs):
+            self.assertEqual(kwargs["learner_user_id"], self.admin_id)
+            self.assertTrue(kwargs["allow_note_authority"])
+            order.append("learner")
+
+        def record_decks(_user_id):
+            order.append("decks")
+            return []
+
+        with self.app.app_context(), patch(
+            "app.services.connect.import_session.lock_study_authority_route",
+            side_effect=record_fence,
+        ), patch(
+            "app.services.connect.import_session._accessible_note_types",
+            return_value=[],
+        ), patch(
+            "app.services.connect.import_session._owned_decks",
+            side_effect=record_decks,
+        ):
+            prepare_import_batch_context(
+                user_id=self.admin_id,
+                session=SimpleNamespace(note_type_bindings={}),
+                cards=[],
+            )
+        self.assertEqual(order, ["learner", "decks"])
+
+    def test_note_authority_import_session_relocates_existing_deck_like_legacy(self):
+        self._login()
+        self._create_session()
+        with self.app.app_context():
+            stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.admin_id,
+                now_utc=datetime(2026, 9, 23, 3, 0, 0),
+            )
+            db.session.commit()
+        payload = self._session_payload()
+        payload["selectedDecks"] = ["Renamed"]
+        payload["decks"][0]["targetPath"] = "Renamed"
+        response = self.client.post(
+            "/api/flashcards/import/anki/sessions", json=payload
+        )
+        self.assertEqual(response.status_code, 201, response.get_json())
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Deck, self.deck_id).name, "Renamed")
+
+    def test_note_authority_card_import_updates_content_and_snapshot_starts_state(self):
+        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
+        self._login()
+        initial_session_id = self._create_session()["importSessionId"]
+        original = {
+            "ankiNoteId": 3301,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "5" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "before", "Meaning": "authority"},
+                "tags": ["before-enrollment"],
+            },
+        }
+        self.assertTrue(
+            self._upload_package(initial_session_id, "cards", 0, [original])["results"][0]["imported"]
+        )
+        with self.app.app_context():
+            stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.admin_id,
+                now_utc=datetime(2026, 9, 22, 12, 0, 0),
+            )
+            db.session.commit()
+            revisions = {
+                row.subject_id: row.authority_revision
+                for row in StudyAuthoritySubjectToken.query.all()
+            }
+
+        session_id = self._create_session()["importSessionId"]
+        imported = self._upload_package(
+            session_id,
+            "cards",
+            0,
+            [
+                {
+                    **original,
+                    "contentHash": "6" * 64,
+                    "note": {
+                        **original["note"],
+                        "fields": {"Word": "after", "Meaning": "updated"},
+                        "tags": ["after-enrollment"],
+                    },
+                },
+                {
+                    **original,
+                    "ankiNoteId": 3302,
+                    "contentHash": "7" * 64,
+                    "note": {**original["note"], "fields": {"Word": "new", "Meaning": "pristine"}},
+                    "cardsProgress": [{"ord": 0, "type": 2, "queue": 2, "interval": 3,
+                        "factor": 2500, "reps": 1, "lapses": 0}],
+                },
+            ],
+        )
+        self.assertEqual([row["imported"] for row in imported["results"]], [True, True])
+        # Per-Card legacy progress is not applied under NOTE; it is typed.
+        self.assertEqual(
+            imported["results"][1]["progressResults"],
+            [{"ord": 0, "state": "unsupported", "code": "NOTE_SNAPSHOT_REQUIRED"}],
+        )
+        with self.app.app_context():
+            updated = ConnectSourceNoteRef.query.filter_by(
+                user_id=self.admin_id, external_note_id="3301").one()
+            self.assertEqual(db.session.get(Note, updated.note_id).field_values,
+                {"Word": "after", "Meaning": "updated"})
+            self.assertEqual(
+                {row.subject_id: row.authority_revision for row in StudyAuthoritySubjectToken.query.all()},
+                revisions,
+            )
+            new_note_id = ConnectSourceNoteRef.query.filter_by(
+                user_id=self.admin_id, external_note_id="3302").one().note_id
+            new_card_ids = [card.id for card in Card.query.filter_by(note_id=new_note_id)]
+            self.assertEqual(
+                CardProgress.query.filter(CardProgress.card_id.in_(new_card_ids)).count(), 0
+            )
+
+        snapshot = {
+            "externalNoteId": 3302,
+            "sourceCardId": 4302,
+            "ord": 0,
+            "snapshotHash": "a" * 64,
+            "baseSnapshotHash": None,
+            "type": 2,
+            "queue": 2,
+            "due": 50003,
+            "sourceToday": 50000,
+            "interval": 14,
+            "factor": 2500,
+            "reps": 2,
+            "lapses": 1,
+            "left": 0,
+        }
+        applied = self._upload_package(session_id, "progress", 0, [snapshot])["results"][0]
+        self.assertEqual((applied["state"], applied["code"]), ("applied", "PROGRESS_APPLIED"))
+        with self.app.app_context():
+            subject = StudyProgressSubject.query.filter_by(
+                learner_user_id=self.admin_id, live_note_id=new_note_id).one()
+            self.assertEqual(
+                int(db.session.get(StudyAuthoritySubjectToken, subject.id).authority_revision), 1
+            )
+            rows = CardProgress.query.filter(CardProgress.card_id.in_(new_card_ids)).all()
+            self.assertEqual({(row.interval_days, row.scheduler_mode) for row in rows}, {(14, "anki")})
 
     def test_progress_snapshot_conflict_and_idempotency_contract(self):
         self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True

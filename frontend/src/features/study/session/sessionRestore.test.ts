@@ -5,123 +5,12 @@ import {
   resolveClientAlgorithm,
   validateSnapshotAlgorithmContract,
 } from '../scheduler/algorithmRegistry'
-import type { StudySessionSnapshot } from '../types'
 import { canonicalDigest } from './canonicalDigest'
 import { normalizePersistedStudySession } from './sessionRestore'
 
-const FROZEN_TEMPLATE_VERSION = 'sha256-d2ee81f91e39933b64c17571d6b6e567b339f3349024d95bd383d77dac83fd84'
-const FROZEN_CONTENT_VERSION = 'sha256-cd4d425619f174fcfd5a7e53d2578b8f63ec314efdf728c6985bf71405d73fce'
+import { FROZEN_TEMPLATE_VERSION, FROZEN_CONTENT_VERSION, studySnapshotFixture as snapshot } from './studySessionTestFixture'
 const FROZEN_BINDING_FINGERPRINT = 'sha256-fcc37db709986454b8f9f41ee8761518992b282185bb140812749a562580142d'
 
-function snapshot(): StudySessionSnapshot {
-  return {
-    schema_version: 'study-session.v2',
-    session_id: '11111111-1111-4111-8111-111111111111',
-    user_id: 7,
-    session_token: 'token',
-    snapshot_hash: 'snapshot-hash',
-    scope: { type: 'deck', id: '12', name: 'Deck' },
-    server_now_utc: '2026-02-22T09:00:00.000Z',
-    expires_at: '2026-02-23T09:00:00.000Z',
-    timezone: 'UTC',
-    day_boundary_hour_local: 4,
-    learn_ahead_seconds: 1200,
-    scheduler_algorithm: 'legacy-anki',
-    algorithm_version: '1.0.0',
-    queue_contract_version: 'flama-queue.v1',
-    policies: {
-      policy: {
-        algorithm_key: 'legacy-anki',
-        algorithm_version: '1.0.0',
-        config_schema_version: 'scheduler-config.v1',
-        config_hash: 'policy',
-        timezone: 'UTC',
-        preset_id: null,
-        config: {
-          learning_steps_ms: [60_000, 600_000],
-          graduating_interval_days: 1,
-          easy_interval_days: 5,
-          relearning_steps_ms: [600_000],
-          minimum_interval_days: 1,
-          starting_ease: 2.5,
-          easy_bonus: 1.3,
-          interval_modifier: 1,
-          hard_factor: 1.2,
-          new_interval_factor: 0,
-          min_ease: 1.3,
-          max_interval_days: 36_500,
-          day_boundary_hour_local: 4,
-          learn_ahead_seconds: 1200,
-          leech_threshold: 8,
-          leech_suspend: true,
-          scheduler_mode: 'legacy',
-          review_fuzz_factor: null,
-          fsrs_next_states: null,
-        },
-      },
-    },
-    cards: [{
-      card_id: 'card-1',
-      note_id: 'note-1',
-      template_id: 'template-1',
-      source_deck_id: 12,
-      local_deck_id: 12,
-      composition_id: 'standard',
-      note_type_id: 'type-1',
-      created_at: '2026-02-01T00:00:00.000Z',
-      policy_key: 'policy',
-      template_key: 'template',
-      content_key: 'content',
-      base_revision: 0,
-      base_state_hash: 'base',
-      can_edit_card: true,
-      state: {
-        type: 'new',
-        step_index: 0,
-        due_at: '2026-02-22T09:00:00.000Z',
-        due_day: null,
-        interval_days: 0,
-        ease: 2.5,
-        reps: 0,
-        lapses: 0,
-        last_review_at: null,
-        review_kind: 'review',
-        scheduler_mode: 'legacy',
-        suspended: false,
-        suspension_reason: null,
-        leeched: false,
-        memory_state: null,
-      },
-    }],
-    templates: {
-      template: {
-        schema_version: 'study-template.v1',
-        renderer_abi: 'test',
-        id: 'template-1',
-        version: 'v1',
-        front_source: '{{Word}}',
-        back_source: '{{Word}}',
-        front_inline_scripts: [],
-        back_inline_scripts: [],
-        shared_css: '',
-        field_defs: [],
-      },
-    },
-    contents: {
-      content: {
-        schema_version: 'study-content.v1',
-        renderer_abi: 'test',
-        id: 'note-1',
-        note_id: 'note-1',
-        version: 'v1',
-        field_values: { Word: '猫' },
-        render_context: { Word: '猫' },
-        media: [],
-      },
-    },
-    compositions: {},
-  }
-}
 
 type StoredEventFixture = {
   event_id: string
@@ -140,6 +29,13 @@ type StoredEventFixture = {
   config_schema_version?: string
   config_hash?: string
   study_session_id?: string
+  authority_mode?: string
+  enrollment_epoch?: string
+  logical_note_key?: string
+  subject_generation?: string
+  base_authority_revision?: string
+  base_authority_state_hash?: string
+  operation_key?: string
 }
 
 function persistedSession() {
@@ -380,6 +276,96 @@ describe('persisted study session normalization', () => {
       action_contract_version: '1',
       config_hash: 'policy',
       study_session_id: stored.snapshot.session_id,
+    })
+  })
+
+  it('restores exact v4 Note pin and quarantines epoch or operation drift', () => {
+    const stored = persistedSession()
+    const eventId = stored.events[0].event_id
+    const pin = {
+      schema_version: 'study-note-authority-pin.v1' as const,
+      authority_mode: 'NOTE' as const,
+      enrollment_epoch: '3',
+      logical_note_key: 'note-key',
+      subject_generation: '2',
+      base_authority_revision: '7',
+      base_authority_state_hash: '11'.repeat(32),
+    }
+    stored.snapshot = {
+      ...stored.snapshot,
+      schema_version: 'study-session.v4',
+      authority_mode: 'NOTE',
+      enrollment_epoch: '3',
+      cards: stored.snapshot.cards.map((card) => ({
+        ...card,
+        authority_pin: pin,
+      })),
+    }
+    stored.events[0] = {
+      ...stored.events[0],
+      action_key: 'review.good',
+      action_contract_version: '1',
+      trigger_key: 'scheduler.review.good',
+      trigger_contract_version: '1',
+      algorithm_key: 'legacy-anki',
+      algorithm_version: '1.0.0',
+      config_schema_version: 'scheduler-config.v1',
+      config_hash: 'policy',
+      study_session_id: stored.snapshot.session_id,
+      ...pin,
+      operation_key: eventId,
+    }
+
+    const restored = normalizePersistedStudySession(stored)
+    expect(restored.status).toBe('restored')
+    if (restored.status !== 'restored') return
+    expect(restored.session.events[0]).toMatchObject({
+      operation_key: eventId,
+      base_authority_revision: '7',
+    })
+    expect(restored.session.events[0]).not.toHaveProperty('schema_version')
+
+    // Pre-release builds accidentally copied the snapshot pin's schema tag
+    // onto events. It was rejected before admission. Restore must retain the
+    // original batch/event identities and project only the valid event wire.
+    const pending = {
+      ...stored, events: [], status: 'pending_commit',
+      commit_id: '22222222-2222-4222-8222-222222222222',
+      commit_reason: 'auto_finish', resume_after_commit: false,
+      batch_sequence: 1, event_sequence: 1,
+      in_flight_batches: [{
+        schema_version: 'study-batch.v3',
+        batch_id: '22222222-2222-4222-8222-222222222222', batch_sequence: 1,
+        session_token: stored.snapshot.session_token,
+        snapshot_hash: stored.snapshot.snapshot_hash,
+        commit_reason: 'auto_finish', is_final: true,
+        events: stored.events, final_states: [],
+      }],
+    }
+    const recovered = normalizePersistedStudySession(pending)
+    expect(recovered.status).toBe('restored')
+    if (recovered.status !== 'restored') return
+    const batch = recovered.session.in_flight_batches![0]
+    expect(batch.batch_id).toBe(pending.commit_id)
+    expect(batch.events[0].event_id).toBe(eventId)
+    expect(batch.events[0]).toMatchObject({ operation_key: eventId })
+    expect(batch.events[0]).not.toHaveProperty('schema_version')
+
+    const wrongOperation = structuredClone(stored)
+    wrongOperation.events[0].operation_key = 'another-operation'
+    expect(normalizePersistedStudySession(wrongOperation)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'EVENT_CONTRACT_MISMATCH' },
+    })
+
+    const wrongEpoch = structuredClone(stored)
+    if (wrongEpoch.snapshot.schema_version !== 'study-session.v4') {
+      throw new Error('Expected the v4 fixture to retain its schema.')
+    }
+    wrongEpoch.snapshot.enrollment_epoch = '4'
+    expect(normalizePersistedStudySession(wrongEpoch)).toMatchObject({
+      status: 'quarantine',
+      quarantine: { reason: 'MALFORMED_SESSION' },
     })
   })
 

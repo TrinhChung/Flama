@@ -7,7 +7,9 @@ import type {
   StudySessionEvent,
   StudySessionCommitReceipt,
   StudySessionSnapshot,
+  StudyBatchPayload,
 } from '../types'
+import { canonicalDigest } from '../session/canonicalDigest'
 
 ;(globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT: boolean
@@ -73,6 +75,7 @@ vi.mock('../session/studySessionLease', async (importOriginal) => {
 })
 
 import { useStudySession } from './useStudySession'
+import { createPersistedSession } from '../session/studySessionEngine'
 
 type LeaseRecord = {
   signal: AbortSignal
@@ -296,7 +299,7 @@ function receipt(): StudySessionCommitReceipt {
     schema_version: 'study-commit-receipt.v1',
     success: true,
     session_id: 'session-1',
-    commit_id: 'commit-1',
+    commit_id: '00000000-0000-4000-8000-000000000001',
     commit_reason: 'manual_exit',
     applied_event_count: 1,
     updated_cards: [],
@@ -349,6 +352,65 @@ async function waitFor(assertion: () => void) {
   throw lastError
 }
 
+function noteSnapshot(): StudySessionSnapshot {
+  const base = snapshot()
+  return {
+    ...base, schema_version: 'study-session.v4', authority_mode: 'NOTE', enrollment_epoch: '1',
+    batch_transport: 'study-note-batch-transport.v1',
+    cards: base.cards.map((card) => ({ ...card, authority_pin: {
+      schema_version: 'study-note-authority-pin.v1', authority_mode: 'NOTE', enrollment_epoch: '1',
+      logical_note_key: card.note_id, subject_generation: '1', base_authority_revision: '0',
+      base_authority_state_hash: '11'.repeat(32),
+    } })),
+  }
+}
+
+function mockNoteBatchApi() {
+  let id = 0
+  vi.stubGlobal('crypto', {
+    randomUUID: () => `00000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
+  })
+  const batches = new Map<string, StudyBatchPayload>()
+  let completed = true
+  mocks.mutate.mockImplementation(async (path: string, _method: string, payload: StudyBatchPayload) => {
+    if (path === '/api/study/sessions') return noteSnapshot()
+    if (!path.endsWith('/batch')) throw new Error(`Unexpected sync mutation: ${path}`)
+    batches.set(payload.batch_id, payload)
+    return { schema_version: 'study-batch-receipt.v1', status: 'enqueued', session_id: 'session-1',
+      batch_id: payload.batch_id, batch_sequence: payload.batch_sequence, event_count: payload.events.length }
+  })
+  const originalGet = mocks.get.getMockImplementation()!
+  mocks.get.mockImplementation(async (path: string) => {
+    if (!path.includes('/batch/')) return originalGet(path)
+    const batch = batches.get(path.split('/').at(-1)!)
+    if (!batch) {
+      const { ApiError } = await import('@/shared/api/client')
+      throw new ApiError('Not found', 404, 'BATCH_NOT_FOUND')
+    }
+    return { schema_version: 'study-batch-status.v1', status: completed ? 'completed' : 'enqueued',
+      session_id: 'session-1', batch_id: batch.batch_id, batch_sequence: batch.batch_sequence,
+      event_count: batch.events.length, is_final: batch.is_final,
+      receipt: { ...receipt(), schema_version: 'study-commit-receipt.v2', authority_mode: 'NOTE', enrollment_epoch: '1',
+        batch_receipt_schema_version: 'study-note-batch-receipt.v1', batch_id: batch.batch_id,
+        commit_id: batch.batch_id, commit_reason: batch.commit_reason, batch_sequence: batch.batch_sequence,
+        is_final: batch.is_final, applied_event_count: batch.events.length,
+        cumulative_event_count: batch.events.at(-1)?.sequence ?? latest.session?.event_sequence,
+        rating_counts: { again: 0, hard: 0, good: batch.events.length, easy: 0 },
+        request_hash: canonicalDigest(batch), receipt_hash: `sha256-${'22'.repeat(32)}`,
+      } }
+  })
+  return { batches, setCompleted: (value: boolean) => { completed = value } }
+}
+
+async function waitForLeaseAbort(record: LeaseRecord) {
+  for (let attempt = 0; attempt < 20 && !record.signal.aborted; attempt += 1) {
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 25))
+    })
+  }
+  expect(record.signal.aborted).toBe(true)
+}
+
 async function openReadySession() {
   mocks.bootstrap = { data: { user: { id: 7 } } }
   await renderHarness()
@@ -371,7 +433,10 @@ beforeEach(() => {
     if (path === '/api/study/sessions') return Promise.resolve(snapshot())
     throw new Error(`Unexpected mutation: ${path}`)
   })
-  mocks.mutateKeepalive.mockReset().mockResolvedValue(receipt())
+  mocks.mutateKeepalive.mockReset().mockImplementation((_path, _method, payload) => Promise.resolve({
+    ...receipt(), commit_id: payload.commit_id, commit_reason: payload.commit_reason,
+    applied_event_count: payload.events.length,
+  }))
   mocks.invalidateQueries.mockReset().mockResolvedValue(undefined)
   mocks.loadSession.mockReset().mockResolvedValue(null)
   mocks.loadQuarantine = null
@@ -485,9 +550,12 @@ describe('useStudySession cross-tab ownership', () => {
         scope_id: '12',
         composition_id: 'comp:notetype:type-1:template:template-1',
         accepted_session_schema_versions: [
+          'study-session.v4',
           'study-session.v3',
           'study-session.v2',
         ],
+        accepted_batch_schema_versions: ['study-batch.v3'],
+        accepted_note_storage_profiles: ['note-mysql-float-text.v1'],
       },
     )
   })
@@ -639,11 +707,7 @@ describe('useStudySession cross-tab ownership', () => {
 
     pendingLoad.resolve(null)
     await waitFor(() => expect(mocks.saveSession).toHaveBeenCalledOnce())
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 80))
-    })
-
-    expect(record.signal.aborted).toBe(true)
+    await waitForLeaseAbort(record)
     expect(latest.session).toBeNull()
   })
 
@@ -710,10 +774,8 @@ describe('useStudySession cross-tab ownership', () => {
     pendingSave.resolve(true)
     await act(async () => {
       await answerPromise
-      await new Promise((resolve) => window.setTimeout(resolve, 80))
     })
-
-    expect(record.signal.aborted).toBe(true)
+    await waitForLeaseAbort(record)
     expect(latest.session).toBeNull()
   })
 
@@ -746,9 +808,8 @@ describe('useStudySession cross-tab ownership', () => {
     pendingSave.resolve(true)
     await act(async () => {
       await answerPromise
-      await new Promise((resolve) => window.setTimeout(resolve, 80))
     })
-    expect(record.signal.aborted).toBe(true)
+    await waitForLeaseAbort(record)
   })
 
   it('refuses handoff when the current session is not durably stored', async () => {
@@ -776,6 +837,23 @@ describe('useStudySession cross-tab ownership', () => {
     expect(latest.session).not.toBeNull()
   })
 
+  it('does not re-anchor the session clock after a local answer', async () => {
+    await openReadySession()
+    const before = latest.view?.now_ms
+    expect(before).toBeTypeOf('number')
+    const decision = latest.prepareDecision('card-1')
+    const futureWallTime = Date.now() + 10_000
+    const wallClock = vi.spyOn(Date, 'now').mockReturnValue(futureWallTime)
+    try {
+      await act(async () => {
+        await latest.answer('card-1', 'good', decision, 250)
+      })
+      expect(latest.view?.now_ms).toBeLessThan(before! + 5_000)
+    } finally {
+      wallClock.mockRestore()
+    }
+  })
+
   it('keeps the physical lease until the exit batch finishes', async () => {
     await openReadySession()
     const decision = latest.prepareDecision('card-1')
@@ -798,10 +876,7 @@ describe('useStudySession cross-tab ownership', () => {
     expect(record.signal.aborted).toBe(false)
 
     pendingExitCommit.resolve(receipt())
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 80))
-    })
-    expect(record.signal.aborted).toBe(true)
+    await waitForLeaseAbort(record)
   })
 
   it('does not reconcile a commit response after ownership loss', async () => {
@@ -1015,6 +1090,38 @@ describe('useStudySession cross-tab ownership', () => {
     })
   })
 
+  it('retries a durable pending commit when the browser comes back online', async () => {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => {
+      await latest.answer('card-1', 'good', decision, 250)
+    })
+    let networkAvailable = false
+    mocks.mutate.mockImplementation((path: string) => {
+      if (path === '/api/study/sessions/session-1/commit') {
+        return networkAvailable
+          ? Promise.resolve(receipt())
+          : Promise.reject(new TypeError('Network unavailable'))
+      }
+      if (path === '/api/study/sessions') return Promise.resolve(snapshot())
+      throw new Error(`Unexpected mutation: ${path}`)
+    })
+
+    await act(async () => {
+      await expect(latest.commit({ reason: 'manual_exit' })).rejects.toThrow('Network unavailable')
+    })
+    await waitFor(() => expect(latest.session?.status).toBe('pending_commit'))
+    expect(latest.session?.events).toHaveLength(1)
+
+    networkAvailable = true
+    await act(async () => {
+      window.dispatchEvent(new Event('online'))
+    })
+    await waitFor(() => expect(latest.receipt?.commit_id).toBe('00000000-0000-4000-8000-000000000001'))
+    expect(latest.session?.events).toHaveLength(1)
+    expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1')
+  })
+
   it('pagehide waits for the answer owner and flushes the latest durable state', async () => {
     await openReadySession()
     const pendingSave = deferred<boolean>()
@@ -1064,6 +1171,104 @@ describe('useStudySession cross-tab ownership', () => {
     await waitFor(() => expect(latest.session).not.toBeNull())
   })
 
+  it.each([
+    { schema_version: 'study-batch-receipt.v1', status: 'enqueued' },
+    { ...receipt(), session_id: 'another-session' },
+    { ...receipt(), commit_id: 'another-commit' },
+    { ...receipt(), applied_event_count: 0 },
+  ])('retains pending work for an unverified commit response %#', async (response) => {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    mocks.mutate.mockResolvedValue(response)
+    await act(async () => {
+      await expect(latest.commit()).rejects.toMatchObject({ code: 'INVALID_COMMIT_RECEIPT' })
+    })
+    expect(latest.session?.events).toHaveLength(1)
+    expect(latest.session?.status).toBe('pending_commit')
+    expect(latest.receipt).toBeNull()
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+  })
+
+  it('pagehide does not delete pending work on a queue acknowledgment', async () => {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    mocks.mutateKeepalive.mockResolvedValue({ schema_version: 'study-batch-receipt.v1', status: 'enqueued' })
+    await act(async () => { window.dispatchEvent(new Event('pagehide')) })
+    await waitFor(() => expect(mocks.mutateKeepalive).toHaveBeenCalledOnce())
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+    expect(mocks.saveSession.mock.calls.at(-1)?.[0].events).toHaveLength(1)
+  })
+
+  it.each(['committed', 'expired', 'open'])('retains in-flight batches when restoring a %s session', async (status) => {
+    const persisted = createPersistedSession(snapshot())
+    persisted.snapshot.expires_at = status === 'expired' ? '2020-01-01T00:00:00Z' : snapshot().expires_at
+    persisted.batch_sequence = 1
+    persisted.in_flight_batches = [{
+      schema_version: 'study-batch.v1', batch_id: 'batch-1', batch_sequence: 1,
+      session_token: 'token', snapshot_hash: 'snapshot-hash', events: [],
+      is_final: true, commit_reason: 'manual_exit',
+    }]
+    mocks.loadSession.mockResolvedValue(persisted)
+    mocks.get.mockResolvedValue({ status, stale: true })
+    await openReadySession()
+    expect(latest.session?.in_flight_batches).toEqual(persisted.in_flight_batches)
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+    expect(mocks.mutate).not.toHaveBeenCalled()
+  })
+
+  it('uses the negotiated NOTE batch transport and clears only a completed final receipt', async () => {
+    const api = mockNoteBatchApi()
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    await act(async () => { await latest.commit({ reason: 'manual_exit' }) })
+    expect(latest.receipt).toMatchObject({ authority_mode: 'NOTE', applied_event_count: 1 })
+    expect(latest.totalSessionStats.total_reviews).toBe(1)
+    expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1')
+    expect(api.batches.size).toBe(1)
+    expect(mocks.mutate.mock.calls.some(([path]) => path.endsWith('/commit'))).toBe(false)
+    mocks.mutateKeepalive.mockClear()
+    await act(async () => { window.dispatchEvent(new Event('pagehide')) })
+    expect(mocks.mutateKeepalive).not.toHaveBeenCalled()
+  })
+
+  it('continues the same NOTE lease after rollover and preserves its stats through empty finalization', async () => {
+    mockNoteBatchApi()
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    await act(async () => { await latest.commit({ reason: 'rollover', resumeAfterCommit: true }) })
+    expect(latest.session?.status).toBe('active')
+    expect(latest.session?.batch_sequence).toBe(1)
+    expect(latest.receipt).toBeNull()
+    expect(latest.totalSessionStats.total_reviews).toBe(1)
+    expect(mocks.mutate.mock.calls.filter(([path]) => path === '/api/study/sessions')).toHaveLength(1)
+    await act(async () => { await latest.commit({ reason: 'manual_exit' }) })
+    expect(latest.receipt).toMatchObject({ applied_event_count: 0 })
+    expect(latest.totalSessionStats.total_reviews).toBe(1)
+  })
+
+  it('never deletes the durable NOTE batch after ownership is lost during polling', async () => {
+    const api = mockNoteBatchApi()
+    api.setCompleted(false)
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    let commitPromise!: Promise<StudySessionCommitReceipt | null>
+    await act(async () => { commitPromise = latest.commit().catch(() => null); await Promise.resolve() })
+    await waitFor(() => expect(api.batches.size).toBe(1))
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+    await act(async () => {
+      leaseRecords[0].handlers.onLost?.(new DOMException('Lost lease', 'AbortError'))
+      await commitPromise
+    })
+    expect(latest.receipt).toBeNull()
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+    expect(mocks.saveSession.mock.calls.at(-1)?.[0].in_flight_batches).toHaveLength(1)
+  })
+
   it('contains automatic rollover to the synchronous commit path', async () => {
     const events: StudySessionEvent[] = Array.from({ length: 50 }, (_, index) => ({
       event_id: `00000000-0000-4000-8000-${(index + 1).toString().padStart(12, '0')}`,
@@ -1096,7 +1301,7 @@ describe('useStudySession cross-tab ownership', () => {
     })
     mocks.mutate.mockImplementation((path: string) => {
       if (path === '/api/study/sessions/session-1/commit') {
-        return Promise.resolve({ ...receipt(), commit_reason: 'rollover' })
+        return Promise.resolve({ ...receipt(), commit_reason: 'rollover', applied_event_count: 50 })
       }
       if (path === '/api/study/sessions') return Promise.resolve(snapshot())
       throw new Error(`Unexpected mutation: ${path}`)

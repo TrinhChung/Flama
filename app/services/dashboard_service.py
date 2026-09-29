@@ -1,7 +1,7 @@
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 UTC = timezone.utc
 
@@ -12,7 +12,12 @@ from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 from models.deck import Deck
 from models.card_progress import CardProgress
+from app.repositories import study_repository
+from app.repositories.logical_overlay_scope_repository import logical_overlay_cards
+from app.repositories.study_authority_repository import lock_study_authority_route
 from app.repositories.study_repository import default_deck_options, _today_day_index
+from app.services.scheduler_config_service import resolve_deck_options
+from app.services.study_authority_read_service import load_study_authority_card_reads
 from app.services.stats_overview import get_effective_timezone_name, _build_timezone_obj
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
@@ -77,6 +82,11 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
     timezone_obj = _build_timezone_obj(timezone_name)
     boundary_hour = int(default_deck_options().dayBoundaryHourLocal)
     now = _utcnow()
+    authority_route = lock_study_authority_route(
+        db.session,
+        learner_user_id=int(current_user.id),
+        allow_note_authority=True,
+    )
     today_day_index = _today_day_index(
         now=now,
         timezone_name=timezone_name,
@@ -87,7 +97,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
     decks = collect_accessible_decks(user_id=current_user.id, admin_mode=admin_mode)
 
     # Needed below for logical_overlay clone card-count merging
-    if not admin_mode:
+    if not admin_mode or authority_route.mode_code == "NOTE":
         installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
     else:
         installs = []
@@ -234,6 +244,78 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                         bucket["learn"] += 1
                     elif count_bucket == "review":
                         bucket["due"] += 1
+
+    if authority_route.mode_code == "NOTE" and visible_deck_ids:
+        canonical_cards = (
+            Card.query.join(Note, Card.note_id == Note.id)
+            .filter(
+                Note.user_id == current_user.id,
+                Note.deck_id.in_(visible_deck_ids),
+            )
+            .order_by(Card.id.asc())
+            .all()
+        )
+        # Same logical-overlay scope as the LEGACY merge above: source Cards
+        # count under the learner's mapped local deck.
+        overlay_cards, overlay_note_types = (
+            ([], {})
+            if admin_mode
+            else logical_overlay_cards(installs, visible_deck_ids=set(visible_deck_ids))
+        )
+        counted_cards = [
+            (card, int(card.note.deck_id)) for card in canonical_cards
+        ] + overlay_cards
+        options_by_deck_id: Dict[int, Any] = {}
+        deck_options_by_card_id = {}
+        for card, deck_id in counted_cards:
+            if deck_id not in options_by_deck_id:
+                options_by_deck_id[deck_id] = resolve_deck_options(
+                    user_id=int(current_user.id),
+                    deck_id=deck_id,
+                )
+            deck_options_by_card_id.setdefault(str(card.id), options_by_deck_id[deck_id])
+        authority_reads = load_study_authority_card_reads(
+            db.session,
+            learner_user_id=int(current_user.id),
+            cards=tuple({str(card.id): card for card, _ in counted_cards}.values()),
+            now_utc=now,
+            timezone_name=timezone_name,
+            deck_options_by_card_id=deck_options_by_card_id,
+        )
+        card_counts_by_deck = {
+            int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
+            for deck_id in visible_deck_ids
+        }
+        deck_note_types = {}
+        for card in canonical_cards:
+            note = card.note
+            if note.note_type_id and int(note.deck_id) not in deck_note_types:
+                deck_note_types[int(note.deck_id)] = str(note.note_type_id)
+        for local_deck_id, source_note_type_id in overlay_note_types.items():
+            deck_note_types.setdefault(local_deck_id, source_note_type_id)
+        for card, deck_id in counted_cards:
+            bucket = card_counts_by_deck.setdefault(
+                deck_id, {"total": 0, "new": 0, "learn": 0, "due": 0}
+            )
+            bucket["total"] += 1
+            availability = authority_reads[str(card.id)].availability
+            count_bucket = study_repository.counter_bucket_for_progress_values(
+                queue=availability.normalized_queue,
+                due_at=availability.due_at,
+                due_day=availability.due_day,
+                is_suspended=availability.is_suspended,
+                is_buried=availability.is_buried,
+                buried_until_day=availability.buried_until_day,
+                now=now,
+                timezone_name=timezone_name,
+                day_boundary_hour_local=boundary_hour,
+            )
+            if count_bucket == study_repository.NEW_QUEUE:
+                bucket["new"] += 1
+            elif count_bucket == study_repository.LEARNING_QUEUE:
+                bucket["learn"] += 1
+            elif count_bucket == study_repository.REVIEW_QUEUE:
+                bucket["due"] += 1
     
     by_parent: Dict[int, List[Deck]] = {}
     for deck in decks:

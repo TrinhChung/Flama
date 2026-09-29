@@ -2,11 +2,14 @@
 
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import sqlalchemy as sa
 
 from app import create_app
+from app.startup_schema import ensure_backward_compatible_schema
 from app.repositories.study_repository import (
     apply_card_state_to_progress,
     select_next_due_card_from_loaded,
@@ -19,6 +22,7 @@ from models import db
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.scheduler_preset import SchedulerPreset
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.user import User
 from models.user_scheduler_settings import UserSchedulerSettings
 
@@ -133,6 +137,74 @@ class SchedulerSchemaTests(unittest.TestCase):
             self.assertAlmostEqual(float(stored.memory_difficulty or 0), 4.25, delta=0.0001)
             self.assertEqual(int(stored.last_leech_lapses or 0), 3)
             self.assertIsNotNone(stored.last_leech_at)
+
+    def test_startup_compatibility_does_not_rewrite_existing_progress_raw_value(self):
+        with self.app.app_context():
+            progress = CardProgress(
+                user_id=self.user_id,
+                card_id=None,
+                queue="review",
+                interval_days=7,
+                interval_days_raw=None,
+            )
+            db.session.add(progress)
+            # Deliberately divergent NOTE projection: boot repair must not
+            # mask it before the parity reader can reject the learner.
+            recorded_at = datetime(2026, 9, 24, 0, 0, 0)
+            db.session.add(StudyAuthorityEnrollment(
+                learner_user_id=self.user_id,
+                mode_code="NOTE",
+                epoch=1,
+                created_at=recorded_at,
+                updated_at=recorded_at,
+            ))
+            db.session.commit()
+            progress_id = progress.id
+
+            ensure_backward_compatible_schema()
+            db.session.expire_all()
+            stored = db.session.get(CardProgress, progress_id)
+            self.assertIsNone(stored.interval_days_raw)
+
+    def test_startup_compatibility_initializes_raw_value_when_column_is_added(self):
+        # A file-backed database keeps inspector connections separate from the
+        # writer transaction; SQLite :memory: shares one connection and can
+        # roll an in-flight repair UPDATE back during schema inspection.
+        with TemporaryDirectory(prefix="flama-startup-schema-") as temporary_dir:
+            database_path = (Path(temporary_dir) / "startup.sqlite").as_posix()
+            app = create_app({
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": f"sqlite:///{database_path}",
+                "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False,
+            })
+            with app.app_context():
+                db.create_all()
+                user = User(username="startup-raw-user", email="startup-raw@example.com")
+                user.set_password("password")
+                db.session.add(user)
+                db.session.flush()
+                progress = CardProgress(
+                    user_id=user.id,
+                    card_id=None,
+                    queue="review",
+                    interval_days=7,
+                    interval_days_raw=7.0,
+                )
+                db.session.add(progress)
+                db.session.commit()
+                progress_id = progress.id
+
+                db.session.execute(sa.text(
+                    "ALTER TABLE card_progress DROP COLUMN interval_days_raw"
+                ))
+                db.session.commit()
+                ensure_backward_compatible_schema()
+                db.session.expire_all()
+                stored = db.session.get(CardProgress, progress_id)
+                self.assertEqual(stored.interval_days_raw, 7.0)
+                db.session.remove()
+                db.engine.dispose()
 
     def test_review_event_persists_extended_scheduler_metadata(self):
         with self.app.app_context():

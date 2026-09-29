@@ -23,6 +23,7 @@ from app.services.flashcard_legacy import (
     ensure_quiz_note_type,
 )
 from app.services import study_progress_lifecycle_mirror_service
+from app.repositories.study_authority_repository import lock_study_authority_route
 from app.utils.bootstrap_admin import (
     MissingBootstrapAdminCredentials,
     resolve_bootstrap_admin_credentials,
@@ -61,6 +62,9 @@ def _normalize_correct_answer(raw_value: str | None) -> str:
 
 
 def _seed_quiz_dump_for_user(*, user_id: int, note_type_id: str, template_id: str) -> tuple[Deck | None, int]:
+    # This helper replaces whole Note/Card sets; callers must retain the
+    # learner fence until the transaction containing its writes is committed.
+    lock_study_authority_route(db.session, learner_user_id=int(user_id))
     manifest_path = QUIZ_DUMP_ROOT / QUIZ_DUMP_MANIFEST
     if not manifest_path.exists():
         print(f"Không tìm thấy quiz dump manifest: {manifest_path}. Bỏ qua seed deck Trắc nghiệm.")
@@ -270,12 +274,10 @@ def seed_template():
             else:
                 print(f"Test user đã tồn tại: {test_email}")
 
+        # Keep one learner fence across NoteType updates and quiz Note/Card
+        # replacement. The earlier admin-account commits do not touch content.
+        lock_study_authority_route(db.session, learner_user_id=int(user.id))
         note_type, template = ensure_legacy_note_type(db.session, user.id)
-        db.session.commit()
-        print(
-            "Đã đồng bộ Flama Standard Vocabulary từ canonical seed: "
-            f"note_type_id={note_type.id}, template_id={template.id}"
-        )
         quiz_note_type, quiz_template = ensure_quiz_note_type(db.session, user.id)
         quiz_deck, quiz_note_count = _seed_quiz_dump_for_user(
             user_id=user.id,
@@ -283,6 +285,10 @@ def seed_template():
             template_id=quiz_template.id,
         )
         db.session.commit()
+        print(
+            "Đã đồng bộ Flama Standard Vocabulary từ canonical seed: "
+            f"note_type_id={note_type.id}, template_id={template.id}"
+        )
         print(
             f"Đã seed NoteType Trắc nghiệm: note_type_id={quiz_note_type.id}, "
             f"template_id={quiz_template.id}"

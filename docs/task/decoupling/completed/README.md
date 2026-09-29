@@ -27,3 +27,4 @@ Các task đã qua review gate và được chuyển khỏi backlog active:
 - [P3-07 — Applied composition binding contract](./P3-07_APPLIED_COMPOSITION_BINDING_CONTRACT.md)
 - [INT-01 — Phase 0–3 integration](./INT-01_PHASE_0_3_INTEGRATION.md)
 - [Phase 3 and INT-01 closeout — 2026-09-09](./PHASE_3_AND_INT_01_CLOSEOUT_2026-09-09.md)
+- [Phase 4 and INT-02 pre-release development closeout — 2026-09-20](../../../architecture/phase-4-int02-closeout-2026-09-20.md) — production enablement exceptions remain open at P5-09.

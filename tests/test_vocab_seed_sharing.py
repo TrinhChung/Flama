@@ -15,9 +15,11 @@ from app.services.flashcard_legacy import (
     LEGACY_FRONT_TEMPLATE,
     LEGACY_SHARED_CSS,
 )
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from models import db
 from models.card_progress import CardProgress
 from models.flashcard import Card, DeckMarketplaceItem, Note, NoteType, Template
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.user import User
 from models.deck import Deck
 
@@ -108,6 +110,35 @@ class VocabSeedSharingTests(unittest.TestCase):
             return self.runner.invoke(
                 args=["seed-data-ensure", "--path", str(self.seed_dir)]
             )
+
+    def test_vocab_seed_rejects_note_authority_before_creating_content(self):
+        with self.app.app_context():
+            db.session.add(
+                StudyAuthorityEnrollment(
+                    learner_user_id=self.user_id,
+                    mode_code="NOTE",
+                    epoch=1,
+                    created_at=datetime(2026, 9, 23, 1, 0, 0),
+                    updated_at=datetime(2026, 9, 23, 1, 0, 0),
+                )
+            )
+            db.session.commit()
+
+        result = self.runner.invoke(
+            args=[
+                "vocab-seed",
+                "--path",
+                str(self.seed_dir),
+                "--owner-user-id",
+                str(self.user_id),
+            ]
+        )
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("NOTE_AUTHORITY_UNAVAILABLE", result.output)
+        with self.app.app_context():
+            self.assertEqual(NoteType.query.count(), 0)
+            self.assertEqual(Deck.query.count(), 0)
+            self.assertEqual(Note.query.count(), 0)
 
     def test_seed_data_ensure_seeds_empty_database_then_fast_skips(self):
         first_result = self._invoke_seed_data_ensure()
@@ -832,6 +863,31 @@ class VocabSeedSharingTests(unittest.TestCase):
         self.assertIn("ensure_legacy_note_type(db.session, user.id)", seed_source)
         self.assertNotIn("default-flama-vocab-000000000000", seed_source)
         self.assertNotIn("default-template-000000000000", seed_source)
+
+    def test_reseed_quiz_helper_rejects_note_authority_before_content(self):
+        seed_script = Path(__file__).resolve().parents[1] / "scripts" / "seed_flama_template.py"
+        seed_globals = runpy.run_path(str(seed_script))
+        with self.app.app_context():
+            db.session.add(
+                StudyAuthorityEnrollment(
+                    learner_user_id=self.user_id,
+                    mode_code="NOTE",
+                    epoch=1,
+                    created_at=datetime(2026, 9, 23, 1, 0, 0),
+                    updated_at=datetime(2026, 9, 23, 1, 0, 0),
+                )
+            )
+            db.session.commit()
+            with self.assertRaises(StudyAuthorityFenceError) as caught:
+                seed_globals["_seed_quiz_dump_for_user"](
+                    user_id=self.user_id,
+                    note_type_id="unused",
+                    template_id="unused",
+                )
+            self.assertEqual(caught.exception.code, "NOTE_AUTHORITY_UNAVAILABLE")
+            db.session.rollback()
+            self.assertEqual(Note.query.count(), 0)
+            self.assertEqual(Deck.query.count(), 0)
 
     def test_reseed_wrapper_progress_counts_match_their_commands(self):
         scripts_dir = Path(__file__).resolve().parents[1] / "scripts"

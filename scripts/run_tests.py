@@ -83,19 +83,30 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "app/services/anki_scheduler.py",
             "app/services/study_*.py",
+            "scripts/probe_p5_study_batch_mysql.py",
+            "scripts/probe_p5_study_consumer.py",
+            "scripts/serve_p5_note_browser_probe.py",
+            "scripts/probe_p5_numeric_storage_mysql.py",
+            "scripts/probe_p5_direct_replay_mysql.py",
+            "study_worker.py",
+            "deploy/flama-study-worker.service",
+            "app/repositories/study_batch_repository.py",
             "app/services/scheduler_config_service.py",
             "app/repositories/study_repository.py",
             "app/repositories/study_progress_shadow_repository.py",
             "app/repositories/study_progress_backfill_repository.py",
+            "app/repositories/study_authority_repository.py",
             "app/repositories/card_progress_repository.py",
             "app/repositories/review_event_repository.py",
             "app/repositories/study_card_editor_repository.py",
             "app/validators/review_event.py",
             "app/validators/study_composition.py",
             "app/validators/study_session_wire.py",
+            "app/validators/study_note_batch.py",
             "app/routes/flashcards/study.py",
             "models/study_session*.py",
             "models/study_progress*.py",
+            "models/study_authority*.py",
             "models/review_event.py",
             "models/card_progress.py",
             "models/scheduler_preset.py",
@@ -112,15 +123,38 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_artifact_service.py",
             "tests/test_study_behavior_acceptance_baseline.py",
             "tests/test_study_batch_queue.py",
+            "tests/test_study_consumer.py",
+            "tests/test_study_browser_probe.py",
+            "tests/test_study_deploy_safety.py",
+            "tests/test_study_note_batch.py",
+            "tests/test_study_note_storage_precision.py",
+            "tests/test_study_direct_note_replay.py",
+            "tests/test_study_direct_replay_probe.py",
+            "tests/test_study_note_templates.py",
+            "tests/test_study_content_delete.py",
+            "tests/test_study_note_overlay.py",
+            "tests/test_study_algorithm_switch.py",
             "tests/test_study_composition_exit_gate.py",
             "tests/test_study_composition_service.py",
             "tests/test_study_integration.py",
             "tests/test_review_event_provenance.py",
             "tests/test_study_session_api.py",
             "tests/test_study_session_wire_contract.py",
+            "tests/test_study_session_authority_pin.py",
+            "tests/test_study_session_authority_pin_service.py",
             "tests/test_study_progress_shadow_codec.py",
             "tests/test_study_progress_shadow_mirror.py",
             "tests/test_study_progress_shadow_schema.py",
+            "tests/test_study_authority_schema.py",
+            "tests/test_study_authority_note_enrollment.py",
+            "tests/test_study_authority_receipt.py",
+            "tests/test_study_authority_projection_comparator.py",
+            "tests/test_study_authority_projection_encoder.py",
+            "tests/test_study_authority_cas.py",
+            "tests/test_study_authority_sibling_repository.py",
+            "tests/test_study_authority_write_service.py",
+            "tests/test_study_authority_history.py",
+            "tests/test_study_authority_repository.py",
             "tests/test_study_progress_backfill.py",
             "tests/test_study_progress_reconciliation.py",
             "tests/test_scheduler_schema.py",
@@ -144,6 +178,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/scheduler/legacyEngine.golden.test.ts",
             "src/features/study/scheduler/legacyEngine.test.ts",
             "src/features/study/scheduler/algorithmRegistry.test.ts",
+            "src/features/study/scheduler/noteStoragePrecision.test.ts",
             "src/features/study/session/sessionRestore.test.ts",
             "src/features/study/session/sessionStore.test.ts",
             "src/features/study/session/studySessionEngine.test.ts",
@@ -157,6 +192,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/api/v1/learning/browse.py",
             "app/services/browse_card_service.py",
             "app/repositories/browse_card_repository.py",
+            "app/repositories/logical_overlay_scope_repository.py",
             "app/presenters/vocabulary_presenter.py",
             "app/routes/vocabulary.py",
             "frontend/src/features/browse/**",
@@ -165,6 +201,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_flashcard_api_integration.py",
             "tests/test_flashcard_validation_security.py",
             "tests/test_rest_api_v1.py",
+            "tests/test_study_note_overlay.py",
         ],
         "frontend_tests": [
             "src/features/browse/components/BrowseCardTable.test.tsx",
@@ -543,6 +580,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_phase4_external_lifecycle_mysql.py",
             "scripts/probe_phase4_resumable_backfill_mysql.py",
             "scripts/probe_phase4_reconciliation_mysql.py",
+            "scripts/probe_p5_authority_schema_mysql.py",
+            "scripts/probe_p5_study_batch_mysql.py",
+            "scripts/run_p5_vps_preflight.py",
         ],
         "backend_tests": [
             "tests/test_app_startup.py",
@@ -554,7 +594,13 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_phase4_schema_reconciliation_migration.py",
             "tests/test_scheduler_schema.py",
             "tests/test_study_session_batch_migration.py",
+            "tests/test_study_batch_attempt_migration.py",
+            "tests/test_study_history_cut_index_migration.py",
+            "tests/test_study_session_authority_pin.py",
             "tests/test_study_progress_shadow_schema.py",
+            "tests/test_study_authority_schema.py",
+            "tests/test_study_authority_note_enrollment.py",
+            "tests/test_study_authority_receipt.py",
         ],
         "frontend_tests": [],
     },
@@ -599,6 +645,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/launch_chrome_devtools.*",
             "scripts/run_lighthouse_audit.*",
             "scripts/run_tests.py",
+            "scripts/check_backend_release.py",
             "scripts/setup_github_workspace.sh",
             "scripts/setup_new_device.sh",
             "scripts/setup_venv.sh",
@@ -609,6 +656,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "wsgi_audit.py",
         ],
         "backend_tests": [
+            "tests/test_check_backend_release.py",
             "tests/test_ci_workflow.py",
             "tests/test_cloudflare_cache_rule.py",
             "tests/test_deploy_environment_consistency.py",
@@ -739,6 +787,19 @@ DEPLOY_RUNTIME_SOURCE_PATTERNS = (
     "connect_wsgi.py",
     "Dockerfile",
     ".github/workflows/deploy.yml",
+)
+
+# The SPA bundle Cloudflare Pages serves. Co-located tests and docs never
+# reach the bundle, so they must not republish it.
+FRONTEND_DEPLOY_SOURCE_PATTERNS = (
+    "frontend/**",
+    ".github/workflows/deploy-frontend.yml",
+)
+FRONTEND_DEPLOY_EXCLUDED_PATTERNS = (
+    "*.test.ts",
+    "*.test.tsx",
+    "*.md",
+    "frontend/docs/**",
 )
 
 # -----------------------------------------------------------------------------
@@ -996,6 +1057,14 @@ def build_ci_change_plan(
         )
 
     spa_contract = matches_any(SPA_CONTRACT_SOURCE_PATTERNS)
+    bundle_paths = [
+        path
+        for path in normalized
+        if not any(
+            fnmatch.fnmatch(path, excluded)
+            for excluded in FRONTEND_DEPLOY_EXCLUDED_PATTERNS
+        )
+    ]
     return {
         "backend": force_all_validation or bool(backend_tests),
         "frontend": force_all_validation or bool(frontend_tests) or spa_contract,
@@ -1007,6 +1076,11 @@ def build_ci_change_plan(
         # Deployment remains path-sensitive even though master intentionally
         # receives full validation. Test/docs-only merges must not deploy.
         "deploy": matches_any(DEPLOY_RUNTIME_SOURCE_PATTERNS),
+        "frontend_deploy": any(
+            fnmatch.fnmatch(path, pattern)
+            for path in bundle_paths
+            for pattern in FRONTEND_DEPLOY_SOURCE_PATTERNS
+        ),
     }
 
 

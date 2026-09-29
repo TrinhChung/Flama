@@ -1,10 +1,10 @@
 # Kế hoạch triển khai Phase 4 — learner/Note progress shadow
 
-> Status (2026-09-20): P4-10 locally complete; P4-11 and INT-02 remain open. No shadow read authority or production rollout has been approved.
+> Status (2026-09-20): **Phase 4 and INT-02 complete for pre-release development**; P4-11 production exceptions remain explicit. No shadow read authority or production rollout has been approved.
 >
 > Planning date: 2026-09-10
 >
-> Current update (2026-09-20): P4-07 is committed on `develop` at `bd96abc`. P4-08/P4-09/P4-10 remain intentionally uncommitted; P4-10 is locally complete. Writer-by-writer reconciliation covers Connect revlog/legacy import and clone cutover; a 16,424-row disposable MySQL SELECT-only audit passes with zero unexplained differences. P4-11 has a local migration/backup/restart/rollback and representative-count rehearsal, but production-matched environment/fault gates remain open. INT-02 has not closed; `CardProgress` remains authoritative and all Phase 4 flags remain default-off. See the [2026-09-20 evidence report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md). This update supersedes the historical status line above.
+> Current update (2026-09-20): P4-08/P4-09/P4-10 are committed on `develop` at `263b65e`; P4-10 locally reconciled 16,424 synthetic rows with zero unexplained differences. P4-11's local large-row-count and isolated VPS MySQL 8.0.46 small-cohort rehearsal are [accepted for pre-release development](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) only. The [INT-02 closeout](../../architecture/phase-4-int02-closeout-2026-09-20.md) passed full backend/frontend tests and a fresh disposable MySQL local probe. Production multi-user/overlay load, remaining fault matrix and operational limits are **deferred, not passed**; production shadow enablement remains gated. `CardProgress` remains authoritative and all Phase 4 flags default off. This update supersedes historical status lines below.
 >
 > Repository baseline: `develop` at `880ff1b` (`phase3`)
 >
@@ -150,9 +150,9 @@ Production applied both P4-01A revisions. The refreshed two-run P4-01 bundle use
 | P4-07 | [Native/session/worker transactional mirror](./P4-07_NATIVE_SESSION_MIRROR.md) | **IMPLEMENTED / LOCAL VERIFIED — COMMITTED ON DEVELOP (`bd96abc`)** | atomicity, locks, receipt/retry parity passed |
 | P4-08 | [External and lifecycle transactional mirror](./P4-08_EXTERNAL_LIFECYCLE_MIRROR.md) | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED** | 755 backend tests + disposable MySQL savepoint/reset/delete/race passed |
 | P4-09 | [Resumable backfill](./P4-09_RESUMABLE_BACKFILL.md) | **IMPLEMENTED / LOCAL VERIFIED — UNCOMMITTED**; dry-run-first CLI, keyset batches, checkpoints | SQLite fault/race coverage and disposable MySQL crash/resume/CAS pass |
-| P4-10 | [Shadow comparison and audit](./P4-10_SHADOW_RECONCILIATION.md) | **LOCALLY COMPLETE — UNCOMMITTED**; writer matrix, context-fixed parity and 16,424-row MySQL probe pass | production-matched rollout proof belongs to P4-11 |
-| P4-11 | [Disposable MySQL rollout rehearsal](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) | **IN PROGRESS — LOCAL PARTIAL**; 16,424-row load, migration/backup/restart/rollback subset passes | production-matched version/schema and complete fault matrix remain open |
-| INT-02 | [Phase 4 integration and closeout](./INT-02_PHASE_4_INTEGRATION.md) | combined gate, tracker and Phase 5 recommendation | Phase 4 complete; no authority cutover |
+| P4-10 | [Shadow comparison and audit](./P4-10_SHADOW_RECONCILIATION.md) | **LOCALLY COMPLETE / COMMITTED (`263b65e`)**; writer matrix, context-fixed parity and 16,424-row MySQL probe pass | production rollout proof is separate |
+| P4-11 | [Disposable MySQL rollout rehearsal](./P4-11_MYSQL_ROLLOUT_REHEARSAL.md) | **CLOSED FOR PRE-RELEASE DEVELOPMENT** by [risk-scoped decision](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) | production-scale/fault/limits deferred to P5-09 before enablement |
+| INT-02 | [Phase 4 integration and closeout](./INT-02_PHASE_4_INTEGRATION.md) | **COMPLETED FOR PRE-RELEASE DEVELOPMENT**; [exit report](../../architecture/phase-4-int02-closeout-2026-09-20.md) | Phase 4 development handoff complete; no authority cutover |
 
 ## 9. Implementation waves
 
@@ -241,7 +241,7 @@ Gate G4-S: all source rows and references are accounted for, zero unexplained di
 
 ### Wave 6 — MySQL rehearsal and integration closeout
 
-P4-11 uses a disposable MySQL 8 database matching production version, `sql_mode`, charset/collation and representative volume. It covers migration-only upgrade, flags-off Gunicorn/`wsgi.py` restart, indexes/EXPLAIN, bounded backfill, two-connection races, first insert, duplicate key, deadlock retry, savepoint rollback, worker retry, backup/restore, flag disable and forward rollback.
+Original release-grade P4-11 scope: disposable MySQL 8 matching production version, `sql_mode`, charset/collation and representative volume, plus migration-only upgrade, flags-off Gunicorn/`wsgi.py` restart, indexes/EXPLAIN, bounded backfill, two-connection races, first insert, duplicate key, deadlock retry, savepoint rollback, worker retry, backup/restore, flag disable and forward rollback. The [pre-release closeout](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md) accepts a measured subset as the development dependency and moves the unproven production-load/fault/limit work to P5-09 before any production enablement.
 
 INT-02 runs modular suites first, then full suite as the pre-release gate. It updates the canonical tracker only when all outputs and evidence links exist.
 

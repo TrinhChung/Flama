@@ -202,7 +202,7 @@ export function StudyPage() {
   }, [])
 
   useEffect(() => {
-    if (study.leaseConflict || isQuickEditOpen) return
+    if (study.leaseConflict || study.receipt || isQuickEditOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeEl = document.activeElement
@@ -305,6 +305,7 @@ export function StudyPage() {
     isQuickEditOpen,
     revealed,
     study.leaseConflict,
+    study.receipt,
   ])
 
   if (!deckIdRaw) {
@@ -402,10 +403,12 @@ export function StudyPage() {
       || Boolean(study.error)
     )
   const counts = study.view?.counts ?? { new: 0, learning: 0, due: 0 }
-  const isSessionComplete = study.view?.session_state === 'complete_today'
   const isLeaving = isExiting || blocker.state === 'proceeding'
 
-  if (study.receipt && isSessionComplete && !isLeaving) {
+  // A final receipt closes this lease even when the deck still has due cards
+  // (manual/page exit, including an empty final batch after rollover). Queue
+  // exhaustion is not a prerequisite for acknowledging a completed session.
+  if (study.receipt && !isLeaving) {
     return (
       <div className="min-h-[100dvh] w-full flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 bg-background text-foreground overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
         <StudyCompletionCard
@@ -432,7 +435,7 @@ export function StudyPage() {
             cardId={card?.card_id}
             canEdit={Boolean(card?.card_id && card?.can_edit_card !== false)}
             onEdit={handleOpenEdit}
-            onReload={study.reloadSession}
+            onReload={() => { void study.reloadSession() }}
             newCount={counts.new}
             learnCount={counts.learning}
             dueCount={counts.due}

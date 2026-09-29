@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from functools import wraps
 from typing import Any
 from sqlalchemy import or_
+from sqlalchemy.orm.attributes import set_committed_value
 
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services import (
     flashcard_content_service,
     study_progress_lifecycle_mirror_service,
@@ -322,6 +325,21 @@ def create_note_type(
     return get_note_type_schema(user_id=user_id, note_type_id=note_type.id)
 
 
+def _note_type_update_resource_version(nt, *, notes_count, cards_count):
+    # Child schema edits/replacements may preserve both counts and the parent's
+    # DATETIME(0). Bind stable identities and content, not only that timestamp.
+    return compute_resource_version(
+        resource_type="note_type", resource_id=nt.id, notes_count=notes_count,
+        cards_count=cards_count, updated_at=nt.updated_at,
+        templates=[{key: getattr(row, key) for key in (
+            "id", "name", "front_html", "back_html", "shared_css", "position", "is_default",
+        )} for row in sorted(nt.templates, key=lambda row: row.id)],
+        fields=[{key: getattr(row, key) for key in (
+            "id", "name", "field_type", "position", "required", "identity_role",
+        )} for row in sorted(nt.field_defs, key=lambda row: row.id)],
+    )
+
+
 def preview_note_type_update(
     *,
     user_id: int,
@@ -417,6 +435,7 @@ def preview_note_type_update(
                 removed_templates.append(str(rt))
         elif isinstance(templates, list):
             new_t_names = {t.get("name") for t in templates}
+            new_t_ids = {t.get("id") for t in templates if t.get("id")}
             for t in templates:
                 t_name = t.get("name")
                 t_id = t.get("id")
@@ -425,7 +444,7 @@ def preview_note_type_update(
                 else:
                     updated_templates.append(t_name)
             for curr_t in current_template_map:
-                if curr_t not in new_t_names:
+                if curr_t not in new_t_names and current_template_map[curr_t].id not in new_t_ids:
                     removed_templates.append(curr_t)
 
     for rem_t in removed_templates:
@@ -445,13 +464,7 @@ def preview_note_type_update(
             f"Hệ thống sẽ tự động di chuyển dữ liệu trong {notes_count} note(s) sang tên trường mới mà không làm mất dữ liệu."
         )
 
-    resource_version = compute_resource_version(
-        resource_type="note_type",
-        resource_id=nt.id,
-        notes_count=notes_count,
-        cards_count=cards_count,
-        updated_at=nt.updated_at,
-    )
+    resource_version = _note_type_update_resource_version(nt, notes_count=notes_count, cards_count=cards_count)
 
     impact_summary = {
         "notes_count": notes_count,
@@ -573,6 +586,21 @@ def _detect_destructive_note_type_changes(
     return bool(reasons), reasons
 
 
+def _rollback_note_type_update_on_error(mutation):
+    @wraps(mutation)
+    def guarded(*args, **kwargs):
+        try:
+            return mutation(*args, **kwargs)
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise RequestValidationError(str(exc), field="templates", status=409, code=exc.code) from exc
+        except Exception:
+            db.session.rollback()
+            raise
+    return guarded
+
+
+@_rollback_note_type_update_on_error
 def update_note_type(
     *,
     user_id: int,
@@ -594,6 +622,43 @@ def update_note_type(
 ) -> dict[str, Any]:
     """Update a note type's schema, metadata, fields, or templates with data migration support."""
     nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
+
+    if templates is not None:
+        from app.services import study_content_delete_service as content_topology
+
+        try:
+            # Template changes add/remove Cards on every Note of this type, so
+            # fence every learner holding state on them, in learner ID order.
+            type_card_ids = [
+                str(row[0])
+                for row in db.session.query(Card.id)
+                .join(Note, Card.note_id == Note.id)
+                .filter(Note.note_type_id == nt.id)
+                .all()
+            ]
+            authority_routes = content_topology.lock_content_delete_routes(
+                db.session,
+                actor_user_ids=(int(user_id),),
+                card_ids=type_card_ids,
+                deleted_note_ids=(),
+            )
+            authority_route = next(
+                route for route in authority_routes if route.learner_user_id == int(user_id)
+            )
+            # Refresh after waiting for the learner fence; a repeatable-read
+            # snapshot/cached relationship must not validate an older topology.
+            nt = NoteType.query.filter_by(id=note_type_id, user_id=user_id).with_for_update().populate_existing().one()
+            for relationship, model in (("templates", Template), ("field_defs", FieldDef)):
+                rows = model.query.filter_by(note_type_id=nt.id).order_by(model.id).with_for_update().populate_existing().all()
+                set_committed_value(nt, relationship, rows)
+        except StudyAuthorityFenceError as exc:
+            db.session.rollback()
+            raise RequestValidationError(
+                str(exc),
+                field="templates",
+                status=409,
+                code=exc.code,
+            ) from exc
 
     # The generic MCP note-type mutation rewrites fields/templates and cards
     # directly.  Shared decks require stable field/card identity plus release
@@ -623,8 +688,17 @@ def update_note_type(
             code="SHARED_SCHEMA_VERSIONING_REQUIRED",
         )
 
-    notes_count = Note.query.filter_by(note_type_id=nt.id, user_id=user_id).count()
-    cards_count = Card.query.join(Note, Card.note_id == Note.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).count()
+    notes_query = db.session.query(Note.id).filter_by(note_type_id=nt.id, user_id=user_id)
+    cards_query = db.session.query(Card.id).join(Note, Card.note_id == Note.id).filter(
+        Note.note_type_id == nt.id, Note.user_id == user_id)
+    if templates is not None:
+        # Counts must use current reads too: the ownership lookup may have
+        # established a MySQL repeatable-read snapshot before the fence wait.
+        notes_count = len(notes_query.order_by(Note.id).with_for_update().all())
+        cards_count = len(cards_query.order_by(Note.id, Card.id).with_for_update().all())
+    else:
+        notes_count = notes_query.count()
+        cards_count = cards_query.count()
 
     is_destructive, destructive_reasons = _detect_destructive_note_type_changes(
         nt=nt,
@@ -654,13 +728,7 @@ def update_note_type(
                 code="CONFIRMATION_REQUIRED",
             )
 
-    current_resource_version = compute_resource_version(
-        resource_type="note_type",
-        resource_id=nt.id,
-        notes_count=notes_count,
-        cards_count=cards_count,
-        updated_at=nt.updated_at,
-    )
+    current_resource_version = _note_type_update_resource_version(nt, notes_count=notes_count, cards_count=cards_count)
 
     if preview_id:
         is_valid, err_code, err_msg = validate_preview_token(
@@ -867,6 +935,11 @@ def update_note_type(
             )
 
     # 3. Update Templates
+    if templates is not None and authority_route.mode_code == "NOTE":
+        from app.services.study_note_template_service import stage_note_template_changes
+        stage_note_template_changes(db.session, routes=authority_routes, note_type=nt,
+            changes=templates, operation_key=f"mcp-note-type-template-update:{nt.id}:{preview_id or 'direct'}")
+        templates = None  # The legacy mutation below must not run a second time.
     if templates is not None:
         current_templates = {t.name: t for t in nt.templates}
         current_template_ids = {t.id: t for t in nt.templates}

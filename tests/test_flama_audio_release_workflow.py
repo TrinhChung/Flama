@@ -83,15 +83,44 @@ class TestFlamaAudioReleaseWorkflow(unittest.TestCase):
         self.assertIn('Status -ne "Valid"', self.verify_script)
         self.assertIn("TimeStamperCertificate", self.verify_script)
 
+    def _step_block(self, step_name: str, next_step_name: str) -> str:
+        return self.workflow.split(f"name: {step_name}", maxsplit=1)[1].split(
+            f"name: {next_step_name}", maxsplit=1
+        )[0]
+
     def test_pfx_is_ephemeral_and_never_uploaded(self):
         self.assertIn("Import-PfxCertificate", self.sign_script)
         self.assertIn("finally", self.sign_script)
         self.assertIn("Remove-Item -LiteralPath $pfxPath", self.sign_script)
         self.assertIn("Cert:\\CurrentUser\\My", self.sign_script)
-        upload_block = self.workflow.split(
-            "name: Upload verified workflow artifact", maxsplit=1
-        )[1].split("name: Publish GitHub Release", maxsplit=1)[0]
-        self.assertNotIn(".pfx", upload_block.lower())
+        # The only upload paths are the GitHub Release assets and the server
+        # staging copy; neither may ever carry the signing certificate.
+        for upload_block in (
+            self._step_block(
+                "Publish GitHub Release", "Verify GitHub Release artifact bytes"
+            ),
+            self._step_block(
+                "Deploy signed EXE and checksum to Flama download server",
+                "Verify production download bytes and Authenticode",
+            ),
+        ):
+            self.assertNotIn(".pfx", upload_block.lower())
+
+    def test_release_binaries_are_not_duplicated_into_actions_storage(self):
+        # The GitHub Release is the durable copy and does not count against
+        # Actions storage; a workflow artifact would store the EXE and ZIP again.
+        self.assertNotIn("actions/upload-artifact", self.workflow)
+        self.assertNotIn("name: Upload verified workflow artifact", self.workflow)
+        publish_block = self._step_block(
+            "Publish GitHub Release", "Verify GitHub Release artifact bytes"
+        )
+        for asset in (
+            "FlamaAudio-Portable.exe",
+            "FlamaAudio-Portable.exe.sha256",
+            "FlamaAudio-Portable-win-x64.zip",
+            "FlamaAudio-Portable-win-x64.zip.sha256",
+        ):
+            self.assertIn(f'"{asset}"', publish_block)
 
     def test_packages_signed_exe_and_publishes_post_package_hashes(self):
         self.assertIn("FlamaAudio-Portable-win-x64.zip", self.workflow)

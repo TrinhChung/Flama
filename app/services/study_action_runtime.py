@@ -39,6 +39,7 @@ class ReviewTransitionResult:
     action: ReviewActionContract
     algorithm: AlgorithmIdentity
     state: CardState
+    storage_profile: str | None = None
 
     def metadata(self) -> dict[str, str]:
         return {
@@ -49,6 +50,7 @@ class ReviewTransitionResult:
             "algorithm_key": self.algorithm.key,
             "algorithm_version": self.algorithm.version,
             "state_schema_version": self.algorithm.state_schema_version,
+            **({"storage_profile": self.storage_profile} if self.storage_profile else {}),
         }
 
 

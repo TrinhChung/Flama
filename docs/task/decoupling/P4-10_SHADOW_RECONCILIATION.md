@@ -4,7 +4,7 @@
 >
 > Priority: P0 exit gate
 >
-> Status: LOCALLY COMPLETE — intentionally uncommitted; P4-11 deployment gate open
+> Status: LOCALLY COMPLETE — committed on `develop` at `263b65e`; P4-11 pre-release development gate closed with [explicit production deferrals](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md); [INT-02 subsequently closed](../../architecture/phase-4-int02-closeout-2026-09-20.md)
 >
 > Dependency: P4-09
 >
@@ -93,8 +93,10 @@ whose absent classes remain `NOT_OBSERVED`, never silently `PASS`.
 Residual scope: P4-10's local representative-row-count acceptance is met,
 but the synthetic MySQL cohort uses one owned learner/deck context;
 installed overlay parity is proved by integration tests, not a
-production-shaped MySQL mix. The exact production MySQL version/collation,
-concurrent traffic and full failure matrix remain P4-11 deployment gates.
+production-shaped MySQL mix. A later isolated VPS small-cohort probe matched
+the production MySQL version/collation; concurrent traffic and the full
+failure matrix remain [explicitly deferred production-enablement gates](../../architecture/phase-4-p4-11-pre-release-closeout-2026-09-20.md),
+not P4-11 pre-release development blockers.
 No shadow-backed product read has been enabled. See the
 [2026-09-20 evidence report](../../architecture/phase-4-reconciliation-rollout-rehearsal-2026-09-20.md).
 
