@@ -96,6 +96,21 @@ def _assert_table_contract(bind: sa.engine.Connection, table: sa.Table) -> None:
         )
 
 
+REVISION_43_CHECKS = {"ck_study_authority_mode", "ck_study_authority_mode_epoch"}
+
+
+def _created_from_revision_43_metadata(bind: sa.engine.Connection, table: sa.Table) -> bool:
+    """Detect `db.create_all()` from newer model metadata (revision 43 checks)."""
+
+    if table is not LEGACY_ENROLLMENT_TABLE:
+        return False
+    names = {
+        str(row.get("name") or "")
+        for row in sa.inspect(bind).get_check_constraints(table.name)
+    }
+    return REVISION_43_CHECKS.issubset(names)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     existing = set(sa.inspect(bind).get_table_names())
@@ -111,6 +126,12 @@ def upgrade() -> None:
         if table.name not in existing:
             table.create(bind=bind, checkfirst=False)
             existing.add(table.name)
+        elif _created_from_revision_43_metadata(bind, table):
+            # Startup create_all ran before Alembic and built the current
+            # model. Accept only that exact known shape; revision 43 then
+            # re-verifies it and keeps its checks unchanged.
+            _assert_table_contract(bind, StudyAuthorityEnrollment.__table__)
+            continue
         _assert_table_contract(bind, table)
 
 

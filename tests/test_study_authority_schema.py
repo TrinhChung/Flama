@@ -78,6 +78,39 @@ class StudyAuthoritySchemaTests(unittest.TestCase):
                 self.assertTrue(inspector.has_table(table.name))
                 migration._assert_table_contract(connection, table)
 
+    def test_upgrade_accepts_current_model_created_by_startup_create_all(self):
+        # CI/startup runs db.create_all() before Alembic, so the table already
+        # carries the revision-43 NOTE checks when revision 40 inspects it.
+        with db.engine.begin() as connection:
+            self._bind_operations(connection)
+            names = {
+                row["name"]
+                for row in sa.inspect(connection).get_check_constraints(
+                    "study_authority_enrollments"
+                )
+            }
+            self.assertTrue(migration.REVISION_43_CHECKS.issubset(names))
+            migration.upgrade()
+            migration._assert_table_contract(connection, StudyAuthorityEnrollment.__table__)
+
+    def test_upgrade_rejects_revision_43_check_names_with_other_definitions(self):
+        with db.engine.begin() as connection:
+            self._drop_authority_tables(connection)
+            metadata = sa.MetaData()
+            sa.Table("users", metadata, sa.Column("id", sa.Integer, primary_key=True))
+            table = StudyAuthorityEnrollment.__table__.to_metadata(metadata)
+            for constraint in tuple(table.constraints):
+                if isinstance(constraint, sa.CheckConstraint):
+                    table.constraints.remove(constraint)
+            table.append_constraint(sa.CheckConstraint(
+                "mode_code IN ('LEGACY','NOTE','OTHER')", name="ck_study_authority_mode"))
+            table.append_constraint(sa.CheckConstraint(
+                "epoch >= 0", name="ck_study_authority_mode_epoch"))
+            table.create(bind=connection)
+            self._bind_operations(connection)
+            with self.assertRaisesRegex(RuntimeError, "does not match"):
+                migration.upgrade()
+
     def test_upgrade_rejects_incompatible_preexisting_table(self):
         with db.engine.begin() as connection:
             self._drop_authority_tables(connection)

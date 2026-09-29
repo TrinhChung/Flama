@@ -84,31 +84,20 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertIn("flask --app wsgi.py db upgrade", self.workflow)
         self.assertIn("scripts/probe_p1_02_mysql_concurrency.py", self.workflow)
 
-    def test_spa_build_artifact_is_minimal_and_deleted_after_use(self):
-        frontend_block = self.workflow.split("\n  frontend:\n", 1)[1].split(
-            "\n  backend:\n", 1
-        )[0]
+    def test_ci_uses_no_actions_artifact_storage(self):
+        # An exhausted account artifact quota must never block validation, so
+        # the SPA contract builds its own dist instead of passing an artifact.
+        for workflow in (self.workflow, self.audio_workflow):
+            self.assertNotIn("actions/upload-artifact", workflow)
+            self.assertNotIn("actions/download-artifact", workflow)
         spa_block = self.workflow.split("\n  spa-contract:\n", 1)[1].split(
             "\n  redis-contract:\n", 1
         )[0]
-        upload_block = frontend_block.split("name: Upload React build", 1)[1]
-
-        # Uploaded only for the one job that consumes it, without source maps.
-        self.assertIn("if: needs.changes.outputs.spa_contract == 'true'", upload_block)
-        self.assertIn("frontend/dist\n            !frontend/dist/**/*.map", upload_block)
-        self.assertIn("retention-days: 1", upload_block)
-        self.assertIn("if-no-files-found: error", upload_block)
-        self.assertIn(
-            "dist_artifact_id: ${{ steps.upload_dist.outputs.artifact-id }}",
-            frontend_block,
-        )
-        # The consumer frees the storage immediately; cleanup never fails CI.
-        self.assertIn("actions: write", spa_block)
-        cleanup_block = spa_block.split("name: Delete consumed React build artifact", 1)[1]
-        self.assertIn("if: always() && needs.frontend.outputs.dist_artifact_id != ''", cleanup_block)
-        self.assertIn("continue-on-error: true", cleanup_block)
-        self.assertIn('gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID"', cleanup_block)
-        self.assertEqual(self.workflow.count("actions/upload-artifact"), 1)
+        build = spa_block.index("npm run build:ci")
+        self.assertIn("node-version: '22.22.2'", spa_block)
+        self.assertIn("working-directory: frontend", spa_block)
+        self.assertLess(spa_block.index("npm ci"), build)
+        self.assertLess(build, spa_block.index("tests.test_spa_artifact_contract"))
 
     def test_frontend_typecheck_is_not_repeated_during_ci_build(self):
         self.assertIn("npm run typecheck", self.workflow)
