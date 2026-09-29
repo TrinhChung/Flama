@@ -673,6 +673,17 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "frontend_tests": [],
     },
+    "agent_skills": {
+        "source_patterns": [
+            "skills/**",
+            ".claude/skills/**",
+            "scripts/sync_claude_skills.py",
+        ],
+        "backend_tests": [
+            "tests/test_claude_skills_sync.py",
+        ],
+        "frontend_tests": [],
+    },
     "core": {
         "source_patterns": [
             "app/__init__.py",

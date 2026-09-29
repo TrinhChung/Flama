@@ -1,0 +1,4 @@
+interface:
+  display_name: "Antigravity CLI"
+  short_description: "Install, verify, and operate the local agy CLI."
+  default_prompt: "Use $antigravity-cli to verify and operate agy safely in this project."

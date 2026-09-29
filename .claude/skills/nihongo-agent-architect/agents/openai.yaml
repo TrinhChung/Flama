@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nihongo Agent Architect"
+  short_description: "Maintain repo-specific agent guidance."
+  default_prompt: "Use $nihongo-agent-architect to design or update AGENTS.md and repo-local agent skills for this repository."
