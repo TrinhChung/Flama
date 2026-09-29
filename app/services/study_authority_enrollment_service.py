@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
+from flask import current_app
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -42,6 +44,8 @@ from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_batch import StudySessionBatch
 from models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 class StudyAuthorityEnrollmentError(RuntimeError):
@@ -487,6 +491,46 @@ def stage_note_authority_enrollment(
         card_count=len(progress_rows),
         cancelled_session_count=cancelled_session_count,
     )
+
+
+def enroll_new_learner_note_authority(
+    session: Session,
+    *,
+    user: User,
+) -> StudyAuthorityEnrollmentResult | None:
+    """Stage NOTE for a just-created account inside the caller's transaction.
+
+    A new account owns no Notes, progress or installs, so the full proof above
+    is trivial. Opt-in with the same policy as the enrollment CLI: wire v4 on,
+    async batches off. A refusal keeps the account LEGACY (enroll it later via
+    the CLI); no commit here.
+    """
+
+    config = current_app.config
+    if not (
+        config.get("STUDY_NEW_LEARNER_NOTE_ENABLED", False)
+        and config.get("STUDY_WIRE_V4_ENABLED", False)
+        and not config.get("STUDY_ASYNC_BATCH_ENABLED", False)
+    ):
+        return None
+    session.flush()
+    savepoint = session.begin_nested()
+    try:
+        result = stage_note_authority_enrollment(
+            session,
+            learner_user_id=int(user.id),
+            now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        savepoint.commit()
+    except (StudyAuthorityEnrollmentError, StudyAuthorityFenceError) as exc:
+        savepoint.rollback()
+        logger.warning(
+            "New learner %s stays LEGACY: %s",
+            user.id,
+            getattr(exc, "code", "AUTHORITY_TRANSITION_FAILED"),
+        )
+        return None
+    return result
 
 
 def stage_legacy_authority_enrollment(

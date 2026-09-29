@@ -11,8 +11,8 @@ Trạng thái: STOP
 
 ## Cần user quyết định
 
-1. **Flama Audio workflow test (chặn commit release candidate, ngoài Phase 5).** Thay đổi chưa commit ở `.github/workflows/flama-audio-release.yml` xóa step `Upload verified workflow artifact`; `tests/test_flama_audio_release_workflow.py:91` (`test_pfx_is_ephemeral_and_never_uploaded`) split theo tên step đó nên `IndexError`. Phương án: (a) giữ step upload-artifact (revert phần xóa trong workflow); (b) bỏ step và sửa test để assert không có `.pfx` trong mọi step `upload-artifact`/`gh release upload` của workflow. Đề xuất: (b) nếu việc bỏ artifact là cố ý (release asset đã được `gh release download` + verify lại), ngược lại (a). Autopilot không tự sửa vì là thay đổi của user.
-2. **Mở lại autopilot hay không.** Code Phase 5 cho R0 đã xong và INT-03 xanh local; việc còn lại là R0 deploy LEGACY, R1 canary theo runbook (P5-10), rerun probe consumer với Redis thật (cần cài Redis), shared-release versioning/multi-learner shared template và policy history cho Algorithm (Phase 8). Tất cả cần production hoặc quyết định của user nên log đã chuyển `STOP`. Khi có việc code mới (Phase 6+ hoặc lỗi từ canary), cập nhật bảng "Thứ tự" trong P5 plan hoặc thêm plan mới rồi đổi lại `Trạng thái: RUN`.
+1. ~~**Flama Audio workflow test.**~~ **Đã xử lý (kiểm tra 2026-09-29):** commit `489cd5d` sửa test thành assert không còn step `Upload verified workflow artifact`; `tests.test_flama_audio_release_workflow` chạy 10 tests OK.
+2. **Mở lại autopilot hay không.** Code Phase 5 cho R0 đã xong và INT-03 xanh local; việc còn lại của Phase 5 cần production hoặc quyết định của user (R0 deploy, R1 canary, Redis thật). Việc code tiếp theo là Phase 6, đã có [P6 plan](./P6_EXECUTION_PLAN_2026-09-29.md): autopilot chỉ nên làm P6-00 (phần code) và bản nháp ADR P6-01..P6-03 cho tới khi user duyệt D6-01..D6-09. Prompt của scheduled task hiện chỉ đọc P5 plan, nên phải sửa prompt trước rồi mới đổi `Trạng thái: RUN` (xem P6 plan §8).
 
 ## Nhật ký chạy (mới nhất ở cuối)
 

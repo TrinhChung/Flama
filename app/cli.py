@@ -360,6 +360,34 @@ def register_cli_commands(app: Flask) -> None:
             )
         )
 
+    @app.cli.command("study-authority-learners")
+    @click.option(
+        "--mode",
+        type=click.Choice(["NOTE", "LEGACY"], case_sensitive=False),
+        default=None,
+        help="Only print learners currently routed to this mode (no row = LEGACY).",
+    )
+    def study_authority_learners(mode: str | None) -> None:
+        """Print learner user IDs, one per line, for enrollment/audit loops."""
+
+        from sqlalchemy import select
+
+        from models.study_authority_enrollment import StudyAuthorityEnrollment
+        from models.user import User
+
+        rows = db.session.execute(
+            select(User.id, StudyAuthorityEnrollment.mode_code)
+            .outerjoin(
+                StudyAuthorityEnrollment,
+                StudyAuthorityEnrollment.learner_user_id == User.id,
+            )
+            .order_by(User.id.asc())
+        ).all()
+        db.session.rollback()
+        for user_id, mode_code in rows:
+            if mode is None or (mode_code or "LEGACY") == mode.upper():
+                click.echo(int(user_id))
+
     @app.cli.command("study-authority-read-audit")
     @click.option(
         "--user-id",

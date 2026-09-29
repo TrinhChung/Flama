@@ -40,7 +40,9 @@ This plan intentionally stops before detailed SQL. It follows the requested orde
 | Phase 2 — built-in Interaction/Trigger compatibility | **Complete** | owner-token mutex, strict restore/quarantine, one semantic callback, accepted no-bridge keyboard boundary, exact built-in Trigger dispatcher and dual v2/v3 readers | v3 issuance is deliberately flag-off until rollout; async admission is flag-off until its independent readiness gates pass |
 | Phase 3 — composition/StudyMode | **Complete; correction gate reclosed** | exactly-one authorized selection, grouped mixed-NoteType discovery, query-first effective-scope filtering, pre-session selector, versioned session snapshot, real `DeckInstall` overlay proof, plus P4-00 immutable-edit/strict-restore correction | Phase 3 has no open gate; physical reusable definition/application storage remains deferred |
 | Phase 4 — learner/Note progress and Algorithm State | **Complete for pre-release development; INT-02 closed** | additive schema, atomic mirrors, resumable backfill, read-only reconciliation; full 1,267 backend (2 skipped)/437 frontend tests and fresh disposable MySQL probe pass; `CardProgress` remains authoritative | production fault/load/limit rehearsal explicitly deferred before enablement; no authority cutover |
-| Phases 5-9 — authority cutover through contract cleanup | **Not started** | none | all earlier exit gates plus explicit production migration approval |
+| Phase 5 — authority cutover | **Code complete for R0 (2026-09-29); production pending** | persisted learner enrollment, Note CAS, lossless `CardProgress` projection, v4 wire, overlay/first-state, lifecycle coordinator, requested-switch writer; INT-03 passes locally | R0 LEGACY deploy, R1 NOTE canary and cohort expansion; see the [P5 plan](../task/decoupling/P5_EXECUTION_PLAN_2026-09-20.md) |
+| Phase 6 — Card/Template progress ownership | **Preparation only (2026-09-29)** | [P6 plan](../task/decoupling/P6_EXECUTION_PLAN_2026-09-29.md) baseline and decisions; no code | owner decisions D6-01..D6-09, then P6-00..INT-04; production after every active learner is on NOTE |
+| Phases 7-9 — retention through contract cleanup | **Not started** | none | all earlier exit gates plus explicit production migration approval |
 
 ### Current authority and compatibility
 
@@ -1370,6 +1372,8 @@ Orders 2–6 were later closed or explicitly scoped by P0/P1/P2 acceptance. The 
 **Exit gate:** all canonical readers/writers use the new authority, old/new projections reconcile, old sessions either commit through their pinned handler or are explicitly expired under approved policy.
 
 ### Phase 6 — Remove Card/Template from progress ownership
+
+**Preparation (2026-09-29):** the [P6 execution plan](../task/decoupling/P6_EXECUTION_PLAN_2026-09-29.md) maps each item below to the Phase 5 code baseline, lists the owner decisions D6-01..D6-09 and orders the work packages. No Phase 6 code exists yet.
 
 **Work:**
 

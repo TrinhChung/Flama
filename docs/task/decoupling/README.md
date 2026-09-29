@@ -1,5 +1,7 @@
 # Study decoupling task backlog
 
+> **Phase 6 preparation (2026-09-29):** [P6 execution plan](./P6_EXECUTION_PLAN_2026-09-29.md) records the code baseline (what Phase 5 already delivers for NOTE learners), nine owner decisions D6-01..D6-09, gates and work packages P6-00..P6-10/INT-04. No Phase 6 code, migration or flag exists. Phase 6 code stays on `phase6/*` branches until R0 (PR #168) is deployed; production enablement additionally needs every active learner on NOTE (new gate P5-T).
+>
 > **Status (2026-09-29): Phase 5 code scope is complete for R0.** Owned + logical-overlay NOTE authority (pristine reads, first-state materialization), multi-learner content topology, Connect card package, admin-wide readers and the requested Algorithm switch writer are implemented; INT-03 passes locally (1,648 backend tests with one unrelated pre-existing Flama Audio workflow failure, 507 frontend tests, production build, MySQL 8.0.40 probe matrix including 65 direct-replay/overlay/switch scenarios). Remaining Phase 5 steps are operational and need the product owner: deploy R0 (LEGACY default), then the manual NOTE canary R1 per the [runbook](../../runbooks/P5_NOTE_AUTHORITY_RUNBOOK.md). Nothing is committed, pushed or enabled in production by this work. Details: [P5 plan](./P5_EXECUTION_PLAN_2026-09-20.md) §2 and §5.
 >
 > Status (2026-09-28): Phase 0–4 and INT-01/INT-02 are closed **for pre-release development**. Phase 5 has synchronous NOTE support and readiness-gated async admission/worker/status; no production cohort or flags were changed. [Checkpoint](../../architecture/phase-5-p5-05-session-v4-contract-2026-09-22.md) records browser online/offline/reopen, rollover and empty-final recovery. The normal-rating FLOAT failure is fixed with a negotiated/frozen NOTE write-storage profile (4,107 MySQL scalar samples). **Direct REST/MCP retry now restores the original receipt**, including after later answers or a lost COMMIT acknowledgment; MySQL-specific JSON preview precision is preserved as hash-bound text. Corrected local MySQL concurrency/retry scenarios pass; the checkpoint records the exact qualification scope. Broader numeric/browser qualification, Linux deploy rehearsal, remaining P5 writer/reader/switch code and release/canary gates remain open. [Release-first plan](./P5_EXECUTION_PLAN_2026-09-20.md): finish the **full Phase 5 code scope** before R0 ships with LEGACY default; R1 is the NOTE canary. Only extended migration-data/load rehearsal is deferred.
@@ -195,7 +197,18 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | P5-04..P5-07 | **DONE (code)** | Sync + async v4, owned + logical-overlay NOTE with pristine/first-state, Connect snapshot/revlog/card package, multi-learner delete/template topology, admin purge, all readers incl. overlay/admin-wide with NOTE↔LEGACY equality tests. |
 | P5-08 | **DONE (code)** | Requested Algorithm switch writer with synthetic registered target; typed refusals; forward-only rollback; no production initializer/route. |
 | P5-09 / INT-03 | **DONE (local)** | 1,648 backend tests (1 unrelated pre-existing Flama Audio workflow failure), 507 frontend tests, build, MySQL probe matrix (65 direct-replay/overlay/switch scenarios + authority schema + batch + numeric). |
-| P5-10 | **WAITING FOR PRODUCT OWNER** | R0 production LEGACY release, then R1 NOTE canary per runbook; async stays off. |
+| P5-10 | **WAITING FOR PRODUCT OWNER** | Backup + R0 release, then R1 moves **every** learner to NOTE (canary dropped 2026-09-29; new accounts start in NOTE) per [runbook §4](../../runbooks/P5_NOTE_AUTHORITY_RUNBOOK.md); async stays off. |
+
+### Phase 6 — Remove Card/Template from progress ownership (chuẩn bị, chưa có code)
+
+[P6 execution plan](./P6_EXECUTION_PLAN_2026-09-29.md). Entry code: sau khi D6-01..D6-09 được duyệt. Entry production: P5-T (R0, R1, mọi learner hoạt động ở NOTE).
+
+| ID | Trạng thái hiện tại | Ghi chú |
+|---|---|---|
+| P6-00 | **CHƯA BẮT ĐẦU** | Inventory callsite Card/Template + test tái hiện rủi ro ordinal Anki; phần production cần cho phép SELECT-only |
+| P6-01..P6-03 | **CHƯA BẮT ĐẦU** | ADR application occurrence, count/queue mức Note, lifecycle + tham chiếu ngoài |
+| P6-04..P6-10, INT-04 | **CHỜ G6-D** | Schema additive, seam tạo Card, reader/lifecycle/integration, probe MySQL, production |
+| 6B | **CHỜ P6-04** | Versioning Template shared deck (#137) |
 
 ### Cross-phase integration
 
