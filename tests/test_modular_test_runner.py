@@ -160,25 +160,6 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertTrue(plan["mysql_contract"])
         self.assertFalse(plan["deploy"])
 
-    def test_ci_plan_publishes_frontend_only_for_bundle_changes(self):
-        frontend_plan = run_tests.build_ci_change_plan(
-            ["frontend/src/features/study/pages/StudyPage.tsx"]
-        )
-        test_only_plan = run_tests.build_ci_change_plan(
-            [
-                "frontend/src/features/study/pages/StudyPage.test.tsx",
-                "frontend/README.md",
-            ],
-            force_all_validation=True,
-        )
-        backend_plan = run_tests.build_ci_change_plan(["app/api/v1/health.py"])
-
-        self.assertTrue(frontend_plan["frontend_deploy"])
-        self.assertFalse(frontend_plan["deploy"])
-        self.assertFalse(test_only_plan["frontend_deploy"])
-        self.assertFalse(backend_plan["frontend_deploy"])
-        self.assertTrue(backend_plan["deploy"])
-
     def test_ci_plan_selects_external_contracts_by_source(self):
         redis_plan = run_tests.build_ci_change_plan(
             ["app/services/redis_state_service.py"]

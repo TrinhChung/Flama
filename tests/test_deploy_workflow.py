@@ -22,7 +22,6 @@ BOOTSTRAP_PATH = (
     / "deploy"
     / "bootstrap_hostinger.sh"
 )
-FRONTEND_WORKFLOW_PATH = WORKFLOW_PATH.with_name("deploy-frontend.yml")
 
 
 class DeployWorkflowTests(unittest.TestCase):
@@ -117,14 +116,6 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn("return", rollback[check_data:stop_consumer])
         self.assertIn("systemctl disable flama-study-worker.service", rollback)
 
-    def test_release_is_stamped_for_health_before_activation(self):
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
-        activate = workflow[workflow.index('test -f "$environment_file"'):]
-
-        stamp = activate.index("printf '%s\\n' \"$RELEASE_ID\" > \"$release_dir/REVISION\"")
-        self.assertLess(activate.index('tar -xzf "$archive_path" -C "$release_dir"'), stamp)
-        self.assertLess(stamp, activate.index('ln -sfn "$release_dir" "$PROJECT_DIR/current"'))
-
     def test_consumer_unit_uses_same_environment_and_graceful_stop(self):
         unit = (WORKFLOW_PATH.parents[2] / "deploy" / "flama-study-worker.service").read_text(encoding="utf-8")
         self.assertIn("EnvironmentFile=/etc/flama/flama.env", unit)
@@ -132,38 +123,6 @@ class DeployWorkflowTests(unittest.TestCase):
         self.assertIn("ExecStart=/opt/flama/venv/bin/python study_worker.py", unit)
         self.assertIn("KillSignal=SIGTERM", unit)
         self.assertNotIn("db upgrade", unit)
-
-
-class FrontendDeployWorkflowTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.workflow = FRONTEND_WORKFLOW_PATH.read_text(encoding="utf-8")
-
-    def test_frontend_publish_is_reusable_and_never_runs_on_push(self):
-        self.assertIn("  workflow_call:\n", self.workflow)
-        self.assertIn("  workflow_dispatch:\n", self.workflow)
-        self.assertNotIn("  push:\n", self.workflow)
-        self.assertIn("if: github.ref == 'refs/heads/master'", self.workflow)
-        self.assertIn("group: flama-cloudflare-pages-production", self.workflow)
-        self.assertIn("cancel-in-progress: false", self.workflow)
-
-    def test_live_backend_gate_runs_after_build_and_right_before_publish(self):
-        build = self.workflow.index("npm run build:ci")
-        gate = self.workflow.index("python scripts/check_backend_release.py")
-        publish = self.workflow.index("wrangler@4 pages deploy dist")
-
-        self.assertLess(build, gate)
-        self.assertLess(gate, publish)
-        self.assertIn("fetch-depth: 0", self.workflow)
-        self.assertIn('--health-url "${VITE_API_BASE_URL%/}/health"', self.workflow)
-        self.assertIn('--target-sha "$RELEASE_ID"', self.workflow)
-
-    def test_pages_deployment_is_pinned_to_the_validated_commit(self):
-        self.assertIn("RELEASE_ID: ${{ github.sha }}", self.workflow)
-        self.assertIn('--commit-hash="$RELEASE_ID"', self.workflow)
-        self.assertIn('--branch="$GITHUB_REF_NAME"', self.workflow)
-        self.assertIn('--project-name="$CLOUDFLARE_PAGES_PROJECT"', self.workflow)
-        self.assertIn("secrets.CLOUDFLARE_API_TOKEN", self.workflow)
 
 
 class DeployRollbackShellTests(unittest.TestCase):

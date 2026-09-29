@@ -43,7 +43,7 @@ Không có hàng `study_authority_enrollments` nghĩa là LEGACY, epoch 0.
 
 1. **Backup** (workflow deploy không tự backup DB): snapshot DB của nhà cung cấp hoặc `mysqldump --single-transaction --routines --triggers <db> | gzip > /root/flama-pre-r0-$(date -u +%Y%m%dT%H%M%SZ).sql.gz`; kiểm tra file giải nén đọc được (`zcat … | head`). Ghi lại đường dẫn và thời điểm. Không phát hành nếu chưa có backup.
 2. Xác nhận `/etc/flama/flama.env` không bật `STUDY_WIRE_V4_ENABLED` và `STUDY_ASYNC_BATCH_ENABLED` (vắng mặt = `0`).
-3. Merge PR `develop → master`. CI chạy test rồi `deploy.yml` (`flask db upgrade` tới head `20260925_000045`, cài service, kiểm tra `/api/health` và `:4790/healthz`), sau đó `deploy-frontend.yml` publish SPA.
+3. Merge PR `develop → master`. CI chạy test rồi `deploy.yml` (`flask db upgrade` tới head `20260925_000045`, cài service, kiểm tra `/api/health` và `:4790/healthz`). SPA do Cloudflare Pages tự build từ `master`, có thể lên trước backend vài phút.
 4. Smoke (tài khoản thật, chưa enroll): đăng nhập, dashboard, mở phiên học, trả lời 1 thẻ, Browse list/detail, thống kê. Log không có mã `AUTHORITY_*`/`INCOMPLETE_*`.
 5. Ghi nhận: SHA release, head migration, đường dẫn backup, kết quả smoke.
 

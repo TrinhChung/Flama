@@ -647,7 +647,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/launch_chrome_devtools.*",
             "scripts/run_lighthouse_audit.*",
             "scripts/run_tests.py",
-            "scripts/check_backend_release.py",
             "scripts/setup_github_workspace.sh",
             "scripts/setup_new_device.sh",
             "scripts/setup_venv.sh",
@@ -658,7 +657,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "wsgi_audit.py",
         ],
         "backend_tests": [
-            "tests/test_check_backend_release.py",
             "tests/test_ci_workflow.py",
             "tests/test_cloudflare_cache_rule.py",
             "tests/test_deploy_environment_consistency.py",
@@ -789,19 +787,6 @@ DEPLOY_RUNTIME_SOURCE_PATTERNS = (
     "connect_wsgi.py",
     "Dockerfile",
     ".github/workflows/deploy.yml",
-)
-
-# The SPA bundle Cloudflare Pages serves. Co-located tests and docs never
-# reach the bundle, so they must not republish it.
-FRONTEND_DEPLOY_SOURCE_PATTERNS = (
-    "frontend/**",
-    ".github/workflows/deploy-frontend.yml",
-)
-FRONTEND_DEPLOY_EXCLUDED_PATTERNS = (
-    "*.test.ts",
-    "*.test.tsx",
-    "*.md",
-    "frontend/docs/**",
 )
 
 # -----------------------------------------------------------------------------
@@ -1059,14 +1044,6 @@ def build_ci_change_plan(
         )
 
     spa_contract = matches_any(SPA_CONTRACT_SOURCE_PATTERNS)
-    bundle_paths = [
-        path
-        for path in normalized
-        if not any(
-            fnmatch.fnmatch(path, excluded)
-            for excluded in FRONTEND_DEPLOY_EXCLUDED_PATTERNS
-        )
-    ]
     return {
         "backend": force_all_validation or bool(backend_tests),
         "frontend": force_all_validation or bool(frontend_tests) or spa_contract,
@@ -1078,11 +1055,6 @@ def build_ci_change_plan(
         # Deployment remains path-sensitive even though master intentionally
         # receives full validation. Test/docs-only merges must not deploy.
         "deploy": matches_any(DEPLOY_RUNTIME_SOURCE_PATTERNS),
-        "frontend_deploy": any(
-            fnmatch.fnmatch(path, pattern)
-            for path in bundle_paths
-            for pattern in FRONTEND_DEPLOY_SOURCE_PATTERNS
-        ),
     }
 
 
