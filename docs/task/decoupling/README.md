@@ -229,6 +229,8 @@ PR #175 deploy `1e14106`; lần chạy đầu xóa 15.072 dòng membership của
 
 [Đánh giá hành trình người dùng các phase đã xong](./UIUX_COMPLETED_PHASES_USER_JOURNEY_AUDIT_2026-09-30.md) (2026-09-30, **thứ tự ưu tiên hiện hành, UI P8 xếp cuối**): tạo được nhiều Template nhưng UI chưa đổi tên/xóa được; chọn cách học mới ở mức Template; cài NoteType từ chợ đã cô lập Template, còn cài deck thì chưa (thẻ gốc luôn dùng Template tác giả, tác giả hotfix ảnh hưởng mọi người cài). Đợt: phiên an toàn → Template & cách học → minh bạch clone → nhất quán → Template trong overlay (ADR) → P8.
 
+[Tùy chỉnh nút học và thuật toán](./STUDY_BUTTONS_AND_ALGORITHM_CUSTOMIZATION_2026-09-30.md) (2026-09-30): người dùng hiện không sửa được nút hay tham số thuật toán ở đâu (0 preset production, không API ghi); không có giới hạn thẻ mới/ngày dù hướng dẫn nói có; FSRS chỉ là nhãn. Lộ trình C0–C5 (C2 "Cài đặt ôn tập theo deck" làm được trước P8).
+
 ### Cross-phase integration
 
 | ID | Task | Dependency | Output chính |
