@@ -74,6 +74,22 @@ Writer NOTE hôm nay lấy một phần giá trị projection từ **dòng CardP
 
 Hệ quả: CardProgress không còn là nguồn của giá trị nào; mọi giá trị trên có nguồn canonical hoặc suy ra được từ state, và contract test (§4.1) phủ cả burial khác mặc định và state leeched.
 
+### 2.9 Phủ các tình huống của gate P9-03
+
+| Tình huống | Hôm nay dựa vào CardProgress ở đâu | Ở `CANONICAL_V1` |
+|---|---|---|
+| Tạo Note/Card mới, Template add, sibling expansion | Chèn CardProgress để lấy `id` cho contributor | §2.5: subject/state/token/contributor `CANONICAL`/availability, không CardProgress |
+| Trả lời (REST direct, MCP, session commit v4) | Lock sibling CardProgress làm CAS baseline | §2.4. Lease v4 của NOTE chỉ ghim `authority_revision` + semantic hash (`base_progress_revision` = 0, không đọc CardProgress khi mở phiên), nên lease mở trước khi chuyển profile vẫn commit đúng sau khi chuyển: **không cần wire mới** (plan P9-03 mục 4). |
+| Mất ACK, gửi lại commit | Không | Replay/receipt/`SESSION_ALREADY_COMMITTED` được trả trước mọi kiểm tra authority (PR #180); receipt không chứa revision CardProgress. |
+| Reset, xóa Card/Note | Tìm learner bị ảnh hưởng qua CardProgress | §2.5: tìm qua subject/contributor. Xóa Card: contributor `DETACHED`, availability xóa theo cascade như hiện hành. |
+| Note không còn Card | — | Subject/state/history giữ nguyên, 0 contributor ACTIVE, 0 availability ⇒ không vào hàng học. Thêm lại Card ⇒ contributor `CANONICAL` + availability từ state còn giữ. Note chưa từng có Card: không có subject cho đến Card đầu tiên. |
+| Đổi thuật toán (`study_algorithm_switch_service`) | Metadata lấy từ CardProgress sibling đầu; "rollback window" bắt state đích round-trip qua mọi dòng CardProgress | Burial từ availability (§2.8); kiểm state đích bằng adapter §2.2 cho mọi Card sống thay cho round-trip. State cũ vẫn nằm trong history fact của lần đổi. |
+| Overlay/clone rekey (`prepare_clone_rekey_mirror`) | Join CardProgress để tìm Card/learner | Tìm qua contributor `live_card_id` ∈ `card_id_map`; chuyển contributor/availability sang Card mới như hiện hành. |
+| Import và re-sync Connect/Anki | Fence `applied_local_revision` = `CardProgress.revision`; codec dựng input từ dòng CardProgress | §2.6. |
+| Contributor `LEGACY_PROJECTION` có sẵn | Raw evidence phải khớp dòng CardProgress sống | Sau khi chuyển, raw evidence là **lịch sử** (mô tả dòng CardProgress ở lần projection cuối). Reader/writer `CANONICAL_V1` không so với CardProgress và không cập nhật các cột raw; `live_card_progress_id` giữ đến P9-10. |
+| Rollback | — | Profile chỉ đi một chiều; không quay về `PROJECTION_V1` vì projection đã đứng yên từ T0. Rollback code chỉ về release hiểu `CANONICAL_V1` (release P9-03a phải chạy production trước khi chuyển); một revert xóa migration 47 làm `flask db upgrade` báo không tìm thấy revision nên deploy dừng trước bước restart. Sự cố dữ liệu: bổ sung từ backup + binlog theo D9-02, không ghi đè state mới hơn. |
+| Bổ sung dữ liệu thiếu trước T0 (plan P9-03 mục 5) | — | Trước khi chuyển: `study-phase9-readiness` `FULL_NOTE_PASS` và `study-authority-read-audit` PASS toàn bộ learner chứng minh canonical = projection; không giá trị nào chỉ có ở CardProgress (§2.8; burial/leech trên production = 0). |
+
 ## 3. Phương án bị loại
 
 - **Giữ ghi CardProgress nhưng bỏ đọc**: không giảm tải ghi (mục tiêu D9-01), vẫn sai khi projection lệch.
@@ -90,4 +106,4 @@ Hệ quả: CardProgress không còn là nguồn của giá trị nào; mọi gi
 
 ## 5. Kế hoạch triển khai kéo theo
 
-P9-03a migration 47 + profile table + adapter thuần (không đổi hành vi, profile mặc định `PROJECTION_V1`) → P9-04 readers đọc canonical ở cả hai profile, parity với projection còn cập nhật → P9-05/05b writers theo profile → P9-06 backup/restore proof, freeze, chuyển profile, `study-phase9-readiness --projection-since T0` = 0.
+P9-03a adapter thuần + contract test (không schema, không đổi hành vi) → P9-03b migration 47 + profile table (profile mặc định `PROJECTION_V1`, không đổi hành vi) → P9-04 readers đọc canonical ở cả hai profile, parity với projection còn cập nhật → P9-05/05b writers theo profile → P9-06 backup/restore proof, freeze, chuyển profile, `study-phase9-readiness --projection-since T0` = 0.
