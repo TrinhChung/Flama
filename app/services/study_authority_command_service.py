@@ -24,7 +24,6 @@ from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySubject,
     StudyAuthorityRoute,
 )
-from app.services.anki_scheduler import _round_review_interval
 from app.services.study_authority_cas_service import (
     StudyAuthorityCASExpectation,
     verify_study_authority_cas,
@@ -44,6 +43,7 @@ from app.services.study_authority_write_service import (
     StudyAuthorityWriteResult,
     apply_study_authority_material_write,
 )
+from app.services.study_note_card_projection import rounded_interval_days
 from app.services.study_progress_contract import (
     ALGORITHM_KEY,
     ALGORITHM_VERSION,
@@ -254,10 +254,10 @@ def _projection_metadata(
     review = command.review
     state = review.transition.state
     progress = command.siblings.progress_by_card_id[str(review.card.id)]
-    interval_days_rounded = (
-        _round_review_interval(float(state.intervalDays or 0), review.deck_options)
-        if str(state.type) == "review"
-        else int(round(float(state.intervalDays or 0)))
+    interval_days_rounded = rounded_interval_days(
+        queue=str(state.type),
+        interval_days=float(state.intervalDays or 0),
+        deck_options=review.deck_options,
     )
     if state.leeched:
         last_leech_at = review.reviewed_at
