@@ -2133,6 +2133,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
+            learner_id = learner.id
 
             deck_item = DeckMarketplaceItem(
                 owner_user_id=self.user_id,
@@ -2154,6 +2155,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.commit()
             deck_item_id = deck_item.id
 
+        # The re-shown learning step must not cross the study-day boundary.
+        self._keep_day_boundary_away(learner_id)
         learner_client = self.app.test_client()
         learner_client.post(
             "/login",
@@ -3688,7 +3691,19 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(int(prefetched_payload.get("new_count") or 0), 1)
         self.assertEqual(int(prefetched_payload.get("learn_count") or 0), 1)
 
+    def _keep_day_boundary_away(self, user_id):
+        """A 10-minute learning step near 04:00 UTC would cross the study day."""
+        from models.user_scheduler_settings import UserSchedulerSettings
+
+        with self.app.app_context():
+            db.session.add(UserSchedulerSettings(
+                user_id=user_id,
+                day_boundary_hour_local=(datetime.utcnow().hour + 12) % 24,
+            ))
+            db.session.commit()
+
     def test_study_next_uses_learn_ahead_when_only_intraday_learning_remains(self):
+        self._keep_day_boundary_away(self.user_id)
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
         self.client.post(
