@@ -139,6 +139,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_note_write_gap_locks.py",
             "tests/test_study_application_occurrence.py",
             "tests/test_study_note_level_counts.py",
+            "tests/test_study_phase6_continuity.py",
             "tests/test_study_note_templates.py",
             "tests/test_study_content_delete.py",
             "tests/test_study_note_overlay.py",

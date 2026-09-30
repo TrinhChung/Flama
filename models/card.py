@@ -30,7 +30,8 @@ class Card(db.Model):
     application = db.relationship("StudyApplication", back_populates="cards")
     progress_rows = db.relationship("CardProgress", back_populates="card", cascade="all, delete-orphan")
 
+    # One Card per (Note, occurrence). A Template applied twice has two
+    # occurrences, so (note_id, template_id) is no longer unique (D6-09).
     __table_args__ = (
-        UniqueConstraint("note_id", "template_id", name="uq_cards_note_template"),
         UniqueConstraint("note_id", "application_id", name="uq_cards_note_application"),
     )

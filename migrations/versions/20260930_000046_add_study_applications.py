@@ -232,6 +232,41 @@ def _set_ref_card_on_delete(bind, *, keep_on_card_delete: bool) -> None:
     )
 
 
+NOTE_TEMPLATE_UNIQUE = "uq_cards_note_template"
+
+
+def _drop_note_template_unique(bind) -> None:
+    """(note_id, application_id) now carries uniqueness; a Template may repeat."""
+
+    if NOTE_TEMPLATE_UNIQUE not in _index_names(sa.inspect(bind), "cards"):
+        return
+    if bind.dialect.name == "sqlite":
+        with op.batch_alter_table("cards") as batch:
+            batch.drop_constraint(NOTE_TEMPLATE_UNIQUE, type_="unique")
+    else:
+        op.drop_constraint(NOTE_TEMPLATE_UNIQUE, "cards", type_="unique")
+
+
+def _restore_note_template_unique(bind) -> None:
+    if NOTE_TEMPLATE_UNIQUE in _index_names(sa.inspect(bind), "cards"):
+        return
+    duplicates = bind.execute(
+        sa.text(
+            "SELECT COUNT(*) FROM (SELECT note_id, template_id FROM cards "
+            "GROUP BY note_id, template_id HAVING COUNT(*) > 1) d"
+        )
+    ).scalar_one()
+    if duplicates:
+        raise RuntimeError(
+            f"Cannot restore {NOTE_TEMPLATE_UNIQUE}: {duplicates} Note(s) apply a Template twice."
+        )
+    if bind.dialect.name == "sqlite":
+        with op.batch_alter_table("cards") as batch:
+            batch.create_unique_constraint(NOTE_TEMPLATE_UNIQUE, ["note_id", "template_id"])
+    else:
+        op.create_unique_constraint(NOTE_TEMPLATE_UNIQUE, "cards", ["note_id", "template_id"])
+
+
 def _verify(bind) -> None:
     inspector = sa.inspect(bind)
     if not inspector.has_table(APPLICATIONS):
@@ -269,6 +304,7 @@ def upgrade() -> None:
         bind, table="connect_source_card_refs", index=REF_NOTE_INDEX, index_columns=["note_id"]
     )
     _set_ref_card_on_delete(bind, keep_on_card_delete=True)
+    _drop_note_template_unique(bind)
     _verify(bind)
 
 
@@ -306,6 +342,7 @@ def downgrade() -> None:
                 f"Cannot drop {table}.note_id: {orphaned} row(s) keep Note attribution "
                 "that no live Card can reproduce."
             )
+    _restore_note_template_unique(bind)
     _set_ref_card_on_delete(bind, keep_on_card_delete=False)
     names = _index_names(sa.inspect(bind), "review_events")
     if EVENT_NOTE_INDEX in names:

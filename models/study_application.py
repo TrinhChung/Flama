@@ -14,7 +14,7 @@ so a later Template reorder cannot retarget it.
 
 from datetime import datetime
 
-from sqlalchemy import event, select
+from sqlalchemy import delete, event, select
 from sqlalchemy.orm import Session
 
 from models import db
@@ -112,6 +112,21 @@ def _assign_compat_applications(session: Session, _flush_context, _instances) ->
 
     from models.card import Card
     from models.template import Template
+
+    removed_template_ids = sorted(
+        str(item.id)
+        for item in session.deleted
+        if isinstance(item, Template) and item.id is not None
+    )
+    if removed_template_ids:
+        # The occurrence goes with its Template (the FK cascades on MySQL;
+        # this also holds where foreign keys are not enforced).
+        with session.no_autoflush:
+            session.execute(
+                delete(StudyApplication)
+                .where(StudyApplication.template_id.in_(removed_template_ids))
+                .execution_options(synchronize_session=False)
+            )
 
     pending = list(session.new)
     new_templates = [item for item in pending if isinstance(item, Template)]

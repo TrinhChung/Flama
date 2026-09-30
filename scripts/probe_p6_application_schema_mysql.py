@@ -67,6 +67,7 @@ def _reconstruct_head_45() -> None:
     _exec(f"ALTER TABLE cards DROP INDEX `{migration.CARD_APPLICATION_UNIQUE}`")
     _exec(f"ALTER TABLE cards DROP INDEX `{migration.CARD_APPLICATION_INDEX}`")
     _exec("ALTER TABLE cards DROP COLUMN application_id")
+    _exec(f"ALTER TABLE cards ADD CONSTRAINT `{migration.NOTE_TEMPLATE_UNIQUE}` UNIQUE (note_id, template_id)")
     _exec(f"ALTER TABLE review_events DROP INDEX `{migration.EVENT_NOTE_INDEX}`")
     _exec("ALTER TABLE review_events DROP COLUMN note_id")
     _exec(f"ALTER TABLE connect_source_card_refs DROP INDEX `{migration.REF_NOTE_INDEX}`")
@@ -142,6 +143,8 @@ def _check_upgraded() -> dict:
     card_ids = _exec("SELECT COUNT(*) FROM cards WHERE id LIKE 'note-%'").scalar_one()
     if card_ids != 6:
         raise AssertionError("Card identities changed during the migration.")
+    if migration.NOTE_TEMPLATE_UNIQUE in migration._index_names(sa.inspect(db.engine), "cards"):
+        raise AssertionError("(note_id, template_id) is still unique; repeated applications are blocked.")
     return {"applications": len(apps), "cards_mapped": 6, "events_attributed": 2, "events_unresolved": 1}
 
 
