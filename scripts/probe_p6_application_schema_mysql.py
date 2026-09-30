@@ -2,8 +2,9 @@
 
 Builds the head-45 schema in a generated database, seeds owned and Anki-like
 content with review events and Connect card refs, then checks: upgrade and
-backfill, contract, idempotent re-run, guarded downgrade, empty downgrade and
-re-upgrade, and a flags-off ``wsgi.py`` boot. Only the generated database is
+backfill (review events via the batched CLI backfill), contract, idempotent
+re-run, guarded downgrade, empty downgrade and re-upgrade, and a flags-off
+``wsgi.py`` boot. Only the generated database is
 created and dropped; the configured application database is untouched.
 """
 
@@ -29,6 +30,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app import create_app
+from app.services.study_note_attribution_service import backfill_phase6_attribution
 from models import db
 from scripts.probe_phase4_shadow_schema_mysql import (
     _connection_settings, _database_uri, _source_database_collation,
@@ -132,6 +134,12 @@ def _check_upgraded() -> dict:
     bad_cards = _exec("SELECT COUNT(*) FROM cards c JOIN study_applications a ON a.id = c.application_id "
                       "WHERE a.template_id <> c.template_id").scalar_one()
     unmapped = _exec("SELECT COUNT(*) FROM cards WHERE application_id IS NULL").scalar_one()
+    # Migration 46 leaves old events alone; the batched CLI backfill stamps them.
+    if _exec("SELECT COUNT(*) FROM review_events WHERE note_id IS NOT NULL").scalar_one():
+        raise AssertionError("Migration 46 rewrote review_events; it must stay an online column add.")
+    backfill = backfill_phase6_attribution(apply=True, batch_size=1)
+    if (backfill.attributed_events, backfill.unresolved_events, backfill.batches) != (2, 1, 3):
+        raise AssertionError(f"Unexpected ReviewEvent Note backfill: {backfill.to_dict()}")
     events = dict(_exec("SELECT card_id, note_id FROM review_events").all())
     ref_note = _exec("SELECT note_id FROM connect_source_card_refs WHERE id = 'ref-1'").scalar_one()
     if bad_cards or unmapped:
