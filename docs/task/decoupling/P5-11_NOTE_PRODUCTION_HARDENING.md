@@ -81,6 +81,8 @@ Production 30/09 (SELECT-only): 10 learner mỗi người có 460–12.014 Note 
 | 500 Note chưa học | 13,4 s · 12.047 SQL | **1,75 s · 62 SQL** |
 | 3.000 Note chưa học | ≈80 s (ước) | **8,9 s · 164 SQL** |
 
+Cùng PR: công cụ MCP `get_due_card_counts`, `get_study_queue`, `get_deck_stats` nạp Note lười và gọi `resolve_deck_options` cho từng Card (~3 SQL/Card). Nay nạp Note trong cùng truy vấn (`contains_eager`) và resolve tùy chọn một lần mỗi deck, như P5-11b đã làm cho mở phiên. Learner 3.000 Note (MySQL local): `get_due_card_counts` 11,8 s · 9.040 SQL → **2,2 s · 50 SQL**; `get_study_queue` 23,3 s · 18.090 SQL → **4,4 s · 110 SQL** (`bench_p5_session_open_mysql.py` đo cả hai).
+
 ## 3c. P5-11d — tạo Note song song (MCP agent) không còn deadlock
 
 Production 29/09 13:33 (release cũ, sau R1): 17 lần `create_note`/`batch_create_notes` qua MCP trả 500, 16 do deadlock 1213 và 1 do lock wait timeout, khi agent tạo Note song song. Tái hiện trên MySQL 8.0.40 với code `master` sau P5-11: 8 lần tạo song song cho một learner → 3 lỗi 1213.

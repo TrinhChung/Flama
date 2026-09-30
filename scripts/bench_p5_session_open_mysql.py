@@ -243,6 +243,25 @@ def run(*, notes: int, studied: int, pristine: int = 0, overlay: int = 0) -> dic
                          lambda: client.post("/api/study/sessions", json=overlay_body), report)
             else:
                 report["overlay_error"] = opened.get_json()
+        from types import SimpleNamespace
+
+        from app.services.mcp import study_tools
+
+        def mcp(call):
+            def run_call():
+                with app.app_context():
+                    try:
+                        call()
+                        return SimpleNamespace(status_code=200)
+                    finally:
+                        db.session.rollback()
+                        db.session.remove()
+            return run_call
+
+        _measure(app, "mcp_due_counts",
+                 mcp(lambda: study_tools.get_due_card_counts(user_id=learner["user_id"])), report)
+        _measure(app, "mcp_study_queue",
+                 mcp(lambda: study_tools.get_study_queue(user_id=learner["user_id"], limit=10)), report)
         deck = learner["deck_id"]
         for label, url in (
             ("dashboard", "/api/dashboard"),
