@@ -225,7 +225,9 @@ PR #175 deploy `1e14106`; lần chạy đầu xóa 15.072 dòng membership của
 
 [Điều kiện và bằng chứng](./P8_P9_READINESS_2026-09-30.md). `flask study-phase9-readiness` đo các cổng (đọc-only). Không bước Phase 9 nào xóa dữ liệu khi chưa có backup đã kiểm, chứng minh restore và phê duyệt riêng.
 
-[Điều tra UI/UX trước Phase 8](./UIUX_GAP_AUDIT_PRE_P8_2026-09-30.md) (2026-09-30): 2 lỗi P0 về phục hồi phiên (lease hết hạn, lỗi đồng bộ vĩnh viễn), sai lệch hướng dẫn/thuật ngữ/màu, và điều kiện UI (Interaction host, metadata StudyMode, event tổng quát) phải xong trước năng lực P8 đầu tiên. Đề xuất đợt U1 → U2 → U3 → P8-00.
+[Điều tra UI/UX trước Phase 8](./UIUX_GAP_AUDIT_PRE_P8_2026-09-30.md) (2026-09-30): 2 lỗi P0 về phục hồi phiên (lease hết hạn, lỗi đồng bộ vĩnh viễn), sai lệch hướng dẫn/thuật ngữ/màu, và điều kiện UI (Interaction host, metadata StudyMode, event tổng quát) phải xong trước năng lực P8 đầu tiên.
+
+[Đánh giá hành trình người dùng các phase đã xong](./UIUX_COMPLETED_PHASES_USER_JOURNEY_AUDIT_2026-09-30.md) (2026-09-30, **thứ tự ưu tiên hiện hành, UI P8 xếp cuối**): tạo được nhiều Template nhưng UI chưa đổi tên/xóa được; chọn cách học mới ở mức Template; cài NoteType từ chợ đã cô lập Template, còn cài deck thì chưa (thẻ gốc luôn dùng Template tác giả, tác giả hotfix ảnh hưởng mọi người cài). Đợt: phiên an toàn → Template & cách học → minh bạch clone → nhất quán → Template trong overlay (ADR) → P8.
 
 ### Cross-phase integration
 

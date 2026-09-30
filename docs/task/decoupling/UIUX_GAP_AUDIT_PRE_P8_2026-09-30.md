@@ -1,5 +1,7 @@
 # Điều tra UI/UX sau decoupling — chuẩn bị đợt nâng cấp và Phase 8
 
+> **Cập nhật ưu tiên (2026-09-30):** chủ sản phẩm xếp UI Phase 8 (U3, P8-00, P8-01) **cuối cùng**. Thứ tự đợt nâng cấp hiện hành nằm ở [đánh giá hành trình người dùng các phase đã xong](./UIUX_COMPLETED_PHASES_USER_JOURNEY_AUDIT_2026-09-30.md) §4. Các phát hiện UX-A..E dưới đây vẫn giữ nguyên; UX-A1/A2 là đợt 1 của thứ tự mới.
+
 > Lập 2026-09-30 tại commit `8a2a3da` (nhánh `fix/legacy-lease-replay-under-note`). Loại: điều tra/báo cáo, **Runtime change: none**.
 >
 > Phạm vi: React SPA (`frontend/src/`) ở luồng học và các màn liên quan tới tiến độ, StudyMode, Template, thuật toán; đối chiếu với [canonical plan](../../architecture/study-interaction-trigger-algorithm-plan.md) §6, §9, §14.3, §14.4, Phase 8 và Phụ lục B, cùng [`PRODUCT.md`](../../../PRODUCT.md), [`DESIGN.md`](../../../DESIGN.md), [ADR phím tắt tin cậy](../../architecture/trusted-study-keyboard-boundary-2026-09-07.md), [chính sách phạm vi nhiều NoteType](../../architecture/mixed-notetype-study-scope-policy-2026-09-09.md) và [P8/P9 readiness](./P8_P9_READINESS_2026-09-30.md).
