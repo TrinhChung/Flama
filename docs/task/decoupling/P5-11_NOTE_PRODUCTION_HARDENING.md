@@ -47,14 +47,37 @@ Không đổi schema, cờ hay mức cô lập; không đổi hợp đồng API 
 
 Probe mới chạy trong job CI `mysql-contract`.
 
+## 3b. P5-11b — bớt round-trip trên đường đọc/mở phiên
+
+Cùng khóa, cùng snapshot, cùng pin; chỉ gom câu lệnh:
+
+| Thay đổi | File |
+|---|---|
+| `lock_study_authority_subject_rows`: khóa token + state của cả vector subject bằng hai câu `… WHERE subject_id IN (…) FOR UPDATE` theo PK (dòng thấy trong snapshot; subject đã khóa nên chỉ cần record lock), rồi `lock_study_authority_subject(locked_rows=…)` chạy đúng các kiểm tra cũ. Dòng thiếu (tạo token, pristine) đi đường cũ từng subject. | `study_authority_repository.py`, `study_session_authority_pin_service.py` |
+| Mở phiên: nạp sẵn `Card.note`, media, Template; `Deck`/deck options nhớ theo deck trong request; `study_session_cards` chèn một câu nhiều dòng; pin của phiên vừa tạo bỏ câu kiểm tra tồn tại (PK vẫn chặn trùng) nên flush theo lô. | `study_session_service.py` |
+| Browse tree: `contains_eager(Card.note)`; `/api/study/next`: nạp sẵn Note, deck options theo deck. | `browse_card_service.py`, `routes/flashcards/study.py` |
+
+Đo trên MySQL 8.0.40 local, learner NOTE 1.000 Note (`scripts/bench_p5_session_open_mysql.py`):
+
+| Endpoint | Trước | Sau |
+|---|---|---|
+| Mở phiên v4 | 11,5 s · 8.823 SQL | **1,9 s · 46 SQL** |
+| Browse tree | 4,3 s · 3.036 | 1,2 s · 48 |
+| Browse cards | 3,0 s · 2.057 | 1,2 s · 70 |
+| `/api/study/next` | 6,4 s · 5.029 | 1,2 s · 54 |
+| Commit 50 câu | 2,3 s · 1.414 | 2,2 s · 1.318 (O(câu trả lời), chưa đổi) |
+| Mở phiên có 300 Note mới chưa materialize | — | 11,3 s · 6.955 (≈23 SQL/Note) → P5-11c |
+
 ## 4. Rollback
 
 Chỉ đổi code. Deploy lại release trước theo workflow; không có migration hay dữ liệu cần đảo. Các đường fallback giữ đúng hành vi cũ khi không chứng minh được snapshot.
 
-## 5. Việc còn lại (P5-11b)
+## 5. Việc còn lại
 
 1. **Deploy**: merge PR này đưa cả #171 lên production (hết 504 dashboard/overview). Sau deploy chạy lại vòng audit runbook §4.2.4.
-2. **Mở phiên O(phạm vi)**: `open_study_session` snapshot tới 5.000 thẻ, khóa subject/token/state từng Note và chèn 1 dòng `study_session_cards` + 1 pin cho mỗi thẻ (≈8 câu SQL/thẻ). Với learner 39.282 thẻ, mỗi lần mở (và mỗi 50 câu, SPA mở lại) là hàng chục nghìn câu lệnh.
-3. **Reader còn khóa**: Browse tree/list, `stats_today_future`, `/api/study/next`, MCP đọc (`get_card`, `get_due`…): dùng `load_study_authority_card_reads` khóa FOR UPDATE toàn bộ subject trong phạm vi.
-4. **Frontend gửi commit hai lần** (LEGACY v3): sau commit `auto_finish` thành công, `flushOnExit` gửi lại cùng `commit_id` với `final_states` đã cập nhật → 409 `IDEMPOTENCY_KEY_REUSED`. Dữ liệu lần đầu đã lưu; với v4 (`final_states` rỗng) lần gửi lại là replay 200. Chỉ còn ảnh hưởng phiên LEGACY cũ trong IndexedDB.
-5. Retention `study_session_cards`/`study_session_authority_pins` thuộc Phase 7.
+2. **P5-11c — materialize Note pristine theo lô**: Note mới import/cài từ marketplace được materialize khi mở phiên, ≈23 câu SQL/Note qua bộ máy mirror (deck 2.000 Note mới ≈ 70 s). Hướng: gom theo lô hoặc materialize lúc cài/import.
+3. **Snapshot cả phạm vi**: phiên vẫn chứa tới 5.000 thẻ (≈2 ms CPU/thẻ, JSON ≈2 KB/thẻ) và SPA mở lại mỗi 50 câu. Chỉ snapshot hàng đợi trong ngày là thay đổi hợp đồng wire, để sau.
+4. **Reader vẫn khóa** (Browse, `/api/study/next`, MCP): nay chỉ còn vài câu lệnh khóa theo lô; chuyển hẳn sang đọc không khóa như dashboard nếu đo thấy tranh chấp.
+5. **Frontend gửi commit hai lần** (LEGACY v3): sau commit `auto_finish` thành công, `flushOnExit` gửi lại cùng `commit_id` với `final_states` đã cập nhật → 409 `IDEMPOTENCY_KEY_REUSED`. Dữ liệu lần đầu đã lưu; với v4 (`final_states` rỗng) lần gửi lại là replay 200. Chỉ còn ảnh hưởng phiên LEGACY cũ trong IndexedDB.
+6. Retention `study_session_cards`/`study_session_authority_pins` thuộc Phase 7.
+7. **Cổng deploy CI** chỉ xét diff của lần push; một push runtime có CI fail rồi push sau chỉ sửa test sẽ không bao giờ deploy (#171). Nên so với release deploy thành công gần nhất.

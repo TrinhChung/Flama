@@ -731,6 +731,12 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(second_note_resp.status_code, 201)
 
         with self.app.app_context():
+            # "First" is the earliest created_at, ties broken by random UUID;
+            # two notes created in the same second would make this test flaky.
+            first_note = db.session.get(Note, first_note_resp.get_json()["id"])
+            second_note = db.session.get(Note, second_note_resp.get_json()["id"])
+            second_note.created_at = first_note.created_at + timedelta(seconds=1)
+            db.session.commit()
             deck_item = DeckMarketplaceItem(
                 owner_user_id=self.user_id,
                 source_deck_id=self.deck_id,

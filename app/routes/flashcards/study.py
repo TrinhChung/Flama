@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 from flask import jsonify, request, redirect, url_for, flash, send_file, current_app, make_response
 from flask_login import current_user, login_required
 from app.spa import serve_react_spa
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import selectinload
 from models import db
 from models.flashcard import *
 from models.deck import Deck
@@ -229,15 +231,19 @@ def _build_study_next_payload(
     authority_reads = None
     selected_cards_by_id = None
     if route.mode_code == "NOTE":
-        cards = query.order_by(Card.id.asc()).all()
+        cards = query.options(selectinload(Card.note)).order_by(Card.id.asc()).all()
         selected_cards_by_id = {str(card.id): card for card in cards}
-        deck_options_by_card_id = {
-            str(card.id): resolve_deck_options(
-                user_id=current_user.id,
-                deck_id=_effective_scheduler_deck_id(card, clone_scope),
-            )
-            for card in cards
-        }
+        # Options depend only on (learner, deck): resolve each deck once.
+        options_by_deck_id: dict[Any, Any] = {}
+        deck_options_by_card_id = {}
+        for card in cards:
+            deck_id = _effective_scheduler_deck_id(card, clone_scope)
+            if deck_id not in options_by_deck_id:
+                options_by_deck_id[deck_id] = resolve_deck_options(
+                    user_id=current_user.id,
+                    deck_id=deck_id,
+                )
+            deck_options_by_card_id[str(card.id)] = options_by_deck_id[deck_id]
         authority_reads = load_study_authority_card_reads(
             db.session,
             learner_user_id=int(current_user.id),

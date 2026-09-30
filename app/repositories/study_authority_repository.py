@@ -210,6 +210,73 @@ def _validate_hash(value: object, *, nullable: bool, field_name: str) -> bytes |
     return value
 
 
+_BULK_LOCK_CHUNK = 1000
+
+
+def lock_study_authority_subject_rows(
+    session: Session,
+    *,
+    subjects,
+) -> dict[int, tuple[StudyAuthoritySubjectToken, StudyProgressState]]:
+    """Lock the existing token and state rows of many locked subjects at once.
+
+    Issuing one pair of ``FOR UPDATE`` reads per subject costs two round trips
+    per Note on every session open and locking read. Rows visible in the
+    snapshot are locked here by primary key in bulk (record locks only; the
+    subject locks already serialize their writers) and returned current. A
+    subject whose token or state is missing from the result is left to
+    ``lock_study_authority_subject``'s per-row path, which creates or rejects
+    it exactly as before.
+    """
+
+    subject_ids = sorted({int(subject.id) for subject in subjects})
+    if not subject_ids:
+        return {}
+    tokens: dict[int, StudyAuthoritySubjectToken] = {}
+    states: dict[int, StudyProgressState] = {}
+    for start in range(0, len(subject_ids), _BULK_LOCK_CHUNK):
+        chunk = subject_ids[start:start + _BULK_LOCK_CHUNK]
+        visible_tokens = sorted(
+            int(value)
+            for value in session.execute(
+                select(StudyAuthoritySubjectToken.subject_id).where(
+                    StudyAuthoritySubjectToken.subject_id.in_(chunk)
+                )
+            ).scalars()
+        )
+        visible_states = sorted(
+            int(value)
+            for value in session.execute(
+                select(StudyProgressState.subject_id).where(
+                    StudyProgressState.subject_id.in_(chunk)
+                )
+            ).scalars()
+        )
+        if visible_tokens:
+            for token in session.execute(
+                select(StudyAuthoritySubjectToken)
+                .where(StudyAuthoritySubjectToken.subject_id.in_(visible_tokens))
+                .order_by(StudyAuthoritySubjectToken.subject_id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars():
+                tokens[int(token.subject_id)] = token
+        if visible_states:
+            for state in session.execute(
+                select(StudyProgressState)
+                .where(StudyProgressState.subject_id.in_(visible_states))
+                .order_by(StudyProgressState.subject_id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars():
+                states[int(state.subject_id)] = state
+    return {
+        subject_id: (tokens[subject_id], states[subject_id])
+        for subject_id in subject_ids
+        if subject_id in tokens and subject_id in states
+    }
+
+
 def lock_study_authority_subject(
     session: Session,
     *,
@@ -217,12 +284,15 @@ def lock_study_authority_subject(
     subject: StudyProgressSubject,
     now_utc: datetime,
     create_token_if_missing: bool = True,
+    locked_rows: tuple[StudyAuthoritySubjectToken, StudyProgressState] | None = None,
 ) -> LockedStudyAuthoritySubject:
     """Lock/create the independent token, then lock and verify current state.
 
     ``subject`` must already be selected ``FOR UPDATE`` after the learner
     prefix.  New tokens are initialized at revision zero from the existing
     exact state, or with a null hash when the subject has no current state.
+    ``locked_rows`` are this subject's token and state already locked and
+    refreshed by ``lock_study_authority_subject_rows``; the same checks apply.
     """
 
     if not isinstance(route, StudyAuthorityRoute):
@@ -250,6 +320,21 @@ def lock_study_authority_subject(
     if not isinstance(now_utc, datetime) or now_utc.tzinfo is not None:
         raise StudyAuthorityFenceError(
             "INVALID_AUTHORITY_TIME", "Authority time must be naive UTC."
+        )
+
+    if locked_rows is not None:
+        token, state = locked_rows
+        if (
+            int(token.subject_id) != int(subject.id)
+            or int(state.subject_id) != int(subject.id)
+        ):
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_CONTEXT_DIVERGED",
+                "Preloaded authority rows belong to another subject.",
+            )
+        return _verified_locked_subject(
+            subject=subject, token=token, state=state, token_created=False,
+            generation=generation,
         )
 
     token = session.execute(
@@ -281,6 +366,20 @@ def lock_study_authority_subject(
         .with_for_update()
         .execution_options(populate_existing=True)
     ).scalar_one_or_none()
+    return _verified_locked_subject(
+        subject=subject, token=token, state=state, token_created=token_created,
+        generation=generation,
+    )
+
+
+def _verified_locked_subject(
+    *,
+    subject: StudyProgressSubject,
+    token: StudyAuthoritySubjectToken,
+    state: StudyProgressState | None,
+    token_created: bool,
+    generation: int,
+) -> LockedStudyAuthoritySubject:
     state_hash = (
         _validate_hash(
             state.semantic_state_hash,

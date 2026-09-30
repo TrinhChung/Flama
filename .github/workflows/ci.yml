@@ -28,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  deployments: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -50,10 +51,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The deploy gate also compares HEAD with the release running in
+      # production: a runtime push whose CI failed (#171) must deploy with the
+      # next green push, even when that push only changes tests.
+      - name: Resolve the release running in production
+        id: deployed
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=""
+          for id in $(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=Flama&per_page=30" --jq '.[].id' || true); do
+            state=$(gh api "repos/${GITHUB_REPOSITORY}/deployments/${id}/statuses?per_page=1" --jq '.[0].state // ""' || true)
+            if [ "$state" = "success" ]; then
+              sha=$(gh api "repos/${GITHUB_REPOSITORY}/deployments/${id}" --jq '.sha' || true)
+              break
+            fi
+          done
+          echo "Production release: ${sha:-unknown}"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+
       - name: Plan affected validation jobs
         id: plan
         env:
           CI_FORCE_ALL_VALIDATION: ${{ github.event_name != 'pull_request' }}
+          DEPLOYED_RELEASE_SHA: ${{ steps.deployed.outputs.sha }}
         run: python scripts/run_tests.py --ci-plan --github-output "$GITHUB_OUTPUT"
 
   frontend:

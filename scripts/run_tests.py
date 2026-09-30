@@ -1073,17 +1073,28 @@ def build_ci_change_plan(
     changed_files: list[str],
     *,
     force_all_validation: bool = False,
+    files_since_deploy: list[str] | None = None,
 ) -> dict[str, bool]:
-    """Return job-level CI decisions for one complete event diff."""
+    """Return job-level CI decisions for one complete event diff.
+
+    ``files_since_deploy`` is the diff between the release running in
+    production and HEAD. A push whose runtime change never deployed (its CI
+    failed) must still deploy with the next green push, even a test-only one.
+    """
     normalized = [path.replace("\\", "/") for path in changed_files]
     _, backend_tests, frontend_tests = map_files_to_modules(normalized)
 
-    def matches_any(patterns: tuple[str, ...]) -> bool:
+    def matches_any(patterns: tuple[str, ...], paths: list[str] | None = None) -> bool:
         return any(
             fnmatch.fnmatch(path, pattern)
-            for path in normalized
+            for path in (normalized if paths is None else paths)
             for pattern in patterns
         )
+
+    undeployed_runtime = files_since_deploy is not None and matches_any(
+        DEPLOY_RUNTIME_SOURCE_PATTERNS,
+        [path.replace("\\", "/") for path in files_since_deploy],
+    )
 
     spa_contract = matches_any(SPA_CONTRACT_SOURCE_PATTERNS)
     return {
@@ -1095,9 +1106,29 @@ def build_ci_change_plan(
         "mysql_contract": force_all_validation
         or matches_any(MYSQL_CONTRACT_SOURCE_PATTERNS),
         # Deployment remains path-sensitive even though master intentionally
-        # receives full validation. Test/docs-only merges must not deploy.
-        "deploy": matches_any(DEPLOY_RUNTIME_SOURCE_PATTERNS),
+        # receives full validation. Test/docs-only merges must not deploy,
+        # unless runtime code is still missing from production.
+        "deploy": matches_any(DEPLOY_RUNTIME_SOURCE_PATTERNS) or undeployed_runtime,
     }
+
+
+def files_changed_since(base_sha: str) -> list[str] | None:
+    """Files differing between ``base_sha`` and HEAD, or None when unknown."""
+    base = str(base_sha or "").strip()
+    if not base or not all(ch in "0123456789abcdef" for ch in base.lower()):
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "--name-only", base, "HEAD"],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    if proc.returncode != 0:
+        return None
+    return [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
 
 
 def write_github_outputs(path: str, values: dict[str, bool]) -> None:
@@ -1327,11 +1358,19 @@ def main() -> int:
             "yes",
             "on",
         }
+        deployed_sha = str(os.environ.get("DEPLOYED_RELEASE_SHA") or "").strip()
+        since_deploy = files_changed_since(deployed_sha) if deployed_sha else None
         plan = build_ci_change_plan(
             changed,
             force_all_validation=force_all,
+            files_since_deploy=since_deploy,
         )
-        print(json.dumps({"changed_files": changed, **plan}, indent=2, sort_keys=True))
+        print(json.dumps({
+            "changed_files": changed,
+            "deployed_release_sha": deployed_sha or None,
+            "files_since_deploy": since_deploy,
+            **plan,
+        }, indent=2, sort_keys=True))
         if args.github_output:
             write_github_outputs(args.github_output, plan)
         return 0

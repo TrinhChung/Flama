@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from sqlalchemy import case, false, func
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import aliased, contains_eager, selectinload
 
 UTC = timezone.utc
 
@@ -191,8 +191,11 @@ def build_browse_deck_tree(
             # Same scope as the LEGACY tree: admin-wide counts every Note in the
             # visible decks (with the admin's own state); a learner counts owned
             # Notes plus logical-overlay source Cards under their local deck.
-            owned_query = Card.query.join(Note, Card.note_id == Note.id).filter(
-                Note.deck_id.in_(deck_ids)
+            owned_query = (
+                Card.query.join(Note, Card.note_id == Note.id)
+                # card.note.deck_id is read per Card below; fill it from this join.
+                .options(contains_eager(Card.note))
+                .filter(Note.deck_id.in_(deck_ids))
             )
             if not admin_mode:
                 owned_query = owned_query.filter(Note.user_id == user_id)
