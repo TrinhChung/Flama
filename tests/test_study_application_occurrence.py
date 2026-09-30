@@ -9,6 +9,7 @@ from alembic.operations import Operations
 from sqlalchemy import text
 
 from app import create_app
+from app.services.study_note_attribution_service import backfill_phase6_attribution
 from models import db
 from models.card import Card
 from models.deck import Deck
@@ -193,10 +194,77 @@ class StudyApplicationOccurrenceTests(unittest.TestCase):
         occurrence = StudyApplication.query.one()
         self.assertEqual((occurrence.template_id, occurrence.occurrence_key), (template.id, "compat"))
         self.assertEqual(db.session.get(Card, card.id).application_id, occurrence.id)
+        # The migration leaves old events alone; the batched backfill stamps them.
+        self.assertEqual(ReviewEvent.query.filter(ReviewEvent.note_id.isnot(None)).count(), 0)
+        dry_run = backfill_phase6_attribution(apply=False)
+        self.assertEqual((dry_run.pending_events, dry_run.unresolved_events), (2, 1))
+        self.assertEqual(ReviewEvent.query.filter(ReviewEvent.note_id.isnot(None)).count(), 0)
+        report = backfill_phase6_attribution(apply=True, batch_size=1)
+        self.assertEqual((report.attributed_events, report.unresolved_events, report.batches), (1, 1, 2))
+        db.session.expire_all()
         self.assertEqual(
             {row.card_id: row.note_id for row in ReviewEvent.query.all()},
             {card.id: note.id, "gone": None},
         )
+        rerun = backfill_phase6_attribution(apply=True)
+        self.assertEqual((rerun.pending_events, rerun.attributed_events), (1, 0))
+
+    def test_backfill_repairs_rows_written_by_the_previous_release(self):
+        """The deploy migrates while the old release serves; its writes are repaired."""
+        from models.connect_source_card_ref import ConnectSourceCardRef
+
+        front = self._template()
+        notes = [self._note(), self._note()]
+        cards = [Card(note_id=note.id, template_id=front.id) for note in notes]
+        db.session.add_all(cards)
+        db.session.commit()
+        ref = ConnectSourceCardRef(user_id=self.user.id, source_key="src", external_card_id="c1",
+                                   external_note_id="n1", source_ord=0, card_id=cards[0].id)
+        db.session.add(ref)
+        db.session.commit()
+        now = cards[0].created_at
+        # Old code: a Template and Cards with no occurrence, a duplicate Card
+        # (the unique (note, template) key is gone), a ref re-bound without its Note.
+        db.session.execute(text(
+            "INSERT INTO templates (id, note_type_id, name, front_html, back_html, shared_css, position, "
+            "is_default, created_at, updated_at) VALUES ('t-old', :nt, 'Old', '', '', '', 1, 0, :now, :now)"
+        ), {"nt": self.note_type.id, "now": now})
+        for card_id, note_id, template_id in (
+            ("c-old-0", notes[0].id, "t-old"), ("c-old-1", notes[1].id, "t-old"),
+            ("c-dup", notes[0].id, front.id),
+        ):
+            db.session.execute(text(
+                "INSERT INTO cards (id, note_id, template_id, created_at, updated_at) "
+                "VALUES (:id, :note, :template, :now, :now)"
+            ), {"id": card_id, "note": note_id, "template": template_id, "now": now})
+        db.session.execute(text(
+            "UPDATE connect_source_card_refs SET card_id = :card, note_id = NULL WHERE id = :id"
+        ), {"card": "c-old-1", "id": ref.id})
+        db.session.commit()
+
+        dry_run = backfill_phase6_attribution(apply=False)
+        self.assertEqual(
+            (dry_run.templates_without_occurrence, dry_run.unbound_cards, dry_run.refs_pending),
+            (1, 3, 1),
+        )
+        self.assertEqual(StudyApplication.query.filter_by(template_id="t-old").count(), 0)
+        report = backfill_phase6_attribution(apply=True, batch_size=1)
+        self.assertEqual(
+            (report.occurrences_created, report.cards_bound, report.duplicate_cards, report.refs_attributed),
+            (1, 2, ["c-dup"], 1),
+        )
+        db.session.expire_all()
+        old = StudyApplication.query.filter_by(template_id="t-old").one()
+        self.assertEqual((old.occurrence_key, old.source_ord), (COMPAT_OCCURRENCE_KEY, 1))
+        self.assertEqual(
+            {row.id: row.application_id for row in Card.query.filter(Card.template_id == "t-old")},
+            {"c-old-0": old.id, "c-old-1": old.id},
+        )
+        self.assertIsNone(db.session.get(Card, "c-dup").application_id)  # reported, kept
+        self.assertEqual(db.session.get(ConnectSourceCardRef, ref.id).note_id, notes[1].id)
+        rerun = backfill_phase6_attribution(apply=True)
+        self.assertEqual((rerun.occurrences_created, rerun.cards_bound, rerun.refs_attributed), (0, 0, 0))
+        self.assertEqual(rerun.duplicate_cards, ["c-dup"])
 
 
 if __name__ == "__main__":

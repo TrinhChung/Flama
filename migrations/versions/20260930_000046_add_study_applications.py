@@ -11,7 +11,12 @@ Additive only, no existing value changes:
   ``position``, which is what Anki ordinal mapping uses today);
 * ``cards.application_id``: backfilled 1:1 from the Card's Template occurrence;
 * ``review_events.note_id`` and ``connect_source_card_refs.note_id``: the
-  Card's Note, backfilled from live Cards (unresolvable rows stay NULL).
+  Card's Note. Refs are backfilled here; events are backfilled after the
+  deploy in committed batches (``flask study-phase6-attribution-backfill``,
+  which also binds rows the previous release wrote while this migration ran).
+  Unresolvable rows stay NULL.
+* ``connect_source_card_refs.card_id`` becomes nullable with ``ON DELETE SET
+  NULL``; ``(note_id, template_id)`` stops being unique on ``cards``.
 
 Downgrade removes only derivable data and refuses when an occurrence other
 than the compatibility one, or a Note snapshot that no live Card can
@@ -20,6 +25,7 @@ reproduce, would be lost.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime
 import uuid
 
@@ -156,14 +162,21 @@ def _add_card_application(bind) -> None:
         fk.get("referred_table") == APPLICATIONS
         for fk in sa.inspect(bind).get_foreign_keys("cards")
     ):
-        op.create_foreign_key(
-            CARD_APPLICATION_FK,
-            "cards",
-            APPLICATIONS,
-            ["application_id"],
-            ["id"],
-            ondelete="CASCADE",
-        )
+        # Every application_id is still NULL, so there is nothing to validate;
+        # without the check MySQL adds the FK in place instead of copying cards.
+        with _foreign_key_checks_off(bind):
+            op.create_foreign_key(
+                CARD_APPLICATION_FK,
+                "cards",
+                APPLICATIONS,
+                ["application_id"],
+                ["id"],
+                ondelete="CASCADE",
+            )
+    _bind_cards(bind)
+
+
+def _bind_cards(bind) -> None:
     bind.execute(
         sa.text(
             "UPDATE cards SET application_id = (SELECT a.id FROM study_applications a "
@@ -174,18 +187,41 @@ def _add_card_application(bind) -> None:
     )
 
 
-def _add_note_snapshot(bind, *, table: str, index: str, index_columns: list[str]) -> None:
+@contextmanager
+def _foreign_key_checks_off(bind):
+    if bind.dialect.name != "mysql":
+        yield
+        return
+    bind.execute(sa.text("SET SESSION foreign_key_checks = 0"))
+    try:
+        yield
+    finally:
+        bind.execute(sa.text("SET SESSION foreign_key_checks = 1"))
+
+
+def _add_note_snapshot(
+    bind, *, table: str, index: str, index_columns: list[str], backfill: bool
+) -> None:
+    """Add ``note_id`` online; backfill here only when the table is small.
+
+    ``review_events`` is backfilled afterwards in committed batches by
+    ``flask study-review-event-note-backfill``: one statement over every row
+    would lock the whole table (gaps included) and hold back learners'
+    answers during the deploy.
+    """
+
     inspector = sa.inspect(bind)
     if "note_id" not in _columns(inspector, table):
         op.add_column(table, sa.Column("note_id", sa.String(36), nullable=True))
     if index not in _index_names(sa.inspect(bind), table):
         op.create_index(index, table, index_columns)
-    bind.execute(
-        sa.text(
-            f"UPDATE {table} SET note_id = (SELECT c.note_id FROM cards c "
-            f"WHERE c.id = {table}.card_id) WHERE note_id IS NULL"
+    if backfill:
+        bind.execute(
+            sa.text(
+                f"UPDATE {table} SET note_id = (SELECT c.note_id FROM cards c "
+                f"WHERE c.id = {table}.card_id) WHERE note_id IS NULL"
+            )
         )
-    )
 
 
 REF_CARD_FK = "fk_connect_source_card_refs_card_id"
@@ -222,14 +258,17 @@ def _set_ref_card_on_delete(bind, *, keep_on_card_delete: bool) -> None:
         existing_type=sa.String(36),
         nullable=keep_on_card_delete,
     )
-    op.create_foreign_key(
-        REF_CARD_FK,
-        "connect_source_card_refs",
-        "cards",
-        ["card_id"],
-        ["id"],
-        ondelete=wanted,
-    )
+    # Every card_id was valid under the previous constraint; skip re-validation
+    # so the constraint is added in place.
+    with _foreign_key_checks_off(bind):
+        op.create_foreign_key(
+            REF_CARD_FK,
+            "connect_source_card_refs",
+            "cards",
+            ["card_id"],
+            ["id"],
+            ondelete=wanted,
+        )
 
 
 NOTE_TEMPLATE_UNIQUE = "uq_cards_note_template"
@@ -267,7 +306,7 @@ def _restore_note_template_unique(bind) -> None:
         op.create_unique_constraint(NOTE_TEMPLATE_UNIQUE, "cards", ["note_id", "template_id"])
 
 
-def _verify(bind) -> None:
+def _verify(bind, *, existing_card_ids: set[str]) -> None:
     inspector = sa.inspect(bind)
     if not inspector.has_table(APPLICATIONS):
         raise RuntimeError("study_applications was not created.")
@@ -276,11 +315,21 @@ def _verify(bind) -> None:
         found = _columns(inspector, table).get(column)
         if found is None or not found["nullable"] or not isinstance(found["type"], sa.String):
             raise RuntimeError(f"{table}.{column} has an incompatible contract.")
-    unmapped = bind.execute(
-        sa.text("SELECT COUNT(*) FROM cards WHERE application_id IS NULL")
-    ).scalar_one()
+    unmapped = {
+        str(card_id)
+        for card_id in bind.execute(
+            sa.text("SELECT id FROM cards WHERE application_id IS NULL")
+        ).scalars()
+    }
+    if unmapped & existing_card_ids:
+        raise RuntimeError(
+            f"{len(unmapped & existing_card_ids)} Card(s) have no application occurrence after backfill."
+        )
     if unmapped:
-        raise RuntimeError(f"{unmapped} Card(s) have no application occurrence after backfill.")
+        # The previous release keeps serving while the deploy migrates; Cards
+        # it created just now are bound by `flask study-phase6-attribution-backfill`.
+        print(f"[20260930_000046] {len(unmapped)} Card(s) created during the migration are left "
+              "for study-phase6-attribution-backfill.")
     mismatched = bind.execute(
         sa.text(
             "SELECT COUNT(*) FROM cards c JOIN study_applications a ON a.id = c.application_id "
@@ -294,18 +343,24 @@ def _verify(bind) -> None:
 
 def upgrade() -> None:
     bind = op.get_bind()
+    existing_card_ids = {str(card_id) for card_id in bind.execute(sa.text("SELECT id FROM cards")).scalars()}
     _create_applications_table(bind)
     _backfill_compat_applications(bind)
     _add_card_application(bind)
     _add_note_snapshot(
-        bind, table="review_events", index=EVENT_NOTE_INDEX, index_columns=["user_id", "note_id"]
+        bind, table="review_events", index=EVENT_NOTE_INDEX, index_columns=["user_id", "note_id"],
+        backfill=False,
     )
     _add_note_snapshot(
-        bind, table="connect_source_card_refs", index=REF_NOTE_INDEX, index_columns=["note_id"]
+        bind, table="connect_source_card_refs", index=REF_NOTE_INDEX, index_columns=["note_id"],
+        backfill=True,
     )
     _set_ref_card_on_delete(bind, keep_on_card_delete=True)
     _drop_note_template_unique(bind)
-    _verify(bind)
+    # Templates and Cards the serving release wrote during the steps above.
+    _backfill_compat_applications(bind)
+    _bind_cards(bind)
+    _verify(bind, existing_card_ids=existing_card_ids)
 
 
 def downgrade() -> None:

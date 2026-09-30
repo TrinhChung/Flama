@@ -91,6 +91,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_p5_direct_replay_mysql.py",
             "scripts/probe_p5_concurrency_mysql.py",
             "scripts/probe_p6_application_schema_mysql.py",
+            "scripts/bench_p6_migration_mysql.py",
             "models/study_application.py",
             "scripts/bench_p5_session_open_mysql.py",
             "scripts/probe_p7_session_retention_mysql.py",
@@ -824,8 +825,11 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "app/routes/flashcards/study.py",
     "scripts/probe_p5_concurrency_mysql.py",
     "tests/test_study_note_write_gap_locks.py",
-    # Phase 6/7 foreign-key behavior (SET NULL, cascades) only runs on InnoDB.
+    # Migration 46 runs while the previous release serves; FK/DDL behaviour is InnoDB-only.
+    "app/services/study_note_attribution_service.py",
     "scripts/probe_p6_application_schema_mysql.py",
+    "scripts/bench_p6_migration_mysql.py",
+    # Phase 7 foreign-key behavior (cascades from membership to pins) only runs on InnoDB.
     "app/services/study_session_retention_service.py",
     "scripts/probe_p7_session_retention_mysql.py",
     "tests/test_study_session_retention.py",
