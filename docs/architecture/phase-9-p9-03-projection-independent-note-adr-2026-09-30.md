@@ -23,7 +23,7 @@ Thêm bảng một dòng `study_authority_storage_profile` (`profile_code` ∈ {
 
 ### 2.2 Adapter thuần thay cho dòng CardProgress
 
-Tách từ `map_card_progress` một hàm thuần `project_note_card(state_payload, *, card_id, card_created_at) -> (availability, semantic_hash)` và `encode_projection_values(state) -> dict` (đã có trong encoder) **không cần** `id`/dòng DB. Hai đường cũ/mới gọi cùng hàm; code mapping hiện tại trở thành oracle parity (P9-04 so sánh kết quả hai đường trên cùng dữ liệu khi projection còn cập nhật).
+Tách từ `map_card_progress` một hàm thuần `project_note_card(state_payload, *, burial, card_id, card_created_at) -> (availability, semantic_hash)` và `encode_projection_values(state) -> dict` (đã có trong encoder) **không cần** `id`/dòng DB. `burial` là cặp (`is_buried`, `buried_until_day`) vì hai giá trị này nằm trong semantic hash nhưng **không** nằm trong Algorithm State (§2.8). Hai đường cũ/mới gọi cùng hàm; code mapping hiện tại trở thành oracle parity (P9-04 so sánh kết quả hai đường trên cùng dữ liệu khi projection còn cập nhật).
 
 ### 2.3 Evidence contributor không có CardProgress
 
@@ -59,6 +59,21 @@ Một transaction: fence enrollment + profile → khóa subject → token/state 
 
 Reader NOTE (P9-04) chỉ đọc subject/state/token/contributor/availability; kiểm linkage mới: contributor `CANONICAL` phủ đúng Card sống, availability generation/hash = state; `LEGACY_PROJECTION` giữ kiểm cũ cho đến khi hết. Thống kê `reps` marketplace = Σ theo subject `state.reps` × số Card sống trong phạm vi (bằng tổng projection hôm nay vì mọi sibling mang cùng state). Browse lọc/sắp theo availability. Audit canonical thay thế (F9-08) tính lại availability/semantic hash bằng §2.2 từ state và so dòng đã lưu.
 
+### 2.8 Giá trị hiện chỉ có trong projection
+
+Writer NOTE hôm nay lấy một phần giá trị projection từ **dòng CardProgress của Card được trả lời** (`study_authority_command_service._projection_metadata` → `LegacyProjectionMetadata`, "Compatibility values deliberately omitted from Algorithm State") và từ baseline từng sibling. Bỏ CardProgress thì mỗi giá trị cần nguồn canonical riêng:
+
+| Giá trị projection | Hôm nay lấy từ | Production 30/09 (SELECT) | Nguồn ở `CANONICAL_V1` |
+|---|---|---|---|
+| `interval_days` (làm tròn) | review: `_round_review_interval(state.intervalDays, deck options)`; khác: `round(state.intervalDays)` | 40.671/40.671 dòng có `interval_days = FLOOR(interval_days_raw + 0.5)`; max 801 | **Suy ra, không lưu**: hàm thuần `rounded_interval_days(state)` tái tạo đúng encoder. Scheduler đã clamp `intervalDays` theo deck options trước khi ghi (`anki_scheduler._set_review_due`), nên clamp lại là đồng nhất. Reader stats/MCP (ngưỡng mature ≥ 21) gọi hàm này thay cột. |
+| `is_buried`, `buried_until_day` | CardProgress của Card được trả lời, áp cho mọi sibling; nằm trong semantic hash | 0 dòng buried ở `card_progress` lẫn `study_progress_availability`; chỉ import Anki/Connect đặt được (queue -2/-3), không API/UI nào bury | **Availability là nguồn**: writer đọc burial từ availability đã khóa của Card được trả lời (hôm nay bằng projection, audit read 18/18 PASS), giữ nguyên cho mọi sibling; semantic hash vẫn gồm burial. Import Anki/Connect ghi burial vào availability qua cùng adapter. |
+| `last_leech_lapses` | Card được trả lời; `state.leeched` của mapping suy từ nó | 0 dòng > 0 | **Không lưu**: `state.leeched` là nguồn; chỉ encoder projection cần giá trị này. |
+| `last_leech_at` | như trên | 0 dòng khác NULL; không reader API/UI | **Không lưu**; nếu sau này cần hiển thị, lấy thời điểm của history fact đầu tiên có `leeched` = true. |
+| `last_review_event_id` | baseline từng sibling | — | ReviewEvent/history fact do writer stage. `pointer_status` của contributor `CANONICAL`: `VALID` khi writer vừa stage event cho Card đó, giữ nguyên cho sibling, `ABSENT` khi pristine. |
+| `revision`, `updated_at` | CAS projection, `projected_at` | — | `authority_revision` của token; `updated_at` của state/availability. |
+
+Hệ quả: CardProgress không còn là nguồn của giá trị nào; mọi giá trị trên có nguồn canonical hoặc suy ra được từ state, và contract test (§4.1) phủ cả burial khác mặc định và state leeched.
+
 ## 3. Phương án bị loại
 
 - **Giữ ghi CardProgress nhưng bỏ đọc**: không giảm tải ghi (mục tiêu D9-01), vẫn sai khi projection lệch.
@@ -67,7 +82,7 @@ Reader NOTE (P9-04) chỉ đọc subject/state/token/contributor/availability; k
 
 ## 4. Kiểm chứng bắt buộc (gate P9-03 → P9-04/05)
 
-1. Contract test: cùng state, đường cũ (`map_card_progress` trên projection) và mới (§2.2) cho availability + semantic hash giống hệt — mọi queue, suspend/bury, learning steps, relearning, due_at/due_day, memory state; Note 1 và nhiều Card.
+1. Contract test: cùng state, đường cũ (`map_card_progress` trên projection) và mới (§2.2) cho availability + semantic hash giống hệt — mọi queue, suspend/bury (kể cả `buried_until_day`), learning steps, relearning, due_at/due_day, memory state, state leeched; Note 1 và nhiều Card. `rounded_interval_days(state)` bằng `interval_days` của encoder ở mọi case, và bằng cột trên bản sao production (đã đo: 0 lệch).
 2. Migration 47 trên SQLite + MySQL tạm: upgrade/idempotent/downgrade từ chối khi có dòng `CANONICAL`; unique mới không vi phạm trên bản sao dữ liệu production (đã đếm: 0 trùng).
 3. Fixture **không có bảng CardProgress dữ liệu** chạy được reader/writer profile `CANONICAL_V1`.
 4. Connect: ref `NEEDS_CONFIRMATION` + học trên Flama rồi sync cùng snapshot → `LOCAL_PROGRESS_CHANGED`; snapshot khớp → chuyển `AUTHORITY`; `force` ghi và tạo history.
