@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.validators.study_session_wire import SESSION_SCHEMA_V4
 from models import db
@@ -23,6 +23,7 @@ from models.connect_source_card_ref import ConnectSourceCardRef
 from models.study_application import StudyApplication
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_session import StudySession
+from models.study_session_batch import StudySessionBatch
 from models.user import User
 
 SCHEMA_VERSION = "study-phase9-readiness.v2"
@@ -33,7 +34,17 @@ def _count(statement) -> int:
     return int(db.session.execute(statement).scalar_one() or 0)
 
 
-def build_phase9_readiness(*, now_utc: datetime | None = None, window_days: int = 30) -> dict:
+def build_phase9_readiness(
+    *,
+    now_utc: datetime | None = None,
+    window_days: int = 30,
+    projection_since_utc: datetime | None = None,
+) -> dict:
+    """``projection_since_utc`` is the cutover instant T0 (P9-06): after it no
+    ``card_progress`` row may be created or updated. Without it the cutover
+    gate is ``unknown`` rather than silently zero.
+    """
+
     now = (now_utc or datetime.utcnow()).replace(microsecond=0)
     since = now - timedelta(days=int(window_days))
 
@@ -70,6 +81,34 @@ def build_phase9_readiness(*, now_utc: datetime | None = None, window_days: int 
         select(func.count()).select_from(ConnectSourceCardRef).where(ConnectSourceCardRef.card_id.is_(None))
     )
     card_progress_rows = _count(select(func.count()).select_from(CardProgress))
+    projection_writes_since = None
+    if projection_since_utc is not None:
+        projection_writes_since = _count(
+            select(func.count()).select_from(CardProgress).where(or_(
+                CardProgress.created_at >= projection_since_utc,
+                CardProgress.updated_at >= projection_since_utc,
+            ))
+        )
+    # Work issued under the current storage profile must drain before cutover:
+    # a lease is valid until it expires, an admitted batch until it finishes.
+    leases = [
+        {"wire": str(wire or "<none>"), "valid": bool(valid), "sessions": int(count)}
+        for wire, valid, count in db.session.execute(
+            select(
+                StudySession.wire_schema_version,
+                StudySession.expires_at > now,
+                func.count(),
+            )
+            .where(StudySession.status == "open")
+            .group_by(StudySession.wire_schema_version, StudySession.expires_at > now)
+        ).all()
+    ]
+    batches = {
+        str(status): int(count)
+        for status, count in db.session.execute(
+            select(StudySessionBatch.status, func.count()).group_by(StudySessionBatch.status)
+        ).all()
+    }
     db.session.rollback()
 
     old_wire = {
@@ -96,6 +135,24 @@ def build_phase9_readiness(*, now_utc: datetime | None = None, window_days: int 
         "old_session_wire_versions": {
             "evidence": {"sessions_in_window": old_wire, "open_sessions": old_wire_open},
             "status": "ready" if not old_wire and not old_wire_open else "waiting",
+        },
+        "projection_cutover": {
+            "evidence": {
+                "since_utc": projection_since_utc.isoformat() + "Z" if projection_since_utc else None,
+                "card_progress_rows_written_since": projection_writes_since,
+            },
+            "status": (
+                "unknown" if projection_writes_since is None
+                else "ready" if projection_writes_since == 0 else "waiting"
+            ),
+        },
+        "work_drain": {
+            "evidence": {"open_leases": leases, "batches": batches},
+            "status": (
+                "waiting"
+                if any(row["valid"] for row in leases) or batches.get("enqueued") or batches.get("processing")
+                else "ready"
+            ),
         },
         "positional_anki_ordinals": {
             "evidence": {"cards_without_occurrence": unbound_cards,

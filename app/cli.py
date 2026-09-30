@@ -770,12 +770,21 @@ def register_cli_commands(app: Flask) -> None:
         show_default=True,
         help="Observation window for old usage.",
     )
-    def study_phase9_readiness(window_days: int) -> None:
+    @click.option(
+        "--projection-since",
+        type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"]),
+        default=None,
+        help="Cutover instant T0 (UTC): count card_progress rows written since then.",
+    )
+    def study_phase9_readiness(window_days: int, projection_since) -> None:
         """Read-only evidence for the Phase 9 contraction gates."""
 
         from app.services.study_phase9_readiness_service import build_phase9_readiness
 
-        click.echo(json.dumps(build_phase9_readiness(window_days=window_days), sort_keys=True))
+        click.echo(json.dumps(
+            build_phase9_readiness(window_days=window_days, projection_since_utc=projection_since),
+            sort_keys=True,
+        ))
 
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
