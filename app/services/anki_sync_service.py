@@ -120,10 +120,30 @@ def _source_note(session: ConnectImportSession, external_note_id: str) -> Connec
 
 
 def _card_for_ord(note_ref: ConnectSourceNoteRef, source_ord: int) -> Card:
+    """Map an Anki card ordinal to the Note's Card.
+
+    The ordinal is bound to the application occurrence (Phase 6, D6-06), so a
+    later Template reorder cannot retarget it, and a removed Template's
+    ordinal is refused instead of falling through to whichever sibling now
+    sits at that position. Notes whose occurrences carry no ordinal yet keep
+    the previous position-based mapping.
+    """
+
     cards = sorted(
         list(note_ref.note.cards),
         key=lambda card: (int(card.template.position), str(card.template_id)),
     )
+    bound = [
+        card
+        for card in cards
+        if card.application is not None and card.application.source_ord is not None
+    ]
+    if bound:
+        by_ord = {int(card.application.source_ord): card for card in bound}
+        card = by_ord.get(source_ord)
+        if card is None:
+            raise AnkiSyncError("source card ord does not map to a local application")
+        return card
     by_position = {int(card.template.position): card for card in cards}
     card = by_position.get(source_ord)
     if card is None and 0 <= source_ord < len(cards):
@@ -324,7 +344,9 @@ def _lock_note_source_card_refs(
     """Lock current-source sibling refs before entering the NOTE authority graph."""
 
     db.session.flush()
-    requested_card = db.session.get(Card, source_card.card_id)
+    requested_card = (
+        db.session.get(Card, source_card.card_id) if source_card.card_id is not None else None
+    )
     if requested_card is None:
         raise AnkiSyncError("source card no longer maps to a local Card")
     card_ids = tuple(
@@ -899,7 +921,7 @@ def import_reviews(
                     ).with_for_update().first()
                     source_card_obj = (
                         db.session.get(Card, source_card.card_id)
-                        if source_card is not None
+                        if source_card is not None and source_card.card_id is not None
                         else None
                     )
                     if source_card is None or source_card_obj is None:

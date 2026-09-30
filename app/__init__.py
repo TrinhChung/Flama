@@ -118,6 +118,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.study_progress_contributor import StudyProgressContributor  # noqa: F401
     from models.study_progress_availability import StudyProgressAvailability  # noqa: F401
     from models.study_progress_lineage_ref import StudyProgressLineageRef  # noqa: F401
+    from models.study_application import StudyApplication  # noqa: F401
     from models.study_progress_history_fact import StudyProgressHistoryFact  # noqa: F401
     from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent  # noqa: F401
     from models.study_progress_backfill_run import StudyProgressBackfillRun  # noqa: F401

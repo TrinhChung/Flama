@@ -1,5 +1,14 @@
 # Kế hoạch thực thi Phase 6 — tách Card/Template khỏi quyền sở hữu progress
 
+> **Cập nhật 2026-09-30.** P5-T đã đạt trên production (R1 29/09: 18/18 learner NOTE, audit PASS, tài khoản mới vào NOTE). Theo chỉ đạo 30/09 của chủ sản phẩm ("hoàn thiện decoupling lần lượt từng phase, giữ hiệu năng, không mất/hỏng dữ liệu"), các quyết định D6 được chốt như bảng dưới — tất cả theo đề xuất, **trừ D6-05 chọn phương án B**:
+>
+> | ID | Chốt | Lý do khi khác đề xuất |
+> |---|---|---|
+> | D6-01..D6-04, D6-06..D6-09 | Theo đề xuất §4 | — |
+> | D6-05 | **B**: giữ xóa cứng; lineage chuyển sang Note trước khi cascade (`connect_source_card_refs.note_id`, `card_id` NULL + `ON DELETE SET NULL`) | Phương án A cần lọc "application đang hoạt động" ở 182 chỗ truy vấn Card trong 49 file (chưa kể SQL thô); sót một chỗ là Card đã retire quay lại trong số đếm, phiên học hoặc kiểm tra vector sibling của NOTE. B giữ mọi dữ liệu learner (state Note, lịch sử qua `logical_note_key` và `review_events.note_id`, con trỏ Anki trên Note) mà không đổi gì reader đang thấy. ID Card đã xóa vẫn không còn địa chỉ, như hôm nay. |
+>
+> Trạng thái code: [P6-00 inventory](./P6-00_INVENTORY.md) xong; P6-04 (migration 46), P6-05 (seam `before_flush`), phần D6-04/D6-06/D6-07/D6-05B của P6-06/P6-08 đã có code + test + probe MySQL trên nhánh `phase6/p6-applications`. Còn: kiểm lại lifecycle hủy phiên khi xóa Template (P6-07), bỏ `uq_cards_note_template` cho áp dụng lặp (D6-09), INT-04, P6-10.
+
 > Lập ngày: 2026-09-29 | Trạng thái: **CHUẨN BỊ — chưa có code Phase 6.** Tài liệu này chốt baseline, các quyết định cần chủ sản phẩm và thứ tự work package. Không có migration, cờ hay thay đổi runtime nào đi kèm.
 >
 > Baseline code: `develop` tại `0ba1d69` (Phase 5 code + INT-03 local xanh, [P5 plan](./P5_EXECUTION_PLAN_2026-09-20.md) §2). Production vẫn ở head `20260913_000039`, chưa có R0 (PR #168 `develop → master` còn mở; `deploy.yml` chỉ chạy trên `master`).

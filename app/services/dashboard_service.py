@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 
 UTC = timezone.utc
 
-from flask import url_for
+from flask import current_app, url_for
 
 
 from models import db
@@ -76,6 +76,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         day_cutoff_utc=day_cutoff_utc,
         is_note_mode=authority_route.mode_code == "NOTE",
         admin_mode=admin_mode,
+        count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
     )
 
     by_parent: Dict[int, List[Deck]] = {}

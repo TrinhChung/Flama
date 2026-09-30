@@ -427,10 +427,23 @@ def summarize_study_authority_queue(
     learner_user_id: int,
     now_utc: datetime,
     timezone_name: str,
+    count_by_note: bool | None = None,
 ) -> StudyAuthorityQueueSummary:
-    """Count and order a fenced Card vector from canonical availability values."""
+    """Count and order a fenced Card vector from canonical availability values.
 
+    ``count_by_note`` (default: ``STUDY_NOTE_COUNT_ENABLED``) makes the new,
+    learn and due counts count each Note once (Phase 6, D6-04); the queue
+    order itself is unchanged.
+    """
+
+    if count_by_note is None:
+        from flask import current_app, has_app_context
+
+        count_by_note = has_app_context() and bool(
+            current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)
+        )
     card_by_id = {str(card.id): card for card in cards}
+    counted_notes: set[str] = set()
     if set(card_by_id) != set(reads_by_card_id):
         raise ValueError("Authority queue summary requires one read per Card.")
     runtime = resolve_scheduler_runtime_settings(user_id=learner_user_id)
@@ -462,7 +475,12 @@ def summarize_study_authority_queue(
             timezone_name=timezone_name,
             day_boundary_hour_local=boundary_hour,
         )
-        if bucket == study_repository.NEW_QUEUE:
+        note_key = str(card_by_id[card_id].note_id)
+        first_of_note = note_key not in counted_notes
+        counted_notes.add(note_key)
+        if count_by_note and not first_of_note:
+            pass
+        elif bucket == study_repository.NEW_QUEUE:
             new_count += 1
         elif bucket == study_repository.LEARNING_QUEUE:
             learn_count += 1
