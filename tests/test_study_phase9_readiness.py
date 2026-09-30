@@ -86,6 +86,37 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         self.assertEqual(gate["status"], "waiting")
         self.assertEqual(gate["evidence"]["sessions_in_window"]["study-session.v2"]["sessions"], 1)
 
+    def test_projection_cutover_and_work_drain_gates(self):
+        from models.card_progress import CardProgress
+
+        now = datetime(2026, 9, 30, 12, 0, 0)
+        report = build_phase9_readiness(now_utc=now)
+        # Without T0 the cutover gate is unknown, never a silent zero.
+        self.assertEqual(report["gates"]["projection_cutover"]["status"], "unknown")
+        self.assertEqual(report["gates"]["work_drain"]["status"], "ready")
+
+        card = Card.query.one()
+        db.session.add(CardProgress(user_id=self.user_id, card_id=card.id, queue="new", ease_factor=2.5,
+                                    revision=0, created_at=now - timedelta(hours=2),
+                                    updated_at=now - timedelta(hours=2)))
+        db.session.commit()
+        t0 = now - timedelta(hours=1)
+        report = build_phase9_readiness(now_utc=now, projection_since_utc=t0)
+        self.assertEqual(report["gates"]["projection_cutover"]["status"], "ready")
+        progress = CardProgress.query.one()
+        progress.updated_at = now - timedelta(minutes=5)
+        db.session.commit()
+        gate = build_phase9_readiness(now_utc=now, projection_since_utc=t0)["gates"]["projection_cutover"]
+        self.assertEqual((gate["status"], gate["evidence"]["card_progress_rows_written_since"]), ("waiting", 1))
+
+        # An expired open lease does not block; a valid one does.
+        self._session("study-session.v4", now - timedelta(days=2), status="open")
+        self.assertEqual(build_phase9_readiness(now_utc=now)["gates"]["work_drain"]["status"], "ready")
+        self._session("study-session.v4", now - timedelta(hours=1), status="open")
+        drain = build_phase9_readiness(now_utc=now)["gates"]["work_drain"]
+        self.assertEqual(drain["status"], "waiting")
+        self.assertIn({"wire": "study-session.v4", "valid": True, "sessions": 1}, drain["evidence"]["open_leases"])
+
     def test_cli_prints_the_report(self):
         output = self.app.test_cli_runner().invoke(args=["study-phase9-readiness", "--window-days", "7"]).output
         report = json.loads(next(line for line in output.splitlines() if line.startswith("{")))
