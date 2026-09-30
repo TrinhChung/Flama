@@ -1812,9 +1812,16 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         db.session.query(db.func.count()).select_from(abandoned_sessions_q.subquery()).scalar() or 0
     )
 
+    # Phase 7 retention marks leases that ended long ago ``expired``.
+    expired_sessions_count = int(
+        db.session.query(db.func.count(StudySession.id))
+        .filter(StudySession.status == "expired")
+        .scalar() or 0
+    )
+
     unknown_status_sessions_q = (
         db.session.query(StudySession.id)
-        .filter(~StudySession.status.in_(["open", "committed", "cancelled", "abandoned"]))
+        .filter(~StudySession.status.in_(["open", "committed", "cancelled", "abandoned", "expired"]))
         .order_by(StudySession.id.asc())
     )
     unknown_status_sessions_count = int(
@@ -2225,6 +2232,7 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
             "committed_sessions": committed_sessions_count,
             "cancelled_sessions": cancelled_sessions_count,
             "abandoned_sessions": abandoned_sessions_count,
+            "expired_sessions": expired_sessions_count,
             "unknown_status_sessions": unknown_status_sessions_count,
             "unknown_status_sessions_samples": unknown_status_sessions_samples,
             "missing_snapshot_sessions": missing_snapshot_sessions,
@@ -2339,12 +2347,13 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
     )
     review_events_algorithm = (algorithm_events_sum == total_rev)
 
-    # 7. StudySession status accounting: open + committed + cancelled + abandoned + unknown == total_sess
+    # 7. StudySession status accounting: open + committed + cancelled + abandoned + expired + unknown == total_sess
     sessions_status_sum = (
         open_sessions_count
         + committed_sessions_count
         + cancelled_sessions_count
         + abandoned_sessions_count
+        + expired_sessions_count
         + unknown_status_sessions_count
     )
     sessions_accounting = (sessions_status_sum == total_sess)

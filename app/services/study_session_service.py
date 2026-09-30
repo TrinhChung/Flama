@@ -1412,14 +1412,15 @@ def enqueue_study_session_batch(
             "This batch ID has already failed and cannot be re-admitted.",
             status=409,
         )
-    if session.status != "open":
+    if session.status != "open" and session.status != "expired":
         db.session.rollback()
         raise StudySessionError(
             "SESSION_NOT_OPEN", "Study session is not open.", status=409
         )
     # An already-admitted job retains its lease even if its Redis delivery was
     # lost. Expiry prevents new admission, not recovery of an accepted request.
-    if existing_batch is None and enqueued_at > session.expires_at:
+    # Retention marks a session ``expired`` only when it has no admitted batch.
+    if session.status == "expired" or (existing_batch is None and enqueued_at > session.expires_at):
         db.session.rollback()
         raise StudySessionError(
             "SESSION_EXPIRED", "Study session has expired.", status=410
@@ -2258,13 +2259,14 @@ def commit_study_session(
                 status=409,
                 details=json.loads(canonical.response_json),
             )
-    if session.status != "open":
+    if session.status != "open" and session.status != "expired":
         raise StudySessionError(
             "SESSION_NOT_OPEN",
             "Study session is not open.",
             status=409,
         )
-    if _note_batch is None and committed_at > session.expires_at:
+    # Retention marks long-expired leases ``expired``; answer as before it did.
+    if session.status == "expired" or (_note_batch is None and committed_at > session.expires_at):
         raise StudySessionError(
             "SESSION_EXPIRED",
             "Study session has expired.",

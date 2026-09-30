@@ -44,7 +44,7 @@ Bench quy mô production (MySQL 8.0.40, 40k Card, 130k event, 16k ref, luồng g
 
 ## 4. P6-10 — bật đếm theo Note
 
-Sau khi §3 PASS và theo dõi một ngày không lỗi:
+Sau khi §3 PASS. Nếu mỗi Note có đúng một Card (`SELECT COUNT(*) FROM notes` = `SELECT COUNT(*) FROM cards`) thì số đếm không đổi và bật được ngay; ngược lại theo dõi một ngày không lỗi trước khi bật:
 
 1. So số trước khi bật: ghi lại tổng due/new/learn trên dashboard của vài learner NOTE có NoteType nhiều Template.
 2. Thêm `STUDY_NOTE_COUNT_ENABLED=1` vào `/etc/flama/flama.env` (key không do `deploy/sync_managed_env.py` quản lý nên được giữ qua deploy), `systemctl restart flama.service flama-connect.service flama-study-worker.service`.
@@ -62,7 +62,19 @@ Sau khi §3 PASS và theo dõi một ngày không lỗi:
 
 Sau cùng: 40.942 Card đều có occurrence, 0 event có Card mà thiếu/sai `note_id`, 0 ref sai Note, 0 Card trùng, số Card/event bằng seed + số dòng luồng ghi đã ghi (không mất dòng). 22 Card do release cũ tạo trong lúc migrate được backfill gắn.
 
-## 6. Rollback
+## 6. Kết quả phát hành 2026-09-30
+
+| Bước | Kết quả |
+|---|---|
+| Backup | `/root/backups/flama-pre-p6-20260930T085454Z.sql.gz` (115 MB, `-- Dump completed`) |
+| Deploy | PR #174 merge `3e7fa3a` 08:56 UTC; release lên 09:07:48 UTC; head `20260930_000046`; 24 occurrence cho 24 Template; 0 Card chưa gắn; health 200; 0 phản hồi 5xx sau deploy |
+| Backfill `--apply` | 28 s, 65 lô: 128.650 event gắn Note, 595 event có Card đã xóa từ trước giữ NULL; 0 Card/ref/Template cần sửa; chạy lại: 0 thay đổi |
+| Kiểm §3.4 | cả 4 truy vấn = 0 |
+| Dấu vân tay trước/sau (số dòng + CRC: notes, cards, templates, review_events, card_progress, state/subject NOTE, ref Connect, sessions, session cards, commits) | giống hệt, chỉ `alembic_version` đổi |
+| `study-authority-read-audit` | 18/18 learner NOTE PASS (user 1: 194 s) |
+| P6-10 | Production có đúng 1 Card mỗi Note (40.257/40.257) nên số không đổi: đo READ ONLY user 1 dashboard 2,56 s → 2,18 s, overview 2,15 → 2,23 s, new/learn/due giống hệt; user 4 0,81 → 0,88 s. Bật `STUDY_NOTE_COUNT_ENABLED=1` 09:15:53 UTC (env cũ: `/etc/flama/flama.env.pre-p6-10`), restart, health 200 |
+
+## 7. Rollback
 
 - Code: deploy lại release trước (schema 46 tương thích ngược: cột mới nullable, release cũ không đọc chúng).
 - Migration 46 downgrade chỉ khi thật cần: tự từ chối nếu có occurrence lặp, ref đã mất Card, `note_id` không suy lại được, hoặc Note áp dụng một Template hai lần. Backup ở §3.1 là đường lùi cuối.

@@ -711,6 +711,70 @@ def register_cli_commands(app: Flask) -> None:
             )
         )
 
+    @app.cli.command("study-session-retention")
+    @click.option(
+        "--apply",
+        is_flag=True,
+        default=False,
+        help="Expire stale open sessions and delete old membership rows; default is a dry-run.",
+    )
+    @click.option(
+        "--older-than-days",
+        type=click.IntRange(2, 3650),
+        default=30,
+        show_default=True,
+        help="Keep membership rows of sessions newer than this.",
+    )
+    @click.option(
+        "--grace-hours",
+        type=click.IntRange(0, 24 * 365),
+        default=24,
+        show_default=True,
+        help="Expire open sessions only this long after their lease ended.",
+    )
+    @click.option(
+        "--batch-sessions",
+        type=click.IntRange(1, 5000),
+        default=200,
+        show_default=True,
+        help="Sessions per delete transaction.",
+    )
+    def study_session_retention(
+        apply: bool, older_than_days: int, grace_hours: int, batch_sessions: int,
+    ) -> None:
+        """Phase 7: expire stale open sessions and purge old session membership rows.
+
+        Review events, history, receipts, progress and the session rows
+        themselves are never deleted.
+        """
+
+        from datetime import timedelta
+
+        from app.services.study_session_retention_service import run_session_retention
+
+        report = run_session_retention(
+            older_than_days=older_than_days,
+            grace=timedelta(hours=grace_hours),
+            batch_sessions=batch_sessions,
+            apply=apply,
+        )
+        click.echo(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
+
+    @app.cli.command("study-phase9-readiness")
+    @click.option(
+        "--window-days",
+        type=click.IntRange(1, 365),
+        default=30,
+        show_default=True,
+        help="Observation window for old usage.",
+    )
+    def study_phase9_readiness(window_days: int) -> None:
+        """Read-only evidence for the Phase 9 contraction gates."""
+
+        from app.services.study_phase9_readiness_service import build_phase9_readiness
+
+        click.echo(json.dumps(build_phase9_readiness(window_days=window_days), sort_keys=True))
+
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
     @click.option(

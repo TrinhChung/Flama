@@ -21,7 +21,7 @@ Mọi số thống kê (overview, dashboard, streak, heatmap) và khởi tạo A
 
 | ID | Nội dung | Output |
 |---|---|---|
-| P7-01 | Đóng phiên `open` đã quá `expires_at` + biên an toàn (mặc định 24 h) thành `expired`. Commit/batch của phiên hết hạn vốn đã bị từ chối (`SESSION_EXPIRED`); đổi trạng thái chỉ để không còn phiên `open` vĩnh viễn. | Service + CLI `study-session-retention` (dry-run mặc định) |
+| P7-01 | Đóng phiên `open` đã quá `expires_at` + biên an toàn (mặc định 24 h) thành `expired`. Commit/batch của phiên hết hạn vốn đã bị từ chối (`SESSION_EXPIRED`); đổi trạng thái chỉ để không còn phiên `open` vĩnh viễn. Commit/batch muộn của phiên đã `expired` vẫn nhận đúng `410 SESSION_EXPIRED` (không đổi thành `409 SESSION_NOT_OPEN`); audit kiến trúc đếm `expired_sessions` thay vì chặn như status lạ. | Service + CLI `study-session-retention` (dry-run mặc định) |
 | P7-02 | Dọn `study_session_cards` (+ pin theo cascade) của phiên ở trạng thái cuối (`committed`/`cancelled`/`expired`) có `opened_at` cũ hơn 30 ngày; theo lô nhỏ (mặc định 500 phiên), từng lô một transaction, dừng/tiếp tục được, idempotent. Không đụng phiên `open`, phiên có batch `enqueued`, và mọi bảng lịch sử/tiến độ. | Cùng CLI `--apply` |
 | P7-03 | Test chứng minh: số liệu overview/dashboard/lịch sử trước và sau dọn giống hệt; replay commit của phiên đã dọn trả receipt cũ (receipt giữ nguyên); phiên đang mở/đang có batch không bị đụng; chạy lại không đổi gì. | `tests/test_study_session_retention.py` |
 | P7-04 | Probe MySQL: dọn theo lô trên DB tạm với phiên tổng hợp, đo thời gian khóa từng lô. | `scripts/probe_p7_session_retention_mysql.py` |
