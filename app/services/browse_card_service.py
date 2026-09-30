@@ -7,6 +7,7 @@ import hashlib
 from types import SimpleNamespace
 from typing import Any, Mapping
 
+from flask import current_app
 from sqlalchemy import case, false, func
 from sqlalchemy.orm import aliased, contains_eager, selectinload
 
@@ -237,7 +238,16 @@ def build_browse_deck_tree(
                 deck_id: {"total": 0, "new": 0, "learn": 0, "due": 0}
                 for deck_id in deck_ids
             }
+            # D6-04: all Cards of a Note share one NOTE state, so a Note with
+            # several Templates is one item when counting by Note.
+            count_by_note = bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False))
+            counted_notes: set[tuple[int, str]] = set()
             for card, deck_id in counted_cards:
+                if count_by_note:
+                    note_key = (int(deck_id), str(card.note_id))
+                    if note_key in counted_notes:
+                        continue
+                    counted_notes.add(note_key)
                 bucket = direct_counts.setdefault(
                     deck_id, {"total": 0, "new": 0, "learn": 0, "due": 0}
                 )

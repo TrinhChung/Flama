@@ -1,5 +1,14 @@
 # Kế hoạch thực thi Phase 6 — tách Card/Template khỏi quyền sở hữu progress
 
+> **Cập nhật 2026-09-30.** P5-T đã đạt trên production (R1 29/09: 18/18 learner NOTE, audit PASS, tài khoản mới vào NOTE). Theo chỉ đạo 30/09 của chủ sản phẩm ("hoàn thiện decoupling lần lượt từng phase, giữ hiệu năng, không mất/hỏng dữ liệu"), các quyết định D6 được chốt như bảng dưới — tất cả theo đề xuất, **trừ D6-05 chọn phương án B**:
+>
+> | ID | Chốt | Lý do khi khác đề xuất |
+> |---|---|---|
+> | D6-01..D6-04, D6-06..D6-09 | Theo đề xuất §4 | — |
+> | D6-05 | **B**: giữ xóa cứng; lineage chuyển sang Note trước khi cascade (`connect_source_card_refs.note_id`, `card_id` NULL + `ON DELETE SET NULL`) | Phương án A cần lọc "application đang hoạt động" ở 182 chỗ truy vấn Card trong 49 file (chưa kể SQL thô); sót một chỗ là Card đã retire quay lại trong số đếm, phiên học hoặc kiểm tra vector sibling của NOTE. B giữ mọi dữ liệu learner (state Note, lịch sử qua `logical_note_key` và `review_events.note_id`, con trỏ Anki trên Note) mà không đổi gì reader đang thấy. ID Card đã xóa vẫn không còn địa chỉ, như hôm nay. |
+>
+> Trạng thái code (30/09): P6-00..P6-09 có code + test + probe MySQL trên nhánh `phase6/p6-applications` (migration 46, seam `before_flush`, D6-04 đếm theo Note sau cờ `STUDY_NOTE_COUNT_ENABLED`, D6-05B, D6-06 ordinal theo occurrence, D6-07 `review_events.note_id`, D6-09 áp dụng lặp, lifecycle xóa Template). **INT-04 local PASS**: `run_tests.py --all --backend-only` 164 file; probe P5 (direct, batch, analytics, numeric, concurrency) + P6 schema; bench migration quy mô production với release cũ ghi song song (6,9 s, 0 lỗi, không mất dòng). Migration 46 không backfill `review_events` (tránh khóa cả bảng): chạy `flask study-phase6-attribution-backfill --apply` sau deploy theo [runbook P6](../../runbooks/P6_APPLICATION_OCCURRENCE_RUNBOOK.md). Còn: G6-P (backup → merge → deploy → backfill → P6-10 bật cờ).
+
 > Lập ngày: 2026-09-29 | Trạng thái: **CHUẨN BỊ — chưa có code Phase 6.** Tài liệu này chốt baseline, các quyết định cần chủ sản phẩm và thứ tự work package. Không có migration, cờ hay thay đổi runtime nào đi kèm.
 >
 > Baseline code: `develop` tại `0ba1d69` (Phase 5 code + INT-03 local xanh, [P5 plan](./P5_EXECUTION_PLAN_2026-09-20.md) §2). Production vẫn ở head `20260913_000039`, chưa có R0 (PR #168 `develop → master` còn mở; `deploy.yml` chỉ chạy trên `master`).
@@ -64,12 +73,12 @@ Nơi tạo Card: **14 callsite trong 11 file**, chưa có một service chung: `
 | Gate | Điều kiện | Hiện tại |
 |---|---|---|
 | P5-T — Phase 5 tail | R0 deploy (merge #168); R1 chuyển mọi learner sang NOTE một lượt (quyết định 2026-09-29 bỏ canary, [runbook §4](../../runbooks/P5_NOTE_AUTHORITY_RUNBOOK.md)); tài khoản mới vào NOTE (`STUDY_NEW_LEARNER_NOTE_ENABLED`); audit `study-authority-read-audit` PASS toàn bộ | Code sẵn sàng; chờ backup + deploy + chạy runbook |
-| G6-D — thiết kế | D6-01..D6-09 được duyệt; ADR P6-01..P6-03 accepted | Chưa |
-| G6-S — schema additive | Migration 46+ qua SQLite + MySQL 8.0.40 disposable (upgrade/downgrade rỗng/re-upgrade, boot `wsgi.py` cờ tắt); backfill `application_id` 1:1 không đổi Card ID | Chưa |
-| G6-W / G6-R — writer/reader | Mọi callsite tạo/xóa Card đi qua seam application; count/queue theo D6-04; reader NOTE không phụ thuộc Template sống | Chưa |
-| G6-L — continuity | Ma trận §6 xanh trên SQLite và MySQL disposable | Chưa |
-| INT-04 | Full backend/frontend suite, build, probe P5 + P6, audit, rollback NOTE → LEGACY vẫn pass (nếu D6-02 giữ rollback) | Chưa |
-| G6-P — production | P5-T + INT-04; bật cờ Phase 6 theo runbook mới, theo dõi | Chưa |
+| G6-D — thiết kế | D6-01..D6-09 được duyệt; ADR P6-01..P6-03 accepted | Đạt (30/09, D6-05 = B) |
+| G6-S — schema additive | Migration 46+ qua SQLite + MySQL 8.0.40 disposable (upgrade/downgrade rỗng/re-upgrade, boot `wsgi.py` cờ tắt); backfill `application_id` 1:1 không đổi Card ID | Đạt (`probe_p6_application_schema_mysql.py`, `bench_p6_migration_mysql.py`) |
+| G6-W / G6-R — writer/reader | Mọi callsite tạo/xóa Card đi qua seam application; count/queue theo D6-04; reader NOTE không phụ thuộc Template sống | Đạt (seam `before_flush`; đếm theo Note sau cờ) |
+| G6-L — continuity | Ma trận §6 xanh trên SQLite và MySQL disposable | Đạt (`test_study_phase6_continuity.py` + chạy lại trên MySQL trong `probe_p5_direct_replay_mysql.py`) |
+| INT-04 | Full backend/frontend suite, build, probe P5 + P6, audit, rollback NOTE → LEGACY vẫn pass (nếu D6-02 giữ rollback) | Đạt local 30/09 (backend `--all` 164 file; frontend không đổi) |
+| G6-P — production | P5-T + INT-04; bật cờ Phase 6 theo runbook mới, theo dõi | Chờ deploy ([runbook P6](../../runbooks/P6_APPLICATION_OCCURRENCE_RUNBOOK.md)) |
 
 | ID | Work package | Phụ thuộc | Output | Bắt đầu được ngay? |
 |---|---|---|---|---|

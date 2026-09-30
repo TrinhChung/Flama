@@ -137,11 +137,14 @@ def aggregate_deck_study_counts(
     day_cutoff_utc: datetime,
     is_note_mode: bool,
     admin_mode: bool = False,
+    count_by_note: bool = False,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
-    """Count total/new/learn/due Cards per visible deck (subtrees are summed by the caller).
+    """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
     ``day_cutoff_utc`` is the start of the learner's next study day (naive UTC):
     a review with only ``due_at`` is due today exactly when it is before it.
+    ``count_by_note`` (NOTE learners, Phase 6 D6-04) counts each Note once:
+    all its Cards share one state, so a Note with two Templates is one due item.
     Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
     """
 
@@ -220,13 +223,14 @@ def aggregate_deck_study_counts(
             ),
         ),
     )
+    unit = rows.c.note_id if is_note_mode and count_by_note else rows.c.card_id
     aggregated = session.execute(
         select(
             rows.c.deck_id,
-            func.count(func.distinct(rows.c.card_id)),
-            func.count(func.distinct(case((is_new, rows.c.card_id), else_=None))),
-            func.count(func.distinct(case((is_learn, rows.c.card_id), else_=None))),
-            func.count(func.distinct(case((is_due, rows.c.card_id), else_=None))),
+            func.count(func.distinct(unit)),
+            func.count(func.distinct(case((is_new, unit), else_=None))),
+            func.count(func.distinct(case((is_learn, unit), else_=None))),
+            func.count(func.distinct(case((is_due, unit), else_=None))),
             func.max(rows.c.violation),
         ).group_by(rows.c.deck_id)
     ).all()

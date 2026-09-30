@@ -682,6 +682,35 @@ def register_cli_commands(app: Flask) -> None:
             )
         )
 
+    @app.cli.command("study-phase6-attribution-backfill")
+    @click.option(
+        "--apply",
+        is_flag=True,
+        default=False,
+        help="Stamp occurrences and Note attribution in committed batches; default only counts.",
+    )
+    @click.option(
+        "--batch-size",
+        type=click.IntRange(100, 20_000),
+        default=2000,
+        show_default=True,
+        help="Rows per committed batch.",
+    )
+    def study_phase6_attribution_backfill(apply: bool, batch_size: int) -> None:
+        """Bind Cards to occurrences and old rows to their Note after migration 46."""
+
+        from app.services.study_note_attribution_service import backfill_phase6_attribution
+
+        result = backfill_phase6_attribution(apply=apply, batch_size=batch_size)
+        click.echo(
+            json.dumps(
+                result.to_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
     @click.option(

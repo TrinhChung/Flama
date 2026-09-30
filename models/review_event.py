@@ -1,5 +1,8 @@
 from datetime import datetime
 
+from sqlalchemy import event, select
+from sqlalchemy.orm import Session
+
 from models import db
 
 
@@ -9,6 +12,10 @@ class ReviewEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     card_id = db.Column(db.String(64), nullable=False, index=True)
+    # Snapshot of the Card's Note when the event was written (no FK: history
+    # survives Card and Note deletion). NULL on old events that could not be
+    # resolved to a live Card when migration 46 backfilled them.
+    note_id = db.Column(db.String(36), nullable=True)
     deck_id = db.Column(db.Integer, nullable=True, index=True)
     note_type_id = db.Column(db.String(36), nullable=True, index=True)
     scheduler_preset_id = db.Column(
@@ -67,6 +74,44 @@ class ReviewEvent(db.Model):
         db.Index("ix_review_events_user_card_reviewed_at", "user_id", "card_id", "reviewed_at"),
         db.Index("ix_review_events_user_scheduler_reviewed_at", "user_id", "scheduler_mode", "reviewed_at"),
         db.Index("ix_review_events_user_kind_reviewed_at", "user_id", "review_kind", "reviewed_at"),
+        db.Index("ix_review_events_user_note", "user_id", "note_id"),
     )
 
     scheduler_preset = db.relationship("SchedulerPreset", back_populates="review_events")
+
+
+@event.listens_for(Session, "before_flush")
+def _snapshot_review_event_notes(session: Session, _flush_context, _instances) -> None:
+    """Stamp every new ReviewEvent with its Card's Note (Phase 6, D6-07).
+
+    One set-wise lookup per flush covers every writer (study commit, direct
+    answer, MCP, Connect revlog, import). An event whose Card cannot be
+    resolved keeps ``note_id`` NULL, as migration 46 does for old rows.
+    """
+
+    from models.card import Card
+
+    pending = [
+        item
+        for item in session.new
+        if isinstance(item, ReviewEvent) and item.note_id is None and item.card_id
+    ]
+    if not pending:
+        return
+    card_ids = {str(item.card_id) for item in pending}
+    note_by_card: dict[str, str] = {}
+    for item in session.new:
+        if isinstance(item, Card) and item.id is not None and str(item.id) in card_ids:
+            note_by_card[str(item.id)] = str(item.note_id) if item.note_id else None
+    remaining = sorted(card_ids - set(note_by_card))
+    if remaining:
+        with session.no_autoflush:
+            for start in range(0, len(remaining), 1000):
+                for card_id, note_id in session.execute(
+                    select(Card.id, Card.note_id).where(Card.id.in_(remaining[start:start + 1000]))
+                ):
+                    note_by_card[str(card_id)] = str(note_id)
+    for item in pending:
+        note_id = note_by_card.get(str(item.card_id))
+        if note_id:
+            item.note_id = note_id
