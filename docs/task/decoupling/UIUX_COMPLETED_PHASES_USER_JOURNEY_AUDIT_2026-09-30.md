@@ -1,5 +1,7 @@
 # Đánh giá UI/UX các phase đã hoàn tất — Template, chế độ học và clone
 
+> **Kế hoạch triển khai (2026-09-30):** các phát hiện dưới đây đã được chuyển thành [sổ nợ kỹ thuật TD-01..TD-22](../tech-debt/README.md). Track "Template Modularization" ở §5b được thay bằng TD-14..TD-19. Các khoản này dùng chung một vòng đời chia sẻ cho Deck/NoteType/Template, và nâng cấp chính bộ máy deck thay vì coi nó là chuẩn.
+
 > Lập 2026-09-30. Loại: điều tra/báo cáo, **Runtime change: none**.
 >
 > **Chỉ đạo ưu tiên của chủ sản phẩm (2026-09-30):** UI cho Phase 8 xếp cuối. Trước hết cần UI cho các phase đã xong (tách Template/NoteType, chọn chế độ học, clone overlay), đo theo góc nhìn người dùng. Báo cáo này thay phần thứ tự ưu tiên ở §5 của [báo cáo UI/UX trước P8](./UIUX_GAP_AUDIT_PRE_P8_2026-09-30.md); các phát hiện của báo cáo đó vẫn giữ nguyên giá trị.

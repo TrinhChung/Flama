@@ -229,6 +229,8 @@ PR #175 deploy `1e14106`; lần chạy đầu xóa 15.072 dòng membership của
 
 [Đánh giá hành trình người dùng các phase đã xong](./UIUX_COMPLETED_PHASES_USER_JOURNEY_AUDIT_2026-09-30.md) (2026-09-30, **thứ tự ưu tiên hiện hành, UI P8 xếp cuối**): tạo được nhiều Template nhưng UI chưa đổi tên/xóa được; chọn cách học mới ở mức Template; cài NoteType từ chợ đã cô lập Template, còn cài deck thì chưa (thẻ gốc luôn dùng Template tác giả, tác giả hotfix ảnh hưởng mọi người cài). Đợt: phiên an toàn → Template & cách học → minh bạch clone → nhất quán → module hóa Template (6B → fork install-local → Slot/binding → Template Marketplace) → P8. §5b ghi vị trí từng phần của "module hóa Template toàn phần" trong các phase; fork install-local và ghim phiên bản đã được chốt (điều tra Template/NoteType §14 #10–#12) nhưng chưa gán phase.
 
+**Sổ nợ kỹ thuật (2026-09-30):** các phát hiện của ba báo cáo UI/UX dưới đây đã được lập kế hoạch chi tiết thành [22 khoản TD-01..TD-22](../tech-debt/README.md). Trong đó TD-14 nghiên cứu tổng quát hóa vòng đời chia sẻ (fork/release/rebase/đóng góp) dùng chung cho Deck, NoteType và Template, và đánh giá phản biện bộ máy deck hiện tại.
+
 [Tùy chỉnh nút học và thuật toán](./STUDY_BUTTONS_AND_ALGORITHM_CUSTOMIZATION_2026-09-30.md) (2026-09-30): người dùng hiện không sửa được nút hay tham số thuật toán ở đâu (0 preset production, không API ghi); không có giới hạn thẻ mới/ngày dù hướng dẫn nói có; FSRS chỉ là nhãn. Lộ trình C0–C5 (C2 "Cài đặt ôn tập theo deck" làm được trước P8).
 
 ### Cross-phase integration

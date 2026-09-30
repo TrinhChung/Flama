@@ -1,5 +1,7 @@
 # Tùy chỉnh nút học và thuật toán lặp ngắt quãng — hiện trạng và cách sửa
 
+> **Kế hoạch triển khai:** C0 → TD-08, C1 → TD-10, C2 → TD-11, C3 → TD-12, C4 → TD-13 trong [sổ nợ kỹ thuật](../tech-debt/README.md). C5 (thuật toán mới) thuộc P8.
+
 > Lập 2026-09-30. Loại: điều tra/báo cáo, **Runtime change: none**.
 >
 > Câu hỏi của chủ sản phẩm: nếu người dùng muốn sửa các nút trong màn học (Hiện đáp án, Học lại/Khó/Tốt/Dễ, phím tắt) hoặc thuật toán lặp (bước học, khoảng cách, FSRS…) thì hiện sửa ở đâu và bằng cách nào; muốn mở cho người dùng thì phải làm gì.

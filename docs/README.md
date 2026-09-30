@@ -70,6 +70,7 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 | [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
 | [`Study Decoupling Task Backlog`](task/decoupling/README.md) | Tracker task Phase 0–4 và entry Phase 5; P4-11/INT-02 đã đóng cho phát triển, production gate vẫn mở. |
+| [`Sổ nợ kỹ thuật UI/UX & chia sẻ Template`](task/tech-debt/README.md) | 22 khoản TD-01..TD-22 (phiên học an toàn, Template & cách học, minh bạch clone, cài đặt ôn tập, tổng quát hóa vòng đời chia sẻ Deck/NoteType/Template, chuẩn bị P8), kèm ưu tiên, phụ thuộc, quyết định. |
 | [`P5 execution plan — 2026-09-20`](task/decoupling/P5_EXECUTION_PLAN_2026-09-20.md) | Kế hoạch P5-00..P5-10/INT-03, gate, test, production canary và rollback; schema foundation LEGACY-only đang triển khai. |
 | [`P5 executive brief — 2026-09-21`](task/decoupling/P5_EXECUTIVE_BRIEF_2026-09-21.md) | Bản trình quản lý: mục tiêu, mốc, nguồn lực sơ bộ, production canary và hard stops. |
 | [`P5-00 inventory — 2026-09-21`](architecture/phase-5-p5-00-inventory-2026-09-21.md) | Kiểm kê code/schema P5, production SELECT-only preflight còn mở. |

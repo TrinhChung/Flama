@@ -1,5 +1,7 @@
 # Điều tra UI/UX sau decoupling — chuẩn bị đợt nâng cấp và Phase 8
 
+> **Kế hoạch triển khai:** xem [sổ nợ kỹ thuật TD-01..TD-22](../tech-debt/README.md).
+>
 > **Cập nhật ưu tiên (2026-09-30):** chủ sản phẩm xếp UI Phase 8 (U3, P8-00, P8-01) **cuối cùng**. Thứ tự đợt nâng cấp hiện hành nằm ở [đánh giá hành trình người dùng các phase đã xong](./UIUX_COMPLETED_PHASES_USER_JOURNEY_AUDIT_2026-09-30.md) §4. Các phát hiện UX-A..E dưới đây vẫn giữ nguyên; UX-A1/A2 là đợt 1 của thứ tự mới.
 
 > Lập 2026-09-30 tại commit `8a2a3da` (nhánh `fix/legacy-lease-replay-under-note`). Loại: điều tra/báo cáo, **Runtime change: none**.
