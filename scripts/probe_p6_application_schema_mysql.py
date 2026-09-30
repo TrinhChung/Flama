@@ -179,7 +179,8 @@ def run_probe() -> dict:
             _reconstruct_head_45()
             report["seed"] = _seed()
             stamp(revision="20260925_000045", directory="migrations")
-            upgrade(directory="migrations")
+            # Only migration 46 is under test; later revisions have their own probes.
+            upgrade(directory="migrations", revision=migration.revision)
             head = _exec("SELECT version_num FROM alembic_version").scalar_one()
             if head != migration.revision:
                 raise AssertionError(f"Unexpected head: {head}")
@@ -216,7 +217,7 @@ def run_probe() -> dict:
             ):
                 raise AssertionError("Downgrade left migration-46 artifacts.")
             report["derivable_downgrade"] = "PASS"
-            upgrade(directory="migrations")
+            upgrade(directory="migrations", revision=migration.revision)
             report["reupgrade"] = _check_upgraded()
 
             # Removing a Template's Cards keeps the Connect ref on its Note.
