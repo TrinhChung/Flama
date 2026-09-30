@@ -12,6 +12,7 @@ from app.repositories.study_authority_repository import (
     lock_study_authority_route,
 )
 from app.services import stats_overview
+from app.services.db_errors import domain_error_code, run_with_deadlock_retry
 from app.services.flashcard_renderer import render_template_pair
 from app.services.mcp.base import _resolve_deck_for_user
 from app.services.scheduler_config_service import resolve_deck_options
@@ -108,7 +109,7 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
                 timezone_name=timezone_name,
             )
         except Exception as exc:
-            code = getattr(exc, "code", None)
+            code = domain_error_code(exc)
             if code is None:
                 raise
             db.session.rollback()
@@ -186,7 +187,7 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
             deck_options_by_card_id=deck_options_by_card_id,
         )
     except Exception as exc:
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code is None:
             raise
         db.session.rollback()
@@ -284,7 +285,7 @@ def get_card(*, user_id: int, card_id: str) -> dict[str, Any]:
             deck_options=deck_options,
         )
     except Exception as exc:
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code is None:
             raise
         db.session.rollback()
@@ -362,18 +363,22 @@ def submit_review(
     if operation_key is not None:
         service_payload["operation_key"] = operation_key
     try:
-        command_result = execute_native_review_command(
-            user=user,
-            card=card,
-            action=rating,
-            payload=service_payload,
-            clone_scope=None,
-            # MCP does not accept a scope/timezone override. Keep resolved
-            # server policy out of the caller-intent replay fingerprint.
-            requested_scope_id=None,
-            timezone_name=timezone_name,
-            client_event_id=mcp_event_id,
-            source_path="native.mcp",
+        command_result = run_with_deadlock_retry(
+            lambda: execute_native_review_command(
+                user=user,
+                card=card,
+                action=rating,
+                payload=service_payload,
+                clone_scope=None,
+                # MCP does not accept a scope/timezone override. Keep resolved
+                # server policy out of the caller-intent replay fingerprint.
+                requested_scope_id=None,
+                timezone_name=timezone_name,
+                client_event_id=mcp_event_id,
+                source_path="native.mcp",
+            ),
+            session=db.session,
+            label="MCP submit_review",
         )
     except StudyReviewError as exc:
         raise RequestValidationError(
@@ -459,7 +464,7 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
                     },
                 )
             except Exception as exc:
-                code = getattr(exc, "code", None)
+                code = domain_error_code(exc)
                 if code is None:
                     raise
                 db.session.rollback()

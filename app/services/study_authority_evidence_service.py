@@ -102,6 +102,116 @@ def _lineage_material(row: StudyProgressLineageRef) -> dict[str, Any]:
     }
 
 
+def _stored_lineage_digest(
+    rows: list[StudyProgressLineageRef], *, pointer_status: str
+) -> bytes:
+    """Recompute ``contributor.lineage_vector_hash`` as P4-10 reconciliation does."""
+
+    material = [_lineage_material(row) for row in rows]
+    if pointer_status == "ABSENT" and not any(
+        value["ref_kind"] == "LAST_REVIEW_EVENT" for value in material
+    ):
+        material.append(
+            {"ref_kind": "LAST_REVIEW_EVENT", "source_row_key": None, "ref_status": "ABSENT"}
+        )
+    material.sort(
+        key=lambda value: (
+            str(value.get("ref_kind") or ""),
+            str(value.get("source_row_key") or ""),
+        )
+    )
+    return canonical_typed_document(
+        {"references": material},
+        too_large_code="STATE_PAYLOAD_TOO_LARGE",
+    ).digest
+
+
+def _lineage_sort_key(row: StudyProgressLineageRef):
+    return (
+        int(row.contributor_id),
+        str(row.ref_kind),
+        bytes(row.source_row_key),
+        int(row.id),
+    )
+
+
+def _lock_current_lineage_refs(
+    session: Session, *, contributor_ids: tuple[int, ...]
+) -> tuple[StudyProgressLineageRef, ...]:
+    """Lock the current lineage rows of already-locked contributors.
+
+    A range read ``contributor_id IN (...) FOR UPDATE`` takes next-key and gap
+    locks under REPEATABLE READ. New contributors of different learners sit at
+    the end of the index, so two learners' first reviews each lock that gap and
+    then deadlock on their inserts. Instead, the rows visible in the snapshot
+    are locked by primary key (record locks only) and proved current: their
+    digest must equal each contributor's current ``lineage_vector_hash``, which
+    every lineage writer updates in the same transaction. Any difference, such
+    as rows committed after the snapshot, falls back to the range read.
+    """
+
+    if not contributor_ids:
+        return ()
+    # populate_existing below must never discard unflushed lineage changes.
+    session.flush()
+    current = {
+        int(row.id): row
+        for row in session.execute(
+            select(
+                StudyProgressContributor.id,
+                StudyProgressContributor.lineage_vector_hash,
+                StudyProgressContributor.pointer_status,
+            )
+            .where(StudyProgressContributor.id.in_(contributor_ids))
+            .with_for_update()
+        )
+    }
+    visible_ids = sorted(
+        int(value)
+        for value in session.execute(
+            select(StudyProgressLineageRef.id).where(
+                StudyProgressLineageRef.contributor_id.in_(contributor_ids)
+            )
+        ).scalars()
+    )
+    rows: list[StudyProgressLineageRef] = []
+    if visible_ids:
+        rows = list(
+            session.execute(
+                select(StudyProgressLineageRef)
+                .where(StudyProgressLineageRef.id.in_(visible_ids))
+                .order_by(StudyProgressLineageRef.id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars()
+        )
+    by_contributor: dict[int, list[StudyProgressLineageRef]] = defaultdict(list)
+    for row in rows:
+        by_contributor[int(row.contributor_id)].append(row)
+    try:
+        proven = len(rows) == len(visible_ids) and set(current) == set(contributor_ids) and all(
+            current[contributor_id].lineage_vector_hash is not None
+            and _stored_lineage_digest(
+                by_contributor.get(contributor_id, []),
+                pointer_status=str(current[contributor_id].pointer_status),
+            )
+            == bytes(current[contributor_id].lineage_vector_hash)
+            for contributor_id in contributor_ids
+        )
+    except StudyProgressCodecError:
+        proven = False
+    if not proven:
+        rows = list(
+            session.execute(
+                select(StudyProgressLineageRef)
+                .where(StudyProgressLineageRef.contributor_id.in_(contributor_ids))
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars()
+        )
+    return tuple(sorted(rows, key=_lineage_sort_key))
+
+
 def _pointer_evidence(
     progress: CardProgress,
     event_by_id: Mapping[int, ReviewEvent],
@@ -380,19 +490,7 @@ def finalize_study_authority_evidence(
             if row.id is not None
         )
     )
-    lineage_rows = tuple(
-        session.execute(
-            select(StudyProgressLineageRef)
-            .where(StudyProgressLineageRef.contributor_id.in_(contributor_ids))
-            .order_by(
-                StudyProgressLineageRef.contributor_id.asc(),
-                StudyProgressLineageRef.ref_kind.asc(),
-                StudyProgressLineageRef.source_row_key.asc(),
-                StudyProgressLineageRef.id.asc(),
-            )
-            .with_for_update()
-        ).scalars()
-    )
+    lineage_rows = _lock_current_lineage_refs(session, contributor_ids=contributor_ids)
     lineage_by_contributor_id: dict[int, list[StudyProgressLineageRef]] = defaultdict(list)
     for row in lineage_rows:
         lineage_by_contributor_id[int(row.contributor_id)].append(row)

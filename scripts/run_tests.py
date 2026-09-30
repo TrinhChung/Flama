@@ -89,6 +89,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/serve_p5_note_browser_probe.py",
             "scripts/probe_p5_numeric_storage_mysql.py",
             "scripts/probe_p5_direct_replay_mysql.py",
+            "scripts/probe_p5_concurrency_mysql.py",
+            "app/services/db_errors.py",
             "study_worker.py",
             "deploy/flama-study-worker.service",
             "app/repositories/study_batch_repository.py",
@@ -131,6 +133,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_note_storage_precision.py",
             "tests/test_study_direct_note_replay.py",
             "tests/test_study_direct_replay_probe.py",
+            "tests/test_study_note_write_gap_locks.py",
             "tests/test_study_note_templates.py",
             "tests/test_study_content_delete.py",
             "tests/test_study_note_overlay.py",
@@ -800,6 +803,19 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "app/repositories/note_analytics_read_repository.py",
     "scripts/probe_p5_analytics_mysql.py",
     "tests/test_note_analytics_read.py",
+    # Gap locks and deadlocks between learners exist only on InnoDB.
+    "app/services/db_errors.py",
+    "app/services/auth_service.py",
+    "app/services/study_authority_evidence_service.py",
+    "app/services/study_authority_receipt_service.py",
+    "app/services/study_authority_enrollment_service.py",
+    "app/services/study_direct_note_replay_service.py",
+    "app/services/study_progress_history_service.py",
+    "app/services/study_authority_command_service.py",
+    "app/services/study_session_service.py",
+    "app/routes/flashcards/study.py",
+    "scripts/probe_p5_concurrency_mysql.py",
+    "tests/test_study_note_write_gap_locks.py",
 )
 
 DEPLOY_RUNTIME_SOURCE_PATTERNS = (

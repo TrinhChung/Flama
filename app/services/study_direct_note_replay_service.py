@@ -14,7 +14,9 @@ from sqlalchemy import select
 
 from app.services.study_action_runtime import ReviewTransitionResult, resolve_review_action
 from app.services.study_algorithm_registry import AlgorithmIdentity
-from app.services.study_authority_receipt_service import DIRECT_REPLAY_SCHEMA, StudyAuthorityReceiptError
+from app.services.study_authority_receipt_service import (
+    DIRECT_REPLAY_SCHEMA, StudyAuthorityReceiptError, lock_operation_receipt,
+)
 from app.services.study_progress_contract import AUTHORITY_RECEIPT_SCHEMA_VERSION, STORAGE_CODEC
 from app.services.study_progress_history_service import native_review_fact_document, native_review_event_provenance
 from app.services.study_progress_shadow_codec import (
@@ -23,7 +25,6 @@ from app.services.study_progress_shadow_codec import (
 )
 from app.services.study_progress_shadow_mapper import encode_identity
 from models.review_event import ReviewEvent
-from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_progress_history_fact import StudyProgressHistoryFact
 
 
@@ -56,10 +57,10 @@ def read_direct_note_replay(session, *, route, locked, card_id, operation_key, r
     from app.services.study_service import NativeReviewCommandResult
 
     encoded_key = encode_identity(operation_key, max_bytes=512, field_name="authority_operation_key")
-    receipt = session.execute(select(StudyAuthorityCommandReceipt).where(
-        StudyAuthorityCommandReceipt.learner_user_id == route.learner_user_id,
-        StudyAuthorityCommandReceipt.operation_key_hash == hashlib.sha256(encoded_key).digest(),
-    ).with_for_update().execution_options(populate_existing=True)).scalar_one_or_none()
+    receipt = lock_operation_receipt(
+        session, learner_user_id=route.learner_user_id,
+        operation_key_hash=hashlib.sha256(encoded_key).digest(), locked=locked,
+    )
     if receipt is None:
         return None
     if bytes(receipt.operation_key) != encoded_key:

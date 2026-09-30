@@ -39,6 +39,7 @@ from app.services.anki_scheduler import (
     FsrsNextStates,
     _day_index,
 )
+from app.services.db_errors import domain_error_code
 from app.services.study_action_runtime import (
     REVIEW_RATINGS,
     ReviewTransitionResult,
@@ -991,11 +992,11 @@ def _get_study_session_status(
                 is_stale = True
                 extra["stale_reason"] = stale_reason
         except Exception as exc:
-            code = getattr(exc, "code", None)
+            code = domain_error_code(exc)
             if not code:
                 raise
             is_stale = True
-            extra["stale_reason"] = str(code)
+            extra["stale_reason"] = code
 
     threshold = (
         max(session.created_at, session.opened_at)
@@ -1146,8 +1147,9 @@ def study_batch_job_from_admission(
         try:
             return note_batch_job_from_admission(batch, session)
         except Exception as exc:
-            if getattr(exc, "code", None):
-                raise StudySessionError(exc.code, str(exc), status=409) from exc
+            code = domain_error_code(exc)
+            if code:
+                raise StudySessionError(code, str(exc), status=409) from exc
             raise
     source_schema = str(payload.get("schema_version") or "")
     if source_schema not in {wire_contract.batch_schema, wire_contract.commit_schema}:
@@ -1865,11 +1867,11 @@ def _lock_note_session_context(
                 )
                 locked_vectors[note_key] = (siblings, compatibility)
         except Exception as exc:
-            code = getattr(exc, "code", None)
+            code = domain_error_code(exc)
             if code is None:
                 raise
             db.session.rollback()
-            raise StudySessionError(str(code), str(exc), status=409) from exc
+            raise StudySessionError(code, str(exc), status=409) from exc
 
     return card_rows, note_keys, locked_subjects, locked_vectors
 
@@ -2091,9 +2093,9 @@ def _commit_note_authority_session(
         raise
     except Exception as exc:
         db.session.rollback()
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code is not None:
-            raise StudySessionError(str(code), str(exc), status=409) from exc
+            raise StudySessionError(code, str(exc), status=409) from exc
         raise
 
 

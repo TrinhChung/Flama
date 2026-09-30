@@ -16,6 +16,7 @@ from app.repositories.study_authority_repository import (
     lock_study_authority_subject,
 )
 from app.services.anki_scheduler import CardState
+from app.services.db_errors import domain_error_code
 from app.services.study_progress_shadow_codec import (
     STATE_DECODERS,
     StudyProgressCodecError,
@@ -222,8 +223,9 @@ def lock_study_session_authority_subjects(
                 create_token_if_missing=create_token_if_missing,
             )
         except Exception as exc:
-            if getattr(exc, "code", None):
-                raise _fail(str(exc.code), str(exc)) from exc
+            code = domain_error_code(exc)
+            if code:
+                raise _fail(code, str(exc)) from exc
             raise
         state = locked.state
         if state is None:

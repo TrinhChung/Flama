@@ -197,7 +197,8 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | P5-04..P5-07 | **DONE (code)** | Sync + async v4, owned + logical-overlay NOTE with pristine/first-state, Connect snapshot/revlog/card package, multi-learner delete/template topology, admin purge, all readers incl. overlay/admin-wide with NOTE↔LEGACY equality tests. |
 | P5-08 | **DONE (code)** | Requested Algorithm switch writer with synthetic registered target; typed refusals; forward-only rollback; no production initializer/route. |
 | P5-09 / INT-03 | **DONE (local)** | 1,648 backend tests (1 unrelated pre-existing Flama Audio workflow failure), 507 frontend tests, build, MySQL probe matrix (65 direct-replay/overlay/switch scenarios + authority schema + batch + numeric). |
-| P5-10 | **WAITING FOR PRODUCT OWNER** | Backup + R0 release, then R1 moves **every** learner to NOTE (canary dropped 2026-09-29; new accounts start in NOTE) per [runbook §4](../../runbooks/P5_NOTE_AUTHORITY_RUNBOOK.md); async stays off. |
+| P5-10 | **R1 DONE 2026-09-29** | R0 released; R1 moved 18/18 learners to NOTE, audit 18/18 PASS, new accounts start in NOTE ([P5 plan](./P5_EXECUTION_PLAN_2026-09-20.md) header). Async stays off. |
+| P5-11 | **IN PROGRESS** — [NOTE production hardening](./P5-11_NOTE_PRODUCTION_HARDENING.md) | P5-11a: cross-learner gap-lock deadlocks (commits, direct answers, sign-ups) removed, deadlock retry, no SQL leak in 409; MySQL concurrency probe in CI. P5-11b: session open O(scope) and remaining locking readers. The dashboard fix #171 is merged but not yet deployed. |
 
 ### Phase 6 — Remove Card/Template from progress ownership (chuẩn bị, chưa có code)
 
