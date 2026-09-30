@@ -23,7 +23,7 @@ Số liệu production 2026-09-30 (SELECT-only):
 
 | Hạng mục canonical Phase 9 | Bằng chứng | Trạng thái |
 |---|---|---|
-| Ngừng ghi projection `card_progress` | 18/18 learner NOTE, 0 user chưa enroll; 40.668 dòng `card_progress` = 40.668 subject NOTE. Đây là snapshot lịch sử; chưa chứng minh mọi dữ liệu/luồng ghi NOTE đầy đủ | **Quyết định đã chốt; chờ bằng chứng kỹ thuật**: G9-FULL/G9-WRITE → G9-BACKUP → G9-CUT theo P9-03..06. Phục hồi bằng bổ sung backup, không giữ projection chỉ để rollback LEGACY |
+| Ngừng ghi projection `card_progress` | 18/18 learner NOTE, 0 user chưa enroll; 40.668 dòng `card_progress` = 40.668 subject NOTE. Đây là snapshot lịch sử; chưa chứng minh mọi dữ liệu/luồng ghi NOTE đầy đủ | **Quyết định đã chốt; chờ bằng chứng kỹ thuật**: G9-FULL/G9-WRITE → G9-BACKUP → G9-CUT theo P9-03..06. Phục hồi bằng bổ sung backup, không giữ projection chỉ để rollback LEGACY. Readiness v1 vẫn báo `decision`/D6-02 cho gate này đến khi P9-02a cập nhật |
 | Bỏ wire phiên cũ (v2/v3) | 363 phiên v2 trong 30 ngày (phiên cuối mở 29/09 00:51, trước R1); từ R1 chỉ có v4 theo lần ghi nhận này | **waiting**: 2026-10-29 chỉ là mốc dự kiến theo issuance; cần zero usage, valid lease/job và đủ telemetry theo P9-02/P9-08 |
 | Bỏ ánh xạ ordinal Anki theo vị trí | 0 Card thiếu occurrence, 0 occurrence thiếu ordinal, 0 ref Connect mất Card | **ready** về dữ liệu; vẫn cần xác nhận không còn gói Connect/Yomitan cũ |
 | Bỏ giả định 4 rating, lời gọi scheduler cũ, cột Algorithm cố định, renderer/manifest cũ, tương thích theo tên Template/Field | Việc code; mỗi mục cần inventory callsite như P6-00 | Chưa bắt đầu |
@@ -31,8 +31,8 @@ Số liệu production 2026-09-30 (SELECT-only):
 
 ## 4. Thứ tự đề xuất
 
-1. P9-00 và P9-03..05: kiểm toàn bộ learner, dữ liệu, reader/writer, worker, import/lifecycle và new-user default; sửa phần còn thiếu để đạt FULL_NOTE_PASS. Enrollment count không đủ.
-2. Backup nhất quán cả legacy + NOTE, giữ identity mapping/T0/watermark; thử restore cách ly và thử bổ sung dữ liệu thiếu mà bảo toàn mọi ghi mới sau T0.
-3. P9-06: xử lý work cũ, ngừng projection trên mọi entrypoint; xác nhận mọi transaction mới ghi đầy đủ state/history/receipt vào NOTE. Không chờ retention hoặc telemetry wire 30 ngày.
+1. P9-00, P9-02a và P9-03..05c: kiểm toàn bộ learner, dữ liệu, reader/writer, worker, import/lifecycle và new-user default; tách NOTE khỏi projection gồm fence Connect/Anki và audit canonical thay thế; đóng đường vào LEGACY (signup làm ngay được). Enrollment count không đủ.
+2. Write freeze ngắn, backup nhất quán cả legacy + NOTE, giữ identity mapping/T0/watermark; thử restore cách ly và thử bổ sung dữ liệu thiếu mà bảo toàn mọi ghi mới sau T0.
+3. P9-06: xử lý work cũ, ngừng projection trên toàn hệ thống cùng lúc; xác nhận mọi transaction mới ghi đầy đủ state/history/receipt vào NOTE. Không chờ retention hoặc telemetry wire 30 ngày.
 4. Sau đó P9-01/P9-07..10 cắt giảm runtime/code/storage theo mức giảm tài nguyên và gate từng nhóm. Wire/Connect có điều kiện retirement riêng.
 5. Nếu lỗi, bổ sung chọn lọc từ backup theo manifest, revision và lifecycle; không restore dump cũ đè production. Chi tiết [P9 execution plan](./P9_EXECUTION_PLAN_2026-09-30.md).

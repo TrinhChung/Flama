@@ -4,7 +4,7 @@
 
 ## 1. Kết luận có thể dùng để lập kế hoạch
 
-Ưu tiên thực thi theo chỉ đạo chủ sản phẩm: xác nhận chuyển đầy đủ sang NOTE, backup có thể phục hồi, rồi ngừng ghi song song và cắt giảm tài nguyên. Inventory dưới đây dùng để tìm và sửa phần NOTE còn thiếu trước cutover. NOTE readers/writers hiện vẫn dùng `card_progress` để xác minh tính toàn vẹn, nên phải gỡ phụ thuộc đó khi hoàn thiện đường NOTE. Cửa sổ wire cũ là cổng riêng, không chặn ngừng projection khi đủ bằng chứng. Khi lỗi, bổ sung từ backup vào NOTE và giữ dữ liệu mới theo kế hoạch P9; không duy trì projection cập nhật chỉ để quay LEGACY tức thời.
+Ưu tiên thực thi theo chỉ đạo chủ sản phẩm: xác nhận chuyển đầy đủ sang NOTE, backup có thể phục hồi, rồi ngừng ghi song song và cắt giảm tài nguyên. Inventory dưới đây dùng để tìm và sửa phần NOTE còn thiếu trước cutover. NOTE readers/writers hiện vẫn dùng `card_progress` để xác minh tính toàn vẹn, nên phải gỡ phụ thuộc đó khi hoàn thiện đường NOTE. Cửa sổ wire cũ là cổng riêng, không chặn ngừng projection khi đủ bằng chứng. Khi lỗi, bổ sung từ backup vào NOTE và giữ dữ liệu mới theo kế hoạch P9; không duy trì projection cập nhật chỉ để quay LEGACY tức thời. Ba phụ thuộc dễ bị bỏ sót khi cắt: fence Connect/Anki lưu revision CardProgress (F9-06), đường vào LEGACY phụ thuộc env (F9-07) và audit deploy so với projection (F9-08).
 
 Runtime thực tế là `wsgi.py -> create_app() -> build_app_config() / run_startup_maintenance()`. Config và maintenance hiện nằm trong [settings](../../app/settings.py) và [startup](../../app/startup.py); không còn toàn bộ inline như một số hướng dẫn cũ. Production mặc định không chạy maintenance, nhưng env có thể bật; audit phải dùng bootstrap được kiểm chứng.
 
@@ -66,6 +66,48 @@ Nguồn: [migration applications 46](../../migrations/versions/20260930_000046_a
 - **Impact:** Chỉ bỏ fallback sau khi trace import/reimport/template reorder/delete; giữ engine/decoder còn được Algorithm hiện hành dùng, bốn rating của built-in và Field name bindings còn sống.
 - **Unknowns:** Adoption phiên bản Connect, package cũ còn chờ import; inventory name-based binding và renderer chưa hoàn tất.
 
+> F9-06..F9-10 bổ sung sau review kế hoạch P9 cùng ngày; cùng chế độ INVESTIGATE, chỉ đọc source.
+
+### F9-06 — Fence Connect/Anki lưu revision CardProgress
+
+- **Observed:** `connect_source_card_refs.applied_local_revision` lưu giá trị `CardProgress.revision`. Đường NOTE của Anki snapshot so `progress.revision` của sibling với giá trị này để phát hiện learner đã học local (`local_diverged`), dựng candidate từ các cột của dòng CardProgress rồi mới `map_card_progress` sang NOTE state, và ghi lại `applied_local_revision = progress.revision`. Connect import và reconciliation cũng so cùng cặp giá trị.
+- **Evidence:** [Anki sync](../../app/services/anki_sync_service.py) (`_apply_note_authority_progress_snapshot`, các chỗ gán/so `applied_local_revision`), [Connect import](../../app/services/connect/import_cards.py), [reconciliation](../../app/services/study_progress_reconciliation_service.py), [model ref](../../models/connect_source_card_ref.py).
+- **Potential concern:** Khi projection ngừng cập nhật, `CardProgress.revision` đứng yên dù learner tiếp tục học trên NOTE. `local_diverged` vẫn false, nên re-sync Anki (không `force`) ghi đè tiến độ NOTE mới mà không báo conflict. Card/Note chưa có dòng CardProgress thì đường này không dựng được input.
+- **Impact:** Mất tiến độ learner im lặng sau cutover — vi phạm ràng buộc không mất dữ liệu. Cần đổi fence sang revision NOTE, xử lý giá trị đã lưu (khác ngữ nghĩa), và codec snapshot → NOTE state không qua dòng CardProgress trước P9-06.
+- **Unknowns:** Số ref có `applied_local_revision` khác NULL trên production; tần suất người dùng re-sync Anki; revision NOTE nào (authority revision của subject, token hay cột mới) phù hợp nhất với ngữ nghĩa per-Card hiện tại.
+
+### F9-07 — Đường vào LEGACY còn mở
+
+- **Observed:** `enroll_new_learner_note_authority` chỉ enroll NOTE khi `STUDY_NEW_LEARNER_NOTE_ENABLED` và `STUDY_WIRE_V4_ENABLED` bật và `STUDY_ASYNC_BATCH_ENABLED` tắt; ngược lại hoặc khi enrollment bị từ chối, nó trả `None` và tài khoản ở LEGACY (chỉ ghi warning). Cả ba cờ mặc định `False`. Theo runbook P5, hai cờ đầu được sửa tay trong `/etc/flama/flama.env`, không thuộc key do `deploy/sync_managed_env.py` quản lý; cờ async do GitHub variable quản lý. CLI `study-authority-enrollment --mode LEGACY` và runbook P5 §4.5 (rollback NOTE → LEGACY, đặt `STUDY_NEW_LEARNER_NOTE_ENABLED=0`) vẫn còn.
+- **Evidence:** [enrollment service](../../app/services/study_authority_enrollment_service.py), [settings](../../app/settings.py), [auth](../../app/services/auth_service.py), [Google auth](../../app/services/google_auth_service.py), [CLI](../../app/cli.py), [runbook P5](../runbooks/P5_NOTE_AUTHORITY_RUNBOOK.md).
+- **Potential concern:** Sau cutover, một lần lệch env (mất dòng khi sửa file, bật async) tạo learner LEGACY mới: CardProgress lại là authority của learner đó, counters “zero INSERT/UPDATE projection” sai, và dọn code LEGACY ở P9-09/P9-10 làm hỏng tài khoản đó. Rollback NOTE → LEGACY sau cutover tự từ chối nhờ `_verify_lossless_legacy_projection` (projection cũ/thiếu → `LOSSY_LEGACY_PROJECTION`/`INCOMPLETE_AUTHORITY_COVERAGE`), nhưng đó là fail-closed ngẫu nhiên, không phải chính sách.
+- **Impact:** “100% learner ở NOTE” hiện là trạng thái phụ thuộc env, không phải invariant. Cần signup NOTE vô điều kiện, khóa CLI LEGACY và sửa runbook (P9-05c, D9-09).
+- **Unknowns:** Giá trị env thực tế hiện hành trên production; có kế hoạch bật async batch trước khi Phase 9 hoàn tất hay không.
+
+### F9-08 — Audit deploy dựa vào projection
+
+- **Observed:** `study-authority-read-audit` (“Compare canonical NOTE queue semantics with the rollback projection”) và `study-architecture-audit` là nguồn kết quả “audit 18/18 PASS” trong runbook P5/P6 và sau mỗi deploy P5-11. `study_architecture_audit_service.py` có hơn 100 tham chiếu CardProgress. Readiness v1 vẫn ghi gate `legacy_projection_writes` là `decision` với blocker D6-02.
+- **Evidence:** [CLI](../../app/cli.py), [architecture audit](../../app/services/study_architecture_audit_service.py), [readiness](../../app/services/study_phase9_readiness_service.py), [P5 runbook](../runbooks/P5_NOTE_AUTHORITY_RUNBOOK.md).
+- **Potential concern:** Sau cutover, audit hiện tại hoặc báo lệch (projection đứng yên) hoặc bị bỏ qua, nên deploy mất gate an toàn chính đúng lúc hệ thống thay đổi nhiều nhất.
+- **Impact:** Audit canonical thay thế phải có, được kiểm trên production khi projection còn cập nhật, và vào runbook trước P9-06 (P9-04 §4–5). Readiness cập nhật theo D9-02 (P9-02a).
+- **Unknowns:** Những invariant nào của audit hiện tại chỉ có thể kiểm qua projection và cần công thức thay thế.
+
+### F9-09 — Nhiều writer CardProgress là nhánh LEGACY-only
+
+- **Observed:** Các constructor `CardProgress(...)` trong direct review (`study_service.py`), session commit (`study_session_service.py`), worker (`study_worker_service.py`), Connect import (`connect/import_cards.py`) và Anki (`anki_sync_service.py`) nằm sau nhánh `authority_route.mode_code == "NOTE"` đã return/rẽ sang đường NOTE, tức chỉ chạy cho learner LEGACY. Đường NOTE ghi projection tập trung ở authority command/write/evidence, pristine materialization, lifecycle mirror, Anki NOTE snapshot và các đường delete/reset (`deck_management_service`, `flashcard_content_service`, `study_note_template_service`, `study_content_delete_service`). Discovery learner khi xóa nội dung hợp nhất CardProgress với subject/contributor/session, nên không bỏ sót learner NOTE khi projection không còn dòng mới.
+- **Evidence:** các file trên; [content delete](../../app/services/study_content_delete_service.py) `discover_content_learner_ids`.
+- **Potential concern:** Nếu P9-05 port mọi callsite CardProgress, phạm vi và ước lượng bị thổi phồng; nếu bỏ sót phân loại, một nhánh NOTE thật có thể bị coi là LEGACY.
+- **Impact:** P9-00 phải phân loại callsite (đường NOTE / LEGACY-only / cleanup lifecycle / startup-schema). Nhánh LEGACY-only chỉ cần chặn (P9-05c) rồi xóa (P9-09).
+- **Unknowns:** Danh sách cuối từ trace entrypoint thực, không từ grep.
+
+### F9-10 — Startup có thể tái tạo storage đã drop
+
+- **Observed:** Startup maintenance gọi `db.create_all()` sau khi import models; `app/startup_schema.py` còn nhiều patch liên quan `card_progress`.
+- **Evidence:** [startup](../../app/startup.py), [startup schema](../../app/startup_schema.py).
+- **Potential concern:** Drop bảng khi model còn trong metadata thì lần boot có maintenance bật tạo lại bảng rỗng; patch cột cũ có thể chạy trên schema đã contract.
+- **Impact:** P9-10 phải gỡ model khỏi metadata và gỡ patch trong release chạy trước DDL, rồi boot `wsgi.py` với maintenance bật để chứng minh.
+- **Unknowns:** Env production có bật maintenance ở lần boot nào không; thứ tự import models khi gỡ.
+
 ## 4. Những số đo được sử dụng và giới hạn
 
 [P5-11](../task/decoupling/P5-11_NOTE_PRODUCTION_HARDENING.md) ghi các tối ưu đã có: open 1.000 Note còn 46 SQL, materialize 3.000 pristine Note còn 164 SQL, reader Browse/MCP đã gom truy vấn. [P7 runbook](../runbooks/P7_SESSION_RETENTION_RUNBOOK.md) ghi lần dọn đầu 15.072 membership. [Readiness](../task/decoupling/P8_P9_READINESS_2026-09-30.md) ghi 18/18 learner NOTE và 40.668 CardProgress.
@@ -78,4 +120,5 @@ Nguồn: [migration applications 46](../../migrations/versions/20260930_000046_a
 2. Toàn bộ reader/writer/callsite của projection, availability, contributors, history và old wire; mỗi mục có owner và replacement.
 3. Readiness trong bootstrap read-only; telemetry không đếm thiếu khi deploy/restart hoặc log bị mất.
 4. Bằng chứng phục hồi không mất commit mới sau thời điểm backup; backup cũ tự nó chưa đáp ứng RPO=0.
-5. DDL từng bảng trên đúng MySQL production. Online DDL vẫn có metadata lock; FK CASCADE/SET NULL có thể hạn chế lựa chọn `LOCK`. Không khẳng định toàn bộ contraction chạy không downtime trước rehearsal. [MySQL 8.0 online DDL limitations](https://dev.mysql.com/doc/refman/8.0/en/innodb-online-ddl-limitations.html).
+5. Env authority thực tế trên production (F9-07), số ref Connect có `applied_local_revision` (F9-06), hạ tầng backup/binlog và thời gian dump/restore với dữ liệu hiện tại.
+6. DDL từng bảng trên đúng MySQL production. Online DDL vẫn có metadata lock; FK CASCADE/SET NULL có thể hạn chế lựa chọn `LOCK`. Không khẳng định toàn bộ contraction chạy không downtime trước rehearsal. [MySQL 8.0 online DDL limitations](https://dev.mysql.com/doc/refman/8.0/en/innodb-online-ddl-limitations.html).

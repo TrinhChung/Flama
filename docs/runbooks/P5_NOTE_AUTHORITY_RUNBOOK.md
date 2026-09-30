@@ -108,6 +108,9 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
 **Hard stop** (xem xét rollback): transition được chấp nhận mà không chiếu được về legacy, split-brain/đua epoch, decoder sai, phiên cũ commit qua epoch, mất event/receipt, source clone bị sửa, hoặc audit `BLOCK` không giải thích được.
 
 ### 4.5 Rollback một learner (NOTE → LEGACY)
+
+> **Từ 2026-09-30 (D9-02, [kế hoạch P9](../task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md)):** đây không còn là đường phục hồi mặc định. Khi lỗi, giữ learner ở NOTE, sửa tiến hoặc bổ sung chọn lọc từ backup theo §9 kế hoạch P9. Không đặt `STUDY_NEW_LEARNER_NOTE_ENABLED=0`. P9-05c sẽ khóa `--mode LEGACY` chậm nhất khi P9-06 bắt đầu; sau khi projection ngừng cập nhật, lệnh dưới đây luôn bị từ chối. Phần còn lại của mục giữ làm lịch sử.
+
 ```bash
 flama_cli study-authority-enrollment --user-id <ID> --mode LEGACY          # dry-run
 flama_cli study-authority-enrollment --user-id <ID> --mode LEGACY --apply

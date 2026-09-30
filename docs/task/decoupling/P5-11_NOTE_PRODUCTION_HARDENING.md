@@ -126,7 +126,7 @@ Chỉ đổi code. Deploy lại release trước theo workflow; không có migra
 
 1. ~~**Deploy**~~: xong (#173 `6472e42`, rồi #176–#178), audit 18/18 PASS sau mỗi lần.
 2. ~~**P5-11c — materialize Note pristine theo lô**~~: xong, §3b'.
-3. **Snapshot cả phạm vi**: phiên vẫn chứa tới 5.000 thẻ (≈2 ms CPU/thẻ, JSON ≈2 KB/thẻ) và SPA mở lại mỗi 50 câu. Chỉ snapshot hàng đợi trong ngày là thay đổi hợp đồng wire, để sau.
+3. **Snapshot cả phạm vi**: phiên vẫn chứa tới 5.000 thẻ (≈2 ms CPU/thẻ, JSON ≈2 KB/thẻ). Nhánh NOTE batch tiếp tục cùng lease sau mỗi lô 50 câu; chỉ transport cũ (v2/v3) mở lại snapshot ([F9-02](../../architecture/phase-9-contraction-investigation-2026-09-30.md#f9-02--snapshot-lớn-còn-tồn-tại-note-rollover-đã-tái-sử-dụng-lease)). Chỉ snapshot hàng đợi trong ngày là thay đổi hợp đồng wire, để sau (P9-07).
 4. ~~**Reader vẫn khóa**~~: Browse và MCP đọc theo tập hợp (§3b''). Còn `/api/study/next` (SPA không dùng) giữ bộ đọc từng thẻ có chủ đích; learner 20k Note mất ~15 s.
 5. **Frontend gửi commit hai lần** (LEGACY v3): sau commit `auto_finish` thành công, `flushOnExit` gửi lại cùng `commit_id` với `final_states` đã cập nhật → 409 `IDEMPOTENCY_KEY_REUSED`. Dữ liệu lần đầu đã lưu; với v4 (`final_states` rỗng) lần gửi lại là replay 200. Chỉ còn ảnh hưởng phiên LEGACY cũ trong IndexedDB.
 6. ~~Retention membership phiên~~: Phase 7, đã chạy 30/09.
