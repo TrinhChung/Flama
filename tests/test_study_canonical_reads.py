@@ -103,6 +103,51 @@ class StudyCanonicalReadTests(unittest.TestCase):
                 canonical = self._read_everything("CANONICAL_V1")
         self.assertEqual(canonical, projected)
 
+    def _read_endpoints(self):
+        paths = [
+            "/api/dashboard",
+            "/api/statistics/overview",
+            "/api/statistics/today-future",
+        ] + [
+            f"/api/browse/cards?deck_id={self.deck_id}{query}"
+            for query in ("", "&status=new", "&status=learn", "&status=due", "&sort_dir=desc")
+        ]
+        responses = {}
+        for path in paths:
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, (path, response.get_json()))
+            responses[path] = response.get_json()
+        with self.app.app_context():
+            from app.repositories import flashcards_share_repository as share_reads
+
+            responses["reps"] = (
+                share_reads.get_deck_reps_for_user_in_subtree(self.user_id, [self.deck_id]),
+                share_reads.get_deck_reps_for_user_in_source_scope(self.user_id, [self.deck_id]),
+                share_reads.get_note_type_reps_for_user(
+                    self.user_id, str(db.session.get(Card, self.card_ids[0]).note.note_type_id)),
+            )
+            db.session.rollback()
+        return responses
+
+    def test_endpoints_answer_the_same_under_canonical_without_card_progress(self):
+        self._answer()
+        with self.app.app_context():
+            self._add_pristine_note()
+        with mock.patch("app.services.browse_card_service._utcnow", return_value=NOW):
+            projected = self._read_endpoints()
+            self.assertGreater(projected["reps"][0], 0)
+            with self.app.app_context():
+                self._set_profile("CANONICAL_V1")
+                db.session.execute(CardProgress.__table__.delete())
+                db.session.commit()
+            with mock.patch(
+                "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES", BOTH_PROFILES
+            ):
+                canonical = self._read_endpoints()
+        for path in projected:
+            with self.subTest(path=path):
+                self.assertEqual(canonical[path], projected[path])
+
     def test_projection_profile_still_requires_its_projection(self):
         self._answer()
         with self.app.app_context():

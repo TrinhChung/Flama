@@ -35,6 +35,8 @@ from models import db
 from models.card import Card
 from models.card_progress import CardProgress
 from models.note import Note
+from models.study_progress_state import StudyProgressState
+from models.study_progress_subject import StudyProgressSubject
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -320,14 +322,26 @@ def _load_canonical_scope_reads(
     scope_deck_ids: list[int] | None,
     now_utc: datetime,
     timezone_name: str,
+    storage_profile: str,
 ) -> tuple[list[Card], dict[str, StudyAuthorityCardRead]]:
     # Same row set as LEGACY `build_progress_rows_query`: every learner
     # CardProgress (owned or logical-overlay source), scoped by Note deck.
     # NOTE state projects all siblings; never-studied Notes carry no load.
-    query = Card.query.join(Note, Card.note_id == Note.id).join(
-        CardProgress,
-        db.and_(CardProgress.card_id == Card.id, CardProgress.user_id == user_id),
-    )
+    # CANONICAL_V1 froze that projection: every Card of a stateful Note.
+    query = Card.query.join(Note, Card.note_id == Note.id)
+    if storage_profile == "PROJECTION_V1":
+        query = query.join(
+            CardProgress,
+            db.and_(CardProgress.card_id == Card.id, CardProgress.user_id == user_id),
+        )
+    else:
+        query = query.join(
+            StudyProgressSubject,
+            db.and_(
+                StudyProgressSubject.learner_user_id == user_id,
+                StudyProgressSubject.live_note_id == Card.note_id,
+            ),
+        ).join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
     if scope_deck_ids is not None:
         if not scope_deck_ids:
             return [], {}
@@ -459,6 +473,7 @@ def build_today_future_stats(
             scope_deck_ids=scope_deck_ids,
             now_utc=now_utc_naive,
             timezone_name=timezone_effective,
+            storage_profile=authority_route.storage_profile,
         )
         rows = _canonical_due_rows(
             cards=canonical_cards,
