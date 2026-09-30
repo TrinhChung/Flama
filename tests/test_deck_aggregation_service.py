@@ -377,7 +377,9 @@ class DeckAggregationServiceTests(unittest.TestCase):
             # Add 2 new cards and 1 review card to owned deck
             _, cards_new = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id, card_count=2)
             _, cards_rev = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
-            self._add_progress(user_id=self.learner_id, card_id=cards_rev[0].id, queue="review", due_day=today_day)
+            # Due yesterday: the dashboard counts from the learner's study day
+            # (day boundary 04:00), so "today in UTC" is not yet due before 04:00.
+            self._add_progress(user_id=self.learner_id, card_id=cards_rev[0].id, queue="review", due_day=today_day - 1)
             db.session.commit()
 
             with self.app.test_request_context():

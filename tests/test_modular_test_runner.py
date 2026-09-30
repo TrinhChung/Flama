@@ -160,6 +160,32 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertTrue(plan["mysql_contract"])
         self.assertFalse(plan["deploy"])
 
+    def test_ci_plan_deploys_runtime_code_still_missing_from_production(self):
+        # #171 changed app/ but its master CI failed; #172 only changed a test.
+        stuck = run_tests.build_ci_change_plan(
+            ["tests/test_note_analytics_read.py"],
+            force_all_validation=True,
+            files_since_deploy=["app/services/dashboard_service.py", "tests/test_note_analytics_read.py"],
+        )
+        current = run_tests.build_ci_change_plan(
+            ["tests/test_note_analytics_read.py"],
+            force_all_validation=True,
+            files_since_deploy=["tests/test_note_analytics_read.py", "docs/x.md"],
+        )
+        unknown = run_tests.build_ci_change_plan(
+            ["tests/test_note_analytics_read.py"],
+            force_all_validation=True,
+            files_since_deploy=None,
+        )
+
+        self.assertTrue(stuck["deploy"])
+        self.assertFalse(current["deploy"])
+        self.assertFalse(unknown["deploy"])
+
+    def test_files_changed_since_rejects_non_sha_input(self):
+        self.assertIsNone(run_tests.files_changed_since(""))
+        self.assertIsNone(run_tests.files_changed_since("HEAD; rm -rf /"))
+
     def test_ci_plan_selects_external_contracts_by_source(self):
         redis_plan = run_tests.build_ci_change_plan(
             ["app/services/redis_state_service.py"]

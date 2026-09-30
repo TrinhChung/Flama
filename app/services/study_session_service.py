@@ -12,7 +12,9 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from flask import current_app
+from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
@@ -39,6 +41,7 @@ from app.services.anki_scheduler import (
     FsrsNextStates,
     _day_index,
 )
+from app.services.db_errors import domain_error_code
 from app.services.study_action_runtime import (
     REVIEW_RATINGS,
     ReviewTransitionResult,
@@ -570,8 +573,14 @@ def open_study_session(
             status=exc.status,
             details=exc.details,
         ) from exc
+    # Each Card's Note, media and Template are read below; load them in three
+    # set-wise queries instead of one query per Card.
     cards = (
-        selected_query.order_by(Card.created_at.asc(), Card.id.asc())
+        selected_query.options(
+            selectinload(Card.note).selectinload(Note.media_assets),
+            selectinload(Card.template),
+        )
+        .order_by(Card.created_at.asc(), Card.id.asc())
         .limit(MAX_SESSION_CARDS + 1)
         .all()
     )
@@ -589,6 +598,27 @@ def open_study_session(
             status=404,
         )
 
+    # Deck rows and options depend only on (learner, local deck) within this
+    # request, so resolve each once instead of once per Card.
+    deck_by_id: dict[int, Any] = {}
+    options_by_deck_id: dict[int | None, Any] = {}
+
+    def local_deck_for(deck_id: int | None):
+        if deck_id is None:
+            return None
+        if deck_id not in deck_by_id:
+            deck_by_id[deck_id] = db.session.get(Deck, deck_id)
+        return deck_by_id[deck_id]
+
+    def options_for(deck_id: int | None):
+        if deck_id not in options_by_deck_id:
+            options_by_deck_id[deck_id] = resolve_deck_options(
+                user_id=int(user.id),
+                deck_id=deck_id,
+                deck_obj=local_deck_for(deck_id),
+            )
+        return options_by_deck_id[deck_id]
+
     authority_subjects = None
     if authority_route.mode_code == "NOTE":
         from app.services.study_note_pristine_service import materialize_pristine_notes
@@ -598,7 +628,6 @@ def open_study_session(
             # never-studied Notes (owned or overlay source) this lease covers,
             # using the same deck options LEGACY would use for a first review.
             starting_ease_by_note_id: dict[str, float] = {}
-            options_by_deck_id: dict[int | None, Any] = {}
             for card in cards:
                 if str(card.note_id) in starting_ease_by_note_id:
                     continue
@@ -606,18 +635,8 @@ def open_study_session(
                     card=card,
                     clone_scope=clone_scope,
                 )
-                if effective_deck_id not in options_by_deck_id:
-                    options_by_deck_id[effective_deck_id] = resolve_deck_options(
-                        user_id=int(user.id),
-                        deck_id=effective_deck_id,
-                        deck_obj=(
-                            db.session.get(Deck, effective_deck_id)
-                            if effective_deck_id is not None
-                            else None
-                        ),
-                    )
                 starting_ease_by_note_id[str(card.note_id)] = float(
-                    options_by_deck_id[effective_deck_id].startingEase
+                    options_for(effective_deck_id).startingEase
                 )
             materialize_pristine_notes(
                 db.session,
@@ -654,8 +673,32 @@ def open_study_session(
     contents: dict[str, Any] = {}
     compositions: dict[str, Any] = {}
     card_payloads: list[dict[str, Any]] = []
-    session_card_rows: list[StudySessionCard] = []
+    session_card_values: list[dict[str, Any]] = []
     frozen_binding: dict[str, Any] | None = None
+
+    # Overlay content: load the install's added Notes and field overrides once.
+    clone_added_note_ids: frozenset[str] | None = None
+    note_override_rows_by_note_id: dict[str, list] | None = None
+    if clone_scope is not None:
+        from app.repositories.flashcards_share_repository import (
+            get_clone_note_field_overrides_batch,
+        )
+
+        install_id = str(clone_scope.install.id)
+        clone_added_note_ids = frozenset(
+            str(value)
+            for value in db.session.execute(
+                select(DeckCloneAddedNote.note_id).where(
+                    DeckCloneAddedNote.deck_install_id == install_id
+                )
+            ).scalars()
+        )
+        note_override_rows_by_note_id = {
+            str(note_id): rows
+            for (_install, note_id), rows in get_clone_note_field_overrides_batch(
+                [install_id], sorted({str(card.note_id) for card in cards})
+            ).items()
+        }
 
     for ordinal, card in enumerate(cards):
         note = card.note
@@ -663,16 +706,8 @@ def open_study_session(
             card=card,
             clone_scope=clone_scope,
         )
-        local_deck = (
-            db.session.get(Deck, local_deck_id)
-            if local_deck_id is not None
-            else None
-        )
-        options = resolve_deck_options(
-            user_id=int(user.id),
-            deck_id=local_deck_id,
-            deck_obj=local_deck,
-        )
+        local_deck = local_deck_for(local_deck_id)
+        options = options_for(local_deck_id)
         policy = build_scheduler_policy(
             options=options,
             timezone_name=timezone_name,
@@ -705,6 +740,8 @@ def open_study_session(
         context = study_artifact_service.build_effective_study_card(
             card=card,
             clone_scope=clone_scope,
+            clone_added_note_ids=clone_added_note_ids,
+            note_override_rows_by_note_id=note_override_rows_by_note_id,
         )
         template = study_artifact_service.build_template_artifact(context)
         content = study_artifact_service.build_content_artifact(context)
@@ -785,27 +822,27 @@ def open_study_session(
                 serialize_study_note_authority_identity(authority_identity)
             )
         card_payloads.append(card_payload)
-        session_card_rows.append(
-            StudySessionCard(
-                session_id=session_id,
-                card_id=str(card.id),
-                source_deck_id=(
+        session_card_values.append(
+            {
+                "session_id": session_id,
+                "card_id": str(card.id),
+                "source_deck_id": (
                     int(note.deck_id) if note.deck_id is not None else None
                 ),
-                local_deck_id=local_deck_id,
-                note_type_id=str(note.note_type_id),
-                scheduler_preset_id=(
+                "local_deck_id": local_deck_id,
+                "note_type_id": str(note.note_type_id),
+                "scheduler_preset_id": (
                     int(local_deck.scheduler_preset_id)
                     if local_deck is not None
                     and local_deck.scheduler_preset_id is not None
                     else None
                 ),
-                base_progress_revision=base_revision,
-                base_state_hash=state_hash,
-                scheduler_config_hash=policy_key,
-                initial_state_json=_json_dumps(state_payload),
-                ordinal=ordinal,
-            )
+                "base_progress_revision": base_revision,
+                "base_state_hash": state_hash,
+                "scheduler_config_hash": policy_key,
+                "initial_state_json": _json_dumps(state_payload),
+                "ordinal": ordinal,
+            }
         )
 
     scope_deck = (
@@ -897,10 +934,26 @@ def open_study_session(
         expires_at=expires_at,
     )
     db.session.add(session)
-    db.session.add_all(session_card_rows)
+    db.session.flush()
+    # One multi-row INSERT instead of one INSERT per Card (MySQL has no
+    # RETURNING, so ORM objects would be inserted one by one for their IDs).
+    db.session.execute(insert(StudySessionCard), session_card_values)
     if authority_subjects is not None:
         try:
-            db.session.flush()
+            session_card_rows = tuple(
+                db.session.execute(
+                    select(StudySessionCard)
+                    .where(StudySessionCard.session_id == session_id)
+                    .order_by(StudySessionCard.ordinal.asc())
+                ).scalars()
+            )
+            if [row.card_id for row in session_card_rows] != [
+                payload["card_id"] for payload in card_payloads
+            ]:
+                raise StudySessionAuthorityPinError(
+                    "SESSION_AUTHORITY_PIN_DIVERGED",
+                    "Persisted Study Session membership differs from its snapshot.",
+                )
             for session_card, card_payload in zip(
                 session_card_rows,
                 card_payloads,
@@ -915,6 +968,7 @@ def open_study_session(
                         str(card_payload["note_id"])
                     ],
                     now_utc=opened_at,
+                    membership_created_in_transaction=True,
                 )
                 if serialize_study_session_authority_pin(pin) != card_payload.get(
                     "authority_pin"
@@ -991,11 +1045,11 @@ def _get_study_session_status(
                 is_stale = True
                 extra["stale_reason"] = stale_reason
         except Exception as exc:
-            code = getattr(exc, "code", None)
+            code = domain_error_code(exc)
             if not code:
                 raise
             is_stale = True
-            extra["stale_reason"] = str(code)
+            extra["stale_reason"] = code
 
     threshold = (
         max(session.created_at, session.opened_at)
@@ -1146,8 +1200,9 @@ def study_batch_job_from_admission(
         try:
             return note_batch_job_from_admission(batch, session)
         except Exception as exc:
-            if getattr(exc, "code", None):
-                raise StudySessionError(exc.code, str(exc), status=409) from exc
+            code = domain_error_code(exc)
+            if code:
+                raise StudySessionError(code, str(exc), status=409) from exc
             raise
     source_schema = str(payload.get("schema_version") or "")
     if source_schema not in {wire_contract.batch_schema, wire_contract.commit_schema}:
@@ -1865,11 +1920,11 @@ def _lock_note_session_context(
                 )
                 locked_vectors[note_key] = (siblings, compatibility)
         except Exception as exc:
-            code = getattr(exc, "code", None)
+            code = domain_error_code(exc)
             if code is None:
                 raise
             db.session.rollback()
-            raise StudySessionError(str(code), str(exc), status=409) from exc
+            raise StudySessionError(code, str(exc), status=409) from exc
 
     return card_rows, note_keys, locked_subjects, locked_vectors
 
@@ -2091,9 +2146,9 @@ def _commit_note_authority_session(
         raise
     except Exception as exc:
         db.session.rollback()
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code is not None:
-            raise StudySessionError(str(code), str(exc), status=409) from exc
+            raise StudySessionError(code, str(exc), status=409) from exc
         raise
 
 

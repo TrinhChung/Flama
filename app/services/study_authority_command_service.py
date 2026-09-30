@@ -366,6 +366,8 @@ def apply_existing_state_note_review(
             require_scheduler_grade=True,
         ),
         now_utc=command.now_utc,
+        # review_event was inserted above in this uncommitted transaction.
+        event_created_in_transaction=True,
     )
     return ExistingStateNoteReviewResult(
         review_event=review_event,

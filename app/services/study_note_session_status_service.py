@@ -9,6 +9,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
+from app.services.db_errors import domain_error_code
 from app.services.study_note_batch_service import (
     NoteBatchContinuation, StudyNoteBatchError, decode_note_batch_payload,
     decode_note_batch_receipt, verify_note_batch_continuation,
@@ -148,7 +149,7 @@ def inspect_note_session_continuation(*, user, study_session, route, check_curre
                     raise _evidence_invalid("NOTE batch receipt changed during verification.")
         return stream, "BATCH_FAILED" if stream["failed_batch_id"] else None
     except Exception as exc:
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code:
-            return stream, str(code)
+            return stream, code
         raise

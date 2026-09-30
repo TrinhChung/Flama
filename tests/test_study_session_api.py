@@ -2559,6 +2559,16 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertTrue(status_res2.get_json()["stale"])
 
     def test_auto_finish_rejects_actionable_learning_card(self):
+        from models.user_scheduler_settings import UserSchedulerSettings
+
+        # Keep the day boundary 12 h away: a learning step that crosses it
+        # becomes tomorrow's card, so auto_finish would be legitimately allowed.
+        with self.app.app_context():
+            db.session.add(UserSchedulerSettings(
+                user_id=self.user_id,
+                day_boundary_hour_local=(datetime.utcnow().hour + 12) % 24,
+            ))
+            db.session.commit()
         snapshot = self._open_session()
         payload = self._commit_payload(snapshot)
         payload["commit_reason"] = "auto_finish"

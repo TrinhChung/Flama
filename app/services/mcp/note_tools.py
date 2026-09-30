@@ -17,6 +17,7 @@ from app.services import (
     study_progress_lifecycle_mirror_service,
 )
 from app.services.anki_content_normalizer import normalize_anki_field_values
+from app.services.db_errors import domain_error_code
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_authority_read_service import (
     StudyAuthorityReadError,
@@ -162,7 +163,7 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
                     "NOTE detail Card topology differs from its canonical subject.",
                 )
         except Exception as exc:
-            code = getattr(exc, "code", None)
+            code = domain_error_code(exc)
             if code is None:
                 raise
             db.session.rollback()

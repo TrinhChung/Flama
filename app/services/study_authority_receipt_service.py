@@ -13,7 +13,7 @@ import hashlib
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from sqlalchemy import select
+from sqlalchemy import and_ as sa_and, select
 from sqlalchemy.orm import Session
 
 from app.services.stats_overview import normalize_review_mode
@@ -33,6 +33,7 @@ from app.services.study_progress_shadow_codec import (
 from app.services.study_progress_shadow_mapper import encode_identity
 from app.services.study_service import normalize_review_duration
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
+from models.study_authority_subject_token import StudyAuthoritySubjectToken
 
 DIRECT_REPLAY_SCHEMA = "study-direct-note-replay.v1"
 
@@ -202,6 +203,77 @@ def _build_receipt_identity(
     )
 
 
+def _token_snapshot_is_current(session: Session, *, locked) -> bool:
+    """True when no other transaction committed on this subject after our snapshot.
+
+    Every receipt is written in the transaction that advances its subject's
+    token, and the caller holds that token FOR UPDATE, so the locked token is
+    current. If the snapshot shows the same token, a receipt committed for this
+    subject would also be visible in the snapshot.
+    """
+
+    token = locked.token
+    snapshot = session.execute(
+        select(
+            StudyAuthoritySubjectToken.subject_generation,
+            StudyAuthoritySubjectToken.authority_revision,
+            StudyAuthoritySubjectToken.semantic_state_hash,
+        ).where(StudyAuthoritySubjectToken.subject_id == int(locked.subject.id))
+    ).first()
+    return snapshot is not None and (
+        int(snapshot.subject_generation) == int(token.subject_generation)
+        and int(snapshot.authority_revision) == int(token.authority_revision)
+        and snapshot.semantic_state_hash == token.semantic_state_hash
+    )
+
+
+def lock_operation_receipt(
+    session: Session,
+    *,
+    learner_user_id: int,
+    operation_key_hash: bytes,
+    locked,
+) -> StudyAuthorityCommandReceipt | None:
+    """Current receipt for one learner operation, without locking an absent key.
+
+    ``locked`` is the caller's locked subject (token held FOR UPDATE). Locking
+    an absent unique key takes a gap lock that neighbouring learners' receipt
+    inserts share, and they deadlock. So look in the snapshot first: a visible
+    receipt is locked by primary key; an absent one needs no lock when the
+    subject token proves the snapshot current. Otherwise read current rows
+    with the original locking read.
+    """
+
+    operation_filter = (
+        StudyAuthorityCommandReceipt.learner_user_id == int(learner_user_id),
+        StudyAuthorityCommandReceipt.operation_key_hash == operation_key_hash,
+    )
+    visible_id = session.execute(
+        select(StudyAuthorityCommandReceipt.id).where(*operation_filter)
+    ).scalar_one_or_none()
+    if visible_id is None and _token_snapshot_is_current(session, locked=locked):
+        return None
+    receipt = session.execute(
+        select(StudyAuthorityCommandReceipt)
+        .where(
+            StudyAuthorityCommandReceipt.id == int(visible_id)
+            if visible_id is not None
+            else sa_and(*operation_filter)
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if receipt is None and visible_id is not None:
+        # The visible receipt disappeared (reset/delete fence): read current.
+        receipt = session.execute(
+            select(StudyAuthorityCommandReceipt)
+            .where(*operation_filter)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+    return receipt
+
+
 def _locked_replay(
     session: Session,
     *,
@@ -209,17 +281,12 @@ def _locked_replay(
     identity: _ReceiptIdentity,
 ) -> StudyAuthorityCommandReceipt | None:
     base = command.command
-    receipt = session.execute(
-        select(StudyAuthorityCommandReceipt)
-        .where(
-            StudyAuthorityCommandReceipt.learner_user_id
-            == base.route.learner_user_id,
-            StudyAuthorityCommandReceipt.operation_key_hash
-            == identity.operation_key_hash,
-        )
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
+    receipt = lock_operation_receipt(
+        session,
+        learner_user_id=base.route.learner_user_id,
+        operation_key_hash=identity.operation_key_hash,
+        locked=base.locked,
+    )
     if receipt is None:
         return None
     if bytes(receipt.operation_key) != identity.operation_key:

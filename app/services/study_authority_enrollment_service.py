@@ -225,11 +225,25 @@ def stage_note_authority_enrollment(
     ).scalar_one_or_none()
     if learner is None:
         raise _fail("LEARNER_NOT_FOUND", "Learner authority fence row is missing.")
-    enrollment = session.execute(
-        select(StudyAuthorityEnrollment)
+    # Every enrollment writer holds the User row above FOR UPDATE, so only an
+    # existing row needs its own lock. Locking an absent row would take a gap
+    # lock at the end of the primary key, where concurrent sign-ups then
+    # deadlock on their inserts. If this snapshot predates another
+    # enrollment's commit, the insert below fails on the primary key instead.
+    enrollment_exists = session.execute(
+        select(StudyAuthorityEnrollment.learner_user_id)
         .where(StudyAuthorityEnrollment.learner_user_id == learner_user_id)
-        .with_for_update()
-    ).scalar_one_or_none()
+    ).first() is not None
+    enrollment = (
+        session.execute(
+            select(StudyAuthorityEnrollment)
+            .where(StudyAuthorityEnrollment.learner_user_id == learner_user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if enrollment_exists
+        else None
+    )
     previous_mode = str(enrollment.mode_code) if enrollment is not None else "LEGACY"
     previous_epoch = int(enrollment.epoch) if enrollment is not None else 0
     if previous_mode == "NOTE":

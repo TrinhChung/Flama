@@ -29,6 +29,7 @@ from app.repositories.study_authority_repository import (
     lock_study_authority_route,
     lock_study_authority_siblings,
 )
+from app.services.db_errors import domain_error_code
 from app.services.study_algorithm_registry import StudyAlgorithmNotFoundError
 from app.services.study_algorithm_switch_preflight_service import (
     StudyAlgorithmSwitchPreflightError,
@@ -156,7 +157,7 @@ def apply_study_algorithm_switch(
         subjects = lock_study_session_authority_subjects(
             session, route=route, logical_note_keys=[request.logical_note_key], now_utc=now_utc)
     except Exception as exc:
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code is None:
             raise
         raise _fail(str(code), str(exc)) from exc
@@ -234,7 +235,7 @@ def apply_study_algorithm_switch(
             siblings=tuple(baselines),
         )
     except Exception as exc:
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code is None:
             raise
         raise _fail("SWITCH_TARGET_NOT_PROJECTABLE", str(exc), blockers=(str(code),)) from exc

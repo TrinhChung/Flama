@@ -79,10 +79,12 @@
 
 ## Agent Files & Multi-Agent Framework
 - Multi-Agent Orchestration Architecture documentation: `docs/architecture/MULTI_AGENT_COLLABORATION.md`.
+- Repo-local skills live in `skills/` (source of truth). `.claude/skills/` mirrors them for Claude Code: after editing `skills/`, run `python scripts/sync_claude_skills.py` (the pre-commit hook does it for staged skill changes, and `tests/test_claude_skills_sync.py` fails on drift). Never edit the mirror directly. `.claude/skills/mysql` is vendored and lives only there.
 - Use `$flama-agent-orchestrator` when managing complex full-stack features requiring cross-layer coordination across Frontend, Backend, and Database subagents.
 - Use `$flama-frontend-architecture` when refactoring, decomposing, or building React SPA components in `frontend/src/`, enforcing Feature-Sliced Design (FSD), extracting custom hooks, consolidating reusable UI primitives, and preserving Zero Visual Regression.
 - Use `$flama-backend-architecture` when building or refactoring Flask REST APIs (`app/api/`), service logic (`app/services/`), repositories (`app/repositories/`), validators (`app/validators/`), Anki scheduling, or Flama Connect protocol.
 - Use `$flama-database-architecture` when reviewing, investigating, analyzing, or evolving the Flama MySQL database schema (`models/`), ORM entity boundaries, marketplace clone overlay models, or planning zero-data-loss Alembic migrations (`migrations/`).
+- Use `$mysql` (`.claude/skills/mysql/SKILL.md`, vendored from PlanetScale) for MySQL/InnoDB query optimization, `EXPLAIN` analysis, index design, N+1 fixes, data types, locking/deadlocks, and online DDL. Pair it with `$flama-database-architecture` for Flama-specific domain modeling.
 - Use `$antigravity-cli` when installing, verifying, or operating the local `agy` command, including restoring its PATH shim and selecting safe versus full-access execution.
 - Use `$antigravity-manager-api` when checking or operating the local Antigravity Manager HTTP API for account status, quota refresh, or explicit account switching. Never store its API key in the repository.
 - The user authorizes `agy` as an implementation worker for assigned tasks. Follow `$antigravity-cli` worker orchestration: isolate file ownership, review every diff, and rotate only the `agy` account through Manager when the applicable quota is at or below the documented threshold.

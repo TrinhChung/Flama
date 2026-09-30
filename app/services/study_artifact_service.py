@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Mapping
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.services import flashcards_share_service
@@ -92,13 +92,25 @@ def build_effective_study_card(
     *,
     card: Any,
     clone_scope: flashcards_share_service.CloneDeckScope | None,
+    clone_added_note_ids: frozenset[str] | None = None,
+    note_override_rows_by_note_id: Mapping[str, list] | None = None,
 ) -> EffectiveStudyCard:
+    """Resolve a Card's effective content, owned or through a clone overlay.
+
+    Callers building many Cards of one install may pass the install's added
+    Note IDs and field-override rows loaded once; otherwise both are queried
+    per Card.
+    """
     note = card.note
     field_defs = list(note.note_type.field_defs)
     field_values = dict(note.field_values or {})
-    if clone_scope is not None and flashcards_share_service.is_clone_added_note(
-        scope=clone_scope,
-        note_id=note.id,
+    if clone_scope is not None and (
+        str(note.id) in clone_added_note_ids
+        if clone_added_note_ids is not None
+        else flashcards_share_service.is_clone_added_note(
+            scope=clone_scope,
+            note_id=note.id,
+        )
     ):
         return EffectiveStudyCard(
             card=card,
@@ -123,6 +135,11 @@ def build_effective_study_card(
                 install=clone_scope.install,
                 source_note=note,
                 schema_view=schema_view,
+                note_override_rows=(
+                    list(note_override_rows_by_note_id.get(str(note.id), ()))
+                    if note_override_rows_by_note_id is not None
+                    else None
+                ),
             )
     return EffectiveStudyCard(
         card=card,
