@@ -15,6 +15,7 @@ from typing import Mapping
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.repositories.study_inserted_rows import SUBJECT, inserted_in_transaction
 from app.services.study_progress_contract import RAW_SCHEMA_VERSION, STORAGE_CODEC
 from app.services.study_progress_shadow_codec import (
     StudyProgressCodecError,
@@ -285,6 +286,7 @@ def lock_study_authority_subject(
     now_utc: datetime,
     create_token_if_missing: bool = True,
     locked_rows: tuple[StudyAuthoritySubjectToken, StudyProgressState] | None = None,
+    subject_created_in_transaction: bool = False,
 ) -> LockedStudyAuthoritySubject:
     """Lock/create the independent token, then lock and verify current state.
 
@@ -293,6 +295,11 @@ def lock_study_authority_subject(
     exact state, or with a null hash when the subject has no current state.
     ``locked_rows`` are this subject's token and state already locked and
     refreshed by ``lock_study_authority_subject_rows``; the same checks apply.
+    ``subject_created_in_transaction``: the caller inserted ``subject`` in
+    this transaction, so only this transaction can have created its token or
+    state (both have a foreign key to the uncommitted subject). They are read
+    without ``FOR UPDATE``: that read would only take a gap lock at the end of
+    the index, where concurrent inserts of other new subjects deadlock.
     """
 
     if not isinstance(route, StudyAuthorityRoute):
@@ -337,11 +344,19 @@ def lock_study_authority_subject(
             generation=generation,
         )
 
+    # Rows of a subject this transaction inserted can only be this
+    # transaction's own: read them, but without a gap-locking FOR UPDATE.
+    lock_children = not (
+        subject_created_in_transaction
+        or inserted_in_transaction(session, SUBJECT, subject.id)
+    )
+    token_query = select(StudyAuthoritySubjectToken).where(
+        StudyAuthoritySubjectToken.subject_id == int(subject.id)
+    )
+    if lock_children:
+        token_query = token_query.with_for_update()
     token = session.execute(
-        select(StudyAuthoritySubjectToken)
-        .where(StudyAuthoritySubjectToken.subject_id == int(subject.id))
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        token_query.execution_options(populate_existing=True)
     ).scalar_one_or_none()
     token_created = token is None
     if token is None:
@@ -360,11 +375,13 @@ def lock_study_authority_subject(
         session.add(token)
         session.flush()
 
+    state_query = select(StudyProgressState).where(
+        StudyProgressState.subject_id == int(subject.id)
+    )
+    if lock_children:
+        state_query = state_query.with_for_update()
     state = session.execute(
-        select(StudyProgressState)
-        .where(StudyProgressState.subject_id == int(subject.id))
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        state_query.execution_options(populate_existing=True)
     ).scalar_one_or_none()
     return _verified_locked_subject(
         subject=subject, token=token, state=state, token_created=token_created,

@@ -318,7 +318,7 @@ jobs:
           DB_USER: root
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
-        run: python scripts/probe_p5_concurrency_mysql.py --learners 4 --notes 24 --rounds 2 --answers 8 --signups 6
+        run: python scripts/probe_p5_concurrency_mysql.py --learners 4 --notes 24 --rounds 2 --answers 8 --signups 6 --creates 8
 
       - name: Rehearse Phase 6 application-occurrence migration on MySQL
         env:

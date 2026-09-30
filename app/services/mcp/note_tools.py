@@ -17,7 +17,7 @@ from app.services import (
     study_progress_lifecycle_mirror_service,
 )
 from app.services.anki_content_normalizer import normalize_anki_field_values
-from app.services.db_errors import domain_error_code
+from app.services.db_errors import domain_error_code, run_with_deadlock_retry
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_authority_read_service import (
     StudyAuthorityReadError,
@@ -390,6 +390,24 @@ def create_note(
     auto_commit: bool = True,
 ) -> dict[str, Any]:
     """Create a single flashcard note with cards for the user."""
+    if not auto_commit:
+        return _create_note(user_id=user_id, note_data=note_data, auto_commit=False)
+    # Agents create Notes in parallel; new NOTE subjects of concurrent
+    # creations can still meet on index gaps. A deadlock victim has written
+    # nothing (one transaction, one commit), so the creation simply reruns.
+    return run_with_deadlock_retry(
+        lambda: _create_note(user_id=user_id, note_data=note_data, auto_commit=True),
+        session=db.session,
+        label="mcp_create_note",
+    )
+
+
+def _create_note(
+    *,
+    user_id: int,
+    note_data: dict[str, Any],
+    auto_commit: bool,
+) -> dict[str, Any]:
     deck = _resolve_deck_for_user(
         user_id=user_id,
         deck_id=note_data.get("deck_id"),
@@ -795,15 +813,22 @@ def batch_create_notes(*, user_id: int, notes: list[dict[str, Any]]) -> dict[str
             "note_ids": [],
         }
 
-    created_note_ids: list[str] = []
-    try:
-        for item in notes:
-            result = create_note(user_id=user_id, note_data=item, auto_commit=False)
-            created_note_ids.append(str(result["note_id"]))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        raise
+    def create_all() -> list[str]:
+        created: list[str] = []
+        try:
+            for item in notes:
+                result = create_note(user_id=user_id, note_data=item, auto_commit=False)
+                created.append(str(result["note_id"]))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        return created
+
+    # One atomic transaction: a deadlock victim reruns the whole batch.
+    created_note_ids = run_with_deadlock_retry(
+        create_all, session=db.session, label="mcp_batch_create_notes"
+    )
 
     return {
         "created_count": len(created_note_ids),

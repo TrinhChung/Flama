@@ -29,6 +29,17 @@ Không bao giờ xóa: `study_sessions`, `study_session_commits` (receipt: commi
 5. `flama_cli study-session-retention --apply`.
 6. Kiểm: dấu vân tay các bảng ở bước 4 không đổi (trừ `study_sessions.status` của các phiên vừa `expired`); `study_session_cards` giảm đúng `purged_session_cards`; chạy lại `--apply` ra `expired_sessions=0`, `purged_sessions=0`; dashboard/overview một learner giống trước; `flama_cli study-architecture-audit` không có `unknown_status_sessions`.
 
+### Kết quả lần chạy đầu 2026-09-30
+
+| Bước | Kết quả |
+|---|---|
+| Release | PR #175 `1e14106`, lên 09:52:46 UTC; health 200; 0 phản hồi 5xx |
+| Backup | `/root/backups/flama-pre-p7-20260930T095337Z.sql.gz` (117 MB, `-- Dump completed`) |
+| Dry-run | 0 phiên `open` quá hạn; 160 phiên, 15.072 dòng membership; khớp truy vấn SQL §2.3 |
+| `--apply --batch-sessions 20` | 8 lô, 4,4 s cả khởi động app; xóa 15.072 dòng membership, 0 pin |
+| Dấu vân tay trước/sau | chỉ `study_session_cards` đổi (41.160 → 26.088); notes, cards, review_events, card_progress, state/subject NOTE, ref Connect, sessions (id + status), commits giống hệt |
+| Chạy lại `--apply` | 0 phiên, 0 dòng |
+
 ## 3. Lịch định kỳ (tùy chọn, cần chủ sản phẩm duyệt)
 
 Một timer systemd hằng ngày chạy `--apply` sau khi lần chạy tay đầu tiên đạt. Chưa cài.

@@ -19,10 +19,17 @@ from typing import Any, Iterable, Mapping, Sequence
 from flask import current_app
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_route,
+)
+from app.repositories.study_inserted_rows import (
+    CONTRIBUTOR,
+    SUBJECT,
+    inserted_in_transaction,
+    remember_inserted,
 )
 from app.repositories.study_progress_shadow_repository import (
     assert_subject_finalization_fence,
@@ -690,14 +697,16 @@ def _sync_pointer_lineage(
 ) -> bytes:
     existing = tuple(
         session.execute(
-            select(StudyProgressLineageRef)
-            .where(StudyProgressLineageRef.contributor_id == contributor.id)
-            .order_by(
-                StudyProgressLineageRef.ref_kind.asc(),
-                StudyProgressLineageRef.source_row_key.asc(),
-                StudyProgressLineageRef.id.asc(),
+            _lock_unless_inserted(
+                select(StudyProgressLineageRef)
+                .where(StudyProgressLineageRef.contributor_id == contributor.id)
+                .order_by(
+                    StudyProgressLineageRef.ref_kind.asc(),
+                    StudyProgressLineageRef.source_row_key.asc(),
+                    StudyProgressLineageRef.id.asc(),
+                ),
+                session, CONTRIBUTOR, contributor.id,
             )
-            .with_for_update()
         ).scalars()
     )
     pointer_rows = [row for row in existing if row.ref_kind == "LAST_REVIEW_EVENT"]
@@ -882,6 +891,42 @@ def _mapping_quarantine(code: str) -> str:
     return "QUARANTINED_UNCLASSIFIED_CONTEXT"
 
 
+def _use_stored_card_created_at(session: Session, cards_by_id: Mapping[str, Card]) -> None:
+    """Map Cards with the ``created_at`` the database stored.
+
+    A Card created in this transaction still carries its in-memory default
+    (microseconds), while ``cards.created_at`` is DATETIME(0) on MySQL and is
+    rounded on insert. Availability evidence (DATETIME(6)) must match the
+    stored Card, or every later parity read reports it stale. Values read
+    from MySQL have no fraction, so only just-created Cards are re-read.
+    """
+
+    fractional = sorted(
+        card_id
+        for card_id, card in cards_by_id.items()
+        if card.created_at is not None and card.created_at.microsecond
+    )
+    if not fractional:
+        return
+    for card_id, stored in session.execute(
+        select(Card.id, Card.created_at).where(Card.id.in_(fractional))
+    ).all():
+        set_committed_value(cards_by_id[str(card_id)], "created_at", stored)
+
+
+def _lock_unless_inserted(statement, session: Session, kind: str, parent_id):
+    """``FOR UPDATE`` unless the parent row was inserted by this transaction.
+
+    Children of an uncommitted parent cannot exist (foreign keys), so the
+    locking read would only take a gap lock that concurrent creations
+    deadlock on (see ``study_inserted_rows``).
+    """
+
+    if inserted_in_transaction(session, kind, parent_id):
+        return statement
+    return statement.with_for_update()
+
+
 def _upsert_availability(
     session: Session,
     *,
@@ -892,9 +937,11 @@ def _upsert_availability(
 ) -> None:
     projection = mapped.availability
     row = session.execute(
-        select(StudyProgressAvailability)
-        .where(StudyProgressAvailability.contributor_id == contributor.id)
-        .with_for_update()
+        _lock_unless_inserted(
+            select(StudyProgressAvailability)
+            .where(StudyProgressAvailability.contributor_id == contributor.id),
+            session, CONTRIBUTOR, contributor.id,
+        )
     ).scalar_one_or_none()
     if row is None:
         row = StudyProgressAvailability(
@@ -928,9 +975,10 @@ def _upsert_state(
     now_utc: datetime,
 ) -> None:
     row = session.execute(
-        select(StudyProgressState)
-        .where(StudyProgressState.subject_id == subject.id)
-        .with_for_update()
+        _lock_unless_inserted(
+            select(StudyProgressState).where(StudyProgressState.subject_id == subject.id),
+            session, SUBJECT, subject.id,
+        )
     ).scalar_one_or_none()
     if row is None:
         row = StudyProgressState(subject_id=int(subject.id), created_at=now_utc)
@@ -961,9 +1009,10 @@ def _upsert_state(
 
 def _remove_usable_state(session: Session, subject_id: int) -> None:
     row = session.execute(
-        select(StudyProgressState)
-        .where(StudyProgressState.subject_id == subject_id)
-        .with_for_update()
+        _lock_unless_inserted(
+            select(StudyProgressState).where(StudyProgressState.subject_id == subject_id),
+            session, SUBJECT, subject_id,
+        )
     ).scalar_one_or_none()
     if row is not None:
         session.delete(row)
@@ -1055,6 +1104,7 @@ def finalize_native_mirror(
     try:
         # Flush both event ids and final CardProgress pointer/timestamp values.
         session.flush()
+        _use_stored_card_created_at(session, plan.cards_by_id)
 
         card_ids = sorted(plan.cards_by_id)
         final_progress_rows = tuple(
@@ -1139,13 +1189,15 @@ def finalize_native_mirror(
 
             prior_contributors = tuple(
                 session.execute(
-                    select(StudyProgressContributor)
-                    .where(StudyProgressContributor.subject_id == subject.id)
-                    .order_by(
-                        StudyProgressContributor.logical_card_key.asc(),
-                        StudyProgressContributor.id.asc(),
+                    _lock_unless_inserted(
+                        select(StudyProgressContributor)
+                        .where(StudyProgressContributor.subject_id == subject.id)
+                        .order_by(
+                            StudyProgressContributor.logical_card_key.asc(),
+                            StudyProgressContributor.id.asc(),
+                        ),
+                        session, SUBJECT, subject.id,
                     )
-                    .with_for_update()
                 ).scalars()
             )
             prior_by_progress_id = {
@@ -1153,6 +1205,7 @@ def finalize_native_mirror(
                 for row in prior_contributors
                 if row.live_card_progress_id is not None
             }
+            created_contributors: list[StudyProgressContributor] = []
             active_prior_contributors = tuple(
                 row
                 for row in prior_contributors
@@ -1291,6 +1344,7 @@ def finalize_native_mirror(
                         updated_at=finalized_at,
                     )
                     session.add(contributor)
+                    created_contributors.append(contributor)
                 else:
                     if int(contributor.subject_id) != int(subject.id):
                         raise _fail("A live CardProgress contributor is attached elsewhere.")
@@ -1310,6 +1364,8 @@ def finalize_native_mirror(
                 contributors_by_progress_id[progress_id] = contributor
 
             session.flush()
+            for created in created_contributors:
+                remember_inserted(session, CONTRIBUTOR, created.id)
 
             for progress in rows:
                 progress_id = int(progress.id)
@@ -1368,12 +1424,13 @@ def finalize_native_mirror(
                 else:
                     contributor.lineage_vector_hash = lineage_hash
                     availability = session.execute(
-                        select(StudyProgressAvailability)
-                        .where(
-                            StudyProgressAvailability.contributor_id
-                            == contributor.id
+                        _lock_unless_inserted(
+                            select(StudyProgressAvailability).where(
+                                StudyProgressAvailability.contributor_id
+                                == contributor.id
+                            ),
+                            session, CONTRIBUTOR, contributor.id,
                         )
-                        .with_for_update()
                     ).scalar_one_or_none()
                     if availability is not None:
                         session.delete(availability)
