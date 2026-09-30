@@ -15,6 +15,8 @@ Canonical plan: thêm từng năng lực một, ví dụ (a) đánh giá trắc 
 
 Việc cần chủ sản phẩm: chọn năng lực đầu tiên và UX của nó. Sau khi chọn, lập `P8_EXECUTION_PLAN` theo mẫu P6 (quyết định, gate, work package, probe MySQL, runbook).
 
+Điều kiện UI và chi phí UX của từng lựa chọn: [điều tra UI/UX trước Phase 8](./UIUX_GAP_AUDIT_PRE_P8_2026-09-30.md) §4 (P8-UI-1..10) và §6 (quyết định D-U1..D-U6).
+
 ## 3. Phase 9 — cổng và bằng chứng
 
 Lệnh `flask study-phase9-readiness [--window-days 30]` có body chỉ đọc, cho trạng thái từng cổng: `ready` (các phép đếm hiện có đạt), `waiting` (phép đếm chưa đạt), `decision` (cần quyết định sản phẩm). **Readiness v1 chưa phải bằng chứng đủ để cắt:** chưa đo actual readers/writers, restore/retry, accepted jobs và package versions; CLI cũng chưa nằm trong audit-only app. Phải bảo đảm bootstrap không chạy maintenance. P9-02 sẽ bổ sung coverage và các cổng thiếu; chi tiết [F9-04](../../architecture/phase-9-contraction-investigation-2026-09-30.md#f9-04--readiness-v1-là-tín-hiệu-sơ-bộ-chưa-chứng-minh-hết-consumer-cũ).

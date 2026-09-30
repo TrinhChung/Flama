@@ -225,6 +225,8 @@ PR #175 deploy `1e14106`; lần chạy đầu xóa 15.072 dòng membership của
 
 [Điều kiện và bằng chứng](./P8_P9_READINESS_2026-09-30.md). `flask study-phase9-readiness` đo các cổng (đọc-only). Không bước Phase 9 nào xóa dữ liệu khi chưa có backup đã kiểm, chứng minh restore và phê duyệt riêng.
 
+[Điều tra UI/UX trước Phase 8](./UIUX_GAP_AUDIT_PRE_P8_2026-09-30.md) (2026-09-30): 2 lỗi P0 về phục hồi phiên (lease hết hạn, lỗi đồng bộ vĩnh viễn), sai lệch hướng dẫn/thuật ngữ/màu, và điều kiện UI (Interaction host, metadata StudyMode, event tổng quát) phải xong trước năng lực P8 đầu tiên. Đề xuất đợt U1 → U2 → U3 → P8-00.
+
 ### Cross-phase integration
 
 | ID | Task | Dependency | Output chính |
