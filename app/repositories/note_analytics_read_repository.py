@@ -14,14 +14,18 @@ the locking reader does are deliberately left out:
 * the semantic hash of each ``CardProgress`` compatibility row is not
   recomputed: that content parity is ``study-authority-read-audit``'s job.
   Only the row linkage (row present, contributor id/revision) is checked.
+
+Under the ``CANONICAL_V1`` storage profile (ADR P9-03) nothing here joins
+``card_progress``: the projection is frozen, so neither its presence nor its
+linkage is evidence any more.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, and_, case, cast, func, not_, null, or_, select
+from sqlalchemy import LargeBinary, and_, case, cast, false, func, not_, null, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from app.services.study_progress_contract import PROJECTION_VERSION
+from app.services.study_progress_contract import DEFAULT_STORAGE_PROFILE, PROJECTION_VERSION
 from models.card import Card
 from models.card_progress import CardProgress
 from models.study_authority_subject_token import StudyAuthoritySubjectToken
@@ -59,7 +63,15 @@ def violation_error(rank: int | None) -> tuple[str, str] | None:
     return code, _VIOLATION_MESSAGES[code]
 
 
-def note_card_rows(scope, *, learner_user_id: int):
+def reads_projection(storage_profile: str) -> bool:
+    """Whether NOTE reads still verify the ``card_progress`` projection."""
+
+    return storage_profile == DEFAULT_STORAGE_PROFILE
+
+
+def note_card_rows(
+    scope, *, learner_user_id: int, storage_profile: str = DEFAULT_STORAGE_PROFILE
+):
     """Canonical availability plus a violation rank for each Card in ``scope``.
 
     ``scope`` is a subquery exposing ``deck_id``, ``card_id`` and ``note_id``.
@@ -72,7 +84,19 @@ def note_card_rows(scope, *, learner_user_id: int):
     token = aliased(StudyAuthoritySubjectToken)
     contributor = aliased(StudyProgressContributor)
     availability = aliased(StudyProgressAvailability)
+    linked = reads_projection(storage_profile)
     progress = aliased(CardProgress)
+    progress_present = progress.id.isnot(None) if linked else false()
+    progress_missing = progress.id.is_(None) if linked else false()
+    progress_unlinked = (
+        or_(
+            contributor.live_card_progress_id.is_(None),
+            contributor.live_card_progress_id != progress.id,
+            contributor.card_progress_revision != progress.revision,
+        )
+        if linked
+        else false()
+    )
 
     stateful = state.subject_id.isnot(None)
     has_token = token.subject_id.isnot(None)
@@ -86,7 +110,7 @@ def note_card_rows(scope, *, learner_user_id: int):
     violation = case(
         # I9: a Note without state must carry no other NOTE or compatibility evidence.
         (and_(~stateful, subject.id.isnot(None), not_(pristine_subject)), 1),
-        (and_(~stateful, or_(contributor.id.isnot(None), progress.id.isnot(None))), 1),
+        (and_(~stateful, or_(contributor.id.isnot(None), progress_present)), 1),
         # I3
         (and_(stateful, or_(subject.live_note_id.is_(None), subject.live_note_id != scope.c.note_id)), 2),
         # I1/I2 generation
@@ -106,22 +130,20 @@ def note_card_rows(scope, *, learner_user_id: int):
         (and_(stateful, or_(
             contributor.id.is_(None),
             availability.contributor_id.is_(None),
-            progress.id.is_(None),
+            progress_missing,
         )), 5),
         # I7/I8
         (and_(stateful, or_(
             contributor.subject_generation != subject.subject_generation,
             availability.subject_generation != subject.subject_generation,
-            contributor.live_card_progress_id.is_(None),
-            contributor.live_card_progress_id != progress.id,
-            contributor.card_progress_revision != progress.revision,
+            progress_unlinked,
             availability.projection_version != PROJECTION_VERSION,
             availability.state_schema_version != state.state_schema_version,
             availability.semantic_state_hash != state.semantic_state_hash,
         )), 6),
         else_=0,
     )
-    return (
+    statement = (
         select(
             scope.c.deck_id.label("deck_id"),
             scope.c.card_id.label("card_id"),
@@ -151,11 +173,13 @@ def note_card_rows(scope, *, learner_user_id: int):
             availability.contributor_id == contributor.id,
             availability.subject_id == subject.id,
         ))
-        .outerjoin(progress, and_(
-            progress.card_id == scope.c.card_id,
-            progress.user_id == int(learner_user_id),
-        ))
     )
+    if not linked:
+        return statement
+    return statement.outerjoin(progress, and_(
+        progress.card_id == scope.c.card_id,
+        progress.user_id == int(learner_user_id),
+    ))
 
 
 def subject_vector_violation(session: Session, *, scope, learner_user_id: int) -> int:
@@ -191,11 +215,14 @@ def subject_vector_violation(session: Session, *, scope, learner_user_id: int) -
     return 5 if found is not None else 0
 
 
-def learner_note_scope(*, learner_user_id: int):
+def learner_note_scope(
+    *, learner_user_id: int, storage_profile: str = DEFAULT_STORAGE_PROFILE
+):
     """Every Card the learner's NOTE progress touches: stateful Notes plus projections.
 
     Mirrors the overview's former reader input (every learner ``CardProgress``
     Card) and adds Cards of stateful Notes, so a missing projection is caught.
+    Under ``CANONICAL_V1`` only stateful Notes count.
     """
 
     stateful_cards = (
@@ -219,7 +246,11 @@ def learner_note_scope(*, learner_user_id: int):
             CardProgress.user_id == int(learner_user_id),
         ))
     )
-    cards = stateful_cards.union(projected_cards).subquery("learner_cards")
+    cards = (
+        stateful_cards.union(projected_cards)
+        if reads_projection(storage_profile)
+        else stateful_cards
+    ).subquery("learner_cards")
     return select(
         null().label("deck_id"),
         cards.c.card_id,

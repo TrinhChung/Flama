@@ -740,7 +740,9 @@ def list_browse_cards(
             .subquery("browse_candidates")
         )
         verified = note_analytics_read_repository.note_card_rows(
-            candidate_scope, learner_user_id=user_id
+            candidate_scope,
+            learner_user_id=user_id,
+            storage_profile=authority_route.storage_profile,
         ).subquery("browse_candidate_rows")
         worst = int(db.session.execute(select(func.max(verified.c.violation))).scalar() or 0)
         if not worst:
