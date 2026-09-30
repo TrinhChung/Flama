@@ -164,6 +164,81 @@ def validate_study_authority_projection(*, card, locked, progress, contributor, 
     return _availability_from_canonical(availability_row)
 
 
+@dataclass(frozen=True)
+class StudyAuthorityAvailabilitySnapshot:
+    """Canonical availability of one Card, enough for queue counts and order."""
+
+    availability: StudyAuthorityAvailabilityRead
+
+
+def load_study_authority_availability_snapshot(
+    session: Session,
+    *,
+    learner_user_id: int,
+    cards: Sequence[Card],
+    scope,
+    now_utc: datetime,
+) -> Mapping[str, StudyAuthorityAvailabilitySnapshot]:
+    """Non-locking canonical availability for a whole NOTE queue (P5-11e).
+
+    ``summarize_study_authority_queue`` reads nothing but availability, which
+    ``load_study_authority_card_reads`` takes verbatim from the canonical row
+    (Notes with state) or derives from the Card (never-studied Notes). This
+    reads the same values set-wise, without locks or per-Card verification,
+    and checks evidence integrity with the dashboard's set-wise rules and the
+    locking reader's error codes. ``scope`` is a subquery with ``deck_id``,
+    ``card_id`` and ``note_id`` covering ``cards``. Callers still take a full
+    locking read of the Cards they return or answer.
+    """
+
+    from sqlalchemy import LargeBinary, and_, cast, func
+
+    from app.repositories import note_analytics_read_repository as note_reads
+    from models.study_progress_state import StudyProgressState
+    from models.study_progress_subject import StudyProgressSubject
+
+    rows = note_reads.note_card_rows(scope, learner_user_id=learner_user_id).subquery("queue_rows")
+    worst = int(session.execute(select(func.max(rows.c.violation))).scalar() or 0)
+    if not worst:
+        worst = note_reads.subject_vector_violation(
+            session, scope=scope, learner_user_id=learner_user_id
+        )
+    error = note_reads.violation_error(worst)
+    if error is not None:
+        raise StudyAuthorityReadError(*error)
+    canonical = {
+        str(card_id): row
+        for card_id, row in session.execute(
+            select(scope.c.card_id, StudyProgressAvailability)
+            .select_from(scope)
+            .join(StudyProgressSubject, and_(
+                StudyProgressSubject.learner_user_id == int(learner_user_id),
+                StudyProgressSubject.logical_note_key == cast(scope.c.note_id, LargeBinary),
+            ))
+            .join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
+            .join(StudyProgressContributor, and_(
+                StudyProgressContributor.subject_id == StudyProgressSubject.id,
+                StudyProgressContributor.live_card_id == scope.c.card_id,
+                StudyProgressContributor.contributor_status == "ACTIVE",
+            ))
+            .join(StudyProgressAvailability, and_(
+                StudyProgressAvailability.contributor_id == StudyProgressContributor.id,
+                StudyProgressAvailability.subject_id == StudyProgressSubject.id,
+            ))
+        ).all()
+    }
+    return MappingProxyType({
+        str(card.id): StudyAuthorityAvailabilitySnapshot(
+            availability=(
+                _availability_from_canonical(canonical[str(card.id)])
+                if str(card.id) in canonical
+                else _availability_from_legacy(card=card, progress=None, now_utc=now_utc)
+            )
+        )
+        for card in cards
+    })
+
+
 def load_study_authority_card_read(
     session: Session,
     *,

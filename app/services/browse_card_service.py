@@ -8,14 +8,13 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from flask import current_app
-from sqlalchemy import case, false, func
-from sqlalchemy.orm import aliased, contains_eager, selectinload
+from sqlalchemy import case, false, func, select
+from sqlalchemy.orm import aliased, selectinload
 
 UTC = timezone.utc
 
-from app.repositories import browse_card_repository
+from app.repositories import browse_card_repository, note_analytics_read_repository
 from app.repositories import vocabulary_repository as vocabulary_ctrl
-from app.repositories.logical_overlay_scope_repository import logical_overlay_cards
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_route,
@@ -36,6 +35,8 @@ from app.services.scheduler_config_service import (
     resolve_scheduler_runtime_settings,
 )
 from app.services import study_progress_lifecycle_mirror_service
+from app.services.anki_scheduler import _day_index_to_datetime
+from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from app.services.study_authority_read_service import (
     StudyAuthorityCardRead,
     StudyAuthorityReadError,
@@ -192,84 +193,28 @@ def build_browse_deck_tree(
             # Same scope as the LEGACY tree: admin-wide counts every Note in the
             # visible decks (with the admin's own state); a learner counts owned
             # Notes plus logical-overlay source Cards under their local deck.
-            owned_query = (
-                Card.query.join(Note, Card.note_id == Note.id)
-                # card.note.deck_id is read per Card below; fill it from this join.
-                .options(contains_eager(Card.note))
-                .filter(Note.deck_id.in_(deck_ids))
+            # Counted set-wise from canonical availability, like the dashboard,
+            # instead of one locking authority read per Card (P5-11e).
+            boundary_hour = int(resolve_scheduler_runtime_settings(user_id=user_id).day_boundary_hour_local)
+            today_day_index = study_repository._today_day_index(
+                now=_utcnow(),
+                timezone_name=timezone_name,
+                day_boundary_hour_local=boundary_hour,
             )
-            if not admin_mode:
-                owned_query = owned_query.filter(Note.user_id == user_id)
-            owned_cards = owned_query.order_by(Card.id.asc()).all() if deck_ids else []
-            overlay_cards, _ = ([], None) if admin_mode else logical_overlay_cards(
-                DeckInstall.query.filter(
-                    DeckInstall.user_id == user_id,
-                    DeckInstall.clone_mode == "logical_overlay",
-                    DeckInstall.local_deck_id.isnot(None),
-                )
-                .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
-                .all(),
-                visible_deck_ids=deck_ids,
-            )
-            counted_cards = [
-                (card, int(card.note.deck_id)) for card in owned_cards
-            ] + overlay_cards
-            now = _utcnow()
-            options_by_deck_id: dict[int, Any] = {}
-            deck_options_by_card_id: dict[str, Any] = {}
-            for card, deck_id in counted_cards:
-                if deck_id not in options_by_deck_id:
-                    options_by_deck_id[deck_id] = resolve_deck_options(
-                        user_id=user_id,
-                        deck_id=deck_id,
-                    )
-                deck_options_by_card_id.setdefault(str(card.id), options_by_deck_id[deck_id])
-            reads = load_study_authority_card_reads(
+            direct_counts, _note_types = aggregate_deck_study_counts(
                 db.session,
                 learner_user_id=user_id,
-                cards=tuple({str(card.id): card for card, _ in counted_cards}.values()),
-                now_utc=now,
-                timezone_name=timezone_name,
-                deck_options_by_card_id=deck_options_by_card_id,
+                visible_deck_ids=sorted(deck_ids),
+                today_day_index=today_day_index,
+                day_cutoff_utc=_day_index_to_datetime(
+                    today_day_index + 1, boundary_hour, timezone_name=timezone_name,
+                ),
+                is_note_mode=True,
+                admin_mode=admin_mode,
+                # D6-04: all Cards of a Note share one NOTE state.
+                count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
+                owned_by_any_user=admin_mode,
             )
-            runtime = resolve_scheduler_runtime_settings(user_id=user_id)
-            boundary_hour = int(runtime.day_boundary_hour_local)
-            direct_counts = {
-                deck_id: {"total": 0, "new": 0, "learn": 0, "due": 0}
-                for deck_id in deck_ids
-            }
-            # D6-04: all Cards of a Note share one NOTE state, so a Note with
-            # several Templates is one item when counting by Note.
-            count_by_note = bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False))
-            counted_notes: set[tuple[int, str]] = set()
-            for card, deck_id in counted_cards:
-                if count_by_note:
-                    note_key = (int(deck_id), str(card.note_id))
-                    if note_key in counted_notes:
-                        continue
-                    counted_notes.add(note_key)
-                bucket = direct_counts.setdefault(
-                    deck_id, {"total": 0, "new": 0, "learn": 0, "due": 0}
-                )
-                bucket["total"] += 1
-                availability = reads[str(card.id)].availability
-                count_bucket = study_repository.counter_bucket_for_progress_values(
-                    queue=availability.normalized_queue,
-                    due_at=availability.due_at,
-                    due_day=availability.due_day,
-                    is_suspended=availability.is_suspended,
-                    is_buried=availability.is_buried,
-                    buried_until_day=availability.buried_until_day,
-                    now=now,
-                    timezone_name=timezone_name,
-                    day_boundary_hour_local=boundary_hour,
-                )
-                if count_bucket == NEW_QUEUE:
-                    bucket["new"] += 1
-                elif count_bucket == LEARNING_QUEUE:
-                    bucket["learn"] += 1
-                elif count_bucket == REVIEW_QUEUE:
-                    bucket["due"] += 1
 
             def rebuild_counts(node: dict[str, Any]) -> dict[str, int]:
                 counts = dict(
@@ -777,43 +722,35 @@ def list_browse_cards(
 
     now = _utcnow()
     authority_reads: Mapping[str, StudyAuthorityCardRead] | None = None
-    if authority_route.mode_code == "NOTE":
+    is_note_mode = authority_route.mode_code == "NOTE"
+    if is_note_mode:
         # Verify every visible candidate (owned and logical-overlay source)
-        # against canonical NOTE state before the shared status/sort SQL runs.
-        # A verified projection is value-equal to canonical availability and a
+        # against canonical NOTE state before the shared status/sort SQL runs,
+        # set-wise with the locking reader's codes as the dashboard does
+        # (P5-11e); the page's Cards get the full locking read below. A
         # never-studied Note has no row in either model; any divergence fails
         # closed instead of silently serving CardProgress.
-        candidates = query.order_by(Card.id.asc()).all()
-        options_by_deck_id: dict[int | None, Any] = {}
-        deck_options_by_card_id: dict[str, Any] = {}
-        for candidate in candidates:
-            note_obj = candidate.note
-            # Overlay source Cards use the learner's mapped local deck options.
-            effective_deck_id = int(note_obj.deck_id) if note_obj.deck_id is not None else None
-            if effective_deck_id is not None and note_obj.user_id != user_id:
-                effective_deck_id = source_to_local_deck_id.get(effective_deck_id, effective_deck_id)
-            if effective_deck_id not in options_by_deck_id:
-                options_by_deck_id[effective_deck_id] = resolve_deck_options(
-                    user_id=user_id,
-                    deck_id=effective_deck_id,
-                )
-            deck_options_by_card_id[str(candidate.id)] = options_by_deck_id[effective_deck_id]
-        try:
-            authority_reads = load_study_authority_card_reads(
-                db.session,
-                learner_user_id=user_id,
-                cards=tuple(candidates),
-                now_utc=now,
-                timezone_name=timezone_name,
-                deck_options_by_card_id=deck_options_by_card_id,
+        candidate_scope = (
+            query.with_entities(
+                Note.deck_id.label("deck_id"),
+                Card.id.label("card_id"),
+                Card.note_id.label("note_id"),
             )
-        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+            .order_by(None)
+            .subquery("browse_candidates")
+        )
+        verified = note_analytics_read_repository.note_card_rows(
+            candidate_scope, learner_user_id=user_id
+        ).subquery("browse_candidate_rows")
+        worst = int(db.session.execute(select(func.max(verified.c.violation))).scalar() or 0)
+        if not worst:
+            worst = note_analytics_read_repository.subject_vector_violation(
+                db.session, scope=candidate_scope, learner_user_id=user_id
+            )
+        violation = note_analytics_read_repository.violation_error(worst)
+        if violation is not None:
             db.session.rollback()
-            raise BrowseApiError(
-                str(exc),
-                status=409,
-                code=str(exc.code),
-            ) from exc
+            raise BrowseApiError(violation[1], status=409, code=violation[0])
     normalized_progress_queue = normalized_queue_expr(progress_alias)
     query = query.filter(active_progress_expr(progress_alias))
     if status == NEW_QUEUE:
@@ -890,6 +827,37 @@ def list_browse_cards(
             )
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    if is_note_mode:
+        options_by_deck_id: dict[int | None, Any] = {}
+        deck_options_by_card_id: dict[str, Any] = {}
+        for card_obj in pagination.items:
+            note_obj = card_obj.note
+            # Overlay source Cards use the learner's mapped local deck options.
+            effective_deck_id = int(note_obj.deck_id) if note_obj.deck_id is not None else None
+            if effective_deck_id is not None and note_obj.user_id != user_id:
+                effective_deck_id = source_to_local_deck_id.get(effective_deck_id, effective_deck_id)
+            if effective_deck_id not in options_by_deck_id:
+                options_by_deck_id[effective_deck_id] = resolve_deck_options(
+                    user_id=user_id,
+                    deck_id=effective_deck_id,
+                )
+            deck_options_by_card_id[str(card_obj.id)] = options_by_deck_id[effective_deck_id]
+        try:
+            authority_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=tuple(pagination.items),
+                now_utc=now,
+                timezone_name=timezone_name,
+                deck_options_by_card_id=deck_options_by_card_id,
+            )
+        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+            db.session.rollback()
+            raise BrowseApiError(
+                str(exc),
+                status=409,
+                code=str(exc.code),
+            ) from exc
     progress_map = {} if authority_reads is not None else load_card_progress_map(
         user_id=user_id,
         card_ids=[card_obj.id for card_obj in pagination.items],

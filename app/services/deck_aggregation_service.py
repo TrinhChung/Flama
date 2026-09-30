@@ -138,6 +138,7 @@ def aggregate_deck_study_counts(
     is_note_mode: bool,
     admin_mode: bool = False,
     count_by_note: bool = False,
+    owned_by_any_user: bool = False,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
     """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
@@ -145,6 +146,8 @@ def aggregate_deck_study_counts(
     a review with only ``due_at`` is due today exactly when it is before it.
     ``count_by_note`` (NOTE learners, Phase 6 D6-04) counts each Note once:
     all its Cards share one state, so a Note with two Templates is one due item.
+    ``owned_by_any_user`` (admin-wide Browse) counts every Note in the visible
+    decks with the learner's own state, not only the learner's Notes.
     Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
     """
 
@@ -159,11 +162,10 @@ def aggregate_deck_study_counts(
         )
         .select_from(Card)
         .join(Note, Card.note_id == Note.id)
-        .where(
-            Note.user_id == learner_user_id,
-            Note.deck_id.in_(visible_deck_ids),
-        )
+        .where(Note.deck_id.in_(visible_deck_ids))
     )
+    if not owned_by_any_user:
+        owned = owned.where(Note.user_id == learner_user_id)
     # Admins see every deck but, as before, never count logical-overlay sources.
     overlay, overlay_types = (
         (None, [])
