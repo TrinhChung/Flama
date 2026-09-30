@@ -6,7 +6,6 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from flask import current_app
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -511,40 +510,32 @@ def enroll_new_learner_note_authority(
     session: Session,
     *,
     user: User,
-) -> StudyAuthorityEnrollmentResult | None:
+) -> StudyAuthorityEnrollmentResult:
     """Stage NOTE for a just-created account inside the caller's transaction.
 
-    A new account owns no Notes, progress or installs, so the full proof above
-    is trivial. Opt-in with the same policy as the enrollment CLI: wire v4 on,
-    async batches off. A refusal keeps the account LEGACY (enroll it later via
-    the CLI); no commit here.
+    Every new account starts in NOTE (Phase 9, D9-09): no environment flag
+    decides it, so a drifted ``STUDY_NEW_LEARNER_NOTE_ENABLED`` or
+    ``STUDY_WIRE_V4_ENABLED`` can no longer create LEGACY learners. Wire or
+    async misconfiguration affects every NOTE learner alike and is reported
+    at system level. A new account owns no Notes, progress or installs, so
+    the proof is trivial; if it is still refused, the error propagates and
+    the caller's signup fails instead of leaving a LEGACY account. No commit.
     """
 
-    config = current_app.config
-    if not (
-        config.get("STUDY_NEW_LEARNER_NOTE_ENABLED", False)
-        and config.get("STUDY_WIRE_V4_ENABLED", False)
-        and not config.get("STUDY_ASYNC_BATCH_ENABLED", False)
-    ):
-        return None
     session.flush()
-    savepoint = session.begin_nested()
     try:
-        result = stage_note_authority_enrollment(
+        return stage_note_authority_enrollment(
             session,
             learner_user_id=int(user.id),
             now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
         )
-        savepoint.commit()
     except (StudyAuthorityEnrollmentError, StudyAuthorityFenceError) as exc:
-        savepoint.rollback()
         logger.warning(
-            "New learner %s stays LEGACY: %s",
+            "Signup of %s refused: NOTE enrollment failed (%s)",
             user.id,
             getattr(exc, "code", "AUTHORITY_TRANSITION_FAILED"),
         )
-        return None
-    return result
+        raise
 
 
 def stage_legacy_authority_enrollment(

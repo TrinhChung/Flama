@@ -312,15 +312,17 @@ def register_cli_commands(app: Flask) -> None:
         )
         from app.services.study_authority_enrollment_service import (
             StudyAuthorityEnrollmentError,
-            stage_legacy_authority_enrollment,
             stage_note_authority_enrollment,
         )
 
-        transition = (
-            stage_note_authority_enrollment
-            if mode.upper() == "NOTE"
-            else stage_legacy_authority_enrollment
-        )
+        if mode.upper() == "LEGACY":
+            # Phase 9, D9-02: NOTE keeps new data and repairs come from backup;
+            # no learner goes back to LEGACY (runbook P9 §9).
+            raise click.ClickException(
+                "LEGACY_ENROLLMENT_RETIRED: learners no longer move back to LEGACY; "
+                "see docs/task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md §9."
+            )
+        transition = stage_note_authority_enrollment
         if apply and mode.upper() == "NOTE":
             if not bool(app.config.get("STUDY_WIRE_V4_ENABLED", False)):
                 raise click.ClickException(
