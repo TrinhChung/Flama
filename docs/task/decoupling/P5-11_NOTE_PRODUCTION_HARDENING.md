@@ -124,10 +124,10 @@ Chỉ đổi code. Deploy lại release trước theo workflow; không có migra
 
 ## 5. Việc còn lại
 
-1. **Deploy**: merge PR này đưa cả #171 lên production (hết 504 dashboard/overview). Sau deploy chạy lại vòng audit runbook §4.2.4.
+1. ~~**Deploy**~~: xong (#173 `6472e42`, rồi #176–#178), audit 18/18 PASS sau mỗi lần.
 2. ~~**P5-11c — materialize Note pristine theo lô**~~: xong, §3b'.
 3. **Snapshot cả phạm vi**: phiên vẫn chứa tới 5.000 thẻ (≈2 ms CPU/thẻ, JSON ≈2 KB/thẻ) và SPA mở lại mỗi 50 câu. Chỉ snapshot hàng đợi trong ngày là thay đổi hợp đồng wire, để sau.
-4. **Reader vẫn khóa** (Browse, `/api/study/next`, MCP): nay chỉ còn vài câu lệnh khóa theo lô; chuyển hẳn sang đọc không khóa như dashboard nếu đo thấy tranh chấp.
+4. ~~**Reader vẫn khóa**~~: Browse và MCP đọc theo tập hợp (§3b''). Còn `/api/study/next` (SPA không dùng) giữ bộ đọc từng thẻ có chủ đích; learner 20k Note mất ~15 s.
 5. **Frontend gửi commit hai lần** (LEGACY v3): sau commit `auto_finish` thành công, `flushOnExit` gửi lại cùng `commit_id` với `final_states` đã cập nhật → 409 `IDEMPOTENCY_KEY_REUSED`. Dữ liệu lần đầu đã lưu; với v4 (`final_states` rỗng) lần gửi lại là replay 200. Chỉ còn ảnh hưởng phiên LEGACY cũ trong IndexedDB.
-6. Retention `study_session_cards`/`study_session_authority_pins` thuộc Phase 7.
-7. **Cổng deploy CI** chỉ xét diff của lần push; một push runtime có CI fail rồi push sau chỉ sửa test sẽ không bao giờ deploy (#171). Nên so với release deploy thành công gần nhất.
+6. ~~Retention membership phiên~~: Phase 7, đã chạy 30/09.
+7. ~~**Cổng deploy CI**~~: xong trong #173 (so với release deploy thành công gần nhất).
