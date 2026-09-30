@@ -106,20 +106,52 @@ Bằng chứng: khi dựng phiên, `build_effective_study_card` luôn dùng `tem
 | **3. Minh bạch clone** | Nhãn nguồn gốc NoteType (cài từ chợ / dùng cho deck đã cài / deck đã phát hành đang dùng); nhãn "chỉ áp dụng cho thẻ tự thêm"; ẩn "Chia sẻ lên Kho" cho bản sao; hiện "Mẫu thẻ của tác giả" ở phiên/Browse; cảnh báo tác giả trước khi hotfix; cờ `has_released_dependents` | Frontend + API nhỏ (đọc) | N1–N3, D1, D3, A1 (cảnh báo), A2 (thông điệp), A3, S5 (câu chữ) | 3–4 ngày |
 | **4. Nhất quán** | U2 của báo cáo trước (màu, thuật ngữ, hướng dẫn phím tắt, Việt hóa) + C0/C1 của [báo cáo tùy chỉnh nút và thuật toán](./STUDY_BUTTONS_AND_ALGORITHM_CUSTOMIZATION_2026-09-30.md) | Frontend | UX-D1..D6 | 2–3 ngày |
 | **4b. Cài đặt ôn tập theo deck** | C2 (preset + cài đặt người dùng, chỉ tham số đang được đọc), sau đó C3 (giới hạn thẻ mới/ngày) và C4 (chế độ 2 nút) | Backend ghi + frontend | xem [báo cáo tùy chỉnh](./STUDY_BUTTONS_AND_ALGORITHM_CUSTOMIZATION_2026-09-30.md) §4 | 4–6 ngày (C2) |
-| **5. Template trong overlay (thiết kế + backend)** | Theo D-T1/D-T2: override Template theo install và/hoặc release Template (6B #137); UI cho người cài chọn hoặc sửa Template cho thẻ gốc; mở khóa tác giả thêm Template | ADR + schema + UI | D1, D2, D4, D5, A1, A2 | lập kế hoạch riêng |
+| **5. Module hóa Template (thiết kế + backend)** | Thực hiện các quyết định đã chốt ở [điều tra Template/NoteType §14](../../architecture/template-notetype-decoupling-investigation.md#14-post-investigation-decision-record-and-remaining-questions): 6B version Template cho deck chia sẻ (#137), bản cài ghim phiên bản, fork install-local khi người cài sửa, Template độc lập có Slot và binding. Xem §5b | ADR + schema + UI | D1, D2, D4, D5, A1, A2 | lập kế hoạch riêng (§5b) |
 | **6. Sau cùng: P8** | U3, P8-00, năng lực P8 đầu tiên | | theo báo cáo trước §4–§5 | |
 
 Đợt 2 và 3 chủ yếu là frontend trên API đã có, nên cho giá trị nhanh mà không đụng P9. Đợt 5 chạm vào clone overlay và release, là vùng rủi ro cao theo `AGENTS.md`: phải đọc [`CLONE_CUTOVER_REPORT.md`](../../plans/completed/CLONE_CUTOVER_REPORT.md) và test cả trường hợp sở hữu trực tiếp lẫn clone đã cài; tuyệt đối không quay lại mô hình copy toàn bộ.
 
 ## 5. Quyết định cần chủ sản phẩm
 
-| ID | Câu hỏi | Khuyến nghị |
+> **Đính chính (2026-09-30):** D-T1 và D-T2 **đã được chủ sản phẩm chốt** trong [điều tra Template/NoteType §14](../../architecture/template-notetype-decoupling-investigation.md#14-post-investigation-decision-record-and-remaining-questions) (#10, #11, #12). Hai mục đó không còn là câu hỏi mở; việc còn lại là triển khai (§5b). Hành vi hotfix #138 hiện tại **trái** với quyết định #10.
+
+| ID | Câu hỏi | Trạng thái / khuyến nghị |
 |---|---|---|
-| D-T1 | Người cài deck có được dùng Template riêng cho **thẻ gốc** không? | Có, bằng **override trình bày theo install**: thẻ gốc của install có thể render bằng một Template trong bản sao NoteType của người cài. Không copy Note hay Card, giữ overlay-only. Cần ADR vì liên quan composition, snapshot phiên và Connect `source_ord` |
-| D-T2 | Hotfix Template của tác giả có tiếp tục áp dụng tức thì cho mọi người cài không? | Trước mắt giữ, nhưng bắt buộc cảnh báo và ghi chú (đợt 3). Về lâu dài đưa vào release (6B) để người cài nhận cập nhật như nội dung |
-| D-T3 | Thẻ gốc và Note tự thêm trong deck đã cài có học chung một phiên được không? | Cho phép gộp khi hai Template tương đương (cùng nguồn, chưa bị sửa); nếu không, giữ tách nhưng giải thích rõ. Cần sửa chính sách P3-05 |
+| D-T1 | Người cài deck có được dùng Template riêng cho **thẻ gốc** không? | **Đã chốt (#11):** có. Khi người cài sửa giao diện, hệ thống fork một bản install-local, không ảnh hưởng tác giả hay người khác. Chưa triển khai; cần ADR vì liên quan composition, snapshot phiên và Connect `source_ord`; giữ overlay-only (không copy Note/Card) |
+| D-T2 | Hotfix Template của tác giả có tiếp tục áp dụng tức thì cho mọi người cài không? | **Đã chốt (#10):** bản cài tham chiếu phiên bản **được ghim**; sửa thì fork (copy-on-write). Hotfix tại chỗ #138 là giải pháp tạm, trái quyết định này. Trước khi có 6B: bắt buộc cảnh báo và ghi chú (đợt 3) |
+| D-T3 | Thẻ gốc và Note tự thêm trong deck đã cài có học chung một phiên được không? | #12 đã cho phép **dùng chung một Template** cho thẻ gốc và thẻ tự thêm. Việc gộp thành một lựa chọn trong phiên vẫn cần quyết định riêng (sửa chính sách P3-05) |
 | D-T4 | Template mới bắt đầu từ đâu? | Sao chép Template đang chọn |
 | D-T5 | Có cho xóa Template trong UI không? | Có, với dialog nêu số Card bị gỡ và khẳng định tiến độ Note được giữ; backend đã chặn Template mặc định/cuối cùng |
+
+## 5b. "Module hóa Template toàn phần" nằm ở đâu trong kế hoạch
+
+Nguồn gốc:
+- đề xuất [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](../../plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) (`FLAMA-ARCH-2026-TPL-01`), gồm 3 tầng: Template độc lập có Slot, Binding ánh xạ Field → Slot, và Template Marketplace;
+- 21 quyết định sản phẩm ở [điều tra Template/NoteType §14](../../architecture/template-notetype-decoupling-investigation.md#14-post-investigation-decision-record-and-remaining-questions).
+
+[Canonical plan](../../architecture/study-interaction-trigger-algorithm-plan.md) hợp nhất ý tưởng này vào §5 (Template role), §9 (StudyMode) và §16.3. **Không có phase riêng tên "module hóa"**: nó bị chia nhỏ theo phase như bảng dưới.
+
+| Thành phần | Phase phụ trách | Trạng thái (2026-09-30) | Bằng chứng |
+|---|---|---|---|
+| Tiến độ không còn thuộc Card/Template (sửa, thay, xóa Template giữ tiến độ) | Phase 5, Phase 6 | ✅ Xong trên production | [README](./README.md) Phase 5–6 |
+| Composition/StudyMode, chọn Template trước phiên | Phase 3 | ✅ Xong (mức tương thích) | `app/services/study_composition_service.py` |
+| Danh tính "application" (Template áp dụng vào NoteType, `source_ord`), nền cho áp dụng lặp | Phase 6 (D6-03) | ✅ Có bảng `study_applications`; ❌ UI áp dụng lặp lùi sang Phase 8 (D6-09) | `models/study_application.py` |
+| Template **độc lập** (không thuộc NoteType), khai báo Slot; binding Field → Slot; một Template dùng cho nhiều NoteType (quyết định #3–#7) | Canonical Phase 3 có liệt kê, nhưng ghi rõ "Physical reusable definition/application tables remain deferred"; P6 đẩy "binding kind mới" sang **Phase 8** | ❌ Chưa làm: `templates.note_type_id` vẫn bắt buộc, binding duy nhất là `legacy-fielddef-direct` | `study_session_service.py:767`; [P6 plan](./P6_EXECUTION_PLAN_2026-09-29.md) dòng "Không thuộc Phase 6" |
+| Version Template cho deck chia sẻ; cho tác giả thêm/xóa Template khi đã phát hành | **Track 6B** (#137, D6-08) | ❌ Chưa bắt đầu; tạm có hotfix #138 | `flashcard_content_service.py:1514-1554` |
+| Bản cài ghim phiên bản; fork install-local khi người cài sửa (quyết định #1, #10, #11, #12) | **Chưa gán phase/task nào** | ❌ Chưa làm; phụ thuộc 6B | §2.4 báo cáo này |
+| Template Marketplace (bán Template riêng, soft delete; quyết định #1, #2, #21) | Canonical §16.3 Priority 1 #13 ("before broad reuse/distribution"); **chưa gán phase** | ❌ Chưa làm | — |
+| Đổi tên Field không làm gãy Template; hiện phụ thuộc và hỏi cập nhật alias; Field bị xóa thì Slot trống + cảnh báo (quyết định #19, #20) | Binding ổn định: cùng lõi Slot (Phase 8); dọn cơ chế theo tên: **Phase 9** | ❌ Chưa làm: đổi tên Field chỉ đổi khóa JSON của Note (`flashcard_content_service.py:1622-1662`); Template còn `{{TênCũ}}` render rỗng, **không cảnh báo** | `flashcard_content_service.py:618-632` |
+| Nhập Anki: chuẩn hóa token thành input tái dùng (quyết định #13, #14) | Một phần ở Phase 6 (`source_ord` gắn application); phần chuẩn hóa token đi cùng lõi Slot | ⚠️ Một phần | `models/study_application.py:11-12` |
+| Template JS chỉ nhận input khai báo (quyết định #16, #17: tạm cho đọc toàn bộ) | Phase 9 (retire legacy full-context ABI) | ⏸ Cố ý giữ tương thích | canonical §5.1 |
+
+**Nhận xét cho thứ tự ưu tiên hiện hành (UI P8 xếp cuối):** phần lõi của module hóa (Template độc lập + Slot/binding) đang nằm trong Phase 8, còn fork cho người cài và Template Marketplace chưa có phase nào. Nếu muốn đáp ứng câu hỏi "clone deck tự sửa Template không ảnh hưởng người khác" (§1, câu 4b) mà không phải chờ tương tác mới của P8, nên tách một track riêng, tạm gọi **"Template Modularization"**, theo thứ tự:
+
+1. **6B** — version Template cho deck chia sẻ; bản cài ghim phiên bản.
+2. **Fork install-local** cho thẻ gốc, theo quyết định #11. Làm được trên `study_applications` hiện có mà không cần Slot.
+3. **Template độc lập + Slot/binding + UI ánh xạ Field** (quyết định #3–#7, #19, #20).
+4. **Template Marketplace.**
+
+Bước 1–2 giải quyết D1, D2, D5, A1, A2. Bước 3 là nền để P8 thêm tương tác mới. Mỗi bước cần plan riêng theo mẫu P6 (quyết định, gate, work package, probe MySQL) và phải tuân guardrail overlay-only.
 
 ## 6. Kiểm chứng khi triển khai
 
