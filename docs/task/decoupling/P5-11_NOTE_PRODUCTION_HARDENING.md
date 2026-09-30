@@ -83,6 +83,26 @@ Production 30/09 (SELECT-only): 10 learner mỗi người có 460–12.014 Note 
 
 Cùng PR: công cụ MCP `get_due_card_counts`, `get_study_queue`, `get_deck_stats` nạp Note lười và gọi `resolve_deck_options` cho từng Card (~3 SQL/Card). Nay nạp Note trong cùng truy vấn (`contains_eager`) và resolve tùy chọn một lần mỗi deck, như P5-11b đã làm cho mở phiên. Learner 3.000 Note (MySQL local): `get_due_card_counts` 11,8 s · 9.040 SQL → **2,2 s · 50 SQL**; `get_study_queue` 23,3 s · 18.090 SQL → **4,4 s · 110 SQL** (`bench_p5_session_open_mysql.py` đo cả hai).
 
+## 3b''. P5-11e — reader đếm/chọn hàng đợi theo tập hợp
+
+Sau R1 mọi reader NOTE đọc authority **có khóa và xác minh từng Card** (≈0,7 ms CPU/Card). Learner 20.000 Note (MySQL local): Browse tree 13,8 s, Browse cards 15,1 s, MCP `get_due_card_counts` 13,5 s, `get_study_queue` 26,7 s; learner lớn nhất production có ~39k thẻ. Dashboard/overview đã đọc tập hợp không khóa từ #171.
+
+- **Browse tree** (NOTE): đếm bằng `aggregate_deck_study_counts` như dashboard (cùng ngữ nghĩa `counter_bucket_for_progress_values`; thêm `owned_by_any_user` cho Browse admin).
+- **Browse cards** (NOTE): kiểm toàn vẹn mọi ứng viên bằng luật tập hợp của dashboard (`note_card_rows` + `subject_vector_violation`, cùng mã lỗi); đọc authority đầy đủ, có khóa chỉ cho thẻ của trang.
+- **MCP** `get_due_card_counts`/`get_study_queue`: `load_study_authority_availability_snapshot` đọc đúng các giá trị availability mà bộ đọc có khóa trả về (dòng canonical cho Note đã học, suy từ Card cho Note chưa học) rồi gọi chính `summarize_study_authority_queue` → cùng số đếm, cùng thứ tự; thẻ trả về vẫn được đọc đầy đủ. `tests/test_study_availability_snapshot.py` chứng minh availability và tóm tắt hàng đợi bằng đúng bộ đọc có khóa (SQLite + MySQL trong probe overlay).
+- **Giữ nguyên** `/api/study/next`: endpoint quyết định thẻ sắp trả lời, có test yêu cầu từ chối khi availability bị sửa lệch mà hash không đổi — chỉ bộ đọc từng thẻ phát hiện được. SPA không dùng endpoint này (0 lượt trong 15 ngày log).
+
+Đánh đổi (giống dashboard): kiểm tra tập hợp phát hiện mọi lệch liên kết (thiếu contributor/availability/projection, sai thế hệ/revision/hash) nhưng không tính lại nội dung projection từng thẻ; phần đó do `study-authority-read-audit` đảm nhận.
+
+| Learner 20.000 Note (MySQL 8.0.40 local, `bench_p5_session_open_mysql.py --notes 20000`) | Trước | Sau |
+|---|---|---|
+| Browse tree | 13,8 s · 192 SQL | **1,4 s · 17 SQL** |
+| Browse cards (trang 50) | 15,1 s · 251 SQL | **1,6 s · 55 SQL** |
+| MCP `get_due_card_counts` | 13,5 s · 186 SQL | **4,3 s · 12 SQL** |
+| MCP `get_study_queue` | 26,7 s · 382 SQL | **8,2 s · 55 SQL** |
+| Dashboard / overview (đối chứng, không đổi) | 1,2 / 1,1 s | 1,1 / 0,9 s |
+| `/api/study/next` (giữ nguyên) | 14,1 s | 14–18 s |
+
 ## 3c. P5-11d — tạo Note song song (MCP agent) không còn deadlock
 
 Production 29/09 13:33 (release cũ, sau R1): 17 lần `create_note`/`batch_create_notes` qua MCP trả 500, 16 do deadlock 1213 và 1 do lock wait timeout, khi agent tạo Note song song. Tái hiện trên MySQL 8.0.40 với code `master` sau P5-11: 8 lần tạo song song cho một learner → 3 lỗi 1213.

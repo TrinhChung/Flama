@@ -23,6 +23,7 @@ from app.services.study_action_runtime import (
     execute_review_action,
 )
 from app.services.study_authority_read_service import (
+    load_study_authority_availability_snapshot,
     load_study_authority_card_read,
     load_study_authority_card_reads,
     summarize_study_authority_queue,
@@ -41,6 +42,20 @@ from models.user import User
 
 # 5. Study & Card Review Operations
 # ---------------------------------------------------------------------------
+
+
+def _card_scope(cards_query):
+    """The Cards of ``cards_query`` as a (deck_id, card_id, note_id) subquery."""
+
+    return (
+        cards_query.with_entities(
+            Note.deck_id.label("deck_id"),
+            Card.id.label("card_id"),
+            Card.note_id.label("note_id"),
+        )
+        .order_by(None)
+        .subquery("mcp_queue_scope")
+    )
 
 
 def _deck_options_by_card_id(*, user_id: int, cards) -> dict[str, Any]:
@@ -101,15 +116,14 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
     if authority_route.mode_code == "NOTE":
         # The Note is already joined; load it with the Card instead of per Card.
         cards = cards_query.options(contains_eager(Card.note)).order_by(Card.id.asc()).all()
-        options_by_card_id = _deck_options_by_card_id(user_id=user_id, cards=cards)
         try:
-            authority_reads = load_study_authority_card_reads(
+            # Counts need availability only: read it set-wise (P5-11e).
+            authority_reads = load_study_authority_availability_snapshot(
                 db.session,
                 learner_user_id=user_id,
                 cards=tuple(cards),
+                scope=_card_scope(cards_query),
                 now_utc=now,
-                timezone_name=timezone_name,
-                deck_options_by_card_id=options_by_card_id,
             )
             summary = summarize_study_authority_queue(
                 cards=tuple(cards),
@@ -177,17 +191,44 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
 
     # Fetch candidate cards with their (joined) Notes in one query.
     candidate_cards = cards_query.options(contains_eager(Card.note)).all()
-    deck_options_by_card_id = _deck_options_by_card_id(
-        user_id=user_id,
-        cards=[card for card in candidate_cards if card.note is not None],
-    )
+    studyable = tuple(card for card in candidate_cards if card.note is not None)
     try:
+        if counts["authority_mode"] == "NOTE":
+            # Order the whole queue set-wise, then read the returned Cards fully.
+            ordering_reads = load_study_authority_availability_snapshot(
+                db.session,
+                learner_user_id=user_id,
+                cards=studyable,
+                scope=_card_scope(cards_query),
+                now_utc=now,
+            )
+        else:
+            ordering_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=studyable,
+                now_utc=now,
+                timezone_name=timezone_name,
+                deck_options_by_card_id=_deck_options_by_card_id(user_id=user_id, cards=studyable),
+            )
+        queue_summary = summarize_study_authority_queue(
+            cards=studyable,
+            reads_by_card_id=ordering_reads,
+            learner_user_id=user_id,
+            now_utc=now,
+            timezone_name=timezone_name,
+        )
+        candidate_by_id = {str(card.id): card for card in candidate_cards}
+        returned = [
+            candidate_by_id[card_id]
+            for card_id in queue_summary.due_card_ids
+            if candidate_by_id[card_id].note.note_type is not None
+        ][:limit]
+        deck_options_by_card_id = _deck_options_by_card_id(user_id=user_id, cards=returned)
         authority_reads = load_study_authority_card_reads(
             db.session,
             learner_user_id=user_id,
-            cards=tuple(
-                card for card in candidate_cards if card.note is not None
-            ),
+            cards=tuple(returned),
             now_utc=now,
             timezone_name=timezone_name,
             deck_options_by_card_id=deck_options_by_card_id,
@@ -203,23 +244,10 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
             status=409,
             code=str(code),
         ) from exc
-    queue_summary = summarize_study_authority_queue(
-        cards=tuple(card for card in candidate_cards if card.note is not None),
-        reads_by_card_id=authority_reads,
-        learner_user_id=user_id,
-        now_utc=now,
-        timezone_name=timezone_name,
-    )
-    candidate_by_id = {str(card.id): card for card in candidate_cards}
     actionable_cards: list[dict[str, Any]] = []
 
-    for card_id in queue_summary.due_card_ids:
-        if len(actionable_cards) >= limit:
-            break
-        card = candidate_by_id[card_id]
+    for card in returned:
         note = card.note
-        if not note or not note.note_type:
-            continue
 
         deck_options = deck_options_by_card_id[str(card.id)]
         authority_read = authority_reads[str(card.id)]
