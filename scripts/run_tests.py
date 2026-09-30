@@ -170,6 +170,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_authority_receipt.py",
             "tests/test_study_authority_projection_comparator.py",
             "tests/test_study_authority_projection_encoder.py",
+            "tests/test_study_note_card_projection.py",
             "tests/test_study_authority_cas.py",
             "tests/test_study_authority_sibling_repository.py",
             "tests/test_study_authority_write_service.py",
