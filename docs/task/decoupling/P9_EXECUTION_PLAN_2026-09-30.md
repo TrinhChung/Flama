@@ -2,7 +2,7 @@
 
 > Lập 2026-09-30 theo yêu cầu chuẩn bị kế hoạch chi tiết, ưu tiên giảm tải sớm. **Trạng thái: kế hoạch; chưa triển khai code, migration hoặc thay đổi production.** Nguồn: [canonical Phase 9](../../architecture/study-interaction-trigger-algorithm-plan.md#phase-9--contract-old-storage-and-compatibility-code), [điều tra code hiện tại](../../architecture/phase-9-contraction-investigation-2026-09-30.md), [readiness P8/P9](./P8_P9_READINESS_2026-09-30.md).
 >
-> **Bổ sung sau review (2026-09-30):** thêm phát hiện [F9-06..F9-10](../../architecture/phase-9-contraction-investigation-2026-09-30.md#f9-06--fence-connectanki-lưu-revision-cardprogress) — fence Connect/Anki lưu revision CardProgress (nguy cơ ghi đè im lặng), đường vào LEGACY còn mở, audit deploy phụ thuộc projection, phân loại writer LEGACY-only, startup tái tạo bảng. Kéo theo: quyết định D9-08/D9-09, tách P9-02a/P9-02b, thêm P9-05b/P9-05c, gate và ma trận kiểm chứng tương ứng.
+> **Bổ sung sau review (2026-09-30):** thêm phát hiện [F9-06..F9-10](../../architecture/phase-9-contraction-investigation-2026-09-30.md#f9-06--fence-connectanki-lưu-revision-cardprogress) — fence Connect/Anki lưu revision CardProgress (nguy cơ ghi đè im lặng), đường vào LEGACY còn mở, audit deploy phụ thuộc projection, phân loại writer LEGACY-only, startup tái tạo bảng. Kéo theo: quyết định D9-08/D9-09, tách P9-02a/P9-02b, thêm P9-05b/P9-05c, gate và ma trận kiểm chứng tương ứng. Những gì cần dữ liệu production để chốt nằm ở [§11 bàn giao](#11-bàn-giao-cho-phiên-thực-thi-có-dữ-liệu-production).
 
 ## 1. Hướng thực hiện
 
@@ -83,8 +83,8 @@ Chỉ đạo mới của chủ sản phẩm đã chốt thứ tự, việc bỏ 
 | D9-05 | Retention định kỳ, có row/time budget và một runner; giữ cửa sổ 30 ngày | Chốt lịch vận hành trước bật timer P9-01; đề xuất daily ngoài giờ cao điểm theo số liệu traffic |
 | D9-06 | Snapshot giới hạn/refill là thay đổi contract riêng | Chốt offline coverage/learn-ahead trước P9-07; không tự giảm `MAX_SESSION_CARDS` |
 | D9-07 | Mỗi destructive migration có manifest cụ thể, backup/restore proof và reconciliation | Chuẩn bị đầy đủ trước apply; chỉ đạo cắt giảm không cho phép đè dữ liệu NOTE mới bằng backup cũ |
-| D9-08 | **Mặc định cắt một lần cho toàn hệ thống trong write freeze ngắn**, không xây cơ chế cohort/storage profile theo learner. Lý do: 18 learner; P5 plan ghi 29/09 production chưa có người dùng thật và đã bỏ canary vì vậy. Cờ/epoch cutover lưu trong DB, đọc dưới fence enrollment/epoch hiện có, không thêm authority mode mới nếu không cần | Xác minh lại quy mô và người dùng thật ở P9-00. Chỉ quay lại cohort nếu số liệu cho thấy freeze không chấp nhận được; khi đó ghi rõ lý do và thời hạn duy trì hai đường |
-| D9-09 | Tài khoản mới vào NOTE **vô điều kiện**: không enroll được thì signup báo lỗi, không rơi về LEGACY; bỏ ràng buộc với `STUDY_ASYNC_BATCH_ENABLED`/cờ env. CLI `--mode LEGACY` và runbook rollback P5 bị gỡ/khóa | Phần signup làm sớm (P9-05c), không phụ thuộc P9-03. Gỡ CLI LEGACY chậm nhất tại P9-06; nhất quán với D9-02 (không quay LEGACY) |
+| D9-08 | **Đề xuất, chờ xác nhận bằng dữ liệu P9-00 (§11):** mặc định cắt một lần cho toàn hệ thống trong write freeze ngắn, không xây cơ chế cohort/storage profile theo learner. Lý do: 18 learner; P5 plan ghi 29/09 production chưa có người dùng thật và đã bỏ canary vì vậy. Cờ/epoch cutover lưu trong DB, đọc dưới fence enrollment/epoch hiện có, không thêm authority mode mới nếu không cần | Xác minh lại quy mô và người dùng thật ở P9-00. Chỉ quay lại cohort nếu số liệu cho thấy freeze không chấp nhận được; khi đó ghi rõ lý do và thời hạn duy trì hai đường |
+| D9-09 | **Đề xuất, hệ quả trực tiếp của D9-02; xác nhận ở §11:** tài khoản mới vào NOTE **vô điều kiện**: không enroll được thì signup báo lỗi, không rơi về LEGACY; bỏ ràng buộc với `STUDY_ASYNC_BATCH_ENABLED`/cờ env. CLI `--mode LEGACY` và runbook rollback P5 bị gỡ/khóa | Phần signup làm sớm (P9-05c), không phụ thuộc P9-03. Gỡ CLI LEGACY chậm nhất tại P9-06; nhất quán với D9-02 (không quay LEGACY) |
 
 ### Hai phương án tách projection
 
@@ -405,5 +405,27 @@ Mỗi P9-A/B/C có report riêng: release/schema, quyết định áp dụng, le
 - **P9-A đạt:** G9-FULL + G9-WRITE có bằng chứng toàn hệ thống; NOTE chứa đủ dữ liệu, chạy được khi không có projection, mọi luồng ghi mới (gồm Connect/Anki) đã được kiểm; không còn đường vào LEGACY; audit canonical thay thế sẵn sàng.
 - **P9-B đạt:** backup/restore + bổ sung dữ liệu đã thử; toàn hệ thống ngừng projection, writes mới đầy đủ vào NOTE; 0 learner LEGACY; bảng cũ có thể vẫn giữ.
 - **P9-C đạt:** từng nhóm cắt giảm có hiệu quả tài nguyên đo được, archive/schema contract được xác minh; recovery giữ cả dữ liệu trước và sau cutover.
+
+## 11. Bàn giao cho phiên thực thi có dữ liệu production
+
+Bản kế hoạch này được lập và review **chỉ từ source và tài liệu trong repo**, không có quyền đọc production, `/etc/flama/flama.env` hay hạ tầng backup. Phiên thực thi (local, có dữ liệu đầy đủ) phải xác minh các điểm dưới đây trước khi chốt quyết định hoặc bắt đầu code tương ứng. Kết quả nào khác giả định thì sửa kế hoạch trước, không âm thầm làm khác.
+
+| # | Cần xác minh (SELECT-only / đọc cấu hình) | Quyết định/việc phụ thuộc | Nếu khác giả định |
+|---|---|---|---|
+| H-01 | Số learner, số tài khoản mới gần đây, có người dùng thật ngoài chủ sản phẩm hay chưa; traffic theo giờ | D9-08 (cắt toàn hệ thống trong freeze) | Có người dùng thật hoặc freeze không chấp nhận được → ghi lý do, dùng nhánh cohort ở P9-06 và giới hạn thời gian hai đường |
+| H-02 | Thời gian `mysqldump --single-transaction` và restore cách ly với dữ liệu hiện tại; dung lượng DB | Độ dài freeze P9-06 §2–3 | Quá dài → dump trong freeze, restore thử sau khi mở ghi (đã cho phép ở P9-06 §3) hoặc snapshot nhà cung cấp |
+| H-03 | `log_bin`, `binlog_format`, `binlog_expire_logs_seconds`, nơi lưu dump; có snapshot nhà cung cấp không | RPO sau cutover (P9-06 §6, §9) | Không có binlog → ghi RPO thực tế theo chu kỳ backup; không báo RPO=0 |
+| H-04 | Giá trị thật của `STUDY_WIRE_V4_ENABLED`, `STUDY_NEW_LEARNER_NOTE_ENABLED`, `STUDY_ASYNC_BATCH_ENABLED`, `STUDY_PROGRESS_SHADOW_*`, cờ startup maintenance; key nào do `deploy/sync_managed_env.py`/GitHub variables quản lý | D9-09, P9-05c, F9-07, F9-10 | Có learner LEGACY hoặc unenrolled → xử lý trước mọi bước khác |
+| H-05 | Số dòng `connect_source_card_refs` có `applied_local_revision` khác NULL, phân bố theo learner; tần suất sync Anki/Connect gần đây | ADR P9-03 §7, P9-05b (migrate hay đánh dấu “cần xác nhận lại”) | Không có ref nào → P9-05b chỉ còn đổi code + test, bỏ phần xử lý giá trị cũ |
+| H-06 | Output hiện tại của `study-phase9-readiness`, `study-authority-read-audit` toàn bộ learner, `study-architecture-audit` | Baseline cho P9-02a/P9-04 §4 | Audit không PASS → sửa trước, không bắt đầu P9-03 |
+| H-07 | Phiên v2/v3 còn `open`, batch `enqueued`, lease còn hạn | Drain P9-06, P9-08 | Còn work cũ → drain theo contract trước freeze |
+| H-08 | Baseline P9-00 trên release đang chạy (SQL/answer, rows/answer, p95, lock waits, CPU, rows/ngày) | Ngưỡng §8 | Chốt ngưỡng theo số đo, không theo mục tiêu đề xuất |
+
+Việc code còn mở, **chưa làm trong lần lập kế hoạch này**:
+
+- Test hồi quy cho thay đổi trong `commit_study_session` (commit `8a2a3da`, dời kiểm authority mode xuống sau replay/committed/expired): lease v3 đã commit trước khi learner chuyển NOTE, client mất ACK, gửi lại cùng `commit_id` → nhận receipt cũ, không `WIRE_CONTRACT_MISMATCH`; lease v3 còn mở của learner NOTE vẫn bị từ chối. Test backend liên quan hiện có (session API, readiness, retention, authority pin) chạy pass sau thay đổi.
+- Cập nhật gate `legacy_projection_writes` trong `study_phase9_readiness_service.py` theo D9-02 (P9-02a).
+- P9-05c phần signup (độc lập, nhỏ, làm được trước P9-03).
+- Toàn bộ P9-00..P9-10 theo thứ tự §6.
 
 Việc lập tài liệu này chỉ kiểm tra source, commands/paths và liên kết. Test, benchmark, production readiness và rollout trong kế hoạch vẫn là công việc triển khai, không phải kết quả đã thực hiện.
