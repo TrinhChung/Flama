@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import func, select
 
 from app import create_app
+from app.services.study_architecture_audit_service import build_study_architecture_audit
 from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
 from app.services.study_composition_service import make_compatibility_composition_id
 from app.services.study_session_retention_service import run_session_retention
@@ -113,9 +114,23 @@ class StudySessionRetentionTests(unittest.TestCase):
             row.expires_at = row.expires_at - timedelta(days=days)
             db.session.commit()
 
+    @classmethod
+    def _without_signed_tokens(cls, value):
+        # Deck move tokens (and their MID aliases) are signed with the current
+        # second; they are not learner data and differ between two requests.
+        if isinstance(value, dict):
+            return {
+                key: cls._without_signed_tokens(item)
+                for key, item in value.items()
+                if key not in {"move_token", "parent_move_token", "move_alias", "parent_move_alias"}
+            }
+        if isinstance(value, list):
+            return [cls._without_signed_tokens(item) for item in value]
+        return value
+
     def _learner_view(self):
         stats = self.client.get("/api/statistics/overview?year=2026&timezone=UTC").get_json()
-        dashboard = self.client.get("/api/dashboard").get_json()
+        dashboard = self._without_signed_tokens(self.client.get("/api/dashboard").get_json())
         with self.app.app_context():
             events = sorted(
                 (row.id, row.card_id, row.note_id, row.rating, row.study_session_id)
@@ -146,6 +161,9 @@ class StudySessionRetentionTests(unittest.TestCase):
         with self.app.app_context():
             pins_before = StudySessionAuthorityPin.query.count()
         before = self._learner_view()
+        late_payload = self._commit_payload(stale_open, answers=1)
+        late_before = self.client.post(f"/api/study/sessions/{stale_open['session_id']}/commit", json=late_payload)
+        stale_status_before = self.client.get(f"/api/study/sessions/{stale_open['session_id']}").get_json()["status"]
 
         with self.app.app_context():
             dry = run_session_retention(apply=False)
@@ -174,6 +192,25 @@ class StudySessionRetentionTests(unittest.TestCase):
         status = self.client.get(f"/api/study/sessions/{old['session_id']}")
         self.assertEqual(status.status_code, 200, status.get_json())
         self.assertEqual(status.get_json()["status"], "committed")
+
+        # A late commit of the lease retention marked expired is answered as
+        # before retention ran (410 SESSION_EXPIRED), and its status is unchanged.
+        late_after = self.client.post(f"/api/study/sessions/{stale_open['session_id']}/commit", json=late_payload)
+        self.assertEqual(late_before.status_code, 410, late_before.get_json())
+        self.assertEqual(late_before.get_json()["error"], "SESSION_EXPIRED")
+        self.assertEqual((late_after.status_code, late_after.get_json()["error"]),
+                         (late_before.status_code, late_before.get_json()["error"]))
+        self.assertEqual(stale_status_before, "expired")
+        self.assertEqual(
+            self.client.get(f"/api/study/sessions/{stale_open['session_id']}").get_json()["status"], "expired"
+        )
+
+        # The architecture audit knows the status; it is not an unknown lifecycle.
+        # (On MySQL the audit only runs under a SELECT-only principal.)
+        with self.app.app_context():
+            if db.engine.dialect.name == "sqlite":
+                gates = build_study_architecture_audit()["session_gates"]
+                self.assertEqual((gates["expired_sessions"], gates["unknown_status_sessions"]), (1, 0))
 
         # The still-open session keeps working.
         self._commit(live_open, self._commit_payload(live_open, answers=1))

@@ -1,5 +1,7 @@
 # Study decoupling task backlog
 
+> **Status (2026-09-30): Phase 5, Phase 6 chạy trên production; Phase 7 sẵn sàng.** P5-11 NOTE hardening deploy qua PR #173 (`6472e42`). Phase 6 (application occurrence, Note attribution, đếm theo Note) deploy qua PR #174 (`3e7fa3a`): backfill 128.650 event, dấu vân tay dữ liệu learner không đổi, audit 18/18 PASS, `STUDY_NOTE_COUNT_ENABLED=1` ([runbook P6](../../runbooks/P6_APPLICATION_OCCURRENCE_RUNBOOK.md)). Phase 7 retention membership phiên có code + test + probe MySQL ([plan](./P7_EXECUTION_PLAN_2026-09-30.md), [runbook](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md)). Phase 8 chờ chủ sản phẩm chọn năng lực; Phase 9 chờ cửa sổ telemetry và phê duyệt riêng ([P8/P9 readiness](./P8_P9_READINESS_2026-09-30.md)).
+>
 > **Phase 6 preparation (2026-09-29):** [P6 execution plan](./P6_EXECUTION_PLAN_2026-09-29.md) records the code baseline (what Phase 5 already delivers for NOTE learners), nine owner decisions D6-01..D6-09, gates and work packages P6-00..P6-10/INT-04. No Phase 6 code, migration or flag exists. Phase 6 code stays on `phase6/*` branches until R0 (PR #168) is deployed; production enablement additionally needs every active learner on NOTE (new gate P5-T).
 >
 > **Status (2026-09-29): Phase 5 code scope is complete for R0.** Owned + logical-overlay NOTE authority (pristine reads, first-state materialization), multi-learner content topology, Connect card package, admin-wide readers and the requested Algorithm switch writer are implemented; INT-03 passes locally (1,648 backend tests with one unrelated pre-existing Flama Audio workflow failure, 507 frontend tests, production build, MySQL 8.0.40 probe matrix including 65 direct-replay/overlay/switch scenarios). Remaining Phase 5 steps are operational and need the product owner: deploy R0 (LEGACY default), then the manual NOTE canary R1 per the [runbook](../../runbooks/P5_NOTE_AUTHORITY_RUNBOOK.md). Nothing is committed, pushed or enabled in production by this work. Details: [P5 plan](./P5_EXECUTION_PLAN_2026-09-20.md) §2 and §5.
@@ -198,18 +200,26 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | P5-08 | **DONE (code)** | Requested Algorithm switch writer with synthetic registered target; typed refusals; forward-only rollback; no production initializer/route. |
 | P5-09 / INT-03 | **DONE (local)** | 1,648 backend tests (1 unrelated pre-existing Flama Audio workflow failure), 507 frontend tests, build, MySQL probe matrix (65 direct-replay/overlay/switch scenarios + authority schema + batch + numeric). |
 | P5-10 | **R1 DONE 2026-09-29** | R0 released; R1 moved 18/18 learners to NOTE, audit 18/18 PASS, new accounts start in NOTE ([P5 plan](./P5_EXECUTION_PLAN_2026-09-20.md) header). Async stays off. |
-| P5-11 | **IN PROGRESS** — [NOTE production hardening](./P5-11_NOTE_PRODUCTION_HARDENING.md) | P5-11a: cross-learner gap-lock deadlocks (commits, direct answers, sign-ups) removed, deadlock retry, no SQL leak in 409; MySQL concurrency probe in CI. P5-11b: session open O(scope) and remaining locking readers. The dashboard fix #171 is merged but not yet deployed. |
+| P5-11 | **DONE 2026-09-30** — [NOTE production hardening](./P5-11_NOTE_PRODUCTION_HARDENING.md) | Deadlock khác learner, retry, session open O(scope), N+1 `/api/study/next`, cổng deploy so với release đang chạy; deploy PR #173 (`6472e42`), audit 18/18 PASS. |
 
-### Phase 6 — Remove Card/Template from progress ownership (chuẩn bị, chưa có code)
+### Phase 6 — Remove Card/Template from progress ownership (DONE trên production 2026-09-30)
 
-[P6 execution plan](./P6_EXECUTION_PLAN_2026-09-29.md). Entry code: sau khi D6-01..D6-09 được duyệt. Entry production: P5-T (R0, R1, mọi learner hoạt động ở NOTE).
+[P6 execution plan](./P6_EXECUTION_PLAN_2026-09-29.md), [runbook](../../runbooks/P6_APPLICATION_OCCURRENCE_RUNBOOK.md).
 
 | ID | Trạng thái hiện tại | Ghi chú |
 |---|---|---|
-| P6-00 | **CHƯA BẮT ĐẦU** | Inventory callsite Card/Template + test tái hiện rủi ro ordinal Anki; phần production cần cho phép SELECT-only |
-| P6-01..P6-03 | **CHƯA BẮT ĐẦU** | ADR application occurrence, count/queue mức Note, lifecycle + tham chiếu ngoài |
-| P6-04..P6-10, INT-04 | **CHỜ G6-D** | Schema additive, seam tạo Card, reader/lifecycle/integration, probe MySQL, production |
-| 6B | **CHỜ P6-04** | Versioning Template shared deck (#137) |
+| P6-00..P6-09 | **DONE** | Inventory, D6 chốt (D6-05 = B), migration 46, seam `before_flush`, đếm theo Note, lifecycle, ordinal Anki theo occurrence, `review_events.note_id`, áp dụng lặp, probe + bench MySQL |
+| INT-04 | **DONE** | Backend `--all` 164 file, probe P5 + P6, bench migration quy mô production với release cũ ghi song song |
+| P6-10 | **DONE** | PR #174 deploy, backfill, dấu vân tay không đổi, audit 18/18, bật `STUDY_NOTE_COUNT_ENABLED` |
+| 6B | **CHƯA BẮT ĐẦU** | Versioning Template shared deck (#137) |
+
+### Phase 7 — Retention chi tiết phiên (code sẵn sàng)
+
+[P7 plan](./P7_EXECUTION_PLAN_2026-09-30.md), [runbook](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md). `flask study-session-retention` (dry-run mặc định): đóng phiên `open` quá hạn thành `expired` (commit muộn vẫn `410 SESSION_EXPIRED`), xóa membership phiên kết thúc > 30 ngày theo lô; không xóa event/history/progress/session/receipt.
+
+### Phase 8 / Phase 9
+
+[Điều kiện và bằng chứng](./P8_P9_READINESS_2026-09-30.md). `flask study-phase9-readiness` đo các cổng (đọc-only). Không bước Phase 9 nào xóa dữ liệu khi chưa có backup đã kiểm, chứng minh restore và phê duyệt riêng.
 
 ### Cross-phase integration
 

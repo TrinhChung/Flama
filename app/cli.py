@@ -760,6 +760,21 @@ def register_cli_commands(app: Flask) -> None:
         )
         click.echo(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
 
+    @app.cli.command("study-phase9-readiness")
+    @click.option(
+        "--window-days",
+        type=click.IntRange(1, 365),
+        default=30,
+        show_default=True,
+        help="Observation window for old usage.",
+    )
+    def study_phase9_readiness(window_days: int) -> None:
+        """Read-only evidence for the Phase 9 contraction gates."""
+
+        from app.services.study_phase9_readiness_service import build_phase9_readiness
+
+        click.echo(json.dumps(build_phase9_readiness(window_days=window_days), sort_keys=True))
+
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
     @click.option(
