@@ -107,12 +107,9 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
 
 **Hard stop** (xem xét rollback): transition được chấp nhận mà không chiếu được về legacy, split-brain/đua epoch, decoder sai, phiên cũ commit qua epoch, mất event/receipt, source clone bị sửa, hoặc audit `BLOCK` không giải thích được.
 
-### 4.5 Rollback một learner (NOTE → LEGACY)
-```bash
-flama_cli study-authority-enrollment --user-id <ID> --mode LEGACY          # dry-run
-flama_cli study-authority-enrollment --user-id <ID> --mode LEGACY --apply
-```
-Rollback chỉ commit khi mọi state NOTE còn sống chiếu **không mất mát** về `CardProgress` (subject đã tombstone do xoá nội dung được bỏ qua an toàn). Nếu bị từ chối với `LOSSY_LEGACY_PROJECTION`, `UNPROJECTABLE_LEGACY_STATE` hoặc `ROLLBACK_ALGORITHM_NOT_LEGACY`: **không** sửa cột legacy bằng tay, giữ learner ở NOTE và sửa tiến (forward repair) hoặc khôi phục backup theo quy trình đã duyệt. Không downgrade schema, không xoá dữ liệu trong sự cố. Tắt `STUDY_PROGRESS_SHADOW_*` không đảo authority của learner NOTE. Khi rollback nhiều learner, đặt `STUDY_NEW_LEARNER_NOTE_ENABLED=0` trước để tài khoản mới không vào NOTE.
+### 4.5 ~~Rollback một learner (NOTE → LEGACY)~~ — đã gỡ (Phase 9, D9-02)
+
+Không còn đường quay learner về LEGACY. Theo quyết định D9-02 của chủ sản phẩm, hệ NOTE giữ dữ liệu mới; khi có lỗi thì khoanh vùng, sửa tiến (forward repair) hoặc **bổ sung phần thiếu từ backup vào NOTE** theo [P9 plan §9](../task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md#9-bổ-sung-từ-backup-bảo-toàn-dữ-liệu-note-mới). `flama_cli study-authority-enrollment --mode LEGACY` trả `LEGACY_ENROLLMENT_RETIRED`; tài khoản mới luôn vào NOTE bất kể `STUDY_NEW_LEARNER_NOTE_ENABLED`/`STUDY_WIRE_V4_ENABLED` (đăng ký lỗi `NOTE_ENROLLMENT_FAILED` thay vì tạo learner LEGACY). Không sửa cột legacy bằng tay, không downgrade schema, không xoá dữ liệu trong sự cố. Tắt `STUDY_PROGRESS_SHADOW_*` không đảo authority của learner NOTE.
 
 ## 5. Giới hạn đã biết khi mọi learner ở NOTE
 - Gói Connect/Anki kiểu cũ nhúng `cardsProgress` theo từng Card: nội dung vẫn import, còn progress trả `unsupported / NOTE_SNAPSHOT_REQUIRED`; progress phải đi qua gói snapshot.

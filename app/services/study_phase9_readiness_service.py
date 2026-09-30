@@ -3,9 +3,10 @@
 Phase 9 removes old storage and compatibility code only after telemetry
 proves nothing still uses it, and every destructive step needs a verified
 backup and a separate approval. This report only counts; it never writes.
-Each gate is ``ready`` when its evidence is empty over the observation window,
-``waiting`` when old usage was seen inside the window, and ``decision`` when a
-product decision (not data) blocks it.
+Each gate is ``ready`` when its evidence is empty over the observation window
+and ``waiting`` otherwise, with ``blocking_reasons`` where the cause is not
+plain usage. Owner decisions D9-01/D9-02 (docs/task/decoupling/
+P9_EXECUTION_PLAN_2026-09-30.md) removed the former ``decision`` status.
 """
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_session import StudySession
 from models.user import User
 
-SCHEMA_VERSION = "study-phase9-readiness.v1"
+SCHEMA_VERSION = "study-phase9-readiness.v2"
+PROJECTION_DEPENDENT_NOTE_CODE = "NOTE_STILL_DEPENDS_ON_PROJECTION"
 
 
 def _count(statement) -> int:
@@ -74,13 +76,22 @@ def build_phase9_readiness(*, now_utc: datetime | None = None, window_days: int 
         str(version or "<none>"): {"sessions": int(count), "last_opened_utc": last.isoformat() + "Z"}
         for version, count, last in old_wire_rows
     }
+    # D9-02 replaced D6-02: NOTE keeps new data and repairs come from backup,
+    # so the projection gate is technical, not a product decision.
+    projection_blockers = []
+    if legacy_learners:
+        projection_blockers.append("LEGACY_LEARNERS")
+    if unenrolled_users:
+        projection_blockers.append("UNENROLLED_USERS")
+    # NOTE readers/writers still validate and write CardProgress until the
+    # projection-independent contract (P9-03..P9-05b) ships.
+    projection_blockers.append(PROJECTION_DEPENDENT_NOTE_CODE)
     gates = {
         "legacy_projection_writes": {
             "evidence": {"legacy_learners": legacy_learners, "unenrolled_users": unenrolled_users,
                          "card_progress_rows": card_progress_rows},
-            # CardProgress is the NOTE -> LEGACY rollback projection (D6-02 keeps rollback).
-            "status": "decision" if not legacy_learners and not unenrolled_users else "waiting",
-            "blocker": "Stopping CardProgress writes removes the NOTE -> LEGACY rollback kept by D6-02.",
+            "status": "waiting" if projection_blockers else "ready",
+            "blocking_reasons": projection_blockers,
         },
         "old_session_wire_versions": {
             "evidence": {"sessions_in_window": old_wire, "open_sessions": old_wire_open},

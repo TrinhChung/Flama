@@ -61,7 +61,9 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         now = datetime(2026, 9, 30, 12, 0, 0)
         report = build_phase9_readiness(now_utc=now)
         # The learner has no enrollment yet: the projection gate is still waiting.
-        self.assertEqual(report["gates"]["legacy_projection_writes"]["status"], "waiting")
+        gate = report["gates"]["legacy_projection_writes"]
+        self.assertEqual(gate["status"], "waiting")
+        self.assertIn("UNENROLLED_USERS", gate["blocking_reasons"])
         self.assertEqual(report["gates"]["old_session_wire_versions"]["status"], "ready")
         self.assertEqual(report["gates"]["positional_anki_ordinals"]["status"], "ready")
         self.assertFalse(report["destructive_steps_allowed"])
@@ -71,7 +73,11 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         self._session("study-session.v2", now - timedelta(days=40))
         self._session("study-session.v4", now - timedelta(days=1))
         report = build_phase9_readiness(now_utc=now)
-        self.assertEqual(report["gates"]["legacy_projection_writes"]["status"], "decision")
+        # D9-02: no product decision blocks the gate, only the projection
+        # dependency of NOTE readers/writers (P9-03..P9-05b).
+        gate = report["gates"]["legacy_projection_writes"]
+        self.assertEqual(gate["status"], "waiting")
+        self.assertEqual(gate["blocking_reasons"], ["NOTE_STILL_DEPENDS_ON_PROJECTION"])
         self.assertEqual(report["gates"]["old_session_wire_versions"]["status"], "ready")
 
         self._session("study-session.v2", now - timedelta(days=3))
@@ -83,7 +89,7 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
     def test_cli_prints_the_report(self):
         output = self.app.test_cli_runner().invoke(args=["study-phase9-readiness", "--window-days", "7"]).output
         report = json.loads(next(line for line in output.splitlines() if line.startswith("{")))
-        self.assertEqual((report["schema_version"], report["window_days"]), ("study-phase9-readiness.v1", 7))
+        self.assertEqual((report["schema_version"], report["window_days"]), ("study-phase9-readiness.v2", 7))
 
 
 if __name__ == "__main__":

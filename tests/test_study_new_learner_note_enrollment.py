@@ -1,4 +1,4 @@
-"""New accounts start in NOTE authority only when the rollout flags allow it."""
+"""Every new account starts in NOTE authority; nothing creates LEGACY learners (P9-05c, D9-09)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,10 @@ from app.services.study_authority_enrollment_service import (
 from models import db
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.user import User
+
+REFUSAL_TARGET = (
+    "app.services.study_authority_enrollment_service.stage_note_authority_enrollment"
+)
 
 
 class NewLearnerNoteEnrollmentTests(unittest.TestCase):
@@ -44,48 +48,58 @@ class NewLearnerNoteEnrollmentTests(unittest.TestCase):
         row = db.session.get(StudyAuthorityEnrollment, int(user_id))
         return None if row is None else (row.mode_code, int(row.epoch))
 
-    def test_flag_off_keeps_legacy_default(self):
-        self._make_app(STUDY_WIRE_V4_ENABLED=True)
-        user = self._register()
-        self.assertIsNone(self._mode(user.id))
+    def test_registration_enrolls_note_whatever_the_flags(self):
+        self._make_app()
+        for index, flags in enumerate((
+            {},
+            {"STUDY_WIRE_V4_ENABLED": True, "STUDY_NEW_LEARNER_NOTE_ENABLED": True},
+            {"STUDY_NEW_LEARNER_NOTE_ENABLED": False, "STUDY_WIRE_V4_ENABLED": False},
+            {"STUDY_WIRE_V4_ENABLED": True, "STUDY_ASYNC_BATCH_ENABLED": True},
+        )):
+            with self.subTest(flags=flags), patch.dict(self.app.config, flags):
+                user = self._register(f"learner{index}")
+                self.assertEqual(self._mode(user.id), ("NOTE", 1))
 
-    def test_registration_enrolls_note_when_enabled(self):
-        self._make_app(
-            STUDY_WIRE_V4_ENABLED=True,
-            STUDY_NEW_LEARNER_NOTE_ENABLED=True,
-        )
+    def test_refused_enrollment_creates_no_account(self):
+        self._make_app()
+        with patch(REFUSAL_TARGET, side_effect=StudyAuthorityEnrollmentError("SIMULATED", "refused")), \
+                self.assertLogs("app.services.study_authority_enrollment_service", level="WARNING"):
+            with self.assertRaises(StudyAuthorityEnrollmentError):
+                self._register()
+        db.session.rollback()
+        self.assertEqual(User.query.count(), 0)
+        self.assertEqual(StudyAuthorityEnrollment.query.count(), 0)
+
+    def test_signup_api_reports_refused_enrollment(self):
+        self._make_app()
+        client = self.app.test_client()
+        with patch(REFUSAL_TARGET, side_effect=StudyAuthorityEnrollmentError("SIMULATED", "refused")), \
+                self.assertLogs("app.services.study_authority_enrollment_service", level="WARNING"):
+            response = client.post("/api/auth/register", json={
+                "email": "api-learner@example.test", "username": "api_learner",
+                "password": "Secret-pass-123", "confirm_password": "Secret-pass-123",
+            })
+        self.assertEqual(response.status_code, 503, response.get_json())
+        self.assertEqual(response.get_json()["error"], "NOTE_ENROLLMENT_FAILED")
+        self.assertEqual(User.query.count(), 0)
+
+    def test_enrollment_cli_refuses_legacy(self):
+        self._make_app()
         user = self._register()
+        runner = self.app.test_cli_runner()
+        for args in (["--mode", "LEGACY"], ["--mode", "legacy", "--apply"]):
+            refused = runner.invoke(args=["study-authority-enrollment", "--user-id", str(user.id), *args])
+            self.assertNotEqual(refused.exit_code, 0, refused.output)
+            self.assertIn("LEGACY_ENROLLMENT_RETIRED", refused.output)
         self.assertEqual(self._mode(user.id), ("NOTE", 1))
 
-    def test_requires_wire_v4_and_async_off(self):
-        self._make_app(STUDY_NEW_LEARNER_NOTE_ENABLED=True)
-        self.assertIsNone(self._mode(self._register("no-v4").id))
-        self.app.config.update(
-            STUDY_WIRE_V4_ENABLED=True, STUDY_ASYNC_BATCH_ENABLED=True
-        )
-        self.assertIsNone(self._mode(self._register("async-on").id))
-
-    def test_refusal_keeps_account_created_on_legacy(self):
-        self._make_app(
-            STUDY_WIRE_V4_ENABLED=True,
-            STUDY_NEW_LEARNER_NOTE_ENABLED=True,
-        )
-        refusal = StudyAuthorityEnrollmentError("SIMULATED", "refused")
-        with patch(
-            "app.services.study_authority_enrollment_service."
-            "stage_note_authority_enrollment",
-            side_effect=refusal,
-        ), self.assertLogs(
-            "app.services.study_authority_enrollment_service", level="WARNING"
-        ):
-            user = self._register()
-        self.assertIsNotNone(db.session.get(User, user.id))
-        self.assertIsNone(self._mode(user.id))
-
     def test_learners_cli_lists_ids_by_current_mode(self):
-        self._make_app(STUDY_WIRE_V4_ENABLED=True)
-        legacy = self._register("stays-legacy")
-        self.app.config["STUDY_NEW_LEARNER_NOTE_ENABLED"] = True
+        self._make_app()
+        # Accounts created before NOTE-only signup have no enrollment row.
+        legacy = User(username="stays-legacy", email="stays-legacy@example.test")
+        legacy.set_password("Secret-pass-123")
+        db.session.add(legacy)
+        db.session.commit()
         note = self._register("starts-note")
         runner = self.app.test_cli_runner()
 
@@ -98,16 +112,24 @@ class NewLearnerNoteEnrollmentTests(unittest.TestCase):
         self.assertEqual(ids("--mode", "LEGACY"), [legacy.id])
         self.assertEqual(ids("--mode", "note"), [note.id])
 
-    def test_google_provisioning_enrolls_note_when_enabled(self):
-        self._make_app(
-            STUDY_WIRE_V4_ENABLED=True,
-            STUDY_NEW_LEARNER_NOTE_ENABLED=True,
-        )
+    def test_google_provisioning_enrolls_note_whatever_the_flags(self):
+        self._make_app(STUDY_WIRE_V4_ENABLED=False)
         user, action = google_auth_service.resolve_or_create_user(
             {"sub": "g-sub-note-1", "email": "google-note@example.test"}
         )
         self.assertEqual(action, "created")
         self.assertEqual(self._mode(user.id), ("NOTE", 1))
+
+    def test_google_provisioning_refusal_creates_no_account(self):
+        self._make_app()
+        with patch(REFUSAL_TARGET, side_effect=StudyAuthorityEnrollmentError("SIMULATED", "refused")), \
+                self.assertLogs("app.services.study_authority_enrollment_service", level="WARNING"):
+            with self.assertRaises(Exception):
+                google_auth_service.resolve_or_create_user(
+                    {"sub": "g-sub-refused", "email": "google-refused@example.test"}
+                )
+        db.session.rollback()
+        self.assertEqual(User.query.count(), 0)
 
 
 if __name__ == "__main__":
