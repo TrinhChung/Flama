@@ -7,7 +7,7 @@ does not commit or switch enrollment.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping
@@ -16,7 +16,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.repositories.study_inserted_rows import SUBJECT, inserted_in_transaction
-from app.services.study_progress_contract import RAW_SCHEMA_VERSION, STORAGE_CODEC
+from app.services.study_progress_contract import (
+    DEFAULT_STORAGE_PROFILE,
+    RAW_SCHEMA_VERSION,
+    STORAGE_CODEC,
+    STORAGE_PROFILES,
+)
 from app.services.study_progress_shadow_codec import (
     StudyProgressCodecError,
     serialize_raw_card_progress,
@@ -25,6 +30,7 @@ from models.card import Card
 from models.card_progress import CardProgress
 from models.note import Note
 from models.study_authority_enrollment import StudyAuthorityEnrollment
+from models.study_authority_storage_profile import StudyAuthorityStorageProfile
 from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
@@ -45,6 +51,41 @@ class StudyAuthorityRoute:
     mode_code: str
     epoch: int
     persisted: bool
+    storage_profile: str = DEFAULT_STORAGE_PROFILE
+
+
+# Storage profiles this release can read and write NOTE authority under. A
+# release that meets any other profile refuses the NOTE route (ADR P9-03 §2.1).
+SUPPORTED_STORAGE_PROFILES = frozenset({"PROJECTION_V1"})
+
+
+def read_study_storage_profile(session: Session, *, lock: str | None = None) -> str:
+    """Return the system NOTE storage profile; ``lock`` is None, "share" or "update"."""
+
+    statement = select(StudyAuthorityStorageProfile.profile_code).where(
+        StudyAuthorityStorageProfile.id == 1
+    )
+    if lock is not None:
+        if lock not in {"share", "update"}:
+            raise ValueError("lock must be None, 'share' or 'update'.")
+        statement = statement.with_for_update(read=lock == "share")
+    profile_code = session.execute(statement).scalar_one_or_none()
+    if profile_code is None:
+        return DEFAULT_STORAGE_PROFILE
+    if profile_code not in STORAGE_PROFILES:
+        raise StudyAuthorityFenceError(
+            "INVALID_STORAGE_PROFILE", "Persisted study storage profile is invalid."
+        )
+    return str(profile_code)
+
+
+def _with_supported_profile(route: "StudyAuthorityRoute", profile_code: str) -> "StudyAuthorityRoute":
+    if profile_code not in SUPPORTED_STORAGE_PROFILES:
+        raise StudyAuthorityFenceError(
+            "STORAGE_PROFILE_UNSUPPORTED",
+            f"This release cannot serve Note authority under storage profile {profile_code}.",
+        )
+    return replace(route, storage_profile=profile_code)
 
 
 @dataclass(frozen=True)
@@ -144,10 +185,13 @@ def read_study_authority_route(session: Session, *, learner_user_id: int) -> Stu
     ).scalar_one_or_none()
     if enrollment is None:
         return StudyAuthorityRoute(learner_id, "LEGACY", 0, False)
-    return _decode_route(
+    route = _decode_route(
         learner_user_id=learner_id, mode_code=enrollment.mode_code,
         epoch=enrollment.epoch, persisted=True, allow_note_authority=True,
     )
+    if route.mode_code != "NOTE":
+        return route
+    return _with_supported_profile(route, read_study_storage_profile(session))
 
 
 def lock_study_authority_route(
@@ -190,12 +234,19 @@ def lock_study_authority_route(
             epoch=0,
             persisted=False,
         )
-    return _decode_route(
+    route = _decode_route(
         learner_user_id=learner_id,
         mode_code=enrollment.mode_code,
         epoch=enrollment.epoch,
         persisted=True,
         allow_note_authority=allow_note_authority,
+    )
+    if route.mode_code != "NOTE":
+        return route
+    # Shared, like the User row: the profile switch takes it exclusively and
+    # so waits for every NOTE transaction that started under the old profile.
+    return _with_supported_profile(
+        route, read_study_storage_profile(session, lock="share")
     )
 
 

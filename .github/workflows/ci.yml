@@ -356,6 +356,15 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p7_session_retention_mysql.py
 
+      - name: Run migration 47 storage profile bench on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/bench_p9_profile_migration_mysql.py --contributors 3000
+
   deploy:
     needs: [changes, frontend, backend, spa-contract, redis-contract, mysql-contract]
     if: >-
