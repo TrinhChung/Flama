@@ -90,6 +90,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_p5_numeric_storage_mysql.py",
             "scripts/probe_p5_direct_replay_mysql.py",
             "scripts/probe_p5_concurrency_mysql.py",
+            "scripts/bench_p5_session_open_mysql.py",
             "app/services/db_errors.py",
             "study_worker.py",
             "deploy/flama-study-worker.service",
