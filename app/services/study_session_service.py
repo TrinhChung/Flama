@@ -2218,19 +2218,6 @@ def commit_study_session(
         raise StudySessionError("INVALID_NOTE_BATCH_CONTEXT", "Invalid internal NOTE batch context.", status=409)
     _validate_session_token(session, payload.get("session_token"))
     wire_contract = _wire_contract_or_session_error(session.wire_schema_version)
-    if wire_contract.requires_note_authority_identity:
-        if authority_route.mode_code != "NOTE":
-            raise StudySessionError(
-                "AUTHORITY_MODE_CONFLICT",
-                "Study Session v4 requires active NOTE authority.",
-                status=409,
-            )
-    elif authority_route.mode_code == "NOTE":
-        raise StudySessionError(
-            "WIRE_CONTRACT_MISMATCH",
-            "NOTE authority cannot commit a legacy Study Session lease.",
-            status=409,
-        )
     if str(payload.get("schema_version") or "") != wire_contract.commit_schema:
         raise StudySessionError(
             "UNSUPPORTED_COMMIT_SCHEMA",
@@ -2271,6 +2258,23 @@ def commit_study_session(
             "SESSION_EXPIRED",
             "Study session has expired.",
             status=410,
+        )
+    # Only a commit that would write needs the lease's authority contract. A
+    # replay, an already-committed lease and an expired lease are answered
+    # first, exactly as before the learner's authority changed: a browser that
+    # lost the acknowledgement of a pre-cutover legacy commit gets its receipt.
+    if wire_contract.requires_note_authority_identity:
+        if authority_route.mode_code != "NOTE":
+            raise StudySessionError(
+                "AUTHORITY_MODE_CONFLICT",
+                "Study Session v4 requires active NOTE authority.",
+                status=409,
+            )
+    elif authority_route.mode_code == "NOTE":
+        raise StudySessionError(
+            "WIRE_CONTRACT_MISMATCH",
+            "NOTE authority cannot commit a legacy Study Session lease.",
+            status=409,
         )
     if _note_batch is None and session.wire_schema_version == SESSION_SCHEMA_V4:
         admitted = StudySessionBatch.query.filter_by(session_id=session.id).with_for_update().first()

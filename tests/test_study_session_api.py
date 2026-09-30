@@ -2158,6 +2158,47 @@ class StudySessionApiTests(unittest.TestCase):
             response = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(response.status_code, 200)
 
+    def test_pre_cutover_legacy_commit_replays_after_note_enrollment(self):
+        # A browser lost the acknowledgement of a legacy commit, then the
+        # learner moved to NOTE: the retry must get its receipt, not a refusal.
+        # The commit path reads only the learner's route, so the NOTE fence
+        # row is enough here (full enrollment is covered elsewhere).
+        committed = self._open_session_v3()
+        payload = self._commit_payload(committed)
+        first = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=payload)
+        self.assertEqual(first.status_code, 200, first.get_json())
+        receipt = first.get_json()
+        open_lease = self._open_session_v3()
+        with self.app.app_context():
+            now = datetime.utcnow()
+            db.session.add(StudyAuthorityEnrollment(
+                learner_user_id=self.user_id, mode_code="NOTE", epoch=1, created_at=now, updated_at=now,
+            ))
+            db.session.commit()
+            events_before = ReviewEvent.query.count()
+
+        replay = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=payload)
+        self.assertEqual(replay.status_code, 200, replay.get_json())
+        self.assertEqual(replay.get_json(), receipt)
+
+        other = self._commit_payload(committed)
+        again = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=other)
+        self.assertEqual(again.status_code, 409, again.get_json())
+        self.assertEqual(again.get_json()["error"], "SESSION_ALREADY_COMMITTED")
+        self.assertEqual(again.get_json()["details"], receipt)
+
+        # A legacy lease that would still write stays refused under NOTE.
+        with self.app.app_context():
+            db.session.get(StudySession, open_lease["session_id"]).status = "open"
+            db.session.commit()
+        refused = self.client.post(
+            f"/api/study/sessions/{open_lease['session_id']}/commit", json=self._commit_payload(open_lease)
+        )
+        self.assertEqual(refused.status_code, 409, refused.get_json())
+        self.assertEqual(refused.get_json()["error"], "WIRE_CONTRACT_MISMATCH")
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), events_before)
+
     def test_direct_note_read_fails_closed_on_stale_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=13)
         with self.app.app_context():
