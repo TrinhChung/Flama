@@ -34,7 +34,7 @@ Migration 47 (**expand**, không đổi giá trị cũ):
 | `evidence_kind` | Thêm, `NOT NULL DEFAULT 'LEGACY_PROJECTION'`, CHECK ∈ {`LEGACY_PROJECTION`, `CANONICAL`} | Mọi dòng cũ = `LEGACY_PROJECTION` |
 | `source_progress_id`, `card_progress_revision`, `raw_schema_version`, `storage_codec`, `raw_payload`, `raw_payload_size`, `raw_progress_hash` | Nới NULL; CHECK cặp: `evidence_kind='LEGACY_PROJECTION'` ⇒ tất cả NOT NULL; `CANONICAL` ⇒ tất cả NULL | Không dòng nào NULL hôm nay |
 | Unique `(subject_id, subject_generation, logical_card_key)` | Thêm **trước** khi nới `source_progress_id` (MySQL cho nhiều NULL trong unique cũ) | Production: 0 nhóm trùng |
-| `live_card_progress_id` | Giữ nguyên (FK SET NULL, unique); `CANONICAL` luôn NULL | — |
+| `live_card_progress_id` | Giữ nguyên (FK SET NULL, unique); `CANONICAL` luôn NULL do writer đảm bảo — MySQL từ chối CHECK trên cột có FK kèm referential action (lỗi 3823, phát hiện khi bench migration 47) | — |
 | `pointer_status` | Không tái dùng cho evidence | — |
 
 Contributor `CANONICAL`: `logical_card_key`, `live_card_id`, `subject_generation`, `lineage_vector_hash`, `history_completeness_code`, `current_provenance_code`, `contributor_status` như hiện tại. Availability giữ bảng và composite FK hiện có, giá trị từ §2.2. Dòng cũ giữ nguyên đến P9-10.
