@@ -37,6 +37,7 @@ from tests.test_study_note_batch import StudyNoteBatchTests
 from tests.test_study_note_templates import StudyNoteTemplateTests
 from tests.test_study_content_delete import StudyContentDeleteTests
 from tests.test_study_note_overlay import StudyNoteOverlayTests
+from tests.test_study_pristine_bulk_materialization import StudyPristineBulkMaterializationTests
 from tests.test_study_algorithm_switch import StudyAlgorithmSwitchTests
 from tests.test_study_phase6_continuity import (
     StudyPhase6ContinuityTests, StudyRepeatedApplicationTests,
@@ -307,6 +308,11 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
             def setUpClass(cls):
                 cls.app = app
 
+        class MySQLPristineBulkTests(StudyPristineBulkMaterializationTests):
+            @classmethod
+            def setUpClass(cls):
+                cls.app = app
+
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteTemplateTests)
         report["scope"] = (
             "note-templates" if templates_only
@@ -319,6 +325,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
             report["scope"] = "content-delete"
         elif overlay_only:
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteOverlayTests)
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLPristineBulkTests))
             report["scope"] = "note-overlay"
         elif switch_only:
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLAlgorithmSwitchTests)
@@ -326,6 +333,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
         elif not templates_only:
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLAlgorithmSwitchTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteOverlayTests))
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLPristineBulkTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLContentDeleteTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLPhase6ContinuityTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLRepeatedApplicationTests))

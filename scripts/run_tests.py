@@ -146,6 +146,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_session_retention.py",
             "tests/test_study_phase9_readiness.py",
             "tests/test_study_inserted_rows.py",
+            "tests/test_study_pristine_bulk_materialization.py",
             "tests/test_study_note_templates.py",
             "tests/test_study_content_delete.py",
             "tests/test_study_note_overlay.py",
@@ -835,6 +836,9 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "app/services/study_progress_shadow_mirror_service.py",
     "app/services/study_progress_lifecycle_mirror_service.py",
     "app/services/mcp/note_tools.py",
+    "app/services/study_note_pristine_service.py",
+    "scripts/probe_p5_direct_replay_mysql.py",
+    "tests/test_study_pristine_bulk_materialization.py",
     # Migration 46 runs while the previous release serves; FK/DDL behaviour is InnoDB-only.
     "app/services/study_note_attribution_service.py",
     "scripts/probe_p6_application_schema_mysql.py",
