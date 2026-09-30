@@ -1,6 +1,6 @@
 # P5-11 — Gia cố NOTE authority sau R1
 
-> Lập 2026-09-30. Trạng thái: **P5-11a xong (code + kiểm chứng local MySQL)**; P5-11b (mở phiên O(phạm vi), các reader còn khóa) đang làm. Nguồn: [báo cáo tải](../../architecture/DATABASE_ARCHITECTURE_SCALABILITY_REVIEW_2026-09-29.md), [điều tra truy vấn](../../architecture/DATABASE_QUERY_PERFORMANCE_INVESTIGATION_2026-09-29.md), log production 28–30/09.
+> Lập 2026-09-30. Trạng thái: **P5-11a + P5-11b đã deploy production** (PR #173, release `6472e42`, 30/09 ~04:30 UTC; kèm bản sửa dashboard #171). Backup trước merge `/root/backups/flama-pre-pr173-20260930T041022Z.sql.gz`. Sau deploy: audit `study-authority-read-audit` **18/18 PASS**, 0 learner LEGACY; dashboard user 1 (39k thẻ) đo trên production trong transaction READ ONLY **3,1 s** (trước: ~120 s, 504), user 4 0,86 s; journal không có `Lock wait`/deadlock. P5-11c (materialize theo lô) còn mở. Nguồn: [báo cáo tải](../../architecture/DATABASE_ARCHITECTURE_SCALABILITY_REVIEW_2026-09-29.md), [điều tra truy vấn](../../architecture/DATABASE_QUERY_PERFORMANCE_INVESTIGATION_2026-09-29.md), log production 28–30/09.
 
 ## 1. Vì sao cần
 
