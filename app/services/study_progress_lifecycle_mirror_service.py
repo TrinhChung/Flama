@@ -39,6 +39,7 @@ from app.services.study_progress_shadow_mapper import (
     map_card_progress,
 )
 from app.services import study_progress_shadow_mirror_service as mirror
+from app.repositories.study_inserted_rows import SUBJECT, remember_inserted
 from models.card import Card
 from models.card_progress import CardProgress
 from models.note import Note
@@ -933,14 +934,23 @@ def _materialize_note_authority(
         )
     materialized_at = _utc_naive(now_utc)
     logical_note_key = str(note.id).encode("utf-8")
-    existing_subject = session.execute(
-        select(StudyProgressSubject)
-        .where(
+    # Plain read first: a locking read of an absent key takes a gap lock that
+    # concurrent Note creations of the same learner (MCP batches) deadlock on.
+    # A concurrent creation of the same key still fails on the unique index.
+    existing_subject_id = session.execute(
+        select(StudyProgressSubject.id).where(
             StudyProgressSubject.learner_user_id == route.learner_user_id,
             StudyProgressSubject.logical_note_key == logical_note_key,
         )
-        .with_for_update()
     ).scalar_one_or_none()
+    existing_subject = None
+    if existing_subject_id is not None:
+        existing_subject = session.execute(
+            select(StudyProgressSubject)
+            .where(StudyProgressSubject.id == int(existing_subject_id))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one()
     if existing_subject is not None:
         if (
             str(existing_subject.live_note_id or "") != str(note.id)
@@ -971,13 +981,16 @@ def _materialize_note_authority(
         )
         session.add(subject)
         session.flush()
+        remember_inserted(session, SUBJECT, subject.id)
     else:
         subject = existing_subject
+    subject_created = existing_subject is None
     locked = lock_study_authority_subject(
         session,
         route=route,
         subject=subject,
         now_utc=materialized_at,
+        subject_created_in_transaction=subject_created,
     )
     if locked.state is not None or locked.token.semantic_state_hash is not None:
         raise StudyAuthorityFenceError(
@@ -985,6 +998,8 @@ def _materialize_note_authority(
             "New Note authority unexpectedly has current state.",
         )
     card_ids = tuple(str(card.id) for card in card_rows)
+    # Non-locking: a concurrent insert of the same (learner, Card) progress
+    # fails on uq_card_progress_user_card instead of deadlocking on a gap.
     existing_progress = session.execute(
         select(CardProgress.id)
         .where(
@@ -992,14 +1007,15 @@ def _materialize_note_authority(
             CardProgress.card_id.in_(card_ids),
         )
         .limit(1)
-        .with_for_update()
     ).scalar_one_or_none()
     if existing_progress is not None:
         raise StudyAuthorityFenceError(
             "AUTHORITY_PROGRESS_EXISTS",
             "New Note already has compatibility progress.",
         )
-    existing_contributor = session.execute(
+    # A subject inserted by this transaction cannot have contributors yet
+    # (their foreign key references the uncommitted subject).
+    existing_contributor = None if subject_created else session.execute(
         select(StudyProgressContributor.id)
         .where(StudyProgressContributor.subject_id == int(subject.id))
         .limit(1)

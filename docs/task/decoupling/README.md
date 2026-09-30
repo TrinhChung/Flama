@@ -1,6 +1,6 @@
 # Study decoupling task backlog
 
-> **Status (2026-09-30): Phase 5, Phase 6 chạy trên production; Phase 7 sẵn sàng.** P5-11 NOTE hardening deploy qua PR #173 (`6472e42`). Phase 6 (application occurrence, Note attribution, đếm theo Note) deploy qua PR #174 (`3e7fa3a`): backfill 128.650 event, dấu vân tay dữ liệu learner không đổi, audit 18/18 PASS, `STUDY_NOTE_COUNT_ENABLED=1` ([runbook P6](../../runbooks/P6_APPLICATION_OCCURRENCE_RUNBOOK.md)). Phase 7 retention membership phiên có code + test + probe MySQL ([plan](./P7_EXECUTION_PLAN_2026-09-30.md), [runbook](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md)). Phase 8 chờ chủ sản phẩm chọn năng lực; Phase 9 chờ cửa sổ telemetry và phê duyệt riêng ([P8/P9 readiness](./P8_P9_READINESS_2026-09-30.md)).
+> **Status (2026-09-30): Phase 5, Phase 6, Phase 7 chạy trên production.** P5-11 NOTE hardening deploy qua PR #173 (`6472e42`). Phase 6 (application occurrence, Note attribution, đếm theo Note) deploy qua PR #174 (`3e7fa3a`): backfill 128.650 event, dấu vân tay dữ liệu learner không đổi, audit 18/18 PASS, `STUDY_NOTE_COUNT_ENABLED=1` ([runbook P6](../../runbooks/P6_APPLICATION_OCCURRENCE_RUNBOOK.md)). Phase 7 retention membership phiên deploy qua PR #175 (`1e14106`), lần chạy đầu dọn 15.072 dòng membership, dữ liệu learner không đổi ([plan](./P7_EXECUTION_PLAN_2026-09-30.md), [runbook](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md)). Phase 8 chờ chủ sản phẩm chọn năng lực; Phase 9 chờ cửa sổ telemetry và phê duyệt riêng ([P8/P9 readiness](./P8_P9_READINESS_2026-09-30.md)).
 >
 > **Phase 6 preparation (2026-09-29):** [P6 execution plan](./P6_EXECUTION_PLAN_2026-09-29.md) records the code baseline (what Phase 5 already delivers for NOTE learners), nine owner decisions D6-01..D6-09, gates and work packages P6-00..P6-10/INT-04. No Phase 6 code, migration or flag exists. Phase 6 code stays on `phase6/*` branches until R0 (PR #168) is deployed; production enablement additionally needs every active learner on NOTE (new gate P5-T).
 >
@@ -213,7 +213,9 @@ Post-closeout note: P3-01..P3-07 vẫn là lịch sử delivery đã hoàn tất
 | P6-10 | **DONE** | PR #174 deploy, backfill, dấu vân tay không đổi, audit 18/18, bật `STUDY_NOTE_COUNT_ENABLED` |
 | 6B | **CHƯA BẮT ĐẦU** | Versioning Template shared deck (#137) |
 
-### Phase 7 — Retention chi tiết phiên (code sẵn sàng)
+### Phase 7 — Retention chi tiết phiên (DONE trên production 2026-09-30)
+
+PR #175 deploy `1e14106`; lần chạy đầu xóa 15.072 dòng membership của 160 phiên > 30 ngày, dấu vân tay dữ liệu learner không đổi ([runbook §2](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md)).
 
 [P7 plan](./P7_EXECUTION_PLAN_2026-09-30.md), [runbook](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md). `flask study-session-retention` (dry-run mặc định): đóng phiên `open` quá hạn thành `expired` (commit muộn vẫn `410 SESSION_EXPIRED`), xóa membership phiên kết thúc > 30 ngày theo lô; không xóa event/history/progress/session/receipt.
 

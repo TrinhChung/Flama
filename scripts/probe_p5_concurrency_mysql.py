@@ -2,7 +2,9 @@
 
 Seeds several NOTE learners in a generated database, then runs rounds in
 which every learner commits first reviews of a v4 session at the same moment,
-followed by a burst of simultaneous sign-ups with new-learner NOTE enrollment.
+followed by a burst of simultaneous sign-ups with new-learner NOTE enrollment
+and a burst of simultaneous MCP ``create_note`` calls by one learner (agents
+create Notes in parallel).
 Reports HTTP statuses, the InnoDB deadlock delta and integrity checks (event,
 token and lineage counts plus ``study-authority-read-audit`` per learner).
 
@@ -10,7 +12,7 @@ Creation and cleanup touch only a generated database on loopback MySQL; the
 configured application database is never read or written.
 
 Usage: python scripts/probe_p5_concurrency_mysql.py [--learners 6] [--notes 40]
-       [--rounds 3] [--answers 12] [--signups 10]
+       [--rounds 3] [--answers 12] [--signups 10] [--creates 12]
 """
 
 from __future__ import annotations
@@ -244,6 +246,54 @@ def _signup_burst(app, count: int) -> dict:
     }
 
 
+def _create_burst(app, learner: dict, count: int) -> dict:
+    """One learner's agent creates ``count`` Notes through MCP at the same moment."""
+
+    from app.services.mcp.note_tools import create_note
+
+    with app.app_context():
+        note_type_name = db.session.execute(
+            select(NoteType.name).join(Note, Note.note_type_id == NoteType.id)
+            .where(Note.deck_id == learner["deck_id"]).limit(1)
+        ).scalar_one()
+        before = db.session.execute(
+            select(func.count()).select_from(Note).where(Note.user_id == learner["user_id"])
+        ).scalar_one()
+        subjects_before = db.session.execute(
+            select(func.count()).select_from(StudyProgressSubject)
+            .where(StudyProgressSubject.learner_user_id == learner["user_id"])
+        ).scalar_one()
+    barrier = threading.Barrier(count, timeout=60)
+    tag = secrets.token_hex(3)
+
+    def create(index):
+        with app.app_context():
+            barrier.wait()
+            try:
+                create_note(user_id=learner["user_id"], note_data={
+                    "deck_id": learner["deck_id"], "note_type_name": note_type_name,
+                    "fields": {"Word": f"mcp-{tag}-{index}"}})
+                return "created"
+            except Exception as exc:  # noqa: BLE001 - reported, not raised
+                db.session.rollback()
+                return type(exc).__name__
+            finally:
+                db.session.remove()
+
+    with ThreadPoolExecutor(max_workers=count) as executor:
+        results = list(executor.map(create, range(count)))
+    with app.app_context():
+        after = db.session.execute(
+            select(func.count()).select_from(Note).where(Note.user_id == learner["user_id"])
+        ).scalar_one()
+        subjects_after = db.session.execute(
+            select(func.count()).select_from(StudyProgressSubject)
+            .where(StudyProgressSubject.learner_user_id == learner["user_id"])
+        ).scalar_one()
+    return {"results": dict(Counter(results)), "notes_added": int(after - before),
+            "subjects_added": int(subjects_after - subjects_before)}
+
+
 def _integrity(app, learners: list[dict], accepted_by_user: dict[int, int]) -> dict:
     report = {"learners": [], "ok": True}
     runner = app.test_cli_runner()
@@ -290,7 +340,8 @@ def _integrity(app, learners: list[dict], accepted_by_user: dict[int, int]) -> d
     return report
 
 
-def run_probe(*, learners: int, notes: int, rounds: int, answers: int, signups: int) -> dict:
+def run_probe(*, learners: int, notes: int, rounds: int, answers: int, signups: int,
+              creates: int = 0) -> dict:
     load_dotenv(ROOT_DIR / ".env")
     settings = _connection_settings()
     name = f"flama_p5_direct_probe_{os.getpid()}_{secrets.token_hex(4)}"
@@ -310,7 +361,7 @@ def run_probe(*, learners: int, notes: int, rounds: int, answers: int, signups: 
             report["mysql_version"], report["isolation"] = cursor.fetchone()
         # One process runs every simulated request thread here; production
         # runs 4 threads per process against the default pool of 4 + 1.
-        os.environ["DB_POOL_SIZE"] = str(max(learners, signups) + 2)
+        os.environ["DB_POOL_SIZE"] = str(max(learners, signups, creates) + 2)
         app = _probe_app(_database_uri(settings, name))
         app.config.update(STUDY_NEW_LEARNER_NOTE_ENABLED=True, STUDY_PROGRESS_SHADOW_WRITE_ENABLED=True)
         seeded = _seed(app, learners=learners, notes=notes)
@@ -341,12 +392,18 @@ def run_probe(*, learners: int, notes: int, rounds: int, answers: int, signups: 
         deadlocks_before = _deadlock_count(admin)
         report["signups"] = _signup_burst(app, signups) if signups else None
         report["signup_deadlocks"] = _deadlock_count(admin) - deadlocks_before
-        if report["commit_deadlocks"] or report["direct_deadlocks"] or report["signup_deadlocks"]:
+        deadlocks_before = _deadlock_count(admin)
+        report["creates"] = _create_burst(app, seeded[0], creates) if creates else None
+        report["create_deadlocks"] = _deadlock_count(admin) - deadlocks_before
+        if (report["commit_deadlocks"] or report["direct_deadlocks"] or report["signup_deadlocks"]
+                or report["create_deadlocks"]):
             report["latest_deadlock"] = _latest_deadlock(admin)
         report["integrity"] = _integrity(app, seeded, accepted_by_user)
         report["status"] = (
             "PASS" if report["integrity"]["ok"] and report["commit_failures"] == 0
             and (not signups or report["signups"]["created"] == report["signups"]["enrolled_note"] == signups)
+            and (not creates or report["creates"]["results"] == {"created": creates}
+                 and report["creates"]["notes_added"] == report["creates"]["subjects_added"] == creates)
             else "FAIL"
         )
     finally:
@@ -369,9 +426,10 @@ def main() -> int:
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--answers", type=int, default=12)
     parser.add_argument("--signups", type=int, default=10)
+    parser.add_argument("--creates", type=int, default=12)
     args = parser.parse_args()
     report = run_probe(learners=args.learners, notes=args.notes, rounds=args.rounds,
-                       answers=args.answers, signups=args.signups)
+                       answers=args.answers, signups=args.signups, creates=args.creates)
     print(json.dumps(report, ensure_ascii=False, indent=1, default=str))
     return 0 if report["status"] == "PASS" else 1
 

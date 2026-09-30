@@ -68,6 +68,21 @@ Cùng khóa, cùng snapshot, cùng pin; chỉ gom câu lệnh:
 | Commit 50 câu | 2,3 s · 1.414 | 2,2 s · 1.318 (O(câu trả lời), chưa đổi) |
 | Mở phiên có 300 Note mới chưa materialize | — | 11,3 s · 6.955 (≈23 SQL/Note) → P5-11c |
 
+## 3c. P5-11d — tạo Note song song (MCP agent) không còn deadlock
+
+Production 29/09 13:33 (release cũ, sau R1): 17 lần `create_note`/`batch_create_notes` qua MCP trả 500, 16 do deadlock 1213 và 1 do lock wait timeout, khi agent tạo Note song song. Tái hiện trên MySQL 8.0.40 với code `master` sau P5-11: 8 lần tạo song song cho một learner → 3 lỗi 1213.
+
+Nguyên nhân: materialize subject NOTE cho Note mới đọc `FOR UPDATE` những dòng chưa tồn tại — subject theo `(learner, logical_note_key)`, token/state, `card_progress`, contributor, availability, lineage của subject/contributor vừa INSERT. Id subject/contributor tăng dần nên các gap lock đó cùng rơi vào supremum cuối index; hai transaction cùng giữ gap lock rồi cùng INSERT → deadlock (kể cả giữa hai learner khác nhau).
+
+Sửa (không đổi schema, mức cô lập hay hợp đồng API):
+
+- `app/repositories/study_inserted_rows.py`: ghi nhận subject/contributor do transaction hiện tại INSERT (gắn với đúng transaction gốc, tự xóa khi commit/rollback, không bao giờ được công nhận ở transaction sau). Dòng con của chúng có FK tới cha chưa commit nên chỉ chính transaction này tạo được; các chỗ đọc chúng (token, state, contributor, availability, lineage) đọc thường, không `FOR UPDATE`. Không đánh dấu ở nhánh upsert `ON DUPLICATE KEY UPDATE` vì PyMySQL chạy `CLIENT_FOUND_ROWS`, rowcount không phân biệt được insert với dòng có sẵn.
+- `_materialize_note_authority`: tìm subject bằng đọc thường rồi khóa theo PK nếu có; kiểm `card_progress` bằng đọc thường (unique `(user_id, card_id)` chặn trùng).
+- MCP `create_note`/`batch_create_notes` chạy lại khi deadlock như các đường ghi khác của P5-11 (một transaction, một commit).
+- Lỗi tiềm ẩn đi kèm: availability lưu `card_created_at` DATETIME(6) từ giá trị `Card.created_at` trong bộ nhớ (có micro-giây) trong khi `cards.created_at` là DATETIME(0) → `study-authority-read-audit` báo "availability evidence is stale" cho mọi Note tạo mới ở NOTE (có từ trước, tái hiện trên code gốc). `finalize_native_mirror` nay đọc lại `created_at` đã lưu của Card vừa tạo (chỉ Card có phần lẻ giây). Production 30/09: 0/40.668 dòng lệch (các lần tạo sau R1 đều đã lỗi), nên không cần sửa dữ liệu.
+
+Kiểm chứng MySQL 8.0.40: 1/8/16 lần tạo song song → 0 deadlock, audit PASS, 0 trường lệch; `probe_p5_concurrency_mysql.py` thêm `--creates` (CI chạy `--creates 8`).
+
 ## 4. Rollback
 
 Chỉ đổi code. Deploy lại release trước theo workflow; không có migration hay dữ liệu cần đảo. Các đường fallback giữ đúng hành vi cũ khi không chứng minh được snapshot.

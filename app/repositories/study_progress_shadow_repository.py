@@ -15,6 +15,7 @@ from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from app.repositories.study_inserted_rows import SUBJECT, inserted_in_transaction
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_subject import StudyProgressSubject
 
@@ -90,6 +91,9 @@ def ensure_and_lock_subject(
             session.flush()
         statement = None
     if statement is not None:
+        # The upsert cannot tell an insert from an existing row (PyMySQL runs
+        # with CLIENT_FOUND_ROWS), so this path never marks the subject as
+        # inserted and its readers keep their locks.
         session.execute(statement)
 
     return session.execute(
@@ -154,7 +158,9 @@ def load_current_contributors(
             StudyProgressContributor.id,
         )
     )
-    if for_update:
+    # A subject inserted by this transaction has no contributors yet; locking
+    # the empty range would only take a gap lock (see study_inserted_rows).
+    if for_update and not inserted_in_transaction(session, SUBJECT, subject_id):
         statement = statement.with_for_update()
     return tuple(session.execute(statement).scalars())
 
