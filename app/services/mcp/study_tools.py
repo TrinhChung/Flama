@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy.orm import contains_eager
+
 from app.repositories import study_repository, vocabulary_repository
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
@@ -39,6 +41,19 @@ from models.user import User
 
 # 5. Study & Card Review Operations
 # ---------------------------------------------------------------------------
+
+
+def _deck_options_by_card_id(*, user_id: int, cards) -> dict[str, Any]:
+    """Resolve deck options once per deck, not once per Card (P5-11b)."""
+
+    by_deck: dict[Any, Any] = {}
+    options: dict[str, Any] = {}
+    for card in cards:
+        deck_id = card.note.deck_id
+        if deck_id not in by_deck:
+            by_deck[deck_id] = resolve_deck_options(user_id=user_id, deck_id=deck_id)
+        options[str(card.id)] = by_deck[deck_id]
+    return options
 
 
 def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str, Any]:
@@ -84,14 +99,9 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
         Note.user_id == user_id, Note.deck_id.in_(deck_ids)
     )
     if authority_route.mode_code == "NOTE":
-        cards = cards_query.order_by(Card.id.asc()).all()
-        options_by_card_id = {
-            str(card.id): resolve_deck_options(
-                user_id=user_id,
-                deck_id=card.note.deck_id,
-            )
-            for card in cards
-        }
+        # The Note is already joined; load it with the Card instead of per Card.
+        cards = cards_query.options(contains_eager(Card.note)).order_by(Card.id.asc()).all()
+        options_by_card_id = _deck_options_by_card_id(user_id=user_id, cards=cards)
         try:
             authority_reads = load_study_authority_card_reads(
                 db.session,
@@ -165,16 +175,12 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
         .filter(Note.user_id == user_id, Note.deck_id.in_(deck_ids))
     )
 
-    # Fetch candidate cards
-    candidate_cards = cards_query.all()
-    deck_options_by_card_id = {
-        str(card.id): resolve_deck_options(
-            user_id=user_id,
-            deck_id=card.note.deck_id,
-        )
-        for card in candidate_cards
-        if card.note is not None
-    }
+    # Fetch candidate cards with their (joined) Notes in one query.
+    candidate_cards = cards_query.options(contains_eager(Card.note)).all()
+    deck_options_by_card_id = _deck_options_by_card_id(
+        user_id=user_id,
+        cards=[card for card in candidate_cards if card.note is not None],
+    )
     try:
         authority_reads = load_study_authority_card_reads(
             db.session,
@@ -434,6 +440,7 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
     cards = (
         Card.query.join(Note, Card.note_id == Note.id)
         .filter(Note.deck_id == deck_id, Note.user_id == user_id)
+        .options(contains_eager(Card.note))
         .all()
     )
     card_count = len(cards)
@@ -455,13 +462,9 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
                     timezone_name=stats_overview.get_effective_timezone_name(
                         getattr(db.session.get(User, user_id), "timezone", "UTC")
                     ),
-                    deck_options_by_card_id={
-                        str(card.id): resolve_deck_options(
-                            user_id=user_id,
-                            deck_id=card.note.deck_id,
-                        )
-                        for card in cards
-                    },
+                    deck_options_by_card_id=_deck_options_by_card_id(
+                        user_id=user_id, cards=cards
+                    ),
                 )
             except Exception as exc:
                 code = domain_error_code(exc)

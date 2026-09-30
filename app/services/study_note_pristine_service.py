@@ -137,20 +137,14 @@ def materialize_pristine_notes(
     note_by_id = {str(card.note_id): card.note for card in cards}
     _stateful, pristine = classify_note_authority_keys(
         session, learner_user_id=route.learner_user_id, note_ids=note_by_id)
-    for note_id in sorted(pristine, key=lambda value: value.encode("utf-8")):
-        siblings = tuple(session.execute(
-            select(Card).where(Card.note_id == note_id).order_by(Card.id.asc()).with_for_update(read=True)
-        ).scalars())
-        if not siblings:
-            raise StudyAuthorityFenceError(
-                "INCOMPLETE_AUTHORITY_COVERAGE", "A Note without Cards cannot be studied.")
-        lifecycle.materialize_pristine_note_authority(
-            session,
-            route=route,
-            note=note_by_id[note_id],
-            cards=siblings,
-            starting_ease=starting_ease_by_note_id[note_id],
-            provenance_code=provenance_code,
-            now_utc=now_utc,
-        )
+    # Set-wise: a study session over thousands of never-studied overlay Notes
+    # must open within one request (P5-11c). Same rows as the per-Note path.
+    lifecycle.materialize_pristine_notes_bulk(
+        session,
+        route=route,
+        note_ids=pristine,
+        starting_ease_by_note_id=starting_ease_by_note_id,
+        provenance_code=provenance_code,
+        now_utc=now_utc,
+    )
     return pristine

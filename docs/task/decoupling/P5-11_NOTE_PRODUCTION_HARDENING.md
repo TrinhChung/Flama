@@ -68,6 +68,21 @@ Cùng khóa, cùng snapshot, cùng pin; chỉ gom câu lệnh:
 | Commit 50 câu | 2,3 s · 1.414 | 2,2 s · 1.318 (O(câu trả lời), chưa đổi) |
 | Mở phiên có 300 Note mới chưa materialize | — | 11,3 s · 6.955 (≈23 SQL/Note) → P5-11c |
 
+## 3b'. P5-11c — materialize Note chưa học theo lô
+
+Production 30/09 (SELECT-only): 10 learner mỗi người có 460–12.014 Note nguồn overlay chưa học (deck marketplace đã cài, chưa có subject NOTE). Mở phiên v4 materialize mọi Note chưa học trong phạm vi (tối đa 5.000 thẻ) trong một request, ≈24 câu SQL/Note qua bộ máy mirror tổng quát: 2.000 Note ≈ 55 s local, vượt timeout 60 s của nginx trên VPS; transaction bị hủy nên lần mở sau lặp lại.
+
+`materialize_pristine_notes` nay gọi `materialize_pristine_notes_bulk` + `finalize_pristine_materialization`: cùng thứ tự khóa (Card chung → subject theo khóa → token), cùng điều kiện từ chối và mã lỗi, cùng các hàm thuần (`map_card_progress`, `build_contributor_evidence`, `canonical_document`), nhưng ghi subject/CardProgress/contributor/availability/state/token bằng câu lệnh theo lô. Đường từng-Note (`materialize_new_note_authority`, tạo Note mới) giữ nguyên.
+
+`tests/test_study_pristine_bulk_materialization.py`: cùng dữ liệu (7 Note, 11 Card, có Note 2 Template, có subject/token pristine sẵn), chạy đường từng-Note rồi rollback, chạy đường theo lô, so **mọi cột** của subject, token, card_progress, contributor, availability, state — khớp tuyệt đối trên SQLite; trên MySQL (id không quay lại sau rollback) khớp mọi cột trừ các trường suy ra từ id. Có ca đối chứng âm (ease khác phải lệch), ca từ chối, và audit đọc PASS. Chạy trong `probe_p5_direct_replay_mysql.py`.
+
+| Mở phiên v4 (MySQL 8.0.40 local) | Trước | Sau |
+|---|---|---|
+| 500 Note chưa học | 13,4 s · 12.047 SQL | **1,75 s · 62 SQL** |
+| 3.000 Note chưa học | ≈80 s (ước) | **8,9 s · 164 SQL** |
+
+Cùng PR: công cụ MCP `get_due_card_counts`, `get_study_queue`, `get_deck_stats` nạp Note lười và gọi `resolve_deck_options` cho từng Card (~3 SQL/Card). Nay nạp Note trong cùng truy vấn (`contains_eager`) và resolve tùy chọn một lần mỗi deck, như P5-11b đã làm cho mở phiên. Learner 3.000 Note (MySQL local): `get_due_card_counts` 11,8 s · 9.040 SQL → **2,2 s · 50 SQL**; `get_study_queue` 23,3 s · 18.090 SQL → **4,4 s · 110 SQL** (`bench_p5_session_open_mysql.py` đo cả hai).
+
 ## 3c. P5-11d — tạo Note song song (MCP agent) không còn deadlock
 
 Production 29/09 13:33 (release cũ, sau R1): 17 lần `create_note`/`batch_create_notes` qua MCP trả 500, 16 do deadlock 1213 và 1 do lock wait timeout, khi agent tạo Note song song. Tái hiện trên MySQL 8.0.40 với code `master` sau P5-11: 8 lần tạo song song cho một learner → 3 lỗi 1213.
@@ -90,7 +105,7 @@ Chỉ đổi code. Deploy lại release trước theo workflow; không có migra
 ## 5. Việc còn lại
 
 1. **Deploy**: merge PR này đưa cả #171 lên production (hết 504 dashboard/overview). Sau deploy chạy lại vòng audit runbook §4.2.4.
-2. **P5-11c — materialize Note pristine theo lô**: Note mới import/cài từ marketplace được materialize khi mở phiên, ≈23 câu SQL/Note qua bộ máy mirror (deck 2.000 Note mới ≈ 70 s). Hướng: gom theo lô hoặc materialize lúc cài/import.
+2. ~~**P5-11c — materialize Note pristine theo lô**~~: xong, §3b'.
 3. **Snapshot cả phạm vi**: phiên vẫn chứa tới 5.000 thẻ (≈2 ms CPU/thẻ, JSON ≈2 KB/thẻ) và SPA mở lại mỗi 50 câu. Chỉ snapshot hàng đợi trong ngày là thay đổi hợp đồng wire, để sau.
 4. **Reader vẫn khóa** (Browse, `/api/study/next`, MCP): nay chỉ còn vài câu lệnh khóa theo lô; chuyển hẳn sang đọc không khóa như dashboard nếu đo thấy tranh chấp.
 5. **Frontend gửi commit hai lần** (LEGACY v3): sau commit `auto_finish` thành công, `flushOnExit` gửi lại cùng `commit_id` với `final_states` đã cập nhật → 409 `IDEMPOTENCY_KEY_REUSED`. Dữ liệu lần đầu đã lưu; với v4 (`final_states` rỗng) lần gửi lại là replay 200. Chỉ còn ảnh hưởng phiên LEGACY cũ trong IndexedDB.

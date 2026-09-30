@@ -43,6 +43,7 @@ from app.repositories.study_inserted_rows import SUBJECT, remember_inserted
 from models.card import Card
 from models.card_progress import CardProgress
 from models.note import Note
+from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
@@ -912,6 +913,233 @@ def materialize_pristine_note_authority(
         now_utc=materialized_at,
         starting_ease=float(starting_ease),
     )
+
+
+_PRISTINE_CHUNK = 500
+
+
+def _chunked(values):
+    values = tuple(values)
+    for start in range(0, len(values), _PRISTINE_CHUNK):
+        yield values[start:start + _PRISTINE_CHUNK]
+
+
+def materialize_pristine_notes_bulk(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    note_ids: Iterable[str],
+    starting_ease_by_note_id: Mapping[str, float],
+    provenance_code: str = "NATIVE_DIRECT",
+    now_utc: datetime | None = None,
+) -> int:
+    """First-state materialize many pristine Notes with set-wise statements.
+
+    Same rows, values, refusals and lock order (sibling Cards shared, then
+    subjects in key order, then their tokens) as calling
+    ``materialize_pristine_note_authority`` for each Note, which costs about
+    twenty statements per Note. The caller has classified every Note as
+    pristine under the learner fence. Returns the number of Notes.
+    """
+
+    if route.mode_code != "NOTE":
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_MODE_CONFLICT", "First-state materialization requires NOTE."
+        )
+    ordered = sorted({str(value) for value in note_ids if str(value)}, key=lambda value: value.encode("utf-8"))
+    if not ordered:
+        return 0
+    materialized_at = _utc_naive(now_utc)
+    learner_id = route.learner_user_id
+
+    cards_by_note: dict[str, list[Card]] = {note_id: [] for note_id in ordered}
+    for chunk in _chunked(ordered):
+        for card in session.execute(
+            select(Card).where(Card.note_id.in_(chunk)).order_by(Card.note_id.asc(), Card.id.asc())
+            .with_for_update(read=True)
+        ).scalars():
+            cards_by_note[str(card.note_id)].append(card)
+    if any(not cards for cards in cards_by_note.values()):
+        raise StudyAuthorityFenceError(
+            "INCOMPLETE_AUTHORITY_COVERAGE", "A Note without Cards cannot be studied.")
+
+    # Create-if-absent every envelope, then lock them in canonical key order.
+    table = StudyProgressSubject.__table__
+    dialect = session.get_bind().dialect.name
+    for chunk in _chunked(ordered):
+        values = [
+            {
+                "learner_user_id": learner_id,
+                "logical_note_key": note_id.encode("utf-8"),
+                "live_note_id": note_id,
+                "created_at": materialized_at,
+                "updated_at": materialized_at,
+            }
+            for note_id in chunk
+        ]
+        if dialect == "mysql":
+            from sqlalchemy.dialects.mysql import insert as dialect_insert
+
+            statement = dialect_insert(table).values(values)
+            statement = statement.on_duplicate_key_update(id=table.c.id)
+        else:
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+
+            statement = dialect_insert(table).values(values).on_conflict_do_nothing(
+                index_elements=[table.c.learner_user_id, table.c.logical_note_key]
+            )
+        session.execute(statement)
+    subject_by_note: dict[str, StudyProgressSubject] = {}
+    for chunk in _chunked(ordered):
+        for subject in session.execute(
+            select(StudyProgressSubject)
+            .where(
+                StudyProgressSubject.learner_user_id == learner_id,
+                StudyProgressSubject.logical_note_key.in_([note_id.encode("utf-8") for note_id in chunk]),
+            )
+            .order_by(StudyProgressSubject.logical_note_key.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalars():
+            subject_by_note[bytes(subject.logical_note_key).decode("utf-8")] = subject
+    for note_id in ordered:
+        subject = subject_by_note.get(note_id)
+        if (
+            subject is None
+            or str(subject.live_note_id or "") != note_id
+            or str(subject.status_code or "") != "NO_CURRENT_PROGRESS"
+            or int(subject.contributor_count) != 0
+            or subject.authority_vector_hash is not None
+            or subject.lineage_vector_hash is not None
+        ):
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_SUBJECT_EXISTS",
+                "Note already has non-pristine authority evidence.",
+            )
+    subject_ids = sorted(int(subject.id) for subject in subject_by_note.values())
+
+    # The subject locks serialize every writer of these children, so plain
+    # reads decide; absent rows are then inserted without gap locks.
+    tokens: dict[int, StudyAuthoritySubjectToken] = {}
+    for chunk in _chunked(subject_ids):
+        if session.execute(
+            select(StudyProgressState.subject_id).where(StudyProgressState.subject_id.in_(chunk)).limit(1)
+        ).first() is not None:
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_STATE_DIVERGED", "New Note authority unexpectedly has current state.")
+        if session.execute(
+            select(StudyProgressContributor.id).where(StudyProgressContributor.subject_id.in_(chunk)).limit(1)
+        ).first() is not None:
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_SUBJECT_EXISTS", "Pristine Note authority subject has contributor evidence.")
+        visible = [
+            int(value) for value in session.execute(
+                select(StudyAuthoritySubjectToken.subject_id)
+                .where(StudyAuthoritySubjectToken.subject_id.in_(chunk))
+            ).scalars()
+        ]
+        if visible:
+            for token in session.execute(
+                select(StudyAuthoritySubjectToken)
+                .where(StudyAuthoritySubjectToken.subject_id.in_(sorted(visible)))
+                .order_by(StudyAuthoritySubjectToken.subject_id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars():
+                tokens[int(token.subject_id)] = token
+    for subject in subject_by_note.values():
+        token = tokens.get(int(subject.id))
+        if token is None:
+            continue
+        if int(token.subject_generation) != int(subject.subject_generation):
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_GENERATION_DIVERGED",
+                "Authority token generation differs from the locked subject.",
+            )
+        if token.semantic_state_hash is not None or int(token.authority_revision) < 0:
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_STATE_DIVERGED",
+                "Authority token references a missing current state.",
+            )
+
+    card_ids = sorted(str(card.id) for cards in cards_by_note.values() for card in cards)
+    for chunk in _chunked(card_ids):
+        if session.execute(
+            select(CardProgress.id)
+            .where(CardProgress.user_id == learner_id, CardProgress.card_id.in_(chunk))
+            .limit(1)
+        ).first() is not None:
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_PROGRESS_EXISTS", "New Note already has compatibility progress.")
+
+    progress_values = []
+    for note_id in ordered:
+        ease = float(starting_ease_by_note_id[note_id])
+        for card in cards_by_note[note_id]:
+            progress_values.append({
+                "user_id": learner_id, "card_id": str(card.id), "queue": "new", "step_index": 0,
+                "due_at": None, "due_day": None, "interval_days": 0, "interval_days_raw": 0.0,
+                "is_suspended": False, "is_buried": False, "buried_until_day": None,
+                "review_kind": "review", "scheduler_mode": "legacy", "ease_factor": ease,
+                "memory_stability": None, "memory_difficulty": None, "suspension_reason": None,
+                "last_leech_at": None, "last_leech_lapses": 0, "last_review_event_id": None,
+                "reps": 0, "lapses": 0, "last_reviewed_at": None, "revision": 0,
+                "created_at": materialized_at, "updated_at": materialized_at,
+            })
+    for chunk in _chunked(progress_values):
+        session.execute(CardProgress.__table__.insert(), list(chunk))
+    progress_by_card_id: dict[str, CardProgress] = {}
+    for chunk in _chunked(card_ids):
+        for progress in session.execute(
+            select(CardProgress)
+            .where(CardProgress.user_id == learner_id, CardProgress.card_id.in_(chunk))
+            .execution_options(populate_existing=True)
+        ).scalars():
+            progress_by_card_id[str(progress.card_id)] = progress
+    if set(progress_by_card_id) != set(card_ids):
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_MATERIALIZATION_INCOMPLETE",
+            "New Note authority did not build complete canonical state.",
+        )
+
+    state_hash_by_subject = mirror.finalize_pristine_materialization(
+        session,
+        learner_user_id=learner_id,
+        items=[
+            mirror.PristineMaterializationItem(
+                note_id=note_id,
+                subject=subject_by_note[note_id],
+                cards=tuple(cards_by_note[note_id]),
+                progress_rows=tuple(progress_by_card_id[str(card.id)] for card in cards_by_note[note_id]),
+            )
+            for note_id in ordered
+        ],
+        provenance_code=provenance_code,
+        now_utc=materialized_at,
+    )
+
+    new_tokens = []
+    for subject in subject_by_note.values():
+        subject_id = int(subject.id)
+        state_hash = state_hash_by_subject[subject_id]
+        token = tokens.get(subject_id)
+        if token is None:
+            new_tokens.append({
+                "subject_id": subject_id,
+                "subject_generation": int(subject.subject_generation),
+                "authority_revision": 0,
+                "semantic_state_hash": state_hash,
+                "created_at": materialized_at,
+                "updated_at": materialized_at,
+            })
+        else:
+            token.subject_generation = int(subject.subject_generation)
+            token.semantic_state_hash = state_hash
+            token.updated_at = materialized_at
+    for chunk in _chunked(new_tokens):
+        session.execute(StudyAuthoritySubjectToken.__table__.insert(), list(chunk))
+    session.flush()
+    return len(ordered)
 
 
 def _materialize_note_authority(
