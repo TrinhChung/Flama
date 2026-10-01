@@ -355,14 +355,23 @@ def _response_payload(
         "review_event_id": int(result.review_event.id),
         "history_fact_id": int(result.history.fact.id),
         "card_id": str(base.review.card.id),
-        "projected_card_revisions": {
+        "projected_card_revisions": _card_revisions(base, result),
+    }
+
+
+def _card_revisions(base, result: ExistingStateNoteReviewResult) -> dict[str, int]:
+    if base.route.storage_profile == "PROJECTION_V1":
+        return {
             str(row.card_id): int(row.revision)
             for row in sorted(
                 result.write.projected_progress,
                 key=lambda progress: str(progress.card_id),
             )
-        },
-    }
+        }
+    # CANONICAL_V1 writes no projection: every sibling reports the Note's
+    # authority revision (ADR P9-03 §2.9); clients only echo it back.
+    revision = int(result.write.authority_revision)
+    return {card_id: revision for card_id in sorted(base.siblings.card_ids)}
 
 
 def _stage_receipt(

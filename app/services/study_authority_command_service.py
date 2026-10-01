@@ -30,6 +30,7 @@ from app.services.study_authority_cas_service import (
 )
 from app.services.study_authority_evidence_service import (
     StudyAuthorityEvidenceResult,
+    finalize_study_authority_canonical_evidence,
     finalize_study_authority_evidence,
 )
 from app.services.study_authority_projection_encoder import (
@@ -41,9 +42,15 @@ from app.services.study_authority_projection_encoder import (
 from app.services.study_authority_write_service import (
     StudyAuthorityStateWrite,
     StudyAuthorityWriteResult,
+    apply_study_authority_canonical_write,
     apply_study_authority_material_write,
 )
-from app.services.study_note_card_projection import rounded_interval_days
+from app.services.study_note_card_projection import (
+    NoteCardBurial,
+    NoteCardProjection,
+    project_note_card,
+    rounded_interval_days,
+)
 from app.services.study_progress_contract import (
     ALGORITHM_KEY,
     ALGORITHM_VERSION,
@@ -89,7 +96,8 @@ class ExistingStateNoteReviewCommand:
 @dataclass(frozen=True)
 class ExistingStateNoteReviewResult:
     review_event: ReviewEvent
-    projection: EncodedLegacyProjection
+    # None under CANONICAL_V1: no legacy projection is encoded or written.
+    projection: EncodedLegacyProjection | None
     write: StudyAuthorityWriteResult
     evidence: StudyAuthorityEvidenceResult
     history: NativeHistoryFactResult
@@ -275,6 +283,47 @@ def _projection_metadata(
     )
 
 
+def _canonical_sibling_projections(
+    command: ExistingStateNoteReviewCommand,
+    next_state: StudyAuthorityStateWrite,
+) -> dict[str, NoteCardProjection]:
+    """Project the next state onto every live sibling (ADR P9-03 §2.2, §2.8).
+
+    Burial is not Algorithm State: like the projection writer, every sibling
+    keeps the reviewed Card's current burial, read from its locked availability.
+    """
+
+    reviewed_card_id = str(command.review.card.id)
+    contributor = command.compatibility.contributor_by_card_id[reviewed_card_id]
+    availability = command.compatibility.availability_by_contributor_id[int(contributor.id)]
+    burial = NoteCardBurial(
+        is_buried=bool(availability.is_buried),
+        buried_until_day=(
+            int(availability.buried_until_day)
+            if availability.buried_until_day is not None
+            else None
+        ),
+    )
+    try:
+        projections = {
+            str(card.id): project_note_card(
+                next_state.state_payload,
+                burial=burial,
+                card_id=str(card.id),
+                card_created_at=card.created_at,
+            )
+            for card in command.siblings.cards
+        }
+    except StudyProgressCodecError as exc:
+        raise _fail(exc.code, str(exc)) from exc
+    if len({projection.semantic_state_hash for projection in projections.values()}) != 1:
+        raise _fail(
+            "SEMANTIC_MISMATCH",
+            "Sibling projections do not share one semantic Note state.",
+        )
+    return projections
+
+
 def apply_existing_state_note_review(
     session: Session,
     *,
@@ -294,11 +343,43 @@ def apply_existing_state_note_review(
             "Canonical ReviewEvent did not receive a durable transaction identity.",
         )
 
+    reviewed_card_id = str(command.review.card.id)
+    if command.route.storage_profile != "PROJECTION_V1":
+        projections = _canonical_sibling_projections(command, next_state)
+        write_result = apply_study_authority_canonical_write(
+            session,
+            route=command.route,
+            locked=command.locked,
+            expected=command.expected,
+            next_state=next_state,
+            semantic_state_hash=projections[reviewed_card_id].semantic_state_hash,
+            now_utc=command.now_utc,
+        )
+        evidence = finalize_study_authority_canonical_evidence(
+            session,
+            route=command.route,
+            locked=command.locked,
+            siblings=command.siblings,
+            compatibility=command.compatibility,
+            write_result=write_result,
+            projections_by_card_id=projections,
+            review_event=review_event,
+            now_utc=command.now_utc,
+        )
+        return _with_history_fact(
+            session,
+            command=command,
+            review_event=review_event,
+            projection=None,
+            write_result=write_result,
+            evidence=evidence,
+            before_state_hash=before_state_hash,
+        )
+
     card_created_at = {
         str(card.id): card.created_at for card in command.siblings.cards
     }
     baselines: list[LegacySiblingBaseline] = []
-    reviewed_card_id = str(command.review.card.id)
     for card_id in command.siblings.card_ids:
         progress = command.siblings.progress_by_card_id[card_id]
         raw = serialize_raw_card_progress(progress)
@@ -350,6 +431,28 @@ def apply_existing_state_note_review(
         review_event=review_event,
         now_utc=command.now_utc,
     )
+    return _with_history_fact(
+        session,
+        command=command,
+        review_event=review_event,
+        projection=projection,
+        write_result=write_result,
+        evidence=evidence,
+        before_state_hash=before_state_hash,
+    )
+
+
+def _with_history_fact(
+    session: Session,
+    *,
+    command: ExistingStateNoteReviewCommand,
+    review_event: ReviewEvent,
+    projection: EncodedLegacyProjection | None,
+    write_result: StudyAuthorityWriteResult,
+    evidence: StudyAuthorityEvidenceResult,
+    before_state_hash: bytes,
+) -> ExistingStateNoteReviewResult:
+    reviewed_card_id = str(command.review.card.id)
     reviewed_contributor = evidence.contributor_by_card_id[reviewed_card_id]
     history = append_native_history_fact(
         session,
