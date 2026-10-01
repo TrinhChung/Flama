@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AdminMcpTokensPage } from '../AdminMcpTokensPage'
+import { ALL_MCP_SCOPES } from '@/features/settings/hooks/useMcpTokenCRUD'
 
 // Enable React 19 Act Environment
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -182,6 +183,10 @@ describe('AdminMcpTokensPage Baseline Characterization Suite', () => {
     })
 
     vi.clearAllMocks()
+    mocks.writeText.mockReset().mockResolvedValue(undefined)
+    mocks.mutate.mockReset()
+    mocks.toastSuccess.mockReset()
+    mocks.toastError.mockReset()
 
     mocks.get.mockImplementation((url: string) => {
       if (url === '/admin/mcp-tokens/summary') {
@@ -213,6 +218,7 @@ describe('AdminMcpTokensPage Baseline Characterization Suite', () => {
   })
 
   afterEach(async () => {
+    queryClient.clear()
     if (root && container) {
       const activeRoot = root
       await act(async () => {
@@ -335,11 +341,12 @@ describe('AdminMcpTokensPage Baseline Characterization Suite', () => {
     expect(mocks.mutate).toHaveBeenCalledWith(
       '/admin/mcp-tokens/tokens',
       'POST',
-      expect.objectContaining({
+      {
         user_id: 10,
         name: 'Assigned Claude Key',
-        scopes: expect.any(Array),
-      })
+        expires_in_days: 180,
+        scopes: ALL_MCP_SCOPES.map((s) => s.key),
+      }
     )
 
     // Admin secret reveal modal appears
@@ -414,7 +421,7 @@ describe('AdminMcpTokensPage Baseline Characterization Suite', () => {
     expect(mocks.mutate).toHaveBeenCalledWith(
       '/admin/mcp-tokens/tokens/501/rotate',
       'POST',
-      expect.anything()
+      { expires_in_days: 180 }
     )
 
     // Close secret modal
@@ -490,5 +497,271 @@ describe('AdminMcpTokensPage Baseline Characterization Suite', () => {
     })
 
     expect(mocks.mutate).toHaveBeenCalledWith('/admin/mcp-tokens/cleanup', 'POST')
+  })
+
+  // =========================================================================
+  // EDGE CASES: MUTATION FAILURE, CLIPBOARD REJECTION & EMPTY STATE
+  // =========================================================================
+
+  it('[Edge Case - Mutation Failure] keeps admin create dialog open and fires toast.error on mutation failure', async () => {
+    mocks.mutate.mockRejectedValueOnce(new Error('Tên token đã được sử dụng.'))
+
+    await renderPage()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Quản trị Token & Kết nối AI')
+    })
+
+    const tokensTabTrigger = Array.from(document.querySelectorAll('button[role="tab"]')).find((t) =>
+      t.textContent?.includes('Danh sách Token & Secrets')
+    )!
+    await act(async () => {
+      clickRadixTab(tokensTabTrigger as HTMLElement)
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cấp Token mới cho User')
+    })
+
+    const openCreateBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Cấp Token mới cho User')
+    )!
+    await act(async () => {
+      openCreateBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cấp MCP Access Token Mới')
+    })
+
+    const createDialog = document.querySelector('[role="dialog"]')!
+    const nameInput = createDialog.querySelector<HTMLInputElement>(
+      'input[placeholder*="Claude Desktop PC"]'
+    )!
+    await act(async () => {
+      setNativeInputValue(nameInput, 'Duplicate Admin Key')
+    })
+
+    const submitBtn = Array.from(createDialog.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Cấp Token Mới')
+    )!
+    await act(async () => {
+      submitBtn.click()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Tên token đã được sử dụng.')
+    // Dialog stays open and value is preserved
+    expect(document.body.textContent).toContain('Cấp MCP Access Token Mới')
+    expect(nameInput.value).toBe('Duplicate Admin Key')
+    expect(document.body.textContent).not.toContain('Token & Secret Đã Được Tạo Thành Công')
+  })
+
+  it('[Edge Case - Mutation Failure] keeps rotate dialog open and fires toast.error when admin rotate fails', async () => {
+    mocks.mutate.mockRejectedValueOnce(new Error('Lỗi hệ thống khi tạo secret mới.'))
+
+    await renderPage()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Quản trị Token & Kết nối AI')
+    })
+
+    const tokensTabTrigger = Array.from(document.querySelectorAll('button[role="tab"]')).find((t) =>
+      t.textContent?.includes('Danh sách Token & Secrets')
+    )!
+    await act(async () => {
+      clickRadixTab(tokensTabTrigger as HTMLElement)
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Tanaka Cursor Agent')
+    })
+
+    const rotateBtn = document.querySelector<HTMLButtonElement>('button[title*="Xoay vòng Secret"]')!
+    await act(async () => {
+      rotateBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Xoay Vòng Secret Cho Token')
+    })
+
+    const confirmRotateBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(
+      (b) => b.textContent?.includes('Xác Nhận Xoay Vòng Secret')
+    )!
+    await act(async () => {
+      confirmRotateBtn.click()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Lỗi hệ thống khi tạo secret mới.')
+    expect(document.body.textContent).toContain('Xoay Vòng Secret Cho Token')
+    expect(document.body.textContent).not.toContain('Token & Secret Đã Được Tạo Thành Công')
+  })
+
+  it('[Edge Case - Mutation Failure] fires toast.error when toggle user MCP permission fails', async () => {
+    mocks.mutate.mockRejectedValueOnce(new Error('Không có quyền thay đổi user này.'))
+
+    await renderPage()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Quản trị Token & Kết nối AI')
+    })
+
+    // Tanaka Sensei is in the users table
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Tanaka Sensei')
+    })
+
+    const toggleBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Thu hồi quyền quản lý') || b.textContent?.includes('Cấp quyền quản lý')
+    )!
+    await act(async () => {
+      toggleBtn.click()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Không có quyền thay đổi user này.')
+  })
+
+  it('[Edge Case - Clipboard Rejection] fires toast.error when copying admin secret token fails', async () => {
+    mocks.mutate.mockResolvedValueOnce({
+      item: {
+        token: 'flama_sec_admin_failed_copy',
+        name: 'Copy Rejection Token',
+      },
+    })
+    mocks.writeText.mockRejectedValueOnce(new Error('Clipboard denied'))
+
+    await renderPage()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Quản trị Token & Kết nối AI')
+    })
+
+    const tokensTabTrigger = Array.from(document.querySelectorAll('button[role="tab"]')).find((t) =>
+      t.textContent?.includes('Danh sách Token & Secrets')
+    )!
+    await act(async () => {
+      clickRadixTab(tokensTabTrigger as HTMLElement)
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cấp Token mới cho User')
+    })
+
+    const openCreateBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Cấp Token mới cho User')
+    )!
+    await act(async () => {
+      openCreateBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cấp MCP Access Token Mới')
+    })
+
+    const createDialog = document.querySelector('[role="dialog"]')!
+    const submitBtn = Array.from(createDialog.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Cấp Token Mới')
+    )!
+    await act(async () => {
+      submitBtn.click()
+    })
+
+    // Secret modal appears
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Token & Secret Đã Được Tạo Thành Công')
+    })
+
+    const copyBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(
+      (b) => b.textContent?.includes('Sao chép') && !b.textContent?.includes('URL')
+    )!
+    await act(async () => {
+      copyBtn.click()
+    })
+
+    // Note: AdminMcpTokensPage has NO trailing dot in toast error
+    expect(mocks.toastError).toHaveBeenCalledWith('Không thể sao chép vào bộ nhớ tạm')
+    expect(copyBtn.textContent).toContain('Sao chép')
+    expect(copyBtn.textContent).not.toContain('Đã chép')
+  })
+
+  it('[Edge Case - Empty List] renders empty state when admin tokens list is empty', async () => {
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/admin/mcp-tokens/summary') {
+        return Promise.resolve({
+          total_tokens: 0,
+          active_tokens: 0,
+          revoked_tokens: 0,
+          expired_tokens: 0,
+          inactive_tokens: 0,
+          total_requests: 0,
+          total_users: 1,
+          permitted_users: 1,
+        })
+      }
+      if (url === '/admin/mcp-tokens/users') {
+        return Promise.resolve({
+          items: mockAdminUsers,
+          total: 1,
+          page: 1,
+          per_page: 50,
+          pages: 1,
+        })
+      }
+      if (url === '/admin/mcp-tokens/tokens') {
+        return Promise.resolve({
+          items: [],
+          total: 0,
+          page: 1,
+          per_page: 50,
+          pages: 0,
+        })
+      }
+      return Promise.resolve({ items: [] })
+    })
+
+    await renderPage()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Quản trị Token & Kết nối AI')
+    })
+
+    const tokensTabTrigger = Array.from(document.querySelectorAll('button[role="tab"]')).find((t) =>
+      t.textContent?.includes('Danh sách Token & Secrets')
+    )!
+    await act(async () => {
+      clickRadixTab(tokensTabTrigger as HTMLElement)
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Chưa có token nào')
+      expect(document.body.textContent).toContain("Bấm 'Cấp Token mới cho User' ở trên để tạo token cho người dùng.")
+    })
+
+    // Table is not rendered
+    const tokensContent = document.querySelector('[data-state="active"][role="tabpanel"]')
+    expect(tokensContent?.querySelector('table')).toBeNull()
+  })
+
+  it('[Edge Case - Empty List] renders empty state when admin users query returns empty list', async () => {
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/admin/mcp-tokens/summary') {
+        return Promise.resolve(mockAdminSummary)
+      }
+      if (url === '/admin/mcp-tokens/users') {
+        return Promise.resolve({
+          items: [],
+          total: 0,
+          page: 1,
+          per_page: 20,
+          pages: 0,
+        })
+      }
+      return Promise.resolve({ items: [] })
+    })
+
+    await renderPage()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Không tìm thấy người dùng')
+      expect(document.body.textContent).toContain('Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc trạng thái quyền.')
+    })
+
+    const usersContent = document.querySelector('[data-state="active"][role="tabpanel"]')
+    expect(usersContent?.querySelector('table')).toBeNull()
   })
 })

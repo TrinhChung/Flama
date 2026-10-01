@@ -172,6 +172,10 @@ describe('McpTokensTab Baseline Characterization Suite', () => {
     })
 
     vi.clearAllMocks()
+    mocks.writeText.mockReset().mockResolvedValue(undefined)
+    mocks.mutate.mockReset()
+    mocks.toastSuccess.mockReset()
+    mocks.toastError.mockReset()
 
     // Default GET response for /mcp-tokens
     mocks.get.mockImplementation((url: string) => {
@@ -191,6 +195,7 @@ describe('McpTokensTab Baseline Characterization Suite', () => {
   })
 
   afterEach(async () => {
+    queryClient.clear()
     if (root && container) {
       const activeRoot = root
       await act(async () => {
@@ -278,11 +283,20 @@ describe('McpTokensTab Baseline Characterization Suite', () => {
     expect(mocks.mutate).toHaveBeenCalledWith(
       '/mcp-tokens',
       'POST',
-      expect.objectContaining({
+      {
         name: 'Antigravity Agent',
         expires_in_days: 180,
-        scopes: expect.arrayContaining(['deck:read', 'note:read', 'note:check']),
-      })
+        scopes: [
+          'deck:read',
+          'deck-share:read',
+          'note:read',
+          'note:check',
+          'note-type:read',
+          'study:read',
+          'stats:read',
+          'media:read',
+        ],
+      }
     )
 
     // 6. Assert Secret Modal/Alert appears with newly issued secret
@@ -466,11 +480,11 @@ describe('McpTokensTab Baseline Characterization Suite', () => {
     expect(mocks.mutate).toHaveBeenCalledWith(
       `/mcp-tokens/${mockActiveToken.id}`,
       'PATCH',
-      expect.objectContaining({
+      {
         name: 'Cursor Pro Workstation',
         expires_in_days: 365,
-        scopes: expect.any(Array),
-      })
+        scopes: mockActiveToken.scopes,
+      }
     )
 
     // Dialog closes
@@ -749,5 +763,250 @@ describe('McpTokensTab Baseline Characterization Suite', () => {
 
     // Read-only explanatory banner is displayed
     expect(document.body.textContent).toContain('Thông số Kết nối AI do Quản trị viên Quản lý')
+  })
+
+  // =========================================================================
+  // EDGE CASES: MUTATION FAILURE, CLIPBOARD REJECTION & EMPTY STATE
+  // =========================================================================
+
+  it('[Edge Case - Mutation Failure] preserves form input and displays toast.error when create mutation fails', async () => {
+    mocks.mutate.mockRejectedValueOnce(new Error('Tên token đã tồn tại trên hệ thống.'))
+
+    await renderTab()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cursor IDE MacBook')
+    })
+
+    const nameInput = document.querySelector<HTMLInputElement>('#mcp-token-name')!
+    await act(async () => {
+      setNativeInputValue(nameInput, 'Faulty Bot Token')
+    })
+
+    const submitBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tạo Token mới')
+    )!
+    await act(async () => {
+      submitBtn.click()
+    })
+
+    // Assert error toast is displayed with error message
+    expect(mocks.toastError).toHaveBeenCalledWith('Tên token đã tồn tại trên hệ thống.')
+
+    // Form input value is preserved (NOT cleared)
+    expect(nameInput.value).toBe('Faulty Bot Token')
+
+    // Submit button recovers from pending state
+    expect(submitBtn.disabled).toBe(false)
+
+    // Secret alert is NOT revealed
+    expect(document.body.textContent).not.toContain('Secret Token của bạn đã sẵn sàng!')
+  })
+
+  it('[Edge Case - Mutation Failure] keeps edit dialog open and displays toast.error when update mutation fails', async () => {
+    mocks.mutate.mockRejectedValueOnce(new Error('Lỗi cập nhật token trên máy chủ.'))
+
+    await renderTab()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cursor IDE MacBook')
+    })
+
+    const editBtn = document.querySelector<HTMLButtonElement>('button[title="Chỉnh sửa tên & thời hạn"]')!
+    await act(async () => {
+      editBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Chỉnh sửa MCP Token')
+    })
+
+    const editNameInput = document.querySelector<HTMLInputElement>('#edit-token-name')!
+    await act(async () => {
+      setNativeInputValue(editNameInput, 'Renamed Faulty')
+    })
+
+    const saveBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Lưu quyền hạn')
+    )!
+    await act(async () => {
+      saveBtn.click()
+    })
+
+    // Assert error toast
+    expect(mocks.toastError).toHaveBeenCalledWith('Lỗi cập nhật token trên máy chủ.')
+
+    // Dialog stays open so user changes are not lost
+    expect(document.body.textContent).toContain('Chỉnh sửa MCP Token')
+    expect(editNameInput.value).toBe('Renamed Faulty')
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+  })
+
+  it('[Edge Case - Mutation Failure] keeps rotate dialog open and displays toast.error when rotate mutation fails', async () => {
+    mocks.mutate.mockRejectedValueOnce(new Error('Token không hợp lệ để xoay vòng.'))
+
+    await renderTab()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cursor IDE MacBook')
+    })
+
+    const rotateBtn = document.querySelector<HTMLButtonElement>('button[title="Xoay vòng / Đổi Secret Key"]')!
+    await act(async () => {
+      rotateBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Đổi Secret Token (Rotate)')
+    })
+
+    const confirmRotateBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Xác nhận Đổi Secret')
+    )!
+    await act(async () => {
+      confirmRotateBtn.click()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Token không hợp lệ để xoay vòng.')
+    expect(document.body.textContent).toContain('Đổi Secret Token (Rotate)')
+    expect(document.body.textContent).not.toContain('Secret Token của bạn đã sẵn sàng!')
+  })
+
+  it('[Edge Case - Mutation Failure] keeps revoke dialog open and displays toast.error when revoke mutation fails', async () => {
+    mocks.mutate.mockRejectedValueOnce(new Error('Không thể kết nối cơ sở dữ liệu.'))
+
+    await renderTab()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cursor IDE MacBook')
+    })
+
+    const revokeBtn = document.querySelector<HTMLButtonElement>('button[title="Thu hồi Token"]')!
+    await act(async () => {
+      revokeBtn.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Xác nhận thu hồi MCP Token')
+    })
+
+    const confirmRevokeBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Xác nhận thu hồi')
+    )!
+    await act(async () => {
+      confirmRevokeBtn.click()
+    })
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Không thể kết nối cơ sở dữ liệu.')
+    expect(document.body.textContent).toContain('Xác nhận thu hồi MCP Token')
+  })
+
+  it('[Edge Case - Clipboard Rejection] fires toast.error and does not change button text when clipboard writeText rejects', async () => {
+    mocks.mutate.mockResolvedValueOnce({
+      item: {
+        id: 105,
+        name: 'Denied Clipboard Token',
+        token: 'flama_sec_denied_123',
+        status: 'active',
+        scopes: ['deck:read'],
+      },
+    })
+    mocks.writeText.mockRejectedValueOnce(new Error('DOMException: Clipboard permission denied'))
+
+    await renderTab()
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Cursor IDE MacBook')
+    })
+
+    const nameInput = document.querySelector<HTMLInputElement>('#mcp-token-name')!
+    await act(async () => {
+      setNativeInputValue(nameInput, 'Denied Clipboard Token')
+    })
+
+    const submitBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tạo Token mới')
+    )!
+    await act(async () => {
+      submitBtn.click()
+    })
+
+    // Secret alert appears
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Secret Token của bạn đã sẵn sàng!')
+    })
+
+    // Click Copy Token button
+    const copyTokenBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Sao chép') && !b.textContent?.includes('URL')
+    )!
+    await act(async () => {
+      copyTokenBtn.click()
+    })
+
+    // Error toast fired with trailing dot
+    expect(mocks.toastError).toHaveBeenCalledWith('Không thể sao chép vào bộ nhớ tạm.')
+    // Button label remains "Sao chép" (does NOT flip to "Đã chép")
+    expect(copyTokenBtn.textContent).toContain('Sao chép')
+    expect(copyTokenBtn.textContent).not.toContain('Đã chép')
+  })
+
+  it('[Edge Case - Empty List] renders empty state and zeroed stat cards when token list is empty (Manager)', async () => {
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/mcp-tokens') {
+        return Promise.resolve({
+          items: [],
+          policy: {
+            default_expiry_days: 180,
+            allowed_expiry_days: [30, 90, 180, 365],
+            allow_no_expiry: true,
+            scopes: ALL_MCP_SCOPES.map((s) => s.key),
+          },
+        })
+      }
+      return Promise.resolve({})
+    })
+
+    await renderTab()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Danh sách Token & Secrets (0)')
+      expect(document.body.textContent).toContain('Chưa có MCP token nào')
+      expect(document.body.textContent).toContain("Điền tên và bấm 'Tạo Token mới' ở trên")
+    })
+
+    // Table should not be in the document
+    expect(document.querySelector('table')).toBeNull()
+
+    // Active tokens stat card should display 0
+    expect(document.body.textContent).toContain('Token đang hoạt động')
+    // Cleanup button should not be displayed when inactiveCount is 0
+    expect(document.body.textContent).not.toContain('Dọn dẹp')
+  })
+
+  it('[Edge Case - Empty List] renders standard user empty state when token list is empty (Non-Manager)', async () => {
+    mockBootstrapUser = {
+      id: 2,
+      email: 'student@nihongo.flama',
+      is_admin: false,
+      can_manage_mcp_tokens: false,
+    }
+
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/mcp-tokens') {
+        return Promise.resolve({
+          items: [],
+          policy: { scopes: [] },
+        })
+      }
+      return Promise.resolve({})
+    })
+
+    await renderTab()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Thông số Máy chủ MCP')
+      expect(document.body.textContent).toContain('Thông số Kết nối AI do Quản trị viên Quản lý')
+    })
+
+    // Create card and table should not exist for non-manager with empty items
+    expect(document.querySelector('#mcp-token-name')).toBeNull()
+    expect(document.querySelector('table')).toBeNull()
+    expect(document.body.textContent).not.toContain('Danh sách Token & Secrets')
   })
 })
