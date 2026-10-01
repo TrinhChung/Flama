@@ -139,7 +139,8 @@ def materialize_pristine_notes(
         return frozenset()
     note_by_id = {str(card.note_id): card.note for card in cards}
     _stateful, pristine = classify_note_authority_keys(
-        session, learner_user_id=route.learner_user_id, note_ids=note_by_id)
+        session, learner_user_id=route.learner_user_id, note_ids=note_by_id,
+        storage_profile=route.storage_profile)
     # Set-wise: a study session over thousands of never-studied overlay Notes
     # must open within one request (P5-11c). Same rows as the per-Note path.
     lifecycle.materialize_pristine_notes_bulk(
