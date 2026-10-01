@@ -1124,10 +1124,15 @@ def _idempotent_response(
     if row is None:
         return None
     if row.request_hash != request_hash:
+        # A commit row exists only once the lease committed under this id. A
+        # retry that changed the payload (a browser that lost the receipt and
+        # resent with another commit reason) cannot commit again; answer with
+        # the stored receipt so the client can settle, never re-apply it.
         raise StudySessionError(
-            "IDEMPOTENCY_KEY_REUSED",
-            "The commit id was already used with a different payload.",
+            "SESSION_ALREADY_COMMITTED",
+            "Study session was already committed.",
             status=409,
+            details=json.loads(row.response_json),
         )
     return json.loads(row.response_json)
 

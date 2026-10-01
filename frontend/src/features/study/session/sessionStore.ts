@@ -434,6 +434,31 @@ export async function removeStudySession(key: string) {
   }
 }
 
+/**
+ * Move a still-valid local session out of the active store, keeping its
+ * bounded raw copy, when the server already settled its lease another way.
+ * The scope reopens only after the user acknowledges the quarantine.
+ */
+export async function quarantineStudySession(
+  key: string,
+  session: PersistedStudySession,
+  quarantine: StudySessionQuarantine,
+) {
+  try {
+    await moveSessionToQuarantine(key, session, quarantine)
+  } catch {
+    // Keep at least this tab from resubmitting the lease.
+    memoryFallback.delete(key)
+    rememberQuarantine({
+      scope_key: key,
+      quarantined_at_ms: Date.now(),
+      reason: quarantine.reason,
+      message: quarantine.message,
+      ...quarantineEvidence(session),
+    })
+  }
+}
+
 export async function removeStudySessionIfMatches(
   key: string,
   sessionId: string,

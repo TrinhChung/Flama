@@ -2158,6 +2158,28 @@ class StudySessionApiTests(unittest.TestCase):
             response = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(response.status_code, 200)
 
+    def test_reused_commit_id_with_another_payload_settles_on_the_stored_receipt(self):
+        # Production 2026-10-01: a browser lost the receipt of a commit and
+        # resent the same commit id with another reason (auto_finish, then
+        # manual_exit). It must get the stored receipt to settle, and nothing
+        # may be applied twice.
+        snapshot = self._open_session_v3()
+        payload = {**self._commit_payload(snapshot), "commit_reason": "page_exit"}
+        url = f"/api/study/sessions/{snapshot['session_id']}/commit"
+        first = self.client.post(url, json=payload)
+        self.assertEqual(first.status_code, 200, first.get_json())
+        receipt = first.get_json()
+        with self.app.app_context():
+            events_before = ReviewEvent.query.count()
+
+        resent = self.client.post(url, json={**payload, "commit_reason": "manual_exit"})
+        self.assertEqual(resent.status_code, 409, resent.get_json())
+        self.assertEqual(resent.get_json()["error"], "SESSION_ALREADY_COMMITTED")
+        self.assertEqual(resent.get_json()["details"], receipt)
+        self.assertEqual(self.client.post(url, json=payload).get_json(), receipt)
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), events_before)
+
     def test_pre_cutover_legacy_commit_replays_after_note_enrollment(self):
         # A browser lost the acknowledgement of a legacy commit, then the
         # learner moved to NOTE: the retry must get its receipt, not a refusal.

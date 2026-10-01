@@ -167,6 +167,22 @@ describe('local study session engine', () => {
     vi.unstubAllGlobals()
   })
 
+  it('keeps the original commit reason when a pending commit is retried', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    const local = createPersistedSession(snapshot())
+    const now = Date.parse(local.snapshot.server_now_utc)
+    const answered = applyLocalAnswer(
+      local, 'card-1', 'good', decisionForCard(local, 'card-1', now + 1000), 500,
+    )
+    const first = prepareCommit(answered, { reason: 'auto_finish' })
+    const retry = prepareCommit(first.session, { reason: 'manual_exit' })
+    expect(retry.payload.commit_id).toBe(first.payload.commit_id)
+    expect(retry.payload.commit_reason).toBe('auto_finish')
+    expect(retry.payload).toEqual(first.payload)
+  })
+
   it('fails before opening a session whose Algorithm is unavailable', () => {
     const unsupported = snapshot()
     unsupported.algorithm_version = '2.0.0'

@@ -516,7 +516,10 @@ export function prepareCommit(
   const commitId = session.commit_id ?? crypto.randomUUID()
   const resumeAfterCommit = options.resumeAfterCommit
     ?? session.resume_after_commit
-  const commitReason = options.reason
+  // A retry under an existing commit id must resend the same payload: the
+  // server keys idempotency on it, so a new reason would never settle.
+  const commitReason = (session.commit_id ? session.commit_reason : undefined)
+    ?? options.reason
     ?? session.commit_reason
     ?? (resumeAfterCommit ? 'rollover' : 'manual_exit')
   const prepared = {
