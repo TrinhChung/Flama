@@ -2,8 +2,25 @@ import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { AlertTriangle, HelpCircle, Loader2, X } from "lucide-react"
 
+import { cva } from "class-variance-authority"
+
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+
+export const confirmDialogVariants = cva(
+  "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-5 text-popover-foreground shadow-lg ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+  {
+    variants: {
+      variant: {
+        primary: "",
+        destructive: "",
+      },
+    },
+    defaultVariants: {
+      variant: "primary",
+    },
+  }
+)
 
 export interface ConfirmDialogProps {
   /** Controlled open state */
@@ -106,10 +123,7 @@ export function ConfirmDialog({
               e.preventDefault()
             }
           }}
-          className={cn(
-            "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-5 text-popover-foreground shadow-lg ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-            className
-          )}
+          className={cn(confirmDialogVariants({ variant }), className)}
         >
           <div className="flex items-start gap-3.5">
             {icon ? (

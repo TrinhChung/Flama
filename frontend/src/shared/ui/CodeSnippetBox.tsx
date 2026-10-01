@@ -1,8 +1,23 @@
 import * as React from "react"
+import { cva } from "class-variance-authority"
 import { Check, Copy } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+
+export const codeSnippetVariants = cva(
+  "rounded-lg border border-border bg-muted/20 dark:bg-muted/10 overflow-hidden text-sm",
+  {
+    variants: {
+      variant: {
+        default: "border-border bg-muted/20 dark:bg-muted/10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
 
 export interface CodeSnippetBoxProps
   extends Omit<React.HTMLAttributes<HTMLDivElement>, "onCopy"> {
@@ -100,10 +115,7 @@ export const CodeSnippetBox = React.forwardRef<HTMLDivElement, CodeSnippetBoxPro
       <div
         ref={ref}
         data-slot="code-snippet-box"
-        className={cn(
-          "rounded-lg border border-border bg-muted/20 dark:bg-muted/10 overflow-hidden text-sm",
-          className
-        )}
+        className={cn(codeSnippetVariants(), className)}
         {...props}
       >
         {(title || language || showCopyButton) && (

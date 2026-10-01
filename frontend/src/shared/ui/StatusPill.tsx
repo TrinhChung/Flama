@@ -36,6 +36,8 @@ export const statusPillVariants = cva(
   }
 )
 
+export type StatusPillVariant = NonNullable<VariantProps<typeof statusPillVariants>["variant"]>
+
 export interface StatusPillProps
   extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof statusPillVariants> {

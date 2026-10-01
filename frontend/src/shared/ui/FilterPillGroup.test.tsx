@@ -64,7 +64,8 @@ describe("FilterPillGroup Primitive", () => {
 
     // Clicking unchecked enabled option calls onChange
     await act(async () => {
-      ;(radios?.[2] as HTMLButtonElement).click()
+      const radioBtn = radios?.[2] as HTMLButtonElement | undefined
+      radioBtn?.click()
     })
     expect(onChange).toHaveBeenCalledWith("review")
   })
@@ -92,13 +93,15 @@ describe("FilterPillGroup Primitive", () => {
 
     // Clicking active checkbox removes it from selection
     await act(async () => {
-      ;(checkboxes?.[0] as HTMLButtonElement).click()
+      const checkBtn = checkboxes?.[0] as HTMLButtonElement | undefined
+      checkBtn?.click()
     })
     expect(onChange).toHaveBeenCalledWith(["review"])
 
     // Clicking inactive checkbox adds it to selection
     await act(async () => {
-      ;(checkboxes?.[1] as HTMLButtonElement).click()
+      const checkBtn = checkboxes?.[1] as HTMLButtonElement | undefined
+      checkBtn?.click()
     })
     expect(onChange).toHaveBeenCalledWith(["all", "review", "learning"])
   })
