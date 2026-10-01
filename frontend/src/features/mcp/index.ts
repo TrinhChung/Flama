@@ -1,2 +1,7 @@
 export * from './types'
 export * from './hooks/useMcpTokens'
+export * from './components/McpTokensManager'
+export * from './components/McpTokenTable'
+export * from './components/McpTokenSecretModal'
+export * from './components/McpCreateEditTokenModal'
+export * from './components/McpTokenActionModals'
