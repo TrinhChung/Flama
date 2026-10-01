@@ -28,6 +28,7 @@ import {
 import {
   acknowledgeStudySessionQuarantine,
   loadStudySessionWithDurability,
+  quarantineStudySession,
   removeStudySessionIfMatches,
   saveStudySession,
   scopeKey,
@@ -99,6 +100,34 @@ function requireMatchingCommitReceipt(value: unknown, session: PersistedStudySes
     throw new ApiError('Chưa nhận được xác nhận lưu hợp lệ. Dữ liệu vẫn được giữ để thử lại.', 502, 'INVALID_COMMIT_RECEIPT')
   }
   return value
+}
+
+/**
+ * The server answered SESSION_ALREADY_COMMITTED for this lease: its stored
+ * receipt is authoritative, whatever commit reason this retry carried. The
+ * lease is closed, so local answers it does not cover can never be saved to
+ * it; they are quarantined (kept, not deleted) so the scope can reopen.
+ */
+async function settleCommittedLease(value: unknown, session: PersistedStudySession) {
+  if (
+    !isCommitReceipt(value)
+    || value.session_id !== session.snapshot.session_id
+    || (session.snapshot.schema_version === 'study-session.v4' && (
+      value.schema_version !== 'study-commit-receipt.v2'
+      || value.authority_mode !== 'NOTE'
+      || value.enrollment_epoch !== session.snapshot.enrollment_epoch
+    ))
+  ) {
+    throw new ApiError('Chưa nhận được xác nhận lưu hợp lệ. Dữ liệu vẫn được giữ để thử lại.', 502, 'INVALID_COMMIT_RECEIPT')
+  }
+  if (value.commit_id === session.commit_id && value.applied_event_count === session.events.length) {
+    return value
+  }
+  const message = `Phiên học này đã được lưu trước đó với ${value.applied_event_count} câu trả lời; `
+    + `${session.events.length} câu trong trình duyệt khác bản đã lưu nên đã được cách ly (không xoá). `
+    + 'Chọn Thử lại để mở phiên mới.'
+  await quarantineStudySession(session.scope_key, session, { reason: 'COMMITTED_ELSEWHERE', message })
+  throw new ApiError(message, 409, 'SESSION_ALREADY_COMMITTED')
 }
 
 function openSnapshot(userId: number, deckId: string, compositionId: string) {
@@ -688,7 +717,14 @@ export function useStudySession(deckId: string | null) {
         if (!isThisLease()) return caught.details
         const pending = sessionRef.current
         if (pending) {
-          const result = requireMatchingCommitReceipt(caught.details, pending)
+          let result: StudySessionCommitReceipt
+          try {
+            result = await settleCommittedLease(caught.details, pending)
+          } catch (unsettled) {
+            if (isThisLease() && hasLeaseRef.current) setError(unsettled)
+            throw unsettled
+          }
+          if (!isThisLease()) return result
           const batchReviews = pending.events.length
           const batchDurationMs = pending.events.reduce(
             (sum, ev) => sum + (ev.duration_ms || 0),
