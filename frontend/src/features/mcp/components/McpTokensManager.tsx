@@ -195,13 +195,17 @@ export function McpTokensManager({
         initialUserId={initialCreateUserId}
         isSubmitting={isCreating || isUpdating}
         onSubmitCreate={async (payload) => {
-          const res = await createToken(payload)
-          setIssuedResult(res)
-          setIsCreateOpen(false)
+          try {
+            const res = await createToken(payload)
+            setIssuedResult(res)
+            setIsCreateOpen(false)
+          } catch {}
         }}
         onSubmitEdit={async (payload) => {
-          await updateToken(payload)
-          setEditingToken(null)
+          try {
+            await updateToken(payload)
+            setEditingToken(null)
+          } catch {}
         }}
       />
 
@@ -217,31 +221,39 @@ export function McpTokensManager({
         onRotateClose={() => setRotatingToken(null)}
         isRotating={isRotating}
         onRotateConfirm={async (tokenId, expiryDays) => {
-          const res = await rotateToken({ id: tokenId, expires_in_days: expiryDays })
-          setIssuedResult(res)
-          setRotatingToken(null)
+          try {
+            const res = await rotateToken({ id: tokenId, expires_in_days: expiryDays })
+            setIssuedResult(res)
+            setRotatingToken(null)
+          } catch {}
         }}
         revokingTokenId={revokingTokenId}
         onRevokeClose={() => setRevokingTokenId(null)}
         isRevoking={isRevoking}
         onRevokeConfirm={async (tokenId) => {
-          await revokeToken(tokenId)
-          setRevokingTokenId(null)
+          try {
+            await revokeToken(tokenId)
+            setRevokingTokenId(null)
+          } catch {}
         }}
         purgingToken={purgingToken}
         onPurgeClose={() => setPurgingToken(null)}
         isPurging={isPurging}
         onPurgeConfirm={async (tokenId) => {
-          await purgeToken(tokenId)
-          setPurgingToken(null)
+          try {
+            await purgeToken(tokenId)
+            setPurgingToken(null)
+          } catch {}
         }}
         isCleanupOpen={isCleanupOpen}
         inactiveCount={inactiveCount}
         onCleanupClose={() => setIsCleanupOpen(false)}
         isCleaningUp={isCleaningUp}
         onCleanupConfirm={async () => {
-          await cleanupExpired()
-          setIsCleanupOpen(false)
+          try {
+            await cleanupExpired()
+            setIsCleanupOpen(false)
+          } catch {}
         }}
         viewingScopeToken={viewingScopeToken}
         onScopeDetailsClose={() => setViewingScopeToken(null)}

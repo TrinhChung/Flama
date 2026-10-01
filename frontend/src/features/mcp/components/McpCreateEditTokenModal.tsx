@@ -100,7 +100,6 @@ export function McpCreateEditTokenModal({
         custom_token: customToken.trim() || undefined,
       })
     }
-    onOpenChange(false)
   }
 
   return (

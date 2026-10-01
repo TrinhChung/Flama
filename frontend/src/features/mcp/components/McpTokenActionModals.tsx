@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, Shield } from 'lucide-react'
 import { ConfirmDialog } from '@/shared/ui'
 import { Button } from '@/components/ui/button'
@@ -60,6 +60,12 @@ export function McpTokenActionModals({
   onScopeDetailsClose,
 }: McpTokenActionModalsProps) {
   const [rotateExpiry, setRotateExpiry] = useState('180')
+
+  useEffect(() => {
+    if (!rotatingToken) {
+      setRotateExpiry('180')
+    }
+  }, [rotatingToken])
 
   return (
     <>
