@@ -155,7 +155,7 @@ export function McpTokenActionModals({
         description={
           mode === 'admin'
             ? `Hệ thống sẽ xóa vĩnh viễn tất cả ${inactiveCount} token đã hết hạn hoặc đã thu hồi trên toàn hệ thống để tối ưu cơ sở dữ liệu.`
-            : `Hệ thống sẽ xóa vĩnh viễn ${inactiveCount} token đã thu hồi hoặc hết hạn khỏi hệ thống.`
+            : `Xóa sạch tất cả ${inactiveCount} token đã thu hồi hoặc đã hết hạn của bạn khỏi cơ sở dữ liệu?`
         }
         confirmText={mode === 'admin' ? 'Xác Nhận Dọn Dẹp' : `Dọn dẹp ${inactiveCount} token`}
         isLoading={isCleaningUp}

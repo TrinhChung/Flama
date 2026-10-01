@@ -2,6 +2,7 @@ import {
   Key,
   Shield,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
   RefreshCw,
   Pencil,
@@ -29,6 +30,7 @@ export interface McpTokenTableProps {
   canManageTokens?: boolean
   isLoading?: boolean
   onEdit: (token: McpToken) => void
+  onPermissionsEdit?: (token: McpToken) => void
   onRotate: (token: McpToken) => void
   onRevoke: (tokenId: number) => void
   onPurge: (token: McpToken) => void
@@ -75,6 +77,7 @@ export function McpTokenTable({
   canManageTokens = true,
   isLoading = false,
   onEdit,
+  onPermissionsEdit,
   onRotate,
   onRevoke,
   onPurge,
@@ -87,11 +90,13 @@ export function McpTokenTable({
     return (
       <div className="text-center py-12 border rounded-xl bg-card/40">
         <Key className="size-8 text-muted-foreground/40 mx-auto mb-2" />
-        <h4 className="text-sm font-semibold text-foreground">Không tìm thấy MCP token nào</h4>
+        <h4 className="text-sm font-semibold text-foreground">
+          {mode === 'admin' ? 'Chưa có token nào' : 'Chưa có MCP token nào'}
+        </h4>
         <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
           {mode === 'admin'
-            ? 'Chưa có token nào được cấp hoặc không khớp với bộ lọc tìm kiếm.'
-            : 'Bạn chưa tạo token nào hoặc không tìm thấy kết quả phù hợp.'}
+            ? "Bấm 'Cấp Token mới cho User' ở trên để tạo token cho người dùng. Chưa có token nào được cấp hoặc không khớp với bộ lọc tìm kiếm. Không tìm thấy MCP token nào."
+            : "Điền tên và bấm 'Tạo Token mới' ở trên. Bạn chưa tạo token nào hoặc không tìm thấy kết quả phù hợp. Không tìm thấy MCP token nào."}
         </p>
       </div>
     )
@@ -184,6 +189,18 @@ export function McpTokenTable({
                   <TableCell className="text-right whitespace-nowrap">
                     {canManageTokens ? (
                       <div className="flex items-center justify-end gap-1">
+                        {mode === 'user' && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-950/40"
+                            title="Phân quyền & Cấp quyền hạn (Scopes)"
+                            onClick={() => onPermissionsEdit?.(token)}
+                          >
+                            <ShieldCheck className="size-3.5" />
+                          </Button>
+                        )}
+
                         <Button
                           size="icon"
                           variant="ghost"

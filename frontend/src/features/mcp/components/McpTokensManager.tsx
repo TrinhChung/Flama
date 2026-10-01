@@ -10,6 +10,7 @@ import { McpTokenTable } from './McpTokenTable'
 import { McpCreateEditTokenModal } from './McpCreateEditTokenModal'
 import { McpTokenSecretModal } from './McpTokenSecretModal'
 import { McpTokenActionModals } from './McpTokenActionModals'
+import { McpTokenInlineCreateCard } from './McpTokenInlineCreateCard'
 
 export interface McpTokensManagerProps {
   mode: McpMode
@@ -19,6 +20,7 @@ export interface McpTokensManagerProps {
   onSwitchToChatGPT?: () => void
   headerTitle?: string
   headerDescription?: string
+  createLayout?: 'modal' | 'inline'
 }
 
 export function McpTokensManager({
@@ -28,36 +30,18 @@ export function McpTokensManager({
   onSuccessMutation,
   headerTitle,
   headerDescription,
+  createLayout = 'modal',
 }: McpTokensManagerProps) {
   const {
-    tokens,
-    isLoading,
-    search,
-    setSearch,
-    statusFilter,
-    setStatusFilter,
-    page,
-    setPage,
-    totalPages,
-    totalItems,
-    inactiveCount,
-    canManageTokens,
-    createToken,
-    updateToken,
-    rotateToken,
-    revokeToken,
-    purgeToken,
-    cleanupExpired,
-    isCreating,
-    isUpdating,
-    isRotating,
-    isRevoking,
-    isPurging,
-    isCleaningUp,
+    tokens, isLoading, search, setSearch, statusFilter, setStatusFilter,
+    page, setPage, totalPages, totalItems, inactiveCount, canManageTokens,
+    createToken, updateToken, rotateToken, revokeToken, purgeToken, cleanupExpired,
+    isCreating, isUpdating, isRotating, isRevoking, isPurging, isCleaningUp,
   } = useMcpTokens({ mode, userId: initialCreateUserId ?? undefined, onSuccessMutation })
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingToken, setEditingToken] = useState<McpToken | null>(null)
+  const [isPermissionsOnly, setIsPermissionsOnly] = useState(false)
   const [issuedResult, setIssuedResult] = useState<IssuedTokenResult | null>(null)
   const [rotatingToken, setRotatingToken] = useState<McpToken | null>(null)
   const [revokingTokenId, setRevokingTokenId] = useState<number | null>(null)
@@ -69,11 +53,15 @@ export function McpTokensManager({
 
   return (
     <div className="space-y-6">
-      {/* Header & Quick Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold tracking-tight text-foreground">
-            {headerTitle || (mode === 'admin' ? 'Danh sách MCP Tokens & Secrets' : 'Quản lý MCP Access Tokens')}
+            {headerTitle ||
+              (createLayout === 'inline'
+                ? `Danh sách Token & Secrets (${tokens.length})`
+                : mode === 'admin'
+                ? 'Danh sách MCP Tokens & Secrets'
+                : 'Quản lý MCP Access Tokens')}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {headerDescription ||
@@ -97,19 +85,23 @@ export function McpTokensManager({
               </Button>
             )}
 
-            <Button
-              size="sm"
-              onClick={() => setIsCreateOpen(true)}
-              className="gap-1.5 text-xs font-semibold shadow-2xs"
-            >
-              <Plus className="size-3.5" />
-              <span>{mode === 'admin' ? 'Cấp Token mới cho User' : 'Tạo Token mới'}</span>
-            </Button>
+            {createLayout !== 'inline' && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setIsCreateOpen(true)
+                  setIsPermissionsOnly(false)
+                }}
+                className="gap-1.5 text-xs font-semibold shadow-2xs"
+              >
+                <Plus className="size-3.5" />
+                <span>{mode === 'admin' ? 'Cấp Token mới cho User' : 'Tạo Token mới'}</span>
+              </Button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Mini Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
@@ -121,7 +113,7 @@ export function McpTokensManager({
 
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Đang hoạt động</span>
+            <span className="text-xs font-medium text-muted-foreground">Token đang hoạt động</span>
             <ShieldCheck className="size-3.5 text-emerald-600" />
           </div>
           <div className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{activeCount}</div>
@@ -136,7 +128,19 @@ export function McpTokensManager({
         </Card>
       </div>
 
-      {/* Search & Filter Toolbar */}
+      {canManageTokens && createLayout === 'inline' && (
+        <McpTokenInlineCreateCard
+          tokens={tokens}
+          onCreateToken={async (payload) => {
+            try {
+              const res = await createToken(payload)
+              setIssuedResult(res)
+            } catch {}
+          }}
+          isCreating={isCreating}
+        />
+      )}
+
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex-1 max-w-sm">
           <SearchInput
@@ -163,13 +167,19 @@ export function McpTokensManager({
         </div>
       </div>
 
-      {/* Token List Table */}
       <McpTokenTable
         tokens={tokens}
         mode={mode}
         canManageTokens={canManageTokens}
         isLoading={isLoading}
-        onEdit={(token) => setEditingToken(token)}
+        onEdit={(token) => {
+          setEditingToken(token)
+          setIsPermissionsOnly(false)
+        }}
+        onPermissionsEdit={(token) => {
+          setEditingToken(token)
+          setIsPermissionsOnly(true)
+        }}
         onRotate={(token) => setRotatingToken(token)}
         onRevoke={(id) => setRevokingTokenId(id)}
         onPurge={(token) => setPurgingToken(token)}
@@ -180,16 +190,17 @@ export function McpTokensManager({
         onPageChange={(p) => setPage(p)}
       />
 
-      {/* Sub-Modals */}
       <McpCreateEditTokenModal
         open={isCreateOpen || Boolean(editingToken)}
         onOpenChange={(open) => {
           if (!open) {
             setIsCreateOpen(false)
             setEditingToken(null)
+            setIsPermissionsOnly(false)
           }
         }}
         editingToken={editingToken}
+        isPermissionsOnly={isPermissionsOnly}
         mode={mode}
         users={users}
         initialUserId={initialCreateUserId}
@@ -205,6 +216,7 @@ export function McpTokensManager({
           try {
             await updateToken(payload)
             setEditingToken(null)
+            setIsPermissionsOnly(false)
           } catch {}
         }}
       />
@@ -213,6 +225,7 @@ export function McpTokensManager({
         issuedToken={issuedResult}
         isOpen={Boolean(issuedResult)}
         onClose={() => setIssuedResult(null)}
+        mode={mode}
       />
 
       <McpTokenActionModals

@@ -26,7 +26,7 @@ export interface McpCreateEditTokenModalProps {
   onSubmitCreate: (payload: CreateTokenPayload) => Promise<void>
   onSubmitEdit: (payload: UpdateTokenPayload) => Promise<void>
   isSubmitting?: boolean
-  isViewOnly?: boolean
+  isPermissionsOnly?: boolean
 }
 
 export function McpCreateEditTokenModal({
@@ -39,6 +39,7 @@ export function McpCreateEditTokenModal({
   onSubmitCreate,
   onSubmitEdit,
   isSubmitting = false,
+  isPermissionsOnly = false,
 }: McpCreateEditTokenModalProps) {
   const isEditing = Boolean(editingToken)
   const [name, setName] = useState('')
@@ -83,11 +84,11 @@ export function McpCreateEditTokenModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || scopes.length === 0) return
+    if ((!isPermissionsOnly && !name.trim()) || scopes.length === 0) return
     if (isEditing && editingToken) {
       await onSubmitEdit({
         id: editingToken.id,
-        name: name.trim(),
+        name: isPermissionsOnly ? editingToken.name : name.trim(),
         scopes,
         expires_in_days: expiry === 'keep' ? 'keep' : expiry === 'none' ? 'none' : Number(expiry),
       })
@@ -107,12 +108,16 @@ export function McpCreateEditTokenModal({
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {isEditing
+            {isPermissionsOnly
+              ? 'Cấp & Chỉnh sửa Quyền hạn MCP Token'
+              : isEditing
               ? mode === 'admin' ? 'Chỉnh Sửa Token & Scopes' : 'Chỉnh sửa MCP Token'
               : mode === 'admin' ? 'Cấp MCP Access Token Mới' : 'Tạo MCP Access Token mới'}
           </DialogTitle>
           <DialogDescription>
-            {isEditing
+            {isPermissionsOnly
+              ? 'Cập nhật trực tiếp các quyền hạn (Scopes) cho Token.'
+              : isEditing
               ? 'Cập nhật tên gợi nhớ, thời hạn hoặc thay đổi trực tiếp quyền hạn (scopes).'
               : 'Tạo token ủy quyền kết nối API cho một thiết bị hoặc tài khoản người dùng.'}
           </DialogDescription>
@@ -140,20 +145,22 @@ export function McpCreateEditTokenModal({
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor={isEditing ? 'edit-token-name' : 'mcp-token-name'} className="text-xs font-semibold">
-              Tên gợi nhớ (Client / Thiết bị) *
-            </Label>
-            <Input
-              id={isEditing ? 'edit-token-name' : 'mcp-token-name'}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={mode === 'admin' ? 'VD: Claude Desktop PC, ChatGPT Connector...' : 'Ví dụ: Claude Desktop - MacBook Pro'}
-              className="text-xs"
-              maxLength={120}
-              required
-            />
-          </div>
+          {!isPermissionsOnly && (
+            <div className="space-y-1.5">
+              <Label htmlFor={isEditing ? 'edit-token-name' : 'mcp-token-name'} className="text-xs font-semibold">
+                Tên gợi nhớ (Client / Thiết bị) *
+              </Label>
+              <Input
+                id={isEditing ? 'edit-token-name' : 'mcp-token-name'}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={mode === 'admin' ? 'VD: Claude Desktop PC, ChatGPT Connector...' : 'Ví dụ: Claude Desktop - MacBook Pro'}
+                className="text-xs"
+                maxLength={120}
+                required
+              />
+            </div>
+          )}
 
           {mode === 'admin' && !isEditing && (
             <div className="space-y-1.5">
@@ -167,25 +174,27 @@ export function McpCreateEditTokenModal({
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'} className="text-xs font-semibold">
-              Thời hạn hiệu lực
-            </Label>
-            <NativeSelect
-              id={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'}
-              value={expiry}
-              onChange={(e) => setExpiry(e.target.value)}
-              className="w-full text-xs"
-            >
-              {isEditing && <NativeSelectOption value="keep">Giữ nguyên thời hạn hiện tại</NativeSelectOption>}
-              <NativeSelectOption value="180">6 tháng (180 ngày) - Mặc định</NativeSelectOption>
-              <NativeSelectOption value="365">1 năm (365 ngày)</NativeSelectOption>
-              <NativeSelectOption value="none">Vĩnh viễn (Không hết hạn)</NativeSelectOption>
-              <NativeSelectOption value="90">3 tháng (90 ngày)</NativeSelectOption>
-              <NativeSelectOption value="30">1 tháng (30 ngày)</NativeSelectOption>
-              <NativeSelectOption value="7">7 ngày (Ngắn hạn / Test)</NativeSelectOption>
-            </NativeSelect>
-          </div>
+          {!isPermissionsOnly && (
+            <div className="space-y-1.5">
+              <Label htmlFor={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'} className="text-xs font-semibold">
+                Thời hạn hiệu lực
+              </Label>
+              <NativeSelect
+                id={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'}
+                value={expiry}
+                onChange={(e) => setExpiry(e.target.value)}
+                className="w-full text-xs"
+              >
+                {isEditing && <NativeSelectOption value="keep">Giữ nguyên thời hạn hiện tại</NativeSelectOption>}
+                <NativeSelectOption value="180">6 tháng (180 ngày) - Mặc định</NativeSelectOption>
+                <NativeSelectOption value="365">1 năm (365 ngày)</NativeSelectOption>
+                <NativeSelectOption value="none">Vĩnh viễn (Không hết hạn)</NativeSelectOption>
+                <NativeSelectOption value="90">3 tháng (90 ngày)</NativeSelectOption>
+                <NativeSelectOption value="30">1 tháng (30 ngày)</NativeSelectOption>
+                <NativeSelectOption value="7">7 ngày (Ngắn hạn / Test)</NativeSelectOption>
+              </NativeSelect>
+            </div>
+          )}
 
           <div className="space-y-2 pt-2 border-t">
             <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-semibold">
@@ -252,7 +261,7 @@ export function McpCreateEditTokenModal({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || !name.trim() || scopes.length === 0 || (mode === 'admin' && !isEditing && !userId)}
+              disabled={isSubmitting || (!isPermissionsOnly && !name.trim()) || scopes.length === 0 || (mode === 'admin' && !isEditing && !userId)}
             >
               {isSubmitting
                 ? 'Đang lưu…'

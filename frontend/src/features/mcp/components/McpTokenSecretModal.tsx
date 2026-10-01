@@ -1,4 +1,6 @@
-import { KeyRound, AlertTriangle } from 'lucide-react'
+import { useState } from 'react'
+import { KeyRound, AlertTriangle, Check, Copy, LinkIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { CodeSnippetBox } from '@/shared/ui'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,20 +12,24 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { FLAMA_MCP_URL } from '@/config/env'
-import type { IssuedTokenResult } from '../types'
+import type { IssuedTokenResult, McpMode } from '../types'
 
 export interface McpTokenSecretModalProps {
   issuedToken: IssuedTokenResult | null
   isOpen?: boolean
   onClose: () => void
+  mode?: McpMode
 }
 
 export function McpTokenSecretModal({
   issuedToken,
   isOpen,
   onClose,
+  mode = 'user',
 }: McpTokenSecretModalProps) {
   const showModal = isOpen !== undefined ? isOpen : Boolean(issuedToken)
+  const [copiedToken, setCopiedToken] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState(false)
 
   const serverUrl = issuedToken
     ? `${FLAMA_MCP_URL.replace(/\/+$/, '')}/${encodeURIComponent(issuedToken.token)}`
@@ -45,6 +51,38 @@ export function McpTokenSecretModal({
         2
       )
     : ''
+
+  const handleCopyToken = async () => {
+    if (!issuedToken?.token) return
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(issuedToken.token)
+      } else {
+        throw new Error('Clipboard API unavailable')
+      }
+      setCopiedToken(true)
+      toast.success(mode === 'admin' ? 'Đã sao chép Secret Token' : 'Đã sao chép Token vào bộ nhớ tạm.')
+      setTimeout(() => setCopiedToken(false), 2000)
+    } catch {
+      toast.error(mode === 'admin' ? 'Không thể sao chép vào bộ nhớ tạm' : 'Không thể sao chép vào bộ nhớ tạm.')
+    }
+  }
+
+  const handleCopyUrl = async () => {
+    if (!serverUrl) return
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(serverUrl)
+      } else {
+        throw new Error('Clipboard API unavailable')
+      }
+      setCopiedUrl(true)
+      toast.success(mode === 'admin' ? 'Đã sao chép URL' : 'Đã sao chép URL Endpoint vào bộ nhớ tạm.')
+      setTimeout(() => setCopiedUrl(false), 2000)
+    } catch {
+      toast.error(mode === 'admin' ? 'Không thể sao chép vào bộ nhớ tạm' : 'Không thể sao chép vào bộ nhớ tạm.')
+    }
+  }
 
   return (
     <Dialog open={showModal} onOpenChange={(open) => !open && onClose()}>
@@ -81,18 +119,43 @@ export function McpTokenSecretModal({
               <span>Chỉ hiển thị 1 lần duy nhất. Nếu đánh mất, bạn cần dùng chức năng <strong>Xoay vòng Secret (Rotate)</strong> để sinh key mới.</span>
             </div>
 
-            <CodeSnippetBox
-              code={issuedToken.token}
-              title="Secret Access Token (Bearer Key)"
-              showCopyButton
-            />
+            <div className="rounded-lg border bg-muted/20 overflow-hidden text-sm">
+              <div className="flex items-center justify-between border-b border-border/80 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground font-mono">Secret Access Token (Bearer Key)</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleCopyToken}
+                  className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
+                >
+                  {copiedToken ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
+                  <span>{copiedToken ? 'Đã chép' : 'Sao chép'}</span>
+                </Button>
+              </div>
+              <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground">
+                <code>{issuedToken.token}</code>
+              </pre>
+            </div>
 
-            <CodeSnippetBox
-              code={serverUrl}
-              title="Endpoint URL dành cho AI Assistant (Cursor / Claude)"
-              showCopyButton
-              copyLabel="Sao chép URL"
-            />
+            <div className="rounded-lg border bg-muted/20 overflow-hidden text-sm">
+              <div className="flex items-center justify-between border-b border-border/80 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground font-mono">Endpoint URL dành cho AI Assistant (Cursor / Claude)</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleCopyUrl}
+                  className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
+                >
+                  {copiedUrl ? <Check className="size-3 text-emerald-500" /> : <LinkIcon className="size-3" />}
+                  <span>{copiedUrl ? 'Đã chép' : 'Sao chép URL'}</span>
+                </Button>
+              </div>
+              <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground">
+                <code>{serverUrl}</code>
+              </pre>
+            </div>
 
             <CodeSnippetBox
               code={jsonConfig}
@@ -103,7 +166,8 @@ export function McpTokenSecretModal({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex-row justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Đóng</Button>
           <Button onClick={onClose}>Đã lưu Secret & Đóng</Button>
         </DialogFooter>
       </DialogContent>

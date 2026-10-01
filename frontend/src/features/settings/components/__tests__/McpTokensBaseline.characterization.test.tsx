@@ -16,6 +16,14 @@ import {
 // Enable React 19 Act Environment to prevent repeated act(...) warnings
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// Mock ResizeObserver for JSDOM
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
+
 // Helper: Dispatches value changes on React-controlled HTMLInputElement in JSDOM
 function setNativeInputValue(element: HTMLInputElement, value: string) {
   const valueSetter = Object.getOwnPropertyDescriptor(element, 'value')?.set
