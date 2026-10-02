@@ -93,6 +93,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_p6_application_schema_mysql.py",
             "scripts/bench_p6_migration_mysql.py",
             "scripts/bench_p9_profile_migration_mysql.py",
+            "scripts/probe_p9_connect_fence_mysql.py",
             "scripts/trace_card_progress_callsites.py",
             "models/study_application.py",
             "scripts/bench_p5_session_open_mysql.py",
@@ -153,6 +154,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_canonical_reads.py",
             "tests/test_study_canonical_review_write.py",
             "tests/test_study_canonical_materialization.py",
+            "tests/test_study_canonical_connect.py",
             "tests/test_study_canonical_lifecycle.py",
             "tests/test_study_canonical_switch.py",
             "tests/test_study_note_templates.py",
@@ -856,6 +858,8 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "scripts/bench_p6_migration_mysql.py",
     # Migration 47: MySQL adds CHECKs by copying and refuses them on FK-action columns.
     "scripts/bench_p9_profile_migration_mysql.py",
+    # Migration 48: one ALTER with a CHECK on connect_source_card_refs.
+    "scripts/probe_p9_connect_fence_mysql.py",
     # Phase 7 foreign-key behavior (cascades from membership to pins) only runs on InnoDB.
     "app/services/study_session_retention_service.py",
     "scripts/probe_p7_session_retention_mysql.py",
