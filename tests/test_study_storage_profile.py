@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import importlib
 import unittest
+from unittest import mock
 
 from alembic import op
 from alembic.migration import MigrationContext
@@ -156,6 +157,13 @@ class StudyStorageProfileTests(unittest.TestCase):
     def test_release_refuses_note_routes_under_an_unsupported_profile(self):
         self._enroll_note()
         self._set_profile("CANONICAL_V1")
+        # A release older than P9-05d (rollback past the switch) fails closed.
+        old_release = mock.patch(
+            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES",
+            frozenset({"PROJECTION_V1"}),
+        )
+        old_release.start()
+        self.addCleanup(old_release.stop)
         for resolve in (
             lambda: lock_study_authority_route(
                 db.session, learner_user_id=self.user.id, allow_note_authority=True

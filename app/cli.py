@@ -752,6 +752,30 @@ def register_cli_commands(app: Flask) -> None:
             sort_keys=True,
         ))
 
+    @app.cli.command("study-storage-profile-switch")
+    @click.option("--apply", "apply_switch", is_flag=True, default=False,
+                  help="Switch now (one-way); without it, only print the plan.")
+    def study_storage_profile_switch(apply_switch: bool) -> None:
+        """P9-06: switch the NOTE storage profile to CANONICAL_V1 (write freeze only)."""
+
+        from app.services.study_storage_profile_service import (
+            StorageProfileSwitchError,
+            apply_storage_profile_switch,
+            plan_storage_profile_switch,
+        )
+
+        if not apply_switch:
+            click.echo(json.dumps(plan_storage_profile_switch(db.session), sort_keys=True))
+            return
+        try:
+            result = apply_storage_profile_switch(db.session)
+            db.session.commit()
+        except StorageProfileSwitchError as exc:
+            db.session.rollback()
+            click.echo(json.dumps({"error": exc.code, "message": str(exc), "blockers": list(exc.blockers)}))
+            raise SystemExit(1) from exc
+        click.echo(json.dumps(result, sort_keys=True))
+
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
     @click.option(

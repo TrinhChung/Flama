@@ -122,9 +122,12 @@ def build_phase9_readiness(
         projection_blockers.append("LEGACY_LEARNERS")
     if unenrolled_users:
         projection_blockers.append("UNENROLLED_USERS")
-    # NOTE readers/writers still validate and write CardProgress until the
-    # projection-independent contract (P9-03..P9-05b) ships.
-    projection_blockers.append(PROJECTION_DEPENDENT_NOTE_CODE)
+    # NOTE readers/writers depend on CardProgress until this release can run
+    # the projection-independent profile (P9-03..P9-05d).
+    from app.repositories.study_authority_repository import SUPPORTED_STORAGE_PROFILES
+
+    if "CANONICAL_V1" not in SUPPORTED_STORAGE_PROFILES:
+        projection_blockers.append(PROJECTION_DEPENDENT_NOTE_CODE)
     gates = {
         "legacy_projection_writes": {
             "evidence": {"legacy_learners": legacy_learners, "unenrolled_users": unenrolled_users,

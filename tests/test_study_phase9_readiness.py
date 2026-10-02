@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 import json
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
@@ -72,12 +73,16 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         db.session.commit()
         self._session("study-session.v2", now - timedelta(days=40))
         self._session("study-session.v4", now - timedelta(days=1))
-        report = build_phase9_readiness(now_utc=now)
-        # D9-02: no product decision blocks the gate, only the projection
-        # dependency of NOTE readers/writers (P9-03..P9-05b).
-        gate = report["gates"]["legacy_projection_writes"]
+        # D9-02: no product decision blocks the gate. A release without
+        # CANONICAL_V1 support still depends on the projection.
+        with patch("app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES",
+                   frozenset({"PROJECTION_V1"})):
+            gate = build_phase9_readiness(now_utc=now)["gates"]["legacy_projection_writes"]
         self.assertEqual(gate["status"], "waiting")
         self.assertEqual(gate["blocking_reasons"], ["NOTE_STILL_DEPENDS_ON_PROJECTION"])
+        report = build_phase9_readiness(now_utc=now)
+        gate = report["gates"]["legacy_projection_writes"]
+        self.assertEqual((gate["status"], gate["blocking_reasons"]), ("ready", []))
         self.assertEqual(report["gates"]["old_session_wire_versions"]["status"], "ready")
 
         self._session("study-session.v2", now - timedelta(days=3))
