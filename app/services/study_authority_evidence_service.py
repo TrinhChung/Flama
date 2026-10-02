@@ -899,3 +899,126 @@ def finalize_study_authority_canonical_evidence(
         contributor_by_card_id=compatibility.contributor_by_card_id,
         now_utc=now_utc,
     )
+
+
+def _current_pointer(session: Session, contributor: StudyProgressContributor) -> dict[str, Any]:
+    """The contributor's current event pointer, as the mirror's lineage sync takes it."""
+
+    row = session.execute(
+        select(StudyProgressLineageRef)
+        .where(
+            StudyProgressLineageRef.contributor_id == int(contributor.id),
+            StudyProgressLineageRef.ref_kind == "LAST_REVIEW_EVENT",
+        )
+        .order_by(StudyProgressLineageRef.id.asc())
+        .with_for_update()
+    ).scalars().first()
+    if row is None:
+        return {"ref_kind": "LAST_REVIEW_EVENT", "source_row_key": None, "ref_status": "ABSENT"}
+    return {
+        "ref_kind": "LAST_REVIEW_EVENT",
+        "source_row_key": bytes(row.source_row_key).decode("utf-8"),
+        "ref_status": str(row.ref_status),
+        "occurred_at": row.occurred_at,
+        "source_payload_hash": (
+            bytes(row.source_payload_hash) if row.source_payload_hash is not None else None
+        ),
+    }
+
+
+def finalize_canonical_external_evidence(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked: LockedStudyAuthoritySubject,
+    siblings: LockedStudyAuthoritySiblings,
+    compatibility: LockedStudyAuthorityCompatibility,
+    projections_by_card_id: Mapping[str, NoteCardProjection] | None,
+    applied_contexts: Mapping[str, Any],
+    now_utc: datetime,
+) -> StudyAuthorityEvidenceResult:
+    """CANONICAL_V1 counterpart of ``finalize_external_progress_mirror``.
+
+    ``projections_by_card_id`` is None when the snapshot only confirmed the
+    current state. Contributors named in ``applied_contexts`` take the
+    external provenance and lineage; availability follows the new state.
+    """
+
+    from app.services.study_progress_shadow_mirror_service import (
+        _sync_pointer_lineage as sync_external_lineage,
+    )
+
+    if route.storage_profile == "PROJECTION_V1" or locked.state is None:
+        raise _fail(
+            "AUTHORITY_MODE_CONFLICT",
+            "Canonical external evidence requires a CANONICAL_V1 NOTE state.",
+        )
+    card_ids = set(siblings.card_ids)
+    if not applied_contexts or not set(applied_contexts).issubset(card_ids) or (
+        set(compatibility.contributor_by_card_id) != card_ids
+    ):
+        raise _fail(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "External evidence requires contexts inside the locked sibling vector.",
+        )
+    generation = int(locked.subject.subject_generation)
+    authority_material: list[dict[str, str]] = []
+    lineage_material: list[dict[str, str]] = []
+    lineage_hashes: list[bytes] = []
+    for card_id in sorted(card_ids, key=lambda value: value.encode("utf-8")):
+        contributor = compatibility.contributor_by_card_id[card_id]
+        context = applied_contexts.get(card_id)
+        if context is not None:
+            inherited = str(contributor.history_completeness_code)
+            requested = str(context.history_completeness_code)
+            contributor.history_completeness_code = (
+                "HISTORY_MIXED_PARTIAL"
+                if requested == "HISTORY_SNAPSHOT_ONLY"
+                and inherited not in {"HISTORY_UNKNOWN", "HISTORY_SNAPSHOT_ONLY"}
+                else requested
+            )
+            contributor.current_provenance_code = str(context.provenance_code)
+            contributor.lineage_vector_hash = sync_external_lineage(
+                session,
+                contributor=contributor,
+                generation=generation,
+                pointer=_current_pointer(session, contributor),
+                external_context=context,
+                now_utc=now_utc,
+            )
+        contributor.updated_at = now_utc
+        if projections_by_card_id is not None:
+            expected = projections_by_card_id[card_id].availability
+            availability = compatibility.availability_by_contributor_id[int(contributor.id)]
+            availability.normalized_queue = expected.normalized_queue
+            availability.due_at = expected.due_at
+            availability.due_day = expected.due_day
+            availability.is_suspended = expected.is_suspended
+            availability.is_buried = expected.is_buried
+            availability.buried_until_day = expected.buried_until_day
+            availability.card_created_at = expected.card_created_at
+            availability.card_order_key = expected.card_order_key
+            availability.state_schema_version = expected.state_schema_version
+            availability.semantic_state_hash = expected.semantic_state_hash
+            availability.updated_at = now_utc
+        authority_material.append({
+            "card_id": card_id,
+            "contributor_id": str(contributor.id),
+            "evidence": "CANONICAL",
+            "semantic_state_hash": bytes(locked.state.semantic_state_hash).hex(),
+        })
+        lineage_material.append({
+            "card_id": card_id,
+            "contributor_id": str(contributor.id),
+            "lineage_vector_hash": bytes(contributor.lineage_vector_hash).hex(),
+        })
+        lineage_hashes.append(bytes(contributor.lineage_vector_hash))
+    return _finalize_subject_vectors(
+        subject=locked.subject,
+        state=locked.state,
+        authority_material=authority_material,
+        lineage_material=lineage_material,
+        lineage_hashes=lineage_hashes,
+        contributor_by_card_id=compatibility.contributor_by_card_id,
+        now_utc=now_utc,
+    )

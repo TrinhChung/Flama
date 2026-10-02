@@ -90,6 +90,18 @@ def projection_is_live(session: Session) -> bool:
     return read_study_storage_profile(session) == DEFAULT_STORAGE_PROFILE
 
 
+def bind_storage_profile(session: Session, route: "StudyAuthorityRoute") -> "StudyAuthorityRoute":
+    """Give a NOTE route built outside the fence the current storage profile.
+
+    The caller already holds the learner's User row; the profile row is read
+    under the same shared lock the fence takes.
+    """
+
+    if route.mode_code != "NOTE":
+        return route
+    return _with_supported_profile(route, read_study_storage_profile(session, lock="share"))
+
+
 def _with_supported_profile(route: "StudyAuthorityRoute", profile_code: str) -> "StudyAuthorityRoute":
     if profile_code not in SUPPORTED_STORAGE_PROFILES:
         raise StudyAuthorityFenceError(

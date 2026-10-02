@@ -7,6 +7,14 @@ from models import db
 from models.model_uuid import uuid_str
 
 
+APPLIED_STATES = ("LEGACY_CARD_PROGRESS", "AUTHORITY", "NEEDS_CONFIRMATION")
+APPLIED_STATE_CHECK = (
+    "applied_local_revision_state IS NULL OR "
+    "(applied_local_revision_state IN ('LEGACY_CARD_PROGRESS', 'AUTHORITY', 'NEEDS_CONFIRMATION') "
+    "AND (applied_local_revision_state <> 'AUTHORITY' OR applied_authority_revision IS NOT NULL))"
+)
+
+
 class ConnectSourceCardRef(db.Model):
     """Stable mapping and sync cursors for one external Anki card."""
 
@@ -35,6 +43,11 @@ class ConnectSourceCardRef(db.Model):
     note_id = db.Column(db.String(36), nullable=True, index=True)
     snapshot_hash = db.Column(db.String(64), nullable=True)
     applied_local_revision = db.Column(db.BigInteger, nullable=True)
+    # NOTE storage profile CANONICAL_V1 (ADR P9-03 §2.6, migration 48): the
+    # Note authority revision this ref last applied or confirmed.
+    # applied_local_revision keeps the projection-era CardProgress revision.
+    applied_authority_revision = db.Column(db.BigInteger, nullable=True)
+    applied_local_revision_state = db.Column(db.String(32), nullable=True)
     review_cursor = db.Column(db.BigInteger, nullable=True)
     last_session_id = db.Column(
         db.String(36),
@@ -64,6 +77,9 @@ class ConnectSourceCardRef(db.Model):
             "user_id",
             "source_key",
             "external_note_id",
+        ),
+        db.CheckConstraint(
+            APPLIED_STATE_CHECK, name="ck_connect_source_card_refs_applied_state"
         ),
     )
 

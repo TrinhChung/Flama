@@ -1169,6 +1169,30 @@ def get_import_note_statuses(
             if asset.sha256:
                 media_by_note.setdefault(asset.note_id, set()).add(asset.sha256.lower())
 
+    # CANONICAL_V1 fences refs on the Note authority revision (ADR P9-03 §2.6).
+    canonical = route.mode_code == "NOTE" and route.storage_profile != "PROJECTION_V1"
+    token_revision_by_card_id: dict[str, int] = {}
+    if canonical:
+        from models.card import Card
+        from models.study_authority_subject_token import StudyAuthoritySubjectToken
+        from models.study_progress_subject import StudyProgressSubject
+
+        fenced_card_ids = sorted({str(row.card_id) for row in card_refs if row.card_id})
+        if fenced_card_ids:
+            token_revision_by_card_id = {
+                str(card_id): int(revision)
+                for card_id, revision in db.session.query(
+                    Card.id, StudyAuthoritySubjectToken.authority_revision
+                )
+                .join(StudyProgressSubject, db.and_(
+                    StudyProgressSubject.learner_user_id == user_id,
+                    StudyProgressSubject.live_note_id == Card.note_id,
+                ))
+                .join(StudyAuthoritySubjectToken, StudyAuthoritySubjectToken.subject_id == StudyProgressSubject.id)
+                .filter(Card.id.in_(fenced_card_ids))
+                .all()
+            }
+
     results: list[dict[str, Any]] = []
     for external_id, content_hash in requested.items():
         ref = refs_by_external_id.get(external_id)
@@ -1186,6 +1210,17 @@ def get_import_note_statuses(
             if card_ref is None:
                 progress_state = "new"
                 review_cursor = None
+            elif canonical:
+                # An unconfirmed (projection-era) ref is settled when its next
+                # snapshot is sent: confirmed if it equals the state, else a
+                # conflict. Only a confirmed ref can report a local change here.
+                revision = token_revision_by_card_id.get(str(card_ref.card_id))
+                local_changed = (
+                    card_ref.applied_local_revision_state == "AUTHORITY"
+                    and card_ref.applied_authority_revision is not None
+                    and revision is not None
+                    and int(card_ref.applied_authority_revision) != revision
+                )
             else:
                 progress = CardProgress.query.filter_by(
                     user_id=user_id,
@@ -1199,6 +1234,7 @@ def get_import_note_statuses(
                         != int(card_ref.applied_local_revision)
                     )
                 )
+            if card_ref is not None:
                 if local_changed:
                     progress_state = "local_changed"
                 elif card_ref.snapshot_hash == requested_card["snapshotHash"]:

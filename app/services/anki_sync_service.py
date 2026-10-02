@@ -436,12 +436,28 @@ def _apply_note_authority_progress_snapshot(
         locked=locked,
         requested_card_id=str(requested_card.id),
     )
-    lock_study_authority_compatibility(
+    compatibility = lock_study_authority_compatibility(
         db.session,
         route=route,
         locked=locked,
         siblings=siblings,
     )
+    if route.storage_profile != "PROJECTION_V1":
+        return _apply_canonical_progress_snapshot(
+            session,
+            route=route,
+            requested_card=requested_card,
+            source_card=source_card,
+            sibling_source_refs=sibling_source_refs,
+            source_note=source_note,
+            record=record,
+            now_utc=now_utc,
+            locked=locked,
+            siblings=siblings,
+            compatibility=compatibility,
+            control=control,
+            previous_snapshot_hash=previous_snapshot_hash,
+        )
     progress = siblings.progress_by_card_id[str(requested_card.id)]
 
     # A newly discovered external Card has no accepted local revision yet. Its
@@ -595,6 +611,231 @@ def _apply_note_authority_progress_snapshot(
             source_ref.applied_local_revision = int(projected.revision or 0)
     study_progress_shadow_mirror_service.finalize_external_progress_mirror(
         mirror_plan,
+        applied_contexts=contexts,
+        now_utc=now_utc,
+    )
+    return (
+        "applied",
+        "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
+        control.legacy_unversioned,
+    )
+
+
+def _state_progress_values(
+    *,
+    state_payload: dict[str, Any],
+    availability: Any,
+    learner_user_id: int,
+    card_id: str,
+    now_utc: datetime,
+) -> dict[str, Any]:
+    """CardProgress-shaped values of the current NOTE state (CANONICAL_V1).
+
+    The snapshot replaces every scheduling field; this base only supplies
+    what a snapshot does not carry (last review time, leech flag) and the
+    identity the mapper needs, which never reaches Algorithm State. A leeched
+    state keeps its flag as long as lapses stay positive: the exact lapse
+    count of the last leech is not state (ADR P9-03 §2.8).
+    """
+
+    from app.services.study_note_card_projection import rounded_interval_days
+    from app.services.study_progress_shadow_codec import (
+        decode_datetime,
+        decode_float,
+        decode_integer,
+    )
+
+    def token(name, decoder):
+        value = state_payload.get(name)
+        return decoder(value, field_name=name) if value is not None else None
+
+    memory = state_payload.get("memory_state") or None
+    queue = str(state_payload["type"])
+    interval = token("interval_days", decode_float) or 0.0
+    return {
+        "id": 1,
+        "user_id": int(learner_user_id),
+        "card_id": card_id,
+        "queue": queue,
+        "step_index": token("step_index", decode_integer) or 0,
+        "due_at": token("due_at", decode_datetime),
+        "due_day": token("due_day", decode_integer),
+        "interval_days": rounded_interval_days(queue=queue, interval_days=interval),
+        "interval_days_raw": interval,
+        "is_suspended": bool(state_payload.get("suspended")),
+        "is_buried": bool(availability.is_buried),
+        "buried_until_day": availability.buried_until_day,
+        "review_kind": state_payload.get("review_kind"),
+        "scheduler_mode": state_payload.get("scheduler_mode"),
+        "ease_factor": token("ease", decode_float),
+        "memory_stability": (
+            decode_float(memory["stability"], field_name="memory_stability") if memory else None
+        ),
+        "memory_difficulty": (
+            decode_float(memory["difficulty"], field_name="memory_difficulty") if memory else None
+        ),
+        "suspension_reason": state_payload.get("suspension_reason"),
+        "last_leech_at": None,
+        "last_leech_lapses": 1 if state_payload.get("leeched") else 0,
+        "last_review_event_id": None,
+        "reps": token("reps", decode_integer) or 0,
+        "lapses": token("lapses", decode_integer) or 0,
+        "last_reviewed_at": token("last_review_at", decode_datetime),
+        "revision": 0,
+        "created_at": now_utc,
+        "updated_at": now_utc,
+    }
+
+
+def _apply_canonical_progress_snapshot(
+    session: ConnectImportSession,
+    *,
+    route: StudyAuthorityRoute,
+    requested_card: Card,
+    source_card: ConnectSourceCardRef,
+    sibling_source_refs: tuple[ConnectSourceCardRef, ...],
+    source_note: ConnectSourceNoteRef,
+    record: dict[str, Any],
+    now_utc: datetime,
+    locked,
+    siblings: LockedStudyAuthoritySiblings,
+    compatibility,
+    control,
+    previous_snapshot_hash: str | None,
+) -> tuple[str, str, bool]:
+    """CANONICAL_V1 snapshot apply; the fence is the Note authority revision.
+
+    A ref without a confirmed authority revision (projection-era refs the
+    switch could not map, ``NEEDS_CONFIRMATION``) is confirmed when the
+    snapshot equals the current state, and is a local conflict otherwise
+    unless forced (ADR P9-03 §2.6).
+    """
+
+    from app.services.study_authority_evidence_service import (
+        finalize_canonical_external_evidence,
+    )
+    from app.services.study_authority_write_service import apply_study_authority_canonical_write
+    from app.services.study_note_card_projection import NoteCardBurial, project_note_card
+
+    if locked.state is None or locked.token.semantic_state_hash is None:
+        raise AnkiProgressConflict(
+            "AUTHORITY_STATE_REQUIRED",
+            "NOTE authority has no current state for the imported snapshot.",
+        )
+    token_revision = int(locked.token.authority_revision)
+    current_semantic_hash = bytes(locked.token.semantic_state_hash)
+    confirmed = (
+        source_card.applied_local_revision_state == "AUTHORITY"
+        and source_card.applied_authority_revision is not None
+    )
+    local_diverged = previous_snapshot_hash is not None and (
+        not confirmed or int(source_card.applied_authority_revision) != token_revision
+    )
+    same_snapshot = previous_snapshot_hash == control.snapshot_hash
+    if same_snapshot and not (control.force and local_diverged):
+        return "unchanged", "PROGRESS_UNCHANGED", control.legacy_unversioned
+    if (
+        control.base_snapshot_supplied
+        and (control.base_snapshot_hash or "") != (previous_snapshot_hash or "")
+        and not control.force
+    ):
+        return "source_conflict", "SOURCE_SNAPSHOT_CHANGED", control.legacy_unversioned
+    if local_diverged and confirmed and not control.force:
+        return "local_conflict", "LOCAL_PROGRESS_CHANGED", control.legacy_unversioned
+
+    values = _progress_snapshot_values(session, record)
+    if values is None:
+        return "due_unresolved", "ANKI_DUE_UNRESOLVED", control.legacy_unversioned
+    contributor = compatibility.contributor_by_card_id[str(requested_card.id)]
+    candidate_values = _state_progress_values(
+        state_payload=dict(locked.state.state_payload),
+        availability=compatibility.availability_by_contributor_id[int(contributor.id)],
+        learner_user_id=session.user_id,
+        card_id=str(requested_card.id),
+        now_utc=now_utc,
+    )
+    candidate_values.update(values)
+    mapped = map_card_progress(
+        SimpleNamespace(**candidate_values),
+        card_created_at=requested_card.created_at,
+        card_order_key=str(requested_card.id),
+    )
+    if isinstance(mapped, MappingFailure):
+        raise AnkiProgressConflict(
+            mapped.code,
+            f"Anki snapshot cannot become NOTE authority: {mapped.message}",
+        )
+    if mapped.semantic_state_hash != current_semantic_hash and local_diverged and not control.force:
+        return "local_conflict", "LOCAL_PROGRESS_CHANGED", control.legacy_unversioned
+
+    contexts = _note_progress_snapshot_contexts(
+        siblings=siblings,
+        requested_card_id=str(requested_card.id),
+        source_card=source_card,
+        source_note=source_note,
+    )
+    source_card.snapshot_hash = control.snapshot_hash
+    if mapped.semantic_state_hash == current_semantic_hash:
+        source_card.applied_authority_revision = token_revision
+        source_card.applied_local_revision_state = "AUTHORITY"
+        finalize_canonical_external_evidence(
+            db.session,
+            route=route,
+            locked=locked,
+            siblings=siblings,
+            compatibility=compatibility,
+            projections_by_card_id=None,
+            applied_contexts={str(requested_card.id): contexts[str(requested_card.id)]},
+            now_utc=now_utc,
+        )
+        return (
+            "applied",
+            "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
+            control.legacy_unversioned,
+        )
+
+    burial = NoteCardBurial(
+        is_buried=bool(candidate_values["is_buried"]),
+        buried_until_day=candidate_values["buried_until_day"],
+    )
+    projections = {
+        str(card.id): project_note_card(
+            mapped.state.payload, burial=burial, card_id=str(card.id), card_created_at=card.created_at)
+        for card in siblings.cards
+    }
+    write = apply_study_authority_canonical_write(
+        db.session,
+        route=route,
+        locked=locked,
+        expected=StudyAuthorityCASExpectation(
+            enrollment_epoch=route.epoch,
+            subject_generation=int(locked.subject.subject_generation),
+            authority_revision=token_revision,
+            semantic_state_hash=current_semantic_hash,
+        ),
+        next_state=StudyAuthorityStateWrite(
+            algorithm_key=mapped.algorithm_key,
+            algorithm_version=mapped.algorithm_version,
+            state_schema_version=mapped.state_schema_version,
+            storage_codec=mapped.storage_codec,
+            state_payload=mapped.state.payload,
+            state_payload_size=mapped.state.size,
+            algorithm_state_hash=mapped.algorithm_state_hash,
+        ),
+        semantic_state_hash=projections[str(requested_card.id)].semantic_state_hash,
+        now_utc=now_utc,
+    )
+    for source_ref in sibling_source_refs:
+        if str(source_ref.card_id) in projections:
+            source_ref.applied_authority_revision = int(write.authority_revision)
+            source_ref.applied_local_revision_state = "AUTHORITY"
+    finalize_canonical_external_evidence(
+        db.session,
+        route=route,
+        locked=locked,
+        siblings=siblings,
+        compatibility=compatibility,
+        projections_by_card_id=projections,
         applied_contexts=contexts,
         now_utc=now_utc,
     )

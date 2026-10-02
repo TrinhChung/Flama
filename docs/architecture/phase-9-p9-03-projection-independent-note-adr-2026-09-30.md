@@ -52,7 +52,7 @@ Một transaction: fence enrollment + profile → khóa subject → token/state 
 ### 2.6 Connect/Anki (F9-06, H-05)
 
 - Thêm `connect_source_card_refs.applied_authority_revision BIGINT NULL` và `applied_local_revision_state ENUM('LEGACY_CARD_PROGRESS','AUTHORITY','NEEDS_CONFIRMATION')`.
-- Ở cutover, 15.965 ref hiện có (100% có `applied_local_revision` = `CardProgress.revision`) chuyển `NEEDS_CONFIRMATION`: không có ánh xạ chứng minh được từ revision projection sang authority revision. Lần sync kế tiếp của ref đó so snapshot: khớp state hiện tại → ghi `AUTHORITY` + revision hiện tại; khác → trả `LOCAL_PROGRESS_CHANGED` (hoặc áp khi `force`), không ghi đè im lặng.
+- Ở cutover (trong write freeze), mỗi ref có `applied_local_revision` **bằng** `CardProgress.revision` hiện tại — nghĩa là không có thay đổi cục bộ kể từ lần sync trước — được ánh xạ chứng minh được sang `applied_authority_revision` = `authority_revision` hiện tại của token Note (cả hai đọc trong cùng snapshot đã đóng băng), `applied_local_revision_state = 'AUTHORITY'`. Ref lệch (đã có thay đổi cục bộ, vốn sẽ là conflict) hoặc không có Card sống chuyển `NEEDS_CONFIRMATION`. Lần sync kế tiếp của ref `NEEDS_CONFIRMATION`: snapshot khớp state hiện tại → ghi `AUTHORITY` + revision hiện tại; khác → `LOCAL_PROGRESS_CHANGED` (hoặc áp khi `force`), không ghi đè im lặng. Đánh dấu toàn bộ 15.965 ref `NEEDS_CONFIRMATION` (đề xuất ban đầu) bị loại: user sync Anki đều đặn sẽ gặp conflict dù không học trên Flama. Migration 48 (#P9-05d) chỉ thêm hai cột NULL + CHECK; ánh xạ chạy trong CLI cutover P9-06.
 - Codec snapshot Anki → state dùng §2.2, không dựng input từ dòng CardProgress; Card chưa có CardProgress import được.
 
 ### 2.7 Readers
