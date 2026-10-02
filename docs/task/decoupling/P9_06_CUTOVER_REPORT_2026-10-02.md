@@ -17,6 +17,7 @@ Migration dữ liệu hiện có chạy đúng một lần. Profile persisted tr
 - Sau mở: ba service active, `/api/health` trả `{"status":"ok"}`.
 - Audit sau chuyển: **18/18 learner PASS**, `compared_with_projection=false`.
 - Postflight: 0 dòng projection tạo/cập nhật kể từ T0; 15.965 external ref đều có Card/application/ordinal đúng mapping; 0 duplicate ordinal. Đây là kiểm các dòng còn tồn tại, chưa thay SQL trace hay workload review thực tế.
+- Readiness v3 đã chạy qua `wsgi_audit.py` với principal MySQL **SELECT-only** được kiểm grant: `legacy_projection_writes=ready`, `projection_cutover=ready`, 0 legacy/unenrolled learner, 0 projection write. `work_drain=waiting` vì 4 lease v4 hợp lệ; các gate retirement chưa xanh vì thiếu telemetry/package coverage, đúng với phạm vi giữ compatibility. Credentials nằm ngoài repo, quyền private; báo cáo `/var/lib/flama/phase9/readiness.json`.
 
 ## Backup và recovery
 
