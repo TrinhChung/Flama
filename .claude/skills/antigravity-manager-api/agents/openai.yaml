@@ -1,0 +1,4 @@
+interface:
+  display_name: "Antigravity Manager API"
+  short_description: "Manage local Antigravity accounts without secrets."
+  default_prompt: "Use $antigravity-manager-api to inspect or operate the local Antigravity Manager safely."
