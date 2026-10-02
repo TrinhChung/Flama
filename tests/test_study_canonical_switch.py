@@ -70,6 +70,21 @@ class StudyCanonicalSwitchTests(unittest.TestCase):
             )
         self.assertEqual(self.statements, [])
 
+    def test_switch_freezes_history_of_contributors_without_projection_evidence(self):
+        # A Note materialized after the profile switch has CANONICAL
+        # contributors: no raw CardProgress evidence to put in the history cut.
+        with self.app.app_context():
+            StudyProgressContributor.query.filter_by(contributor_status="ACTIVE").update({
+                "evidence_kind": "CANONICAL", "source_progress_id": None, "live_card_progress_id": None,
+                "card_progress_revision": None, "raw_schema_version": None, "storage_codec": None,
+                "raw_payload": None, "raw_payload_size": None, "raw_progress_hash": None,
+            })
+            db.session.commit()
+            self._switch()
+            db.session.commit()
+            self.assertEqual(StudyProgressState.query.one().algorithm_key, switch_tests.SYNTHETIC.key)
+        self.assertEqual(self.statements, [])
+
     def test_a_wider_state_no_longer_needs_a_projection_round_trip(self):
         # PROJECTION_V1 refuses it: CardProgress cannot hold the extra key.
         # CANONICAL_V1 only needs availability to be derivable (ADR §2.9).
