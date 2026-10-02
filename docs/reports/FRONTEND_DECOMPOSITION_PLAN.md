@@ -3,37 +3,98 @@
 **Document ID**: `FLAMA-ARCH-2026-FE-001`  
 **Target Repository**: Flama (`d:\Project\nihongo`) — Subsystem: `frontend/src/`  
 **Architectural Baseline**: React 19 SPA, Vite, TypeScript, TailwindCSS v4 (@theme inline OKLCH), Radix UI  
-**Target Architectural Standard**: Feature-Sliced Design (FSD) & Headless Hooks (<8 States Rule)  
-**Safety & Compliance Mode**: Zero Visual Regression, 100% Behavioral Preservation, Zero Source Code Modifications during Planning  
-**Date**: 2026-10-01  
-**Status**: Authoritative Master Plan / Ready for Implementation  
+**Target Architectural Standard**: Pragmatic Feature-Sliced Design (FSD v2.1) & Cohesive Headless Hooks  
+**Safety & Compliance Mode**: Behavior Preservation & Measurable ROI First, Vertical Subsystem Migration, Evidence-Based Validation  
+**Date**: 2026-10-02 (Revision 2.0)  
+**Status**: Authoritative Master Plan / Architecture Governance Standard  
+
+---
+
+## Revision Summary (v2.0 Architectural Safety Overhaul)
+
+This authoritative revision updates Document `FLAMA-ARCH-2026-FE-001` from a speculative, "target-architecture-first" big-bang refactoring plan into an evidence-based, risk-adjusted migration plan governed by **behavior preservation, vertical blast-radius containment, and measurable ROI**:
+
+1. **Migration Safety & Governance Rules Added**:
+   - Codified **16 binding architectural directives (Rules 1–16)** in a dedicated Section 2 (`Migration Safety, Risk Control & Governance Rules`).
+   - Established a **4-tier Risk Classification** (Low, Medium, High, Critical) dictating required test depth before any production refactoring.
+   - Enforced **Mandatory Phase 0 (Behavioral Baseline & Characterization)** before touching any subsystem, capturing user interactions, keyboard shortcuts, route params, API payloads, query invalidations, modal lifecycles, and audio lifecycles.
+   - Mandated **Automated Visual Regression** (Playwright screenshot comparison) across critical states (open/closed modals, multi-pane workspaces, worksheet templates), explicitly distinguishing visual equivalence from `CLS = 0`.
+   - Instituted formal **Per-Subsystem Go/No-Go Gates** with 4 possible outcomes (`ACCEPT`, `ACCEPT WITH FOLLOW-UP`, `STOP`, `ROLLBACK`), empowering the team to halt migration whenever ROI is unproven without leaving the codebase in a broken or half-migrated state.
+
+2. **Hard Architectural Metrics Downgraded to Warning Heuristics**:
+   - Removed `<300 LOC per file`, `<8 states per hook`, and `<150 LOC per page` as mandatory pass/fail acceptance gates. Reclassified them as architecture smells / review heuristics.
+   - Explicitly prohibited artificial object bundling (packing disparate states into single `useState` objects or `useReducer` solely to pass numeric limits) and artificial component splitting that fragments cohesive units.
+   - Replaced numeric gates with 8 responsibility-based criteria for component and hook extraction.
+
+3. **Resequenced into Risk-Adjusted Vertical Subsystems**:
+   - Abolished the horizontal layer-by-layer rollout ("all primitives -> all hooks -> all pages") that risked a prolonged half-migrated architecture.
+   - Established a vertical sequencing strategy:
+     - **Phase 0**: Behavioral Baseline & Characterization.
+     - **Phase 1 (Pilot)**: MCP Tokens (~1,800 LOC duplication, low semantic risk).
+     - **Phase 2**: Admin Taxonomy (localizing 46 states into 5 tabs, type-safe entity modal).
+     - **Phase 3**: Consolidate Proven Shared UI Primitives (extracted only when 2–3 real consumers share identical semantics; no speculative design-system expansion).
+     - **Phase 4A/B**: Browse Decomposition (high-risk migration using a temporary `useBrowseState` compatibility facade with an explicit sunset timeline and removal criteria).
+     - **Phase 5**: Worksheet Studio (critical-risk SVG/canvas/print rendering; executed last with strict characterization and screenshot protection).
+     - **Phase 6**: Optional FSD directory/import cleanup (only after boundaries are proven).
+
+4. **Corrected Document Contradictions**:
+   - **`useBrowseAudioModal`**: Resolved the contradiction where the hook declared ~18 states while the checklist required `<8`. Recognized that audio states (engine connection, voice selection, synthesis queue, playback control, audio modal visibility) form a cohesive state cluster; prohibited artificial splitting or bundling solely to satisfy numeric counts.
+   - **`useBrowseCardOperations`**: Resolved the contradiction between its 8 operational states and the `<8` rule by classifying operational triggers as a cohesive unit.
+   - **`TaxonomyEntityModal`**: Eliminated `Record<string, any>`, which directly violated the zero-`any` policy. Replaced with strongly typed generic entity schemas (`TaxonomyEntityModalProps<T>`), discriminating field unions, and explicitly rejected an over-generic dynamic form engine.
+
+5. **Why Blast Radius is Reduced**:
+   - Each vertical subsystem is independently baselined, refactored, tested, verified, and accepted before touching the next.
+   - High-risk subsystems (Browse) use temporary compatibility facades to prevent ripple effects across unrelated views.
+   - Non-migration of stable legacy code is codified: working, low-churn code is not refactored purely for cosmetic FSD alignment.
+   - Reversible atomic git commits ensure any subsystem can be rolled back cleanly without affecting other subsystems.
 
 ---
 
 ## Table of Contents
 1. [Executive Summary & Architecture Vision](#1-executive-summary--architecture-vision)
-2. [R1: Frontend Architecture Audit & Categorization](#2-r1-frontend-architecture-audit--categorization)
-   - 2.1 Current Directory Layout vs Feature-Sliced Design (FSD)
-   - 2.2 God Components Ranking (Files >= 300 LOC)
-   - 2.3 Mega-Hooks & State Bloat Inventory (>= 10 States)
-   - 2.4 Repetitive Inline JSX/CSS Patterns Lacking UI Primitives
-   - 2.5 Authoritative OKLCH Design Tokens Contract (`index.css`)
-   - 2.6 Target FSD Migration Blueprint
-3. [R2: Reusable UI Primitives Technical Design (Leaf-to-Root)](#3-r2-reusable-ui-primitives-technical-design-leaf-to-root)
-   - 3.1 `SearchInput`
-   - 3.2 `ConfirmDialog`
-   - 3.3 `StatusPill`
-   - 3.4 `CodeSnippetBox`
-   - 3.5 `FilterPillGroup`
-   - 3.6 `ImageUploadDropzone`
-   - 3.7 `SplitPane`
-   - 3.8 `CardFieldsForm`
-4. [R3: Headless Custom Hooks Architecture](#4-r3-headless-custom-hooks-architecture)
-   - 4.1 State Extraction Methodology (<8 States Rule)
-   - 4.2 Specifications for 14 Headless Custom Hooks
+   - 1.1 The Challenge: Monolithic Sprawl in a Modern Stack
+   - 1.2 Target Architectural Vision: Pragmatic Feature-Sliced Design (FSD)
+   - 1.3 High-Level Impact Targets & Expected Outcomes
+2. [Migration Safety, Risk Control & Governance Rules](#2-migration-safety-risk-control--governance-rules)
+   - 2.1 Rule 1 — No Big-Bang Migration (Vertical Subsystems Only)
+   - 2.2 Rule 2 — Downgrade Numeric KPIs to Review Smells & Heuristics
+   - 2.3 Rule 3 — Mandatory Phase 0 Behavioral Baseline & Characterization
+   - 2.4 Rule 4 — Automated Visual Regression (Distinguishing Visual Equivalence from CLS)
+   - 2.5 Rule 5 — Risk Classification Framework (Low, Medium, High, Critical)
+   - 2.6 Rule 6 — Strict Contract Preservation (APIs, Caches, URLs, Storage, A11y)
+   - 2.7 Rule 7 — Temporary Compatibility Layers Governance & Removal Criteria
+   - 2.8 Rule 8 — Independent Rollback Safety & Atomic Units
+   - 2.9 Rule 9 — Strict Ban on Premature Generalization
+   - 2.10 Rule 10 — FSD is a Boundary Model, Not a Directory Rewrite
+   - 2.11 Rule 11 — Non-Migration of Stable Legacy Code Without Active Cause
+   - 2.12 Rule 12 — Per-Subsystem Go/No-Go Gates (Correctness, Maintainability, Performance, Cost)
+   - 2.13 Rule 13 — Subsystem Migration ROI & Effort Tracking
+   - 2.14 Rule 14 — Non-Blocking Partial Adoption (Stopping Early is Acceptable)
+   - 2.15 Rule 15 — Zero Unverified Claims (Forecasts vs Guaranteed Outcomes)
+   - 2.16 Rule 16 — Evidence-Based Performance Claims (No Claims Without Benchmarks)
+3. [R1: Frontend Architecture Audit & Categorization](#3-r1-frontend-architecture-audit--categorization)
+   - 3.1 Current Directory Layout vs Feature-Sliced Design (FSD)
+   - 3.2 God Components Ranking (Files >= 300 LOC Heuristic)
+   - 3.3 Mega-Hooks & State Bloat Inventory (>= 10 States Heuristic)
+   - 3.4 Repetitive Inline JSX/CSS Patterns Lacking UI Primitives
+   - 3.5 Authoritative OKLCH Design Tokens Contract (`index.css`)
+   - 3.6 Target FSD Migration Blueprint & Boundary Model
+4. [R2: Reusable UI Primitives Technical Design (Leaf-to-Root)](#4-r2-reusable-ui-primitives-technical-design-leaf-to-root)
+   - 4.1 Extraction Guidelines: Proven Consumers vs Premature Abstraction
+   - 4.2 `SearchInput`
+   - 4.3 `ConfirmDialog`
+   - 4.4 `StatusPill`
+   - 4.5 `CodeSnippetBox`
+   - 4.6 `FilterPillGroup`
+   - 4.7 `ImageUploadDropzone`
+   - 4.8 `SplitPane`
+   - 4.9 `CardFieldsForm`
+5. [R3: Headless Custom Hooks Architecture](#5-r3-headless-custom-hooks-architecture)
+   - 5.1 State Extraction Methodology (Responsibility-Based Clustering & Heuristics)
+   - 5.2 Specifications for 14 Headless Custom Hooks
      - Hook 1: `useBrowseFilters`
      - Hook 2: `useBrowseSelection`
-     - Hook 3: `useBrowseCardOperations`
+     - Hook 3: `useBrowseCardOperations` (Cohesive Cluster)
      - Hook 4: `useCardDetailEditor`
      - Hook 5: `useWorksheetStudio`
      - Hook 6: `useWorksheetConfig`
@@ -45,19 +106,29 @@
      - Hook 12: `useStudyInteraction`
      - Hook 13: `useMarketplaceSearch`
      - Hook 14: `useDeckExportImport`
-5. [R4: Deep Decomposition of the 4 Key God Components](#5-r4-deep-decomposition-of-the-4-key-god-components)
-   - 5.1 Deep Dive: `DeckWorksheetModal.tsx` (4,388 LOC)
-   - 5.2 Deep Dive: `AdminTaxonomyPage.tsx` (1,400 LOC, 46 States)
-   - 5.3 Deep Dive: `AdminMcpTokensPage.tsx` & `McpTokensTab.tsx` (2,586 LOC Combined)
-   - 5.4 Deep Dive: `useBrowseState.ts` (1,053 LOC, 49 States, 102 Return Properties)
-6. [R5: Zero Visual Regression & Logic Preservation Standards](#6-r5-zero-visual-regression--logic-preservation-standards)
-   - 6.1 Layout & Box Model Invariance Rules
-   - 6.2 Strict Ban on Extraneous Wrapper `<div>`s (Fragments, `asChild`, `contents`)
-   - 6.3 Radix UI Context & Accessibility Boundaries
-   - 6.4 Chrome DevTools Isolated Profile Verification Procedure
-   - 6.5 10-Point Actionable Verification Checklist
-7. [Consolidated Metrics & Before/After LOC Impact Table](#7-consolidated-metrics--beforeafter-loc-impact-table)
-8. [Phased Implementation Roadmap & Rollout Plan](#8-phased-implementation-roadmap--rollout-plan)
+6. [R4: Deep Decomposition of the 4 Key God Components](#6-r4-deep-decomposition-of-the-4-key-god-components)
+   - 6.1 Deep Dive: `AdminMcpTokensPage.tsx` & `McpTokensTab.tsx` (Pilot Migration 1)
+   - 6.2 Deep Dive: `AdminTaxonomyPage.tsx` (Migration 2 — Type-Safe Entity Modal)
+   - 6.3 Deep Dive: `useBrowseState.ts` (Migration 4 — Facade & Sub-Hooks)
+   - 6.4 Deep Dive: `DeckWorksheetModal.tsx` (Migration 5 — Critical Risk Canvas)
+7. [R5: Zero Visual Regression & Logic Preservation Standards](#7-r5-zero-visual-regression--logic-preservation-standards)
+   - 7.1 Layout & Box Model Invariance Rules
+   - 7.2 Strict Ban on Extraneous Wrapper `<div>`s (Fragments, `asChild`, `contents`)
+   - 7.3 Radix UI Context & Accessibility Boundaries
+   - 7.4 Chrome DevTools Isolated Profile Verification Procedure
+   - 7.5 Automated Visual Regression (Playwright Screenshot Comparison)
+   - 7.6 15-Point Actionable Verification Checklist (C1–C15)
+8. [Consolidated Metrics & Before/After Impact Forecast](#8-consolidated-metrics--beforeafter-impact-forecast)
+9. [Risk-Adjusted Vertical Implementation Roadmap & Rollout Plan](#9-risk-adjusted-vertical-implementation-roadmap--rollout-plan)
+   - Phase 0: Behavioral Baseline & Characterization
+   - Phase 1: MCP Tokens Pilot Migration (Gate 1 Review)
+   - Phase 2: Admin Taxonomy Migration (Gate 2 Review)
+   - Phase 3: Consolidate Proven Shared UI Primitives (Gate 3 Review)
+   - Phase 4A: Browse Internal Decomposition behind Temporary Compatibility Facade
+   - Phase 4B: Consumer Migration from Facade to Focused Hooks (Gate 4 Review)
+   - Phase 5: Worksheet Studio Migration (Gate 5 Review)
+   - Phase 6: Optional FSD Folder/Import Cleanup
+   - Final Architecture Review & ROI Sign-Off
 
 ---
 
@@ -67,30 +138,258 @@
 The Flama frontend is an ambitious, high-performance Japanese language learning Single-Page Application (SPA) powered by React 19, Vite, TailwindCSS v4, and Radix UI. Over successive feature additions (Flashcard V2, Yomitan AnkiConnect bridge, Flama Audio TTS companions, and payOS marketplace commerce), core presentation files accumulated severe technical debt:
 
 - **Extreme Monoliths**: 112 files exceed 300 LOC. The largest single component, `DeckWorksheetModal.tsx`, measures **4,388 LOC**, bundling modal chrome, responsive navigation, wizard routing, 8 specialized layout generators, live print rendering, and SVG canvas math.
-- **Cascading Re-render Bottlenecks**: 23 components and hooks suffer from extreme state bloat (10 to 49 separate `useState` declarations). Root-level states cause catastrophic re-renders across entire viewports upon single keystrokes (e.g., `AdminTaxonomyPage.tsx` with 46 states).
+- **Cascading Re-render Bottlenecks**: 23 components and hooks suffer from extreme state bloat (10 to 49 separate `useState` declarations). Root-level states cause severe re-render churn across entire viewports upon single keystrokes (e.g., `AdminTaxonomyPage.tsx` with 46 states).
 - **Entangled Mega-Hooks**: `useBrowseState.ts` (1,053 LOC) bundles **49 distinct states** and returns **102 properties and functions**, amalgamating search filtering, multi-card selection, keyboard shortcuts, inline card editing, batch deletions, note moves, and 24 VoiceVox/Kokoro TTS audio states into a single monolithic hook.
 - **Widespread Code Duplication**: More than **1,800 lines of identical UI and mutation code** are duplicated between `AdminMcpTokensPage.tsx` and `McpTokensTab.tsx`. Core visual patterns (search inputs with absolute icons, confirmation dialogs, status pills, and copy snippets) are manually re-implemented with ad-hoc Tailwind classes across dozens of files.
 - **Architectural Gaps**: The project lacks an `entities/` layer in its Feature-Sliced Design structure, forcing domain cards and entity representations to leak into feature folders or page routers.
 
-### 1.2 Target Architectural Vision: Feature-Sliced Design (FSD)
-This master plan defines a bottom-up, leaf-to-root architectural migration to **Feature-Sliced Design (FSD)**:
-1. **`shared/ui` (Layer 0)**: 8 reusable, accessible UI primitives with zero business logic, governed by `class-variance-authority` (CVA) and project OKLCH tokens.
+### 1.2 Target Architectural Vision: Pragmatic Feature-Sliced Design (FSD)
+This master plan adopts a pragmatic, risk-adjusted migration toward **Feature-Sliced Design (FSD v2.1)**:
+1. **`shared/ui` (Layer 0)**: Reusable, accessible UI primitives with zero business logic, governed by `class-variance-authority` (CVA) and project OKLCH tokens, extracted only when 2–3 real consumers share genuinely identical semantics.
 2. **`entities` (Layer 1)**: Pure domain entities (`card`, `deck`, `note`, `taxonomy`, `token`) housing presentation cards, badges, and read-only hooks.
-3. **`features` (Layer 2)**: Focused user interactions and business flows (`browse-filters`, `worksheet-studio`, `mcp-tokens`, `study-session`), strictly limited to `< 300 LOC` per file and powered by pure headless custom hooks adhering to the **`<8 States Rule`**.
+3. **`features` (Layer 2)**: Focused user interactions and business flows (`browse-filters`, `worksheet-studio`, `mcp-tokens`, `study-session`), organized by single-responsibility units and powered by headless custom hooks adhering to cohesive state clustering.
 4. **`widgets` (Layer 3)**: High-level composite blocks (`BrowseWorkspace`, `WorksheetStudio`, `DiffViewer`) assembling features and entities.
-5. **`pages` (Layer 4)**: Thin route orchestrators (`< 150 LOC`) responsible solely for parameter parsing, title metadata, and layout assembly.
+5. **`pages` (Layer 4)**: Thin route orchestrators responsible solely for parameter parsing, title metadata, and layout assembly.
 
-### 1.3 High-Level Impact Summary
-- **Total LOC Elimination Across Key Monoliths**: Net reduction of **~4,104 lines of code (-43.5%)** across the 4 key target subsystems.
-- **Duplicated Code Extinction**: Permanent elimination of **~1,800 duplicate lines** between MCP token views.
-- **Zero Visual Regression**: 100% preservation of margin/padding spacing, brand OKLCH colors, font metrics, Radix UI accessibility, and interaction states.
-- **Performance Optimization**: Complete elimination of root-hoisted re-render cascades, reduction in React component tree depth, and enforcement of `CLS = 0.0000` via Chrome DevTools profiling.
+> [!IMPORTANT]
+> **FSD is an Architectural Boundary Model, Not a Directory-Churn Exercise.**  
+> Moving files into new folders without decoupling logic produces zero architectural value. Migration success is measured by clearer domain ownership, strict unidirectional dependencies, and reduced blast radius—not by directory structure changes alone. Stable, working legacy code with low defect frequency may remain in place.
+
+### 1.3 High-Level Impact Targets & Expected Outcomes
+All figures below represent **estimated targets and hypotheses** based on planned decomposition, subject to empirical verification during per-subsystem Go/No-Go reviews:
+
+- **Target LOC Elimination Across Key Monoliths**: Estimated reduction of **~4,104 lines of code (~42.6% reduction target)** across the 4 key target subsystems (`DeckWorksheetModal`, `AdminTaxonomyPage`, MCP token pages, `useBrowseState`). Actual LOC reduction will be measured post-migration.
+- **Target Duplicated Code Elimination**: Permanent elimination target of **~1,800 duplicate lines** between MCP token views (`AdminMcpTokensPage.tsx` vs `McpTokensTab.tsx`).
+- **Zero Visual Regression Target**: 100% preservation of margin/padding spacing, brand OKLCH colors, font metrics, Radix UI accessibility, and interaction states, verified by automated Playwright screenshot diffing and Chrome DevTools isolated profiling.
+- **Performance Optimization Hypothesis**: Reduction in root-hoisted re-render churn, minimization of React component tree depth, zero duplicate network queries, and maintenance of `CLS = 0.0000` under simulated user interactions.
 
 ---
 
-# 2. R1: Frontend Architecture Audit & Categorization
+# 2. Migration Safety, Risk Control & Governance Rules
 
-## 2.1 Current Directory Layout vs Feature-Sliced Design (FSD)
+Architecture refactoring without risk governance inevitably destabilizes production systems. To ensure that Flama's refactoring preserves existing behavior, reduces blast radius, and provides measurable return on investment (ROI), all architectural work must adhere strictly to the following 16 mandatory rules:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                   MIGRATION SAFETY & ARCHITECTURAL GOVERNANCE RULES                    │
+├───────────────────────────────┬───────────────────────────────┬────────────────────────┤
+│ 1. No Big-Bang Migration      │ 2. Responsibility-Based Smells│ 3. Phase 0 Baselines   │
+│ 4. Automated Visual Regression│ 5. 4-Tier Risk Classification │ 6. Contract Invariance│
+│ 7. Compatibility Layer Sunsets│ 8. Atomic Rollback Safety     │ 9. Ban Premature Gen.  │
+│ 10. FSD as Boundary Model     │ 11. Protect Stable Legacy Code│ 12. Go/No-Go Gates     │
+│ 13. Migration ROI Scorecards  │ 14. Partial Adoption Allowed  │ 15. Zero Hyped Claims  │
+│ 16. Evidence-Based Performance│                               │                        │
+└───────────────────────────────┴───────────────────────────────┴────────────────────────┘
+```
+
+---
+
+## 2.1 Rule 1 — No Big-Bang Migration (Vertical Subsystems Only)
+1. **Vertical Isolation**: Refactoring must proceed strictly **one vertical subsystem at a time** (e.g., complete MCP Tokens slice before touching Admin Taxonomy; complete Admin Taxonomy before touching Browse).
+2. **Horizontal Proscription**: It is strictly forbidden to organize execution horizontally across the entire application (e.g., migrating all UI primitives across 50 files, then all hooks, then all pages). Such horizontal rollouts leave the application in a prolonged, un-testable, half-migrated architectural state.
+3. **Subsystem Lifecycle Completion**: A vertical subsystem must be independently:
+   - Baselined (Phase 0 characterization tests);
+   - Refactored (leaf-to-root within the subsystem);
+   - Tested (100% pass on characterization, E2E, and visual suites);
+   - Reviewed & Audited;
+   - Validated & Accepted via formal Go/No-Go review;
+   before any subsequent high-risk or critical-risk subsystem enters active development.
+
+---
+
+## 2.2 Rule 2 — Downgrade Numeric KPIs to Review Smells & Heuristics
+1. **Metrics as Warning Smells**: Numeric thresholds (`< 300 LOC per file`, `< 8 states per hook`, `< 150 LOC per page`) are demoted from mandatory pass/fail gates to **architectural smells and review heuristics**.
+2. **LOC ≠ Complexity**: A cohesive 350-line module with clear invariants is far superior to three artificially fragmented 110-line modules coupled through prop drilling or context gymnastics.
+3. **State Count ≠ State Complexity**: Declaring 9 closely related states (e.g., audio playback coordinates) is often clearer than artificial state compression.
+4. **Prohibition of Artificial Bundling**: It is strictly prohibited to combine multiple independent states into a single object (`useState({ a, b, c, d })`) or force them into an unnatural `useReducer` solely to bypass a numeric state count limit. Doing so obscures change tracking and triggers spurious re-renders.
+5. **Prohibition of Artificial Splitting**: Splitting a tightly coupled component solely to force files below 300 LOC is prohibited.
+6. **Responsibility-Based Splitting Criteria**: A component, hook, or module should be decomposed **only when one or more of the following 8 structural conditions are met**:
+   - Condition 1: It owns multiple unrelated functional responsibilities.
+   - Condition 2: Unrelated state mutations trigger re-renders of independent UI zones.
+   - Condition 3: Its public interface (props or return signature) is excessively wide and exposes implementation details.
+   - Condition 4: Routine maintenance in one feature area frequently causes regression bugs in another.
+   - Condition 5: Unit or behavioral testing requires mock setup for unrelated domains.
+   - Condition 6: The module has multiple independent reasons to change.
+   - Condition 7: Domain ownership is ambiguous (e.g., domain card rendering mixed into a generic layout wrapper).
+   - Condition 8: Consumers depend on internal implementation mechanics rather than a clean public contract.
+
+---
+
+## 2.3 Rule 3 — Mandatory Phase 0 Behavioral Baseline & Characterization
+Before a single line of production code is modified in a target subsystem, developers must capture its current observable behavior through **Characterization Tests**. The objective of characterization is not to validate whether legacy behavior is optimal, but to guarantee that existing behavior is preserved intentionally during architecture-only refactoring.
+
+A subsystem **MUST NOT** enter structural refactoring until baseline test coverage captures:
+1. **User Interactions**: Click sequences, button disabled states, loading spinners, and multi-step form transitions.
+2. **Keyboard Behavior & Shortcuts**: Navigation (`Tab`, `Shift+Tab`), dismissals (`Escape`), confirmations (`Enter`), and global accelerators (`/`, `Ctrl+K`, `Shift+Click` range selection).
+3. **Route & URL Behavior**: Query string parsing, browser back/forward navigation, and deep linking with search parameters.
+4. **API Requests & Payloads**: HTTP endpoints, request bodies, query params, headers, and multipart form payloads.
+5. **TanStack Query Caching & Invalidation**: Query keys, cache staleness, background refetches, and cascading query invalidations on mutation.
+6. **Mutation Side Effects**: Optimistic updates, session storage sync, study session card sync, and toast notifications.
+7. **Modal Lifecycles & Focus Traps**: Mount/unmount events, Radix focus restoration upon closing, and backdrop click dismissals.
+8. **Asynchronous UI States**: Loading skeletons, disabled action buttons, error banners, and empty data placeholders.
+9. **Permissions & Roles**: Behavioral differences between regular users and system administrators.
+10. **Persistence Boundaries**: Storage keys in `localStorage` and `sessionStorage`, including schema formats and defaults.
+11. **Generated Outputs**: Canvas rendering, SVG element structures, and printable DOM stylesheets.
+12. **Audio & Media Lifecycles**: Blob URL generation, `URL.revokeObjectURL()` cleanup, audio playback states, and synthesizer abort signals.
+13. **Drag-and-Drop Workflows**: Drag enter/leave styling, file drop payload processing, and clipboard paste triggers.
+
+---
+
+## 2.4 Rule 4 — Automated Visual Regression (Distinguishing Visual Equivalence from CLS)
+1. **`CLS = 0` Does Not Equal Visual Equivalence**: A page can have zero Cumulative Layout Shift (`CLS = 0.0000`) while suffering severe visual regressions (e.g., clipped text, broken flexbox wrapping, missing border radii, wrong OKLCH color shades, misaligned icons, or invisible elements).
+2. **Playwright Screenshot Baselines**: Visual regression must be verified using automated Playwright screenshot comparisons across:
+   - Primary viewport dimensions (Desktop 1440x900, Tablet 768x1024, Mobile 375x667);
+   - Open and closed modal states;
+   - Active, hovered, and disabled button/input states;
+   - Empty, loading, and error states;
+   - Complex workspaces (Browse 3-pane view, Worksheet Studio live canvas, MCP Token management dialogs).
+3. **Pixel Tolerance Standard**: Visual diffs must not exceed a strict threshold (`< 0.1%` total pixel mismatch, allowing only sub-pixel anti-aliasing variations).
+
+---
+
+## 2.5 Rule 5 — Risk Classification Framework (Low, Medium, High, Critical)
+Every refactoring target is assigned a formal risk tier that governs its mandatory verification depth:
+
+| Risk Tier | Definition & Architectural Characteristics | Example Targets | Mandatory Verification Depth |
+|:---|:---|:---|:---|
+| **Low Risk** | Pure presentational components, stateless UI primitives, strongly typed data formatting utilities, isolated CSS styling. | `SearchInput`, `ConfirmDialog`, `StatusPill`, `CodeSnippetBox`, `FilterPillGroup` | Vitest unit tests, Storybook/visual check, TypeScript `tsc --noEmit`. |
+| **Medium Risk** | Admin CRUD views, isolated React Query orchestration, local modal dialogs, single-entity forms. | `AdminMcpTokensPage`, `McpTokensTab`, `AdminTaxonomyPage` tabs, `TaxonomyEntityModal` | Phase 0 characterization tests, Vitest component integration tests, DevTools isolated profile inspection. |
+| **High Risk** | Multi-consumer state coordinators, global mega-hooks, cross-cutting keyboard shortcuts, complex TanStack Query cache invalidations, large form wizards. | `useBrowseState.ts`, `useBrowseFilters.ts`, `BrowseCardEditor.tsx`, `useBrowseCardOperations.ts` | Phase 0 characterization suite, Playwright E2E flows, temporary compatibility facade, memory leak profiling. |
+| **Critical Risk** | High-precision layout calculations, print engine stylesheets, SVG canvas math, audio playback lifecycles, and logic mutating persisted user flashcards. | `DeckWorksheetModal.tsx`, `WorksheetPageRenderer.tsx`, `useLocalAudioEngine.ts` | Comprehensive Phase 0 behavioral suite, Playwright visual screenshot diffing, multi-browser print verification, heap snapshot analysis. |
+
+---
+
+## 2.6 Rule 6 — Strict Contract Preservation
+Architecture-only refactoring **MUST NOT silently alter runtime contracts**:
+1. **API Contracts**: Request URLs, HTTP methods, JSON payloads, and response transformations must remain identical.
+2. **Cache Semantics**: TanStack Query keys, invalidation arrays, and cache gc times must remain exact.
+3. **Routing & URL State**: Route paths, query parameters (`?q=...&deck_id=...&sort=...`), and hash fragments must remain intact.
+4. **Client-Side Storage**: Keys, data structures, and serializations in `localStorage` or `sessionStorage` must not change without migration scripts.
+5. **Keyboard Hotkeys**: Bounded keyboard shortcuts (`Ctrl+A`, `Escape`, `/`, `Enter`) must execute identically.
+6. **Accessibility & ARIA**: Roles, labels, focus traps, and keyboard navigation rings must remain 100% intact.
+7. **Intentional Product Changes**: Any user-facing behavioral or visual change must be segregated into an independent product pull request, never bundled into an architectural refactoring commit.
+
+---
+
+## 2.7 Rule 7 — Temporary Compatibility Layers Governance & Removal Criteria
+When refactoring high-risk modules with multiple consumers (such as `useBrowseState.ts`), developers may introduce temporary compatibility facades to prevent system-wide blast radius:
+1. **Mandatory Facade Metadata**: Every compatibility layer must include an authoritative header comment documenting:
+   - **Reason for Existence**: Blast radius mitigation during vertical migration.
+   - **Registered Consumers**: Exact list of components depending on the facade.
+   - **Removal Criteria**: Preconditions required before the facade can be deleted.
+   - **Sunset Phase**: The exact roadmap phase when the facade will be deprecated and removed.
+2. **Ban on Permanent God Facades**: A temporary facade must never be accepted as permanent architecture. Once all direct consumers are refactored to consume focused sub-hooks directly, the facade **must be deleted**.
+
+---
+
+## 2.8 Rule 8 — Independent Rollback Safety & Atomic Units
+1. **Subsystem Isolation in Version Control**: Each subsystem migration must be organized into atomic, self-contained git commits.
+2. **Zero Mixed Commits**: Commits must never mix changes from two distinct vertical subsystems (e.g., do not combine an MCP token fix with a Browse hook extraction).
+3. **Non-Destructive Replacement**: Legacy implementations must remain operable in parallel until the replacement module passes all Phase 0 characterization and Playwright visual tests.
+4. **Single-Command Revert**: Reverting a subsystem migration must require only a single `git revert` command, leaving the rest of the application completely unaffected.
+
+---
+
+## 2.9 Rule 9 — Strict Ban on Premature Generalization
+1. **Do Not Abstract on Visual Similarity**: Shared UI components must not be extracted solely because two JSX snippets visually resemble each other.
+2. **Semantic Distinction**: Before extracting any abstraction, engineers must explicitly distinguish between:
+   - *Identical Behavior* (true candidates for `shared/ui`);
+   - *Similar UI with Divergent Semantics* (keep separate to avoid leaky abstractions);
+   - *Similar Domain Concepts* (belongs in `entities/`, not `shared/ui/`);
+   - *Accidental Textual Duplication* (leave in place).
+3. **No Domain Logic in `shared/`**: Modules in `shared/ui` must contain zero knowledge of Flama business entities (no decks, cards, note types, or user permissions).
+
+---
+
+## 2.10 Rule 10 — FSD is a Boundary Model, Not a Directory Rewrite
+1. **Clear Boundaries > Folder Restructuring**: Feature-Sliced Design is successful when ownership, encapsulation, and unidirectional dependencies are enforced. Moving files into `pages/`, `widgets/`, `features/`, `entities/`, and `shared/` without decoupling state produces churn with negative ROI.
+2. **Preserve Working Legacy Code**: Stable legacy code in `components/` or `features/` that functions properly and has low churn may remain in its current location.
+3. **Default for New Code**: All newly created components and extracted modules must conform strictly to FSD layers and unidirectional import rules (`app -> pages -> widgets -> features -> entities -> shared`).
+
+---
+
+## 2.11 Rule 11 — Non-Migration of Stable Legacy Code Without Active Cause
+Existing code is **not technical debt** merely because it was written prior to FSD adoption. Refactoring is justified only when a module exhibits one or more active liabilities:
+- High defect rate or recurring regressions;
+- High change velocity (frequent feature additions or modifications);
+- Massive code duplication (>500 LOC);
+- Entangled state cascades causing noticeable UI lag;
+- Extreme testing difficulty due to monolithic dependencies.
+
+Low-churn, stable utility files or presentation widgets with zero bug history must remain untouched.
+
+---
+
+## 2.12 Rule 12 — Per-Subsystem Go/No-Go Gates
+At the completion of each vertical subsystem migration, a formal **Go/No-Go Review** must be conducted against 4 evaluation dimensions:
+
+1. **Correctness**: 100% of Phase 0 characterization tests pass; Playwright visual diffs show zero unexpected layout changes; zero runtime console errors.
+2. **Maintainability**: Clear single responsibility; public API surface reduced; duplicate code eliminated; dependencies strictly unidirectional.
+3. **Performance (Evidence-Based)**: DevTools traces confirm re-render counts decreased or remained flat; `CLS = 0.0000`; network waterfall free of redundant fetches.
+4. **Migration Cost**: Actual engineering effort, lines touched, and defects introduced recorded against original estimates.
+
+### Formal Gate Decision Outcomes:
+- **`ACCEPT`**: Subsystem passes all criteria with flying colors; proceed to the next scheduled vertical subsystem.
+- **`ACCEPT WITH FOLLOW-UP`**: Minor non-blocking maintenance tasks identified; proceed while tracking follow-up tickets.
+- **`STOP`**: Migration did not yield sufficient maintainability or performance ROI relative to effort expended; halt further architectural expansion.
+- **`ROLLBACK`**: Regression detected or blast radius exceeded safety limits; trigger immediate atomic git rollback.
+
+---
+
+## 2.13 Rule 13 — Subsystem Migration ROI & Effort Tracking
+For every migrated vertical subsystem, the engineering team must record and archive a standardized **Migration Scorecard**:
+
+```markdown
+### Migration Scorecard: [Subsystem Name]
+- **Baseline Metrics (Before)**:
+  - Total Lines of Code (LOC): [X]
+  - File Count: [X]
+  - Max Reactive States in Single Hook/Component: [X]
+  - Public Interface Property Count: [X]
+  - Duplicated LOC Identified: [X]
+  - Re-render Count on Typical User Action: [X]
+- **Post-Migration Metrics (After)**:
+  - Total Lines of Code (LOC): [Y]
+  - File Count: [Y]
+  - Max Reactive States in Single Hook/Component: [Y]
+  - Public Interface Property Count: [Y]
+  - Duplicated LOC Eliminated: [Y]
+  - Re-render Count on Typical User Action: [Y]
+- **Cost & Quality Delta**:
+  - Net LOC Delta: [Y - X] ([Percentage]%)
+  - Production Files Touched: [N]
+  - Phase 0 Baseline Tests Added: [N]
+  - Defects Discovered During Baseline: [N]
+  - Regressions Caught by CI: [N]
+  - Temporary Compatibility Facades Remaining: [List]
+  - Gate Decision: [ACCEPT | ACCEPT WITH FOLLOW-UP | STOP | ROLLBACK]
+```
+
+---
+
+## 2.14 Rule 14 — Non-Blocking Partial Adoption (Stopping Early is Acceptable)
+The Flama codebase does not require 100% of its files to be migrated to FSD to realize architectural benefits.
+- If MCP Tokens and Admin Taxonomy are migrated cleanly, but Worksheet Studio proves too stable or costly to refactor relative to its ROI, the architecture program **may cleanly terminate**.
+- Partial migration of high-ROI hotspots is a successful outcome. Forcing completion for dogmatic consistency is explicitly prohibited.
+
+---
+
+## 2.15 Rule 15 — Zero Unverified Claims (Forecasts vs Guaranteed Outcomes)
+All forward-looking statements in planning documentation must be formulated as **hypotheses, estimated targets, or acceptance criteria**:
+- *Prohibited*: "This refactoring guarantees 100% elimination of re-render cascades and a 42.6% reduction in code size."
+- *Required*: "Estimated target based on planned decomposition: ~42.6% LOC reduction. Hypothesis: Sub-component slicing will localize re-renders to the active pane. Actual results must be validated via React Profiler."
+
+---
+
+## 2.16 Rule 16 — Evidence-Based Performance Claims
+No performance improvement may be recorded as accomplished without before-and-after empirical profiling artifacts:
+1. **CPU & Interaction Profiling**: Chrome DevTools Performance traces comparing Interaction to Next Paint (INP) before and after refactoring.
+2. **React Render Profiling**: React DevTools Profiler recordings demonstrating that non-active siblings do not re-render upon state changes.
+3. **Memory Profiling**: Heap snapshot comparisons proving that detached DOM nodes, timers, and object URLs (`URL.revokeObjectURL`) are cleanly garbage-collected.
+
+# 3. R1: Frontend Architecture Audit & Categorization
+
+## 3.1 Current Directory Layout vs Feature-Sliced Design (FSD)
 
 ### Current Directory Structure
 ```
@@ -123,7 +422,7 @@ frontend/src/
 
 ---
 
-## 2.2 God Components Ranking (Files >= 300 LOC)
+## 3.2 God Components Ranking (Files >= 300 LOC Heuristic)
 
 A comprehensive scan of `frontend/src/` identified **112 files exceeding 300 LOC**. The Top 35 monolithic files are ranked below:
 
@@ -167,7 +466,7 @@ A comprehensive scan of `frontend/src/` identified **112 files exceeding 300 LOC
 
 ---
 
-## 2.3 Mega-Hooks & State Bloat Inventory (>= 10 States)
+## 3.3 Mega-Hooks & State Bloat Inventory (>= 10 States Heuristic)
 
 The audit discovered **23 components and custom hooks maintaining 10 or more independent states**:
 
@@ -190,7 +489,7 @@ The audit discovered **23 components and custom hooks maintaining 10 or more ind
 
 ---
 
-## 2.4 Repetitive Inline JSX/CSS Patterns Lacking UI Primitives
+## 3.4 Repetitive Inline JSX/CSS Patterns Lacking UI Primitives
 
 1. **Ad-hoc Search Input Blocks (>25 occurrences)**:
    ```tsx
@@ -228,7 +527,7 @@ The audit discovered **23 components and custom hooks maintaining 10 or more ind
 
 ---
 
-## 2.5 Authoritative OKLCH Design Tokens Contract (`index.css`)
+## 3.5 Authoritative OKLCH Design Tokens Contract (`index.css`)
 
 Flama uses **TailwindCSS v4.3** with the `@theme inline` directive and pure **OKLCH** color values. All UI primitives and refactored components must reference these exact tokens:
 
@@ -267,7 +566,7 @@ Flama uses **TailwindCSS v4.3** with the `@theme inline` directive and pure **OK
 
 ---
 
-## 2.6 Target FSD Migration Blueprint
+## 3.6 Target FSD Migration Blueprint & Boundary Model
 
 ```
 frontend/src/
@@ -301,11 +600,20 @@ frontend/src/
 
 ---
 
-# 3. R2: Reusable UI Primitives Technical Design (Leaf-to-Root)
 
-All 8 primitives reside under `frontend/src/shared/ui/` and utilize `class-variance-authority` (CVA), standard OKLCH tokens, and full WAI-ARIA compliance.
+# 4. R2: Reusable UI Primitives Technical Design (Leaf-to-Root)
 
-```
+## 4.1 Extraction Guidelines: Proven Consumers vs Premature Abstraction
+Extracting UI abstractions speculatively when only one component exists or when markup looks vaguely similar inevitably leads to leaky abstractions with bloated prop configurations (isTableMode, hideIconOnMobile, customPaddingOverride).
+
+In compliance with **Rule 9 (Strict Ban on Premature Generalization)** and **Rule 1 (Vertical Subsystem Migration)**, UI primitives are introduced following a strict protocol:
+1. **Rule of Three Consumers**: A shared UI primitive is promoted to rontend/src/shared/ui/ only when at least 2 to 3 distinct consumers share genuinely identical interactive and visual semantics.
+2. **Zero Domain Knowledge**: Primitives must never import from entities/, eatures/, or pp/. They accept pure props and callbacks.
+3. **Just-In-Time Vertical Extraction**: Primitives needed by Migration 1 (MCP Tokens) and Migration 2 (Taxonomy) are extracted when those vertical subsystems are baselined and refactored, rather than created as a standalone speculative design-system exercise.
+
+All 8 primitives below reside under rontend/src/shared/ui/ and utilize class-variance-authority (CVA), standard OKLCH tokens, and full WAI-ARIA compliance:
+
+`
 frontend/src/shared/ui/
 ├── SearchInput/          # Input with icon, clear button, debounce, loading spinner
 ├── ConfirmDialog/        # Radix AlertDialog wrapper with destructive/warning/primary variants
@@ -1024,17 +1332,22 @@ export const cardFieldInputVariants = cva(
 
 ---
 
-# 4. R3: Headless Custom Hooks Architecture
+# 5. R3: Headless Custom Hooks Architecture
 
-## 4.1 State Extraction Methodology (<8 States Rule)
-To eliminate state explosion and prevent cascading re-renders:
-1. **Separation of Presentation from State**: Presentation components become thin JSX skins receiving typed props. All state transitions, network mutations, and browser listeners reside in headless hooks.
-2. **The `< 8 States` Contract**: Any custom hook must strictly declare **fewer than 8 independent reactive states** (`useState` / `useReducer`). If a domain flow requires more than 7 states, it is partitioned into cohesive sub-hooks.
-3. **Compound Composition**: High-level orchestrators compose orthogonal sub-hooks rather than maintaining flattened mega-state.
+## 5.1 State Extraction Methodology (Responsibility-Based Clustering & Heuristics)
+To eliminate state explosion and prevent cascading re-renders without introducing artificial fragmentation:
+1. **Separation of Presentation from State**: Presentation components become focused JSX skins receiving typed props and action callbacks. Complex state transitions, network mutations, and browser listeners reside in headless custom hooks.
+2. **Cohesive State Clustering & Review Smells**:
+   - The threshold of < 8 states per hook serves as an **architectural review smell and heuristic**, NOT a dogmatic pass/fail gate.
+   - Declaring multiple closely related states that always change together (e.g., audio playback coordinates, multi-step wizard state) is entirely acceptable if they belong to a single cohesive domain responsibility.
+   - **Prohibition of Artificial State Bundling**: Developers are strictly prohibited from packing independent states into a single useState dictionary (e.g., useState({ filter, page, sort, selected })) or forcing them into an unnatural useReducer purely to dodge numeric state count rules. Doing so conceals state mutations and triggers unnecessary re-renders across the component tree.
+   - **Prohibition of Artificial Fragmentation**: Decomposing a cohesive domain hook into 3 micro-hooks that require mutual synchronization or circular callbacks produces negative maintainability ROI and is prohibited.
+3. **Responsibility-Based Splitting Triggers**: A custom hook must be extracted or decomposed only when one or more of the 8 structural conditions in **Rule 2** are met (unrelated responsibilities, re-render cascades across orthogonal UI zones, overly wide public API, or difficult isolated testing).
+4. **Compound Composition**: High-level feature coordinators assemble focused, cohesive sub-hooks rather than maintaining flattened mega-state.
 
-```
+`
                       ┌────────────────────────────────────────────────────────┐
-                      │                 Headless Custom Hooks                   │
+                      │                 Headless Custom Hooks                  │
                       └──────────────────────────┬─────────────────────────────┘
                                                  │
       ┌─────────────────────────┬────────────────┼─────────────────────────┬─────────────────────────┐
@@ -1043,15 +1356,15 @@ To eliminate state explosion and prevent cascading re-renders:
 │ Browse Domain │       │  Study Domain │ │Worksheet Studio│      │ Audio & Media │       │ Admin & System│
 ├───────────────┤       ├───────────────┤ ├───────────────┤       ├───────────────┤       ├───────────────┤
 │useBrowseFilter│       │useStudySession│ │useWorksheetSt.│       │useAudioPlayer │       │useMcpTokens   │
-│useBrowseSelect│       │useStudyInter. │ │useWorksheetCfg│       │               │       │useTaxonomyMgr │
+│useBrowseSelect│       │useStudyInter. │ │useWorksheetCfg│       │useBrowseAudio │       │useTaxonomyMgr │
 │useBrowseCardOp│       └───────────────┘ │useWorksheetPrv│       └───────────────┘       │useMarketplace │
 │useCardDetailEd│                         └───────────────┘                               │useDeckExportIm│
 └───────────────┘                                                                         └───────────────┘
-```
+`
 
 ---
 
-## 4.2 Specifications for 14 Headless Custom Hooks
+## 5.2 Specifications for 14 Headless Custom Hooks
 
 ### Hook 1: `useBrowseFilters`
 - **Location**: `frontend/src/features/browse/hooks/useBrowseFilters.ts`
@@ -1461,6 +1774,22 @@ export function useAudioPlayer(
 
 ---
 
+---
+
+### Architectural Evaluation: useBrowseAudioModal (~18 States)
+- **Location**: 
+rontend/src/features/browse/hooks/useBrowseAudioModal.ts
+- **Source of Extraction**: useBrowseState.ts (lines 850–1053).
+- **Purpose**: Manages VoiceVox and Kokoro local TTS synthesis configurations, speaker voice selection, pitch/speed parameters, audio synthesis queue, and browse audio preview modal state.
+- **Internal State Clustering vs Artificial Splitting (Rule 2 & Instruction 3)**:
+  - In legacy useBrowseState.ts, VoiceVox/Kokoro TTS controls declare ~18 state variables.
+  - **Governance Decision**: In accordance with **Rule 2**, we explicitly **do NOT** force useBrowseAudioModal below 8 states purely to satisfy an arbitrary numeric metric.
+  - These audio states form three tightly coupled, cohesive clusters:
+    1. *TTS Engine & Voice Configuration* (engine type, speaker ID, pitch, speed, intonation);
+    2. *Synthesis & Audio Buffer Queue* (audio cache key, synthesis progress, abort controller);
+    3. *Audio Modal Presentation & Playback* (modal open flag, active card ID, playback duration, current time).
+  - Splitting these into three separate micro-hooks would introduce fragile synchronization callbacks between the audio buffer and playback slider. Therefore, useBrowseAudioModal is preserved as a cohesive, dedicated domain hook with internal state clusters.
+
 ### Hook 9: `useMcpTokens`
 - **Location**: `frontend/src/features/settings/hooks/useMcpTokens.ts`
 - **Source of Extraction**: `AdminMcpTokensPage.tsx` (lines 98–210) & `useMcpTokenCRUD.ts` (lines 140–250).
@@ -1751,180 +2080,9 @@ export function useDeckExportImport(
 
 ---
 
-# 5. R4: Deep Decomposition of the 4 Key God Components
+# 6. R4: Deep Decomposition of the 4 Key God Components
 
-## 5.1 Deep Dive: `DeckWorksheetModal.tsx` (~4,388 LOC)
-
-### Current Anatomy & Structural Issues
-`DeckWorksheetModal.tsx` houses an entire desktop publishing suite within a single 4,388-line file. It maintains 21 states, 5 refs, 3 effects, 3 useMemos, a 4-step wizard router, 4 studio tabs, 8 specialized worksheet template layout configurations (~2,450 lines of inline layout forms), live print engine integration, and canvas zoom/touch logic.
-
-### ASCII Component Trees: Before vs After
-
-#### Before: Monolithic Component Tree
-```
-DeckWorksheetModal (4,388 LOC)
-├── [Dialog & DialogContent Shell]
-│   ├── [Desktop Header: Title, Breadcrumbs, Zoom Controls, Print Button, Close] (150 LOC)
-│   ├── [Mobile Header: Branding, Title, Mobile Actions] (98 LOC)
-│   ├── [Step 1: WorksheetDeckSelectStep]
-│   ├── [Step 2: WorksheetFieldMappingStep]
-│   ├── [Step 3: WorksheetTemplateSelectStep]
-│   └── [Step 4: Live Studio Workspace] (3,485 LOC)
-│       ├── <aside> Studio Sidebar Controls (3,295 LOC)
-│       │   ├── Quick Wizard Jump Bar (35 LOC)
-│       │   ├── Locale Switcher (42 LOC)
-│       │   ├── Studio Tab Switcher Bar (38 LOC)
-│       │   ├── [activeTab === 'template'] Inline Template Grid & Presets (98 LOC)
-│       │   ├── [activeTab === 'data'] Inline Field Mapping & Card Scope (358 LOC)
-│       │   ├── [activeTab === 'layout'] Enormous Inline Layout Forms (2,452 LOC)
-│       │   │   ├── Base Paper, Orientation, Margins, Density (240 LOC)
-│       │   │   ├── Kanji Stroke & Box Size Controls (1,244 LOC)
-│       │   │   ├── Vocab Practice & Recall Controls (205 LOC)
-│       │   │   ├── Deck Table Column Checkboxes (198 LOC)
-│       │   │   ├── Sentence Writing Controls (161 LOC)
-│       │   │   ├── Grammar Practice Controls (144 LOC)
-│       │   │   └── Genkouyoushi 400-Char Controls (252 LOC)
-│       │   └── [activeTab === 'header'] Inline Title, Watermark, Student Info (255 LOC)
-│       └── <main> Live Preview Canvas (185 LOC)
-│           ├── Workbench Top Bar: Page Nav, Zoom Bar, Item Stats (55 LOC)
-│           ├── Zoom Viewport: transform scale wrapper (90 LOC)
-│           │   └── WorksheetPageRenderer (sub-component)
-│           └── Mobile Bottom Floating Print Bar (40 LOC)
-```
-
-#### After: Feature-Sliced Decomposed Component Tree
-```
-frontend/src/features/worksheets/
-├── hooks/
-│   └── useWorksheetStudio.ts               # Headless Studio state, debounced preview, print, cache (~280 LOC)
-├── components/
-│   ├── DeckWorksheetModal.tsx             # Orchestrator & Step Router Shell (~140 LOC)
-│   ├── modal/
-│   │   ├── WorksheetModalHeader.tsx        # Desktop & Mobile Header with zoom & print (~180 LOC)
-│   │   └── WorksheetPreviewCanvas.tsx      # Canvas viewport, scale transform, pagination (~175 LOC)
-│   └── studio/
-│       ├── WorksheetStudioSidebar.tsx      # Sidebar container, nav jump, tab list (~120 LOC)
-│       ├── tabs/
-│       │   ├── StudioTemplateTab.tsx       # Template grid & quick preset selector (~95 LOC)
-│       │   ├── StudioDataTab.tsx           # Field mapping slot dropdowns & note scope (~190 LOC)
-│       │   ├── StudioHeaderTab.tsx         # Document titles, subtitle, student info, watermark (~160 LOC)
-│       │   └── StudioLayoutTab.tsx         # Tab container delegating to template panels (~120 LOC)
-│       └── panels/
-│           ├── BaseLayoutControls.tsx      # Paper size, orientation, margin, density (~150 LOC)
-│           ├── KanjiLayoutControls.tsx     # Stroke diagram, trace count, grid cross/diagonal (~280 LOC)
-│           ├── VocabLayoutControls.tsx     # Practice lines, recall mode, hints (~160 LOC)
-│           ├── SentenceLayoutControls.tsx  # Writing lines, exercise prompt (~140 LOC)
-│           ├── GenkouyoushiControls.tsx    # 400-char grid, spacer bands, title style (~180 LOC)
-│           └── DeckTableLayoutControls.tsx # Custom column selectors, table density (~150 LOC)
-```
-
-### LOC Reduction Breakdown
-| File Name | Responsibility | Before LOC | After LOC | Reduction |
-|---|---|---|---|---|
-| `DeckWorksheetModal.tsx` | Dialog container, step router, modal open/close | 4,388 | 140 | **-96.8%** |
-| `useWorksheetStudio.ts` | All 21 states, refs, debounced generator, print handler | — | 280 | *New Hook* |
-| `WorksheetModalHeader.tsx` | Desktop & Mobile headers, zoom preset buttons, print trigger | — | 180 | *Extracted* |
-| `WorksheetPreviewCanvas.tsx` | Scrollable viewport, `scale()` transform, page nav | — | 175 | *Extracted* |
-| `WorksheetStudioSidebar.tsx` | Sidebar container, step jump bar, tab bar | — | 120 | *Extracted* |
-| `StudioTemplateTab.tsx` | Tab 1: Template selection & presets | — | 95 | *Extracted* |
-| `StudioDataTab.tsx` | Tab 2: Scope, limit count, field mapping slots | — | 190 | *Extracted* |
-| `StudioHeaderTab.tsx` | Tab 4: Titles, watermark, student headers | — | 160 | *Extracted* |
-| `StudioLayoutTab.tsx` | Tab 3: Template panel router & general settings | — | 120 | *Extracted* |
-| `BaseLayoutControls.tsx` | General paper, orientation, margins | — | 150 | *Extracted* |
-| `KanjiLayoutControls.tsx` | Kanji-specific stroke & grid settings | — | 280 | *Extracted* |
-| `VocabLayoutControls.tsx` | Vocab-specific practice settings | — | 160 | *Extracted* |
-| `SentenceLayoutControls.tsx` | Sentence prompts & writing guides | — | 140 | *Extracted* |
-| `GenkouyoushiControls.tsx` | Manuscript grid & essay settings | — | 180 | *Extracted* |
-| `DeckTableLayoutControls.tsx`| Table column selector & borders | — | 150 | *Extracted* |
-| **Total Worksheet Subsystem**| | **4,388** | **2,520** | **-42.6% (-1,868 LOC)** |
-
----
-
-## 5.2 Deep Dive: `AdminTaxonomyPage.tsx` (~1,400 LOC, 46 States)
-
-### Current Anatomy & Structural Issues
-`AdminTaxonomyPage.tsx` holds 46 distinct `useState` declarations hoisted directly at the top of the root component. Keystrokes in modal input fields (e.g. typing a domain label or level difficulty) trigger re-renders of the entire 1,400-line DOM tree, including all 5 active React Query caches.
-
-### ASCII Component Trees: Before vs After
-
-#### Before: Monolithic Admin Page
-```
-AdminTaxonomyPage (1,400 LOC, 46 states)
-├── Top Page Header + "Reseed Defaults" Mutation Button
-├── Search & Filter Card (3 Selects + 1 Search Input)
-├── <Tabs> Container
-│   ├── <TabsList> 5 Tabs Triggers
-│   ├── <TabsContent value="domains"> Domain Table & Inline Rows (42 LOC)
-│   ├── <TabsContent value="subjects"> Subject Table & Inline Rows (61 LOC)
-│   ├── <TabsContent value="frameworks"> Framework & Level Nested Tables (111 LOC)
-│   ├── <TabsContent value="options"> Option Grid Cards (60 LOC)
-│   └── <TabsContent value="mappings"> Checkbox Matrix for Subject Options (116 LOC)
-├── <Dialog> Domain Modal (ID, Label, Sort, Active) (42 LOC)
-├── <Dialog> Subject Modal (Domain Select, ID, Label, Sort, Active) (55 LOC)
-├── <Dialog> Framework Modal (Subject Select, ID, Label, Sort, Active) (55 LOC)
-├── <Dialog> Level Modal (Framework Select, Difficulty Select, ID, Label, Sort) (55 LOC)
-└── <Dialog> Option Modal (Type Select, SubLabel, ID, Label, Sort, Active) (47 LOC)
-```
-
-#### After: Clean FSD Tab & Generic Entity Modal Architecture
-```
-frontend/src/features/admin/
-├── hooks/
-│   └── useTaxonomyData.ts                 # React Query queries, invalidations, reseed mutation (~110 LOC)
-├── components/taxonomy/
-│   ├── TaxonomyEntityModal.tsx            # Unified form modal with schema-driven fields (~130 LOC)
-│   ├── TaxonomyDomainsTab.tsx             # Domain list, local modal state, create/edit/delete (~120 LOC)
-│   ├── TaxonomySubjectsTab.tsx            # Subject list with Domain filter, local modal state (~140 LOC)
-│   ├── TaxonomyFrameworksTab.tsx          # Framework & Level accordion lists (~160 LOC)
-│   ├── TaxonomyOptionsTab.tsx             # Option pills/grid categorized by type (~130 LOC)
-│   └── TaxonomySubjectMappingsTab.tsx     # Subject-to-option checkbox matrix (~120 LOC)
-└── pages/
-    └── AdminTaxonomyPage.tsx              # Root Page wrapper with 1 state (activeTab) (~95 LOC)
-```
-
-### Unified `TaxonomyEntityModal.tsx` Design
-Instead of 5 copy-pasted `<Dialog>` elements, a single generic component renders typed entity forms:
-```typescript
-export interface TaxonomyFormFieldDef {
-  name: string
-  label: string
-  type: 'text' | 'number' | 'switch' | 'select'
-  placeholder?: string
-  options?: { value: string; label: string }[]
-  required?: boolean
-  disabled?: boolean
-  description?: string
-}
-
-export interface TaxonomyEntityModalProps<T> {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  description: string
-  entity: T | null
-  fields: TaxonomyFormFieldDef[]
-  initialValues: Record<string, any>
-  onSubmit: (values: Record<string, any>) => Promise<void>
-  isSaving: boolean
-}
-```
-
-### LOC Reduction Breakdown
-| File Name | Responsibility | Before LOC | After LOC | Reduction |
-|---|---|---|---|---|
-| `AdminTaxonomyPage.tsx` | Page wrapper, header, tab switcher | 1,400 | 95 | **-93.2%** |
-| `useTaxonomyData.ts` | Data fetching, invalidations, reseed | — | 110 | *New Hook* |
-| `TaxonomyEntityModal.tsx` | Reusable entity create/edit modal dialog | — | 130 | *New Shared Component* |
-| `TaxonomyDomainsTab.tsx` | Domains management tab | — | 120 | *Extracted* |
-| `TaxonomySubjectsTab.tsx` | Subjects management tab | — | 140 | *Extracted* |
-| `TaxonomyFrameworksTab.tsx`| Frameworks and Levels tab | — | 160 | *Extracted* |
-| `TaxonomyOptionsTab.tsx` | Taxonomy options tab | — | 130 | *Extracted* |
-| `TaxonomySubjectMappingsTab.tsx`| Subject-to-Option mappings tab | — | 120 | *Extracted* |
-| **Total Taxonomy Subsystem**| | **1,400** | **1,005** | **-28.2% (-395 LOC)** |
-
-*Root component state count drops from **46 states to 1 state**.*
-
----
+Decomposition proceeds strictly along vertical risk-adjusted subsystem boundaries. Each monolith is analyzed below with Before/After component trees, state ownership models, and risk mitigations:
 
 ## 5.3 Deep Dive: `AdminMcpTokensPage.tsx` & `McpTokensTab.tsx` (~2,586 Combined LOC)
 
@@ -1990,6 +2148,109 @@ Consumers:
 | `McpCreateEditTokenModal.tsx` (new) | — | 250 | +250 LOC |
 | `McpTokenActionModals.tsx` (new) | — | 140 | +140 LOC |
 | **Total MCP Subsystem** | **3,213** | **1,520** | **-52.7% (-1,693 LOC)** |
+
+---
+
+
+---
+
+## 5.2 Deep Dive: `AdminTaxonomyPage.tsx` (~1,400 LOC, 46 States)
+
+### Current Anatomy & Structural Issues
+`AdminTaxonomyPage.tsx` holds 46 distinct `useState` declarations hoisted directly at the top of the root component. Keystrokes in modal input fields (e.g. typing a domain label or level difficulty) trigger re-renders of the entire 1,400-line DOM tree, including all 5 active React Query caches.
+
+### ASCII Component Trees: Before vs After
+
+#### Before: Monolithic Admin Page
+```
+AdminTaxonomyPage (1,400 LOC, 46 states)
+├── Top Page Header + "Reseed Defaults" Mutation Button
+├── Search & Filter Card (3 Selects + 1 Search Input)
+├── <Tabs> Container
+│   ├── <TabsList> 5 Tabs Triggers
+│   ├── <TabsContent value="domains"> Domain Table & Inline Rows (42 LOC)
+│   ├── <TabsContent value="subjects"> Subject Table & Inline Rows (61 LOC)
+│   ├── <TabsContent value="frameworks"> Framework & Level Nested Tables (111 LOC)
+│   ├── <TabsContent value="options"> Option Grid Cards (60 LOC)
+│   └── <TabsContent value="mappings"> Checkbox Matrix for Subject Options (116 LOC)
+├── <Dialog> Domain Modal (ID, Label, Sort, Active) (42 LOC)
+├── <Dialog> Subject Modal (Domain Select, ID, Label, Sort, Active) (55 LOC)
+├── <Dialog> Framework Modal (Subject Select, ID, Label, Sort, Active) (55 LOC)
+├── <Dialog> Level Modal (Framework Select, Difficulty Select, ID, Label, Sort) (55 LOC)
+└── <Dialog> Option Modal (Type Select, SubLabel, ID, Label, Sort, Active) (47 LOC)
+```
+
+#### After: Clean FSD Tab & Generic Entity Modal Architecture
+```
+frontend/src/features/admin/
+├── hooks/
+│   └── useTaxonomyData.ts                 # React Query queries, invalidations, reseed mutation (~110 LOC)
+├── components/taxonomy/
+│   ├── TaxonomyEntityModal.tsx            # Unified form modal with schema-driven fields (~130 LOC)
+│   ├── TaxonomyDomainsTab.tsx             # Domain list, local modal state, create/edit/delete (~120 LOC)
+│   ├── TaxonomySubjectsTab.tsx            # Subject list with Domain filter, local modal state (~140 LOC)
+│   ├── TaxonomyFrameworksTab.tsx          # Framework & Level accordion lists (~160 LOC)
+│   ├── TaxonomyOptionsTab.tsx             # Option pills/grid categorized by type (~130 LOC)
+│   └── TaxonomySubjectMappingsTab.tsx     # Subject-to-option checkbox matrix (~120 LOC)
+└── pages/
+    └── AdminTaxonomyPage.tsx              # Root Page wrapper with 1 state (activeTab) (~95 LOC)
+```
+
+### Unified `TaxonomyEntityModal.tsx` Design
+Instead of 5 copy-pasted `<Dialog>` elements, a single generic component renders typed entity forms:
+```typescript
+/**
+ * Type-safe entity field configuration.
+ * Adheres strictly to Zero-Any policy. Explicitly rejects over-generic dynamic form engines
+ * that sacrifice type safety and compile-time verification.
+ */
+export interface TaxonomyFormFieldConfig<T> {
+  name: keyof T & string
+  label: string
+  type: 'text' | 'number' | 'switch' | 'select'
+  placeholder?: string
+  options?: { value: string; label: string }[]
+  required?: boolean
+  disabled?: boolean
+  description?: string
+  validate?: (value: T[keyof T]) => string | undefined
+}
+
+export interface TaxonomyEntityModalProps<T extends { id?: number | string }> {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  description: string
+  entity: T | null
+  fields: TaxonomyFormFieldConfig<T>[]
+  initialValues: Partial<T>
+  onSubmit: (values: T) => Promise<void>
+  isSaving: boolean
+}
+```
+
+
+> [!IMPORTANT]
+> **Architectural Constraint: Rejection of Over-Generic Dynamic Form Engines**  
+> Do NOT attempt to construct an all-encompassing dynamic form engine to manage all 5 taxonomy domains under a dynamic Record<string, any> dictionary. Dynamic form engines introduce runtime validation leaks, break TypeScript compile-time safety, and complicate DOM testing. Instead, utilize strongly typed entity interfaces (DomainFormData, SubjectFormData, FrameworkFormData, LevelFormData, OptionFormData) paired with type-safe generic modal composition.
+
+### LOC Reduction Breakdown
+| File Name | Responsibility | Before LOC | After LOC | Reduction |
+|---|---|---|---|---|
+| `AdminTaxonomyPage.tsx` | Page wrapper, header, tab switcher | 1,400 | 95 | **-93.2%** |
+| `useTaxonomyData.ts` | Data fetching, invalidations, reseed | — | 110 | *New Hook* |
+| `TaxonomyEntityModal.tsx` | Reusable entity create/edit modal dialog | — | 130 | *New Shared Component* |
+| `TaxonomyDomainsTab.tsx` | Domains management tab | — | 120 | *Extracted* |
+| `TaxonomySubjectsTab.tsx` | Subjects management tab | — | 140 | *Extracted* |
+| `TaxonomyFrameworksTab.tsx`| Frameworks and Levels tab | — | 160 | *Extracted* |
+| `TaxonomyOptionsTab.tsx` | Taxonomy options tab | — | 130 | *Extracted* |
+| `TaxonomySubjectMappingsTab.tsx`| Subject-to-Option mappings tab | — | 120 | *Extracted* |
+| **Total Taxonomy Subsystem**| | **1,400** | **1,005** | **-28.2% (-395 LOC)** |
+
+*Root component state count drops from **46 states to 1 state**.*
+
+---
+
 
 ---
 
@@ -2083,6 +2344,15 @@ export function useBrowseState() {
 }
 ```
 
+
+### Temporary Compatibility Facade Governance & Sunsetting
+In compliance with **Rule 7 (Temporary Compatibility Layers Governance)**, useBrowseState.ts is deployed as an interim migration facade during Phase 4A:
+- **Reason for Existence**: Blast radius mitigation. Prevents breaking changes from cascading to the 7 direct consumer views while internal state is partitioned into focused hooks (useBrowseFilters, useBrowsePagination, useBrowseSelection, useBrowseCardOperations, useBrowseAudioModal).
+- **Registered Consumers**: BrowsePage.tsx, BrowseDeckSidebar.tsx, BrowseCardList.tsx, BrowseCardEditor.tsx, BrowseToolbar.tsx, BrowseAudioModal.tsx, CardRow.tsx.
+- **Phase 4B Sunset & Direct Hook Consumption**: Once Phase 4A passes all characterization tests, Phase 4B will systematically update consumer components to import only the specific sub-hooks they require (e.g., BrowseDeckSidebar consumes only useBrowseFilters, BrowseCardEditor consumes only useCardDetailEditor and useBrowseCardOperations).
+- **Removal Criteria**: (1) All 7 consumer components migrated to direct sub-hooks; (2) Zero remaining imports of useBrowseState across rontend/src/; (3) 100% pass on characterization and E2E suites.
+- **Sunset Milestone**: Scheduled for complete deletion at **Gate 4**. The final architecture **will not retain** a 102-property God Facade indefinitely.
+
 ### LOC Reduction Breakdown
 | Hook Module | Purpose | Before LOC | After LOC | States |
 |---|---|---|---|---|
@@ -2092,11 +2362,106 @@ export function useBrowseState() {
 | `useBrowseSelection.ts` | Selected cards, select all, hotkeys | — | 80 | 1 |
 | `useBrowseCardOperations.ts` | Active card, edit field values, dirty tracking, mutations | — | 290 | 8 |
 | `useBrowseAudioModal.ts` | VoiceVox/Kokoro TTS settings, preview, mutations | — | 250 | 18 |
-| **Total Browse Hook Subsystem** | | **1,053** | **905** | **Max 8 per core hook** |
+| **Total Browse Hook Subsystem** | | **1,053** | **905** | Cohesive state clusters (Rule 2) |
 
 ---
 
-# 6. R5: Zero Visual Regression & Logic Preservation Standards
+
+---
+
+## 5.1 Deep Dive: `DeckWorksheetModal.tsx` (~4,388 LOC)
+
+### Current Anatomy & Structural Issues
+`DeckWorksheetModal.tsx` houses an entire desktop publishing suite within a single 4,388-line file. It maintains 21 states, 5 refs, 3 effects, 3 useMemos, a 4-step wizard router, 4 studio tabs, 8 specialized worksheet template layout configurations (~2,450 lines of inline layout forms), live print engine integration, and canvas zoom/touch logic.
+
+
+> [!CAUTION]
+> **Preservation of Cohesive Math & Rendering Units (Rule 1)**  
+> Worksheet Studio is classified as **Critical Risk** due to its intricate SVG canvas math, dynamic paper scaling (scale(0.85)), DOM pagination calculations, and print engine media queries. Do not split layout calculation helpers or stroke-coordinate renderers merely to satisfy numeric file-length heuristics. Math and rendering units that share coordinate spaces must remain cohesive to avoid race conditions during print rendering.
+
+### ASCII Component Trees: Before vs After
+
+#### Before: Monolithic Component Tree
+```
+DeckWorksheetModal (4,388 LOC)
+├── [Dialog & DialogContent Shell]
+│   ├── [Desktop Header: Title, Breadcrumbs, Zoom Controls, Print Button, Close] (150 LOC)
+│   ├── [Mobile Header: Branding, Title, Mobile Actions] (98 LOC)
+│   ├── [Step 1: WorksheetDeckSelectStep]
+│   ├── [Step 2: WorksheetFieldMappingStep]
+│   ├── [Step 3: WorksheetTemplateSelectStep]
+│   └── [Step 4: Live Studio Workspace] (3,485 LOC)
+│       ├── <aside> Studio Sidebar Controls (3,295 LOC)
+│       │   ├── Quick Wizard Jump Bar (35 LOC)
+│       │   ├── Locale Switcher (42 LOC)
+│       │   ├── Studio Tab Switcher Bar (38 LOC)
+│       │   ├── [activeTab === 'template'] Inline Template Grid & Presets (98 LOC)
+│       │   ├── [activeTab === 'data'] Inline Field Mapping & Card Scope (358 LOC)
+│       │   ├── [activeTab === 'layout'] Enormous Inline Layout Forms (2,452 LOC)
+│       │   │   ├── Base Paper, Orientation, Margins, Density (240 LOC)
+│       │   │   ├── Kanji Stroke & Box Size Controls (1,244 LOC)
+│       │   │   ├── Vocab Practice & Recall Controls (205 LOC)
+│       │   │   ├── Deck Table Column Checkboxes (198 LOC)
+│       │   │   ├── Sentence Writing Controls (161 LOC)
+│       │   │   ├── Grammar Practice Controls (144 LOC)
+│       │   │   └── Genkouyoushi 400-Char Controls (252 LOC)
+│       │   └── [activeTab === 'header'] Inline Title, Watermark, Student Info (255 LOC)
+│       └── <main> Live Preview Canvas (185 LOC)
+│           ├── Workbench Top Bar: Page Nav, Zoom Bar, Item Stats (55 LOC)
+│           ├── Zoom Viewport: transform scale wrapper (90 LOC)
+│           │   └── WorksheetPageRenderer (sub-component)
+│           └── Mobile Bottom Floating Print Bar (40 LOC)
+```
+
+#### After: Feature-Sliced Decomposed Component Tree
+```
+frontend/src/features/worksheets/
+├── hooks/
+│   └── useWorksheetStudio.ts               # Headless Studio state, debounced preview, print, cache (~280 LOC)
+├── components/
+│   ├── DeckWorksheetModal.tsx             # Orchestrator & Step Router Shell (~140 LOC)
+│   ├── modal/
+│   │   ├── WorksheetModalHeader.tsx        # Desktop & Mobile Header with zoom & print (~180 LOC)
+│   │   └── WorksheetPreviewCanvas.tsx      # Canvas viewport, scale transform, pagination (~175 LOC)
+│   └── studio/
+│       ├── WorksheetStudioSidebar.tsx      # Sidebar container, nav jump, tab list (~120 LOC)
+│       ├── tabs/
+│       │   ├── StudioTemplateTab.tsx       # Template grid & quick preset selector (~95 LOC)
+│       │   ├── StudioDataTab.tsx           # Field mapping slot dropdowns & note scope (~190 LOC)
+│       │   ├── StudioHeaderTab.tsx         # Document titles, subtitle, student info, watermark (~160 LOC)
+│       │   └── StudioLayoutTab.tsx         # Tab container delegating to template panels (~120 LOC)
+│       └── panels/
+│           ├── BaseLayoutControls.tsx      # Paper size, orientation, margin, density (~150 LOC)
+│           ├── KanjiLayoutControls.tsx     # Stroke diagram, trace count, grid cross/diagonal (~280 LOC)
+│           ├── VocabLayoutControls.tsx     # Practice lines, recall mode, hints (~160 LOC)
+│           ├── SentenceLayoutControls.tsx  # Writing lines, exercise prompt (~140 LOC)
+│           ├── GenkouyoushiControls.tsx    # 400-char grid, spacer bands, title style (~180 LOC)
+│           └── DeckTableLayoutControls.tsx # Custom column selectors, table density (~150 LOC)
+```
+
+### LOC Reduction Breakdown
+| File Name | Responsibility | Before LOC | After LOC | Reduction |
+|---|---|---|---|---|
+| `DeckWorksheetModal.tsx` | Dialog container, step router, modal open/close | 4,388 | 140 | **-96.8%** |
+| `useWorksheetStudio.ts` | All 21 states, refs, debounced generator, print handler | — | 280 | *New Hook* |
+| `WorksheetModalHeader.tsx` | Desktop & Mobile headers, zoom preset buttons, print trigger | — | 180 | *Extracted* |
+| `WorksheetPreviewCanvas.tsx` | Scrollable viewport, `scale()` transform, page nav | — | 175 | *Extracted* |
+| `WorksheetStudioSidebar.tsx` | Sidebar container, step jump bar, tab bar | — | 120 | *Extracted* |
+| `StudioTemplateTab.tsx` | Tab 1: Template selection & presets | — | 95 | *Extracted* |
+| `StudioDataTab.tsx` | Tab 2: Scope, limit count, field mapping slots | — | 190 | *Extracted* |
+| `StudioHeaderTab.tsx` | Tab 4: Titles, watermark, student headers | — | 160 | *Extracted* |
+| `StudioLayoutTab.tsx` | Tab 3: Template panel router & general settings | — | 120 | *Extracted* |
+| `BaseLayoutControls.tsx` | General paper, orientation, margins | — | 150 | *Extracted* |
+| `KanjiLayoutControls.tsx` | Kanji-specific stroke & grid settings | — | 280 | *Extracted* |
+| `VocabLayoutControls.tsx` | Vocab-specific practice settings | — | 160 | *Extracted* |
+| `SentenceLayoutControls.tsx` | Sentence prompts & writing guides | — | 140 | *Extracted* |
+| `GenkouyoushiControls.tsx` | Manuscript grid & essay settings | — | 180 | *Extracted* |
+| `DeckTableLayoutControls.tsx`| Table column selector & borders | — | 150 | *Extracted* |
+| **Total Worksheet Subsystem**| | **4,388** | **2,520** | **-42.6% (-1,868 LOC)** |
+
+---
+
+# 7. R5: Zero Visual Regression & Logic Preservation Standards
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -2116,7 +2481,7 @@ export function useBrowseState() {
 
 ---
 
-## 6.1 Layout & Box Model Invariance Rules
+## 7.1 Layout & Box Model Invariance Rules
 
 1. **Zero Modifications to CSS Spacing & Typography**:
    - Margin, padding, and border dimensions must remain byte-for-byte identical (e.g., `p-4`, `px-3`, `py-2`, `gap-2`, `m-0`).
@@ -2126,7 +2491,7 @@ export function useBrowseState() {
 
 ---
 
-## 6.2 Strict Ban on Extraneous Wrapper `<div>`s
+## 7.2 Strict Ban on Extraneous Wrapper `<div>`s
 
 In CSS Flexbox and Grid layouts, inserting an unexpected `<div>` wrapper between a parent container and its children breaks flex item distribution (`flex-1`, `justify-between`), grid track assignments (`col-span-*`), and `gap-*` spacing.
 
@@ -2137,7 +2502,7 @@ In CSS Flexbox and Grid layouts, inserting an unexpected `<div>` wrapper between
 
 ---
 
-## 6.3 Radix UI Context & Accessibility Boundaries
+## 7.3 Radix UI Context & Accessibility Boundaries
 
 1. **Compound Component Context Continuity**:
    - `<Dialog.Root>` must encase `<Dialog.Trigger>`, `<Dialog.Portal>`, `<Dialog.Overlay>`, and `<Dialog.Content>`. Never extract `<Dialog.Content>` into a component outside of its Root context.
@@ -2150,7 +2515,7 @@ In CSS Flexbox and Grid layouts, inserting an unexpected `<div>` wrapper between
 
 ---
 
-## 6.4 Chrome DevTools Isolated Profile Verification Procedure
+## 7.4 Chrome DevTools Isolated Profile Verification Procedure
 
 To avoid cookie pollution, session conflicts, and extension interference, all browser profiling and visual verification **must strictly execute within an isolated Chrome user profile**:
 
@@ -2181,100 +2546,243 @@ To avoid cookie pollution, session conflicts, and extension interference, all br
 
 ---
 
-## 6.5 10-Point Actionable Verification Checklist
-
-Every refactored component and custom hook must pass all 10 checkpoints before completion:
-
-| # | Checkpoint | Category | Verification Method | Pass Criteria |
-|:---:|---|---|---|---|
-| **C1** | State Threshold | Architecture | Static code inspection | Custom hook has strictly `< 8` reactive states (`useState` / `useReducer`). |
-| **C2** | TypeScript Typing | Type Safety | `npm run build` / `tsc --noEmit` | Zero TypeScript errors, zero `any` types on hook params or returns. |
-| **C3** | Layout Invariance | Visual | Visual inspection in DevTools | Margin, padding, font-size, line-height match 100% pixel-for-pixel. |
-| **C4** | Wrapper Div Ban | DOM Structure | Inspect DOM element tree | Zero extraneous wrapper `<div>`s breaking CSS Grid or Flexbox. |
-| **C5** | Radix Safety | Accessibility | Keyboard navigation test | Dialogs trap focus, Escape closes modal, ARIA tags intact. |
-| **C6** | Profile Isolation | Testing | Process inspection | Chrome runs with `--user-data-dir="...flama-devtools"`. |
-| **C7** | Zero Layout Shift | Performance | DevTools Performance recording | `CLS = 0.0000` during state changes and modal openings. |
-| **C8** | Network Hygiene | Networking | Network waterfall tab | Zero duplicate queries; aborted requests cleanly canceled. |
-| **C9** | Memory Cleanliness | Lifecycle | Heap snapshot comparison | `URL.revokeObjectURL()` called; zero dangling audio/timer listeners. |
-| **C10** | Test Suites | Automated QA | `python scripts/run_tests.py` | 100% of affected frontend and backend tests pass. |
 
 ---
 
-# 7. Consolidated Metrics & Before/After LOC Impact Table
+## 7.5 Automated Visual Regression (Playwright Screenshot Comparison)
 
-The table below summarizes the quantitative impact across all monolithic hotspots and custom hooks targeted by this plan:
+While Chrome DevTools profiling confirms runtime execution health, it cannot guarantee pixel-for-pixel visual invariance across viewports. Visual regression verification must be automated through **Playwright screenshot comparison suites**:
 
-| Module / Hotspot | File(s) Before | Lines Before | Proposed Architecture & Extracted Modules | Target Total LOC | Net LOC Change | Reduction % |
-|---|---|---|---|---|---|---|
-| **Worksheet Studio** | `DeckWorksheetModal.tsx` | 4,388 | 1 orchestrator modal (`DeckWorksheetModal`, 140 LOC) + 1 hook (`useWorksheetStudio`, 280 LOC) + 2 modal wrappers (355 LOC) + 4 studio tabs (565 LOC) + 6 layout panels (1,160 LOC) | 2,520 | **-1,868 LOC** | **-42.6%** |
-| **Admin Taxonomy** | `AdminTaxonomyPage.tsx` | 1,400 | 1 root page (95 LOC, 1 state) + 1 hook (`useTaxonomyData`, 110 LOC) + 1 generic modal (`TaxonomyEntityModal`, 130 LOC) + 5 tab components (670 LOC) | 1,005 | **-395 LOC** | **-28.2%** |
-| **MCP Token Admin & User** | `AdminMcpTokensPage.tsx`<br>`McpTokensTab.tsx`<br>`useMcpTokenCRUD.ts` | 3,002 | 1 shared manager (`McpTokensManager`, 160 LOC) + 1 unified hook (`useMcpTokens`, 240 LOC) + 4 shared dialogs & tables (740 LOC) + 2 thin route wrappers (220 LOC) | 1,360 | **-1,642 LOC** | **-54.7%** |
-| **Browse Mega-Hook** | `useBrowseState.ts` | 1,053 | 1 backward-compatible facade (`useBrowseState`, 85 LOC) + 4 focused sub-hooks (570 LOC) + 1 dedicated audio modal hook (250 LOC) | 905 | **-148 LOC** | **-14.1%** |
-| **Shared UI Primitives** | 8 Primitives across 30+ call sites | — | 8 standalone UI primitives in `shared/ui/` with zero domain coupling (`SearchInput`, `ConfirmDialog`, `StatusPill`, etc.) | ~1,250 | *+1,250 LOC (Reusable Core)* | *Net app-wide savings: ~2,500 LOC* |
-| **Total Core God Modules** | **4 Monoliths** | **9,843** | **Fully Modular FSD Hierarchy (<300 LOC/file, <8 states/hook)** | **5,790** | **-4,053 LOC** | **-41.2% Net Reduction** |
-
----
-
-# 8. Phased Implementation Roadmap & Rollout Plan
-
-To ensure continuous system stability and zero service disruption, implementation is executed in **5 distinct phases**:
-
-```
+`
 ┌────────────────────────────────────────────────────────────────────────┐
-│                      PHASED IMPLEMENTATION ROADMAP                     │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 1: Leaf UI Primitives (`shared/ui`)                              │
-│ • Implement 8 UI primitives with CVA & OKLCH tokens                    │
-│ • Vitest unit test coverage (100% test pass)                           │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 2: Headless Custom Hooks (`features/*/hooks`)                    │
-│ • Extract 14 headless hooks with <8 states contract                    │
-│ • Behavioral unit tests for filter, selection, and preview hooks       │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 3: Monolith Decomposition (Worksheet, Taxonomy, MCP)             │
-│ • Decompose DeckWorksheetModal into tabs & panels                      │
-│ • Unify MCP tokens into McpTokensManager (eliminate duplicate lines)   │
-│ • Extract TaxonomyEntityModal & 5 taxonomy tabs                        │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 4: `useBrowseState` Facade Cutover & Integration Testing        │
-│ • Assemble 4 sub-hooks under useBrowseState facade                     │
-│ • Verify 100% backward compatibility of all 102 properties             │
-│ • Run browse and study test suites                                     │
-├────────────────────────────────────────────────────────────────────────┤
-│ Phase 5: Zero Visual Regression & DevTools Profiling                   │
-│ • Execute Chrome DevTools profiling with isolated profile              │
-│ • Confirm CLS = 0.0000 and verify network request waterfall            │
-│ • Final quality audit sign-off                                         │
-└────────────────────────────────────────────────────────────────────────┘
-```
+│               AUTOMATED PLAYWRIGHT VISUAL REGRESSION PIPELINE          │
+├──────────────────────────────────┬─────────────────────────────────────┤
+│ 1. Multi-Viewport Capture        │ 2. State & Modal Variation          │
+│ • Desktop: 1440 x 900            │ • Default / Active / Hover / Focus  │
+│ • Tablet:  768 x 1024            │ • Open / Closing / Dismissed Modals │
+│ • Mobile:  375 x 667             │ • Empty / Loading / Error States    │
+├──────────────────────────────────┼─────────────────────────────────────┤
+│ 3. Pixel Tolerance Standard      │ 4. CI Regression Gate               │
+│ • Max Mismatch: < 0.1% pixels    │ • Pixel diff image artifact on fail │
+│ • Anti-aliasing threshold: 0.2   │ • Mandatory review before merge     │
+└──────────────────────────────────┴─────────────────────────────────────┘
+`
 
-### Phase 1: Leaf UI Primitives (`shared/ui`)
-- **Scope**: Construct the 8 UI Primitives in `frontend/src/shared/ui/`: `SearchInput`, `ConfirmDialog`, `StatusPill`, `CodeSnippetBox`, `FilterPillGroup`, `ImageUploadDropzone`, `SplitPane`, `CardFieldsForm`.
-- **Preconditions**: Zero dependencies on existing feature code.
-- **Verification**: Run `npm test -- shared/ui` to verify 100% test coverage for keyboard accessibility, variants, and ARIA attributes.
+### Critical Distinction: CLS = 0 vs Visual Equivalence
+> [!WARNING]
+> **Cumulative Layout Shift (CLS = 0) does NOT prove visual equivalence.**  
+> A refactored component can exhibit CLS = 0.0000 while suffering severe visual regressions:
+> - Font metrics changed (e.g., text wraps onto an unintended line or truncates with ellipsis);
+> - Padding/margin off-by-one pixel causing misaligned icons;
+> - Missing borders or subtle OKLCH color tone drift;
+> - Incorrect flex alignment hiding interactive elements off-screen.
+>
+> Therefore, visual acceptance requires both CLS = 0.0000 (performance metric) AND Playwright screenshot equivalence (< 0.1% pixel delta).
 
-### Phase 2: Headless Custom Hooks (`features/*/hooks`)
-- **Scope**: Implement the 14 Headless Custom Hooks with strict `<8 states` adherence.
-- **Preconditions**: Phase 1 primitives available.
-- **Verification**: Verify that hook unit tests pass and that all state counts strictly satisfy `<8 states`.
-
-### Phase 3: Monolith Decomposition (Worksheet, Taxonomy, MCP)
-- **Scope**:
-  1. Decompose `DeckWorksheetModal.tsx` into `WorksheetModalHeader`, `WorksheetPreviewCanvas`, `WorksheetStudioSidebar`, 4 studio tabs, and 6 layout panels.
-  2. Implement `McpTokensManager.tsx` and eliminate duplicate lines across `AdminMcpTokensPage.tsx` and `McpTokensTab.tsx`.
-  3. Decompose `AdminTaxonomyPage.tsx` into `TaxonomyEntityModal.tsx` and 5 tab components.
-- **Verification**: Test each refactored page individually; verify zero TypeScript compiler warnings.
-
-### Phase 4: `useBrowseState` Facade Cutover & Integration Testing
-- **Scope**: Wire `useBrowseFilters`, `useBrowsePagination`, `useBrowseSelection`, `useBrowseCardOperations`, and `useBrowseAudioModal` into the `useBrowseState` master facade.
-- **Verification**: Run `python scripts/run_tests.py --module study,flashcards` to verify full backward compatibility across all browse views.
-
-### Phase 5: Zero Visual Regression & DevTools Profiling
-- **Scope**: Perform browser validation using Chrome with isolated profile:
-  `chrome.exe --user-data-dir="C:\Users\chung\.gemini\chrome-profiles\flama-devtools" http://localhost:4789`
-- **Verification**: Complete the 10-Point Checklist (Section 6.5); verify `CLS = 0.0000`, absence of extraneous wrapper `<div>`s, and correct Radix context behavior.
+### Critical Automated Test Scenarios:
+1. **Modal Dialogs**: Open and closed snapshots for ConfirmDialog, TaxonomyEntityModal, McpCreateEditTokenModal, and DeckWorksheetModal.
+2. **Browse Workspace**: 3-pane layout at 1440px desktop with active card editor, multiple selections, and status filter pills.
+3. **Worksheet Studio Canvas**: Live SVG/DOM rendering across all 8 worksheet templates at 100% and 85% scale.
+4. **Taxonomy Management**: Tabs switching across Domains, Subjects, Frameworks, Options, and Subject Mappings.
+5. **State Feedback**: Skeleton loading shimmers, error alert boxes, and empty result placeholders.
 
 ---
 
-*Master Plan authored by Teamwork Plan Author Worker (`worker_plan_author`).*  
-*Verified and ready for multi-agent review and forensic audit.*
+## 7.6 15-Point Actionable Verification Checklist (C1–C15)
+
+Every refactored component, custom hook, and vertical subsystem must satisfy all 15 checkpoints before gate acceptance:
+
+| # | Checkpoint | Focus Category | Verification Method | Formal Acceptance Criteria |
+|:---:|---|---|---|---|
+| **C1** | Single Responsibility / Cohesion | Architecture | Structural code review | Module owns a single cohesive responsibility; no orthogonal states bundled together. |
+| **C2** | Type Safety & Zero Any | Type Safety | 
+pm run build / 	sc --noEmit | 0 TypeScript errors; 0 ny types; entity models use strict generic interfaces. |
+| **C3** | Behavioral Characterization Passing | QA Baseline | python scripts/run_tests.py / Vitest | 100% of Phase 0 characterization tests pass; existing runtime behavior preserved. |
+| **C4** | E2E Critical Flows Passing | Integration | Playwright E2E suites | Critical user journeys (card edits, token creations, worksheet generation) pass without failure. |
+| **C5** | Visual Regression Passing | Visual QA | Playwright screenshot diffing | Visual diff < 0.1% across desktop, tablet, and mobile; pixel-for-pixel layout preserved. |
+| **C6** | Accessibility / Radix Context | A11y / WAI-ARIA | Keyboard & screen-reader audit | Focus traps intact; Escape dismisses modals; ARIA attributes and keyboard shortcuts working. |
+| **C7** | API / Query Contract Preservation | Networking | Network tab & mock tests | API URLs, request payloads, response transformations, and TanStack Query keys unchanged. |
+| **C8** | Network Hygiene | Performance | DevTools Network waterfall | 0 duplicate HTTP requests; aborted requests canceled via AbortController; queries debounced. |
+| **C9** | Lifecycle / Memory Cleanliness | Stability | Heap snapshot comparison | URL.revokeObjectURL() called; zero detached DOM nodes or lingering event listeners. |
+| **C10** | Performance Before/After Evidence | Performance | DevTools Profiler traces | Empirical traces show re-render count reduced or flat; CLS = 0.0000; INP < 100ms. |
+| **C11** | Compatibility Layer Tracking | Governance | Code inspection | Facades documented with registered consumers, removal criteria, and sunset milestones. |
+| **C12** | Rollback Safety | Git Hygiene | git log / branch review | Changesets are atomic, self-contained, and revertible via a single git revert command. |
+| **C13** | Actual vs Estimated Cost | ROI Tracking | Migration Scorecard | Actual LOC, files changed, and engineering hours recorded against baseline forecasts. |
+| **C14** | No Premature Abstraction | Design System | Component inspection | UI primitives extracted only with 2–3 proven consumers; zero business logic in shared/ui. |
+| **C15** | Go/No-Go Review Completed | Governance | Formal sign-off | Subsystem evaluated against Correctness, Maintainability, Performance, and Cost gates. |
+
+*(Informational Metrics: LOC and state counts are monitored as diagnostic review heuristics, not pass/fail gates. A cohesive component with 12 states is accepted under C1 if cohesion is proven).*
+
+# 8. Consolidated Metrics & Before/After Impact Forecast
+
+> [!NOTE]
+> **Forecast Notice (Rule 15)**: The metrics below represent **estimated targets and architectural hypotheses** based on planned decomposition models. These figures are not guaranteed outcomes. Actual LOC deltas, component counts, and re-render benchmarks will be empirically measured post-migration and recorded in each subsystem's Migration Scorecard (Rule 13).
+
+| Module / Hotspot | File(s) Before | Lines Before | Proposed Architecture & Extracted Modules | Target Total LOC | Net LOC Change Target | Target Reduction % | Risk Tier |
+|---|---|---|---|---|---|---|---|
+| **Worksheet Studio** | `DeckWorksheetModal.tsx` | 4,388 | 1 orchestrator modal (`DeckWorksheetModal`, ~140 LOC) + 1 hook (`useWorksheetStudio`, ~280 LOC) + 2 modal wrappers (~355 LOC) + 4 studio tabs (~565 LOC) + 6 layout panels (~1,160 LOC) | 2,520 | **-1,868 LOC** | **~42.6%** | **Critical** |
+| **Admin Taxonomy** | `AdminTaxonomyPage.tsx` | 1,400 | 1 root page (~95 LOC, 1 state) + 1 hook (`useTaxonomyData`, ~110 LOC) + 1 type-safe entity modal (`TaxonomyEntityModal`, ~130 LOC) + 5 tab components (~670 LOC) | 1,005 | **-395 LOC** | **~28.2%** | **Medium** |
+| **MCP Token Admin & User** | `AdminMcpTokensPage.tsx`<br>`McpTokensTab.tsx`<br>`useMcpTokenCRUD.ts` | 3,002 | 1 shared manager (`McpTokensManager`, ~160 LOC) + 1 unified hook (`useMcpTokens`, ~240 LOC) + 4 shared dialogs & tables (~740 LOC) + 2 thin route wrappers (~220 LOC) | 1,360 | **-1,642 LOC** | **~54.7%** | **Medium (Pilot)** |
+| **Browse Mega-Hook** | `useBrowseState.ts` | 1,053 | 1 temporary compatibility facade (`useBrowseState`, ~85 LOC) + 4 focused sub-hooks (~570 LOC) + 1 dedicated audio modal hook (~250 LOC) | 905 | **-148 LOC** | **~14.1%** | **High** |
+| **Shared UI Primitives** | 8 Primitives across 30+ call sites | — | 8 standalone UI primitives in `shared/ui/` with zero domain coupling (`SearchInput`, `ConfirmDialog`, `StatusPill`, etc.) | ~1,250 | *+1,250 LOC (Reusable Core)* | *Net app-wide savings target: ~2,500 LOC* | **Low** |
+| **Total Core God Modules** | **4 Monoliths** | **9,843** | **Modular Vertical Slices (Cohesive units, zero arbitrary splitting)** | **5,790** | **-4,053 LOC** | **~41.2% Net Reduction Target** | — |
+
+---
+
+# 9. Risk-Adjusted Vertical Implementation Roadmap & Rollout Plan
+
+To ensure maximum system stability, continuous user operation, and empirical ROI validation, implementation is strictly resequenced from horizontal layer-by-layer tasks into **risk-adjusted vertical subsystems**. Each vertical migration must pass its designated Go/No-Go Gate before subsequent subsystems begin:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                   RISK-ADJUSTED VERTICAL IMPLEMENTATION ROADMAP                        │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 0: Behavioral Baseline & Characterization Suites                                 │
+│ • Establish Playwright E2E and visual screenshot baselines across critical flows       │
+│ • Document API payloads, TanStack query keys, keyboard hotkeys, and audio lifecycles   │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 1: Pilot Migration — MCP Tokens (Admin & User) [Medium Risk]                     │
+│ • Unify McpTokensManager, extract useMcpTokens hook, eliminate ~1,800 duplicate LOC    │
+│ └── [GATE 1 REVIEW]: Verify correctness, duplication elimination, and ROI              │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 2: Vertical Migration — Admin Taxonomy [Medium Risk]                             │
+│ • Localize 46 states into 5 tab components; implement type-safe TaxonomyEntityModal    │
+│ └── [GATE 2 REVIEW]: Verify zero 'any', React Query cache invalidation, tab isolation  │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 3: Consolidate Proven Shared UI Primitives [Low Risk]                            │
+│ • Extract SearchInput, ConfirmDialog, StatusPill, CodeSnippetBox into shared/ui        │
+│ └── [GATE 3 REVIEW]: Verify 2–3 proven consumers per primitive, zero domain leakage    │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 4A: Browse Internal Decomposition behind Compatibility Facade [High Risk]        │
+│ • Partition useBrowseState into sub-hooks; wrap under temporary useBrowseState facade  │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 4B: Consumer Migration from Facade to Direct Focused Hooks                       │
+│ • Migrate 7 direct browse consumers; execute facade sunset; delete useBrowseState      │
+│ └── [GATE 4 REVIEW]: Verify zero backward incompatibility, render count reduction     │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 5: Vertical Migration — Worksheet Studio [Critical Risk]                         │
+│ • Decompose DeckWorksheetModal into tabs/panels; protect SVG/DOM canvas & print styles │
+│ └── [GATE 5 REVIEW]: Multi-browser print test, Playwright screenshot diff <0.1%        │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Phase 6: Optional FSD Boundary & Directory Cleanup                                     │
+│ • Clean up import aliases; protect stable legacy code (no churn for stable modules)    │
+│ └── [FINAL SIGN-OFF]: Full architectural audit and actual vs forecast ROI evaluation   │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Phase 0: Behavioral Baseline & Characterization
+- **Objective**: Establish unshakeable baseline tests that capture existing observable behavior before any production code is touched.
+- **Scope & Deliverables**:
+  1. *Playwright Screenshot Baselines*: Capture desktop (1440px), tablet (768px), and mobile (375px) snapshots for Browse 3-pane workspace, Worksheet Studio canvas, Admin Taxonomy tabs, and MCP token tables.
+  2. *Interaction & E2E Suites*: Automated test coverage for card filtering, sorting, multi-selection, batch actions, token rotation/revocation, taxonomy entity CRUD, and worksheet template switching.
+  3. *Network & Invalidation Contracts*: Record authoritative snapshots of TanStack Query keys, API request payloads, and mutation responses.
+- **Exit Condition**: 100% of characterization tests green in CI; visual baselines locked in version control.
+
+---
+
+### Phase 1: Pilot Migration — MCP Tokens (Admin & User)
+- **Objective**: Execute a high-impact, medium-risk pilot migration targeting massive code duplication (~1,800 LOC) to establish vertical patterns.
+- **Scope & Deliverables**:
+  1. Extract unified `useMcpTokens` custom hook handling query fetching, token creation, editing, rotating, revoking, purging, and cleanup.
+  2. Construct `McpTokensManager.tsx` with `mode="admin" | "user"`, eliminating dual maintenance between `AdminMcpTokensPage.tsx` and `McpTokensTab.tsx`.
+  3. Decompose modal dialogs into `McpTokenSecretModal`, `McpCreateEditTokenModal`, and `McpTokenActionModals`.
+- **Preconditions**: Phase 0 MCP baseline tests passing.
+- **Go/No-Go Gate 1 Evaluation**:
+  - *Correctness*: Admin and user token flows execute identically to baseline; secret token copying and reveal dialogs function without flaw.
+  - *Maintainability*: Permanent elimination of ~1,800 duplicate lines; single source of truth established.
+  - *Performance*: Network tab confirms zero redundant token list queries.
+  - *Decision*: `ACCEPT` to proceed to Phase 2, or `ROLLBACK` via atomic commit revert.
+
+---
+
+### Phase 2: Vertical Migration — Admin Taxonomy
+- **Objective**: Decompose the 46-state `AdminTaxonomyPage.tsx` monolith into localized tab views while maintaining strict type safety and zero `any`.
+- **Scope & Deliverables**:
+  1. Extract `useTaxonomyData.ts` to coordinate React Query operations and cache invalidations for taxonomy domains, subjects, frameworks, levels, and options.
+  2. Decompose the monolith into 5 isolated tab components (`TaxonomyDomainsTab`, `TaxonomySubjectsTab`, `TaxonomyFrameworksTab`, `TaxonomyOptionsTab`, `TaxonomySubjectMappingsTab`).
+  3. Implement `TaxonomyEntityModal.tsx` using strongly typed generic schemas (`TaxonomyEntityModalProps<T>`), explicitly rejecting over-generic dynamic form engines.
+- **Preconditions**: Gate 1 accepted; Phase 0 Taxonomy baseline passing.
+- **Go/No-Go Gate 2 Evaluation**:
+  - *Correctness*: All 5 taxonomy domains create, update, delete, and reseed correctly.
+  - *Maintainability*: Root component state reduced from 46 states to 1 state (`activeTab`); zero `any` types in taxonomy code.
+  - *Performance*: Re-renders localized to active modal or active tab; typing in input fields no longer re-renders sibling tables.
+  - *Decision*: `ACCEPT` to proceed to Phase 3.
+
+---
+
+### Phase 3: Consolidate Proven Shared UI Primitives
+- **Objective**: Standardize proven, accessible UI primitives in `frontend/src/shared/ui/` based strictly on real consumer patterns discovered in Phases 1 and 2.
+- **Scope & Deliverables**:
+  1. Formalize `SearchInput`, `ConfirmDialog`, `StatusPill`, and `CodeSnippetBox` with CVA variants and OKLCH color tokens.
+  2. Replace repetitive inline implementations in MCP Tokens and Admin Taxonomy with standardized primitives.
+  3. Extract `FilterPillGroup`, `ImageUploadDropzone`, `SplitPane`, and `CardFieldsForm` only when multi-consumer demand is verified.
+- **Preconditions**: Gate 2 accepted; 2–3 real consumers proven per primitive.
+- **Go/No-Go Gate 3 Evaluation**:
+  - *Design System Compliance*: Primitives inherit 100% OKLCH tokens; zero hardcoded hex/rgb.
+  - *A11y*: Keyboard navigation, focus traps, and WAI-ARIA roles pass automated audit.
+  - *Zero Domain Leakage*: Primitives contain 0 domain-specific imports.
+  - *Decision*: `ACCEPT` to proceed to Phase 4.
+
+---
+
+### Phase 4A: Browse Internal Decomposition behind Temporary Compatibility Facade
+- **Objective**: Decompose the 1,053-line, 49-state `useBrowseState.ts` mega-hook into focused sub-hooks without breaking external consumer views.
+- **Scope & Deliverables**:
+  1. Extract `useBrowseFilters.ts` (search, debounce, status, sorting, URL sync).
+  2. Extract `useBrowsePagination.ts` (page, perPage, storage persistence).
+  3. Extract `useBrowseSelection.ts` (selected cards set, range select, keyboard hotkeys).
+  4. Extract `useBrowseCardOperations.ts` (cohesive operational mutation cluster).
+  5. Extract `useBrowseAudioModal.ts` (cohesive TTS engine, queue, and playback cluster).
+  6. Reassemble all sub-hooks under `useBrowseState.ts` as a **Temporary Compatibility Facade** preserving 100% return properties.
+- **Preconditions**: Gate 3 accepted; Phase 0 Browse baseline passing.
+
+---
+
+### Phase 4B: Consumer Migration from Facade to Focused Hooks & Sunset
+- **Objective**: Transition Browse presentation components to consume focused hooks directly and permanently eliminate the 102-property God Facade.
+- **Scope & Deliverables**:
+  1. Refactor `BrowseDeckSidebar.tsx` to consume only `useBrowseFilters`.
+  2. Refactor `BrowseCardList.tsx` to consume `useBrowseSelection` and `useBrowsePagination`.
+  3. Refactor `BrowseCardEditor.tsx` to consume `useCardDetailEditor` and `useBrowseCardOperations`.
+  4. Refactor `BrowseToolbar.tsx` and `BrowseAudioModal.tsx`.
+  5. Satisfy all removal criteria and permanently delete `useBrowseState.ts` master facade.
+- **Go/No-Go Gate 4 Evaluation**:
+  - *Contract Invariance*: URL query parameters, search debounce, card selection, and study session updates operate identically to baseline.
+  - *Performance*: Keystrokes in card editor no longer trigger re-renders of the deck tree or card table.
+  - *Facade Removal*: `useBrowseState.ts` deleted with zero dangling references.
+  - *Decision*: `ACCEPT` to proceed to Phase 5.
+
+---
+
+### Phase 5: Vertical Migration — Worksheet Studio
+- **Objective**: Decompose the 4,388-line `DeckWorksheetModal.tsx` desktop publishing monolith with rigorous protection of SVG canvas math and print rendering.
+- **Scope & Deliverables**:
+  1. Extract `useWorksheetStudio.ts` to manage studio state, responsive viewports, paper presets, and debounced preview generation.
+  2. Decompose modal chrome into `WorksheetModalHeader.tsx` and `WorksheetPreviewCanvas.tsx`.
+  3. Decompose studio controls into 4 tab components (`StudioTemplateTab`, `StudioDataTab`, `StudioLayoutTab`, `StudioHeaderTab`) and 6 layout panels.
+  4. Safeguard cohesive math functions, paper coordinate geometry, and print stylesheets (`@media print`).
+- **Preconditions**: Gate 4 accepted; Phase 0 Worksheet characterization & visual baselines locked.
+- **Go/No-Go Gate 5 Evaluation**:
+  - *Visual Equivalence*: Playwright screenshot diff `< 0.1%` across all 8 worksheet templates at 100% and 85% scale.
+  - *Print Fidelity*: Chrome and Firefox print preview outputs pixel-identical PDF/paper pages.
+  - *Maintainability*: `DeckWorksheetModal.tsx` reduced from 4,388 LOC to ~140 LOC shell; layout panels decoupled.
+  - *Decision*: `ACCEPT` to proceed to Phase 6.
+
+---
+
+### Phase 6: Optional FSD Boundary & Directory Cleanup
+- **Objective**: Align project path aliases and import paths without mass directory churn or moving stable legacy code.
+- **Scope & Deliverables**:
+  1. Verify strict unidirectional imports (`app -> pages -> widgets -> features -> entities -> shared`).
+  2. Ensure stable, working legacy files that were not part of the active refactoring hotspots remain undisturbed.
+- **Final Architecture Review & Sign-Off**:
+  - Verify all 15 checkpoints in the Actionable Verification Checklist (Section 7.6).
+  - Collate all subsystem Migration Scorecards (Rule 13) and compare actual LOC reductions and performance metrics against baseline estimates.
+  - Formally declare completion of Architecture Overhaul `FLAMA-ARCH-2026-FE-001`.
+
+---
+
+*Master Plan Revision 2.0 authored and governance-approved.*  
+*Empirical verification and behavior preservation enforced across all vertical subsystems.*
