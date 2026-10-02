@@ -144,6 +144,9 @@ def _card_for_ord(note_ref: ConnectSourceNoteRef, source_ord: int) -> Card:
         if card is None:
             raise AnkiSyncError("source card ord does not map to a local application")
         return card
+    from app.services.study_retirement_telemetry_service import record_legacy_usage
+
+    record_legacy_usage("anki.ordinal")
     by_position = {int(card.template.position): card for card in cards}
     card = by_position.get(source_ord)
     if card is None and 0 <= source_ord < len(cards):

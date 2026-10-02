@@ -935,6 +935,9 @@ def open_study_session(
     )
     db.session.add(session)
     db.session.flush()
+    from app.services.study_retirement_telemetry_service import record_legacy_usage
+
+    record_legacy_usage("session.issue", wire=session.wire_schema_version)
     # One multi-row INSERT instead of one INSERT per Card (MySQL has no
     # RETURNING, so ORM objects would be inserted one by one for their IDs).
     db.session.execute(insert(StudySessionCard), session_card_values)
@@ -1021,6 +1024,9 @@ def _get_study_session_status(
         )
 
     status = str(session.status or "open")
+    from app.services.study_retirement_telemetry_service import record_legacy_usage
+
+    record_legacy_usage("session.restore", wire=session.wire_schema_version)
     if status == "open" and (now or datetime.utcnow()) > session.expires_at:
         status = "expired"
     if status == "open":
@@ -2233,6 +2239,9 @@ def commit_study_session(
             status=422,
         )
     if _note_batch is None:
+        from app.services.study_retirement_telemetry_service import record_legacy_usage
+
+        record_legacy_usage("session.commit", wire=session.wire_schema_version)
         replayed = _idempotent_response(
             session_id=session_id,
             idempotency_key=commit_key,

@@ -241,8 +241,30 @@ def run_study_architecture_audit_command(
 
 
 
+def register_phase9_audit_commands(app: Flask) -> None:
+    @app.cli.command("study-phase9-readiness")
+    @click.option("--window-days", type=click.IntRange(30, 365), default=30, show_default=True)
+    @click.option("--projection-since", type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"]))
+    @click.option("--observed-at", type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"]))
+    @click.option("--retirement-observation", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+    def study_phase9_readiness(window_days, projection_since, observed_at, retirement_observation):
+        """Read-only evidence; production uses wsgi_audit.py and SELECT-only credentials."""
+        from app.services.study_phase9_readiness_service import build_phase9_readiness
+
+        if app.config.get("STARTUP_RUN_MAINTENANCE", True):
+            raise click.ClickException("Use wsgi_audit.py; startup maintenance must be disabled.")
+        try:
+            observation = json.loads(retirement_observation.read_text(encoding="utf-8")) if retirement_observation else None
+            result = build_phase9_readiness(window_days=window_days, projection_since_utc=projection_since,
+                                           now_utc=observed_at, retirement_observation=observation)
+        except (ValueError, KeyError, TypeError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(json.dumps(result, sort_keys=True))
+
+
 def register_audit_cli_commands(app: Flask) -> None:
     """Register ONLY read-only audit commands on audit Flask app instances."""
+    register_phase9_audit_commands(app)
 
     @app.cli.command("study-architecture-audit")
     @click.option(
@@ -284,6 +306,7 @@ def register_audit_cli_commands(app: Flask) -> None:
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
+    register_phase9_audit_commands(app)
 
     @app.cli.command("study-authority-enrollment")
     @click.option(
@@ -736,30 +759,6 @@ def register_cli_commands(app: Flask) -> None:
             apply=apply,
         )
         click.echo(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
-
-    @app.cli.command("study-phase9-readiness")
-    @click.option(
-        "--window-days",
-        type=click.IntRange(1, 365),
-        default=30,
-        show_default=True,
-        help="Observation window for old usage.",
-    )
-    @click.option(
-        "--projection-since",
-        type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"]),
-        default=None,
-        help="Cutover instant T0 (UTC): count card_progress rows written since then.",
-    )
-    def study_phase9_readiness(window_days: int, projection_since) -> None:
-        """Read-only evidence for the Phase 9 contraction gates."""
-
-        from app.services.study_phase9_readiness_service import build_phase9_readiness
-
-        click.echo(json.dumps(
-            build_phase9_readiness(window_days=window_days, projection_since_utc=projection_since),
-            sort_keys=True,
-        ))
 
     @app.cli.command("study-storage-profile-switch")
     @click.option("--apply", "apply_switch", is_flag=True, default=False,
