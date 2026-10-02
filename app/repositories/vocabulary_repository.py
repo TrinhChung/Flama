@@ -731,7 +731,14 @@ def build_browse_deck_tree_payload(
     user_id: int,
     admin_mode: bool,
     timezone_name: str = "UTC",
+    progress_counts: bool = True,
 ) -> list[dict[str, Any]]:
+    """Deck tree with per-deck counts from the ``card_progress`` rows.
+
+    ``progress_counts=False`` leaves every count at zero without reading
+    ``card_progress``: NOTE learners recount the whole tree from canonical
+    availability, and under ``CANONICAL_V1`` that projection is frozen.
+    """
     from app.repositories.study_repository import (
         _today_day_index,
         active_progress_expr,
@@ -799,7 +806,7 @@ def build_browse_deck_tree_payload(
         counts_query = counts_query.filter(Note.user_id == user_id)
     counts_query = counts_query.group_by(Note.deck_id)
 
-    for row in counts_query.all():
+    for row in counts_query.all() if progress_counts else ():
         deck_id = row[0]
         if deck_id is None:
             continue
@@ -877,7 +884,7 @@ def build_browse_deck_tree_payload(
                             conds.append(Card.created_at <= snapshot_at)
                         install_conditions.append(db.and_(*conds))
 
-                    if install_conditions:
+                    if install_conditions and progress_counts:
                         clone_counts_query = (
                             db.session.query(
                                 Note.deck_id,
@@ -908,7 +915,7 @@ def build_browse_deck_tree_payload(
                             bucket["learn"] += int(row[3] or 0)
                             bucket["due"] += int(row[4] or 0)
                 else:
-                    for install in logical_installs:
+                    for install in logical_installs if progress_counts else ():
                         inst_key = str(install.id)
                         source_to_local = maps_by_install.get(inst_key)
                         if not source_to_local:

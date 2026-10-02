@@ -63,6 +63,35 @@ def _option(value):
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
 
 
+def restore_dump(settings, target, backup: Path, executable: str) -> float:
+    """Pipe ``backup`` into the already created ``target``; return seconds."""
+
+    validate_target(settings, target)
+    with tempfile.TemporaryDirectory(prefix="flama-p9-client-") as directory:
+        defaults = Path(directory) / "client.cnf"
+        defaults.write_text("[client]\n" + "\n".join(f"{key}={_option(settings[key])}"
+                            for key in ("host", "port", "user", "password")) + "\n", encoding="utf-8")
+        if os.name != "nt":
+            defaults.chmod(0o600)
+        started = time.monotonic()
+        with tempfile.TemporaryFile() as errors:
+            process = subprocess.Popen([executable, f"--defaults-file={defaults}", "--binary-mode",
+                                        "--default-character-set=utf8mb4", f"--database={target}"],
+                                       stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors)
+            try:
+                with gzip.open(backup, "rb") as source:
+                    shutil.copyfileobj(source, process.stdin, length=1024 * 1024)
+                process.stdin.close()
+                code = process.wait()
+                if code:
+                    raise RuntimeError(f"mysql restore failed with exit {code}; no source database was modified")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+        return round(time.monotonic() - started, 3)
+
+
 def run_probe(backup: Path, *, mysql_binary: str, env_file: Path | None = None):
     load_dotenv(env_file or ROOT / ".env")
     settings = _connection_settings()
@@ -82,29 +111,7 @@ def run_probe(backup: Path, *, mysql_binary: str, env_file: Path | None = None):
         with connection.cursor() as cursor:
             cursor.execute(f"CREATE DATABASE `{target}` CHARACTER SET utf8mb4 COLLATE {collation}")
             created = True
-        with tempfile.TemporaryDirectory(prefix="flama-p9-client-") as directory:
-            defaults = Path(directory) / "client.cnf"
-            defaults.write_text("[client]\n" + "\n".join(f"{key}={_option(settings[key])}"
-                                for key in ("host", "port", "user", "password")) + "\n", encoding="utf-8")
-            if os.name != "nt":
-                defaults.chmod(0o600)
-            started = time.monotonic()
-            with tempfile.TemporaryFile() as errors:
-                process = subprocess.Popen([executable, f"--defaults-file={defaults}", "--binary-mode",
-                                            "--default-character-set=utf8mb4", f"--database={target}"],
-                                           stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors)
-                try:
-                    with gzip.open(backup, "rb") as source:
-                        shutil.copyfileobj(source, process.stdin, length=1024 * 1024)
-                    process.stdin.close()
-                    code = process.wait()
-                    if code:
-                        raise RuntimeError(f"mysql restore failed with exit {code}; no source database was modified")
-                finally:
-                    if process.poll() is None:
-                        process.kill()
-                        process.wait()
-            report["restore_seconds"] = round(time.monotonic() - started, 3)
+        report["restore_seconds"] = restore_dump(settings, target, backup, executable)
         connection.select_db(target)
         with connection.cursor() as cursor:
             cursor.execute("SHOW TABLES")

@@ -1,6 +1,6 @@
 # Runbook Phase 7 — retention chi tiết phiên học
 
-> Lập 2026-09-30; cập nhật P9-01 ngày 2026-10-02. Nguồn: [P7 execution plan](../task/decoupling/P7_EXECUTION_PLAN_2026-09-30.md), [P9 plan](../task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md). Timer trong repo chưa được cài/bật trên production. Lệnh `flama_cli` giống [runbook P5](./P5_NOTE_AUTHORITY_RUNBOOK.md), thêm `Environment=STARTUP_RUN_MAINTENANCE=0` để chạy maintenance này mà không chạy các mutator startup khác.
+> Lập 2026-09-30; cập nhật P9-01 ngày 2026-10-02. Nguồn: [P7 execution plan](../task/decoupling/P7_EXECUTION_PLAN_2026-09-30.md), [P9 plan](../task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md). Timer đã cài và bật trên production từ 2026-10-02 (§3). Lệnh `flama_cli` giống [runbook P5](./P5_NOTE_AUTHORITY_RUNBOOK.md), thêm `Environment=STARTUP_RUN_MAINTENANCE=0` để chạy maintenance này mà không chạy các mutator startup khác.
 
 ## 1. Lệnh làm gì
 

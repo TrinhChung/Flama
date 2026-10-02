@@ -1,5 +1,7 @@
 # Phase 8 và Phase 9 — điều kiện bắt đầu và bằng chứng hiện tại
 
+> Phần Phase 9 dưới đây là ảnh chụp 2026-09-30. D9-02 đã thay quyết định giữ rollback D6-02 và Phase 9 đã tổng kết ở [INT-06](./P9_CLOSEOUT_2026-10-03.md). Phần Phase 8 vẫn hiện hành.
+
 > Lập 2026-09-30, sau khi Phase 6 chạy trên production và Phase 7 sẵn sàng. Scope gốc: [canonical plan §15 Phase 8, Phase 9](../../architecture/study-interaction-trigger-algorithm-plan.md#phase-8--add-new-interactions-algorithms-and-secondary-consumers). Ràng buộc của chủ sản phẩm: giữ hiệu năng, **không mất hoặc hỏng dữ liệu learner**.
 
 ## 1. Kết luận

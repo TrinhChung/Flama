@@ -56,6 +56,7 @@ def create_review_event_record(
     duration_ms: int | None,
     deck_id: int | None,
     note_type_id: str | None,
+    note_id: str | None = None,
     scheduler_preset_id: int | None = None,
     study_session_id: str | None = None,
     client_event_id: str | None = None,
@@ -86,6 +87,9 @@ def create_review_event_record(
     event = ReviewEvent(
         user_id=user_id,
         card_id=str(card_id),
+        # Callers holding the Card stamp its Note; otherwise the before_flush
+        # hook resolves it (Phase 6, D6-07).
+        note_id=str(note_id) if note_id else None,
         deck_id=deck_id,
         note_type_id=note_type_id,
         scheduler_preset_id=scheduler_preset_id,
