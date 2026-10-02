@@ -154,13 +154,17 @@ def _deck_purge_scope(
             )
         )
     card_ids = tuple(sorted(card_ids_found))
+    from app.repositories.study_authority_repository import projection_is_live
+
+    projection_live = projection_is_live(db.session)
     for offset in range(0, len(card_ids), 500):
         card_chunk = card_ids[offset : offset + 500]
-        collect_learner_ids(
-            db.session.query(CardProgress.user_id).filter(
-                CardProgress.card_id.in_(card_chunk)
+        if projection_live:
+            collect_learner_ids(
+                db.session.query(CardProgress.user_id).filter(
+                    CardProgress.card_id.in_(card_chunk)
+                )
             )
-        )
         collect_learner_ids(
             db.session.query(StudyProgressSubject.learner_user_id)
             .join(
