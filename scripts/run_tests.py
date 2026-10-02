@@ -160,6 +160,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_storage_profile_switch.py",
             "tests/test_study_canonical_lifecycle.py",
             "tests/test_study_canonical_switch.py",
+            "tests/test_study_profile_switch_lease.py",
             "tests/test_study_note_templates.py",
             "tests/test_study_content_delete.py",
             "tests/test_study_note_overlay.py",
