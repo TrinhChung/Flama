@@ -281,24 +281,23 @@ def _workload(app, trace: _Trace, learners: dict[str, int], decks: dict[str, int
 
     owner = learners["owned"]
     client = _client(app, owner)
-    # A single-NoteType deck whose fields are all plain text, so the API accepts made-up values.
+    # A single-NoteType deck of the learner's own NoteType; non-text (media) fields stay empty.
     target = _rows(app, """
         SELECT n.deck_id, MIN(n.note_type_id) FROM notes n
         WHERE n.user_id = :user_id AND n.deck_id IS NOT NULL
         GROUP BY n.deck_id HAVING COUNT(DISTINCT n.note_type_id) = 1 AND COUNT(*) BETWEEN 5 AND 400
-           AND MIN(n.note_type_id) IN (
-               SELECT t.id FROM note_types t WHERE t.user_id = :user_id AND NOT EXISTS (
-                   SELECT 1 FROM field_defs f WHERE f.note_type_id = t.id AND f.field_type <> 'text'))
+           AND MIN(n.note_type_id) IN (SELECT t.id FROM note_types t WHERE t.user_id = :user_id)
         ORDER BY COUNT(*) DESC LIMIT 1""", user_id=owner)
     if target:
         deck_id, note_type_id = int(target[0][0]), str(target[0][1])
-        field_names = [row[0] for row in _rows(app, "SELECT name FROM field_defs WHERE note_type_id = :id "
-                                               "ORDER BY position", id=note_type_id)]
+        fields = _rows(app, "SELECT name, field_type FROM field_defs WHERE note_type_id = :id ORDER BY position",
+                       id=note_type_id)
 
         def create_and_study():
             created = client.post("/api/notes", json={
                 "note_type_id": note_type_id, "deck_id": deck_id,
-                "field_values": {name: f"p9 workload {name}" for name in field_names}})
+                "field_values": {name: f"p9 workload {name}" if kind == "text" else ""
+                                 for name, kind in fields}})
             if created.status_code != 201:
                 return {"create": created.status_code, "body": str(created.get_json())[:200]}
             note_id = created.get_json().get("id") or created.get_json().get("note", {}).get("id")
