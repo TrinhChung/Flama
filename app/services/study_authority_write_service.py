@@ -78,6 +78,21 @@ def _validate_next_state(
     state_write: StudyAuthorityStateWrite,
     projection: EncodedLegacyProjection,
 ) -> tuple[dict[str, object], bytes]:
+    payload = _validated_state_payload(state_write)
+    if projection.comparison.algorithm_state_hash != state_write.algorithm_state_hash:
+        raise _fail(
+            "PROJECTION_STATE_MISMATCH",
+            "Legacy projection was encoded from another Algorithm State.",
+        )
+    semantic_hash = projection.comparison.semantic_state_hash
+    if not isinstance(semantic_hash, bytes) or len(semantic_hash) != 32:
+        raise _fail(
+            "INVALID_AUTHORITY_WRITE", "Projected semantic state hash is invalid."
+        )
+    return payload, semantic_hash
+
+
+def _validated_state_payload(state_write: StudyAuthorityStateWrite) -> dict[str, object]:
     if not isinstance(state_write, StudyAuthorityStateWrite):
         raise _fail("INVALID_AUTHORITY_WRITE", "Next state contract is missing.")
     if (
@@ -121,17 +136,7 @@ def _validate_next_state(
         )
     except StudyProgressCodecError as exc:
         raise _fail(exc.code, str(exc)) from exc
-    if projection.comparison.algorithm_state_hash != state_write.algorithm_state_hash:
-        raise _fail(
-            "PROJECTION_STATE_MISMATCH",
-            "Legacy projection was encoded from another Algorithm State.",
-        )
-    semantic_hash = projection.comparison.semantic_state_hash
-    if not isinstance(semantic_hash, bytes) or len(semantic_hash) != 32:
-        raise _fail(
-            "INVALID_AUTHORITY_WRITE", "Projected semantic state hash is invalid."
-        )
-    return document.payload, semantic_hash
+    return document.payload
 
 
 def _validate_projection_rows(
@@ -245,6 +250,11 @@ def apply_study_authority_material_write(
     scheduling semantics are unchanged.
     """
 
+    if route.storage_profile != "PROJECTION_V1":
+        raise _fail(
+            "STORAGE_PROFILE_CONFLICT",
+            "CANONICAL_V1 writes no legacy projection.",
+        )
     verified = verify_study_authority_cas(
         route=route,
         locked=locked,
@@ -257,32 +267,6 @@ def apply_study_authority_material_write(
             "First-state materialization requires the complete contributor command.",
         )
     state_payload, semantic_hash = _validate_next_state(next_state, projection)
-    current_identity = (
-        str(locked.state.algorithm_key),
-        str(locked.state.algorithm_version),
-        str(locked.state.state_schema_version),
-        str(locked.state.storage_codec),
-    )
-    next_identity = (
-        next_state.algorithm_key,
-        next_state.algorithm_version,
-        next_state.state_schema_version,
-        next_state.storage_codec,
-    )
-    if next_identity != current_identity and not allow_algorithm_identity_change:
-        raise _fail(
-            "ALGORITHM_IDENTITY_CHANGE_UNAUTHORIZED",
-            "Only a requested Algorithm switch may change the state identity.",
-        )
-    if semantic_hash == verified.semantic_state_hash and next_identity == current_identity:
-        raise _fail(
-            "NON_MATERIAL_AUTHORITY_WRITE",
-            "An unchanged state must not advance the authority revision.",
-        )
-    if verified.authority_revision >= _MYSQL_SIGNED_BIGINT_MAX:
-        raise _fail(
-            "AUTHORITY_REVISION_EXHAUSTED", "Authority revision cannot advance."
-        )
     projected_rows = _validate_projection_rows(
         route=route,
         locked=locked,
@@ -290,27 +274,16 @@ def apply_study_authority_material_write(
         projection=projection,
         now_utc=now_utc,
     )
-
-    subject = locked.subject
-    state = locked.state
-    state.subject_generation = int(subject.subject_generation)
-    # This remains the Phase 4 bookkeeping counter; it is not authority CAS.
-    state.mirror_revision = int(subject.mirror_revision)
-    state.algorithm_key = next_state.algorithm_key
-    state.algorithm_version = next_state.algorithm_version
-    state.state_schema_version = next_state.state_schema_version
-    state.storage_codec = next_state.storage_codec
-    state.state_payload = state_payload
-    state.state_payload_size = next_state.state_payload_size
-    state.algorithm_state_hash = next_state.algorithm_state_hash
-    state.semantic_state_hash = semantic_hash
-    state.updated_at = now_utc
-
-    next_revision = verified.authority_revision + 1
-    locked.token.subject_generation = int(subject.subject_generation)
-    locked.token.authority_revision = next_revision
-    locked.token.semantic_state_hash = semantic_hash
-    locked.token.updated_at = now_utc
+    state, next_revision = _stage_state_and_token(
+        verified_revision=verified.authority_revision,
+        verified_semantic_hash=verified.semantic_state_hash,
+        locked=locked,
+        next_state=next_state,
+        state_payload=state_payload,
+        semantic_hash=semantic_hash,
+        now_utc=now_utc,
+        allow_algorithm_identity_change=allow_algorithm_identity_change,
+    )
 
     applied_rows: list[CardProgress] = []
     for row, sibling in projected_rows:
@@ -329,3 +302,121 @@ def apply_study_authority_material_write(
         semantic_state_hash=semantic_hash,
         projected_progress=tuple(applied_rows),
     )
+
+
+def apply_study_authority_canonical_write(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked: LockedStudyAuthoritySubject,
+    expected: StudyAuthorityCASExpectation,
+    next_state: StudyAuthorityStateWrite,
+    semantic_state_hash: bytes,
+    now_utc: datetime,
+    allow_algorithm_identity_change: bool = False,
+) -> StudyAuthorityWriteResult:
+    """CANONICAL_V1 counterpart: stage state and token only; never commit.
+
+    ``semantic_state_hash`` comes from ``project_note_card`` over the next
+    state (ADR P9-03 §2.2); availability is refreshed by the evidence step.
+    CAS is the token's authority revision and semantic hash (§2.4).
+    """
+
+    if route.storage_profile == "PROJECTION_V1":
+        raise _fail(
+            "STORAGE_PROFILE_CONFLICT",
+            "PROJECTION_V1 must write the legacy projection.",
+        )
+    if not isinstance(now_utc, datetime) or now_utc.tzinfo is not None:
+        raise _fail("INVALID_AUTHORITY_TIME", "Authority time must be naive UTC.")
+    if not isinstance(semantic_state_hash, bytes) or len(semantic_state_hash) != 32:
+        raise _fail("INVALID_AUTHORITY_WRITE", "Semantic state hash is invalid.")
+    verified = verify_study_authority_cas(
+        route=route,
+        locked=locked,
+        expected=expected,
+        require_note_authority=True,
+    )
+    if locked.state is None:
+        raise _fail(
+            "AUTHORITY_STATE_REQUIRED",
+            "First-state materialization requires the complete contributor command.",
+        )
+    state_payload = _validated_state_payload(next_state)
+    state, next_revision = _stage_state_and_token(
+        verified_revision=verified.authority_revision,
+        verified_semantic_hash=verified.semantic_state_hash,
+        locked=locked,
+        next_state=next_state,
+        state_payload=state_payload,
+        semantic_hash=semantic_state_hash,
+        now_utc=now_utc,
+        allow_algorithm_identity_change=allow_algorithm_identity_change,
+    )
+    return StudyAuthorityWriteResult(
+        state=state,
+        authority_revision=next_revision,
+        semantic_state_hash=semantic_state_hash,
+        projected_progress=(),
+    )
+
+
+def _stage_state_and_token(
+    *,
+    verified_revision: int,
+    verified_semantic_hash: bytes | None,
+    locked: LockedStudyAuthoritySubject,
+    next_state: StudyAuthorityStateWrite,
+    state_payload: dict[str, object],
+    semantic_hash: bytes,
+    now_utc: datetime,
+    allow_algorithm_identity_change: bool,
+) -> tuple[StudyProgressState, int]:
+    current_identity = (
+        str(locked.state.algorithm_key),
+        str(locked.state.algorithm_version),
+        str(locked.state.state_schema_version),
+        str(locked.state.storage_codec),
+    )
+    next_identity = (
+        next_state.algorithm_key,
+        next_state.algorithm_version,
+        next_state.state_schema_version,
+        next_state.storage_codec,
+    )
+    if next_identity != current_identity and not allow_algorithm_identity_change:
+        raise _fail(
+            "ALGORITHM_IDENTITY_CHANGE_UNAUTHORIZED",
+            "Only a requested Algorithm switch may change the state identity.",
+        )
+    if semantic_hash == verified_semantic_hash and next_identity == current_identity:
+        raise _fail(
+            "NON_MATERIAL_AUTHORITY_WRITE",
+            "An unchanged state must not advance the authority revision.",
+        )
+    if verified_revision >= _MYSQL_SIGNED_BIGINT_MAX:
+        raise _fail(
+            "AUTHORITY_REVISION_EXHAUSTED", "Authority revision cannot advance."
+        )
+
+    subject = locked.subject
+    state = locked.state
+    state.subject_generation = int(subject.subject_generation)
+    # This remains the Phase 4 bookkeeping counter; it is not authority CAS.
+    state.mirror_revision = int(subject.mirror_revision)
+    state.algorithm_key = next_state.algorithm_key
+    state.algorithm_version = next_state.algorithm_version
+    state.state_schema_version = next_state.state_schema_version
+    state.storage_codec = next_state.storage_codec
+    state.state_payload = state_payload
+    state.state_payload_size = next_state.state_payload_size
+    state.algorithm_state_hash = next_state.algorithm_state_hash
+    state.semantic_state_hash = semantic_hash
+    state.updated_at = now_utc
+
+    next_revision = verified_revision + 1
+    locked.token.subject_generation = int(subject.subject_generation)
+    locked.token.authority_revision = next_revision
+    locked.token.semantic_state_hash = semantic_hash
+    locked.token.updated_at = now_utc
+    return state, next_revision

@@ -28,6 +28,7 @@ from app.services import (
     study_progress_shadow_mirror_service,
 )
 from app.services.anki_scheduler import CardState, DeckOptions, _day_index
+from app.services.db_errors import domain_error_code
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.stats_overview import normalize_review_mode
 from app.services.study_action_runtime import (
@@ -566,6 +567,7 @@ def _execute_note_authority_review_command(
         db.session,
         learner_user_id=int(user.id),
         note_ids=[note_key],
+        storage_profile=route.storage_profile,
     )
     if pristine:
         # First review of a never-studied Note: the client saw the pristine
@@ -1006,7 +1008,7 @@ def execute_native_review_command(
         raise
     except Exception as exc:
         db.session.rollback()
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code is not None:
-            raise StudyReviewError(str(code), str(exc), status=409) from exc
+            raise StudyReviewError(code, str(exc), status=409) from exc
         raise

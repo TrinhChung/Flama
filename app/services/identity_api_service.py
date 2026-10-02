@@ -18,7 +18,9 @@ from app.email import (
     mask_email,
 )
 from app.services import login_rate_limit_service, password_reset_rate_limit_service
+from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.auth_service import register_user_and_commit
+from app.services.study_authority_enrollment_service import StudyAuthorityEnrollmentError
 from app.services.rest_api_service import build_session_payload
 from app.utils.redirects import resolve_safe_next_url
 from app.validators.password import validate_password_policy
@@ -137,6 +139,14 @@ def register_account(
             "DB_ERROR",
             "Could not create the user.",
             status=500,
+        ) from exc
+    except (StudyAuthorityEnrollmentError, StudyAuthorityFenceError) as exc:
+        # Every account starts in NOTE (D9-09); no account is created otherwise.
+        db.session.rollback()
+        raise IdentityApiError(
+            "NOTE_ENROLLMENT_FAILED",
+            "Could not create the user: study progress could not be initialised.",
+            status=503,
         ) from exc
 
     return {

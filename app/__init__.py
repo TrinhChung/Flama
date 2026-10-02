@@ -118,6 +118,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.study_progress_contributor import StudyProgressContributor  # noqa: F401
     from models.study_progress_availability import StudyProgressAvailability  # noqa: F401
     from models.study_progress_lineage_ref import StudyProgressLineageRef  # noqa: F401
+    from models.study_application import StudyApplication  # noqa: F401
     from models.study_progress_history_fact import StudyProgressHistoryFact  # noqa: F401
     from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent  # noqa: F401
     from models.study_progress_backfill_run import StudyProgressBackfillRun  # noqa: F401
@@ -126,6 +127,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.study_authority_enrollment import StudyAuthorityEnrollment  # noqa: F401
     from models.study_authority_command_receipt import StudyAuthorityCommandReceipt  # noqa: F401
     from models.study_authority_subject_token import StudyAuthoritySubjectToken  # noqa: F401
+    from models.study_authority_storage_profile import StudyAuthorityStorageProfile  # noqa: F401
     from models.payment_order import PaymentOrder  # noqa: F401  # register model
     from models.payment_order_item import PaymentOrderItem  # noqa: F401  # register model
     from models.payment_webhook_event import PaymentWebhookEvent  # noqa: F401  # register model

@@ -42,11 +42,14 @@ def classify_note_authority_keys(
     learner_user_id: int,
     note_ids: Iterable[str],
     for_update: bool = True,
+    storage_profile: str = "PROJECTION_V1",
 ) -> tuple[frozenset[str], frozenset[str]]:
     """Split Notes into (stateful, pristine) or fail on partial evidence.
 
     Locking reads by default: a first-state insert for these keys waits until
     the caller's transaction ends, so a read never mixes the two answers.
+    Under ``CANONICAL_V1`` the frozen ``card_progress`` projection is not
+    evidence: pristine means no state and no ACTIVE contributor.
     """
 
     note_ids = sorted({str(value) for value in note_ids if str(value)})
@@ -103,7 +106,7 @@ def classify_note_authority_keys(
                 "INCOMPLETE_AUTHORITY_COVERAGE",
                 "A Note has contributor evidence without current NOTE state.",
             )
-    for chunk in _chunks(sorted(candidates)):
+    for chunk in _chunks(sorted(candidates) if storage_profile == "PROJECTION_V1" else []):
         if session.execute(read(
             select(CardProgress.id).join(Card, Card.id == CardProgress.card_id).where(
                 CardProgress.user_id == int(learner_user_id),
@@ -136,21 +139,16 @@ def materialize_pristine_notes(
         return frozenset()
     note_by_id = {str(card.note_id): card.note for card in cards}
     _stateful, pristine = classify_note_authority_keys(
-        session, learner_user_id=route.learner_user_id, note_ids=note_by_id)
-    for note_id in sorted(pristine, key=lambda value: value.encode("utf-8")):
-        siblings = tuple(session.execute(
-            select(Card).where(Card.note_id == note_id).order_by(Card.id.asc()).with_for_update(read=True)
-        ).scalars())
-        if not siblings:
-            raise StudyAuthorityFenceError(
-                "INCOMPLETE_AUTHORITY_COVERAGE", "A Note without Cards cannot be studied.")
-        lifecycle.materialize_pristine_note_authority(
-            session,
-            route=route,
-            note=note_by_id[note_id],
-            cards=siblings,
-            starting_ease=starting_ease_by_note_id[note_id],
-            provenance_code=provenance_code,
-            now_utc=now_utc,
-        )
+        session, learner_user_id=route.learner_user_id, note_ids=note_by_id,
+        storage_profile=route.storage_profile)
+    # Set-wise: a study session over thousands of never-studied overlay Notes
+    # must open within one request (P5-11c). Same rows as the per-Note path.
+    lifecycle.materialize_pristine_notes_bulk(
+        session,
+        route=route,
+        note_ids=pristine,
+        starting_ease_by_note_id=starting_ease_by_note_id,
+        provenance_code=provenance_code,
+        now_utc=now_utc,
+    )
     return pristine

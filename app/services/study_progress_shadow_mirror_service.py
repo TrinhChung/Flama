@@ -19,10 +19,17 @@ from typing import Any, Iterable, Mapping, Sequence
 from flask import current_app
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_route,
+)
+from app.repositories.study_inserted_rows import (
+    CONTRIBUTOR,
+    SUBJECT,
+    inserted_in_transaction,
+    remember_inserted,
 )
 from app.repositories.study_progress_shadow_repository import (
     assert_subject_finalization_fence,
@@ -690,14 +697,16 @@ def _sync_pointer_lineage(
 ) -> bytes:
     existing = tuple(
         session.execute(
-            select(StudyProgressLineageRef)
-            .where(StudyProgressLineageRef.contributor_id == contributor.id)
-            .order_by(
-                StudyProgressLineageRef.ref_kind.asc(),
-                StudyProgressLineageRef.source_row_key.asc(),
-                StudyProgressLineageRef.id.asc(),
+            _lock_unless_inserted(
+                select(StudyProgressLineageRef)
+                .where(StudyProgressLineageRef.contributor_id == contributor.id)
+                .order_by(
+                    StudyProgressLineageRef.ref_kind.asc(),
+                    StudyProgressLineageRef.source_row_key.asc(),
+                    StudyProgressLineageRef.id.asc(),
+                ),
+                session, CONTRIBUTOR, contributor.id,
             )
-            .with_for_update()
         ).scalars()
     )
     pointer_rows = [row for row in existing if row.ref_kind == "LAST_REVIEW_EVENT"]
@@ -882,6 +891,42 @@ def _mapping_quarantine(code: str) -> str:
     return "QUARANTINED_UNCLASSIFIED_CONTEXT"
 
 
+def _use_stored_card_created_at(session: Session, cards_by_id: Mapping[str, Card]) -> None:
+    """Map Cards with the ``created_at`` the database stored.
+
+    A Card created in this transaction still carries its in-memory default
+    (microseconds), while ``cards.created_at`` is DATETIME(0) on MySQL and is
+    rounded on insert. Availability evidence (DATETIME(6)) must match the
+    stored Card, or every later parity read reports it stale. Values read
+    from MySQL have no fraction, so only just-created Cards are re-read.
+    """
+
+    fractional = sorted(
+        card_id
+        for card_id, card in cards_by_id.items()
+        if card.created_at is not None and card.created_at.microsecond
+    )
+    if not fractional:
+        return
+    for card_id, stored in session.execute(
+        select(Card.id, Card.created_at).where(Card.id.in_(fractional))
+    ).all():
+        set_committed_value(cards_by_id[str(card_id)], "created_at", stored)
+
+
+def _lock_unless_inserted(statement, session: Session, kind: str, parent_id):
+    """``FOR UPDATE`` unless the parent row was inserted by this transaction.
+
+    Children of an uncommitted parent cannot exist (foreign keys), so the
+    locking read would only take a gap lock that concurrent creations
+    deadlock on (see ``study_inserted_rows``).
+    """
+
+    if inserted_in_transaction(session, kind, parent_id):
+        return statement
+    return statement.with_for_update()
+
+
 def _upsert_availability(
     session: Session,
     *,
@@ -892,9 +937,11 @@ def _upsert_availability(
 ) -> None:
     projection = mapped.availability
     row = session.execute(
-        select(StudyProgressAvailability)
-        .where(StudyProgressAvailability.contributor_id == contributor.id)
-        .with_for_update()
+        _lock_unless_inserted(
+            select(StudyProgressAvailability)
+            .where(StudyProgressAvailability.contributor_id == contributor.id),
+            session, CONTRIBUTOR, contributor.id,
+        )
     ).scalar_one_or_none()
     if row is None:
         row = StudyProgressAvailability(
@@ -928,9 +975,10 @@ def _upsert_state(
     now_utc: datetime,
 ) -> None:
     row = session.execute(
-        select(StudyProgressState)
-        .where(StudyProgressState.subject_id == subject.id)
-        .with_for_update()
+        _lock_unless_inserted(
+            select(StudyProgressState).where(StudyProgressState.subject_id == subject.id),
+            session, SUBJECT, subject.id,
+        )
     ).scalar_one_or_none()
     if row is None:
         row = StudyProgressState(subject_id=int(subject.id), created_at=now_utc)
@@ -961,9 +1009,10 @@ def _upsert_state(
 
 def _remove_usable_state(session: Session, subject_id: int) -> None:
     row = session.execute(
-        select(StudyProgressState)
-        .where(StudyProgressState.subject_id == subject_id)
-        .with_for_update()
+        _lock_unless_inserted(
+            select(StudyProgressState).where(StudyProgressState.subject_id == subject_id),
+            session, SUBJECT, subject_id,
+        )
     ).scalar_one_or_none()
     if row is not None:
         session.delete(row)
@@ -1055,6 +1104,7 @@ def finalize_native_mirror(
     try:
         # Flush both event ids and final CardProgress pointer/timestamp values.
         session.flush()
+        _use_stored_card_created_at(session, plan.cards_by_id)
 
         card_ids = sorted(plan.cards_by_id)
         final_progress_rows = tuple(
@@ -1139,13 +1189,15 @@ def finalize_native_mirror(
 
             prior_contributors = tuple(
                 session.execute(
-                    select(StudyProgressContributor)
-                    .where(StudyProgressContributor.subject_id == subject.id)
-                    .order_by(
-                        StudyProgressContributor.logical_card_key.asc(),
-                        StudyProgressContributor.id.asc(),
+                    _lock_unless_inserted(
+                        select(StudyProgressContributor)
+                        .where(StudyProgressContributor.subject_id == subject.id)
+                        .order_by(
+                            StudyProgressContributor.logical_card_key.asc(),
+                            StudyProgressContributor.id.asc(),
+                        ),
+                        session, SUBJECT, subject.id,
                     )
-                    .with_for_update()
                 ).scalars()
             )
             prior_by_progress_id = {
@@ -1153,6 +1205,7 @@ def finalize_native_mirror(
                 for row in prior_contributors
                 if row.live_card_progress_id is not None
             }
+            created_contributors: list[StudyProgressContributor] = []
             active_prior_contributors = tuple(
                 row
                 for row in prior_contributors
@@ -1291,6 +1344,7 @@ def finalize_native_mirror(
                         updated_at=finalized_at,
                     )
                     session.add(contributor)
+                    created_contributors.append(contributor)
                 else:
                     if int(contributor.subject_id) != int(subject.id):
                         raise _fail("A live CardProgress contributor is attached elsewhere.")
@@ -1310,6 +1364,8 @@ def finalize_native_mirror(
                 contributors_by_progress_id[progress_id] = contributor
 
             session.flush()
+            for created in created_contributors:
+                remember_inserted(session, CONTRIBUTOR, created.id)
 
             for progress in rows:
                 progress_id = int(progress.id)
@@ -1368,12 +1424,13 @@ def finalize_native_mirror(
                 else:
                     contributor.lineage_vector_hash = lineage_hash
                     availability = session.execute(
-                        select(StudyProgressAvailability)
-                        .where(
-                            StudyProgressAvailability.contributor_id
-                            == contributor.id
+                        _lock_unless_inserted(
+                            select(StudyProgressAvailability).where(
+                                StudyProgressAvailability.contributor_id
+                                == contributor.id
+                            ),
+                            session, CONTRIBUTOR, contributor.id,
                         )
-                        .with_for_update()
                     ).scalar_one_or_none()
                     if availability is not None:
                         session.delete(availability)
@@ -1492,6 +1549,244 @@ def finalize_native_mirror(
             ",".join(result.statuses),
         )
         return result
+    except Exception:
+        _metric("internal_error")
+        raise
+
+
+_BULK_CHUNK = 500
+
+
+@dataclass(frozen=True)
+class PristineMaterializationItem:
+    """One pristine Note whose compatibility progress was just inserted."""
+
+    note_id: str
+    subject: StudyProgressSubject
+    cards: tuple[Card, ...]
+    progress_rows: tuple[CardProgress, ...]
+
+
+def finalize_pristine_materialization(
+    session: Session,
+    *,
+    learner_user_id: int,
+    items: Sequence[PristineMaterializationItem],
+    provenance_code: str,
+    now_utc: datetime | None = None,
+) -> dict[int, bytes]:
+    """Set-wise ``finalize_native_mirror`` for first-state materialization.
+
+    Writes exactly what ``finalize_native_mirror`` writes for a locked
+    pristine subject whose new CardProgress rows carry no event pointer, no
+    prior contributor, no lineage row and one external context
+    (``provenance_code``, ``HISTORY_NATIVE_COMPLETE``) per Card: one ACTIVE
+    contributor and one availability row per Card, one current state and the
+    subject envelope — with a few set-wise statements instead of about twenty
+    per Note. Any mapping failure or sibling divergence refuses the whole
+    batch, as the per-Note path does. Returns each subject's state hash.
+    """
+
+    finalized_at = _utc_naive(now_utc)
+    lineage_hash = canonical_typed_document(
+        {"references": [{"ref_kind": "LAST_REVIEW_EVENT", "source_row_key": None, "ref_status": "ABSENT"}]},
+        too_large_code="STATE_PAYLOAD_TOO_LARGE",
+    ).digest
+    try:
+        _use_stored_card_created_at(
+            session, {str(card.id): card for item in items for card in item.cards}
+        )
+        contributor_values: list[dict[str, Any]] = []
+        availability_by_progress_id: dict[int, tuple[int, int, Any]] = {}
+        state_values: list[dict[str, Any]] = []
+        state_hash_by_subject: dict[int, bytes] = {}
+        statuses: list[str] = []
+        for item in sorted(items, key=lambda value: value.note_id.encode("utf-8")):
+            subject = item.subject
+            if int(subject.learner_user_id) != int(learner_user_id):
+                raise _fail("A pristine subject belongs to another learner.")
+            generation = int(subject.subject_generation)
+            mirror_revision = int(subject.mirror_revision) + 1
+            cards_by_id = {str(card.id): card for card in item.cards}
+            rows = sorted(
+                item.progress_rows,
+                key=lambda row: (str(row.card_id).encode("utf-8"), int(row.id)),
+            )
+            if not rows or {str(row.card_id) for row in rows} != set(cards_by_id):
+                raise StudyAuthorityFenceError(
+                    "INCOMPLETE_AUTHORITY_COVERAGE",
+                    "New Note authority requires every generated Card.",
+                )
+            mapped_rows: list[MappedCardProgress] = []
+            raw_hash_by_progress_id: dict[int, bytes] = {}
+            for progress in rows:
+                card = cards_by_id[str(progress.card_id)]
+                mapped = map_card_progress(
+                    progress,
+                    card_created_at=card.created_at,
+                    card_order_key=str(card.id),
+                )
+                if isinstance(mapped, MappingFailure):
+                    if mapped.raw is None:
+                        raise _fail(
+                            f"CardProgress {int(progress.id)} could not retain bounded raw "
+                            f"evidence: {mapped.code}."
+                        )
+                    raise StudyAuthorityFenceError(
+                        "AUTHORITY_MATERIALIZATION_INCOMPLETE",
+                        "New Note authority did not build complete canonical state.",
+                    )
+                evidence = build_contributor_evidence(
+                    mapped,
+                    progress,
+                    subject_generation=generation,
+                    pointer_status="ABSENT",
+                    history_completeness_code="HISTORY_NATIVE_COMPLETE",
+                    current_provenance_code=provenance_code,
+                    lineage_vector_hash=lineage_hash,
+                )
+                contributor_values.append({
+                    "subject_id": int(subject.id),
+                    "subject_generation": evidence.subject_generation,
+                    "source_progress_id": evidence.source_progress_id,
+                    "live_card_progress_id": evidence.live_card_progress_id,
+                    "logical_card_key": evidence.logical_card_key,
+                    "live_card_id": evidence.live_card_id,
+                    "card_progress_revision": evidence.card_progress_revision,
+                    "raw_schema_version": evidence.raw_schema_version,
+                    "storage_codec": evidence.storage_codec,
+                    "raw_payload": evidence.raw.payload,
+                    "raw_payload_size": evidence.raw.size,
+                    "raw_progress_hash": evidence.raw.digest,
+                    "pointer_status": evidence.pointer_status,
+                    "history_completeness_code": evidence.history_completeness_code,
+                    "current_provenance_code": evidence.current_provenance_code,
+                    "lineage_vector_hash": evidence.lineage_vector_hash,
+                    "contributor_status": evidence.contributor_status,
+                    "detached_at": None,
+                    "created_at": finalized_at,
+                    "updated_at": finalized_at,
+                })
+                availability_by_progress_id[int(progress.id)] = (
+                    int(subject.id), generation, mapped.availability
+                )
+                raw_hash_by_progress_id[int(progress.id)] = evidence.raw.digest
+                mapped_rows.append(mapped)
+            if len({value.semantic_state_hash for value in mapped_rows}) != 1:
+                raise StudyAuthorityFenceError(
+                    "AUTHORITY_MATERIALIZATION_INCOMPLETE",
+                    "New Note authority did not build complete canonical state.",
+                )
+            # Every contributor carries the same ABSENT-pointer lineage.
+            status = "MIRRORED_SINGLE" if len(rows) == 1 else "MIRRORED_EQUIVALENT_FANIN"
+            first = mapped_rows[0]
+            state_values.append({
+                "subject_id": int(subject.id),
+                "subject_generation": generation,
+                "mirror_revision": mirror_revision,
+                "algorithm_key": first.algorithm_key,
+                "algorithm_version": first.algorithm_version,
+                "state_schema_version": first.state_schema_version,
+                "storage_codec": first.storage_codec,
+                "state_payload": first.state.payload,
+                "state_payload_size": first.state.size,
+                "algorithm_state_hash": first.algorithm_state_hash,
+                "semantic_state_hash": first.semantic_state_hash,
+                "created_at": finalized_at,
+                "updated_at": finalized_at,
+            })
+            state_hash_by_subject[int(subject.id)] = first.semantic_state_hash
+            subject.live_note_id = item.note_id
+            subject.subject_generation = generation
+            subject.mirror_revision = mirror_revision
+            subject.status_code = status
+            subject.contributor_count = len(rows)
+            subject.authority_vector_hash = canonical_document(
+                {
+                    "contributors": [
+                        {
+                            "card_id": str(row.card_id),
+                            "progress_id": str(row.id),
+                            "raw_progress_hash": raw_hash_by_progress_id[int(row.id)].hex(),
+                            "revision": str(row.revision),
+                        }
+                        for row in rows
+                    ]
+                },
+                too_large_code="STATE_PAYLOAD_TOO_LARGE",
+            ).digest
+            subject.lineage_vector_hash = canonical_document(
+                {
+                    "contributors": [
+                        {
+                            "card_id": str(row.card_id),
+                            "lineage_vector_hash": lineage_hash.hex(),
+                            "progress_id": str(row.id),
+                        }
+                        for row in rows
+                    ]
+                },
+                too_large_code="STATE_PAYLOAD_TOO_LARGE",
+            ).digest
+            subject.mapper_version = MAPPER_VERSION
+            subject.last_mirrored_at = finalized_at
+            subject.updated_at = finalized_at
+            statuses.append(status)
+
+        contributor_table = StudyProgressContributor.__table__
+        for start in range(0, len(contributor_values), _BULK_CHUNK):
+            session.execute(contributor_table.insert(), contributor_values[start:start + _BULK_CHUNK])
+        progress_ids = sorted(availability_by_progress_id)
+        contributor_id_by_progress: dict[int, int] = {}
+        for start in range(0, len(progress_ids), _BULK_CHUNK):
+            chunk = progress_ids[start:start + _BULK_CHUNK]
+            contributor_id_by_progress.update(
+                (int(progress_id), int(contributor_id))
+                for contributor_id, progress_id in session.execute(
+                    select(StudyProgressContributor.id, StudyProgressContributor.live_card_progress_id)
+                    .where(StudyProgressContributor.live_card_progress_id.in_(chunk))
+                ).all()
+            )
+        if set(contributor_id_by_progress) != set(progress_ids):
+            raise _fail("A bulk-inserted contributor could not be read back.")
+        availability_values = []
+        for progress_id in progress_ids:
+            subject_id, generation, projection = availability_by_progress_id[progress_id]
+            availability_values.append({
+                "contributor_id": contributor_id_by_progress[progress_id],
+                "subject_id": subject_id,
+                "subject_generation": generation,
+                "projection_version": projection.projection_version,
+                "normalized_queue": projection.normalized_queue,
+                "due_at": projection.due_at,
+                "due_day": projection.due_day,
+                "is_suspended": projection.is_suspended,
+                "is_buried": projection.is_buried,
+                "buried_until_day": projection.buried_until_day,
+                "card_created_at": projection.card_created_at,
+                "card_order_key": projection.card_order_key,
+                "state_schema_version": projection.state_schema_version,
+                "semantic_state_hash": projection.semantic_state_hash,
+                "created_at": finalized_at,
+                "updated_at": finalized_at,
+            })
+        for table, values in (
+            (StudyProgressAvailability.__table__, availability_values),
+            (StudyProgressState.__table__, state_values),
+        ):
+            for start in range(0, len(values), _BULK_CHUNK):
+                session.execute(table.insert(), values[start:start + _BULK_CHUNK])
+        session.flush()
+        for status in statuses:
+            _metric("finalize", status=status)
+        current_app.logger.info(
+            "study_progress_shadow_mirror finalized subjects=%d contributors=%d "
+            "facts=0 quarantines=0 statuses=%s (pristine bulk)",
+            len(statuses),
+            len(contributor_values),
+            ",".join(statuses),
+        )
+        return state_hash_by_subject
     except Exception:
         _metric("internal_error")
         raise

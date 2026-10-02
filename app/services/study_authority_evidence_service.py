@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
+from types import SimpleNamespace
 from typing import Any, Mapping
 
 from sqlalchemy import select
@@ -25,6 +26,7 @@ from app.repositories.study_authority_repository import (
     StudyAuthorityRoute,
 )
 from app.services.study_authority_write_service import StudyAuthorityWriteResult
+from app.services.study_note_card_projection import NoteCardProjection
 from app.services.study_progress_contract import MAPPER_VERSION
 from app.services.study_progress_history_service import (
     StudyProgressHistoryError,
@@ -100,6 +102,116 @@ def _lineage_material(row: StudyProgressLineageRef) -> dict[str, Any]:
         "ref_status": row.ref_status,
         "occurred_at": row.occurred_at,
     }
+
+
+def _stored_lineage_digest(
+    rows: list[StudyProgressLineageRef], *, pointer_status: str
+) -> bytes:
+    """Recompute ``contributor.lineage_vector_hash`` as P4-10 reconciliation does."""
+
+    material = [_lineage_material(row) for row in rows]
+    if pointer_status == "ABSENT" and not any(
+        value["ref_kind"] == "LAST_REVIEW_EVENT" for value in material
+    ):
+        material.append(
+            {"ref_kind": "LAST_REVIEW_EVENT", "source_row_key": None, "ref_status": "ABSENT"}
+        )
+    material.sort(
+        key=lambda value: (
+            str(value.get("ref_kind") or ""),
+            str(value.get("source_row_key") or ""),
+        )
+    )
+    return canonical_typed_document(
+        {"references": material},
+        too_large_code="STATE_PAYLOAD_TOO_LARGE",
+    ).digest
+
+
+def _lineage_sort_key(row: StudyProgressLineageRef):
+    return (
+        int(row.contributor_id),
+        str(row.ref_kind),
+        bytes(row.source_row_key),
+        int(row.id),
+    )
+
+
+def _lock_current_lineage_refs(
+    session: Session, *, contributor_ids: tuple[int, ...]
+) -> tuple[StudyProgressLineageRef, ...]:
+    """Lock the current lineage rows of already-locked contributors.
+
+    A range read ``contributor_id IN (...) FOR UPDATE`` takes next-key and gap
+    locks under REPEATABLE READ. New contributors of different learners sit at
+    the end of the index, so two learners' first reviews each lock that gap and
+    then deadlock on their inserts. Instead, the rows visible in the snapshot
+    are locked by primary key (record locks only) and proved current: their
+    digest must equal each contributor's current ``lineage_vector_hash``, which
+    every lineage writer updates in the same transaction. Any difference, such
+    as rows committed after the snapshot, falls back to the range read.
+    """
+
+    if not contributor_ids:
+        return ()
+    # populate_existing below must never discard unflushed lineage changes.
+    session.flush()
+    current = {
+        int(row.id): row
+        for row in session.execute(
+            select(
+                StudyProgressContributor.id,
+                StudyProgressContributor.lineage_vector_hash,
+                StudyProgressContributor.pointer_status,
+            )
+            .where(StudyProgressContributor.id.in_(contributor_ids))
+            .with_for_update()
+        )
+    }
+    visible_ids = sorted(
+        int(value)
+        for value in session.execute(
+            select(StudyProgressLineageRef.id).where(
+                StudyProgressLineageRef.contributor_id.in_(contributor_ids)
+            )
+        ).scalars()
+    )
+    rows: list[StudyProgressLineageRef] = []
+    if visible_ids:
+        rows = list(
+            session.execute(
+                select(StudyProgressLineageRef)
+                .where(StudyProgressLineageRef.id.in_(visible_ids))
+                .order_by(StudyProgressLineageRef.id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars()
+        )
+    by_contributor: dict[int, list[StudyProgressLineageRef]] = defaultdict(list)
+    for row in rows:
+        by_contributor[int(row.contributor_id)].append(row)
+    try:
+        proven = len(rows) == len(visible_ids) and set(current) == set(contributor_ids) and all(
+            current[contributor_id].lineage_vector_hash is not None
+            and _stored_lineage_digest(
+                by_contributor.get(contributor_id, []),
+                pointer_status=str(current[contributor_id].pointer_status),
+            )
+            == bytes(current[contributor_id].lineage_vector_hash)
+            for contributor_id in contributor_ids
+        )
+    except StudyProgressCodecError:
+        proven = False
+    if not proven:
+        rows = list(
+            session.execute(
+                select(StudyProgressLineageRef)
+                .where(StudyProgressLineageRef.contributor_id.in_(contributor_ids))
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars()
+        )
+    return tuple(sorted(rows, key=_lineage_sort_key))
 
 
 def _pointer_evidence(
@@ -380,19 +492,7 @@ def finalize_study_authority_evidence(
             if row.id is not None
         )
     )
-    lineage_rows = tuple(
-        session.execute(
-            select(StudyProgressLineageRef)
-            .where(StudyProgressLineageRef.contributor_id.in_(contributor_ids))
-            .order_by(
-                StudyProgressLineageRef.contributor_id.asc(),
-                StudyProgressLineageRef.ref_kind.asc(),
-                StudyProgressLineageRef.source_row_key.asc(),
-                StudyProgressLineageRef.id.asc(),
-            )
-            .with_for_update()
-        ).scalars()
-    )
+    lineage_rows = _lock_current_lineage_refs(session, contributor_ids=contributor_ids)
     lineage_by_contributor_id: dict[int, list[StudyProgressLineageRef]] = defaultdict(list)
     for row in lineage_rows:
         lineage_by_contributor_id[int(row.contributor_id)].append(row)
@@ -532,6 +632,27 @@ def finalize_study_authority_evidence(
         )
         lineage_hashes.append(lineage_hash)
 
+    return _finalize_subject_vectors(
+        subject=subject,
+        state=state,
+        authority_material=authority_material,
+        lineage_material=lineage_material,
+        lineage_hashes=lineage_hashes,
+        contributor_by_card_id=compatibility.contributor_by_card_id,
+        now_utc=now_utc,
+    )
+
+
+def _finalize_subject_vectors(
+    *,
+    subject,
+    state,
+    authority_material: list[dict[str, str]],
+    lineage_material: list[dict[str, str]],
+    lineage_hashes: list[bytes],
+    contributor_by_card_id: Mapping[str, StudyProgressContributor],
+    now_utc: datetime,
+) -> StudyAuthorityEvidenceResult:
     authority_vector_hash = canonical_document(
         {"contributors": authority_material},
         too_large_code="STATE_PAYLOAD_TOO_LARGE",
@@ -540,7 +661,7 @@ def finalize_study_authority_evidence(
         {"contributors": lineage_material},
         too_large_code="STATE_PAYLOAD_TOO_LARGE",
     ).digest
-    if len(expected_cards) == 1:
+    if len(lineage_hashes) == 1:
         status = "MIRRORED_SINGLE"
     elif len(set(lineage_hashes)) == 1:
         status = "MIRRORED_EQUIVALENT_FANIN"
@@ -550,7 +671,7 @@ def finalize_study_authority_evidence(
     next_mirror_revision = int(subject.mirror_revision) + 1
     subject.mirror_revision = next_mirror_revision
     subject.status_code = status
-    subject.contributor_count = len(expected_cards)
+    subject.contributor_count = len(lineage_hashes)
     subject.authority_vector_hash = authority_vector_hash
     subject.lineage_vector_hash = lineage_vector_hash
     subject.mapper_version = MAPPER_VERSION
@@ -562,8 +683,342 @@ def finalize_study_authority_evidence(
     return StudyAuthorityEvidenceResult(
         mirror_revision=next_mirror_revision,
         subject_status=status,
-        contributor_count=len(expected_cards),
+        contributor_count=len(lineage_hashes),
         authority_vector_hash=authority_vector_hash,
         lineage_vector_hash=lineage_vector_hash,
+        contributor_by_card_id=contributor_by_card_id,
+    )
+
+
+def finalize_study_authority_canonical_evidence(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked: LockedStudyAuthoritySubject,
+    siblings: LockedStudyAuthoritySiblings,
+    compatibility: LockedStudyAuthorityCompatibility,
+    write_result: StudyAuthorityWriteResult,
+    projections_by_card_id: Mapping[str, NoteCardProjection],
+    review_event: ReviewEvent | None,
+    now_utc: datetime,
+) -> StudyAuthorityEvidenceResult:
+    """CANONICAL_V1 counterpart of ``finalize_study_authority_evidence``.
+
+    Availability of every sibling comes from ``project_note_card`` over the
+    new state (ADR P9-03 §2.2). Raw CardProgress evidence on contributors is
+    history and is left untouched (§2.9). Only the reviewed Card's pointer,
+    provenance and lineage move; siblings keep theirs, exactly as the
+    projection path leaves an unchanged sibling pointer.
+    """
+
+    if (
+        not isinstance(route, StudyAuthorityRoute)
+        or route.mode_code != "NOTE"
+        or route.storage_profile == "PROJECTION_V1"
+    ):
+        raise _fail(
+            "AUTHORITY_MODE_CONFLICT",
+            "Canonical evidence finalization requires a CANONICAL_V1 NOTE route.",
+        )
+    if not isinstance(now_utc, datetime) or now_utc.tzinfo is not None:
+        raise _fail(
+            "INVALID_AUTHORITY_TIME", "Authority evidence time must be naive UTC."
+        )
+    subject = locked.subject
+    state = locked.state
+    if subject.id is None or state is None or (
+        review_event is not None and review_event.id is None
+    ):
+        raise _fail(
+            "UNFLUSHED_AUTHORITY_EVIDENCE",
+            "Subject, state and ReviewEvent must be persisted before finalization.",
+        )
+    subject_id = int(subject.id)
+    generation = int(subject.subject_generation)
+    if (
+        int(subject.learner_user_id) != route.learner_user_id
+        or int(siblings.subject_id) != subject_id
+        or int(compatibility.subject_id) != subject_id
+        or int(siblings.subject_generation) != generation
+        or int(compatibility.subject_generation) != generation
+        or siblings.learner_user_id != route.learner_user_id
+        or compatibility.learner_user_id != route.learner_user_id
+    ):
+        raise _fail(
+            "AUTHORITY_CONTEXT_DIVERGED",
+            "Evidence inputs do not describe one fenced learner/Note subject.",
+        )
+    if review_event is not None and int(review_event.user_id) != route.learner_user_id:
+        raise _fail("HISTORY_LEARNER_MISMATCH", "ReviewEvent belongs to another learner.")
+    card_by_id = {str(card.id): card for card in siblings.cards}
+    expected_cards = set(card_by_id)
+    event_card_id = str(review_event.card_id or "") if review_event is not None else None
+    if review_event is not None and event_card_id not in expected_cards:
+        raise _fail(
+            "CARD_OUTSIDE_AUTHORITY_SUBJECT",
+            "ReviewEvent Card is outside the locked authority subject.",
+        )
+    if int(locked.token.authority_revision) != int(write_result.authority_revision):
+        raise _fail(
+            "AUTHORITY_REVISION_DIVERGED",
+            "Authority token changed after the material write.",
+        )
+    if (
+        bytes(locked.token.semantic_state_hash or b"") != write_result.semantic_state_hash
+        or bytes(state.semantic_state_hash) != write_result.semantic_state_hash
+        or write_result.state is not state
+        or write_result.projected_progress
+    ):
+        raise _fail(
+            "AUTHORITY_STATE_DIVERGED",
+            "Authority state/token differs from the material-write result.",
+        )
+    if int(subject.mirror_revision) >= _MYSQL_SIGNED_BIGINT_MAX:
+        raise _fail("MIRROR_REVISION_EXHAUSTED", "Derived mirror revision cannot advance.")
+    if (
+        int(subject.mirror_revision) != compatibility.expected_mirror_revision
+        or int(state.mirror_revision) != compatibility.expected_mirror_revision
+    ):
+        raise _fail(
+            "STALE_AUTHORITY_EVIDENCE",
+            "Derived mirror evidence was already finalized or changed after locking.",
+        )
+    if (
+        set(compatibility.contributor_by_card_id) != expected_cards
+        or set(projections_by_card_id) != expected_cards
+    ):
+        raise _fail(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "Evidence finalization requires the complete canonical sibling vector.",
+        )
+
+    new_provenance_code = None
+    event_pointer = None
+    if review_event is not None:
+        try:
+            new_provenance_code, _provenance, _runtime = native_review_event_provenance(
+                review_event
+            )
+        except StudyProgressHistoryError as exc:
+            raise _fail(exc.code, str(exc)) from exc
+        event_pointer = _pointer_evidence(
+            SimpleNamespace(
+                last_review_event_id=int(review_event.id),
+                user_id=route.learner_user_id,
+                card_id=event_card_id,
+            ),
+            {int(review_event.id): review_event},
+        )
+
+    contributor_ids = tuple(
+        sorted(int(row.id) for row in compatibility.contributor_by_card_id.values())
+    )
+    lineage_rows = _lock_current_lineage_refs(session, contributor_ids=contributor_ids)
+    lineage_by_contributor_id: dict[int, list[StudyProgressLineageRef]] = defaultdict(list)
+    for row in lineage_rows:
+        lineage_by_contributor_id[int(row.contributor_id)].append(row)
+
+    authority_material: list[dict[str, str]] = []
+    lineage_material: list[dict[str, str]] = []
+    lineage_hashes: list[bytes] = []
+    for card_id in sorted(expected_cards, key=lambda value: value.encode("utf-8")):
+        contributor = compatibility.contributor_by_card_id[card_id]
+        availability = compatibility.availability_by_contributor_id.get(int(contributor.id))
+        if availability is None:
+            raise _fail(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                f"Card {card_id} has no locked availability evidence.",
+            )
+        projected = projections_by_card_id[card_id]
+        if projected.semantic_state_hash != write_result.semantic_state_hash:
+            raise _fail(
+                "AUTHORITY_PROJECTION_DIVERGED",
+                f"Card {card_id} differs from the authoritative Note state.",
+            )
+        if card_id == event_card_id:
+            pointer_status, pointer = event_pointer
+            lineage_hash = _sync_pointer_lineage(
+                session,
+                contributor=contributor,
+                generation=generation,
+                pointer=pointer,
+                existing=tuple(lineage_by_contributor_id.get(int(contributor.id), ())),
+                now_utc=now_utc,
+            )
+            inherited = str(contributor.history_completeness_code)
+            contributor.pointer_status = pointer_status
+            contributor.current_provenance_code = new_provenance_code
+            contributor.history_completeness_code = (
+                "HISTORY_NATIVE_COMPLETE"
+                if inherited == "HISTORY_NATIVE_COMPLETE"
+                else "HISTORY_MIXED_PARTIAL"
+            )
+            contributor.lineage_vector_hash = lineage_hash
+        else:
+            lineage_hash = bytes(contributor.lineage_vector_hash)
+        contributor.updated_at = now_utc
+
+        expected = projected.availability
+        availability.subject_generation = generation
+        availability.projection_version = expected.projection_version
+        availability.normalized_queue = expected.normalized_queue
+        availability.due_at = expected.due_at
+        availability.due_day = expected.due_day
+        availability.is_suspended = expected.is_suspended
+        availability.is_buried = expected.is_buried
+        availability.buried_until_day = expected.buried_until_day
+        availability.card_created_at = expected.card_created_at
+        availability.card_order_key = expected.card_order_key
+        availability.state_schema_version = expected.state_schema_version
+        availability.semantic_state_hash = expected.semantic_state_hash
+        availability.updated_at = now_utc
+
+        authority_material.append(
+            {
+                "card_id": card_id,
+                "contributor_id": str(contributor.id),
+                "evidence": "CANONICAL",
+                "semantic_state_hash": expected.semantic_state_hash.hex(),
+            }
+        )
+        lineage_material.append(
+            {
+                "card_id": card_id,
+                "contributor_id": str(contributor.id),
+                "lineage_vector_hash": lineage_hash.hex(),
+            }
+        )
+        lineage_hashes.append(lineage_hash)
+
+    return _finalize_subject_vectors(
+        subject=subject,
+        state=state,
+        authority_material=authority_material,
+        lineage_material=lineage_material,
+        lineage_hashes=lineage_hashes,
         contributor_by_card_id=compatibility.contributor_by_card_id,
+        now_utc=now_utc,
+    )
+
+
+def _current_pointer(session: Session, contributor: StudyProgressContributor) -> dict[str, Any]:
+    """The contributor's current event pointer, as the mirror's lineage sync takes it."""
+
+    row = session.execute(
+        select(StudyProgressLineageRef)
+        .where(
+            StudyProgressLineageRef.contributor_id == int(contributor.id),
+            StudyProgressLineageRef.ref_kind == "LAST_REVIEW_EVENT",
+        )
+        .order_by(StudyProgressLineageRef.id.asc())
+        .with_for_update()
+    ).scalars().first()
+    if row is None:
+        return {"ref_kind": "LAST_REVIEW_EVENT", "source_row_key": None, "ref_status": "ABSENT"}
+    return {
+        "ref_kind": "LAST_REVIEW_EVENT",
+        "source_row_key": bytes(row.source_row_key).decode("utf-8"),
+        "ref_status": str(row.ref_status),
+        "occurred_at": row.occurred_at,
+        "source_payload_hash": (
+            bytes(row.source_payload_hash) if row.source_payload_hash is not None else None
+        ),
+    }
+
+
+def finalize_canonical_external_evidence(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked: LockedStudyAuthoritySubject,
+    siblings: LockedStudyAuthoritySiblings,
+    compatibility: LockedStudyAuthorityCompatibility,
+    projections_by_card_id: Mapping[str, NoteCardProjection] | None,
+    applied_contexts: Mapping[str, Any],
+    now_utc: datetime,
+) -> StudyAuthorityEvidenceResult:
+    """CANONICAL_V1 counterpart of ``finalize_external_progress_mirror``.
+
+    ``projections_by_card_id`` is None when the snapshot only confirmed the
+    current state. Contributors named in ``applied_contexts`` take the
+    external provenance and lineage; availability follows the new state.
+    """
+
+    from app.services.study_progress_shadow_mirror_service import (
+        _sync_pointer_lineage as sync_external_lineage,
+    )
+
+    if route.storage_profile == "PROJECTION_V1" or locked.state is None:
+        raise _fail(
+            "AUTHORITY_MODE_CONFLICT",
+            "Canonical external evidence requires a CANONICAL_V1 NOTE state.",
+        )
+    card_ids = set(siblings.card_ids)
+    if not applied_contexts or not set(applied_contexts).issubset(card_ids) or (
+        set(compatibility.contributor_by_card_id) != card_ids
+    ):
+        raise _fail(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "External evidence requires contexts inside the locked sibling vector.",
+        )
+    generation = int(locked.subject.subject_generation)
+    authority_material: list[dict[str, str]] = []
+    lineage_material: list[dict[str, str]] = []
+    lineage_hashes: list[bytes] = []
+    for card_id in sorted(card_ids, key=lambda value: value.encode("utf-8")):
+        contributor = compatibility.contributor_by_card_id[card_id]
+        context = applied_contexts.get(card_id)
+        if context is not None:
+            inherited = str(contributor.history_completeness_code)
+            requested = str(context.history_completeness_code)
+            contributor.history_completeness_code = (
+                "HISTORY_MIXED_PARTIAL"
+                if requested == "HISTORY_SNAPSHOT_ONLY"
+                and inherited not in {"HISTORY_UNKNOWN", "HISTORY_SNAPSHOT_ONLY"}
+                else requested
+            )
+            contributor.current_provenance_code = str(context.provenance_code)
+            contributor.lineage_vector_hash = sync_external_lineage(
+                session,
+                contributor=contributor,
+                generation=generation,
+                pointer=_current_pointer(session, contributor),
+                external_context=context,
+                now_utc=now_utc,
+            )
+        contributor.updated_at = now_utc
+        if projections_by_card_id is not None:
+            expected = projections_by_card_id[card_id].availability
+            availability = compatibility.availability_by_contributor_id[int(contributor.id)]
+            availability.normalized_queue = expected.normalized_queue
+            availability.due_at = expected.due_at
+            availability.due_day = expected.due_day
+            availability.is_suspended = expected.is_suspended
+            availability.is_buried = expected.is_buried
+            availability.buried_until_day = expected.buried_until_day
+            availability.card_created_at = expected.card_created_at
+            availability.card_order_key = expected.card_order_key
+            availability.state_schema_version = expected.state_schema_version
+            availability.semantic_state_hash = expected.semantic_state_hash
+            availability.updated_at = now_utc
+        authority_material.append({
+            "card_id": card_id,
+            "contributor_id": str(contributor.id),
+            "evidence": "CANONICAL",
+            "semantic_state_hash": bytes(locked.state.semantic_state_hash).hex(),
+        })
+        lineage_material.append({
+            "card_id": card_id,
+            "contributor_id": str(contributor.id),
+            "lineage_vector_hash": bytes(contributor.lineage_vector_hash).hex(),
+        })
+        lineage_hashes.append(bytes(contributor.lineage_vector_hash))
+    return _finalize_subject_vectors(
+        subject=locked.subject,
+        state=locked.state,
+        authority_material=authority_material,
+        lineage_material=lineage_material,
+        lineage_hashes=lineage_hashes,
+        contributor_by_card_id=compatibility.contributor_by_card_id,
+        now_utc=now_utc,
     )

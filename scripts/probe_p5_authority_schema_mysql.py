@@ -2311,7 +2311,7 @@ def run_probe() -> dict[str, object]:
                 raise AssertionError("Empty-only downgrade left authority tables.")
             upgrade(directory="migrations")
             head = db.session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-            if head != "20260925_000045":
+            if head != "20260930_000046":
                 raise AssertionError(f"Unexpected migration head: {head}")
             final_indexes = {
                 item["name"]: item["column_names"]

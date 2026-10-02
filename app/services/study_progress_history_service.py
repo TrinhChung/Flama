@@ -219,12 +219,19 @@ def append_native_history_fact(
     *,
     command: NativeHistoryFactInput,
     now_utc: datetime,
+    event_created_in_transaction: bool = False,
 ) -> NativeHistoryFactResult:
     """Stage one immutable native history fact, or return its exact replay.
 
     The subject and contributor must already be locked by the caller.  An
     existing fact is accepted only when it points to the same ReviewEvent and
     has the same canonical evidence payload.
+
+    ``event_created_in_transaction`` means the caller inserted the ReviewEvent
+    in the current, uncommitted transaction, so no committed fact can refer to
+    it and the replay lookup is skipped. That lookup would lock the absent
+    unique key's gap, which other learners' fact inserts share (deadlock).
+    The unique constraint still rejects a duplicate.
     """
 
     learner_user_id = command.learner_user_id
@@ -342,7 +349,7 @@ def append_native_history_fact(
     gap_reason_code = (
         None if completeness == "HISTORY_NATIVE_COMPLETE" else "LEGACY_GAP"
     )
-    existing = session.execute(
+    existing = None if event_created_in_transaction else session.execute(
         select(StudyProgressHistoryFact)
         .where(
             StudyProgressHistoryFact.learner_user_id == learner_user_id,

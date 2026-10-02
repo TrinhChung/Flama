@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   saveSession: vi.fn(),
   removeSession: vi.fn(),
   removeSessionIfMatches: vi.fn(),
+  quarantineSession: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -61,6 +62,7 @@ vi.mock('../session/sessionStore', () => ({
   saveStudySession: mocks.saveSession,
   removeStudySession: mocks.removeSession,
   removeStudySessionIfMatches: mocks.removeSessionIfMatches,
+  quarantineStudySession: mocks.quarantineSession,
   scopeKey: (userId: number, scope: string, scopeId: string) => (
     `user:${userId}:${scope}:${scopeId}`
   ),
@@ -444,6 +446,7 @@ beforeEach(() => {
   mocks.saveSession.mockReset().mockResolvedValue(true)
   mocks.removeSession.mockReset().mockResolvedValue(undefined)
   mocks.removeSessionIfMatches.mockReset().mockResolvedValue(undefined)
+  mocks.quarantineSession.mockReset().mockResolvedValue(undefined)
   mocks.holdLease.mockReset().mockImplementation((
     _manager: LockManager | undefined,
     _name: string,
@@ -1120,6 +1123,64 @@ describe('useStudySession cross-tab ownership', () => {
     await waitFor(() => expect(latest.receipt?.commit_id).toBe('00000000-0000-4000-8000-000000000001'))
     expect(latest.session?.events).toHaveLength(1)
     expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1')
+  })
+
+  async function pendingAfterLostReceipt() {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    mocks.mutate.mockImplementation((path: string) => {
+      if (path === '/api/study/sessions/session-1/commit') {
+        return Promise.reject(new TypeError('Network unavailable'))
+      }
+      if (path === '/api/study/sessions') return Promise.resolve(snapshot())
+      throw new Error(`Unexpected mutation: ${path}`)
+    })
+    await act(async () => {
+      await expect(latest.commit({ reason: 'auto_finish' })).rejects.toThrow('Network unavailable')
+    })
+    await waitFor(() => expect(latest.session?.status).toBe('pending_commit'))
+  }
+
+  function alreadyCommitted(details: StudySessionCommitReceipt) {
+    return async (path: string) => {
+      if (path !== '/api/study/sessions/session-1/commit') throw new Error(`Unexpected mutation: ${path}`)
+      const { ApiError } = await import('@/shared/api/client')
+      throw new ApiError('Study session was already committed.', 409, 'SESSION_ALREADY_COMMITTED', undefined, details)
+    }
+  }
+
+  it('resends a pending commit with its original reason and settles on the stored receipt', async () => {
+    await pendingAfterLostReceipt()
+    const stored = { ...receipt(), commit_reason: 'auto_finish' as const }
+    mocks.mutate.mockImplementation(alreadyCommitted(stored))
+
+    await act(async () => {
+      await expect(latest.commit({ reason: 'manual_exit' })).resolves.toEqual(stored)
+    })
+    const [, , payload] = mocks.mutate.mock.calls.at(-1)!
+    expect(payload.commit_reason).toBe('auto_finish')
+    expect(latest.receipt).toEqual(stored)
+    expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1')
+    expect(mocks.quarantineSession).not.toHaveBeenCalled()
+  })
+
+  it('quarantines local answers a committed lease does not cover instead of deleting them', async () => {
+    await pendingAfterLostReceipt()
+    mocks.mutate.mockImplementation(alreadyCommitted({ ...receipt(), applied_event_count: 0 }))
+
+    await act(async () => {
+      await expect(latest.commit({ reason: 'manual_exit' })).rejects.toMatchObject({
+        code: 'SESSION_ALREADY_COMMITTED',
+      })
+    })
+    expect(mocks.quarantineSession).toHaveBeenCalledWith(
+      'user:7:deck:12',
+      expect.objectContaining({ events: expect.arrayContaining([expect.anything()]) }),
+      expect.objectContaining({ reason: 'COMMITTED_ELSEWHERE' }),
+    )
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+    expect(latest.error).toMatchObject({ code: 'SESSION_ALREADY_COMMITTED' })
   })
 
   it('pagehide waits for the answer owner and flushes the latest durable state', async () => {

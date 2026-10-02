@@ -7,7 +7,7 @@ does not commit or switch enrollment.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping
@@ -15,7 +15,13 @@ from typing import Mapping
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.services.study_progress_contract import RAW_SCHEMA_VERSION, STORAGE_CODEC
+from app.repositories.study_inserted_rows import SUBJECT, inserted_in_transaction
+from app.services.study_progress_contract import (
+    DEFAULT_STORAGE_PROFILE,
+    RAW_SCHEMA_VERSION,
+    STORAGE_CODEC,
+    STORAGE_PROFILES,
+)
 from app.services.study_progress_shadow_codec import (
     StudyProgressCodecError,
     serialize_raw_card_progress,
@@ -24,6 +30,7 @@ from models.card import Card
 from models.card_progress import CardProgress
 from models.note import Note
 from models.study_authority_enrollment import StudyAuthorityEnrollment
+from models.study_authority_storage_profile import StudyAuthorityStorageProfile
 from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_availability import StudyProgressAvailability
 from models.study_progress_contributor import StudyProgressContributor
@@ -44,6 +51,66 @@ class StudyAuthorityRoute:
     mode_code: str
     epoch: int
     persisted: bool
+    storage_profile: str = DEFAULT_STORAGE_PROFILE
+
+
+# Storage profiles this release can read and write NOTE authority under. A
+# release that meets any other profile refuses the NOTE route (ADR P9-03 §2.1).
+# CANONICAL_V1 is supported since P9-05d; only the one-way switch
+# (flask study-storage-profile-switch --apply, P9-06) selects it.
+SUPPORTED_STORAGE_PROFILES = frozenset({"PROJECTION_V1", "CANONICAL_V1"})
+
+
+def read_study_storage_profile(session: Session, *, lock: str | None = None) -> str:
+    """Return the system NOTE storage profile; ``lock`` is None, "share" or "update"."""
+
+    statement = select(StudyAuthorityStorageProfile.profile_code).where(
+        StudyAuthorityStorageProfile.id == 1
+    )
+    if lock is not None:
+        if lock not in {"share", "update"}:
+            raise ValueError("lock must be None, 'share' or 'update'.")
+        statement = statement.with_for_update(read=lock == "share")
+    profile_code = session.execute(statement).scalar_one_or_none()
+    if profile_code is None:
+        return DEFAULT_STORAGE_PROFILE
+    if profile_code not in STORAGE_PROFILES:
+        raise StudyAuthorityFenceError(
+            "INVALID_STORAGE_PROFILE", "Persisted study storage profile is invalid."
+        )
+    return str(profile_code)
+
+
+def projection_is_live(session: Session) -> bool:
+    """Whether card_progress is still written, so it can still reveal learners.
+
+    Under CANONICAL_V1 no LEGACY learner exists (P9-05c of the readiness
+    gate) and the frozen projection names no learner that subjects,
+    contributors or sessions do not.
+    """
+
+    return read_study_storage_profile(session) == DEFAULT_STORAGE_PROFILE
+
+
+def bind_storage_profile(session: Session, route: "StudyAuthorityRoute") -> "StudyAuthorityRoute":
+    """Give a NOTE route built outside the fence the current storage profile.
+
+    The caller already holds the learner's User row; the profile row is read
+    under the same shared lock the fence takes.
+    """
+
+    if route.mode_code != "NOTE":
+        return route
+    return _with_supported_profile(route, read_study_storage_profile(session, lock="share"))
+
+
+def _with_supported_profile(route: "StudyAuthorityRoute", profile_code: str) -> "StudyAuthorityRoute":
+    if profile_code not in SUPPORTED_STORAGE_PROFILES:
+        raise StudyAuthorityFenceError(
+            "STORAGE_PROFILE_UNSUPPORTED",
+            f"This release cannot serve Note authority under storage profile {profile_code}.",
+        )
+    return replace(route, storage_profile=profile_code)
 
 
 @dataclass(frozen=True)
@@ -128,6 +195,30 @@ def _decode_route(
     )
 
 
+def read_study_authority_route(session: Session, *, learner_user_id: int) -> StudyAuthorityRoute:
+    """Resolve authority from the analytics snapshot, without a writer fence.
+
+    Read-only summaries may represent an earlier committed epoch. They must
+    read enrollment and all its evidence from one consistent snapshot, and
+    must never use this route to admit writes or issue Study session pins.
+    """
+    learner_id = _positive_learner_id(learner_user_id)
+    enrollment = session.execute(
+        select(StudyAuthorityEnrollment)
+        .where(StudyAuthorityEnrollment.learner_user_id == learner_id)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if enrollment is None:
+        return StudyAuthorityRoute(learner_id, "LEGACY", 0, False)
+    route = _decode_route(
+        learner_user_id=learner_id, mode_code=enrollment.mode_code,
+        epoch=enrollment.epoch, persisted=True, allow_note_authority=True,
+    )
+    if route.mode_code != "NOTE":
+        return route
+    return _with_supported_profile(route, read_study_storage_profile(session))
+
+
 def lock_study_authority_route(
     session: Session,
     *,
@@ -168,12 +259,19 @@ def lock_study_authority_route(
             epoch=0,
             persisted=False,
         )
-    return _decode_route(
+    route = _decode_route(
         learner_user_id=learner_id,
         mode_code=enrollment.mode_code,
         epoch=enrollment.epoch,
         persisted=True,
         allow_note_authority=allow_note_authority,
+    )
+    if route.mode_code != "NOTE":
+        return route
+    # Shared, like the User row: the profile switch takes it exclusively and
+    # so waits for every NOTE transaction that started under the old profile.
+    return _with_supported_profile(
+        route, read_study_storage_profile(session, lock="share")
     )
 
 
@@ -189,6 +287,73 @@ def _validate_hash(value: object, *, nullable: bool, field_name: str) -> bytes |
     return value
 
 
+_BULK_LOCK_CHUNK = 1000
+
+
+def lock_study_authority_subject_rows(
+    session: Session,
+    *,
+    subjects,
+) -> dict[int, tuple[StudyAuthoritySubjectToken, StudyProgressState]]:
+    """Lock the existing token and state rows of many locked subjects at once.
+
+    Issuing one pair of ``FOR UPDATE`` reads per subject costs two round trips
+    per Note on every session open and locking read. Rows visible in the
+    snapshot are locked here by primary key in bulk (record locks only; the
+    subject locks already serialize their writers) and returned current. A
+    subject whose token or state is missing from the result is left to
+    ``lock_study_authority_subject``'s per-row path, which creates or rejects
+    it exactly as before.
+    """
+
+    subject_ids = sorted({int(subject.id) for subject in subjects})
+    if not subject_ids:
+        return {}
+    tokens: dict[int, StudyAuthoritySubjectToken] = {}
+    states: dict[int, StudyProgressState] = {}
+    for start in range(0, len(subject_ids), _BULK_LOCK_CHUNK):
+        chunk = subject_ids[start:start + _BULK_LOCK_CHUNK]
+        visible_tokens = sorted(
+            int(value)
+            for value in session.execute(
+                select(StudyAuthoritySubjectToken.subject_id).where(
+                    StudyAuthoritySubjectToken.subject_id.in_(chunk)
+                )
+            ).scalars()
+        )
+        visible_states = sorted(
+            int(value)
+            for value in session.execute(
+                select(StudyProgressState.subject_id).where(
+                    StudyProgressState.subject_id.in_(chunk)
+                )
+            ).scalars()
+        )
+        if visible_tokens:
+            for token in session.execute(
+                select(StudyAuthoritySubjectToken)
+                .where(StudyAuthoritySubjectToken.subject_id.in_(visible_tokens))
+                .order_by(StudyAuthoritySubjectToken.subject_id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars():
+                tokens[int(token.subject_id)] = token
+        if visible_states:
+            for state in session.execute(
+                select(StudyProgressState)
+                .where(StudyProgressState.subject_id.in_(visible_states))
+                .order_by(StudyProgressState.subject_id.asc())
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalars():
+                states[int(state.subject_id)] = state
+    return {
+        subject_id: (tokens[subject_id], states[subject_id])
+        for subject_id in subject_ids
+        if subject_id in tokens and subject_id in states
+    }
+
+
 def lock_study_authority_subject(
     session: Session,
     *,
@@ -196,12 +361,21 @@ def lock_study_authority_subject(
     subject: StudyProgressSubject,
     now_utc: datetime,
     create_token_if_missing: bool = True,
+    locked_rows: tuple[StudyAuthoritySubjectToken, StudyProgressState] | None = None,
+    subject_created_in_transaction: bool = False,
 ) -> LockedStudyAuthoritySubject:
     """Lock/create the independent token, then lock and verify current state.
 
     ``subject`` must already be selected ``FOR UPDATE`` after the learner
     prefix.  New tokens are initialized at revision zero from the existing
     exact state, or with a null hash when the subject has no current state.
+    ``locked_rows`` are this subject's token and state already locked and
+    refreshed by ``lock_study_authority_subject_rows``; the same checks apply.
+    ``subject_created_in_transaction``: the caller inserted ``subject`` in
+    this transaction, so only this transaction can have created its token or
+    state (both have a foreign key to the uncommitted subject). They are read
+    without ``FOR UPDATE``: that read would only take a gap lock at the end of
+    the index, where concurrent inserts of other new subjects deadlock.
     """
 
     if not isinstance(route, StudyAuthorityRoute):
@@ -231,11 +405,34 @@ def lock_study_authority_subject(
             "INVALID_AUTHORITY_TIME", "Authority time must be naive UTC."
         )
 
+    if locked_rows is not None:
+        token, state = locked_rows
+        if (
+            int(token.subject_id) != int(subject.id)
+            or int(state.subject_id) != int(subject.id)
+        ):
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_CONTEXT_DIVERGED",
+                "Preloaded authority rows belong to another subject.",
+            )
+        return _verified_locked_subject(
+            subject=subject, token=token, state=state, token_created=False,
+            generation=generation,
+        )
+
+    # Rows of a subject this transaction inserted can only be this
+    # transaction's own: read them, but without a gap-locking FOR UPDATE.
+    lock_children = not (
+        subject_created_in_transaction
+        or inserted_in_transaction(session, SUBJECT, subject.id)
+    )
+    token_query = select(StudyAuthoritySubjectToken).where(
+        StudyAuthoritySubjectToken.subject_id == int(subject.id)
+    )
+    if lock_children:
+        token_query = token_query.with_for_update()
     token = session.execute(
-        select(StudyAuthoritySubjectToken)
-        .where(StudyAuthoritySubjectToken.subject_id == int(subject.id))
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        token_query.execution_options(populate_existing=True)
     ).scalar_one_or_none()
     token_created = token is None
     if token is None:
@@ -254,12 +451,28 @@ def lock_study_authority_subject(
         session.add(token)
         session.flush()
 
+    state_query = select(StudyProgressState).where(
+        StudyProgressState.subject_id == int(subject.id)
+    )
+    if lock_children:
+        state_query = state_query.with_for_update()
     state = session.execute(
-        select(StudyProgressState)
-        .where(StudyProgressState.subject_id == int(subject.id))
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        state_query.execution_options(populate_existing=True)
     ).scalar_one_or_none()
+    return _verified_locked_subject(
+        subject=subject, token=token, state=state, token_created=token_created,
+        generation=generation,
+    )
+
+
+def _verified_locked_subject(
+    *,
+    subject: StudyProgressSubject,
+    token: StudyAuthoritySubjectToken,
+    state: StudyProgressState | None,
+    token_created: bool,
+    generation: int,
+) -> LockedStudyAuthoritySubject:
     state_hash = (
         _validate_hash(
             state.semantic_state_hash,
@@ -385,6 +598,16 @@ def lock_study_authority_siblings(
             "CARD_OUTSIDE_AUTHORITY_SUBJECT",
             "Requested Card is outside the locked authority subject.",
         )
+    if route.storage_profile != "PROJECTION_V1":
+        # CANONICAL_V1: the projection is frozen and never a CAS baseline.
+        return LockedStudyAuthoritySiblings(
+            learner_user_id=route.learner_user_id,
+            subject_id=int(subject.id),
+            subject_generation=int(subject.subject_generation),
+            live_note_id=live_note_id,
+            cards=cards,
+            progress_by_card_id=MappingProxyType({}),
+        )
     progress_rows = tuple(
         session.execute(
             select(CardProgress)
@@ -417,6 +640,101 @@ def lock_study_authority_siblings(
         live_note_id=live_note_id,
         cards=cards,
         progress_by_card_id=MappingProxyType(progress_by_card_id),
+    )
+
+
+def _lock_availability_vector(
+    session: Session, *, subject_id: int, generation: int, contributor_ids: tuple[int, ...]
+) -> dict[int, StudyProgressAvailability]:
+    availability_rows = tuple(
+        session.execute(
+            select(StudyProgressAvailability)
+            .where(StudyProgressAvailability.contributor_id.in_(contributor_ids))
+            .order_by(StudyProgressAvailability.contributor_id.asc())
+            .with_for_update()
+        ).scalars()
+    )
+    availability_by_contributor_id = {
+        int(row.contributor_id): row for row in availability_rows
+    }
+    if (
+        len(availability_rows) != len(contributor_ids)
+        or set(availability_by_contributor_id) != set(contributor_ids)
+    ):
+        raise StudyAuthorityFenceError(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "Authority subject has no complete current availability vector.",
+        )
+    for availability in availability_rows:
+        if (
+            int(availability.subject_id) != subject_id
+            or int(availability.subject_generation) != generation
+        ):
+            raise StudyAuthorityFenceError(
+                "INVALID_AUTHORITY_COMPATIBILITY",
+                "Authority availability evidence has stale subject identity.",
+            )
+    return availability_by_contributor_id
+
+
+def _lock_canonical_compatibility(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked: LockedStudyAuthoritySubject,
+    siblings: LockedStudyAuthoritySiblings,
+) -> LockedStudyAuthorityCompatibility:
+    """CANONICAL_V1: one ACTIVE contributor per live Card, found by Card identity.
+
+    Raw CardProgress evidence on older contributors is history (ADR P9-03
+    §2.9) and is neither compared nor returned.
+    """
+
+    subject = locked.subject
+    subject_id = int(subject.id)
+    generation = int(subject.subject_generation)
+    card_ids = tuple(sorted(siblings.card_ids))
+    contributors = tuple(
+        session.execute(
+            select(StudyProgressContributor)
+            .where(
+                StudyProgressContributor.subject_id == subject_id,
+                StudyProgressContributor.subject_generation == generation,
+                StudyProgressContributor.contributor_status == "ACTIVE",
+            )
+            .order_by(StudyProgressContributor.id.asc())
+            .with_for_update()
+        ).scalars()
+    )
+    contributor_by_card_id = {
+        str(row.live_card_id): row for row in contributors if row.live_card_id is not None
+    }
+    if len(contributors) != len(card_ids) or set(contributor_by_card_id) != set(card_ids):
+        raise StudyAuthorityFenceError(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "Authority subject has no complete current contributor vector.",
+        )
+    for card_id, contributor in contributor_by_card_id.items():
+        if bytes(contributor.logical_card_key) != card_id.encode("utf-8"):
+            raise StudyAuthorityFenceError(
+                "INVALID_AUTHORITY_COMPATIBILITY",
+                f"Card {card_id} has stale or detached contributor evidence.",
+            )
+    availability_by_contributor_id = _lock_availability_vector(
+        session,
+        subject_id=subject_id,
+        generation=generation,
+        contributor_ids=tuple(sorted(int(row.id) for row in contributors)),
+    )
+    return LockedStudyAuthorityCompatibility(
+        learner_user_id=route.learner_user_id,
+        subject_id=subject_id,
+        subject_generation=generation,
+        expected_mirror_revision=int(subject.mirror_revision),
+        contributor_by_card_id=MappingProxyType(contributor_by_card_id),
+        availability_by_contributor_id=MappingProxyType(availability_by_contributor_id),
+        contributor_revision_by_card_id=MappingProxyType({}),
+        contributor_raw_hash_by_card_id=MappingProxyType({}),
     )
 
 
@@ -460,6 +778,8 @@ def lock_study_authority_compatibility(
             "AUTHORITY_CONTEXT_DIVERGED",
             "Authority compatibility inputs do not describe one fenced subject.",
         )
+    if route.storage_profile != "PROJECTION_V1":
+        return _lock_canonical_compatibility(session, route=route, locked=locked, siblings=siblings)
 
     progress_by_id = {
         int(row.id): row

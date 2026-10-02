@@ -1,12 +1,20 @@
-"""Detached-safe source CardProgress evidence for a learner/Note subject."""
+"""Detached-safe Card evidence for a learner/Note subject.
+
+``LEGACY_PROJECTION`` rows describe the CardProgress row they were mirrored
+from; ``CANONICAL`` rows (migration 47) are written without one.
+"""
 
 from __future__ import annotations
 
+from sqlalchemy import text
+
 from app.services.study_progress_contract import (
     CONTRIBUTOR_STATUSES,
+    EVIDENCE_KINDS,
     HISTORY_COMPLETENESS_CODES,
     POINTER_STATUSES,
     PROVENANCE_CODES,
+    contributor_evidence_check,
     sql_allowlist,
 )
 from models import db
@@ -32,7 +40,13 @@ class StudyProgressContributor(db.Model):
         nullable=False,
     )
     subject_generation = db.Column(bigint(), nullable=False)
-    source_progress_id = db.Column(db.Integer, nullable=False)
+    evidence_kind = db.Column(
+        ascii_string(32),
+        nullable=False,
+        default="LEGACY_PROJECTION",
+        server_default=text("'LEGACY_PROJECTION'"),
+    )
+    source_progress_id = db.Column(db.Integer, nullable=True)
     live_card_progress_id = db.Column(
         db.Integer,
         db.ForeignKey("card_progress.id", ondelete="SET NULL"),
@@ -44,12 +58,12 @@ class StudyProgressContributor(db.Model):
         db.ForeignKey("cards.id", ondelete="SET NULL"),
         nullable=True,
     )
-    card_progress_revision = db.Column(bigint(), nullable=False)
-    raw_schema_version = db.Column(ascii_string(64), nullable=False)
-    storage_codec = db.Column(ascii_string(64), nullable=False)
-    raw_payload = db.Column(db.JSON, nullable=False)
-    raw_payload_size = db.Column(db.SmallInteger, nullable=False)
-    raw_progress_hash = db.Column(binary_hash(), nullable=False)
+    card_progress_revision = db.Column(bigint(), nullable=True)
+    raw_schema_version = db.Column(ascii_string(64), nullable=True)
+    storage_codec = db.Column(ascii_string(64), nullable=True)
+    raw_payload = db.Column(db.JSON(none_as_null=True), nullable=True)
+    raw_payload_size = db.Column(db.SmallInteger, nullable=True)
+    raw_progress_hash = db.Column(binary_hash(), nullable=True)
     pointer_status = db.Column(ascii_string(64), nullable=False)
     history_completeness_code = db.Column(ascii_string(64), nullable=False)
     current_provenance_code = db.Column(ascii_string(64), nullable=False)
@@ -82,6 +96,12 @@ class StudyProgressContributor(db.Model):
         ),
         db.UniqueConstraint(
             "live_card_progress_id", name="uq_sp_contributor_live_progress"
+        ),
+        db.UniqueConstraint(
+            "subject_id",
+            "subject_generation",
+            "logical_card_key",
+            name="uq_sp_contributor_generation_card",
         ),
         db.Index(
             "ix_sp_contributor_subject_current",
@@ -125,6 +145,13 @@ class StudyProgressContributor(db.Model):
         db.CheckConstraint(
             sql_allowlist("contributor_status", CONTRIBUTOR_STATUSES),
             name="ck_sp_contributor_status",
+        ),
+        db.CheckConstraint(
+            sql_allowlist("evidence_kind", EVIDENCE_KINDS),
+            name="ck_sp_contributor_evidence_kind",
+        ),
+        db.CheckConstraint(
+            contributor_evidence_check(), name="ck_sp_contributor_evidence"
         ),
         MYSQL_TABLE_OPTIONS,
     )

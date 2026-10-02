@@ -634,7 +634,11 @@ def freeze_study_algorithm_history_cut(
                 "history_completeness": str(row.history_completeness_code),
                 "current_provenance": str(row.current_provenance_code),
                 "logical_card_key": bytes(row.logical_card_key).hex(),
-                "raw_progress_hash": bytes(row.raw_progress_hash).hex(),
+                # CANONICAL contributors carry no raw CardProgress evidence.
+                "raw_progress_hash": (
+                    bytes(row.raw_progress_hash).hex()
+                    if row.raw_progress_hash is not None else None
+                ),
                 "row_hash": row_document.digest.hex(),
             },
         )

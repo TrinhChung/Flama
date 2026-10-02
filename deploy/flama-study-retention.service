@@ -1,0 +1,24 @@
+[Unit]
+Description=Flama bounded Study membership retention
+After=network-online.target mysql.service
+ConditionPathExists=/etc/flama/study-retention-approved
+
+[Service]
+Type=oneshot
+User=flama
+Group=flama
+WorkingDirectory=/opt/flama/current
+EnvironmentFile=/etc/flama/flama.env
+Environment=STARTUP_RUN_MAINTENANCE=0
+Environment=STARTUP_CHECK_DB_CONNECTIVITY=0
+Environment=PYTHONDONTWRITEBYTECODE=1
+RuntimeDirectory=flama-study-retention
+ExecStart=/usr/bin/flock --nonblock /run/flama-study-retention/runner.lock /opt/flama/venv/bin/flask --app wsgi.py study-session-retention --apply --older-than-days 30 --batch-sessions 50 --batch-memberships 1000 --max-memberships 10000 --max-expired-sessions 1000 --max-seconds 60
+TimeoutStartSec=90
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/flama /run/flama-study-retention

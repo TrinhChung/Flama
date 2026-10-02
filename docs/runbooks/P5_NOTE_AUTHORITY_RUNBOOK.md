@@ -56,7 +56,14 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
 ### 4.1 Backfill shadow
 1. Thêm `STUDY_PROGRESS_SHADOW_WRITE_ENABLED=1` và `STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED=1` vào `/etc/flama/flama.env`; `systemctl restart flama.service flama-connect.service`. Từ đây mọi writer LEGACY ghi mirror cùng transaction.
 2. Thử khô: `flama_cli study-progress-backfill` → đọc `source_count`, `quarantined_count`, `unresolvable_count`.
-3. Chạy thật: `flama_cli study-progress-backfill --apply` tới khi JSON có `"complete": true`. Nếu bị ngắt, chạy lại `flama_cli study-progress-backfill --apply --run-id <run_id>`.
+3. Chạy thật: backfill ghi commit của code vào run, mà thư mục release là `git archive` (không có `.git`), nên truyền SHA của release qua `FLAMA_BUILD_COMMIT` (tên thư mục release chính là SHA):
+   ```bash
+   rel=$(basename "$(readlink -f /opt/flama/current)")
+   systemd-run --quiet --wait --collect --pipe --property=User=flama --property=Group=flama \
+     --property=WorkingDirectory=/opt/flama/current --property=EnvironmentFile=/etc/flama/flama.env \
+     --setenv=FLAMA_BUILD_COMMIT="$rel" /opt/flama/venv/bin/flask --app wsgi.py study-progress-backfill --apply
+   ```
+   Chạy tới khi JSON có `"complete": true`. Nếu bị ngắt, thêm `--run-id <run_id>` với cùng `FLAMA_BUILD_COMMIT`.
 4. **Dừng** nếu `quarantined_count` hoặc `unresolvable_count` khác 0: các learner đó sẽ không enroll được; ghi mẫu trong `samples` và xử lý riêng, không sửa dữ liệu bằng tay.
 
 ### 4.2 Bật v4 và enroll
@@ -67,7 +74,7 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
      flama_cli study-authority-enrollment --user-id "$id" --mode NOTE >/dev/null || echo "DRY-RUN FAIL user=$id"
    done
    ```
-3. Enroll thật:
+3. Enroll thật. Learner lớn chạy lâu (2026-09-29: learner 39.282 subject mất khoảng 12 phút) và bị khoá route suốt transaction, nên chạy vòng lặp bằng `nohup … > log &` trên VPS thay vì giữ một phiên SSH có timeout:
    ```bash
    for id in $(flama_cli study-authority-learners --mode LEGACY); do
      flama_cli study-authority-enrollment --user-id "$id" --mode NOTE --apply || echo "ENROLL FAIL user=$id"
@@ -94,18 +101,15 @@ Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã h�
 | `NOTE_ENROLLMENT_DISABLED` | CLI chạy với `STUDY_WIRE_V4_ENABLED` tắt | Kiểm tra env ở bước 4.2.1 |
 
 ### 4.4 Theo dõi sau R1 (hằng ngày trong tuần đầu)
-- Chạy lại vòng audit ở 4.2.4.
+- Chạy lại vòng audit ở 4.2.4, và **luôn chạy sau mỗi lần deploy**. Từ 2026-09-30, dashboard/overview đọc availability NOTE không khóa và chỉ kiểm liên kết với `card_progress` (có dòng, cùng id/revision); việc so **nội dung** bản sao tương thích với state chỉ còn do `study-authority-read-audit` đảm nhận ([review K1](../architecture/P5_DASHBOARD_SQL_AGGREGATION_REVIEW_2026-09-29.md#7-rà-soát-kế-hoạch-và-điều-chỉnh-theo-decoupling-2026-09-30)). Audit dùng reader khóa: learner lớn (khoảng 39 nghìn Card) mất vài phút và bị khóa trong lúc đó, nên chạy lúc ít tải.
 - Log ứng dụng: `AUTHORITY_READ_PARITY_DIVERGED`, `STALE_AUTHORITY_*`, `INCOMPLETE_AUTHORITY_*`, `ALGORITHM_IDENTITY_*`, `CONTENT_SCOPE_CHANGED` (mã cuối là xung đột đồng thời, người dùng thử lại được — chỉ đáng lo nếu lặp lại), `New learner … stays LEGACY` (tài khoản mới không vào được NOTE; enroll bằng CLI).
 - MySQL: lock wait/deadlock tăng bất thường.
 
 **Hard stop** (xem xét rollback): transition được chấp nhận mà không chiếu được về legacy, split-brain/đua epoch, decoder sai, phiên cũ commit qua epoch, mất event/receipt, source clone bị sửa, hoặc audit `BLOCK` không giải thích được.
 
-### 4.5 Rollback một learner (NOTE → LEGACY)
-```bash
-flama_cli study-authority-enrollment --user-id <ID> --mode LEGACY          # dry-run
-flama_cli study-authority-enrollment --user-id <ID> --mode LEGACY --apply
-```
-Rollback chỉ commit khi mọi state NOTE còn sống chiếu **không mất mát** về `CardProgress` (subject đã tombstone do xoá nội dung được bỏ qua an toàn). Nếu bị từ chối với `LOSSY_LEGACY_PROJECTION`, `UNPROJECTABLE_LEGACY_STATE` hoặc `ROLLBACK_ALGORITHM_NOT_LEGACY`: **không** sửa cột legacy bằng tay, giữ learner ở NOTE và sửa tiến (forward repair) hoặc khôi phục backup theo quy trình đã duyệt. Không downgrade schema, không xoá dữ liệu trong sự cố. Tắt `STUDY_PROGRESS_SHADOW_*` không đảo authority của learner NOTE. Khi rollback nhiều learner, đặt `STUDY_NEW_LEARNER_NOTE_ENABLED=0` trước để tài khoản mới không vào NOTE.
+### 4.5 ~~Rollback một learner (NOTE → LEGACY)~~ — đã gỡ (Phase 9, D9-02)
+
+Không còn đường quay learner về LEGACY. Theo quyết định D9-02 của chủ sản phẩm, hệ NOTE giữ dữ liệu mới; khi có lỗi thì khoanh vùng, sửa tiến (forward repair) hoặc **bổ sung phần thiếu từ backup vào NOTE** theo [P9 plan §9](../task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md#9-bổ-sung-từ-backup-bảo-toàn-dữ-liệu-note-mới). `flama_cli study-authority-enrollment --mode LEGACY` trả `LEGACY_ENROLLMENT_RETIRED`; tài khoản mới luôn vào NOTE bất kể `STUDY_NEW_LEARNER_NOTE_ENABLED`/`STUDY_WIRE_V4_ENABLED` (đăng ký lỗi `NOTE_ENROLLMENT_FAILED` thay vì tạo learner LEGACY). Không sửa cột legacy bằng tay, không downgrade schema, không xoá dữ liệu trong sự cố. Tắt `STUDY_PROGRESS_SHADOW_*` không đảo authority của learner NOTE.
 
 ## 5. Giới hạn đã biết khi mọi learner ở NOTE
 - Gói Connect/Anki kiểu cũ nhúng `cardsProgress` theo từng Card: nội dung vẫn import, còn progress trả `unsupported / NOTE_SNAPSHOT_REQUIRED`; progress phải đi qua gói snapshot.

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.services.db_errors import domain_error_code
 from app.services.study_algorithm_registry import AlgorithmResolutionPurpose
 from app.services.study_artifact_service import canonical_digest
 from app.services.study_note_batch_service import decode_note_batch_payload, decode_note_batch_receipt
@@ -99,8 +100,9 @@ def get_study_session_batch_status(*, user, session_id, batch_id):
         db.session.rollback()
         if isinstance(exc, StudySessionError):
             raise
-        if getattr(exc, "code", None):
-            raise StudySessionError(exc.code, str(exc), status=409) from exc
+        code = domain_error_code(exc)
+        if code:
+            raise StudySessionError(code, str(exc), status=409) from exc
         raise
 
 
@@ -138,9 +140,10 @@ def enqueue_note_study_session_batch(*, user, session, route, payload, now=None)
             if job is not None:
                 enqueue_study_batch(job)
             return result
-        if session.status != "open":
+        if session.status != "open" and session.status != "expired":
             raise StudySessionError("SESSION_NOT_OPEN", "Study session is not open.", status=409)
-        if admitted_at > session.expires_at:
+        # Retention marks long-expired leases ``expired``; answer as before it did.
+        if session.status == "expired" or admitted_at > session.expires_at:
             raise StudySessionError("SESSION_EXPIRED", "Study session has expired.", status=410)
         if admitted_at < session.opened_at:
             raise StudySessionError("INVALID_EVENT_TIME", "Admission predates the session.", status=422)
@@ -221,6 +224,7 @@ def enqueue_note_study_session_batch(*, user, session, route, payload, now=None)
         db.session.rollback()
         if isinstance(exc, StudySessionError):
             raise
-        if getattr(exc, "code", None):
-            raise StudySessionError(exc.code, str(exc), status=getattr(exc, "status", 409)) from exc
+        code = domain_error_code(exc)
+        if code:
+            raise StudySessionError(code, str(exc), status=getattr(exc, "status", 409)) from exc
         raise

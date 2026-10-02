@@ -269,6 +269,9 @@ def process_single_study_batch(
             push_to_dlq(job_payload, err_msg)
             return {"status": "session_not_found", "error": err_msg}
 
+        from app.services.study_retirement_telemetry_service import record_legacy_usage
+
+        record_legacy_usage("worker.batch", wire=session.wire_schema_version)
         existing_batch = (
             StudySessionBatch.query.filter_by(session_id=session_id, batch_id=batch_id)
             .populate_existing()

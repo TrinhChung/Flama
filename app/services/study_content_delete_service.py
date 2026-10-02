@@ -18,6 +18,7 @@ from sqlalchemy import select
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_route,
+    projection_is_live,
 )
 from app.services import study_progress_lifecycle_mirror_service as lifecycle
 from models.card import Card
@@ -73,9 +74,11 @@ def discover_content_learner_ids(session, *, card_ids, note_ids, current_read=Fa
                 StudyProgressSubject.live_note_id.in_(chunk)
                 | StudyProgressSubject.logical_note_key.in_([value.encode("utf-8") for value in chunk])
             ))).scalars())
+    projection_live = projection_is_live(session)
     for chunk in _chunks(sorted(set(card_ids))):
-        learner_ids.update(session.execute(read(
-            select(CardProgress.user_id).where(CardProgress.card_id.in_(chunk)))).scalars())
+        if projection_live:
+            learner_ids.update(session.execute(read(
+                select(CardProgress.user_id).where(CardProgress.card_id.in_(chunk)))).scalars())
         learner_ids.update(session.execute(read(
             select(StudyProgressSubject.learner_user_id).join(
                 StudyProgressContributor,
@@ -149,7 +152,7 @@ def _prepare_note_sibling_removal(session, *, route, partial_card_ids, card_note
                 )
             ).scalars()
         )
-    for chunk in _chunks(sorted(partial_card_ids)):
+    for chunk in _chunks(sorted(partial_card_ids) if route.storage_profile == "PROJECTION_V1" else []):
         # Compatibility rows without canonical state make the planner below
         # raise INCOMPLETE_AUTHORITY_COVERAGE rather than silently dropping them.
         target_note_ids.update(
@@ -281,7 +284,7 @@ def prepare_content_expansion(session, *, routes, note_ids, now_utc=None):
                     StudyProgressSubject.learner_user_id == route.learner_user_id,
                     StudyProgressSubject.logical_note_key.in_([value.encode("utf-8") for value in chunk]),
                 )).scalars())
-        for chunk in _chunks(sorted(card_note)):
+        for chunk in _chunks(sorted(card_note) if route.storage_profile == "PROJECTION_V1" else []):
             targets.update(card_note[str(card_id)] for card_id in session.execute(
                 select(CardProgress.card_id).where(
                     CardProgress.user_id == route.learner_user_id,

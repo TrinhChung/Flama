@@ -1,0 +1,18 @@
+# P9-00 — Kết quả xác minh bàn giao §11 trên production (2026-09-30)
+
+> Trả lời bảng [P9 plan §11](./P9_EXECUTION_PLAN_2026-09-30.md#11-bàn-giao-cho-phiên-thực-thi-có-dữ-liệu-production). Tất cả là SELECT-only / đọc cấu hình qua SSH `chung_hostinger_vps`, 2026-09-30 13:40–14:00 UTC, release `5f5e882` (head `20260930_000046`). Không ghi gì lên production.
+
+| # | Kết quả | Hệ quả cho kế hoạch |
+|---|---|---|
+| H-01 | 18 tài khoản, **0 tài khoản mới trong 30 ngày** (mới nhất 2026-08-31). 18/18 NOTE, 0 chưa enroll. 30 ngày qua chỉ 4 learner có review: user 1 (5.319), user 2 (1.636), user 4 (46), user 16 (1). Review tập trung 12–15 UTC và 22–02 UTC; 03–11 UTC và 16–21 UTC gần như trống. | Đúng giả định D9-08: cắt toàn hệ thống một lần trong write freeze ngắn, đặt freeze trong khung 17–21 UTC. Không cần cohort. |
+| H-02 | DB 1.219 MB; `mysqldump --single-transaction` + gzip ≈ 15 s (116 MB) — đo qua các backup hôm nay trong `/root/backups`. Restore cách ly **chưa đo**. | Freeze chỉ cần vài phút cho dump. Restore thử (G9-BACKUP) chạy ở DB cách ly sau khi mở ghi, như P9-06 §3 cho phép. |
+| H-03 | `log_bin=1`, `binlog_format=ROW`, `binlog_expire_logs_seconds=2592000` (30 ngày), 43 file binlog. MySQL 8.0.46. `innodb_buffer_pool_size` 128 MB (mặc định). | **Khác giả định "chưa có bằng chứng binlog/PITR"**: có nguồn khôi phục writes sau T0. RPO≈0 chỉ được tuyên bố sau khi diễn tập replay binlog từ T0 vào DB cách ly (thêm vào P9-06). |
+| H-04 | `/etc/flama/flama.env`: `STUDY_WIRE_V4_ENABLED="1"`, `STUDY_NEW_LEARNER_NOTE_ENABLED="1"`, `STUDY_ASYNC_BATCH_ENABLED="0"`, `STUDY_PROGRESS_SHADOW_WRITE_ENABLED="1"`, `STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED="0"`, `STUDY_NOTE_COUNT_ENABLED=1`. `deploy/sync_managed_env.py` chỉ quản lý `STUDY_ASYNC_BATCH_ENABLED` và `STUDY_QUEUE_NAMESPACE`; các cờ NOTE là sửa tay. | Xác nhận F9-07: tài khoản mới vào NOTE chỉ nhờ env sửa tay. **Đã đóng** bằng P9-05c (đăng ký luôn NOTE, CLI `--mode LEGACY` bị khóa). |
+| H-05 | 15.965 `connect_source_card_refs`, **100% có `applied_local_revision`**: user 1 15.038 (sync gần nhất 2026-08-14), user 4 927 (2026-09-17). 4 import session trong 30 ngày (gần nhất 2026-09-17). | P9-05b phải xử lý giá trị cũ (migrate có ánh xạ chứng minh được hoặc đánh dấu "cần xác nhận lại"), không chỉ đổi code. |
+| H-06 | `study-authority-read-audit` 18/18 PASS lúc 11:14 UTC (release P5-11c); `study-phase9-readiness` v1 lúc 09:53 UTC: 0 LEGACY, 0 unenrolled, 363 phiên v2 trong 30 ngày (phiên cuối mở 2026-09-29 00:51), ordinal: 0 Card thiếu occurrence, 0 occurrence thiếu ordinal. `study-architecture-audit` chưa chạy (chỉ chạy với principal SELECT-only). | Baseline đạt; cần principal read-only cho architecture audit trước P9-04. |
+| H-07 | 0 phiên v2/v3 `open`; 2 phiên v4 `open` (user 1, hết hạn chậm nhất 2026-10-01 13:42 UTC); 0 `study_session_batches`. | Không có work cũ phải drain; phiên v4 mở được xử lý theo contract ở freeze. |
+| H-08 | Baseline hiệu năng đã có từ P5-11/P6 (local MySQL 8.0.40 + đo READ ONLY trên production): dashboard user 1 2,2–2,6 s, overview 2,2 s; mở phiên 500 Note chưa học 1,75 s; Browse 20k Note 1,4–1,6 s; commit 50 câu ≈2 s / ≈1.300 SQL. Chưa có p95 production dưới tải. | Ngưỡng §8 chốt theo các số này; đo p95 production thật ở P9-00 phần benchmark. |
+
+## Sự cố phát hiện trong phiên (đã sửa)
+
+User 1 gặp "Không thể tải dữ liệu — NOTE authority cannot commit a legacy Study Session lease": trình duyệt gửi lại commit của phiên v2 đã lưu ngày 28/09 (mất ACK); sau R1 server chặn trước bước replay. Không mất dữ liệu (13 câu đã lưu). Sửa: PR #180 trả replay/receipt/hết hạn trước kiểm tra authority. Liên quan invariant §3.6 của kế hoạch (client cũ không replay sang lease mới) — replay về đúng lease cũ vẫn phải trả receipt.

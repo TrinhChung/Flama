@@ -14,8 +14,10 @@ from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySubject,
     StudyAuthorityRoute,
     lock_study_authority_subject,
+    lock_study_authority_subject_rows,
 )
 from app.services.anki_scheduler import CardState
+from app.services.db_errors import domain_error_code
 from app.services.study_progress_shadow_codec import (
     STATE_DECODERS,
     StudyProgressCodecError,
@@ -205,14 +207,17 @@ def lock_study_session_authority_subjects(
 
     locked_by_key: dict[str, LockedStudyAuthoritySubject] = {}
     state_by_key: dict[str, CardState] = {}
-    for logical_key in sorted(encoded_by_key, key=lambda item: encoded_by_key[item]):
-        encoded_key = encoded_by_key[logical_key]
-        subject = subject_by_encoded_key[encoded_key]
-        if str(subject.live_note_id or "") != logical_key:
+    for logical_key, encoded_key in encoded_by_key.items():
+        if str(subject_by_encoded_key[encoded_key].live_note_id or "") != logical_key:
             raise _fail(
                 "DETACHED_AUTHORITY_SUBJECT",
                 "Study Session authority subject is detached from its live Note.",
             )
+    # Two locking reads for the whole vector instead of two per Note.
+    locked_rows = lock_study_authority_subject_rows(session, subjects=subjects)
+    for logical_key in sorted(encoded_by_key, key=lambda item: encoded_by_key[item]):
+        encoded_key = encoded_by_key[logical_key]
+        subject = subject_by_encoded_key[encoded_key]
         try:
             locked = lock_study_authority_subject(
                 session,
@@ -220,10 +225,12 @@ def lock_study_session_authority_subjects(
                 subject=subject,
                 now_utc=now_utc,
                 create_token_if_missing=create_token_if_missing,
+                locked_rows=locked_rows.get(int(subject.id)),
             )
         except Exception as exc:
-            if getattr(exc, "code", None):
-                raise _fail(str(exc.code), str(exc)) from exc
+            code = domain_error_code(exc)
+            if code:
+                raise _fail(code, str(exc)) from exc
             raise
         state = locked.state
         if state is None:
@@ -262,8 +269,15 @@ def stage_study_session_authority_pin(
     route: StudyAuthorityRoute,
     locked: LockedStudyAuthoritySubject,
     now_utc: datetime,
+    membership_created_in_transaction: bool = False,
 ) -> StudySessionAuthorityPin:
-    """Stage one v4 membership pin; never commit or roll back."""
+    """Stage one v4 membership pin; never commit or roll back.
+
+    ``membership_created_in_transaction`` means ``session_card`` was inserted
+    in the current, uncommitted transaction, so no pin can exist for it yet;
+    the per-row existence query (which also flushed every earlier pin one by
+    one) is skipped. The primary key still rejects a duplicate.
+    """
 
     if (
         not isinstance(study_session, StudySession)
@@ -308,7 +322,9 @@ def stage_study_session_authority_pin(
             "AUTHORITY_CONTEXT_DIVERGED",
             "Locked subject, token and state cannot produce one session pin.",
         )
-    if session.get(StudySessionAuthorityPin, int(session_card.id)) is not None:
+    if not membership_created_in_transaction and session.get(
+        StudySessionAuthorityPin, int(session_card.id)
+    ) is not None:
         raise _fail(
             "SESSION_AUTHORITY_PIN_EXISTS",
             "Study Session membership already has an authority pin.",

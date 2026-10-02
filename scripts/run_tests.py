@@ -89,12 +89,27 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/serve_p5_note_browser_probe.py",
             "scripts/probe_p5_numeric_storage_mysql.py",
             "scripts/probe_p5_direct_replay_mysql.py",
+            "scripts/probe_p5_concurrency_mysql.py",
+            "scripts/probe_p6_application_schema_mysql.py",
+            "scripts/bench_p6_migration_mysql.py",
+            "scripts/bench_p9_profile_migration_mysql.py",
+            "scripts/probe_p9_connect_fence_mysql.py",
+            "scripts/trace_card_progress_callsites.py",
+            "scripts/collect_study_retirement_observation.py",
+            "scripts/probe_p9_backup_restore_mysql.py",
+            "deploy/flama-study-retention.service",
+            "deploy/flama-study-retention.timer",
+            "models/study_application.py",
+            "scripts/bench_p5_session_open_mysql.py",
+            "scripts/probe_p7_session_retention_mysql.py",
+            "app/services/db_errors.py",
             "study_worker.py",
             "deploy/flama-study-worker.service",
             "app/repositories/study_batch_repository.py",
             "app/services/scheduler_config_service.py",
             "app/repositories/study_repository.py",
             "app/repositories/study_progress_shadow_repository.py",
+            "app/repositories/study_inserted_rows.py",
             "app/repositories/study_progress_backfill_repository.py",
             "app/repositories/study_authority_repository.py",
             "app/repositories/card_progress_repository.py",
@@ -131,6 +146,25 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_note_storage_precision.py",
             "tests/test_study_direct_note_replay.py",
             "tests/test_study_direct_replay_probe.py",
+            "tests/test_study_note_write_gap_locks.py",
+            "tests/test_study_application_occurrence.py",
+            "tests/test_study_note_level_counts.py",
+            "tests/test_study_phase6_continuity.py",
+            "tests/test_study_session_retention.py",
+            "tests/test_study_phase9_readiness.py",
+            "tests/test_study_retirement_telemetry.py",
+            "tests/test_study_backup_restore_probe.py",
+            "tests/test_study_inserted_rows.py",
+            "tests/test_study_pristine_bulk_materialization.py",
+            "tests/test_study_availability_snapshot.py",
+            "tests/test_study_canonical_reads.py",
+            "tests/test_study_canonical_review_write.py",
+            "tests/test_study_canonical_materialization.py",
+            "tests/test_study_canonical_connect.py",
+            "tests/test_study_storage_profile_switch.py",
+            "tests/test_study_canonical_lifecycle.py",
+            "tests/test_study_canonical_switch.py",
+            "tests/test_study_profile_switch_lease.py",
             "tests/test_study_note_templates.py",
             "tests/test_study_content_delete.py",
             "tests/test_study_note_overlay.py",
@@ -147,11 +181,13 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_progress_shadow_mirror.py",
             "tests/test_study_progress_shadow_schema.py",
             "tests/test_study_authority_schema.py",
+            "tests/test_study_storage_profile.py",
             "tests/test_study_authority_note_enrollment.py",
             "tests/test_study_new_learner_note_enrollment.py",
             "tests/test_study_authority_receipt.py",
             "tests/test_study_authority_projection_comparator.py",
             "tests/test_study_authority_projection_encoder.py",
+            "tests/test_study_note_card_projection.py",
             "tests/test_study_authority_cas.py",
             "tests/test_study_authority_sibling_repository.py",
             "tests/test_study_authority_write_service.py",
@@ -494,11 +530,17 @@ MODULES: dict[str, dict[str, list[str]]] = {
     "analytics": {
         "source_patterns": [
             "app/api/v1/analytics/**",
+            "app/services/deck_aggregation_service.py",
+            "app/services/study_analytics_read_service.py",
             "app/services/stats_*.py",
             "app/services/dashboard_service.py",
             "app/repositories/stats_query_repository.py",
+            "app/repositories/note_analytics_read_repository.py",
+            "scripts/probe_p5_analytics_mysql.py",
         ],
         "backend_tests": [
+            "tests/test_deck_aggregation_service.py",
+            "tests/test_note_analytics_read.py",
             "tests/test_stats_overview.py",
             "tests/test_stats_study_time.py",
             "tests/test_stats_today_future.py",
@@ -603,6 +645,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_authority_schema.py",
             "tests/test_study_authority_note_enrollment.py",
             "tests/test_study_authority_receipt.py",
+            "tests/test_study_storage_profile.py",
         ],
         "frontend_tests": [],
     },
@@ -785,6 +828,50 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "requirements.txt",
     "scripts/probe_p1_02_mysql_concurrency.py",
     "tests/test_marketplace_taxonomy_migration.py",
+    # Analytics run in a READ ONLY MySQL transaction that SQLite cannot emulate.
+    "app/api/v1/analytics/**",
+    "app/services/study_analytics_read_service.py",
+    "app/services/deck_aggregation_service.py",
+    "app/services/dashboard_service.py",
+    "app/services/stats_overview.py",
+    "app/repositories/note_analytics_read_repository.py",
+    "scripts/probe_p5_analytics_mysql.py",
+    "tests/test_note_analytics_read.py",
+    # Gap locks and deadlocks between learners exist only on InnoDB.
+    "app/services/db_errors.py",
+    "app/services/auth_service.py",
+    "app/services/study_authority_evidence_service.py",
+    "app/services/study_authority_receipt_service.py",
+    "app/services/study_authority_enrollment_service.py",
+    "app/services/study_direct_note_replay_service.py",
+    "app/services/study_progress_history_service.py",
+    "app/services/study_authority_command_service.py",
+    "app/services/study_session_service.py",
+    "app/routes/flashcards/study.py",
+    "scripts/probe_p5_concurrency_mysql.py",
+    "tests/test_study_note_write_gap_locks.py",
+    # Parallel Note creation (MCP agents) meets on InnoDB gap locks only.
+    "app/repositories/study_inserted_rows.py",
+    "app/repositories/study_authority_repository.py",
+    "app/repositories/study_progress_shadow_repository.py",
+    "app/services/study_progress_shadow_mirror_service.py",
+    "app/services/study_progress_lifecycle_mirror_service.py",
+    "app/services/mcp/note_tools.py",
+    "app/services/study_note_pristine_service.py",
+    "scripts/probe_p5_direct_replay_mysql.py",
+    "tests/test_study_pristine_bulk_materialization.py",
+    # Migration 46 runs while the previous release serves; FK/DDL behaviour is InnoDB-only.
+    "app/services/study_note_attribution_service.py",
+    "scripts/probe_p6_application_schema_mysql.py",
+    "scripts/bench_p6_migration_mysql.py",
+    # Migration 47: MySQL adds CHECKs by copying and refuses them on FK-action columns.
+    "scripts/bench_p9_profile_migration_mysql.py",
+    # Migration 48: one ALTER with a CHECK on connect_source_card_refs.
+    "scripts/probe_p9_connect_fence_mysql.py",
+    # Phase 7 foreign-key behavior (cascades from membership to pins) only runs on InnoDB.
+    "app/services/study_session_retention_service.py",
+    "scripts/probe_p7_session_retention_mysql.py",
+    "tests/test_study_session_retention.py",
 )
 
 DEPLOY_RUNTIME_SOURCE_PATTERNS = (
@@ -1042,17 +1129,28 @@ def build_ci_change_plan(
     changed_files: list[str],
     *,
     force_all_validation: bool = False,
+    files_since_deploy: list[str] | None = None,
 ) -> dict[str, bool]:
-    """Return job-level CI decisions for one complete event diff."""
+    """Return job-level CI decisions for one complete event diff.
+
+    ``files_since_deploy`` is the diff between the release running in
+    production and HEAD. A push whose runtime change never deployed (its CI
+    failed) must still deploy with the next green push, even a test-only one.
+    """
     normalized = [path.replace("\\", "/") for path in changed_files]
     _, backend_tests, frontend_tests = map_files_to_modules(normalized)
 
-    def matches_any(patterns: tuple[str, ...]) -> bool:
+    def matches_any(patterns: tuple[str, ...], paths: list[str] | None = None) -> bool:
         return any(
             fnmatch.fnmatch(path, pattern)
-            for path in normalized
+            for path in (normalized if paths is None else paths)
             for pattern in patterns
         )
+
+    undeployed_runtime = files_since_deploy is not None and matches_any(
+        DEPLOY_RUNTIME_SOURCE_PATTERNS,
+        [path.replace("\\", "/") for path in files_since_deploy],
+    )
 
     spa_contract = matches_any(SPA_CONTRACT_SOURCE_PATTERNS)
     return {
@@ -1064,9 +1162,29 @@ def build_ci_change_plan(
         "mysql_contract": force_all_validation
         or matches_any(MYSQL_CONTRACT_SOURCE_PATTERNS),
         # Deployment remains path-sensitive even though master intentionally
-        # receives full validation. Test/docs-only merges must not deploy.
-        "deploy": matches_any(DEPLOY_RUNTIME_SOURCE_PATTERNS),
+        # receives full validation. Test/docs-only merges must not deploy,
+        # unless runtime code is still missing from production.
+        "deploy": matches_any(DEPLOY_RUNTIME_SOURCE_PATTERNS) or undeployed_runtime,
     }
+
+
+def files_changed_since(base_sha: str) -> list[str] | None:
+    """Files differing between ``base_sha`` and HEAD, or None when unknown."""
+    base = str(base_sha or "").strip()
+    if not base or not all(ch in "0123456789abcdef" for ch in base.lower()):
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "--name-only", base, "HEAD"],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    if proc.returncode != 0:
+        return None
+    return [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
 
 
 def write_github_outputs(path: str, values: dict[str, bool]) -> None:
@@ -1296,11 +1414,19 @@ def main() -> int:
             "yes",
             "on",
         }
+        deployed_sha = str(os.environ.get("DEPLOYED_RELEASE_SHA") or "").strip()
+        since_deploy = files_changed_since(deployed_sha) if deployed_sha else None
         plan = build_ci_change_plan(
             changed,
             force_all_validation=force_all,
+            files_since_deploy=since_deploy,
         )
-        print(json.dumps({"changed_files": changed, **plan}, indent=2, sort_keys=True))
+        print(json.dumps({
+            "changed_files": changed,
+            "deployed_release_sha": deployed_sha or None,
+            "files_since_deploy": since_deploy,
+            **plan,
+        }, indent=2, sort_keys=True))
         if args.github_output:
             write_github_outputs(args.github_output, plan)
         return 0

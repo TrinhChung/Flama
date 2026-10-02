@@ -241,8 +241,30 @@ def run_study_architecture_audit_command(
 
 
 
+def register_phase9_audit_commands(app: Flask) -> None:
+    @app.cli.command("study-phase9-readiness")
+    @click.option("--window-days", type=click.IntRange(30, 365), default=30, show_default=True)
+    @click.option("--projection-since", type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"]))
+    @click.option("--observed-at", type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"]))
+    @click.option("--retirement-observation", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+    def study_phase9_readiness(window_days, projection_since, observed_at, retirement_observation):
+        """Read-only evidence; production uses wsgi_audit.py and SELECT-only credentials."""
+        from app.services.study_phase9_readiness_service import build_phase9_readiness
+
+        if app.config.get("STARTUP_RUN_MAINTENANCE", True):
+            raise click.ClickException("Use wsgi_audit.py; startup maintenance must be disabled.")
+        try:
+            observation = json.loads(retirement_observation.read_text(encoding="utf-8")) if retirement_observation else None
+            result = build_phase9_readiness(window_days=window_days, projection_since_utc=projection_since,
+                                           now_utc=observed_at, retirement_observation=observation)
+        except (ValueError, KeyError, TypeError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(json.dumps(result, sort_keys=True))
+
+
 def register_audit_cli_commands(app: Flask) -> None:
     """Register ONLY read-only audit commands on audit Flask app instances."""
+    register_phase9_audit_commands(app)
 
     @app.cli.command("study-architecture-audit")
     @click.option(
@@ -284,6 +306,7 @@ def register_audit_cli_commands(app: Flask) -> None:
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
+    register_phase9_audit_commands(app)
 
     @app.cli.command("study-authority-enrollment")
     @click.option(
@@ -312,15 +335,17 @@ def register_cli_commands(app: Flask) -> None:
         )
         from app.services.study_authority_enrollment_service import (
             StudyAuthorityEnrollmentError,
-            stage_legacy_authority_enrollment,
             stage_note_authority_enrollment,
         )
 
-        transition = (
-            stage_note_authority_enrollment
-            if mode.upper() == "NOTE"
-            else stage_legacy_authority_enrollment
-        )
+        if mode.upper() == "LEGACY":
+            # Phase 9, D9-02: NOTE keeps new data and repairs come from backup;
+            # no learner goes back to LEGACY (runbook P9 §9).
+            raise click.ClickException(
+                "LEGACY_ENROLLMENT_RETIRED: learners no longer move back to LEGACY; "
+                "see docs/task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md §9."
+            )
+        transition = stage_note_authority_enrollment
         if apply and mode.upper() == "NOTE":
             if not bool(app.config.get("STUDY_WIRE_V4_ENABLED", False)):
                 raise click.ClickException(
@@ -547,57 +572,23 @@ def register_cli_commands(app: Flask) -> None:
                 now_utc=observed_at,
                 timezone_name=timezone_name,
             )
-            legacy_counts = study_repository.query_study_queue_counts(
-                cards_query,
-                user_id=user_id,
-                now=observed_at,
-                timezone_name=timezone_name,
-            )
-            legacy_selected = study_repository.query_next_due_card_id(
-                cards_query,
-                user_id=user_id,
-                now=observed_at,
-                timezone_name=timezone_name,
-            )
-            legacy_pending = study_repository.query_pending_learning_summary(
-                cards_query,
-                user_id=user_id,
-                now=observed_at,
-                timezone_name=timezone_name,
-            )
-            legacy_due_order, legacy_ahead_order = (
-                study_repository.query_study_card_order(
-                    cards_query,
-                    user_id=user_id,
-                    now=observed_at,
+            mismatches: list[str] = []
+            # CANONICAL_V1 froze card_progress: the per-Card canonical
+            # verification above is the whole audit (ADR P9-03 §2.7).
+            compare_projection = route.storage_profile == "PROJECTION_V1"
+            if compare_projection:
+                mismatches = _authority_read_mismatches(
+                    canonical, cards_query, user_id=user_id, observed_at=observed_at,
                     timezone_name=timezone_name,
                 )
-            )
-            mismatches: list[str] = []
-            canonical_counts = (
-                canonical.new_count,
-                canonical.learn_count,
-                canonical.due_count,
-            )
-            if canonical_counts != tuple(int(value) for value in legacy_counts):
-                mismatches.append("queue_counts")
-            if canonical.selected_card_id != legacy_selected:
-                mismatches.append("selected_card_id")
-            if canonical.due_card_ids != legacy_due_order:
-                mismatches.append("due_order")
-            if canonical.learn_ahead_card_ids != legacy_ahead_order:
-                mismatches.append("learn_ahead_order")
-            if (
-                canonical.pending_learning_count != int(legacy_pending[0])
-                or canonical.next_due_at != legacy_pending[1]
-            ):
-                mismatches.append("pending_learning")
             payload = {
                 "schema_version": "study-authority-read-audit.v1",
                 "user_id": user_id,
                 "observed_at_utc": observed_at.isoformat(timespec="microseconds") + "Z",
                 "timezone": timezone_name,
                 "authority_mode": route.mode_code,
+                "storage_profile": route.storage_profile,
+                "compared_with_projection": compare_projection,
                 "enrollment_epoch": route.epoch,
                 "card_count": len(cards),
                 "status": "PASS" if not mismatches else "BLOCK",
@@ -681,6 +672,117 @@ def register_cli_commands(app: Flask) -> None:
                 separators=(",", ":"),
             )
         )
+
+    @app.cli.command("study-phase6-attribution-backfill")
+    @click.option(
+        "--apply",
+        is_flag=True,
+        default=False,
+        help="Stamp occurrences and Note attribution in committed batches; default only counts.",
+    )
+    @click.option(
+        "--batch-size",
+        type=click.IntRange(100, 20_000),
+        default=2000,
+        show_default=True,
+        help="Rows per committed batch.",
+    )
+    def study_phase6_attribution_backfill(apply: bool, batch_size: int) -> None:
+        """Bind Cards to occurrences and old rows to their Note after migration 46."""
+
+        from app.services.study_note_attribution_service import backfill_phase6_attribution
+
+        result = backfill_phase6_attribution(apply=apply, batch_size=batch_size)
+        click.echo(
+            json.dumps(
+                result.to_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+
+    @app.cli.command("study-session-retention")
+    @click.option(
+        "--apply",
+        is_flag=True,
+        default=False,
+        help="Expire stale open sessions and delete old membership rows; default is a dry-run.",
+    )
+    @click.option(
+        "--older-than-days",
+        type=click.IntRange(30, 3650),
+        default=30,
+        show_default=True,
+        help="Keep membership rows of sessions newer than this.",
+    )
+    @click.option(
+        "--grace-hours",
+        type=click.IntRange(0, 24 * 365),
+        default=24,
+        show_default=True,
+        help="Expire open sessions only this long after their lease ended.",
+    )
+    @click.option(
+        "--batch-sessions",
+        type=click.IntRange(1, 5000),
+        default=200,
+        show_default=True,
+        help="Sessions per keyset discovery/expiry page.",
+    )
+    @click.option("--batch-memberships", type=click.IntRange(1, 5000), default=1000, show_default=True)
+    @click.option("--max-memberships", type=click.IntRange(1), default=10000, show_default=True)
+    @click.option("--max-expired-sessions", type=click.IntRange(1), default=1000, show_default=True)
+    @click.option("--max-seconds", type=click.FloatRange(min=0.001), default=60, show_default=True)
+    def study_session_retention(
+        apply: bool, older_than_days: int, grace_hours: int, batch_sessions: int,
+        batch_memberships: int, max_memberships: int, max_expired_sessions: int, max_seconds: float,
+    ) -> None:
+        """Phase 7: expire stale open sessions and purge old session membership rows.
+
+        Review events, history, receipts, progress and the session rows
+        themselves are never deleted.
+        """
+
+        from datetime import timedelta
+
+        from app.services.study_session_retention_service import run_session_retention
+
+        report = run_session_retention(
+            older_than_days=older_than_days,
+            grace=timedelta(hours=grace_hours),
+            batch_sessions=batch_sessions,
+            batch_memberships=batch_memberships,
+            max_memberships=max_memberships,
+            max_expired_sessions=max_expired_sessions,
+            max_seconds=max_seconds,
+            apply=apply,
+        )
+        click.echo(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
+
+    @app.cli.command("study-storage-profile-switch")
+    @click.option("--apply", "apply_switch", is_flag=True, default=False,
+                  help="Switch now (one-way); without it, only print the plan.")
+    def study_storage_profile_switch(apply_switch: bool) -> None:
+        """P9-06: switch the NOTE storage profile to CANONICAL_V1 (write freeze only)."""
+
+        from app.services.study_storage_profile_service import (
+            StorageProfileSwitchError,
+            apply_storage_profile_switch,
+            plan_storage_profile_switch,
+        )
+
+        if not apply_switch:
+            click.echo(json.dumps(plan_storage_profile_switch(db.session), sort_keys=True))
+            return
+        try:
+            result = apply_storage_profile_switch(db.session)
+            db.session.commit()
+        except StorageProfileSwitchError as exc:
+            db.session.rollback()
+            click.echo(json.dumps({"error": exc.code, "message": str(exc), "blockers": list(exc.blockers)}))
+            raise SystemExit(1) from exc
+        click.echo(json.dumps(result, sort_keys=True))
 
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
@@ -1723,3 +1825,35 @@ from app.services.seeding_service import (
     _load_quiz_dump_rows,
     _seed_quiz_dump_for_user,
 )
+
+
+def _authority_read_mismatches(canonical, cards_query, *, user_id, observed_at, timezone_name) -> list[str]:
+    """PROJECTION_V1 only: compare canonical queue reads with the legacy reader."""
+
+    from app.repositories import study_repository
+
+    legacy_counts = study_repository.query_study_queue_counts(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    legacy_selected = study_repository.query_next_due_card_id(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    legacy_pending = study_repository.query_pending_learning_summary(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    legacy_due_order, legacy_ahead_order = study_repository.query_study_card_order(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    mismatches: list[str] = []
+    if (canonical.new_count, canonical.learn_count, canonical.due_count) != tuple(
+        int(value) for value in legacy_counts
+    ):
+        mismatches.append("queue_counts")
+    if canonical.selected_card_id != legacy_selected:
+        mismatches.append("selected_card_id")
+    if canonical.due_card_ids != legacy_due_order:
+        mismatches.append("due_order")
+    if canonical.learn_ahead_card_ids != legacy_ahead_order:
+        mismatches.append("learn_ahead_order")
+    if (
+        canonical.pending_learning_count != int(legacy_pending[0])
+        or canonical.next_due_at != legacy_pending[1]
+    ):
+        mismatches.append("pending_learning")
+    return mismatches

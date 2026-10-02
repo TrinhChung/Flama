@@ -40,7 +40,7 @@ def logical_overlay_cards(
         if install.source_note_type_id:
             for local_deck_id in source_to_local.values():
                 note_type_by_local_deck.setdefault(local_deck_id, str(install.source_note_type_id))
-        query = Card.query.join(Note, Card.note_id == Note.id).filter(
+        query = Card.query.add_columns(Note.deck_id).join(Note, Card.note_id == Note.id).filter(
             Note.deck_id.in_(source_to_local.keys())
         )
         if install.source_owner_user_id is not None:
@@ -48,8 +48,8 @@ def logical_overlay_cards(
         snapshot_at = install.base_snapshot_at or install.installed_at
         if snapshot_at is not None:
             query = query.filter(Note.created_at <= snapshot_at, Card.created_at <= snapshot_at)
-        for card in query.order_by(Card.id.asc()).all():
-            local_deck_id = source_to_local.get(int(card.note.deck_id))
+        for card, source_deck_id in query.order_by(Card.id.asc()).all():
+            local_deck_id = source_to_local.get(int(source_deck_id))
             if local_deck_id is not None:
                 result.append((card, local_deck_id))
     return result, note_type_by_local_deck

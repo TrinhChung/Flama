@@ -25,6 +25,8 @@ from app.services.study_artifact_service import (
 from app.services.study_session_authority_pin_service import (
     lock_study_session_authority_subjects,
 )
+from app.services.study_note_card_projection import NoteCardBurial, project_note_card
+from app.services.study_progress_shadow_codec import StudyProgressCodecError
 from app.services.study_progress_shadow_mapper import (
     MappedCardProgress,
     map_card_progress,
@@ -116,6 +118,204 @@ def _availability_from_canonical(
     )
 
 
+def validate_study_authority_projection(*, card, locked, progress, contributor, availability_row):
+    """Validate a full sibling projection without taking locks or writing."""
+    card_id = str(card.id)
+    mapped = map_card_progress(
+        progress,
+        card_created_at=card.created_at,
+        card_order_key=card_id,
+    )
+    if (
+        not isinstance(mapped, MappedCardProgress)
+        or mapped.semantic_state_hash
+        != bytes(locked.state.semantic_state_hash)
+    ):
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} compatibility projection differs from NOTE state.",
+        )
+    projected = mapped.availability
+    if (
+        int(contributor.subject_id) != int(locked.subject.id)
+        or int(contributor.subject_generation)
+        != int(locked.subject.subject_generation)
+        or int(contributor.live_card_progress_id or 0) != int(progress.id or 0)
+        or int(contributor.card_progress_revision) != int(progress.revision)
+        or int(availability_row.subject_id) != int(locked.subject.id)
+        or int(availability_row.subject_generation)
+        != int(locked.subject.subject_generation)
+        or availability_row.projection_version != projected.projection_version
+        or availability_row.normalized_queue != projected.normalized_queue
+        or availability_row.due_at != projected.due_at
+        or availability_row.due_day != projected.due_day
+        or bool(availability_row.is_suspended) != projected.is_suspended
+        or bool(availability_row.is_buried) != projected.is_buried
+        or availability_row.buried_until_day != projected.buried_until_day
+        or availability_row.card_created_at != projected.card_created_at
+        or bytes(availability_row.card_order_key) != projected.card_order_key
+        or availability_row.state_schema_version
+        != projected.state_schema_version
+        or bytes(availability_row.semantic_state_hash)
+        != projected.semantic_state_hash
+    ):
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} canonical availability evidence is stale.",
+        )
+    return _availability_from_canonical(availability_row)
+
+
+_AVAILABILITY_FIELDS = (
+    "projection_version",
+    "normalized_queue",
+    "due_at",
+    "due_day",
+    "is_suspended",
+    "is_buried",
+    "buried_until_day",
+    "card_created_at",
+    "card_order_key",
+    "state_schema_version",
+    "semantic_state_hash",
+)
+
+
+def validate_study_authority_canonical(*, card, locked, contributor, availability_row):
+    """Validate one Card's stored availability against NOTE state alone (P9-04).
+
+    Recomputes availability and the semantic hash from the Algorithm State
+    plus the stored burial (burial is bound by the hash but is not state,
+    ADR P9-03 §2.8), without any ``card_progress`` row.
+    """
+    card_id = str(card.id)
+    try:
+        projected = project_note_card(
+            locked.state.state_payload,
+            burial=NoteCardBurial(
+                is_buried=bool(availability_row.is_buried),
+                buried_until_day=(
+                    int(availability_row.buried_until_day)
+                    if availability_row.buried_until_day is not None
+                    else None
+                ),
+            ),
+            card_id=card_id,
+            card_created_at=card.created_at,
+        )
+    except StudyProgressCodecError as exc:
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} NOTE state cannot be projected: {exc}",
+        ) from exc
+    expected = projected.availability
+    generation = int(locked.subject.subject_generation)
+    if (
+        projected.semantic_state_hash != bytes(locked.state.semantic_state_hash)
+        or int(contributor.subject_id) != int(locked.subject.id)
+        or int(contributor.subject_generation) != generation
+        or str(contributor.live_card_id or "") != card_id
+        or int(availability_row.subject_id) != int(locked.subject.id)
+        or int(availability_row.subject_generation) != generation
+        or any(
+            _stored(getattr(availability_row, field)) != getattr(expected, field)
+            for field in _AVAILABILITY_FIELDS
+        )
+    ):
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} canonical availability differs from NOTE state.",
+        )
+    return _availability_from_canonical(availability_row)
+
+
+def _stored(value):
+    if isinstance(value, (bytearray, memoryview)):
+        return bytes(value)
+    return value
+
+
+@dataclass(frozen=True)
+class StudyAuthorityAvailabilitySnapshot:
+    """Canonical availability of one Card, enough for queue counts and order."""
+
+    availability: StudyAuthorityAvailabilityRead
+
+
+def load_study_authority_availability_snapshot(
+    session: Session,
+    *,
+    learner_user_id: int,
+    cards: Sequence[Card],
+    scope,
+    now_utc: datetime,
+) -> Mapping[str, StudyAuthorityAvailabilitySnapshot]:
+    """Non-locking canonical availability for a whole NOTE queue (P5-11e).
+
+    ``summarize_study_authority_queue`` reads nothing but availability, which
+    ``load_study_authority_card_reads`` takes verbatim from the canonical row
+    (Notes with state) or derives from the Card (never-studied Notes). This
+    reads the same values set-wise, without locks or per-Card verification,
+    and checks evidence integrity with the dashboard's set-wise rules and the
+    locking reader's error codes. ``scope`` is a subquery with ``deck_id``,
+    ``card_id`` and ``note_id`` covering ``cards``. Callers still take a full
+    locking read of the Cards they return or answer.
+    """
+
+    from sqlalchemy import LargeBinary, and_, cast, func
+
+    from app.repositories import note_analytics_read_repository as note_reads
+    from models.study_progress_state import StudyProgressState
+    from models.study_progress_subject import StudyProgressSubject
+
+    from app.repositories.study_authority_repository import read_study_storage_profile
+
+    rows = note_reads.note_card_rows(
+        scope,
+        learner_user_id=learner_user_id,
+        storage_profile=read_study_storage_profile(session),
+    ).subquery("queue_rows")
+    worst = int(session.execute(select(func.max(rows.c.violation))).scalar() or 0)
+    if not worst:
+        worst = note_reads.subject_vector_violation(
+            session, scope=scope, learner_user_id=learner_user_id
+        )
+    error = note_reads.violation_error(worst)
+    if error is not None:
+        raise StudyAuthorityReadError(*error)
+    canonical = {
+        str(card_id): row
+        for card_id, row in session.execute(
+            select(scope.c.card_id, StudyProgressAvailability)
+            .select_from(scope)
+            .join(StudyProgressSubject, and_(
+                StudyProgressSubject.learner_user_id == int(learner_user_id),
+                StudyProgressSubject.logical_note_key == cast(scope.c.note_id, LargeBinary),
+            ))
+            .join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
+            .join(StudyProgressContributor, and_(
+                StudyProgressContributor.subject_id == StudyProgressSubject.id,
+                StudyProgressContributor.live_card_id == scope.c.card_id,
+                StudyProgressContributor.contributor_status == "ACTIVE",
+            ))
+            .join(StudyProgressAvailability, and_(
+                StudyProgressAvailability.contributor_id == StudyProgressContributor.id,
+                StudyProgressAvailability.subject_id == StudyProgressSubject.id,
+            ))
+        ).all()
+    }
+    return MappingProxyType({
+        str(card.id): StudyAuthorityAvailabilitySnapshot(
+            availability=(
+                _availability_from_canonical(canonical[str(card.id)])
+                if str(card.id) in canonical
+                else _availability_from_legacy(card=card, progress=None, now_utc=now_utc)
+            )
+        )
+        for card in cards
+    })
+
+
 def load_study_authority_card_read(
     session: Session,
     *,
@@ -205,6 +405,7 @@ def load_study_authority_card_reads(
             session,
             learner_user_id=learner_user_id,
             note_ids={str(card.note_id) for card in requested_card_by_id.values()},
+            storage_profile=route.storage_profile,
         )
     except StudyAuthorityFenceError as exc:
         raise StudyAuthorityReadError(exc.code, str(exc)) from exc
@@ -266,20 +467,25 @@ def load_study_authority_card_reads(
             "INCOMPLETE_AUTHORITY_COMPATIBILITY",
             "NOTE read Card is missing from the live sibling vector.",
         )
-    progress_by_card_id = {
-        str(row.card_id): row
-        for row in session.query(CardProgress)
-        .filter(
-            CardProgress.user_id == learner_user_id,
-            CardProgress.card_id.in_(sorted(card_by_id)),
-        )
-        .all()
-    }
-    if set(progress_by_card_id) != set(card_by_id):
-        raise StudyAuthorityReadError(
-            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            "NOTE read has no complete legacy compatibility projection.",
-        )
+    # PROJECTION_V1 still writes the projection, so it must agree too;
+    # CANONICAL_V1 has frozen it and reads nothing from it.
+    reads_projection = route.storage_profile == "PROJECTION_V1"
+    progress_by_card_id = {}
+    if reads_projection:
+        progress_by_card_id = {
+            str(row.card_id): row
+            for row in session.query(CardProgress)
+            .filter(
+                CardProgress.user_id == learner_user_id,
+                CardProgress.card_id.in_(sorted(card_by_id)),
+            )
+            .all()
+        }
+        if set(progress_by_card_id) != set(card_by_id):
+            raise StudyAuthorityReadError(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                "NOTE read has no complete legacy compatibility projection.",
+            )
     subject_by_id = {
         int(locked.subject.id): locked
         for locked in subjects.locked_by_logical_note_key.values()
@@ -344,51 +550,17 @@ def load_study_authority_card_reads(
         card = card_by_id[card_id]
         logical_note_key = str(card.note_id)
         locked = subjects.locked_by_logical_note_key[logical_note_key]
-        progress = progress_by_card_id[card_id]
         contributor = contributor_by_card_id[card_id]
         availability_row = availability_by_contributor_id[int(contributor.id)]
-        mapped = map_card_progress(
-            progress,
-            card_created_at=card.created_at,
-            card_order_key=card_id,
+        if reads_projection:
+            validate_study_authority_projection(
+                card=card, locked=locked, progress=progress_by_card_id[card_id],
+                contributor=contributor, availability_row=availability_row,
+            )
+        availability = validate_study_authority_canonical(
+            card=card, locked=locked,
+            contributor=contributor, availability_row=availability_row,
         )
-        if (
-            not isinstance(mapped, MappedCardProgress)
-            or mapped.semantic_state_hash
-            != bytes(locked.state.semantic_state_hash)
-        ):
-            raise StudyAuthorityReadError(
-                "AUTHORITY_READ_PARITY_DIVERGED",
-                f"Card {card_id} compatibility projection differs from NOTE state.",
-            )
-        projected = mapped.availability
-        if (
-            int(contributor.subject_id) != int(locked.subject.id)
-            or int(contributor.subject_generation)
-            != int(locked.subject.subject_generation)
-            or int(contributor.live_card_progress_id or 0) != int(progress.id or 0)
-            or int(contributor.card_progress_revision) != int(progress.revision)
-            or int(availability_row.subject_id) != int(locked.subject.id)
-            or int(availability_row.subject_generation)
-            != int(locked.subject.subject_generation)
-            or availability_row.projection_version != projected.projection_version
-            or availability_row.normalized_queue != projected.normalized_queue
-            or availability_row.due_at != projected.due_at
-            or availability_row.due_day != projected.due_day
-            or bool(availability_row.is_suspended) != projected.is_suspended
-            or bool(availability_row.is_buried) != projected.is_buried
-            or availability_row.buried_until_day != projected.buried_until_day
-            or availability_row.card_created_at != projected.card_created_at
-            or bytes(availability_row.card_order_key) != projected.card_order_key
-            or availability_row.state_schema_version
-            != projected.state_schema_version
-            or bytes(availability_row.semantic_state_hash)
-            != projected.semantic_state_hash
-        ):
-            raise StudyAuthorityReadError(
-                "AUTHORITY_READ_PARITY_DIVERGED",
-                f"Card {card_id} canonical availability evidence is stale.",
-            )
         if card_id not in requested_card_by_id:
             continue
         result[card_id] = StudyAuthorityCardRead(
@@ -405,7 +577,7 @@ def load_study_authority_card_reads(
             ),
             progress=None,
             authority_revision=int(locked.token.authority_revision),
-            availability=_availability_from_canonical(availability_row),
+            availability=availability,
         )
     return MappingProxyType(dict(sorted(result.items())))
 
@@ -417,10 +589,23 @@ def summarize_study_authority_queue(
     learner_user_id: int,
     now_utc: datetime,
     timezone_name: str,
+    count_by_note: bool | None = None,
 ) -> StudyAuthorityQueueSummary:
-    """Count and order a fenced Card vector from canonical availability values."""
+    """Count and order a fenced Card vector from canonical availability values.
 
+    ``count_by_note`` (default: ``STUDY_NOTE_COUNT_ENABLED``) makes the new,
+    learn and due counts count each Note once (Phase 6, D6-04); the queue
+    order itself is unchanged.
+    """
+
+    if count_by_note is None:
+        from flask import current_app, has_app_context
+
+        count_by_note = has_app_context() and bool(
+            current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)
+        )
     card_by_id = {str(card.id): card for card in cards}
+    counted_notes: set[str] = set()
     if set(card_by_id) != set(reads_by_card_id):
         raise ValueError("Authority queue summary requires one read per Card.")
     runtime = resolve_scheduler_runtime_settings(user_id=learner_user_id)
@@ -452,7 +637,12 @@ def summarize_study_authority_queue(
             timezone_name=timezone_name,
             day_boundary_hour_local=boundary_hour,
         )
-        if bucket == study_repository.NEW_QUEUE:
+        note_key = str(card_by_id[card_id].note_id)
+        first_of_note = note_key not in counted_notes
+        counted_notes.add(note_key)
+        if count_by_note and not first_of_note:
+            pass
+        elif bucket == study_repository.NEW_QUEUE:
             new_count += 1
         elif bucket == study_repository.LEARNING_QUEUE:
             learn_count += 1

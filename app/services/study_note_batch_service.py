@@ -17,6 +17,7 @@ from typing import Any, Mapping
 from sqlalchemy import select
 
 from app.repositories.study_authority_repository import lock_study_authority_route
+from app.services.db_errors import domain_error_code
 from app.services.study_artifact_service import canonical_digest
 from app.validators.study_session_wire import SESSION_SCHEMA_V4, StudyNoteAuthorityWireIdentity
 from app.validators.study_note_batch import validate_note_batch_envelope
@@ -277,7 +278,7 @@ def commit_note_study_session_batch(*, user, session_id: str, batch_id: str, now
         db.session.rollback()
         if isinstance(exc, StudySessionError):
             raise
-        code = getattr(exc, "code", None)
+        code = domain_error_code(exc)
         if code:
             raise StudySessionError(code, str(exc), status=409) from exc
         raise

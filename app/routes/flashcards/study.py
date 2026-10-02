@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 from flask import jsonify, request, redirect, url_for, flash, send_file, current_app, make_response
 from flask_login import current_user, login_required
 from app.spa import serve_react_spa
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import selectinload
 from models import db
 from models.flashcard import *
 from models.deck import Deck
@@ -54,6 +56,7 @@ from app.services.study_authority_read_service import (
     summarize_study_authority_queue,
 )
 from app.services import study_session_service
+from app.services.db_errors import run_with_deadlock_retry
 from app.services.study_action_runtime import (
     compute_review_previews,
     execute_review_action,
@@ -228,15 +231,19 @@ def _build_study_next_payload(
     authority_reads = None
     selected_cards_by_id = None
     if route.mode_code == "NOTE":
-        cards = query.order_by(Card.id.asc()).all()
+        cards = query.options(selectinload(Card.note)).order_by(Card.id.asc()).all()
         selected_cards_by_id = {str(card.id): card for card in cards}
-        deck_options_by_card_id = {
-            str(card.id): resolve_deck_options(
-                user_id=current_user.id,
-                deck_id=_effective_scheduler_deck_id(card, clone_scope),
-            )
-            for card in cards
-        }
+        # Options depend only on (learner, deck): resolve each deck once.
+        options_by_deck_id: dict[Any, Any] = {}
+        deck_options_by_card_id = {}
+        for card in cards:
+            deck_id = _effective_scheduler_deck_id(card, clone_scope)
+            if deck_id not in options_by_deck_id:
+                options_by_deck_id[deck_id] = resolve_deck_options(
+                    user_id=current_user.id,
+                    deck_id=deck_id,
+                )
+            deck_options_by_card_id[str(card.id)] = options_by_deck_id[deck_id]
         authority_reads = load_study_authority_card_reads(
             db.session,
             learner_user_id=int(current_user.id),
@@ -891,18 +898,22 @@ def study_session_open():
                 if exc.code != "UNSUPPORTED_SESSION_SCHEMA":
                     raise
                 legacy_wire_schema_version = None
-        result = study_session_service.open_study_session(
-            user=current_user,
-            query=query,
-            clone_scope=clone_scope,
-            scope_type=validated_query.scope,
-            scope_id=validated_query.scope_id_raw,
-            timezone_name=timezone_name,
-            composition_selection=composition_selection,
-            wire_schema_version=wire_schema_version,
-            legacy_wire_schema_version=legacy_wire_schema_version,
-            accepted_batch_schema_versions=payload.get("accepted_batch_schema_versions"),
-            accepted_note_storage_profiles=payload.get("accepted_note_storage_profiles"),
+        result = run_with_deadlock_retry(
+            lambda: study_session_service.open_study_session(
+                user=current_user,
+                query=query,
+                clone_scope=clone_scope,
+                scope_type=validated_query.scope,
+                scope_id=validated_query.scope_id_raw,
+                timezone_name=timezone_name,
+                composition_selection=composition_selection,
+                wire_schema_version=wire_schema_version,
+                legacy_wire_schema_version=legacy_wire_schema_version,
+                accepted_batch_schema_versions=payload.get("accepted_batch_schema_versions"),
+                accepted_note_storage_profiles=payload.get("accepted_note_storage_profiles"),
+            ),
+            session=db.session,
+            label="study session open",
         )
     except StudyCompositionError as exc:
         db.session.rollback()
@@ -1043,10 +1054,14 @@ def study_session_commit(session_id: str):
                 payload=payload,
             )
             return _no_store_json(result, 202)
-        result = study_session_service.commit_study_session(
-            user=current_user,
-            session_id=session_id,
-            payload=payload,
+        result = run_with_deadlock_retry(
+            lambda: study_session_service.commit_study_session(
+                user=current_user,
+                session_id=session_id,
+                payload=payload,
+            ),
+            session=db.session,
+            label="study session commit",
         )
     except study_session_service.StudySessionError as exc:
         db.session.rollback()
@@ -1139,17 +1154,21 @@ def study_answer(card_id: str):
     )
 
     try:
-        command_result = execute_native_review_command(
-            user=current_user,
-            card=card,
-            action=rating,
-            payload=service_payload,
-            clone_scope=clone_scope,
-            requested_scope_id=requested_scope_id,
-            timezone_name=timezone_name,
-            require_review_state_version=bool(client_render),
-            review_state_version=str(payload.get("review_state_version") or "").strip() or None,
-            now=now,
+        command_result = run_with_deadlock_retry(
+            lambda: execute_native_review_command(
+                user=current_user,
+                card=card,
+                action=rating,
+                payload=service_payload,
+                clone_scope=clone_scope,
+                requested_scope_id=requested_scope_id,
+                timezone_name=timezone_name,
+                require_review_state_version=bool(client_render),
+                review_state_version=str(payload.get("review_state_version") or "").strip() or None,
+                now=now,
+            ),
+            session=db.session,
+            label="study answer",
         )
         local_deck_id_for_usage = command_result.local_deck_id
     except StudyReviewError as exc:

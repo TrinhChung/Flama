@@ -164,7 +164,7 @@ class StudySessionApiTests(unittest.TestCase):
         return response.get_json()
 
     def _enable_existing_state_note_authority(
-        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None
+        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token: bool | None = None
     ):
         with self.app.app_context():
             note_query = Note.query.filter_by(
@@ -275,6 +275,13 @@ class StudySessionApiTests(unittest.TestCase):
                 ]
             )
             expected_hash = mapped.semantic_state_hash.hex()
+            should_include_token = bool(enroll if include_token is None else include_token)
+            if should_include_token:
+                db.session.add(StudyAuthoritySubjectToken(
+                    subject_id=int(subject.id), subject_generation=1,
+                    authority_revision=0, semantic_state_hash=mapped.semantic_state_hash,
+                    created_at=now, updated_at=now,
+                ))
             if enroll:
                 db.session.add(
                     StudyAuthorityEnrollment(
@@ -791,7 +798,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 1)
 
     def test_note_authority_template_delete_rolls_back_stale_projection(self):
-        self._enable_existing_state_note_authority(epoch=14)
+        self._enable_existing_state_note_authority(epoch=14, include_token=True)
         created = self.client.post(
             f"/api/note-types/{self.note_type_id}/templates",
             json={
@@ -823,7 +830,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_note_authority_new_template_expands_every_owned_note(self):
-        self._enable_existing_state_note_authority(epoch=15)
+        self._enable_existing_state_note_authority(epoch=15, include_token=True)
         second_note = self.client.post(
             "/api/notes",
             json={
@@ -2031,11 +2038,12 @@ class StudySessionApiTests(unittest.TestCase):
 
     def test_dashboard_note_counts_are_rebuilt_from_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=14)
-        with patch(
-            "app.services.dashboard_service._classify_progress_fast",
-            return_value=None,
-        ):
-            response = self.client.get("/api/dashboard")
+        with self.app.app_context():
+            # Projection content drift (no revision bump) must not change NOTE counts.
+            progress = CardProgress.query.filter_by(user_id=self.user_id).one()
+            progress.queue, progress.due_day = "review", 0
+            db.session.commit()
+        response = self.client.get("/api/dashboard")
         self.assertEqual(response.status_code, 200, response.get_json())
         payload = response.get_json()
         self.assertEqual(payload["summary"]["new"], 1)
@@ -2149,6 +2157,69 @@ class StudySessionApiTests(unittest.TestCase):
         ):
             response = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(response.status_code, 200)
+
+    def test_reused_commit_id_with_another_payload_settles_on_the_stored_receipt(self):
+        # Production 2026-10-01: a browser lost the receipt of a commit and
+        # resent the same commit id with another reason (auto_finish, then
+        # manual_exit). It must get the stored receipt to settle, and nothing
+        # may be applied twice.
+        snapshot = self._open_session_v3()
+        payload = {**self._commit_payload(snapshot), "commit_reason": "page_exit"}
+        url = f"/api/study/sessions/{snapshot['session_id']}/commit"
+        first = self.client.post(url, json=payload)
+        self.assertEqual(first.status_code, 200, first.get_json())
+        receipt = first.get_json()
+        with self.app.app_context():
+            events_before = ReviewEvent.query.count()
+
+        resent = self.client.post(url, json={**payload, "commit_reason": "manual_exit"})
+        self.assertEqual(resent.status_code, 409, resent.get_json())
+        self.assertEqual(resent.get_json()["error"], "SESSION_ALREADY_COMMITTED")
+        self.assertEqual(resent.get_json()["details"], receipt)
+        self.assertEqual(self.client.post(url, json=payload).get_json(), receipt)
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), events_before)
+
+    def test_pre_cutover_legacy_commit_replays_after_note_enrollment(self):
+        # A browser lost the acknowledgement of a legacy commit, then the
+        # learner moved to NOTE: the retry must get its receipt, not a refusal.
+        # The commit path reads only the learner's route, so the NOTE fence
+        # row is enough here (full enrollment is covered elsewhere).
+        committed = self._open_session_v3()
+        payload = self._commit_payload(committed)
+        first = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=payload)
+        self.assertEqual(first.status_code, 200, first.get_json())
+        receipt = first.get_json()
+        open_lease = self._open_session_v3()
+        with self.app.app_context():
+            now = datetime.utcnow()
+            db.session.add(StudyAuthorityEnrollment(
+                learner_user_id=self.user_id, mode_code="NOTE", epoch=1, created_at=now, updated_at=now,
+            ))
+            db.session.commit()
+            events_before = ReviewEvent.query.count()
+
+        replay = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=payload)
+        self.assertEqual(replay.status_code, 200, replay.get_json())
+        self.assertEqual(replay.get_json(), receipt)
+
+        other = self._commit_payload(committed)
+        again = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=other)
+        self.assertEqual(again.status_code, 409, again.get_json())
+        self.assertEqual(again.get_json()["error"], "SESSION_ALREADY_COMMITTED")
+        self.assertEqual(again.get_json()["details"], receipt)
+
+        # A legacy lease that would still write stays refused under NOTE.
+        with self.app.app_context():
+            db.session.get(StudySession, open_lease["session_id"]).status = "open"
+            db.session.commit()
+        refused = self.client.post(
+            f"/api/study/sessions/{open_lease['session_id']}/commit", json=self._commit_payload(open_lease)
+        )
+        self.assertEqual(refused.status_code, 409, refused.get_json())
+        self.assertEqual(refused.get_json()["error"], "WIRE_CONTRACT_MISMATCH")
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), events_before)
 
     def test_direct_note_read_fails_closed_on_stale_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=13)
@@ -2551,6 +2622,16 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertTrue(status_res2.get_json()["stale"])
 
     def test_auto_finish_rejects_actionable_learning_card(self):
+        from models.user_scheduler_settings import UserSchedulerSettings
+
+        # Keep the day boundary 12 h away: a learning step that crosses it
+        # becomes tomorrow's card, so auto_finish would be legitimately allowed.
+        with self.app.app_context():
+            db.session.add(UserSchedulerSettings(
+                user_id=self.user_id,
+                day_boundary_hour_local=(datetime.utcnow().hour + 12) % 24,
+            ))
+            db.session.commit()
         snapshot = self._open_session()
         payload = self._commit_payload(snapshot)
         payload["commit_reason"] = "auto_finish"

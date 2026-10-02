@@ -299,6 +299,15 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
             self.assertEqual(report["schema_version"], "study-architecture-audit.v5")
             self.assertEqual(report["observed_at"], "2026-09-10T03:04:05")
             self.assertEqual(report["verdicts"]["overall_status"], "PASS")
+            before_bytes = db_path.read_bytes()
+            phase9 = subprocess.run(
+                [sys.executable, "-m", "flask", "--app", "wsgi_audit.py", "study-phase9-readiness"],
+                env=env, capture_output=True, text=True,
+                cwd=str(Path(__file__).resolve().parent.parent),
+            )
+            self.assertEqual(phase9.returncode, 0, phase9.stderr)
+            self.assertEqual(json.loads(phase9.stdout)["schema_version"], "study-phase9-readiness.v3")
+            self.assertEqual(db_path.read_bytes(), before_bytes)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -389,7 +398,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
             )
 
     def test_audit_app_command_surface_isolation(self):
-        """Audit app exposes ONLY study-architecture-audit and zero mutating commands."""
+        """Audit app exposes read-only commands and zero mutating commands."""
         mutating_commands = [
             "startup-maintenance",
             "clone-cutover-overlay",

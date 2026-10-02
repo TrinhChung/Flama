@@ -36,6 +36,23 @@ SUBJECT_STATUSES = (
 
 CONTRIBUTOR_STATUSES = ("ACTIVE", "DETACHED", "REKEYED", "TOMBSTONED")
 
+# LEGACY_PROJECTION evidence describes a CardProgress row; CANONICAL rows are
+# written without one and carry no raw evidence (ADR P9-03 §2.3).
+EVIDENCE_KINDS = ("LEGACY_PROJECTION", "CANONICAL")
+CONTRIBUTOR_RAW_EVIDENCE_COLUMNS = (
+    "source_progress_id",
+    "card_progress_revision",
+    "raw_schema_version",
+    "storage_codec",
+    "raw_payload",
+    "raw_payload_size",
+    "raw_progress_hash",
+)
+
+# One system-wide NOTE storage profile, switched once in a write freeze.
+STORAGE_PROFILES = ("PROJECTION_V1", "CANONICAL_V1")
+DEFAULT_STORAGE_PROFILE = "PROJECTION_V1"
+
 POINTER_STATUSES = (
     "VALID",
     "ABSENT",
@@ -151,3 +168,19 @@ def sql_allowlist(column_name: str, values: tuple[str, ...]) -> str:
         raise ValueError("Unsafe SQL identifier.")
     literals = ", ".join("'" + value.replace("'", "''") + "'" for value in values)
     return f"{column_name} IN ({literals})"
+
+
+def contributor_evidence_check() -> str:
+    """CHECK pairing ``evidence_kind`` with its raw CardProgress evidence.
+
+    ``live_card_progress_id`` stays out: MySQL refuses a CHECK on a column
+    whose foreign key has a referential action (``ON DELETE SET NULL``), so
+    CANONICAL writers leave it NULL by contract, not by constraint.
+    """
+
+    present = " AND ".join(f"{name} IS NOT NULL" for name in CONTRIBUTOR_RAW_EVIDENCE_COLUMNS)
+    absent = " AND ".join(f"{name} IS NULL" for name in CONTRIBUTOR_RAW_EVIDENCE_COLUMNS)
+    return (
+        f"(evidence_kind = 'LEGACY_PROJECTION' AND {present}) OR "
+        f"(evidence_kind = 'CANONICAL' AND {absent})"
+    )

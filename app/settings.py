@@ -268,6 +268,12 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "STUDY_NEW_LEARNER_NOTE_ENABLED",
             default=False,
         ),
+        # Phase 6 (D6-04): NOTE learners' dashboard, deck tree and queue counts
+        # count each Note once instead of each Card. Off until Phase 6 rollout.
+        "STUDY_NOTE_COUNT_ENABLED": coerce_bool_env(
+            "STUDY_NOTE_COUNT_ENABLED",
+            default=False,
+        ),
         # Phase 4 shadow progress remains inert until each later rollout gate
         # is approved independently.  None of these flags grants read authority.
         "STUDY_PROGRESS_SHADOW_WRITE_ENABLED": coerce_bool_env(
