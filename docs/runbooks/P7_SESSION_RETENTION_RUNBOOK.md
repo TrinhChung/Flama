@@ -48,6 +48,10 @@ Repo có `deploy/flama-study-retention.service` và `.timer`: 18:30 UTC mỗi ng
 
 Sau P9-06, backup/restore proof và lần manual đạt: cài hai unit vào `/etc/systemd/system/`, tạo marker `/etc/flama/study-retention-approved` rồi `systemctl daemon-reload` và `systemctl enable --now flama-study-retention.timer`. Không có marker thì service bỏ qua. Xem kết quả qua `journalctl -u flama-study-retention.service`; lỗi hoặc SQL/transaction quá chậm thì tắt timer, giảm batch rồi probe lại. Giới hạn lô không thay thế đo p95 <1 s trên workload nghiệm thu.
 
+### Activation P9-01 2026-10-02
+
+Sau cutover canonical và restore/PITR rehearsal PASS, manual apply xóa 3.251 membership thuộc 19 terminal session đủ tuổi, expire 1 lease, 0 pin; 20 lô trong 0,974 giây. Protected counts không đổi và repeat noop. Unit/timer đã enabled với marker được phê duyệt ngoài repo. Benchmark MySQL local: terminal session 5.000 membership và 200 open lease, 5 lượt cap 1.000, max cả lượt 0,094 s; pin/FK có contract probe riêng. Xem [báo cáo P9-06](../task/decoupling/P9_06_CUTOVER_REPORT_2026-10-02.md).
+
 ## 4. Rollback
 
 Code: deploy lại release trước (status `expired` với release cũ: commit trả `409 SESSION_NOT_OPEN` thay vì `410`, không mất dữ liệu). Membership đã xóa chỉ khôi phục từ backup bước 2.

@@ -34,7 +34,15 @@ Diễn tập binlog phải dùng DB tự sinh cách ly và giữ profile một c
 
 ## Hành vi sau migration và phần được giữ
 
+P9-01 retention đã bật trên production sau rehearsal:
+
+- Workload MySQL local: một terminal session 5.000 membership cùng 200 open lease; 5 lượt mỗi lượt tối đa 1.000 membership, giữ đủ 200 lease. Thời gian cả lượt `0,094 / 0,078 / 0,078 / 0,078 / 0,079` giây; max mẫu `0,094 s` là upper bound p95 của mẫu này. Fixture benchmark không có pin; MySQL contract 7/7 kiểm pin/FK riêng. DB probe tự sinh đã xóa.
+- Manual production `15:08:48Z`: expire 1 lease cũ; xóa 3.251 membership của 19 terminal session đủ tuổi 30 ngày, 0 pin, 20 lô, 0,974 giây cho cả vòng service. Counts state/subject/token/review/receipt/session/session-commit/projection trước/sau không đổi; delta membership khớp. Lượt chạy lại noop, health OK.
+- Unit/timer đã cài và enabled; lịch daily 18:30 UTC + jitter tối đa 10 phút, không chạy bù. Lần tiếp theo được systemd chọn `2026-10-02T18:32:33Z`. Marker phê duyệt lưu ngoài repo, không thêm vào deploy tự động. Chi tiết [runbook retention](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md).
+
 Các test canonical materialization/lifecycle/review/Connect đã nằm trong 887 test Study + Connect PASS. Chúng kiểm tạo mới không cần projection, direct review/session commit, reset rồi review lại, thêm/xóa Template, nhập Anki, revision fence và overlay. #195 kiểm v4 lease cấp trước switch vẫn commit và retry đúng receipt sau switch, projection không bị ghi.
+
+Regression trong `test_study_new_learner_note_enrollment.py` kiểm apply một lần rồi đăng ký thường và Google mới vẫn NOTE/canonical, không có SQL tới `card_progress`; apply lần hai bị từ chối, epoch không đổi. Đây là bảo đảm migration không trở thành bước thủ công cho các tài khoản về sau.
 
 Compatibility v2/v3 và fallback ordinal được giữ theo yêu cầu. Fence hiện hành vẫn từ chối thực thi legacy lease trên NOTE khi không hợp contract, còn receipt đã commit được trả lại idempotently. Không đổi dữ liệu IndexedDB hay chuyển pending event cũ sang phiên mới.
 
