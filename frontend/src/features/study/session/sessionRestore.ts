@@ -45,6 +45,7 @@ export type StudySessionQuarantineReason =
   | 'MALFORMED_SESSION'
   | 'SCOPE_MISMATCH'
   | 'COMMITTED_ELSEWHERE'
+  | 'LEASE_CLOSED'
 
 export type StudySessionQuarantine = Readonly<{
   reason: StudySessionQuarantineReason
