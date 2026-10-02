@@ -567,6 +567,7 @@ def _execute_note_authority_review_command(
         db.session,
         learner_user_id=int(user.id),
         note_ids=[note_key],
+        storage_profile=route.storage_profile,
     )
     if pristine:
         # First review of a never-studied Note: the client saw the pristine

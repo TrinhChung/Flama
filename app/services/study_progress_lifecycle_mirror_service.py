@@ -39,6 +39,10 @@ from app.services.study_progress_shadow_mapper import (
     map_card_progress,
 )
 from app.services import study_progress_shadow_mirror_service as mirror
+from app.services.study_canonical_materialization_service import (
+    CanonicalPristineItem,
+    finalize_canonical_pristine_materialization,
+)
 from app.repositories.study_inserted_rows import SUBJECT, remember_inserted
 from models.card import Card
 from models.card_progress import CardProgress
@@ -1062,6 +1066,31 @@ def materialize_pristine_notes_bulk(
                 "Authority token references a missing current state.",
             )
 
+    if route.storage_profile != "PROJECTION_V1":
+        state_hash_by_subject = finalize_canonical_pristine_materialization(
+            session,
+            learner_user_id=learner_id,
+            items=[
+                CanonicalPristineItem(
+                    note_id=note_id,
+                    subject=subject_by_note[note_id],
+                    cards=tuple(cards_by_note[note_id]),
+                    starting_ease=float(starting_ease_by_note_id[note_id]),
+                )
+                for note_id in ordered
+            ],
+            provenance_code=provenance_code,
+            now_utc=materialized_at,
+        )
+        _stage_pristine_tokens(
+            session,
+            subjects=subject_by_note.values(),
+            tokens=tokens,
+            state_hash_by_subject=state_hash_by_subject,
+            materialized_at=materialized_at,
+        )
+        return len(ordered)
+
     card_ids = sorted(str(card.id) for cards in cards_by_note.values() for card in cards)
     for chunk in _chunked(card_ids):
         if session.execute(
@@ -1118,8 +1147,19 @@ def materialize_pristine_notes_bulk(
         now_utc=materialized_at,
     )
 
+    _stage_pristine_tokens(
+        session,
+        subjects=subject_by_note.values(),
+        tokens=tokens,
+        state_hash_by_subject=state_hash_by_subject,
+        materialized_at=materialized_at,
+    )
+    return len(ordered)
+
+
+def _stage_pristine_tokens(session, *, subjects, tokens, state_hash_by_subject, materialized_at) -> None:
     new_tokens = []
-    for subject in subject_by_note.values():
+    for subject in subjects:
         subject_id = int(subject.id)
         state_hash = state_hash_by_subject[subject_id]
         token = tokens.get(subject_id)
@@ -1139,7 +1179,6 @@ def materialize_pristine_notes_bulk(
     for chunk in _chunked(new_tokens):
         session.execute(StudyAuthoritySubjectToken.__table__.insert(), list(chunk))
     session.flush()
-    return len(ordered)
 
 
 def _materialize_note_authority(
@@ -1226,9 +1265,11 @@ def _materialize_note_authority(
             "New Note authority unexpectedly has current state.",
         )
     card_ids = tuple(str(card.id) for card in card_rows)
+    canonical = route.storage_profile != "PROJECTION_V1"
     # Non-locking: a concurrent insert of the same (learner, Card) progress
     # fails on uq_card_progress_user_card instead of deadlocking on a gap.
-    existing_progress = session.execute(
+    # CANONICAL_V1 reads no card_progress: the projection is frozen.
+    existing_progress = None if canonical else session.execute(
         select(CardProgress.id)
         .where(
             CardProgress.user_id == route.learner_user_id,
@@ -1263,6 +1304,32 @@ def _materialize_note_authority(
                 user_id=route.learner_user_id,
                 deck_id=note.deck_id,
             ).startingEase
+        )
+    if canonical:
+        state_hash = finalize_canonical_pristine_materialization(
+            session,
+            learner_user_id=route.learner_user_id,
+            items=[
+                CanonicalPristineItem(
+                    note_id=str(note.id),
+                    subject=subject,
+                    cards=card_rows,
+                    starting_ease=float(starting_ease),
+                )
+            ],
+            provenance_code=provenance_code,
+            now_utc=materialized_at,
+        )[int(subject.id)]
+        locked.token.subject_generation = int(subject.subject_generation)
+        locked.token.semantic_state_hash = state_hash
+        locked.token.updated_at = materialized_at
+        session.flush()
+        return mirror.NativeMirrorResult(
+            subject_count=1,
+            contributor_count=len(card_rows),
+            history_fact_count=0,
+            quarantine_count=0,
+            statuses=(str(subject.status_code),),
         )
     for card in card_rows:
         session.add(
