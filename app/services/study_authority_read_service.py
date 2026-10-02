@@ -25,6 +25,8 @@ from app.services.study_artifact_service import (
 from app.services.study_session_authority_pin_service import (
     lock_study_session_authority_subjects,
 )
+from app.services.study_note_card_projection import NoteCardBurial, project_note_card
+from app.services.study_progress_shadow_codec import StudyProgressCodecError
 from app.services.study_progress_shadow_mapper import (
     MappedCardProgress,
     map_card_progress,
@@ -164,6 +166,75 @@ def validate_study_authority_projection(*, card, locked, progress, contributor, 
     return _availability_from_canonical(availability_row)
 
 
+_AVAILABILITY_FIELDS = (
+    "projection_version",
+    "normalized_queue",
+    "due_at",
+    "due_day",
+    "is_suspended",
+    "is_buried",
+    "buried_until_day",
+    "card_created_at",
+    "card_order_key",
+    "state_schema_version",
+    "semantic_state_hash",
+)
+
+
+def validate_study_authority_canonical(*, card, locked, contributor, availability_row):
+    """Validate one Card's stored availability against NOTE state alone (P9-04).
+
+    Recomputes availability and the semantic hash from the Algorithm State
+    plus the stored burial (burial is bound by the hash but is not state,
+    ADR P9-03 §2.8), without any ``card_progress`` row.
+    """
+    card_id = str(card.id)
+    try:
+        projected = project_note_card(
+            locked.state.state_payload,
+            burial=NoteCardBurial(
+                is_buried=bool(availability_row.is_buried),
+                buried_until_day=(
+                    int(availability_row.buried_until_day)
+                    if availability_row.buried_until_day is not None
+                    else None
+                ),
+            ),
+            card_id=card_id,
+            card_created_at=card.created_at,
+        )
+    except StudyProgressCodecError as exc:
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} NOTE state cannot be projected: {exc}",
+        ) from exc
+    expected = projected.availability
+    generation = int(locked.subject.subject_generation)
+    if (
+        projected.semantic_state_hash != bytes(locked.state.semantic_state_hash)
+        or int(contributor.subject_id) != int(locked.subject.id)
+        or int(contributor.subject_generation) != generation
+        or str(contributor.live_card_id or "") != card_id
+        or int(availability_row.subject_id) != int(locked.subject.id)
+        or int(availability_row.subject_generation) != generation
+        or any(
+            _stored(getattr(availability_row, field)) != getattr(expected, field)
+            for field in _AVAILABILITY_FIELDS
+        )
+    ):
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Card {card_id} canonical availability differs from NOTE state.",
+        )
+    return _availability_from_canonical(availability_row)
+
+
+def _stored(value):
+    if isinstance(value, (bytearray, memoryview)):
+        return bytes(value)
+    return value
+
+
 @dataclass(frozen=True)
 class StudyAuthorityAvailabilitySnapshot:
     """Canonical availability of one Card, enough for queue counts and order."""
@@ -197,7 +268,13 @@ def load_study_authority_availability_snapshot(
     from models.study_progress_state import StudyProgressState
     from models.study_progress_subject import StudyProgressSubject
 
-    rows = note_reads.note_card_rows(scope, learner_user_id=learner_user_id).subquery("queue_rows")
+    from app.repositories.study_authority_repository import read_study_storage_profile
+
+    rows = note_reads.note_card_rows(
+        scope,
+        learner_user_id=learner_user_id,
+        storage_profile=read_study_storage_profile(session),
+    ).subquery("queue_rows")
     worst = int(session.execute(select(func.max(rows.c.violation))).scalar() or 0)
     if not worst:
         worst = note_reads.subject_vector_violation(
@@ -328,6 +405,7 @@ def load_study_authority_card_reads(
             session,
             learner_user_id=learner_user_id,
             note_ids={str(card.note_id) for card in requested_card_by_id.values()},
+            storage_profile=route.storage_profile,
         )
     except StudyAuthorityFenceError as exc:
         raise StudyAuthorityReadError(exc.code, str(exc)) from exc
@@ -389,20 +467,25 @@ def load_study_authority_card_reads(
             "INCOMPLETE_AUTHORITY_COMPATIBILITY",
             "NOTE read Card is missing from the live sibling vector.",
         )
-    progress_by_card_id = {
-        str(row.card_id): row
-        for row in session.query(CardProgress)
-        .filter(
-            CardProgress.user_id == learner_user_id,
-            CardProgress.card_id.in_(sorted(card_by_id)),
-        )
-        .all()
-    }
-    if set(progress_by_card_id) != set(card_by_id):
-        raise StudyAuthorityReadError(
-            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            "NOTE read has no complete legacy compatibility projection.",
-        )
+    # PROJECTION_V1 still writes the projection, so it must agree too;
+    # CANONICAL_V1 has frozen it and reads nothing from it.
+    reads_projection = route.storage_profile == "PROJECTION_V1"
+    progress_by_card_id = {}
+    if reads_projection:
+        progress_by_card_id = {
+            str(row.card_id): row
+            for row in session.query(CardProgress)
+            .filter(
+                CardProgress.user_id == learner_user_id,
+                CardProgress.card_id.in_(sorted(card_by_id)),
+            )
+            .all()
+        }
+        if set(progress_by_card_id) != set(card_by_id):
+            raise StudyAuthorityReadError(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                "NOTE read has no complete legacy compatibility projection.",
+            )
     subject_by_id = {
         int(locked.subject.id): locked
         for locked in subjects.locked_by_logical_note_key.values()
@@ -467,11 +550,15 @@ def load_study_authority_card_reads(
         card = card_by_id[card_id]
         logical_note_key = str(card.note_id)
         locked = subjects.locked_by_logical_note_key[logical_note_key]
-        progress = progress_by_card_id[card_id]
         contributor = contributor_by_card_id[card_id]
         availability_row = availability_by_contributor_id[int(contributor.id)]
-        availability = validate_study_authority_projection(
-            card=card, locked=locked, progress=progress,
+        if reads_projection:
+            validate_study_authority_projection(
+                card=card, locked=locked, progress=progress_by_card_id[card_id],
+                contributor=contributor, availability_row=availability_row,
+            )
+        availability = validate_study_authority_canonical(
+            card=card, locked=locked,
             contributor=contributor, availability_row=availability_row,
         )
         if card_id not in requested_card_by_id:

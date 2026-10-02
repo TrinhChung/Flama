@@ -13,6 +13,8 @@ from sqlalchemy.orm import joinedload
 
 from models import db
 from models.card_progress import CardProgress
+from models.study_progress_state import StudyProgressState
+from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.flashcard import (
     Card,
@@ -245,17 +247,41 @@ def delete_notes_by_ids(note_ids: List[str]) -> None:
     if note_ids:
         Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
 
-def get_note_type_reps_for_user(user_id: int, installed_note_type_id: str) -> int:
-    """Calculates total review reps for a user across all cards using a specific note type."""
-    result = (
+def _card_reps_query(user_id: int):
+    """Per-Card review reps summed over Card ⋈ Note; callers add the scope.
+
+    NOTE learners under CANONICAL_V1 read each Card's Note state, which the
+    frozen ``card_progress`` projection only copied to every sibling.
+    """
+    from app.repositories.study_authority_repository import read_study_authority_route
+
+    route = read_study_authority_route(db.session, learner_user_id=user_id)
+    if route.mode_code == "NOTE" and route.storage_profile != "PROJECTION_V1":
+        reps = db.cast(StudyProgressState.state_payload["reps"].as_string(), db.Integer)
+        return (
+            db.session.query(db.func.coalesce(db.func.sum(reps), 0))
+            .select_from(Card)
+            .join(Note, Card.note_id == Note.id)
+            .join(StudyProgressSubject, db.and_(
+                StudyProgressSubject.learner_user_id == user_id,
+                StudyProgressSubject.live_note_id == Card.note_id,
+            ))
+            .join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
+        )
+    return (
         db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
         .select_from(CardProgress)
         .join(Card, CardProgress.card_id == Card.id)
         .join(Note, Card.note_id == Note.id)
-        .filter(
-            CardProgress.user_id == user_id,
-            Note.note_type_id == installed_note_type_id,
-        )
+        .filter(CardProgress.user_id == user_id)
+    )
+
+
+def get_note_type_reps_for_user(user_id: int, installed_note_type_id: str) -> int:
+    """Calculates total review reps for a user across all cards using a specific note type."""
+    result = (
+        _card_reps_query(user_id)
+        .filter(Note.note_type_id == installed_note_type_id)
         .scalar()
     )
     return int(result or 0)
@@ -290,16 +316,7 @@ def get_deck_reps_for_user_in_source_scope(
     base_snapshot_at: Optional[datetime] = None
 ) -> int:
     """Calculates total review reps for a user within a cloned deck scope."""
-    query = (
-        db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
-        .select_from(CardProgress)
-        .join(Card, CardProgress.card_id == Card.id)
-        .join(Note, Card.note_id == Note.id)
-        .filter(
-            CardProgress.user_id == user_id,
-            Note.deck_id.in_(source_deck_ids),
-        )
-    )
+    query = _card_reps_query(user_id).filter(Note.deck_id.in_(source_deck_ids))
     if source_owner_user_id is not None:
         query = query.filter(Note.user_id == source_owner_user_id)
     if base_snapshot_at is not None:
@@ -315,14 +332,8 @@ def get_deck_reps_for_user_in_subtree(user_id: int, subtree_deck_ids: List[int])
         return 0
         
     flashcard_reps = (
-        db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
-        .select_from(CardProgress)
-        .join(Card, CardProgress.card_id == Card.id)
-        .join(Note, Card.note_id == Note.id)
-        .filter(
-            CardProgress.user_id == user_id,
-            Note.deck_id.in_(subtree_deck_ids),
-        )
+        _card_reps_query(user_id)
+        .filter(Note.deck_id.in_(subtree_deck_ids))
         .scalar()
     ) or 0
     return int(flashcard_reps)

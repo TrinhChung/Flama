@@ -179,7 +179,13 @@ def aggregate_deck_study_counts(
     scope = (union_all(owned, overlay) if overlay is not None else owned).subquery("counted_cards")
 
     if is_note_mode:
-        rows = note_reads.note_card_rows(scope, learner_user_id=learner_user_id).subquery("rows")
+        from app.repositories.study_authority_repository import read_study_storage_profile
+
+        rows = note_reads.note_card_rows(
+            scope,
+            learner_user_id=learner_user_id,
+            storage_profile=read_study_storage_profile(session),
+        ).subquery("rows")
     else:
         rows = (
             select(

@@ -150,6 +150,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_inserted_rows.py",
             "tests/test_study_pristine_bulk_materialization.py",
             "tests/test_study_availability_snapshot.py",
+            "tests/test_study_canonical_reads.py",
             "tests/test_study_note_templates.py",
             "tests/test_study_content_delete.py",
             "tests/test_study_note_overlay.py",

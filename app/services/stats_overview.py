@@ -155,6 +155,7 @@ def _canonical_future_due_day_counts(
     start_utc: datetime,
     end_utc: datetime,
     day_boundary_hour_local: int,
+    storage_profile: str,
 ) -> dict[date, int]:
     """NOTE future-due days from canonical availability, LEGACY semantics.
 
@@ -169,8 +170,12 @@ def _canonical_future_due_day_counts(
     )
     from app.services.study_authority_read_service import StudyAuthorityReadError
 
-    scope = note_reads.learner_note_scope(learner_user_id=user_id)
-    rows = note_reads.note_card_rows(scope, learner_user_id=user_id).subquery("rows")
+    scope = note_reads.learner_note_scope(
+        learner_user_id=user_id, storage_profile=storage_profile
+    )
+    rows = note_reads.note_card_rows(
+        scope, learner_user_id=user_id, storage_profile=storage_profile
+    ).subquery("rows")
     # One pass: every violating Card plus every due, unsuspended Card.
     fetched = db.session.execute(
         select(rows.c.violation, rows.c.due_at, rows.c.due_day, rows.c.queue).where(
@@ -410,6 +415,7 @@ def build_stats_overview(
                     start_utc=future_start_utc,
                     end_utc=year_end_utc,
                     day_boundary_hour_local=day_boundary_hour,
+                    storage_profile=authority_route.storage_profile,
                 )
             else:
                 due_day_map = query_future_due_day_counts(

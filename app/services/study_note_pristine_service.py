@@ -42,11 +42,14 @@ def classify_note_authority_keys(
     learner_user_id: int,
     note_ids: Iterable[str],
     for_update: bool = True,
+    storage_profile: str = "PROJECTION_V1",
 ) -> tuple[frozenset[str], frozenset[str]]:
     """Split Notes into (stateful, pristine) or fail on partial evidence.
 
     Locking reads by default: a first-state insert for these keys waits until
     the caller's transaction ends, so a read never mixes the two answers.
+    Under ``CANONICAL_V1`` the frozen ``card_progress`` projection is not
+    evidence: pristine means no state and no ACTIVE contributor.
     """
 
     note_ids = sorted({str(value) for value in note_ids if str(value)})
@@ -103,7 +106,7 @@ def classify_note_authority_keys(
                 "INCOMPLETE_AUTHORITY_COVERAGE",
                 "A Note has contributor evidence without current NOTE state.",
             )
-    for chunk in _chunks(sorted(candidates)):
+    for chunk in _chunks(sorted(candidates) if storage_profile == "PROJECTION_V1" else []):
         if session.execute(read(
             select(CardProgress.id).join(Card, Card.id == CardProgress.card_id).where(
                 CardProgress.user_id == int(learner_user_id),
