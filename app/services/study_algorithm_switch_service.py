@@ -36,7 +36,12 @@ from app.services.study_algorithm_switch_preflight_service import (
     preflight_study_algorithm_switch,
 )
 from app.services.study_authority_cas_service import StudyAuthorityCASExpectation
-from app.services.study_authority_evidence_service import finalize_study_authority_evidence
+from app.services.study_authority_evidence_service import (
+    finalize_study_authority_canonical_evidence,
+    finalize_study_authority_evidence,
+)
+from app.services import study_canonical_lifecycle_service as canonical_lifecycle
+from app.services.study_note_card_projection import project_note_card
 from app.services.study_authority_projection_encoder import (
     LegacyProjectionMetadata,
     LegacySiblingBaseline,
@@ -45,6 +50,7 @@ from app.services.study_authority_projection_encoder import (
 from app.services.study_authority_write_service import (
     StudyAuthorityStateWrite,
     StudyAuthorityWriteError,
+    apply_study_authority_canonical_write,
     apply_study_authority_material_write,
 )
 from app.services.study_progress_shadow_codec import (
@@ -203,6 +209,51 @@ def apply_study_algorithm_switch(
     ):
         raise _fail("SWITCH_INITIALIZER_CONTRACT", "Initializer did not return the exact target state.")
 
+    if route.storage_profile != "PROJECTION_V1":
+        write = _apply_canonical_switch(
+            session, route=route, locked=locked, expected=expected, next_state=next_state,
+            siblings=siblings, compatibility=compatibility, now_utc=now_utc)
+    else:
+        write = _apply_projection_switch(
+            session, route=route, locked=locked, expected=expected, next_state=next_state,
+            siblings=siblings, compatibility=compatibility, now_utc=now_utc)
+    return _finish_switch(
+        session, request=request, route=route, locked=locked, expected=expected,
+        siblings=siblings, preflight=preflight, write=write, current_revision=current_revision,
+        operation_key=operation_key, operation_key_hash=operation_key_hash,
+        fingerprint=fingerprint, now_utc=now_utc)
+
+
+def _apply_canonical_switch(session, *, route, locked, expected, next_state, siblings, compatibility, now_utc):
+    """CANONICAL_V1: the target state must project onto every live Card (ADR §2.9)."""
+
+    burial = canonical_lifecycle.burial_of(next(iter(compatibility.availability_by_contributor_id.values())))
+    try:
+        projections = {
+            str(card.id): project_note_card(
+                next_state.state_payload, burial=burial, card_id=str(card.id),
+                card_created_at=card.created_at)
+            for card in siblings.cards
+        }
+    except StudyProgressCodecError as exc:
+        raise _fail("SWITCH_TARGET_NOT_PROJECTABLE", str(exc), blockers=(exc.code,)) from exc
+    hashes = {projection.semantic_state_hash for projection in projections.values()}
+    if len(hashes) != 1:
+        raise _fail("SWITCH_TARGET_NOT_PROJECTABLE", "Siblings do not share one semantic Note state.")
+    try:
+        write = apply_study_authority_canonical_write(
+            session, route=route, locked=locked, expected=expected, next_state=next_state,
+            semantic_state_hash=next(iter(hashes)), now_utc=now_utc,
+            allow_algorithm_identity_change=True)
+    except StudyAuthorityWriteError as exc:
+        raise _fail(exc.code, str(exc)) from exc
+    finalize_study_authority_canonical_evidence(
+        session, route=route, locked=locked, siblings=siblings, compatibility=compatibility,
+        write_result=write, projections_by_card_id=projections, review_event=None, now_utc=now_utc)
+    return write
+
+
+def _apply_projection_switch(session, *, route, locked, expected, next_state, siblings, compatibility, now_utc):
     first_progress = siblings.progress_by_card_id[siblings.card_ids[0]]
     baselines = []
     for card in siblings.cards:
@@ -251,6 +302,11 @@ def apply_study_algorithm_switch(
     finalize_study_authority_evidence(
         session, route=route, locked=locked, siblings=siblings, compatibility=compatibility,
         write_result=write, review_event=None, now_utc=now_utc)
+    return write
+
+
+def _finish_switch(session, *, request, route, locked, expected, siblings, preflight, write,
+                   current_revision, operation_key, operation_key_hash, fingerprint, now_utc):
 
     # Old leases pinned the previous token; cancel them like other topology
     # and state rewrites so a stale session cannot commit across the switch.
@@ -278,10 +334,16 @@ def apply_study_algorithm_switch(
         },
         "to_algorithm": {"key": state.algorithm_key, "version": state.algorithm_version},
         "history_cut_hash": preflight.history_cut.cut_hash.hex(),
-        "projected_card_revisions": {
-            str(row.card_id): int(row.revision)
-            for row in sorted(write.projected_progress, key=lambda row: str(row.card_id))
-        },
+        # CANONICAL_V1 writes no projection: each sibling reports the Note's
+        # authority revision, as review receipts do (ADR P9-03 §2.9).
+        "projected_card_revisions": (
+            {
+                str(row.card_id): int(row.revision)
+                for row in sorted(write.projected_progress, key=lambda row: str(row.card_id))
+            }
+            if route.storage_profile == "PROJECTION_V1"
+            else {card_id: int(write.authority_revision) for card_id in sorted(siblings.card_ids)}
+        ),
     }, too_large_code="AUTHORITY_RESPONSE_TOO_LARGE")
     session.add(StudyAuthorityCommandReceipt(
         learner_user_id=route.learner_user_id,

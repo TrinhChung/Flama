@@ -79,6 +79,17 @@ def read_study_storage_profile(session: Session, *, lock: str | None = None) -> 
     return str(profile_code)
 
 
+def projection_is_live(session: Session) -> bool:
+    """Whether card_progress is still written, so it can still reveal learners.
+
+    Under CANONICAL_V1 no LEGACY learner exists (P9-05c of the readiness
+    gate) and the frozen projection names no learner that subjects,
+    contributors or sessions do not.
+    """
+
+    return read_study_storage_profile(session) == DEFAULT_STORAGE_PROFILE
+
+
 def _with_supported_profile(route: "StudyAuthorityRoute", profile_code: str) -> "StudyAuthorityRoute":
     if profile_code not in SUPPORTED_STORAGE_PROFILES:
         raise StudyAuthorityFenceError(
