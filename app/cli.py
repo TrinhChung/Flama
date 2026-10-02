@@ -688,7 +688,7 @@ def register_cli_commands(app: Flask) -> None:
     )
     @click.option(
         "--older-than-days",
-        type=click.IntRange(2, 3650),
+        type=click.IntRange(30, 3650),
         default=30,
         show_default=True,
         help="Keep membership rows of sessions newer than this.",
@@ -705,10 +705,15 @@ def register_cli_commands(app: Flask) -> None:
         type=click.IntRange(1, 5000),
         default=200,
         show_default=True,
-        help="Sessions per delete transaction.",
+        help="Sessions per keyset discovery/expiry page.",
     )
+    @click.option("--batch-memberships", type=click.IntRange(1, 5000), default=1000, show_default=True)
+    @click.option("--max-memberships", type=click.IntRange(1), default=10000, show_default=True)
+    @click.option("--max-expired-sessions", type=click.IntRange(1), default=1000, show_default=True)
+    @click.option("--max-seconds", type=click.FloatRange(min=0.001), default=60, show_default=True)
     def study_session_retention(
         apply: bool, older_than_days: int, grace_hours: int, batch_sessions: int,
+        batch_memberships: int, max_memberships: int, max_expired_sessions: int, max_seconds: float,
     ) -> None:
         """Phase 7: expire stale open sessions and purge old session membership rows.
 
@@ -724,6 +729,10 @@ def register_cli_commands(app: Flask) -> None:
             older_than_days=older_than_days,
             grace=timedelta(hours=grace_hours),
             batch_sessions=batch_sessions,
+            batch_memberships=batch_memberships,
+            max_memberships=max_memberships,
+            max_expired_sessions=max_expired_sessions,
+            max_seconds=max_seconds,
             apply=apply,
         )
         click.echo(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
