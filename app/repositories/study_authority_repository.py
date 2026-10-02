@@ -573,6 +573,16 @@ def lock_study_authority_siblings(
             "CARD_OUTSIDE_AUTHORITY_SUBJECT",
             "Requested Card is outside the locked authority subject.",
         )
+    if route.storage_profile != "PROJECTION_V1":
+        # CANONICAL_V1: the projection is frozen and never a CAS baseline.
+        return LockedStudyAuthoritySiblings(
+            learner_user_id=route.learner_user_id,
+            subject_id=int(subject.id),
+            subject_generation=int(subject.subject_generation),
+            live_note_id=live_note_id,
+            cards=cards,
+            progress_by_card_id=MappingProxyType({}),
+        )
     progress_rows = tuple(
         session.execute(
             select(CardProgress)
@@ -605,6 +615,101 @@ def lock_study_authority_siblings(
         live_note_id=live_note_id,
         cards=cards,
         progress_by_card_id=MappingProxyType(progress_by_card_id),
+    )
+
+
+def _lock_availability_vector(
+    session: Session, *, subject_id: int, generation: int, contributor_ids: tuple[int, ...]
+) -> dict[int, StudyProgressAvailability]:
+    availability_rows = tuple(
+        session.execute(
+            select(StudyProgressAvailability)
+            .where(StudyProgressAvailability.contributor_id.in_(contributor_ids))
+            .order_by(StudyProgressAvailability.contributor_id.asc())
+            .with_for_update()
+        ).scalars()
+    )
+    availability_by_contributor_id = {
+        int(row.contributor_id): row for row in availability_rows
+    }
+    if (
+        len(availability_rows) != len(contributor_ids)
+        or set(availability_by_contributor_id) != set(contributor_ids)
+    ):
+        raise StudyAuthorityFenceError(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "Authority subject has no complete current availability vector.",
+        )
+    for availability in availability_rows:
+        if (
+            int(availability.subject_id) != subject_id
+            or int(availability.subject_generation) != generation
+        ):
+            raise StudyAuthorityFenceError(
+                "INVALID_AUTHORITY_COMPATIBILITY",
+                "Authority availability evidence has stale subject identity.",
+            )
+    return availability_by_contributor_id
+
+
+def _lock_canonical_compatibility(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked: LockedStudyAuthoritySubject,
+    siblings: LockedStudyAuthoritySiblings,
+) -> LockedStudyAuthorityCompatibility:
+    """CANONICAL_V1: one ACTIVE contributor per live Card, found by Card identity.
+
+    Raw CardProgress evidence on older contributors is history (ADR P9-03
+    §2.9) and is neither compared nor returned.
+    """
+
+    subject = locked.subject
+    subject_id = int(subject.id)
+    generation = int(subject.subject_generation)
+    card_ids = tuple(sorted(siblings.card_ids))
+    contributors = tuple(
+        session.execute(
+            select(StudyProgressContributor)
+            .where(
+                StudyProgressContributor.subject_id == subject_id,
+                StudyProgressContributor.subject_generation == generation,
+                StudyProgressContributor.contributor_status == "ACTIVE",
+            )
+            .order_by(StudyProgressContributor.id.asc())
+            .with_for_update()
+        ).scalars()
+    )
+    contributor_by_card_id = {
+        str(row.live_card_id): row for row in contributors if row.live_card_id is not None
+    }
+    if len(contributors) != len(card_ids) or set(contributor_by_card_id) != set(card_ids):
+        raise StudyAuthorityFenceError(
+            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+            "Authority subject has no complete current contributor vector.",
+        )
+    for card_id, contributor in contributor_by_card_id.items():
+        if bytes(contributor.logical_card_key) != card_id.encode("utf-8"):
+            raise StudyAuthorityFenceError(
+                "INVALID_AUTHORITY_COMPATIBILITY",
+                f"Card {card_id} has stale or detached contributor evidence.",
+            )
+    availability_by_contributor_id = _lock_availability_vector(
+        session,
+        subject_id=subject_id,
+        generation=generation,
+        contributor_ids=tuple(sorted(int(row.id) for row in contributors)),
+    )
+    return LockedStudyAuthorityCompatibility(
+        learner_user_id=route.learner_user_id,
+        subject_id=subject_id,
+        subject_generation=generation,
+        expected_mirror_revision=int(subject.mirror_revision),
+        contributor_by_card_id=MappingProxyType(contributor_by_card_id),
+        availability_by_contributor_id=MappingProxyType(availability_by_contributor_id),
+        contributor_revision_by_card_id=MappingProxyType({}),
+        contributor_raw_hash_by_card_id=MappingProxyType({}),
     )
 
 
@@ -648,6 +753,8 @@ def lock_study_authority_compatibility(
             "AUTHORITY_CONTEXT_DIVERGED",
             "Authority compatibility inputs do not describe one fenced subject.",
         )
+    if route.storage_profile != "PROJECTION_V1":
+        return _lock_canonical_compatibility(session, route=route, locked=locked, siblings=siblings)
 
     progress_by_id = {
         int(row.id): row
