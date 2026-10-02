@@ -130,6 +130,60 @@ async function settleCommittedLease(value: unknown, session: PersistedStudySessi
   throw new ApiError(message, 409, 'SESSION_ALREADY_COMMITTED')
 }
 
+function isTransientCommitFailure(caught: unknown) {
+  return !(caught instanceof ApiError)
+    || caught.code === 'BACKEND_UNAVAILABLE'
+    || caught.code === 'INVALID_COMMIT_RECEIPT'
+    || caught.status >= 500
+}
+
+/**
+ * A restored synchronous lease the server no longer holds open can only be
+ * settled by replaying the exact commit that closed it. Anything else can
+ * never be saved to that lease, so it is quarantined (kept, not deleted)
+ * instead of being retried on every visit. Resolves once the local copy is
+ * settled and may be removed; transient failures are rethrown untouched.
+ */
+async function settleClosedRestoredLease(
+  session: PersistedStudySession,
+  serverStatus: StudySessionStatus['status'] | 'missing',
+) {
+  if (
+    serverStatus === 'committed'
+    && session.status === 'pending_commit'
+    && session.commit_id
+  ) {
+    const prepared = prepareCommit(session)
+    try {
+      const response = await appApi.mutate<unknown>(
+        `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
+        'POST',
+        prepared.payload,
+      )
+      requireMatchingCommitReceipt(response, prepared.session)
+      return
+    } catch (caught) {
+      if (
+        caught instanceof ApiError
+        && caught.code === 'SESSION_ALREADY_COMMITTED'
+        && isCommitReceipt(caught.details)
+      ) {
+        await settleCommittedLease(caught.details, prepared.session)
+        return
+      }
+      if (isTransientCommitFailure(caught)) throw caught
+    }
+  }
+  const unsaved = session.events.length
+  const message = serverStatus === 'missing'
+    ? `Máy chủ không còn phiên học cũ trong trình duyệt này; ${unsaved} câu trả lời chưa lưu đã được cách ly (không xoá). `
+      + 'Chọn Thử lại để mở phiên mới.'
+    : `Phiên học cũ trong trình duyệt này đã đóng trên máy chủ (${serverStatus}); ${unsaved} câu trả lời chưa lưu đã được cách ly (không xoá). `
+      + 'Chọn Thử lại để mở phiên mới.'
+  await quarantineStudySession(session.scope_key, session, { reason: 'LEASE_CLOSED', message })
+  throw new ApiError(message, 409, 'SESSION_LEASE_CLOSED')
+}
+
 function openSnapshot(userId: number, deckId: string, compositionId: string) {
   const key = `${scopeKey(userId, 'deck', deckId)}:composition:${compositionId}`
   const existing = openingRequests.get(key)
@@ -361,6 +415,10 @@ export function useStudySession(deckId: string | null) {
         }
         if (active) {
           const activeSessionId = active.snapshot.session_id
+          // NOTE batch streams settle through their own batch receipts.
+          const settlesSynchronously = !usesNoteBatchTransport(active)
+            && !active.in_flight_batches?.length
+          let closedLeaseStatus: StudySessionStatus['status'] | 'missing' | null = null
           try {
             const serverSession = await appApi.get<StudySessionStatus>(
               `/api/study/sessions/${activeSessionId}`,
@@ -373,6 +431,8 @@ export function useStudySession(deckId: string | null) {
               )
               if (!isThisLease()) return
               active = null
+            } else if (serverSession.status !== 'open') {
+              closedLeaseStatus = serverSession.status
             }
           } catch (caught) {
             if (!isThisLease()) return
@@ -384,11 +444,26 @@ export function useStudySession(deckId: string | null) {
               if (!isThisLease()) return
               active = null
             } else if (
+              caught instanceof ApiError
+              && caught.code === 'SESSION_NOT_FOUND'
+              && settlesSynchronously
+            ) {
+              closedLeaseStatus = 'missing'
+            } else if (
               !(caught instanceof ApiError)
               || caught.code !== 'BACKEND_UNAVAILABLE'
             ) {
               throw caught
             }
+          }
+          // Reviving a lease the server already closed would replay its old
+          // receipt (or fail) on every visit instead of opening a new session.
+          if (active && closedLeaseStatus && settlesSynchronously) {
+            await settleClosedRestoredLease(active, closedLeaseStatus)
+            if (!isThisLease()) return
+            await removeStudySessionIfMatches(key, activeSessionId)
+            if (!isThisLease()) return
+            active = null
           }
         }
         if (active) {
@@ -463,6 +538,7 @@ export function useStudySession(deckId: string | null) {
   useEffect(() => {
     if (!session || !view?.card?.card_id) return
     if (session.active_card_id === view.card.card_id) return
+    if (finalizedSessionRef.current === session.snapshot.session_id) return
     const controller = leaseControllerRef.current
     if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
     void (async () => {
@@ -472,7 +548,7 @@ export function useStudySession(deckId: string | null) {
       try {
         if (!isCurrentLease(controller) || !hasLeaseRef.current) return
         const active = sessionRef.current
-        if (!active) return
+        if (!active || finalizedSessionRef.current === active.snapshot.session_id) return
         const selectedCardId = buildSessionView(active, now()).card?.card_id
         if (!selectedCardId || active.active_card_id === selectedCardId) return
         const nextSession: PersistedStudySession = {
@@ -700,6 +776,8 @@ export function useStudySession(deckId: string | null) {
           prepared.session.scope_key,
           prepared.session.snapshot.session_id,
         )
+        // The receipt closes this lease: nothing may persist or resend it.
+        finalizedSessionRef.current = prepared.session.snapshot.session_id
         if (!isThisLease()) return result
         const reconciled = applyCommitReceipt(prepared.session, result, {
           accumulated_stats: nextAccumulated,
@@ -779,6 +857,7 @@ export function useStudySession(deckId: string | null) {
               pending.scope_key,
               pending.snapshot.session_id,
             )
+            finalizedSessionRef.current = pending.snapshot.session_id
             if (!isThisLease()) return result
             const reconciled = applyCommitReceipt(pending, result, {
               accumulated_stats: nextAccumulated,
@@ -896,12 +975,24 @@ export function useStudySession(deckId: string | null) {
           sessionRef.current = prepared.session
         }
         sessionDurableRef.current = await saveStudySession(prepared.session)
-        const response = await appApi.mutateKeepalive<unknown>(
-          `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
-          'POST',
-          prepared.payload,
-        )
-        requireMatchingCommitReceipt(response, prepared.session)
+        try {
+          const response = await appApi.mutateKeepalive<unknown>(
+            `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
+            'POST',
+            prepared.payload,
+          )
+          requireMatchingCommitReceipt(response, prepared.session)
+        } catch (caught) {
+          if (
+            !(caught instanceof ApiError)
+            || caught.code !== 'SESSION_ALREADY_COMMITTED'
+            || !isCommitReceipt(caught.details)
+          ) throw caught
+          // Same settlement as an in-page retry: a covering stored receipt
+          // clears the copy, anything else is quarantined, never revived.
+          await settleCommittedLease(caught.details, prepared.session)
+        }
+        finalizedSessionRef.current = prepared.session.snapshot.session_id
         await removeStudySessionIfMatches(
           prepared.session.scope_key,
           prepared.session.snapshot.session_id,
