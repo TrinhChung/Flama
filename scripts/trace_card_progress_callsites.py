@@ -16,6 +16,12 @@ own in-memory SQLite.
 been switched (P9-06) and this release supported it: what still touches
 ``card_progress`` is the remaining P9-05 work, and failing tests show NOTE
 flows that do not work without the projection yet.
+
+``--guard-note-writes`` adds a SQLite trigger that aborts any INSERT/UPDATE of
+``card_progress`` for a learner enrolled in NOTE and lists, per issuing app
+frame, the tests that hit it. Under ``CANONICAL_V1`` the list must only hold
+tests that write the projection themselves (no app frame) or build a route by
+hand without a storage profile.
 """
 
 from __future__ import annotations
@@ -72,6 +78,30 @@ def _trace(conn, cursor, statement, parameters, context, executemany):
     records[key]["tests"].add(current_test["id"])
 
 
+note_write_hits: dict[str, set[str]] = defaultdict(set)
+
+
+def _guard_note_writes() -> None:
+    from sqlalchemy import DDL
+
+    from models.card_progress import CardProgress
+
+    for operation in ("INSERT", "UPDATE"):
+        event.listen(CardProgress.__table__, "after_create", DDL(
+            f"CREATE TRIGGER IF NOT EXISTS guard_note_card_progress_{operation.lower()} "
+            f"BEFORE {operation} ON card_progress WHEN EXISTS (SELECT 1 FROM study_authority_enrollments e "
+            "WHERE e.learner_user_id = NEW.user_id AND e.mode_code = 'NOTE') "
+            "BEGIN SELECT RAISE(ABORT, 'NOTE_PROJECTION_WRITE'); END"
+        ).execute_if(dialect="sqlite"))
+
+    # The app may turn the abort into an HTTP error, so record it at the source.
+    @event.listens_for(Engine, "handle_error")
+    def _record(context):
+        if "NOTE_PROJECTION_WRITE" in str(context.original_exception):
+            inner, _outer = _frames()
+            note_write_hits[inner or "<no app frame>"].add(current_test["id"])
+
+
 class _Result(unittest.TextTestResult):
     def startTest(self, test):
         current_test["id"] = test.id()
@@ -90,7 +120,10 @@ def main() -> int:
     parser.add_argument("--module", action="append", default=[])
     parser.add_argument("--json", dest="json_path")
     parser.add_argument("--profile", choices=("PROJECTION_V1", "CANONICAL_V1"), default="PROJECTION_V1")
+    parser.add_argument("--guard-note-writes", action="store_true")
     args = parser.parse_args()
+    if args.guard_note_writes:
+        _guard_note_writes()
     if args.profile != "PROJECTION_V1":
         from unittest import mock
 
@@ -113,6 +146,8 @@ def main() -> int:
     report = {"tests_run": result.testsRun, "failures": len(result.failures), "errors": len(result.errors),
               "files": len(names), "profile": args.profile, "callsites": rows,
               "failed_tests": sorted(test.id() for test, _ in result.failures + result.errors)}
+    if args.guard_note_writes:
+        report["note_projection_writes"] = {issuer: sorted(tests) for issuer, tests in note_write_hits.items()}
     if args.json_path:
         Path(args.json_path).write_text(json.dumps(report, indent=1), encoding="utf-8")
     by_issuer = defaultdict(set)
@@ -120,6 +155,8 @@ def main() -> int:
         by_issuer[row["issuer"]].add(row["operation"])
     for issuer, operations in sorted(by_issuer.items()):
         print(f"{issuer:90} {','.join(sorted(operations))}")
+    for issuer, tests in sorted(report.get("note_projection_writes", {}).items()):
+        print(f"NOTE projection write from {issuer}: {len(tests)} test(s), e.g. {tests[0]}")
     print(json.dumps({key: report[key] for key in ("tests_run", "failures", "errors", "files", "profile")}))
     return 0
 
