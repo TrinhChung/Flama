@@ -26,6 +26,15 @@ BOTH_PROFILES = frozenset({"PROJECTION_V1", "CANONICAL_V1"})
 NOW = datetime(2026, 10, 1)
 
 
+def _without_move_tokens(value):
+    """Dashboard deck move tokens (and their MID- aliases) are time-signed."""
+    if isinstance(value, dict):
+        return {key: _without_move_tokens(item) for key, item in value.items() if "move" not in key}
+    if isinstance(value, list):
+        return [_without_move_tokens(item) for item in value]
+    return value
+
+
 class StudyCanonicalReadTests(unittest.TestCase):
     setUpClass = classmethod(fixtures.StudyDirectNoteReplayTests.setUpClass.__func__)
     setUp = fixtures.StudyDirectNoteReplayTests.setUp
@@ -116,7 +125,7 @@ class StudyCanonicalReadTests(unittest.TestCase):
         for path in paths:
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, (path, response.get_json()))
-            responses[path] = response.get_json()
+            responses[path] = _without_move_tokens(response.get_json())
         with self.app.app_context():
             from app.repositories import flashcards_share_repository as share_reads
 
