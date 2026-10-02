@@ -278,6 +278,8 @@ Nếu D9-08 bị đổi sang cohort (P9-00 cho thấy freeze không chấp nhậ
 
 ### P9-08 — Wire/Connect retirement tách PR
 
+**Cập nhật phạm vi 2026-10-02:** chủ sản phẩm yêu cầu giữ compatibility v2/v3 và fallback positional ordinal. P9-08 chưa được thực thi; mốc chờ retirement dưới đây không chặn P9-06. Lần migration P9-06 đã được duyệt thực hiện ngay và chỉ một lần; logic enrollment, materialization, review/import/reset/sync sau đó tiếp tục bình thường dưới profile canonical. Không miễn gate mặc định cho các lần retirement sau này. [Báo cáo](./P9_06_CUTOVER_REPORT_2026-10-02.md).
+
 - Wire: dừng issuance cũ trước; chờ valid leases + accepted jobs + rollback window + D9-03, không suy từ 30 ngày detail retention. Gỡ executable/replay branch v2/v3 nhưng giữ decoder cần cho history/receipt và typed expiry/upgrade response.
 - Frontend: pending data cũ được quarantine/hiển thị trạng thái rõ; không xóa IndexedDB hàng loạt hoặc replay tự động sang phiên mới. Test commit replay sau membership purge và double-submit cũ.
 - Connect: bỏ riêng fallback positional khi replacement stable ordinal áp dụng cả import/reimport package mới/cũ. Test Template reorder/delete, repeated occurrence, native occurrence không source ordinal, ref detached, overlay. Giữ external ID/provenance.

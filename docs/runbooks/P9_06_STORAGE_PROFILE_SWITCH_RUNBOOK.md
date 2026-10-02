@@ -2,6 +2,8 @@
 
 > Bước **một chiều**: sau khi chuyển, `card_progress` đứng yên (chỉ còn bị xóa khi dọn nội dung) và không quay lại `PROJECTION_V1`. Chỉ chạy khi chủ sản phẩm đã duyệt. Cơ sở: [ADR P9-03](../architecture/phase-9-p9-03-projection-independent-note-adr-2026-09-30.md) §2.1, §2.6, §2.9.
 
+**Đã thực hiện 2026-10-02:** chủ sản phẩm cho phép chuyển ngay, miễn thời gian chờ cho riêng lần migration này, đồng thời yêu cầu **giữ compatibility v2/v3 và fallback ordinal**. T0 `2026-10-02T14:44:54Z`, `CANONICAL_V1`, epoch 2. Xem [báo cáo cutover](../task/decoupling/P9_06_CUTOVER_REPORT_2026-10-02.md). Không bật chính sách bỏ gate lâu dài; không chạy lại migration cho user/note tạo sau T0.
+
 Helper `flama_cli` như trong [P5 runbook](./P5_NOTE_AUTHORITY_RUNBOOK.md).
 
 ## 1. Điều kiện trước (ngày hôm trước)
