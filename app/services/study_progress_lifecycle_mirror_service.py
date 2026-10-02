@@ -2058,6 +2058,16 @@ def prepare_clone_rekey_mirror(
 ) -> RekeyMirrorPlan | None:
     """Prepare old/new clone subjects before P1-02 contributor merge locks."""
 
+    from app.repositories.study_authority_repository import projection_is_live
+
+    if not projection_is_live(session):
+        # Only legacy full-copy installs are rekeyed, and none can exist once
+        # the projection is frozen (production had 0 at P9-06); fail closed.
+        raise StudyAuthorityFenceError(
+            "CLONE_REKEY_REQUIRES_PROJECTION",
+            "Legacy clone cutover rekeys card_progress, which is frozen under CANONICAL_V1.",
+        )
+
     normalized = tuple(
         CloneProgressRekey(
             old_note_id=str(item.old_note_id),

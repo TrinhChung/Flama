@@ -15,6 +15,7 @@ from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySubject,
     StudyAuthorityFenceError,
     StudyAuthorityRoute,
+    bind_storage_profile,
     lock_study_authority_compatibility,
     lock_study_authority_siblings,
     lock_study_authority_subject,
@@ -305,12 +306,12 @@ def stage_note_authority_enrollment(
         )
 
     next_epoch = previous_epoch + 1
-    route = StudyAuthorityRoute(
+    route = bind_storage_profile(session, StudyAuthorityRoute(
         learner_user_id=learner_user_id,
         mode_code="NOTE",
         epoch=next_epoch,
         persisted=True,
-    )
+    ))
     owned_notes = tuple(
         session.execute(
             select(Note)
@@ -338,6 +339,17 @@ def stage_note_authority_enrollment(
         raise _fail(
             "INCOMPLETE_AUTHORITY_COVERAGE",
             f"Learner has {len(cardless_note_ids)} owned Note(s) without Card siblings.",
+        )
+    if route.storage_profile != "PROJECTION_V1":
+        return _stage_canonical_enrollment(
+            session,
+            route=route,
+            enrollment=enrollment,
+            previous_mode=previous_mode,
+            previous_epoch=previous_epoch,
+            owned_note_by_id=owned_note_by_id,
+            cards_by_note_id=cards_by_note_id,
+            now_utc=now_utc,
         )
     owned_card_ids = {str(card.id) for card in owned_cards}
     progress_rows = tuple(
@@ -506,6 +518,57 @@ def stage_note_authority_enrollment(
     )
 
 
+def _stage_canonical_enrollment(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    enrollment: StudyAuthorityEnrollment | None,
+    previous_mode: str,
+    previous_epoch: int,
+    owned_note_by_id: dict,
+    cards_by_note_id: dict,
+    now_utc: datetime,
+) -> StudyAuthorityEnrollmentResult:
+    """CANONICAL_V1: no LEGACY learner exists and card_progress is frozen.
+
+    Nothing is seeded from the projection; every owned Note starts pristine
+    (only an account staged before its first write reaches this). A Note
+    that already has authority evidence is refused by the materializer.
+    """
+
+    card_count = 0
+    for note_id in sorted(owned_note_by_id, key=lambda value: value.encode("utf-8")):
+        try:
+            study_progress_lifecycle_mirror_service.materialize_new_note_authority(
+                session,
+                route=route,
+                note=owned_note_by_id[note_id],
+                cards=cards_by_note_id[note_id],
+                provenance_code="UNKNOWN_LEGACY",
+                now_utc=now_utc,
+            )
+        except StudyAuthorityFenceError as exc:
+            raise _fail(exc.code, str(exc)) from exc
+        card_count += len(cards_by_note_id[note_id])
+    cancelled_session_count = _cancel_open_sessions(session, learner_user_id=route.learner_user_id)
+    if enrollment is None:
+        enrollment = StudyAuthorityEnrollment(learner_user_id=route.learner_user_id, created_at=now_utc)
+        session.add(enrollment)
+    enrollment.mode_code = "NOTE"
+    enrollment.epoch = route.epoch
+    enrollment.updated_at = now_utc
+    return StudyAuthorityEnrollmentResult(
+        learner_user_id=route.learner_user_id,
+        previous_mode=previous_mode,
+        previous_epoch=previous_epoch,
+        mode_code="NOTE",
+        epoch=route.epoch,
+        subject_count=len(owned_note_by_id),
+        card_count=card_count,
+        cancelled_session_count=cancelled_session_count,
+    )
+
+
 def enroll_new_learner_note_authority(
     session: Session,
     *,
@@ -563,6 +626,14 @@ def stage_legacy_authority_enrollment(
     ).scalar_one_or_none()
     if learner is None:
         raise _fail("LEARNER_NOT_FOUND", "Learner authority fence row is missing.")
+    from app.repositories.study_authority_repository import read_study_storage_profile
+
+    if read_study_storage_profile(session, lock="share") != "PROJECTION_V1":
+        # LEGACY reads card_progress, which stopped at the switch (D9-02).
+        raise _fail(
+            "LEGACY_ROLLBACK_RETIRED",
+            "A learner cannot return to LEGACY once card_progress is frozen.",
+        )
     enrollment = session.execute(
         select(StudyAuthorityEnrollment)
         .where(StudyAuthorityEnrollment.learner_user_id == learner_user_id)
@@ -674,12 +745,12 @@ def stage_legacy_authority_enrollment(
             card_count=0,
             cancelled_session_count=cancelled_session_count,
         )
-    route = StudyAuthorityRoute(
+    route = bind_storage_profile(session, StudyAuthorityRoute(
         learner_user_id=learner_user_id,
         mode_code="NOTE",
         epoch=previous_epoch,
         persisted=True,
-    )
+    ))
     locked_subjects: list[LockedStudyAuthoritySubject] = []
     for subject in subjects:
         if not str(subject.live_note_id or "") or not str(

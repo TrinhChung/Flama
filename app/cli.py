@@ -549,57 +549,23 @@ def register_cli_commands(app: Flask) -> None:
                 now_utc=observed_at,
                 timezone_name=timezone_name,
             )
-            legacy_counts = study_repository.query_study_queue_counts(
-                cards_query,
-                user_id=user_id,
-                now=observed_at,
-                timezone_name=timezone_name,
-            )
-            legacy_selected = study_repository.query_next_due_card_id(
-                cards_query,
-                user_id=user_id,
-                now=observed_at,
-                timezone_name=timezone_name,
-            )
-            legacy_pending = study_repository.query_pending_learning_summary(
-                cards_query,
-                user_id=user_id,
-                now=observed_at,
-                timezone_name=timezone_name,
-            )
-            legacy_due_order, legacy_ahead_order = (
-                study_repository.query_study_card_order(
-                    cards_query,
-                    user_id=user_id,
-                    now=observed_at,
+            mismatches: list[str] = []
+            # CANONICAL_V1 froze card_progress: the per-Card canonical
+            # verification above is the whole audit (ADR P9-03 §2.7).
+            compare_projection = route.storage_profile == "PROJECTION_V1"
+            if compare_projection:
+                mismatches = _authority_read_mismatches(
+                    canonical, cards_query, user_id=user_id, observed_at=observed_at,
                     timezone_name=timezone_name,
                 )
-            )
-            mismatches: list[str] = []
-            canonical_counts = (
-                canonical.new_count,
-                canonical.learn_count,
-                canonical.due_count,
-            )
-            if canonical_counts != tuple(int(value) for value in legacy_counts):
-                mismatches.append("queue_counts")
-            if canonical.selected_card_id != legacy_selected:
-                mismatches.append("selected_card_id")
-            if canonical.due_card_ids != legacy_due_order:
-                mismatches.append("due_order")
-            if canonical.learn_ahead_card_ids != legacy_ahead_order:
-                mismatches.append("learn_ahead_order")
-            if (
-                canonical.pending_learning_count != int(legacy_pending[0])
-                or canonical.next_due_at != legacy_pending[1]
-            ):
-                mismatches.append("pending_learning")
             payload = {
                 "schema_version": "study-authority-read-audit.v1",
                 "user_id": user_id,
                 "observed_at_utc": observed_at.isoformat(timespec="microseconds") + "Z",
                 "timezone": timezone_name,
                 "authority_mode": route.mode_code,
+                "storage_profile": route.storage_profile,
+                "compared_with_projection": compare_projection,
                 "enrollment_epoch": route.epoch,
                 "card_count": len(cards),
                 "status": "PASS" if not mismatches else "BLOCK",
@@ -1827,3 +1793,35 @@ from app.services.seeding_service import (
     _load_quiz_dump_rows,
     _seed_quiz_dump_for_user,
 )
+
+
+def _authority_read_mismatches(canonical, cards_query, *, user_id, observed_at, timezone_name) -> list[str]:
+    """PROJECTION_V1 only: compare canonical queue reads with the legacy reader."""
+
+    from app.repositories import study_repository
+
+    legacy_counts = study_repository.query_study_queue_counts(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    legacy_selected = study_repository.query_next_due_card_id(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    legacy_pending = study_repository.query_pending_learning_summary(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    legacy_due_order, legacy_ahead_order = study_repository.query_study_card_order(
+        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
+    mismatches: list[str] = []
+    if (canonical.new_count, canonical.learn_count, canonical.due_count) != tuple(
+        int(value) for value in legacy_counts
+    ):
+        mismatches.append("queue_counts")
+    if canonical.selected_card_id != legacy_selected:
+        mismatches.append("selected_card_id")
+    if canonical.due_card_ids != legacy_due_order:
+        mismatches.append("due_order")
+    if canonical.learn_ahead_card_ids != legacy_ahead_order:
+        mismatches.append("learn_ahead_order")
+    if (
+        canonical.pending_learning_count != int(legacy_pending[0])
+        or canonical.next_due_at != legacy_pending[1]
+    ):
+        mismatches.append("pending_learning")
+    return mismatches
