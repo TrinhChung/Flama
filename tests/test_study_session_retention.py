@@ -3,9 +3,10 @@
 from datetime import datetime, timedelta
 import json
 import unittest
+from unittest import mock
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select, text
 
 from app import create_app
 from app.services.study_architecture_audit_service import build_study_architecture_audit
@@ -239,6 +240,110 @@ class StudySessionRetentionTests(unittest.TestCase):
         self.assertEqual(self._members(old["session_id"]), 0)
         refused = runner.invoke(args=["study-session-retention", "--older-than-days", "1"])
         self.assertNotEqual(refused.exit_code, 0)
+
+    def test_partial_session_resumes_without_changing_facts_or_receipts(self):
+        old = self._open()
+        payload = self._commit_payload(old)
+        receipt = self._commit(old, payload)
+        self._age(old["session_id"], 40)
+        before = self._learner_view()
+        with self.app.app_context():
+            delete_sizes = []
+            def inspect_delete(_connection, _cursor, statement, parameters, _context, _many):
+                if statement.lstrip().upper().startswith("DELETE FROM STUDY_SESSION_"):
+                    delete_sizes.append(len(parameters))
+            event.listen(db.engine, "before_cursor_execute", inspect_delete)
+            self.addCleanup(lambda: self._remove_delete_listener(inspect_delete))
+            dry = run_session_retention(batch_memberships=2, max_memberships=3)
+            self.assertEqual((dry.purged_session_cards, dry.stop_reason), (3, "membership_budget"))
+            self.assertEqual(StudySessionCard.query.count(), 6)
+            first = run_session_retention(apply=True, batch_memberships=2, max_memberships=3)
+            self.assertEqual((first.purged_session_cards, first.batches, first.purged_sessions), (3, 2, 0))
+            self.assertFalse(first.scan_complete)
+            second = run_session_retention(apply=True, batch_memberships=2, max_memberships=3)
+            self.assertEqual((second.purged_session_cards, second.batches, second.purged_sessions), (3, 2, 1))
+            self.assertTrue(delete_sizes)
+            self.assertLessEqual(max(delete_sizes), 2)
+        self.assertEqual(self._learner_view(), before)
+        replay = self.client.post(f"/api/study/sessions/{old['session_id']}/commit", json=payload)
+        self.assertEqual(replay.get_json(), receipt)
+
+    def _remove_delete_listener(self, listener):
+        with self.app.app_context():
+            event.remove(db.engine, "before_cursor_execute", listener)
+
+    def test_mysql_runner_lease_excludes_a_second_runner(self):
+        import hashlib
+        with self.app.app_context():
+            if db.engine.dialect.name != "mysql":
+                self.skipTest("Named runner lease is exercised by the disposable MySQL probe")
+            with db.engine.connect() as connection:
+                database = str(connection.execute(text("SELECT DATABASE()")).scalar_one())
+                key = "flama:study-retention:" + hashlib.sha256(database.encode()).hexdigest()[:24]
+                self.assertEqual(connection.execute(text("SELECT GET_LOCK(:key, 0)"), {"key": key}).scalar_one(), 1)
+                try:
+                    with self.assertRaisesRegex(RuntimeError, "Another Study retention"):
+                        run_session_retention(apply=True)
+                finally:
+                    connection.execute(text("SELECT RELEASE_LOCK(:key)"), {"key": key})
+            self.assertTrue(run_session_retention(apply=True).scan_complete)
+
+    def test_interrupted_run_keeps_committed_chunks_and_can_resume(self):
+        old = self._open()
+        self._commit(old, self._commit_payload(old))
+        self._age(old["session_id"], 40)
+        before = self._learner_view()
+        with self.app.app_context():
+            original_commit = db.session.commit
+            def interrupted_commit():
+                original_commit()
+                raise RuntimeError("runner interrupted after durable chunk")
+            with mock.patch.object(db.session, "commit", side_effect=interrupted_commit):
+                with self.assertRaisesRegex(RuntimeError, "runner interrupted"):
+                    run_session_retention(apply=True, batch_memberships=2)
+            self.assertEqual(StudySessionCard.query.count(), 4)
+            result = run_session_retention(apply=True, batch_memberships=2)
+            self.assertEqual((result.purged_session_cards, result.purged_sessions), (4, 1))
+        self.assertEqual(self._learner_view(), before)
+
+    def test_nonterminal_or_unknown_work_blocks_expiry_and_cleanup(self):
+        from models.study_session_batch import StudySessionBatch
+        for status in ("enqueued", "processing", "recoverable", "future-status"):
+            with self.subTest(status=status):
+                old = self._open()
+                self._age(old["session_id"], 40)
+                with self.app.app_context():
+                    db.session.add(StudySessionBatch(session_id=old["session_id"], user_id=self.user_id,
+                                                    batch_id=str(uuid4()), status=status, request_hash="h"))
+                    db.session.commit()
+                    result = run_session_retention(apply=True)
+                    self.assertEqual(result.expired_sessions, 0)
+                    self.assertEqual(db.session.get(StudySession, old["session_id"]).status, "open")
+                    db.session.get(StudySession, old["session_id"]).status = "committed"
+                    db.session.commit()
+                    result = run_session_retention(apply=True)
+                    self.assertEqual(result.purged_session_cards, 0)
+                self.assertEqual(self._members(old["session_id"]), 6)
+
+    def test_time_and_expiry_budgets_and_retention_floor(self):
+        old = self._open()
+        self._commit(old, self._commit_payload(old))
+        self._age(old["session_id"], 40)
+        with self.app.app_context():
+            with mock.patch("app.services.study_session_retention_service.time.monotonic", side_effect=[0, 61, 61, 61]):
+                result = run_session_retention(apply=True, max_seconds=60)
+            self.assertEqual((result.purged_session_cards, result.stop_reason), (0, "time_budget"))
+            for invalid in (2, 29):
+                with self.assertRaises(ValueError):
+                    run_session_retention(older_than_days=invalid)
+        for _ in range(3):
+            stale = self._open()
+            self._age(stale["session_id"], 3)
+        with self.app.app_context():
+            result = run_session_retention(apply=True, max_expired_sessions=2, batch_sessions=1)
+            self.assertEqual((result.expired_sessions, result.expiry_batches), (2, 2))
+            self.assertFalse(result.scan_complete)
+            self.assertEqual(StudySession.query.filter_by(status="open").count(), 1)
 
 
 if __name__ == "__main__":

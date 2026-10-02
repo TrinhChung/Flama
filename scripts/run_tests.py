@@ -95,6 +95,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/bench_p9_profile_migration_mysql.py",
             "scripts/probe_p9_connect_fence_mysql.py",
             "scripts/trace_card_progress_callsites.py",
+            "deploy/flama-study-retention.service",
+            "deploy/flama-study-retention.timer",
             "models/study_application.py",
             "scripts/bench_p5_session_open_mysql.py",
             "scripts/probe_p7_session_retention_mysql.py",

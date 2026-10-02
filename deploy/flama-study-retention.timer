@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Flama Study membership retention
+
+[Timer]
+OnCalendar=*-*-* 18:30:00 UTC
+RandomizedDelaySec=10m
+Persistent=false
+Unit=flama-study-retention.service
+
+[Install]
+WantedBy=timers.target
