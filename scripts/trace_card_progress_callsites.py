@@ -10,6 +10,12 @@ own in-memory SQLite.
 
     python scripts/trace_card_progress_callsites.py --tests tests/test_study_session_api.py ...
     python scripts/trace_card_progress_callsites.py --module study --json out.json
+    python scripts/trace_card_progress_callsites.py --module study --profile CANONICAL_V1
+
+``--profile CANONICAL_V1`` runs every NOTE route as if the storage profile had
+been switched (P9-06) and this release supported it: what still touches
+``card_progress`` is the remaining P9-05 work, and failing tests show NOTE
+flows that do not work without the projection yet.
 """
 
 from __future__ import annotations
@@ -83,7 +89,15 @@ def main() -> int:
     parser.add_argument("--tests", nargs="*", default=[])
     parser.add_argument("--module", action="append", default=[])
     parser.add_argument("--json", dest="json_path")
+    parser.add_argument("--profile", choices=("PROJECTION_V1", "CANONICAL_V1"), default="PROJECTION_V1")
     args = parser.parse_args()
+    if args.profile != "PROJECTION_V1":
+        from unittest import mock
+
+        from app.repositories import study_authority_repository as repository
+
+        mock.patch.object(repository, "SUPPORTED_STORAGE_PROFILES", frozenset({"PROJECTION_V1", args.profile})).start()
+        mock.patch.object(repository, "read_study_storage_profile", lambda *_a, **_k: args.profile).start()
     files = list(args.tests)
     for module in args.module:
         files.extend(_tests_for_module(module))
@@ -97,7 +111,8 @@ def main() -> int:
     ]
     rows.sort(key=lambda row: (row["issuer"], row["operation"], row["entrypoint"]))
     report = {"tests_run": result.testsRun, "failures": len(result.failures), "errors": len(result.errors),
-              "files": len(names), "callsites": rows}
+              "files": len(names), "profile": args.profile, "callsites": rows,
+              "failed_tests": sorted(test.id() for test, _ in result.failures + result.errors)}
     if args.json_path:
         Path(args.json_path).write_text(json.dumps(report, indent=1), encoding="utf-8")
     by_issuer = defaultdict(set)
@@ -105,7 +120,7 @@ def main() -> int:
         by_issuer[row["issuer"]].add(row["operation"])
     for issuer, operations in sorted(by_issuer.items()):
         print(f"{issuer:90} {','.join(sorted(operations))}")
-    print(json.dumps({key: report[key] for key in ("tests_run", "failures", "errors", "files")}))
+    print(json.dumps({key: report[key] for key in ("tests_run", "failures", "errors", "files", "profile")}))
     return 0
 
 
