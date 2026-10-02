@@ -63,7 +63,9 @@ class StudyStorageProfileSwitchTests(unittest.TestCase):
 
     def test_plan_maps_unchanged_refs_and_flags_diverged_ones(self):
         self._prepare()
-        with self.app.app_context():
+        old_release = mock.patch(
+            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES", frozenset({"PROJECTION_V1"}))
+        with self.app.app_context(), old_release:
             plan = plan_storage_profile_switch(db.session)
             self.assertEqual(plan["connect_refs"], {"authority": 1, "needs_confirmation": 0})
             self.assertIn("RELEASE_DOES_NOT_SUPPORT_CANONICAL_V1", plan["blockers"])

@@ -56,7 +56,9 @@ class StudyAuthorityRoute:
 
 # Storage profiles this release can read and write NOTE authority under. A
 # release that meets any other profile refuses the NOTE route (ADR P9-03 §2.1).
-SUPPORTED_STORAGE_PROFILES = frozenset({"PROJECTION_V1"})
+# CANONICAL_V1 is supported since P9-05d; only the one-way switch
+# (flask study-storage-profile-switch --apply, P9-06) selects it.
+SUPPORTED_STORAGE_PROFILES = frozenset({"PROJECTION_V1", "CANONICAL_V1"})
 
 
 def read_study_storage_profile(session: Session, *, lock: str | None = None) -> str:
