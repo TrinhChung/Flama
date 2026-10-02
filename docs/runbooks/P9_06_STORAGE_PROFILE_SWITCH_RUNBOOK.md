@@ -48,4 +48,4 @@ Nếu `--apply` trả `SWITCH_BLOCKED` hoặc lỗi: không có gì thay đổi 
 
 ## 5. Sau đó (không thuộc cửa sổ)
 
-P9-07..P9-10: ngừng các công cụ còn đọc projection, rồi mới tính chuyện thu hẹp/xóa `card_progress` — mỗi bước cần backup + restore proof + duyệt riêng.
+P9-01, P9-07..P9-10 theo [kế hoạch P9](../task/decoupling/P9_EXECUTION_PLAN_2026-09-30.md) §5: retention, giảm snapshot (nếu cần), gỡ wire cũ, dọn nhánh LEGACY-only, rồi mới archive/drop `card_progress` — mỗi bước cần backup + restore proof + duyệt riêng.
