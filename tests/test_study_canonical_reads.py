@@ -1,10 +1,11 @@
 """P9-04a: NOTE readers verify canonical state and need no CardProgress under CANONICAL_V1."""
 
 from datetime import datetime, timezone
+import re
 import unittest
 from unittest import mock
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from app.repositories import note_analytics_read_repository as note_reads
 from app.services.scheduler_config_service import resolve_deck_options
@@ -117,6 +118,7 @@ class StudyCanonicalReadTests(unittest.TestCase):
             "/api/dashboard",
             "/api/statistics/overview",
             "/api/statistics/today-future",
+            "/api/browse/decks/tree",
         ] + [
             f"/api/browse/cards?deck_id={self.deck_id}{query}"
             for query in ("", "&status=new", "&status=learn", "&status=due", "&sort_dir=desc")
@@ -156,6 +158,29 @@ class StudyCanonicalReadTests(unittest.TestCase):
         for path in projected:
             with self.subTest(path=path):
                 self.assertEqual(canonical[path], projected[path])
+
+    def test_canonical_readers_issue_no_card_progress_statement(self):
+        # The frozen projection is still populated here: only the SQL tells
+        # whether a reader (e.g. the Browse tree's LEGACY count aggregate)
+        # still reads it before discarding the result.
+        self._answer()
+        with self.app.app_context():
+            self._add_pristine_note()
+            self._set_profile("CANONICAL_V1")
+            engine = db.engine
+        seen = []
+
+        def record(_conn, _cursor, statement, *_args):
+            if re.search(r"\bcard_progress\b", statement, re.IGNORECASE):
+                seen.append(statement.split()[0].upper())
+
+        event.listen(engine, "before_cursor_execute", record)
+        self.addCleanup(lambda: event.remove(engine, "before_cursor_execute", record))
+        with mock.patch(
+            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES", BOTH_PROFILES
+        ), mock.patch("app.services.browse_card_service._utcnow", return_value=NOW):
+            self._read_endpoints()
+        self.assertEqual(seen, [])
 
     def test_projection_profile_still_requires_its_projection(self):
         self._answer()

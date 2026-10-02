@@ -145,26 +145,30 @@ def _learners(app) -> dict[str, int]:
     return {"owned": int(owned[0][0]), "installed": int(installed[0][0])}
 
 
-def _open_v4(client, deck_id: int):
+def _open_v4(client, deck_id: int, note_type_id: str | None = None):
     groups = client.get(f"/api/study/scopes/deck/{deck_id}/compositions")
-    if groups.status_code != 200 or not groups.get_json().get("compositions"):
+    compositions = [
+        item["composition_id"] for item in (groups.get_json() or {}).get("compositions", [])
+        if note_type_id is None or f"notetype:{note_type_id}:" in item["composition_id"]
+    ] if groups.status_code == 200 else []
+    if not compositions:
         return None
     response = client.post("/api/study/sessions", json={
         "scope": "deck", "scope_id": deck_id,
-        "composition_id": groups.get_json()["compositions"][0]["composition_id"],
+        "composition_id": compositions[0],
         "accepted_session_schema_versions": ["study-session.v4"],
         "accepted_note_storage_profiles": ["note-mysql-float-text.v1"],
     })
     return response.get_json() if response.status_code == 201 else None
 
 
-def _study_deck(app, client, user_id: int, *, minimum_cards: int = 5):
+def _study_deck(app, client, user_id: int, *, minimum_cards: int = 30):
     """The learner's most recently studied deck whose v4 open has enough Cards."""
 
     for (deck_id,) in _rows(app, """
             SELECT CAST(scope_id AS UNSIGNED) FROM study_sessions
             WHERE user_id = :user_id AND scope_type = 'deck'
-            GROUP BY scope_id ORDER BY MAX(opened_at) DESC LIMIT 12""", user_id=user_id):
+            GROUP BY scope_id ORDER BY MAX(opened_at) DESC LIMIT 30""", user_id=user_id):
         snapshot = _open_v4(client, int(deck_id))
         if snapshot is not None and len(snapshot["cards"]) >= minimum_cards:
             return int(deck_id), snapshot
@@ -251,9 +255,11 @@ def _workload(app, trace: _Trace, learners: dict[str, int], decks: dict[str, int
 
     for role, user_id in learners.items():
         client = _client(app, user_id)
+        trace.step = f"{role}.open"
         snapshot = _open_v4(client, decks[role])
+        trace.step = "between"
         steps[f"{role}.open"] = {"cards": len(snapshot["cards"]) if snapshot else None}
-        chosen = _pick_cards(snapshot, 20)
+        chosen = _pick_cards(snapshot, min(20, len(snapshot["cards"]) - 5))
         payload = _commit_events(snapshot, chosen)
         step(f"{role}.commit_{len(chosen)}", lambda: client.post(
             f"/api/study/sessions/{snapshot['session_id']}/commit", json=payload).status_code)
@@ -270,14 +276,19 @@ def _workload(app, trace: _Trace, learners: dict[str, int], decks: dict[str, int
                 finally:
                     db.session.remove()
 
-        step(f"{role}.mcp_2", mcp_reviews)
+        if role == "owned":  # MCP reviews only the learner's own Cards, never overlay source Cards.
+            step(f"{role}.mcp_2", mcp_reviews)
 
     owner = learners["owned"]
     client = _client(app, owner)
+    # A single-NoteType deck whose fields are all plain text, so the API accepts made-up values.
     target = _rows(app, """
-        SELECT n.deck_id, n.note_type_id FROM notes n JOIN note_types t ON t.id = n.note_type_id
-        WHERE n.user_id = :user_id AND t.user_id = :user_id AND n.deck_id IS NOT NULL
-        GROUP BY n.deck_id, n.note_type_id HAVING COUNT(*) BETWEEN 5 AND 400
+        SELECT n.deck_id, MIN(n.note_type_id) FROM notes n
+        WHERE n.user_id = :user_id AND n.deck_id IS NOT NULL
+        GROUP BY n.deck_id HAVING COUNT(DISTINCT n.note_type_id) = 1 AND COUNT(*) BETWEEN 5 AND 400
+           AND MIN(n.note_type_id) IN (
+               SELECT t.id FROM note_types t WHERE t.user_id = :user_id AND NOT EXISTS (
+                   SELECT 1 FROM field_defs f WHERE f.note_type_id = t.id AND f.field_type <> 'text'))
         ORDER BY COUNT(*) DESC LIMIT 1""", user_id=owner)
     if target:
         deck_id, note_type_id = int(target[0][0]), str(target[0][1])
@@ -291,7 +302,7 @@ def _workload(app, trace: _Trace, learners: dict[str, int], decks: dict[str, int
             if created.status_code != 201:
                 return {"create": created.status_code, "body": str(created.get_json())[:200]}
             note_id = created.get_json().get("id") or created.get_json().get("note", {}).get("id")
-            opened = _open_v4(client, deck_id)
+            opened = _open_v4(client, deck_id, note_type_id)
             new_cards = [card for card in (opened or {}).get("cards", []) if card["note_id"] == note_id]
             committed = client.post(f"/api/study/sessions/{opened['session_id']}/commit",
                                     json=_commit_events(opened, new_cards[:1])) if new_cards else None

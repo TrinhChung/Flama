@@ -183,6 +183,8 @@ def build_browse_deck_tree(
             user_id=user_id,
             admin_mode=admin_mode,
             timezone_name=timezone_name,
+            # NOTE recounts every node below; skip the projection aggregate.
+            progress_counts=authority_route.mode_code != "NOTE",
         )
         if authority_route.mode_code == "NOTE":
             deck_ids: set[int] = set()
