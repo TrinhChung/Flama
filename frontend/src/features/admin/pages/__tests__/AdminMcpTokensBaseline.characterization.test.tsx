@@ -663,6 +663,14 @@ describe('AdminMcpTokensPage Baseline Characterization Suite', () => {
     })
 
     const createDialog = document.querySelector('[role="dialog"]')!
+    const nameInput = createDialog.querySelector<HTMLInputElement>(
+      'input[placeholder*="Claude Desktop PC"]'
+    )
+    expect(nameInput).not.toBeNull()
+    await act(async () => {
+      setNativeInputValue(nameInput!, 'Copy Rejection Token')
+    })
+
     const submitBtn = Array.from(createDialog.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Cấp Token Mới')
     )!
