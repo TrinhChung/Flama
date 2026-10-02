@@ -1,5 +1,7 @@
 # Kế hoạch thực thi Phase 9 — cắt lớp tương thích, giảm tải hệ thống
 
+> **Hoàn tất 2026-10-03** trong phạm vi chủ sản phẩm chốt: [tổng kết INT-06](./P9_CLOSEOUT_2026-10-03.md). Phần dưới là kế hoạch gốc.
+
 > Lập 2026-09-30, ưu tiên giảm tải sớm. **Cập nhật 2026-10-02:** code canonical và tooling P9-06 đã lên production qua #194; profile thực tế còn `PROJECTION_V1`. P9-01 và telemetry retirement được chuẩn bị ở nhánh `phase9/completion-tooling`. Bằng chứng và việc còn chờ nằm trong [tracker hiện hành](./P9_PROGRESS_2026-10-02.md). Những mô tả “hiện trạng” dưới đây là baseline 30/09. Nguồn: [canonical Phase 9](../../architecture/study-interaction-trigger-algorithm-plan.md#phase-9--contract-old-storage-and-compatibility-code), [điều tra baseline](../../architecture/phase-9-contraction-investigation-2026-09-30.md), [readiness P8/P9](./P8_P9_READINESS_2026-09-30.md).
 >
 > **Bổ sung sau review (2026-09-30):** thêm phát hiện [F9-06..F9-10](../../architecture/phase-9-contraction-investigation-2026-09-30.md#f9-06--fence-connectanki-lưu-revision-cardprogress) — fence Connect/Anki lưu revision CardProgress (nguy cơ ghi đè im lặng), đường vào LEGACY còn mở, audit deploy phụ thuộc projection, phân loại writer LEGACY-only, startup tái tạo bảng. Kéo theo: quyết định D9-08/D9-09, tách P9-02a/P9-02b, thêm P9-05b/P9-05c, gate và ma trận kiểm chứng tương ứng. Những gì cần dữ liệu production để chốt nằm ở [§11 bàn giao](#11-bàn-giao-cho-phiên-thực-thi-có-dữ-liệu-production).

@@ -1411,6 +1411,8 @@ Arbitrary user code, multi-trigger chains, and external automation should remain
 
 ### Phase 9 — Contract old storage and compatibility code
 
+> Status 2026-10-03: legacy projection writes stopped (`CANONICAL_V1` since 2026-10-02T14:44:54Z) and expired runtime rows are purged on a daily schedule. The product owner kept v2/v3 wire compatibility, positional Connect fallback and the projection table, so the removal items below remain open with explicit re-entry conditions. See the [INT-06 closeout](../task/decoupling/P9_CLOSEOUT_2026-10-03.md).
+
 Only after telemetry proves no old readers, writers, sessions, packages, or integrations remain:
 
 - stop legacy projection writes;
