@@ -258,6 +258,59 @@ def _append_audit(
     )
 
 
+class ReviewUsageTouches:
+    """Marketplace install usage of several reviews in one transaction.
+
+    A per-review touch sets ``first_use_at`` once, moves ``last_activity_at``
+    forward and re-evaluates a market-activity flag that cannot turn off while
+    reviews only add reps. Touching each install key at its first and last
+    review time, in time order, leaves the same rows and counters as touching
+    it after every review, without repeating the install lookups per answer.
+    """
+
+    _NOTE_TYPE, _DECK = 0, 1
+
+    def __init__(self) -> None:
+        self._times: dict[tuple[int, int, Any], tuple[datetime, datetime]] = {}
+
+    def record(
+        self,
+        *,
+        user_id: int,
+        note_type_id: str,
+        local_deck_id: int | None,
+        reviewed_at: datetime,
+    ) -> None:
+        self._note((int(user_id), self._NOTE_TYPE, str(note_type_id)), reviewed_at)
+        if local_deck_id is not None:
+            self._note((int(user_id), self._DECK, int(local_deck_id)), reviewed_at)
+
+    def _note(self, key: tuple[int, int, Any], reviewed_at: datetime) -> None:
+        first, last = self._times.get(key, (reviewed_at, reviewed_at))
+        self._times[key] = (min(first, reviewed_at), max(last, reviewed_at))
+
+    def apply(self) -> None:
+        calls = []
+        for order, (key, (first, last)) in enumerate(self._times.items()):
+            calls.append((first, key[1], order, key))
+            if last != first:
+                calls.append((last, key[1], order, key))
+        self._times.clear()
+        for activity_at, kind, _order, (user_id, _kind, value) in sorted(calls):
+            if kind == self._NOTE_TYPE:
+                flashcards_share_service.touch_note_type_install_usage(
+                    user_id=user_id,
+                    installed_note_type_id=value,
+                    activity_at=activity_at,
+                )
+            else:
+                flashcards_share_service.touch_deck_install_usage(
+                    user_id=user_id,
+                    local_deck_id=value,
+                    activity_at=activity_at,
+                )
+
+
 def _apply_review_side_effects(
     *,
     user_id: int,
@@ -265,6 +318,7 @@ def _apply_review_side_effects(
     transition: ReviewTransitionResult,
     local_deck_id: int | None,
     reviewed_at: datetime,
+    usage: ReviewUsageTouches | None = None,
 ) -> None:
     if transition.state.leeched and int(card.note.user_id) == int(user_id):
         tags = [
@@ -280,6 +334,14 @@ def _apply_review_side_effects(
         ):
             card.note.tags = tags + ["leech"]
 
+    if usage is not None:
+        usage.record(
+            user_id=int(user_id),
+            note_type_id=str(card.note.note_type_id),
+            local_deck_id=local_deck_id,
+            reviewed_at=reviewed_at,
+        )
+        return
     flashcards_share_service.touch_note_type_install_usage(
         user_id=int(user_id),
         installed_note_type_id=str(card.note.note_type_id),
@@ -318,6 +380,7 @@ def _record_native_review_transition(
     review_event = create_review_event_record(
         user_id=int(user_id),
         card_id=str(card.id),
+        note_id=card.note_id,
         deck_id=local_deck_id,
         note_type_id=str(note_type_id or card.note.note_type_id),
         scheduler_preset_id=scheduler_preset_id,
@@ -430,8 +493,16 @@ def stage_native_review_event(
     )
 
 
-def stage_native_review_side_effects(command: NativeReviewMutationInput) -> None:
-    """Stage leech and marketplace usage effects in the caller transaction."""
+def stage_native_review_side_effects(
+    command: NativeReviewMutationInput,
+    *,
+    usage: ReviewUsageTouches | None = None,
+) -> None:
+    """Stage leech and marketplace usage effects in the caller transaction.
+
+    With ``usage`` the install touches are collected for the caller to apply
+    once (``ReviewUsageTouches.apply``) before it commits.
+    """
 
     if not isinstance(command, NativeReviewMutationInput):
         raise TypeError("Native review mutation input is required.")
@@ -441,6 +512,7 @@ def stage_native_review_side_effects(command: NativeReviewMutationInput) -> None
         transition=command.transition,
         local_deck_id=command.local_deck_id,
         reviewed_at=command.reviewed_at,
+        usage=usage,
     )
 
 

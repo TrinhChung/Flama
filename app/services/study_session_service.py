@@ -1820,9 +1820,11 @@ def _lock_note_session_context(
     *, user, session, session_cards, route, pins, event_card_ids, committed_at,
     create_token_if_missing=True,
 ):
+    # The scope checks below read every Card's Note: load them in one query.
     card_rows = {
         str(card.id): card
         for card in Card.query.filter(Card.id.in_(event_card_ids))
+        .options(selectinload(Card.note))
         .order_by(Card.id.asc())
         .populate_existing()
         .with_for_update(read=True)
@@ -1979,6 +1981,7 @@ def _commit_note_authority_session(
     rating_counts = {rating: 0 for rating in sorted(VALID_RATINGS)}
     projected_revisions: dict[str, int] = {}
     seen_note_events: dict[str, int] = {}
+    usage = study_service.ReviewUsageTouches()
     try:
         if note_batch is not None:
             note_batch = verify_note_batch_continuation(
@@ -2064,7 +2067,7 @@ def _commit_note_authority_session(
                     "A NOTE authority event was already committed.",
                     status=409,
                 )
-            study_service.stage_native_review_side_effects(mutation)
+            study_service.stage_native_review_side_effects(mutation, usage=usage)
             for card_id, revision in dict(
                 result.response_payload["projected_card_revisions"]
             ).items():
@@ -2072,6 +2075,8 @@ def _commit_note_authority_session(
             rating = str(raw_event["rating"]).lower()
             rating_counts[rating] += 1
             seen_note_events[note_key] = seen_note_events.get(note_key, 0) + 1
+        # Install locks follow every subject lock, as on the per-answer path.
+        usage.apply()
 
         updated_cards = [
             {
