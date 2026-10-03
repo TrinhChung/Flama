@@ -59,7 +59,9 @@ class StudyAuthorityRoute:
 # release that meets any other profile refuses the NOTE route (ADR P9-03 §2.1).
 # CANONICAL_V1 is supported since P9-05d; only the one-way switch
 # (flask study-storage-profile-switch --apply, P9-06) selects it.
-SUPPORTED_STORAGE_PROFILES = frozenset({"PROJECTION_V1", "CANONICAL_V1"})
+# CONSOLIDATED_V1 is supported since P10-07; only the one-way switch
+# (flask study-consolidated-switch --apply, P10-08) selects it.
+SUPPORTED_STORAGE_PROFILES = frozenset({"PROJECTION_V1", "CANONICAL_V1", CONSOLIDATED_STORAGE_PROFILE})
 
 
 def read_study_storage_profile(session: Session, *, lock: str | None = None) -> str:
