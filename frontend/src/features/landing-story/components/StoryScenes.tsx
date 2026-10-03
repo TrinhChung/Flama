@@ -187,7 +187,7 @@ function SceneLight() {
   return (
     <g>
       <Ground tone="light" />
-      <circle cx={400} cy={150} r={230} fill="url(#story-glow)" style={glowAt(400, 150, 0.4, 1.2)} />
+      <circle cx={400} cy={150} r={165} fill="url(#story-glow)" style={glowAt(400, 150, 0.5, 0.9)} />
       {desks.map((x, index) => (
         <path
           key={x}
