@@ -59,7 +59,7 @@ class SpaRouteTests(unittest.TestCase):
             "app.spa.serve_react_spa",
             side_effect=self._shell,
         ):
-            for path in ("/support", "/maintenance"):
+            for path in ("/support", "/maintenance", "/landing-story-preview"):
                 with self.subTest(path=path):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200)
