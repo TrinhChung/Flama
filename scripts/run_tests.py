@@ -100,6 +100,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_p9_canonical_workload_mysql.py",
             "scripts/bench_p9_storage_profile_ab_mysql.py",
             "scripts/probe_p10_schema_mysql.py",
+            "scripts/probe_p10_consolidated_workload_mysql.py",
             "migrations/versions/20261003_000049_consolidate_note_progress_row.py",
             "deploy/flama-study-retention.service",
             "deploy/flama-study-retention.timer",
