@@ -89,6 +89,17 @@ Deploy release hỗ trợ hai profile → backup có watermark → freeze → sw
 
 Gỡ nhánh `CANONICAL_V1`, công cụ P4 (mirror, backfill, reconciliation), đổi profile mặc định của test, migration drop bốn bảng + lineage ref + bảng backfill sau archive, bỏ cột envelope cũ. `study_progress_lifecycle_events` được giữ (history cut đọc nó). Gỡ `card_progress`, LEGACY, `PROJECTION_V1` là quyết định riêng (phạm vi compatibility đã giữ ở P9).
 
+Chủ sản phẩm duyệt 2026-10-03: dump rồi drop năm bảng `study_progress_states`, `study_authority_subject_tokens`, `study_progress_contributors`, `study_progress_availability`, `study_progress_lineage_refs`. `card_progress`/LEGACY giữ nguyên. Chia hai PR:
+
+- **PR-A — gỡ code, không đổi schema.** Release chỉ phục vụ `CONSOLIDATED_V1` (`SUPPORTED_STORAGE_PROFILES = {CONSOLIDATED_V1}`; DB không có dòng profile = cài mới `CONSOLIDATED_V1`; DB còn `PROJECTION_V1`/`CANONICAL_V1` bị từ chối `STORAGE_PROFILE_UNSUPPORTED`). Không còn code đọc/ghi năm bảng. Hệ quả:
+  - Learner LEGACY: tiến độ chỉ ở `card_progress`; không còn shadow mirror, history fact hay lifecycle event cho LEGACY.
+  - Enroll NOTE từ chối learner còn `card_progress` (`LEGACY_PROGRESS_NOT_MIGRATABLE`); learner mới/chưa học enroll bình thường. Rollback NOTE → LEGACY bị gỡ (`LEGACY_ROLLBACK_RETIRED`).
+  - Gỡ CLI `study-architecture-audit`, `study-progress-backfill`, `study-storage-profile-switch`, `study-consolidated-switch`; giữ `study-authority-learners`, `study-authority-read-audit`, `study-phase9-readiness` (postflight `/root/p6/audit_all.sh` chỉ dùng hai lệnh đầu).
+  - Read audit không còn so thứ tự với SQL `card_progress` (chỉ có ý nghĩa ở `PROJECTION_V1`); vẫn kiểm từng dòng (availability dựng lại từ state).
+  - `card_progress` đông cứng của learner NOTE không phải bằng chứng: xóa nội dung không bị chặn bởi nó (giống `CONSOLIDATED_V1` trên production từ P10-08).
+  - Probe CI cập nhật: `probe_p5_concurrency_mysql` (revision trên dòng, mỗi câu trả lời đúng một history fact), `probe_p5_direct_replay_mysql`, `probe_p5_study_batch_mysql`, `probe_p9_backup_restore_mysql`; helper chung `scripts/mysql_probe_db.py`.
+- **PR-B — dump + migration 50.** Dump năm bảng trên production (kiểm sha256), migration drop năm bảng và FK `study_progress_history_facts.contributor_id` (giữ cột), gỡ model, gỡ `bench_p9_profile_migration_mysql` khỏi CI.
+
 ## 4. Ước lượng và rủi ro
 
 | Bước | Ước lượng tập trung |
@@ -114,7 +125,7 @@ Rủi ro chính: số entry point lớn trong các file rủi ro cao (`study_ses
 | P10-06 | DONE — test SQLite có guard bảng cũ (`tests/test_study_consolidated_*`), A/B MySQL, workload probe trên bản khôi phục (§6) |
 | P10-07 | DONE — CLI `study-consolidated-switch` + test, rehearsal trên bản khôi phục (§6), [runbook](../../runbooks/P10_CONSOLIDATED_SWITCH_RUNBOOK.md); release `d812f00` (#204) hỗ trợ `CONSOLIDATED_V1` |
 | P10-08 | DONE — production 2026-10-03, T0 `06:38:52Z`, epoch 3, freeze 67 s, 18/18 audit PASS trước/sau ([báo cáo](./P10_08_CUTOVER_REPORT_2026-10-03.md)) |
-| P10-09 | TODO — cần chủ sản phẩm duyệt phạm vi (gỡ code `CANONICAL_V1`/P4, drop bảng cũ) |
+| P10-09 | IN PROGRESS — duyệt 2026-10-03 (dump rồi drop năm bảng). PR-A (gỡ code): suite 1616 test xanh local, 10 probe MySQL CI PASS. PR-B (dump + migration 50): TODO |
 
 Đo sơ bộ (SQLite, một câu trả lời REST dưới `CONSOLIDATED_V1`): 46 SQL, trong đó ghi đúng 1 UPDATE tiến độ + 4 INSERT (ReviewEvent, history fact, receipt, audit). 40 SELECT còn lại là đọc lặp ở route và phần xem trước thẻ kế (`cards` ×7, `decks` ×6, `study_progress_subjects` ×6, `users` ×5, enrollment/profile/scheduler settings ×3). Gom các đọc này là hạng mục tối ưu truy vấn tiếp theo, không thuộc gộp bảng.
 

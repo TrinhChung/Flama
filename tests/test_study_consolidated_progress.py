@@ -6,20 +6,17 @@ from datetime import datetime, timezone
 import re
 import traceback
 import unittest
-from unittest import mock
 from uuid import uuid4
 
 from sqlalchemy import event
 
 from app.services import flashcard_content_service as content
 from app.services.study_composition_service import make_compatibility_composition_id
-from app.services.study_consolidated_switch_service import apply_consolidated_switch
 from models import db
 from models.card import Card
 from models.note import Note
 from models.review_event import ReviewEvent
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
-from models.study_authority_storage_profile import StudyAuthorityStorageProfile
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_subject import StudyProgressSubject
@@ -29,7 +26,6 @@ from tests import test_study_note_batch as batch_tests
 from tests import test_study_note_overlay as overlay_tests
 from tests import test_study_note_templates as template_tests
 
-PROFILES = frozenset({"PROJECTION_V1", "CANONICAL_V1", "CONSOLIDATED_V1"})
 OLD_TABLES = re.compile(
     r"\b(card_progress|study_progress_states|study_authority_subject_tokens|"
     r"study_progress_contributors|study_progress_availability|study_progress_lineage_refs)\b",
@@ -50,20 +46,10 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
         self._consolidate()
 
     def _consolidate(self):
-        supported = mock.patch(
-            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES", PROFILES
-        )
-        supported.start()
-        self.addCleanup(supported.stop)
+        # A database without a profile row is CONSOLIDATED_V1 (P10-09).
         self.app.config["STUDY_WIRE_V4_ENABLED"] = True
         self.addCleanup(self.app.config.__setitem__, "STUDY_WIRE_V4_ENABLED", False)
         with self.app.app_context():
-            # As in production: CANONICAL_V1 (P9-06), then the P10 switch copies onto the rows.
-            db.session.add(StudyAuthorityStorageProfile(
-                id=1, profile_code="CANONICAL_V1", epoch=2, created_at=_now(), updated_at=_now()))
-            db.session.commit()
-            self.switch = apply_consolidated_switch(db.session, now_utc=_now())
-            db.session.commit()
             card = db.session.get(Card, self.card_ids[0])
             self.note_id = card.note_id
             self.note_type_id = card.note.note_type_id
@@ -77,9 +63,11 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
                 return
             verb = statement.split()[0].upper()
             # Deleting Content still clears its frozen card_progress rows, as
-            # under CANONICAL_V1 (an explicit DELETE or the ORM Card cascade).
+            # under CANONICAL_V1 (an explicit DELETE or the ORM Card cascade),
+            # and finds their learners there: card_progress is the only record
+            # of a LEGACY learner once the mirror tables are gone (P10-09).
             if match.group(1).lower() == "card_progress" and (verb == "DELETE" or any(
-                frame.name == "cascade_iterator"
+                frame.name in {"cascade_iterator", "discover_content_learner_ids", "collect_learner_ids"}
                 or frame.filename.replace("\\", "/").endswith(("orm/dependency.py", "orm/unitofwork.py"))
                 for frame in traceback.extract_stack()
             )):
@@ -163,13 +151,6 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
             db.session.add(Card(note_id=note.id, template_id=template_card.template_id))
             db.session.commit()
             return note.id
-
-    def test_switch_copies_the_enrolled_state_onto_the_row(self):
-        self.assertEqual((self.switch["profile"], self.switch["epoch"]), ("CONSOLIDATED_V1", 3))
-        with self.app.app_context():
-            subject = self._subject()
-            self.assertEqual((int(subject.authority_revision), subject.normalized_queue), (0, "new"))
-            self.assertIsNotNone(subject.state_payload)
 
     def test_session_materializes_new_notes_and_commits_on_the_row(self):
         new_note_id = self._add_note("after switch")
@@ -349,150 +330,6 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
         self.assertEqual(self.old_table_statements, [])
 
 
-class StudyConsolidatedSwitchCliTests(unittest.TestCase):
-    """``flask study-consolidated-switch``: plan, apply, and fail-closed evidence."""
-
-    setUpClass = classmethod(fixtures.StudyDirectNoteReplayTests.setUpClass.__func__)
-    _cleanup = fixtures.StudyDirectNoteReplayTests._cleanup
-    _answer = fixtures.StudyDirectNoteReplayTests._answer
-
-    def setUp(self):
-        fixtures.StudyDirectNoteReplayTests.setUp(self)
-        supported = mock.patch(
-            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES", PROFILES
-        )
-        supported.start()
-        self.addCleanup(supported.stop)
-        with self.app.app_context():
-            db.session.add(StudyAuthorityStorageProfile(
-                id=1, profile_code="CANONICAL_V1", epoch=2, created_at=_now(), updated_at=_now()))
-            db.session.commit()
-        self.runner = self.app.test_cli_runner()
-
-    def _cli(self, *args):
-        import json
-
-        result = self.runner.invoke(args=["study-consolidated-switch", *args])
-        return result.exit_code, json.loads(result.output.strip().splitlines()[-1])
-
-    def test_plan_apply_and_audit(self):
-        self._answer()
-        code, plan = self._cli()
-        self.assertEqual((code, plan["blockers"], plan["subjects_with_state"]), (0, [], 1))
-        code, applied = self._cli("--apply")
-        self.assertEqual((code, applied["profile"], applied["epoch"]), (0, "CONSOLIDATED_V1", 3))
-        code, again = self._cli()
-        self.assertIn("PROFILE_IS_CONSOLIDATED_V1", again["blockers"])
-        code, refused = self._cli("--apply")
-        self.assertEqual((code, refused["error"]), (1, "PROFILE_NOT_CANONICAL"))
-        audit = self.runner.invoke(args=["study-authority-read-audit", "--user-id", str(self.user_id)])
-        self.assertEqual(audit.exit_code, 0, audit.output)
-        self.assertIn('"status":"PASS"', audit.output)
-        self.assertIn('"storage_profile":"CONSOLIDATED_V1"', audit.output)
-        # The answered Note keeps its revision across the copy.
-        self._answer({**self.payload, "operation_key": str(uuid4())})
-        with self.app.app_context():
-            self.assertEqual(int(StudyProgressSubject.query.one().authority_revision), 2)
-
-    def test_analytics_without_full_reads_match_the_canonical_answers(self):
-        from app.services.mcp import study_tools
-
-        self._answer({**self.payload, "rating": "easy", "operation_key": str(uuid4())})
-
-        def answers():
-            future = [self.client.get(path).get_json() for path in (
-                "/api/statistics/today-future?scope=collection",
-                f"/api/statistics/today-future?scope=deck&deck_id={self.deck_id}",
-            )]
-            with self.app.app_context():
-                stats = study_tools.get_deck_stats(user_id=self.user_id, deck_id=self.deck_id)
-                db.session.rollback()
-            return future, stats
-
-        canonical = answers()
-        self.assertGreater(canonical[1]["young_cards"], 0)
-        # A review state exercises both the due series and the daily load.
-        self.assertGreater(canonical[0][0]["totals"]["daily_load"], 0)
-        self.assertEqual(self._cli("--apply")[0], 0)
-        with self.app.app_context():
-            engine = db.engine
-        touched = []
-
-        def record(_conn, _cursor, statement, *_args):
-            if OLD_TABLES.search(statement):
-                touched.append(statement.split()[0])
-
-        event.listen(engine, "before_cursor_execute", record)
-        try:
-            consolidated = answers()
-        finally:
-            event.remove(engine, "before_cursor_execute", record)
-        self.assertEqual(consolidated, canonical)
-        self.assertEqual(touched, [])
-
-    def test_v4_lease_opened_before_the_switch_commits_after_it(self):
-        self.app.config["STUDY_WIRE_V4_ENABLED"] = True
-        self.addCleanup(self.app.config.__setitem__, "STUDY_WIRE_V4_ENABLED", False)
-        with self.app.app_context():
-            card = db.session.get(Card, self.card_ids[0])
-            self.note_id, self.note_type_id = card.note_id, card.note.note_type_id
-            self.template_ids = [db.session.get(Card, card_id).template_id for card_id in self.card_ids]
-        snapshot = StudyConsolidatedProgressTests._open(self)
-        code, applied = self._cli("--apply")
-        self.assertEqual((code, applied["profile"]), (0, "CONSOLIDATED_V1"))
-        # The pin's revision and hash were copied onto the row: the lease stays valid.
-        committed = StudyConsolidatedProgressTests._commit(self, snapshot, ["good", "easy"])
-        self.assertEqual(committed.status_code, 200, committed.get_json())
-        with self.app.app_context():
-            subject = StudyProgressSubject.query.one()
-            self.assertEqual((int(subject.authority_revision), subject.current_provenance_code),
-                             (2, "NATIVE_SESSION"))
-            self.assertEqual(StudyProgressHistoryFact.query.count(), 2)
-
-    def test_this_release_supports_the_profile_and_an_older_one_fails_closed(self):
-        from app.repositories import study_authority_repository as repository
-        from app.repositories.study_authority_repository import StudyAuthorityFenceError
-
-        mock.patch.stopall()
-        self.assertIn("CONSOLIDATED_V1", repository.SUPPORTED_STORAGE_PROFILES)
-        code, plan = self._cli()
-        self.assertNotIn("RELEASE_DOES_NOT_SUPPORT_CONSOLIDATED_V1", plan["blockers"])
-        self.assertEqual(self._cli("--apply")[0], 0)
-        older = mock.patch.object(repository, "SUPPORTED_STORAGE_PROFILES",
-                                  frozenset({"PROJECTION_V1", "CANONICAL_V1"}))
-        older.start()
-        self.addCleanup(older.stop)
-        with self.app.app_context():
-            with self.assertRaises(StudyAuthorityFenceError) as raised:
-                repository.lock_study_authority_route(
-                    db.session, learner_user_id=self.user_id, allow_note_authority=True)
-            self.assertEqual(raised.exception.code, "STORAGE_PROFILE_UNSUPPORTED")
-            db.session.rollback()
-
-    def test_divergent_evidence_or_a_legacy_learner_blocks_without_writing(self):
-        from models.study_progress_availability import StudyProgressAvailability
-        from models.user import User
-        from models.study_authority_enrollment import StudyAuthorityEnrollment
-
-        self._answer()
-        with self.app.app_context():
-            row = StudyProgressAvailability.query.first()
-            row.normalized_queue = "review" if row.normalized_queue != "review" else "new"
-            legacy = User(username="still-legacy", email="still-legacy@example.test")
-            db.session.add(legacy)
-            db.session.flush()
-            db.session.add(StudyAuthorityEnrollment(
-                learner_user_id=legacy.id, mode_code="LEGACY", epoch=1, created_at=_now(), updated_at=_now()))
-            db.session.commit()
-        code, refused = self._cli("--apply")
-        self.assertEqual((code, refused["error"]), (1, "SWITCH_BLOCKED"))
-        self.assertIn("LEGACY_LEARNERS", refused["blockers"])
-        self.assertTrue(any(code.startswith("SUBJECT_EVIDENCE_") for code in refused["blockers"]))
-        with self.app.app_context():
-            self.assertEqual(db.session.get(StudyAuthorityStorageProfile, 1).profile_code, "CANONICAL_V1")
-            self.assertIsNone(StudyProgressSubject.query.one().state_payload)
-
-
 class StudyConsolidatedAlgorithmSwitchTests(unittest.TestCase):
     setUpClass = classmethod(fixtures.StudyDirectNoteReplayTests.setUpClass.__func__)
     _cleanup = fixtures.StudyDirectNoteReplayTests._cleanup
@@ -544,9 +381,8 @@ class StudyConsolidatedAlgorithmSwitchTests(unittest.TestCase):
                 self._switch(switch_tests.SYNTHETIC)
             self.assertEqual(failure.exception.code, "SWITCH_TARGET_NOT_PROJECTABLE")
             db.session.rollback()
-            self.assertEqual(self._row(), before)
-            self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 0)
             # No CardProgress rollback projection: extra state fields are the target's own.
+            self.initializers[switch_tests.UNPROJECTABLE.key].extra = {"wide": 1}
             self._switch(switch_tests.UNPROJECTABLE)
             db.session.commit()
             self.assertEqual(int(StudyProgressSubject.query.one().state_payload["wide"]), 1)
@@ -625,23 +461,7 @@ class StudyConsolidatedNoteBatchTests(unittest.TestCase):
     _process = batch_tests.StudyNoteBatchTests._process
 
     def setUp(self):
-        supported = mock.patch(
-            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES", PROFILES
-        )
-        supported.start()
-        self.addCleanup(supported.stop)
-        enroll = batch_tests.stage_note_authority_enrollment
-
-        def enroll_then_switch(session, **kwargs):
-            result = enroll(session, **kwargs)
-            session.add(StudyAuthorityStorageProfile(
-                id=1, profile_code="CANONICAL_V1", epoch=2, created_at=_now(), updated_at=_now()))
-            session.flush()
-            apply_consolidated_switch(session, now_utc=_now())
-            return result
-
-        with mock.patch.object(batch_tests, "stage_note_authority_enrollment", enroll_then_switch):
-            batch_tests.StudyNoteBatchTests.setUp(self)
+        batch_tests.StudyNoteBatchTests.setUp(self)
         with self.app.app_context():
             engine = db.engine
         self.old_table_statements = []

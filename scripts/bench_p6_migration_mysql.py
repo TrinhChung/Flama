@@ -37,7 +37,7 @@ from models import db
 from scripts.probe_p6_application_schema_mysql import (
     PROBE_NAME_PATTERN, _exec, _probe_app, _reconstruct_head_45,
 )
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings, _database_uri, _source_database_collation,
 )
 

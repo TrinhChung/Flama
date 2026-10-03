@@ -20,6 +20,12 @@ from app.services.study_session_authority_pin_service import (
     stage_study_session_authority_pin,
 )
 from app.services.anki_scheduler import CardState
+from app.services.study_consolidated_progress_service import (
+    apply_note_availability,
+    clear_note_progress,
+    note_burial,
+    project_subject_state,
+)
 from app.services.study_progress_shadow_codec import (
     algorithm_state_hash,
     serialize_card_state,
@@ -29,7 +35,6 @@ from models.card import Card
 from models.deck import Deck
 from models.note import Note
 from models.note_type import NoteType
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_authority_pin import StudySessionAuthorityPin
@@ -118,23 +123,19 @@ class StudySessionAuthorityPinServiceTests(unittest.TestCase):
             memoryState=None,
         )
         state_document = serialize_card_state(initial_state)
-        db.session.add(
-            StudyProgressState(
-                subject_id=int(subject.id),
-                subject_generation=1,
-                mirror_revision=1,
-                algorithm_key="legacy-anki",
-                algorithm_version="1.0.0",
-                state_schema_version="anki-card-state.v1",
-                storage_codec="flama-canonical-state-json.v1",
-                state_payload=state_document.payload,
-                state_payload_size=state_document.size,
-                algorithm_state_hash=algorithm_state_hash(state_document.payload),
-                semantic_state_hash=STATE_HASH,
-                created_at=NOW,
-                updated_at=NOW,
-            )
-        )
+        # The Note's one row holds its state (ADR P10).
+        subject.algorithm_key = "legacy-anki"
+        subject.algorithm_version = "1.0.0"
+        subject.state_schema_version = "anki-card-state.v1"
+        subject.storage_codec = "flama-canonical-state-json.v1"
+        subject.state_payload = state_document.payload
+        subject.state_payload_size = state_document.size
+        subject.algorithm_state_hash = algorithm_state_hash(state_document.payload)
+        subject.semantic_state_hash = STATE_HASH
+        subject.history_completeness_code = "HISTORY_NATIVE_COMPLETE"
+        subject.current_provenance_code = "UNKNOWN_LEGACY"
+        apply_note_availability(
+            subject, project_subject_state(state_document.payload, burial=note_burial(subject)), now_utc=NOW)
         study_session = StudySession(
             id="11111111-1111-4111-8111-111111111111",
             user_id=self.user_id,
@@ -293,7 +294,7 @@ class StudySessionAuthorityPinServiceTests(unittest.TestCase):
         )
         db.session.rollback()
 
-        db.session.delete(db.session.get(StudyProgressState, self.subject_id))
+        clear_note_progress(db.session.get(StudyProgressSubject, self.subject_id), now_utc=NOW)
         db.session.commit()
         with self.assertRaises(StudySessionAuthorityPinError) as first_state:
             lock_study_session_authority_subjects(

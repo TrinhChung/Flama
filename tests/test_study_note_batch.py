@@ -10,7 +10,12 @@ from sqlalchemy import event as sql_event
 
 from app import create_app
 from app.services.study_artifact_service import canonical_digest
-from app.services.study_authority_enrollment_service import stage_note_authority_enrollment, stage_legacy_authority_enrollment
+from app.services.study_authority_enrollment_service import (
+    StudyAuthorityEnrollmentError,
+    stage_legacy_authority_enrollment,
+    stage_note_authority_enrollment,
+)
+from app.services.study_progress_shadow_codec import decode_datetime, decode_float
 from app.services.study_composition_service import make_compatibility_composition_id
 from app.services.study_note_batch_service import commit_note_study_session_batch
 from app.services.study_session_service import StudySessionError
@@ -26,8 +31,8 @@ from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_history_fact import StudyProgressHistoryFact
+from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_authority_pin import StudySessionAuthorityPin
 from models.study_session_batch import StudySessionBatch
@@ -154,17 +159,20 @@ class StudyNoteBatchTests(unittest.TestCase):
             self.assertFalse(db.session().in_transaction())
             return result
 
+    @staticmethod
+    def _state_value(name, decoder):
+        return decoder(StudyProgressSubject.query.one().state_payload[name], field_name=name)
+
     def _assert_progress(self, revision, *, session_status="open"):
         with self.app.app_context():
-            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, revision)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, revision)
             self.assertEqual(ReviewEvent.query.count(), revision)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), revision)
             self.assertEqual(StudyProgressHistoryFact.query.filter(
                 StudyProgressHistoryFact.review_event_id.isnot(None),
             ).count(), revision)
-            progress = CardProgress.query.all()
-            self.assertEqual(len(progress), 2)
-            self.assertTrue(all(row.revision == revision for row in progress))
+            # The Note's one row holds the state; no Card carries progress (ADR P10).
+            self.assertEqual(CardProgress.query.count(), 0)
             self.assertEqual(db.session.get(StudySession, self.snapshot["session_id"]).status, session_status)
             self.assertTrue(all(pin.base_authority_revision == 0 for pin in StudySessionAuthorityPin.query.all()))
 
@@ -248,23 +256,16 @@ class StudyNoteBatchTests(unittest.TestCase):
         ]
 
     def _assert_numeric_state_and_rollback(self):
-        from app.services.study_progress_shadow_mapper import map_card_progress
-        from models.study_progress_state import StudyProgressState
-
         with self.app.app_context():
             db.session.expire_all()
-            state = StudyProgressState.query.one()
-            for progress in CardProgress.query.all():
-                self.assertEqual(progress.ease_factor, 2.0)
-                mapped = map_card_progress(progress, card_created_at=progress.card.created_at, card_order_key=progress.card_id)
-                self.assertEqual(mapped.state.payload, state.state_payload)
-                self.assertEqual(mapped.semantic_state_hash, state.semantic_state_hash)
+            self.assertEqual(self._state_value("ease", decode_float), 2.0)
             for row in ReviewEvent.query.all():
                 self.assertEqual(json.loads(row.payload_json)["_study_runtime"]["storage_profile"], "note-mysql-float-text.v1")
-            result = stage_legacy_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=datetime.utcnow())
-            self.assertEqual(result.mode_code, "LEGACY")
-            self.assertEqual(result.card_count, 2)
-            db.session.commit()
+            # The LEGACY rollback is retired with the mirror tables (P10-09).
+            with self.assertRaises(StudyAuthorityEnrollmentError) as refused:
+                stage_legacy_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=datetime.utcnow())
+            self.assertEqual(refused.exception.code, "LEGACY_ROLLBACK_RETIRED")
+            db.session.rollback()
             self.assertEqual(ReviewEvent.query.count(), 8)
 
     def test_all_ratings_across_batches_have_lossless_numeric_projection_and_retry(self):
@@ -274,7 +275,7 @@ class StudyNoteBatchTests(unittest.TestCase):
         self._http_admit(first)
         receipt = self._process(first["batch_id"])
         with self.app.app_context():
-            self.assertTrue(all(row.ease_factor == 2.35 for row in CardProgress.query.all()))
+            self.assertEqual(self._state_value("ease", decode_float), 2.35)
         self._http_admit(last)
         final = self._process(last["batch_id"])
         self.assertEqual(self._process(first["batch_id"]), receipt)
@@ -350,7 +351,7 @@ class StudyNoteBatchTests(unittest.TestCase):
             session = db.session.get(StudySession, self.snapshot["session_id"])
             expected = session.opened_at + timedelta(seconds=1)
             self.assertTrue(all(row.reviewed_at == expected for row in ReviewEvent.query.all()))
-            self.assertTrue(all(row.last_reviewed_at == expected for row in CardProgress.query.all()))
+            self.assertEqual(self._state_value("last_review_at", decode_datetime), expected)
             stored = StudySessionBatch.query.filter_by(batch_id=second["batch_id"]).one()
             self.assertEqual(json.loads(stored.payload_json)["events"][0]["scheduler_offset_ms"], 1999)
 
@@ -446,7 +447,7 @@ class StudyNoteBatchTests(unittest.TestCase):
             self._process(second)
         self.assertEqual(failure.exception.code, "NOTE_BATCH_EVIDENCE_INVALID")
         with self.app.app_context():
-            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, 1)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, 1)
             self.assertEqual(ReviewEvent.query.count(), 1)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 0)
 
@@ -604,8 +605,9 @@ class StudyNoteBatchTests(unittest.TestCase):
         self.assertEqual(receipt["applied_event_count"], 2)
         self.assertEqual(receipt["cumulative_event_count"], 4)
         with self.app.app_context():
-            self.assertEqual([row.authority_revision for row in StudyAuthoritySubjectToken.query.all()], [2, 2])
-            self.assertEqual([row.revision for row in CardProgress.query.all()], [2, 2, 2, 2])
+            self.assertEqual(
+                [row.authority_revision for row in StudyProgressSubject.query.order_by(StudyProgressSubject.id)], [2, 2])
+            self.assertEqual(CardProgress.query.count(), 0)
             self.assertEqual(ReviewEvent.query.count(), 4)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 4)
             self.assertEqual(StudySessionCommit.query.count(), 1)
@@ -898,15 +900,15 @@ class StudyNoteBatchTests(unittest.TestCase):
         self.assertTrue(status["stale"])
         self.assertEqual(status["stale_reason"], "AUTHORITY_STATE_CONFLICT")
 
-    def test_session_status_does_not_repair_a_missing_token(self):
+    def test_session_status_does_not_repair_a_missing_row(self):
         with self.app.app_context():
-            StudyAuthoritySubjectToken.query.delete()
+            StudyProgressSubject.query.delete()
             db.session.commit()
         status = self._session_status()
         self.assertTrue(status["stale"])
-        self.assertEqual(status["stale_reason"], "AUTHORITY_TOKEN_REQUIRED")
+        self.assertEqual(status["stale_reason"], "INCOMPLETE_SESSION_AUTHORITY_SUBJECTS")
         with self.app.app_context():
-            self.assertEqual(StudyAuthoritySubjectToken.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.count(), 0)
 
     def test_session_status_rejects_rehashed_prior_payload(self):
         self._process(self._admit(1, [self._event(1)]))

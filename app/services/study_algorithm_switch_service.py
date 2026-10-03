@@ -1,17 +1,14 @@
-"""Requested Algorithm switch for one NOTE learner/Note subject (P5-08).
+"""Requested Algorithm switch for one NOTE learner/Note row (P5-08, ADR P10).
 
-Transaction-neutral: the caller owns commit/rollback. Lock order is the
-canonical NOTE order: learner fence -> subject/token/state -> sibling Cards and
-CardProgress -> compatibility evidence -> receipt.
-
-Reversible-window contract (Phase 5): the target state must project losslessly
-onto every sibling ``CardProgress`` row, otherwise the switch is refused before
-any write. A Note on a non-``legacy-anki`` identity is forward-only: NOTE ->
-LEGACY rollback refuses it (``ROLLBACK_ALGORITHM_NOT_LEGACY``) and ordinary
-reviews refuse to rewrite its identity. The switch is evidenced by an
-idempotent command receipt bound to the frozen history-cut hash; it is not a
-review, so it appends no ReviewEvent or scheduler history fact. No product
-route calls this command and no production Algorithm registers an initializer.
+Transaction-neutral: the caller owns commit/rollback. Lock order: learner
+fence -> subject row -> sibling Cards (shared) -> receipt. The target state
+must project onto the Note's row (queue, due, suspension), otherwise the switch
+is refused before any write; it may carry fields the source state lacks. A Note
+on a non-``legacy-anki`` identity is forward-only: ordinary reviews refuse to
+rewrite its identity. The switch is evidenced by an idempotent command receipt
+bound to the frozen history-cut hash; it is not a review, so it appends no
+ReviewEvent or scheduler history fact. No product route calls this command
+and no production Algorithm registers an initializer.
 """
 
 from __future__ import annotations
@@ -37,28 +34,15 @@ from app.services.study_algorithm_switch_preflight_service import (
     preflight_study_algorithm_switch,
 )
 from app.services.study_authority_cas_service import StudyAuthorityCASExpectation
-from app.services.study_authority_evidence_service import (
-    finalize_study_authority_canonical_evidence,
-    finalize_study_authority_evidence,
-)
-from app.services import study_canonical_lifecycle_service as canonical_lifecycle
-from app.services.study_note_card_projection import project_note_card
-from app.services.study_authority_projection_encoder import (
-    LegacyProjectionMetadata,
-    LegacySiblingBaseline,
-    encode_note_state_to_legacy_cards,
-)
 from app.services.study_authority_write_service import (
     StudyAuthorityStateWrite,
     StudyAuthorityWriteError,
     apply_study_authority_canonical_write,
-    apply_study_authority_material_write,
 )
 from app.services.study_progress_shadow_codec import (
     StudyProgressCodecError,
     canonical_document,
     canonical_typed_document,
-    serialize_raw_card_progress,
 )
 from app.services.study_progress_shadow_mapper import encode_identity
 from app.services.study_session_authority_pin_service import (
@@ -210,18 +194,11 @@ def apply_study_algorithm_switch(
     ):
         raise _fail("SWITCH_INITIALIZER_CONTRACT", "Initializer did not return the exact target state.")
 
-    if is_consolidated(route):
-        write = _apply_consolidated_switch(
-            session, route=route, locked=locked, expected=expected, next_state=next_state,
-            now_utc=now_utc)
-    elif route.storage_profile != "PROJECTION_V1":
-        write = _apply_canonical_switch(
-            session, route=route, locked=locked, expected=expected, next_state=next_state,
-            siblings=siblings, compatibility=compatibility, now_utc=now_utc)
-    else:
-        write = _apply_projection_switch(
-            session, route=route, locked=locked, expected=expected, next_state=next_state,
-            siblings=siblings, compatibility=compatibility, now_utc=now_utc)
+    if not is_consolidated(route):
+        raise _fail("AUTHORITY_MODE_CONFLICT", "Algorithm switch requires a CONSOLIDATED_V1 route.")
+    write = _apply_consolidated_switch(
+        session, route=route, locked=locked, expected=expected, next_state=next_state,
+        now_utc=now_utc)
     return _finish_switch(
         session, request=request, route=route, locked=locked, expected=expected,
         siblings=siblings, preflight=preflight, write=write, current_revision=current_revision,
@@ -248,87 +225,6 @@ def _apply_consolidated_switch(session, *, route, locked, expected, next_state, 
         raise _fail(exc.code, str(exc)) from exc
     consolidated.finalize_consolidated_rewrite(
         route=route, locked=locked, write_result=write, projection=projection, now_utc=now_utc)
-    return write
-
-
-def _apply_canonical_switch(session, *, route, locked, expected, next_state, siblings, compatibility, now_utc):
-    """CANONICAL_V1: the target state must project onto every live Card (ADR §2.9)."""
-
-    burial = canonical_lifecycle.burial_of(next(iter(compatibility.availability_by_contributor_id.values())))
-    try:
-        projections = {
-            str(card.id): project_note_card(
-                next_state.state_payload, burial=burial, card_id=str(card.id),
-                card_created_at=card.created_at)
-            for card in siblings.cards
-        }
-    except StudyProgressCodecError as exc:
-        raise _fail("SWITCH_TARGET_NOT_PROJECTABLE", str(exc), blockers=(exc.code,)) from exc
-    hashes = {projection.semantic_state_hash for projection in projections.values()}
-    if len(hashes) != 1:
-        raise _fail("SWITCH_TARGET_NOT_PROJECTABLE", "Siblings do not share one semantic Note state.")
-    try:
-        write = apply_study_authority_canonical_write(
-            session, route=route, locked=locked, expected=expected, next_state=next_state,
-            semantic_state_hash=next(iter(hashes)), now_utc=now_utc,
-            allow_algorithm_identity_change=True)
-    except StudyAuthorityWriteError as exc:
-        raise _fail(exc.code, str(exc)) from exc
-    finalize_study_authority_canonical_evidence(
-        session, route=route, locked=locked, siblings=siblings, compatibility=compatibility,
-        write_result=write, projections_by_card_id=projections, review_event=None, now_utc=now_utc)
-    return write
-
-
-def _apply_projection_switch(session, *, route, locked, expected, next_state, siblings, compatibility, now_utc):
-    first_progress = siblings.progress_by_card_id[siblings.card_ids[0]]
-    baselines = []
-    for card in siblings.cards:
-        progress = siblings.progress_by_card_id[str(card.id)]
-        raw = serialize_raw_card_progress(progress)
-        baselines.append(LegacySiblingBaseline(
-            card_id=str(card.id), expected_base_revision=int(progress.revision or 0),
-            card_created_at=card.created_at, raw_payload=raw.payload, raw_payload_size=raw.size,
-            raw_payload_hash=raw.digest, projected_last_review_event_id=progress.last_review_event_id))
-    try:
-        # Rollback window: the target state must round-trip through every
-        # sibling CardProgress row, or nothing is written.
-        projection = encode_note_state_to_legacy_cards(
-            expected_learner_user_id=route.learner_user_id,
-            algorithm_key=next_state.algorithm_key,
-            algorithm_version=next_state.algorithm_version,
-            state_schema_version=next_state.state_schema_version,
-            storage_codec=next_state.storage_codec,
-            state_payload=next_state.state_payload,
-            expected_state_payload_size=next_state.state_payload_size,
-            expected_algorithm_state_hash=next_state.algorithm_state_hash,
-            metadata=LegacyProjectionMetadata(
-                interval_days_rounded=int(first_progress.interval_days or 0),
-                is_buried=bool(first_progress.is_buried),
-                buried_until_day=first_progress.buried_until_day,
-                last_leech_at=first_progress.last_leech_at,
-                last_leech_lapses=int(first_progress.last_leech_lapses or 0),
-                projected_at=now_utc,
-            ),
-            siblings=tuple(baselines),
-        )
-    except Exception as exc:
-        code = domain_error_code(exc)
-        if code is None:
-            raise
-        raise _fail("SWITCH_TARGET_NOT_PROJECTABLE", str(exc), blockers=(str(code),)) from exc
-    try:
-        write = apply_study_authority_material_write(
-            session, route=route, locked=locked, expected=expected, next_state=next_state,
-            siblings=siblings, projection=projection, now_utc=now_utc,
-            allow_algorithm_identity_change=True)
-    except StudyAuthorityWriteError as exc:
-        raise _fail(exc.code, str(exc)) from exc
-    # Refresh compatibility evidence without a ReviewEvent: provenance and
-    # pointers are preserved; the state identity is never rewritten here.
-    finalize_study_authority_evidence(
-        session, route=route, locked=locked, siblings=siblings, compatibility=compatibility,
-        write_result=write, review_event=None, now_utc=now_utc)
     return write
 
 
@@ -361,16 +257,11 @@ def _finish_switch(session, *, request, route, locked, expected, siblings, prefl
         },
         "to_algorithm": {"key": state.algorithm_key, "version": state.algorithm_version},
         "history_cut_hash": preflight.history_cut.cut_hash.hex(),
-        # CANONICAL_V1 writes no projection: each sibling reports the Note's
-        # authority revision, as review receipts do (ADR P9-03 §2.9).
-        "projected_card_revisions": (
-            {
-                str(row.card_id): int(row.revision)
-                for row in sorted(write.projected_progress, key=lambda row: str(row.card_id))
-            }
-            if route.storage_profile == "PROJECTION_V1"
-            else {card_id: int(write.authority_revision) for card_id in sorted(siblings.card_ids)}
-        ),
+        # No Card carries progress: each sibling reports the Note's authority
+        # revision, as review receipts do (ADR P9-03 §2.9).
+        "projected_card_revisions": {
+            card_id: int(write.authority_revision) for card_id in sorted(siblings.card_ids)
+        },
     }, too_large_code="AUTHORITY_RESPONSE_TOO_LARGE")
     session.add(StudyAuthorityCommandReceipt(
         learner_user_id=route.learner_user_id,

@@ -17,7 +17,6 @@ from app.repositories import browse_card_repository, note_analytics_read_reposit
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
-    is_consolidated,
     lock_study_authority_route,
 )
 from app.repositories import study_repository
@@ -53,8 +52,6 @@ from app.validators import (
 )
 from models import db
 from models.card_progress import CardProgress
-from models.study_progress_availability import StudyProgressAvailability
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.flashcard import Card, DeckInstall, Note, NoteType
@@ -357,52 +354,23 @@ def _load_mode_aware_browse_progress(
     )
 
 
-def _join_note_availability(query, *, learner_user_id: int, consolidated: bool = False):
-    """Outer-join each Card's ACTIVE availability; expose CardProgress-named columns."""
+def _join_note_availability(query, *, learner_user_id: int):
+    """Outer-join each Card's Note row; expose CardProgress-named columns (ADR P10 §2.7)."""
 
     subject = aliased(StudyProgressSubject)
-    if consolidated:
-        # ADR P10 §2.7: the Note's row holds availability for all its Cards.
-        query = query.outerjoin(subject, db.and_(
-            subject.learner_user_id == int(learner_user_id),
-            subject.live_note_id == Card.note_id,
-        ))
-        return query, SimpleNamespace(
-            id=case((subject.semantic_state_hash.isnot(None), subject.id), else_=None),
-            queue=subject.normalized_queue,
-            due_at=subject.due_at,
-            due_day=subject.due_day,
-            is_suspended=subject.is_suspended,
-            is_buried=subject.is_buried,
-            buried_until_day=subject.buried_until_day,
-        )
-    contributor = aliased(StudyProgressContributor)
-    availability = aliased(StudyProgressAvailability)
-    query = (
-        query.outerjoin(subject, db.and_(
-            subject.learner_user_id == int(learner_user_id),
-            subject.live_note_id == Card.note_id,
-        ))
-        .outerjoin(contributor, db.and_(
-            contributor.subject_id == subject.id,
-            contributor.live_card_id == Card.id,
-            contributor.contributor_status == "ACTIVE",
-        ))
-        .outerjoin(availability, db.and_(
-            availability.contributor_id == contributor.id,
-            availability.subject_id == subject.id,
-        ))
+    query = query.outerjoin(subject, db.and_(
+        subject.learner_user_id == int(learner_user_id),
+        subject.live_note_id == Card.note_id,
+    ))
+    return query, SimpleNamespace(
+        id=case((subject.semantic_state_hash.isnot(None), subject.id), else_=None),
+        queue=subject.normalized_queue,
+        due_at=subject.due_at,
+        due_day=subject.due_day,
+        is_suspended=subject.is_suspended,
+        is_buried=subject.is_buried,
+        buried_until_day=subject.buried_until_day,
     )
-    columns = SimpleNamespace(
-        id=availability.contributor_id,
-        queue=availability.normalized_queue,
-        due_at=availability.due_at,
-        due_day=availability.due_day,
-        is_suspended=availability.is_suspended,
-        is_buried=availability.is_buried,
-        buried_until_day=availability.buried_until_day,
-    )
-    return query, columns
 
 
 def list_browse_cards(
@@ -491,15 +459,10 @@ def list_browse_cards(
             selected_ids = {selected_deck_id}
 
     query = Card.query.join(Note, Card.note_id == Note.id)
-    if (
-        authority_route.mode_code == "NOTE"
-        and authority_route.storage_profile != "PROJECTION_V1"
-    ):
-        # CANONICAL_V1 froze card_progress: status and due order come from the
-        # learner's availability row (verified below), NULL for pristine Notes.
-        query, progress_alias = _join_note_availability(
-            query, learner_user_id=user_id, consolidated=is_consolidated(authority_route),
-        )
+    if authority_route.mode_code == "NOTE":
+        # Status and due order come from the learner's Note row (verified
+        # below), NULL for pristine Notes; card_progress is LEGACY only.
+        query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
     else:
         progress_alias = aliased(CardProgress)
         query = query.outerjoin(progress_alias, db.and_(

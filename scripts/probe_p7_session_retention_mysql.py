@@ -23,7 +23,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from models import db
 from scripts.probe_p5_direct_replay_mysql import _probe_app
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings, _database_uri, _source_database_collation,
 )
 from tests.test_study_session_retention import StudySessionRetentionTests

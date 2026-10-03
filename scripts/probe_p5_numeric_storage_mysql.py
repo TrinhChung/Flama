@@ -23,7 +23,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.probe_phase4_shadow_schema_mysql import _connection_settings, _source_database_collation
+from scripts.mysql_probe_db import _connection_settings, _source_database_collation
 from app.services.study_note_storage_precision import legacy_float_round_trip
 
 PROBE_NAME_PATTERN = re.compile(r"^flama_p5_numeric_probe_[0-9]+_[a-f0-9]{8}$")

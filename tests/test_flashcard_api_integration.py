@@ -13,10 +13,6 @@ from app.services import flashcards_share_service
 from app.services.share import cutover as cutover_service
 from app.services.share.helpers import ShareControllerError
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime, default_deck_options
-from app.services.study_progress_backfill_service import run_current_progress_backfill
-from app.services.study_progress_reconciliation_service import (
-    build_study_progress_reconciliation,
-)
 from models import db
 from models.flashcard import (
     Card,
@@ -39,7 +35,6 @@ from models.deck_release import DeckRelease
 from models.field_def import FieldDef
 from models.template import Template
 from models.card_progress import CardProgress
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_subject import StudyProgressSubject
@@ -2547,9 +2542,6 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             )
 
     def test_cutover_migrates_legacy_full_copy_install_to_overlay(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
-        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = True
-        self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = True
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
 
@@ -2732,42 +2724,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 card_id=legacy_card_id,
             ).first()
             self.assertIsNone(legacy_progress)
-            old_subject = StudyProgressSubject.query.filter_by(
-                learner_user_id=learner_id,
-                logical_note_key=str(legacy_note_id).encode("utf-8"),
-            ).one()
-            new_subject = StudyProgressSubject.query.filter_by(
-                learner_user_id=learner_id,
-                logical_note_key=str(source_note.id).encode("utf-8"),
-            ).one()
-            self.assertEqual(old_subject.status_code, "REKEYED_CLONE_CUTOVER")
-            self.assertIsNone(old_subject.live_note_id)
-            self.assertEqual(new_subject.status_code, "MIRRORED_SINGLE")
+            # A LEGACY learner's progress is rekeyed in card_progress alone (P10-09).
             self.assertEqual(
-                (old_subject.subject_generation, new_subject.subject_generation),
-                (2, 2),
+                StudyProgressSubject.query.filter_by(learner_user_id=learner_id).count(), 0
             )
-            active = StudyProgressContributor.query.filter_by(
-                subject_id=new_subject.id,
-                contributor_status="ACTIVE",
-            ).one()
-            self.assertEqual(active.current_provenance_code, "CLONE_CUTOVER")
-            self.assertEqual(active.history_completeness_code, "HISTORY_MIXED_PARTIAL")
-            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 2)
-            self.assertTrue(run_current_progress_backfill(db.session, apply=True).complete)
-            reconciled = build_study_progress_reconciliation(
-                db.session, observed_at=datetime.utcnow()
-            )
-            self.assertEqual(reconciled["unexplained"]["by_code"], {})
-            self.assertEqual(reconciled["gate"]["status"], "PASS")
-            self.assertEqual(
-                reconciled["writer_coverage"]["current_contributor_provenance"],
-                {"CLONE_CUTOVER": 1},
-            )
-            self.assertEqual(
-                reconciled["writer_coverage"]["matrix"]["CLONE_CUTOVER"]["status"],
-                "PASS",
-            )
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_shared_deck_clone_overlay_saves_delta_only_and_updates_render(self):
         note_type = self._create_note_type()

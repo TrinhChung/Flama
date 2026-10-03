@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from scripts.probe_phase4_shadow_schema_mysql import _connection_settings, _source_database_collation  # noqa: E402
+from scripts.mysql_probe_db import _connection_settings, _source_database_collation  # noqa: E402
 
 TARGET = re.compile(r"^flama_p9_restore_[0-9]+_[a-f0-9]{8}$")
 DATABASE_DIRECTIVE = re.compile(rb"^\s*(?:/\*![0-9]+\s*)?(?:CREATE\s+DATABASE|DROP\s+DATABASE|USE\s+)", re.I)
@@ -127,14 +127,15 @@ def run_probe(backup: Path, *, mysql_binary: str, env_file: Path | None = None):
             report["alembic_revisions"] = [row[0] for row in cursor.fetchall()]
             cursor.execute("SELECT profile_code, epoch FROM study_authority_storage_profile")
             report["storage_profiles"] = [list(row) for row in cursor.fetchall()]
-            cursor.execute("SELECT COUNT(*) FROM study_progress_states s LEFT JOIN study_progress_subjects p ON p.id=s.subject_id LEFT JOIN study_authority_subject_tokens t ON t.subject_id=s.subject_id WHERE p.id IS NULL OR t.subject_id IS NULL OR s.subject_generation<>p.subject_generation OR t.subject_generation<>s.subject_generation OR NOT (t.semantic_state_hash <=> s.semantic_state_hash)")
-            report["state_token_mismatches"] = int(cursor.fetchone()[0])
-            cursor.execute("SELECT COUNT(*) FROM study_progress_contributors c LEFT JOIN study_progress_availability a ON a.contributor_id=c.id LEFT JOIN study_progress_states s ON s.subject_id=c.subject_id WHERE c.contributor_status='ACTIVE' AND (a.contributor_id IS NULL OR s.subject_id IS NULL OR a.subject_generation<>s.subject_generation OR a.semantic_state_hash<>s.semantic_state_hash)")
-            report["availability_mismatches"] = int(cursor.fetchone()[0])
+            # CONSOLIDATED_V1: a row holds its state and the state's hash together.
+            cursor.execute("SELECT COUNT(*) FROM study_progress_subjects WHERE (state_payload IS NULL) <> (semantic_state_hash IS NULL)")
+            report["row_state_mismatches"] = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM study_progress_history_facts h LEFT JOIN study_progress_subjects p ON p.id=h.subject_id WHERE p.id IS NULL")
+            report["history_orphans"] = int(cursor.fetchone()[0])
             cursor.execute("SELECT COUNT(*) FROM study_authority_command_receipts r LEFT JOIN review_events e ON e.id=r.review_event_id LEFT JOIN study_progress_history_facts h ON h.id=r.history_fact_id WHERE (r.review_event_id IS NOT NULL AND e.id IS NULL) OR (r.history_fact_id IS NOT NULL AND h.id IS NULL)")
             report["receipt_orphans"] = int(cursor.fetchone()[0])
         report["status"] = "PASS" if not any(report[key] for key in
-                                             ("state_token_mismatches", "availability_mismatches", "receipt_orphans")) else "FAIL"
+                                             ("row_state_mismatches", "history_orphans", "receipt_orphans")) else "FAIL"
         return report
     finally:
         if created:

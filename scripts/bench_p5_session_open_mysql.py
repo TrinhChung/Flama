@@ -43,7 +43,7 @@ from models.template import Template
 from models.user import User
 from scripts.probe_p5_concurrency_mysql import _client, _commit_payload
 from scripts.probe_p5_direct_replay_mysql import _probe_app
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings, _database_uri, _source_database_collation,
 )
 

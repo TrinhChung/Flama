@@ -32,7 +32,7 @@ if str(ROOT_DIR) not in sys.path:
 from app import create_app
 from app.services.study_note_attribution_service import backfill_phase6_attribution
 from models import db
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings, _database_uri, _source_database_collation,
 )
 

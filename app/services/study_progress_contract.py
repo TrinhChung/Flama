@@ -53,7 +53,7 @@ CONTRIBUTOR_RAW_EVIDENCE_COLUMNS = (
 # CONSOLIDATED_V1 (ADR P10) keeps state, revision and availability on the
 # subject row instead of the state/token/contributor/availability tables.
 STORAGE_PROFILES = ("PROJECTION_V1", "CANONICAL_V1", "CONSOLIDATED_V1")
-DEFAULT_STORAGE_PROFILE = "PROJECTION_V1"
+DEFAULT_STORAGE_PROFILE = "CONSOLIDATED_V1"
 CONSOLIDATED_STORAGE_PROFILE = "CONSOLIDATED_V1"
 
 # ADR P10 §2.1: the consolidated subject row. The state group, the

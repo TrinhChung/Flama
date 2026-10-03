@@ -21,8 +21,8 @@ from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_history_fact import StudyProgressHistoryFact
+from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
 
@@ -88,8 +88,9 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), count)
             self.assertEqual(StudyProgressHistoryFact.query.filter(StudyProgressHistoryFact.review_event_id.isnot(None)).count(), count)
             self.assertEqual(AuditLog.query.filter_by(action="study.answer").count(), count)
-            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, count)
-            self.assertTrue(all(row.revision == count for row in CardProgress.query.all()))
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, count)
+            # The Note's one row holds its state; no Card carries progress (ADR P10).
+            self.assertEqual(CardProgress.query.count(), 0)
 
     def test_retry_returns_original_result_without_executing_scheduler_or_side_effects(self):
         original = self._answer()

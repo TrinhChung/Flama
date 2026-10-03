@@ -17,8 +17,8 @@ from models.card import Card
 from models.connect_source_card_ref import ConnectSourceCardRef
 from models.review_event import ReviewEvent
 from models.study_application import StudyApplication
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
-from models.study_progress_state import StudyProgressState
+from models.card_progress import CardProgress
+from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.template import Template
 
@@ -42,10 +42,9 @@ class StudyPhase6ContinuityTests(unittest.TestCase):
                 snapshot_hash="h" * 64, applied_local_revision=1, review_cursor=7,
             ))
             db.session.commit()
-            token_before = StudyAuthoritySubjectToken.query.one()
-            state_before = StudyProgressState.query.one()
-            before = (token_before.authority_revision, bytes(token_before.semantic_state_hash),
-                      bytes(state_before.semantic_state_hash))
+            row_before = StudyProgressSubject.query.one()
+            before = (row_before.authority_revision, bytes(row_before.semantic_state_hash),
+                      dict(row_before.state_payload))
             self.assertEqual(ReviewEvent.query.one().note_id, note_id)
 
         with patch.dict(self.app.config, STUDY_WIRE_V4_ENABLED=True):
@@ -63,10 +62,9 @@ class StudyPhase6ContinuityTests(unittest.TestCase):
             self.assertIsNone(db.session.get(Card, removed_card_id))
             self.assertEqual(StudyApplication.query.filter_by(template_id=template_id).count(), 0)
             self.assertEqual(db.session.get(StudySession, snapshot["session_id"]).status, "cancelled")
-            token = StudyAuthoritySubjectToken.query.one()
-            state = StudyProgressState.query.one()
+            row = StudyProgressSubject.query.one()
             self.assertEqual(
-                (token.authority_revision, bytes(token.semantic_state_hash), bytes(state.semantic_state_hash)),
+                (row.authority_revision, bytes(row.semantic_state_hash), dict(row.state_payload)),
                 before,
             )
             event = ReviewEvent.query.one()
@@ -88,7 +86,7 @@ class StudyPhase6ContinuityTests(unittest.TestCase):
         # The surviving sibling still studies from the same Note state.
         self._answer(dict(self.payload, operation_key=str(uuid4())), card_id=self.card_ids[0])
         with self.app.app_context():
-            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, before[0] + 1)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, before[0] + 1)
 
 
 class StudyRepeatedApplicationTests(unittest.TestCase):
@@ -100,7 +98,6 @@ class StudyRepeatedApplicationTests(unittest.TestCase):
     def test_a_template_applied_twice_shares_one_note_state(self):
         from app.services import study_content_delete_service as topology
         from app.services.study_application_service import stage_repeated_application
-        from models.study_progress_subject import StudyProgressSubject
 
         self._answer()  # state exists before the second occurrence is added
         with self.app.app_context():
@@ -114,15 +111,16 @@ class StudyRepeatedApplicationTests(unittest.TestCase):
             repeated = Card.query.filter_by(application_id=occurrence.id).one()
             self.assertEqual((repeated.note_id, repeated.template_id), (note_id, template.id))
             self.assertEqual(Card.query.filter_by(note_id=note_id, template_id=template.id).count(), 2)
+            # The occurrence's Card shares the Note's one row; nothing is copied (ADR P10).
             self.assertEqual(StudyProgressSubject.query.count(), 1)
-            self.assertEqual(StudyProgressSubject.query.one().contributor_count, 3)
-            revision = StudyAuthoritySubjectToken.query.one().authority_revision
+            self.assertEqual(CardProgress.query.count(), 0)
+            revision = StudyProgressSubject.query.one().authority_revision
             repeated_id = repeated.id
 
         # Answering through the repeated occurrence schedules the one Note.
         self._answer(dict(self.payload, operation_key=str(uuid4())), card_id=repeated_id)
         with self.app.app_context():
-            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, revision + 1)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, revision + 1)
             self.assertEqual(StudyProgressSubject.query.count(), 1)
 
 

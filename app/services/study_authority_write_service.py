@@ -1,10 +1,8 @@
-"""Inert, transaction-neutral material write for future NOTE authority.
+"""Transaction-neutral NOTE state write onto a locked progress row (ADR P10 §2.4).
 
-The caller must already hold the learner/enrollment, subject, token/state and
-all sibling ``CardProgress`` locks in the documented canonical order.  This
-module deliberately owns no route selection, event, receipt, commit or
-rollback.  Product NOTE authority remains unreachable while migration 40 is
-LEGACY-only.
+The caller holds the learner fence and the subject row ``FOR UPDATE``; the
+token and state are views of that row. This module owns no route selection,
+event, receipt, commit or rollback.
 """
 
 from __future__ import annotations
@@ -14,34 +12,24 @@ from datetime import datetime
 from typing import Mapping
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import flag_modified
 
 from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySubject,
-    LockedStudyAuthoritySiblings,
     StudyAuthorityRoute,
 )
 from app.services.study_authority_cas_service import (
     StudyAuthorityCASExpectation,
     verify_study_authority_cas,
 )
-from app.services.study_authority_projection_encoder import (
-    EncodedLegacyProjection,
-    EncodedLegacySibling,
-)
 from app.services.study_progress_shadow_codec import (
-    RAW_CARD_PROGRESS_FIELDS,
     STATE_DECODERS,
     StudyProgressCodecError,
     algorithm_state_hash,
-    serialize_raw_card_progress,
     state_document,
 )
-from models.card_progress import CardProgress
-from models.study_progress_state import StudyProgressState
 
 
-_IMMUTABLE_PROGRESS_FIELDS = frozenset({"id", "user_id", "card_id", "created_at"})
+
 _MYSQL_SIGNED_BIGINT_MAX = (1 << 63) - 1
 
 
@@ -64,10 +52,11 @@ class StudyAuthorityStateWrite:
 
 @dataclass(frozen=True)
 class StudyAuthorityWriteResult:
-    state: StudyProgressState
+    state: object
     authority_revision: int
     semantic_state_hash: bytes
-    projected_progress: tuple[CardProgress, ...]
+    # No Card carries progress any more (ADR P10 §2.3); kept for receipts.
+    projected_progress: tuple = ()
 
 
 def _fail(code: str, message: str) -> StudyAuthorityWriteError:
@@ -139,171 +128,6 @@ def _validated_state_payload(state_write: StudyAuthorityStateWrite) -> dict[str,
     return document.payload
 
 
-def _validate_projection_rows(
-    *,
-    route: StudyAuthorityRoute,
-    locked: LockedStudyAuthoritySubject,
-    siblings: LockedStudyAuthoritySiblings,
-    projection: EncodedLegacyProjection,
-    now_utc: datetime,
-) -> tuple[tuple[CardProgress, EncodedLegacySibling], ...]:
-    if not isinstance(projection, EncodedLegacyProjection):
-        raise _fail("INVALID_AUTHORITY_WRITE", "Legacy projection is missing.")
-    if not isinstance(now_utc, datetime) or now_utc.tzinfo is not None:
-        raise _fail("INVALID_AUTHORITY_TIME", "Authority time must be naive UTC.")
-    if not isinstance(siblings, LockedStudyAuthoritySiblings):
-        raise _fail(
-            "INCOMPLETE_LEGACY_PROJECTION",
-            "Authoritative sibling lock result is missing.",
-        )
-    if (
-        siblings.learner_user_id != route.learner_user_id
-        or siblings.subject_id != int(locked.subject.id)
-        or siblings.subject_generation != int(locked.subject.subject_generation)
-    ):
-        raise _fail(
-            "AUTHORITY_SIBLING_FENCE_DIVERGED",
-            "Sibling lock result differs from the fenced authority subject.",
-        )
-    expected_ids = tuple(sibling.card_id for sibling in projection.siblings)
-    if not expected_ids or len(set(expected_ids)) != len(expected_ids):
-        raise _fail(
-            "INCOMPLETE_LEGACY_PROJECTION",
-            "Legacy projection must contain a unique, non-empty sibling set.",
-        )
-    if set(siblings.card_ids) != set(expected_ids):
-        raise _fail(
-            "INCOMPLETE_LEGACY_PROJECTION",
-            "Projection does not match the independently resolved sibling set.",
-        )
-
-    validated: list[tuple[CardProgress, EncodedLegacySibling]] = []
-    for sibling in projection.siblings:
-        row = siblings.progress_by_card_id[sibling.card_id]
-        if not isinstance(row, CardProgress) or row.id is None:
-            raise _fail(
-                "INVALID_LEGACY_PROGRESS",
-                f"Card {sibling.card_id} has no persisted compatibility row.",
-            )
-        if int(row.user_id) != route.learner_user_id or str(row.card_id) != sibling.card_id:
-            raise _fail(
-                "WRONG_LEARNER",
-                f"Card {sibling.card_id} is outside the fenced learner scope.",
-            )
-        baseline = serialize_raw_card_progress(row)
-        if (
-            int(row.revision) != sibling.expected_base_revision
-            or baseline.size != sibling.baseline_raw_size
-            or baseline.digest != sibling.baseline_raw_hash
-        ):
-            raise _fail(
-                "STALE_LEGACY_BASELINE",
-                f"Card {sibling.card_id} changed after projection encoding.",
-            )
-        values = sibling.progress.as_dict()
-        if values.get("revision") != sibling.expected_base_revision + 1:
-            raise _fail(
-                "INVALID_LEGACY_PROJECTION",
-                f"Card {sibling.card_id} must advance exactly one legacy revision.",
-            )
-        if values.get("updated_at") != now_utc:
-            raise _fail(
-                "INVALID_LEGACY_PROJECTION",
-                f"Card {sibling.card_id} projection time differs from authority time.",
-            )
-        for field_name in _IMMUTABLE_PROGRESS_FIELDS:
-            if getattr(row, field_name) != values.get(field_name):
-                raise _fail(
-                    "INVALID_LEGACY_PROJECTION",
-                    f"Card {sibling.card_id} changed immutable {field_name}.",
-                )
-        projected_raw = serialize_raw_card_progress(sibling.progress)
-        if projected_raw.size != sibling.raw.size or projected_raw.digest != sibling.raw.digest:
-            raise _fail(
-                "INVALID_LEGACY_PROJECTION",
-                f"Card {sibling.card_id} projected bytes changed after encoding.",
-            )
-        validated.append((row, sibling))
-    return tuple(validated)
-
-
-def apply_study_authority_material_write(
-    session: Session,
-    *,
-    route: StudyAuthorityRoute,
-    locked: LockedStudyAuthoritySubject,
-    expected: StudyAuthorityCASExpectation,
-    next_state: StudyAuthorityStateWrite,
-    siblings: LockedStudyAuthoritySiblings,
-    projection: EncodedLegacyProjection,
-    now_utc: datetime,
-    allow_algorithm_identity_change: bool = False,
-) -> StudyAuthorityWriteResult:
-    """Stage one existing-state NOTE transition and projection; never commit.
-
-    Event, scheduler-grade history fact and idempotency receipt are deliberately
-    outside this slice.  A future canonical command must stage those objects in
-    the same caller-owned transaction before exposing this helper to routing.
-
-    Only the requested Algorithm switch sets ``allow_algorithm_identity_change``:
-    a new exact Algorithm identity is material even when the projected
-    scheduling semantics are unchanged.
-    """
-
-    if route.storage_profile != "PROJECTION_V1":
-        raise _fail(
-            "STORAGE_PROFILE_CONFLICT",
-            "CANONICAL_V1 writes no legacy projection.",
-        )
-    verified = verify_study_authority_cas(
-        route=route,
-        locked=locked,
-        expected=expected,
-        require_note_authority=True,
-    )
-    if locked.state is None:
-        raise _fail(
-            "AUTHORITY_STATE_REQUIRED",
-            "First-state materialization requires the complete contributor command.",
-        )
-    state_payload, semantic_hash = _validate_next_state(next_state, projection)
-    projected_rows = _validate_projection_rows(
-        route=route,
-        locked=locked,
-        siblings=siblings,
-        projection=projection,
-        now_utc=now_utc,
-    )
-    state, next_revision = _stage_state_and_token(
-        verified_revision=verified.authority_revision,
-        verified_semantic_hash=verified.semantic_state_hash,
-        locked=locked,
-        next_state=next_state,
-        state_payload=state_payload,
-        semantic_hash=semantic_hash,
-        now_utc=now_utc,
-        allow_algorithm_identity_change=allow_algorithm_identity_change,
-    )
-
-    applied_rows: list[CardProgress] = []
-    for row, sibling in projected_rows:
-        values = sibling.progress.as_dict()
-        for field_name in RAW_CARD_PROGRESS_FIELDS:
-            if field_name in _IMMUTABLE_PROGRESS_FIELDS:
-                continue
-            setattr(row, field_name, values[field_name])
-            if field_name == "updated_at":
-                flag_modified(row, field_name)
-        applied_rows.append(row)
-
-    return StudyAuthorityWriteResult(
-        state=state,
-        authority_revision=next_revision,
-        semantic_state_hash=semantic_hash,
-        projected_progress=tuple(applied_rows),
-    )
-
-
 def apply_study_authority_canonical_write(
     session: Session,
     *,
@@ -315,18 +139,13 @@ def apply_study_authority_canonical_write(
     now_utc: datetime,
     allow_algorithm_identity_change: bool = False,
 ) -> StudyAuthorityWriteResult:
-    """CANONICAL_V1 counterpart: stage state and token only; never commit.
+    """Stage the next state and revision on the row; never commit.
 
-    ``semantic_state_hash`` comes from ``project_note_card`` over the next
-    state (ADR P9-03 §2.2); availability is refreshed by the evidence step.
-    CAS is the token's authority revision and semantic hash (§2.4).
+    ``semantic_state_hash`` comes from ``project_note_state`` over the next
+    state; the caller then writes the row's availability. CAS is the row's
+    authority revision and semantic hash.
     """
 
-    if route.storage_profile == "PROJECTION_V1":
-        raise _fail(
-            "STORAGE_PROFILE_CONFLICT",
-            "PROJECTION_V1 must write the legacy projection.",
-        )
     if not isinstance(now_utc, datetime) or now_utc.tzinfo is not None:
         raise _fail("INVALID_AUTHORITY_TIME", "Authority time must be naive UTC.")
     if not isinstance(semantic_state_hash, bytes) or len(semantic_state_hash) != 32:
@@ -371,7 +190,7 @@ def _stage_state_and_token(
     semantic_hash: bytes,
     now_utc: datetime,
     allow_algorithm_identity_change: bool,
-) -> tuple[StudyProgressState, int]:
+) -> tuple[object, int]:
     current_identity = (
         str(locked.state.algorithm_key),
         str(locked.state.algorithm_version),

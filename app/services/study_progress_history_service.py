@@ -32,7 +32,6 @@ from app.validators.review_event import (
     classify_review_event_payload,
 )
 from models.review_event import ReviewEvent
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_subject import StudyProgressSubject
 
@@ -76,9 +75,8 @@ class StudyProgressHistoryError(RuntimeError):
 class NativeHistoryFactInput:
     learner_user_id: int
     subject: StudyProgressSubject
-    # None under CONSOLIDATED_V1 (ADR P10 §2.4): the fact keys its Card by
-    # logical identity on the subject generation, not by a contributor row.
-    contributor: StudyProgressContributor | None
+    # The fact keys its Card by logical identity on the subject generation
+    # (ADR P10 §2.4): Cards carry no progress rows.
     review_event: ReviewEvent
     history_completeness_code: str
     before_state_hash: str | bytes | None = None
@@ -225,7 +223,7 @@ def append_native_history_fact(
 ) -> NativeHistoryFactResult:
     """Stage one immutable native history fact, or return its exact replay.
 
-    The subject and contributor must already be locked by the caller.  An
+    The subject row must already be locked by the caller.  An
     existing fact is accepted only when it points to the same ReviewEvent and
     has the same canonical evidence payload.
 
@@ -244,12 +242,11 @@ def append_native_history_fact(
     ):
         raise _fail("INVALID_HISTORY_CONTEXT", "Learner ID must be positive.")
     subject = command.subject
-    contributor = command.contributor
     event = command.review_event
-    if subject.id is None or event.id is None or (contributor is not None and contributor.id is None):
+    if subject.id is None or event.id is None:
         raise _fail(
             "UNFLUSHED_HISTORY_EVIDENCE",
-            "Subject, contributor and ReviewEvent must be persisted before history append.",
+            "Subject and ReviewEvent must be persisted before history append.",
         )
     if int(subject.learner_user_id) != learner_user_id:
         raise _fail(
@@ -270,43 +267,19 @@ def append_native_history_fact(
     logical_card_key = str(event.card_id or "").strip()
     if not logical_card_key:
         raise _fail("INVALID_HISTORY_CONTEXT", "ReviewEvent has no Card identity.")
-    if contributor is not None:
-        if int(contributor.subject_generation) != generation:
-            raise _fail(
-                "HISTORY_GENERATION_MISMATCH",
-                "History contributor generation differs from its subject.",
-            )
-        if int(contributor.subject_id) != int(subject.id):
-            raise _fail(
-                "HISTORY_CONTRIBUTOR_MISMATCH",
-                "History contributor belongs to another subject.",
-            )
-        if str(contributor.contributor_status) != "ACTIVE":
-            raise _fail(
-                "HISTORY_CONTRIBUTOR_INACTIVE",
-                "History contributor is not active.",
-            )
-        if (
-            bytes(contributor.logical_card_key) != logical_card_key.encode("utf-8")
-            or str(contributor.live_card_id or "") != logical_card_key
-        ):
-            raise _fail(
-                "HISTORY_CARD_MISMATCH",
-                "ReviewEvent Card differs from its active contributor.",
-            )
-    else:
-        # No contributor row: the reviewed Card must still belong to the subject's live Note.
-        from models.card import Card
+    # The reviewed Card must belong to the subject's live Note.
+    from models.card import Card
 
-        card_note_id = event.note_id or session.execute(
-            select(Card.note_id).where(Card.id == logical_card_key)
-        ).scalar_one_or_none()
-        if not subject.live_note_id or str(card_note_id or "") != str(subject.live_note_id):
-            raise _fail(
-                "HISTORY_CARD_MISMATCH",
-                "ReviewEvent Card is outside the subject's live Note.",
-            )
-    contributor_id = int(contributor.id) if contributor is not None else None
+    card_note_id = event.note_id or session.execute(
+        select(Card.note_id).where(Card.id == logical_card_key)
+    ).scalar_one_or_none()
+    if not subject.live_note_id or str(card_note_id or "") != str(subject.live_note_id):
+        raise _fail(
+            "HISTORY_CARD_MISMATCH",
+            "ReviewEvent Card is outside the subject's live Note.",
+        )
+    # Facts written before P10 kept a contributor id; new facts have none.
+    contributor_id = None
     completeness = str(command.history_completeness_code or "")
     if completeness not in HISTORY_COMPLETENESS_CODES:
         raise _fail(
@@ -402,7 +375,6 @@ def append_native_history_fact(
             or bytes(existing.fact_payload_hash) != fact_document.digest
             or existing.subject_id != int(subject.id)
             or existing.subject_generation != generation
-            or existing.contributor_id != contributor_id
             or bytes(existing.logical_note_key or b"") != logical_note_key
             or bytes(existing.logical_card_key) != encoded_card_key
             or existing.history_completeness_code != completeness

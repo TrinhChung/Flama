@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func, or_, select
 
+from app.services.study_progress_contract import DEFAULT_STORAGE_PROFILE
 from app.validators.study_session_wire import SESSION_SCHEMA_V4
 from models import db
 from models.card import Card
@@ -42,7 +43,7 @@ def build_phase9_readiness(
     projection_since_utc: datetime | None = None,
     retirement_observation: dict | None = None,
 ) -> dict:
-    from app.services.study_phase4_preflight_service import collect_connection_safety
+    from app.services.audit_connection_safety import collect_connection_safety
 
     if not 30 <= int(window_days) <= 365:
         raise ValueError("Retirement observation requires at least 30 days.")
@@ -70,7 +71,8 @@ def _build_phase9_readiness(
     now = (now_utc or datetime.utcnow()).replace(microsecond=0)
     since = now - timedelta(days=int(window_days))
     profile = db.session.get(StudyAuthorityStorageProfile, 1)
-    storage_profile = profile.profile_code if profile else "PROJECTION_V1"
+    # A database without a profile row is a fresh CONSOLIDATED_V1 install (P10-09).
+    storage_profile = profile.profile_code if profile else DEFAULT_STORAGE_PROFILE
     switched_at = profile.switched_at if profile else None
     projection_since_utc = projection_since_utc or switched_at
     if projection_since_utc is not None and projection_since_utc > now:
@@ -169,11 +171,11 @@ def _build_phase9_readiness(
         projection_blockers.append("LEGACY_LEARNERS")
     if unenrolled_users:
         projection_blockers.append("UNENROLLED_USERS")
-    # NOTE readers/writers depend on CardProgress until this release can run
-    # the projection-independent profile (P9-03..P9-05d).
+    # NOTE readers/writers never depend on card_progress in this release; a
+    # database still on PROJECTION_V1 is refused by every NOTE route.
     from app.repositories.study_authority_repository import SUPPORTED_STORAGE_PROFILES
 
-    if "CANONICAL_V1" not in SUPPORTED_STORAGE_PROFILES:
+    if storage_profile not in SUPPORTED_STORAGE_PROFILES:
         projection_blockers.append(PROJECTION_DEPENDENT_NOTE_CODE)
     gates = {
         "legacy_projection_writes": {
