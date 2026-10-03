@@ -8,7 +8,7 @@
 
 **Một người có thể tìm ra điều mới. Khi điều ấy được sẻ chia, cả cộng đồng có thể tiến xa hơn.**
 
-Landing kể một hành trình bằng motion graphic liên tục: từ con người học cách sử dụng lửa, trao lửa cho nhau, đến truyền đạt, vun trồng, chế tạo, thắp sáng, kết nối qua máy tính và sử dụng AI. Hành trình trở về với những con người đang học hỏi và góp tri thức trên Flama.
+Landing kể một hành trình bằng motion graphic liên tục: từ con người học cách sử dụng lửa, trao lửa cho nhau, đến truyền đạt, vun trồng, chế tạo, thắp sáng và những bước tiến như máy tính, AI. Các phát minh là hình ảnh về thành quả của tri thức được tiếp nối. Hành trình trở về với những con người đang học hỏi và góp tri thức trên Flama.
 
 Ngọn lửa là ẩn dụ cho kiến thức. Người trao lửa vẫn giữ ngọn lửa của mình; người nhận có thể học thêm, bổ sung rồi trao tiếp. Đây là hành động thị giác quan trọng nhất: **chia sẻ làm tri thức lan rộng**.
 
@@ -45,7 +45,7 @@ Các lựa chọn này đủ để triển khai bản review đầu tiên. Có t
 - Người, bàn tay, cây, công cụ và máy móc dùng cùng tỷ lệ, độ bo và cách đổ bóng. Nhân vật cách điệu nhưng có cử chỉ rõ ràng, tránh cảm giác icon đứng cạnh nhau.
 - Bố cục có tiền cảnh, chủ thể và hậu cảnh; tạo chiều sâu bằng kích thước, độ sáng và chuyển động chậm, không cần dựng thế giới 3D.
 - Một đường sáng màu lửa đi xuyên các cảnh. Nó có thể trở thành nét ký hiệu, đường nước, chuyển động bánh đà, dây tóc bóng đèn hoặc đường truyền dữ liệu.
-- Mỗi cảnh có một hành động chính: tìm ra, trao, kể, vun trồng, cải tiến, thắp sáng, kết nối, kiểm chứng, đóng góp.
+- Mỗi cảnh có một hành động chính: tìm ra, trao, kể, vun trồng, cải tiến, thắp sáng, kết nối, bổ sung, đóng góp.
 - Con người xuất hiện xuyên suốt. Phát minh luôn có dấu vết học hỏi, thử nghiệm và trao đổi giữa nhiều người.
 - Khoảng trống quanh chữ rộng và ổn định. Chữ nằm trên vùng nền phẳng, tránh chồng lên chi tiết chuyển động.
 
@@ -65,7 +65,7 @@ Nguồn nhận diện đang dùng: `frontend/src/index.css`, `frontend/src/share
 | Chữ và đường nét | `--foreground`, `--muted-foreground` | Màu đơn sắc, tương phản rõ. |
 | Nền mở đầu, đề xuất | Than nâu `#211A17`, vùng sáng giấy `#FFF8EF` | Token riêng của story; cần kiểm tra tương phản trong preview. |
 
-Cam và ánh lửa dẫn mắt thay vì phủ toàn bộ màn hình. Cảnh đầu có thể tối để thấy lửa, nhưng giữ cảm giác ấm và nhân văn. Cảnh AI vẫn thuộc bảng màu này; không chuyển thành một thế giới neon xanh/tím.
+Cam và ánh lửa dẫn mắt thay vì phủ toàn bộ màn hình. Cảnh đầu có thể tối để thấy lửa, nhưng giữ cảm giác ấm và nhân văn. Hình ảnh máy tính và AI trong chuỗi phát minh vẫn thuộc bảng màu này; không chuyển thành một thế giới neon xanh/tím.
 
 Giữ **logo `/logo.png` đang được Brand sử dụng**. Logo kết hợp ngọn lửa và các trang sách, phù hợp với đoạn kết. SVG minh họa có thể tiến dần về silhouette đó rồi nối sang logo thật; không âm thầm thay logo bằng `flama-mark.svg`.
 
@@ -143,17 +143,19 @@ Một máy tính mở ra nhiều cửa sổ. Những người ở các vị trí
 
 Các chủ đề có thể gợi bằng một từ tiếng Nhật, một công thức, một sơ đồ lập trình và một bản vẽ cây. Chúng thuộc cùng một ngôn ngữ đồ họa, thể hiện Flama dành cho nhiều lĩnh vực.
 
-**Nối cảnh:** Đường nối và các điểm sáng sắp xếp thành một cấu trúc tri thức có tổ chức. Một bàn tay đưa câu hỏi vào cấu trúc đó.
+Cuối cảnh có một nhịp ngắn nối máy tính với hình tượng AI: các điểm ảnh thành mạng nút liên kết, kèm nhãn “AI” nhỏ để nhận ra bước tiến này. AI xuất hiện trong cùng chuỗi hình ảnh phát minh như động cơ và bóng đèn, không có giao diện hỏi đáp hoặc trình diễn chức năng sản phẩm.
 
-### Cảnh 07 — Công cụ mới, hành trình tiếp tục
+**Nối cảnh:** Máy quay lùi khỏi hình tượng công nghệ, theo đường sáng màu lửa về những bàn tay đang trao tri thức cho nhau.
 
-**Chữ chính:** “Với những công cụ mới, ta mở rộng điều có thể học và sẻ chia.”
+### Cảnh 07 — Tri thức được trao, bước tiến được mở
 
-Một hình ảnh AI cách điệu xuất hiện như công cụ giữa những con người: tiếp nhận câu hỏi, gợi liên kết, rồi trả một mảnh thông tin để người dùng đọc, kiểm chứng và bổ sung. Luồng sáng đi qua công cụ rồi được con người trao tiếp.
+**Chữ chính:** “Những điều được sẻ chia mở đường cho những bước tiến mới.”
 
-Không dùng robot làm nhân vật chính. AI không phải điểm kết của câu chuyện và cảnh này không tuyên bố Flama đang có một tính năng AI chưa được xác minh. Đây là hình ảnh về công cụ trong hành trình tri thức.
+Máy quay mở rộng để thấy phía sau những bước tiến là nhiều con người đang tiếp nối hiểu biết của nhau. Một người góp cách làm, một người bổ sung kinh nghiệm, người nhận kết nối chúng thành một ý tưởng mới rồi trao tiếp. Các ngọn lửa được thắp thêm trong khi lửa của người trao vẫn sáng.
 
-**Nối cảnh:** Các mảnh thông tin trở thành những trang/thẻ nội dung có cấu trúc. Máy quay thu về một không gian học chung, sáng và ấm.
+Những đóng góp nhỏ từ nhiều người tạo thành một mạng tri thức chung. Chủ thể của cảnh là bàn tay, con người và hành động chia sẻ; các phát minh vừa đi qua trở thành dấu vết ở hậu cảnh. Cảnh này làm rõ lý do Flama xuất hiện: một nơi để mọi người trao điều mình biết và cùng phát triển kho tri thức cộng đồng.
+
+**Nối cảnh:** Những đường lửa nối các đóng góp thành các trang/thẻ học trong một không gian chung, sáng và ấm. Mạng cộng đồng giữ nguyên khi bước sang Flama.
 
 ### Cảnh 08 — Ngọn lửa hôm nay: Flama
 
@@ -200,8 +202,8 @@ CTA phụ dẫn tới phần cộng đồng hoặc kho bộ thẻ theo trạng t
 | 03 → 04 | Bánh xe, tâm xoay và đốm sáng | Nối hình bánh xe dẫn nước với bánh đà. |
 | 04 → 05 | Đường cong hơi nước | Thu về dây tóc bóng đèn, đồng thời chuyển vùng sáng. |
 | 05 → 06 | Điểm sáng hổ phách | Thành điểm ảnh, mở thành mạng cửa sổ. |
-| 06 → 07 | Các đường nối tri thức | Sắp xếp thành cấu trúc công cụ AI. |
-| 07 → 08 | Mảnh thông tin và bàn tay | Thành thẻ học, trở lại với cộng đồng. |
+| 06 → 07 | Đường sáng từ các hình tượng phát minh | Theo đường lửa về bàn tay trao tri thức, mở rộng ra cộng đồng. |
+| 07 → 08 | Các đóng góp và mạng cộng đồng | Nối thành trang/thẻ học, giữ cộng đồng làm chủ thể khi Flama xuất hiện. |
 | 08 → 09 | Trang sách và đường lửa | Hội tụ thành logo; bàn tay trao một ngọn lửa về phía người xem. |
 
 Ở thời điểm nối, giữ ít nhất một trong ba yếu tố: vị trí đốm sáng, hướng chuyển động hoặc hình khối chủ thể. Cảnh mới bắt đầu xuất hiện trước khi cảnh cũ biến mất. Dùng morph ở những hình có cấu trúc phù hợp; ở các hình khác, dùng chuyển vị trí, nối hình và che/mở lớp để giữ tính liên tục.
@@ -222,7 +224,7 @@ Một chương chỉ có một chuyển động dẫn chuyện nổi bật. Hậ
 
 - Bố cục dọc, tranh và lời dẫn cùng hiện đủ trong các khối đọc. Các điểm nối hình vẫn liên tục nhưng giảm camera pan và độ dày chi tiết.
 - Bản đầu ưu tiên cuộn native với cảnh theo luồng trang; không áp dụng một chuỗi pin dài trên màn nhỏ. Dùng `svh`/chiều cao ổn định để giảm nhảy cảnh khi thanh trình duyệt thay đổi.
-- Giữ đầy đủ lửa → cộng đồng → truyền đạt/canh tác → động cơ/bóng đèn → máy tính/AI → Flama. Không cắt bỏ thông điệp chia sẻ để tiết kiệm không gian.
+- Giữ đầy đủ lửa → cộng đồng → truyền đạt/canh tác → động cơ/bóng đèn → máy tính/AI → tri thức được trao tiếp → Flama. AI chỉ là một nhịp trong chuỗi phát minh; ưu tiên không gian cho con người và hành động chia sẻ.
 - Kiểm tra từ 320px; nút dễ chạm, tối thiểu 44px. Tranh không gây tràn ngang; chữ không bị che bởi bàn tay hay máy móc.
 
 ### Reduced motion và điều khiển
@@ -299,7 +301,7 @@ Toàn bộ style đặt dưới phạm vi story. Không đổi `LandingPage.tsx`
 - Lazy-load module story và các asset chưa cần ngay. Hero có kích thước dành sẵn, tranh tĩnh dự phòng và lời dẫn hiển thị sớm.
 - Dữ liệu câu chuyện lưu một nguồn duy nhất cho motion mode và static mode, tránh hai bản copy khác nhau.
 
-Tài sản cần dựng: nhân vật/bàn tay theo một bộ hình; lửa và điểm sáng; ký hiệu truyền đạt; hạt/cây/luống đất; bánh xe/bánh đà/động cơ; bóng đèn; máy tính/cửa sổ; cấu trúc AI; thẻ/trang sách; keyframe cuối căn theo logo thật.
+Tài sản cần dựng: nhân vật/bàn tay theo một bộ hình; lửa và điểm sáng; ký hiệu truyền đạt; hạt/cây/luống đất; bánh xe/bánh đà/động cơ; bóng đèn; máy tính/cửa sổ; hình tượng AI ngắn trong chuỗi phát minh; mạng đóng góp cộng đồng; thẻ/trang sách; keyframe cuối căn theo logo thật.
 
 Trước hết dựng bộ keyframe đồng nhất, sau đó mới nối motion. Mỗi asset cần xác định điểm neo để cảnh sau tiếp nối vị trí/hình khối của cảnh trước. Không ghép chín minh họa rời rồi chỉ thêm fade-in.
 
@@ -323,7 +325,7 @@ Mục tiêu hiệu năng cho review: cuộn mượt trên thiết bị thử đ�
 
 - [ ] Người xem hiểu truyền lửa là truyền tri thức và thấy rõ người trao vẫn giữ lửa.
 - [ ] Câu chuyện có sử dụng lửa, cộng đồng, ngôn ngữ/ký hiệu, canh tác, động cơ hơi nước, bóng đèn, máy tính và AI.
-- [ ] Mỗi bước tiến có con người học hỏi, trao đổi hoặc bổ sung; AI không chiếm vai trò cộng đồng.
+- [ ] Mỗi bước tiến có con người học hỏi, trao đổi hoặc bổ sung; AI chỉ là hình ảnh về một bước tiến, không có đoạn PR hoặc demo tính năng AI của Flama.
 - [ ] Đoạn lịch sử nối tự nhiên vào Flama; người xem hiểu Flama làm gì ở cảnh cộng đồng.
 - [ ] Có cảm giác một hành trình nối liền, không phải slideshow icon hoặc video rồi đến bảng tính năng.
 - [ ] Logo, sắc cam/đỏ/hổ phách và tinh thần chia sẻ hiện diện xuyên suốt.
