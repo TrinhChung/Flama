@@ -9,6 +9,7 @@ from uuid import uuid4
 from flask import jsonify, request, redirect, url_for, flash, send_file, current_app, make_response
 from flask_login import current_user, login_required
 from app.spa import serve_react_spa
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import selectinload
 from models import db
@@ -49,8 +50,9 @@ from app.validators import (
 from app.services.stats_overview import get_effective_timezone_name
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services import study_artifact_service
-from app.repositories.study_authority_repository import lock_study_authority_route
+from app.repositories.study_authority_repository import is_consolidated, lock_study_authority_route
 from app.services.study_authority_read_service import (
+    load_study_authority_availability_snapshot,
     load_study_authority_card_read,
     load_study_authority_card_reads,
     summarize_study_authority_queue,
@@ -233,28 +235,52 @@ def _build_study_next_payload(
     if route.mode_code == "NOTE":
         cards = query.options(selectinload(Card.note)).order_by(Card.id.asc()).all()
         selected_cards_by_id = {str(card.id): card for card in cards}
-        # Options depend only on (learner, deck): resolve each deck once.
-        options_by_deck_id: dict[Any, Any] = {}
-        deck_options_by_card_id = {}
-        for card in cards:
-            deck_id = _effective_scheduler_deck_id(card, clone_scope)
-            if deck_id not in options_by_deck_id:
-                options_by_deck_id[deck_id] = resolve_deck_options(
-                    user_id=current_user.id,
-                    deck_id=deck_id,
+        if is_consolidated(route):
+            # ADR P10 §2.7: count and order the scope set-wise from the rows,
+            # without locks or per-Card re-derivation (the offline audit does
+            # that); only the returned Card takes the full locking read below.
+            card_ids = query.with_entities(Card.id.label("id")).order_by(None).subquery("study_next_ids")
+            scope_rows = (
+                select(
+                    Note.deck_id.label("deck_id"),
+                    Card.id.label("card_id"),
+                    Card.note_id.label("note_id"),
                 )
-            deck_options_by_card_id[str(card.id)] = options_by_deck_id[deck_id]
-        authority_reads = load_study_authority_card_reads(
-            db.session,
-            learner_user_id=int(current_user.id),
-            cards=tuple(cards),
-            now_utc=now,
-            timezone_name=timezone_name,
-            deck_options_by_card_id=deck_options_by_card_id,
-        )
+                .join(Note, Note.id == Card.note_id)
+                .where(Card.id.in_(select(card_ids.c.id)))
+                .subquery("study_next_scope")
+            )
+            ordering_reads = load_study_authority_availability_snapshot(
+                db.session,
+                learner_user_id=int(current_user.id),
+                cards=tuple(cards),
+                scope=scope_rows,
+                now_utc=now,
+            )
+        else:
+            # Options depend only on (learner, deck): resolve each deck once.
+            options_by_deck_id: dict[Any, Any] = {}
+            deck_options_by_card_id = {}
+            for card in cards:
+                deck_id = _effective_scheduler_deck_id(card, clone_scope)
+                if deck_id not in options_by_deck_id:
+                    options_by_deck_id[deck_id] = resolve_deck_options(
+                        user_id=current_user.id,
+                        deck_id=deck_id,
+                    )
+                deck_options_by_card_id[str(card.id)] = options_by_deck_id[deck_id]
+            authority_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=int(current_user.id),
+                cards=tuple(cards),
+                now_utc=now,
+                timezone_name=timezone_name,
+                deck_options_by_card_id=deck_options_by_card_id,
+            )
+            ordering_reads = authority_reads
         queue_summary = summarize_study_authority_queue(
             cards=tuple(cards),
-            reads_by_card_id=authority_reads,
+            reads_by_card_id=ordering_reads,
             learner_user_id=int(current_user.id),
             now_utc=now,
             timezone_name=timezone_name,

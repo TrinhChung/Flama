@@ -329,16 +329,25 @@ def load_study_authority_availability_snapshot(
     storage_profile = read_study_storage_profile(session)
     if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
         # ADR P10 §2.7: one row per Note, no cross-table evidence to check.
+        # Only the availability columns: the state payload is not needed here.
         stateful = {
-            str(card_id): subject
-            for card_id, subject in session.execute(
-                select(scope.c.card_id, StudyProgressSubject)
+            str(row.card_id): row
+            for row in session.execute(
+                select(
+                    scope.c.card_id,
+                    StudyProgressSubject.normalized_queue,
+                    StudyProgressSubject.due_at,
+                    StudyProgressSubject.due_day,
+                    StudyProgressSubject.is_suspended,
+                    StudyProgressSubject.is_buried,
+                    StudyProgressSubject.buried_until_day,
+                )
                 .select_from(scope)
                 .join(StudyProgressSubject, and_(
                     StudyProgressSubject.learner_user_id == int(learner_user_id),
                     StudyProgressSubject.logical_note_key == cast(scope.c.note_id, LargeBinary),
                 ))
-                .where(StudyProgressSubject.state_payload.isnot(None))
+                .where(StudyProgressSubject.semantic_state_hash.isnot(None))
             ).all()
         }
         return MappingProxyType({

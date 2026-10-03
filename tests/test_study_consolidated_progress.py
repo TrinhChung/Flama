@@ -230,6 +230,20 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
             "live": subject.live_note_id is not None,
         }
 
+    def test_study_next_orders_from_the_rows_and_verifies_the_returned_card(self):
+        ok = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(ok.status_code, 200, ok.get_json())
+        self.assertIn(ok.get_json()["card_id"], self.card_ids)
+        with self.app.app_context():
+            # A row whose availability disagrees with its state: ordered as due,
+            # then refused by the full read of the returned Card.
+            subject = self._subject()
+            subject.normalized_queue, subject.due_day = "review", 0
+            db.session.commit()
+        refused = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual((refused.status_code, refused.get_json()["error"]),
+                         (409, "AUTHORITY_READ_PARITY_DIVERGED"), refused.get_json())
+
     def test_lifecycle_story_stays_on_the_row(self):
         self._answer(self.card_ids[0])
         self._answer(self.card_ids[0], rating="hard")
