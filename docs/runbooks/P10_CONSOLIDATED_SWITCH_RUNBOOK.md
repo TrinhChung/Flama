@@ -2,6 +2,8 @@
 
 > Bước **một chiều**: sau khi chuyển, tiến độ mỗi learner × Note nằm trên một dòng `study_progress_subjects`; `study_progress_states`, `study_authority_subject_tokens`, `study_progress_contributors`, `study_progress_availability`, `study_progress_lineage_refs` và `card_progress` đứng yên (chỉ còn bị xóa khi dọn nội dung) cho tới contraction. Không quay lại `CANONICAL_V1`. **Chỉ chạy khi chủ sản phẩm đã duyệt cửa sổ (P10-08).** Cơ sở: [ADR P10](../architecture/phase-10-consolidated-note-progress-adr-2026-10-03.md) §2.6, §6; [kế hoạch P10](../task/decoupling/P10_EXECUTION_PLAN_2026-10-03.md).
 
+**Đã thực hiện 2026-10-03:** T0 `2026-10-03T06:38:52Z`, `CONSOLIDATED_V1`, epoch 3, freeze 67 giây. Xem [báo cáo cutover](../task/decoupling/P10_08_CUTOVER_REPORT_2026-10-03.md). Lệnh `--apply` lần sau bị từ chối (`PROFILE_NOT_CANONICAL`); không cần chạy lại cho user/Note tạo sau T0.
+
 Helper `flama_cli` như trong [P5 runbook](./P5_NOTE_AUTHORITY_RUNBOOK.md).
 
 ## 1. Điều kiện trước (ngày hôm trước)

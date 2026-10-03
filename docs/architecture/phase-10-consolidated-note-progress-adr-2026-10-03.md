@@ -1,6 +1,6 @@
 # ADR P10 — Gộp tiến độ NOTE về một dòng cho mỗi learner × Note
 
-> Trạng thái: **Đề xuất, đã được chủ sản phẩm yêu cầu triển khai (2026-10-03)**. Thay thế phương án B của [ADR P4-03](./phase-4-algorithm-state-availability-adr-2026-09-12.md) §4 (state tách 1:1 khỏi envelope; availability theo contributor) và phần contributor/availability/token của [ADR P4-05](./phase-4-physical-shadow-schema-adr-2026-09-13.md) và [ADR P9-03](./phase-9-p9-03-projection-independent-note-adr-2026-09-30.md). Giữ nguyên các quyết định sản phẩm của [kế hoạch gốc](./study-interaction-trigger-algorithm-plan.md) §16.1. Kế hoạch thực thi: [P10](../task/decoupling/P10_EXECUTION_PLAN_2026-10-03.md).
+> Trạng thái: **Đã triển khai production 2026-10-03** (P10-08, T0 `06:38:52Z`, epoch 3; [báo cáo](../task/decoupling/P10_08_CUTOVER_REPORT_2026-10-03.md)). Contraction (P10-09) chưa làm. Thay thế phương án B của [ADR P4-03](./phase-4-algorithm-state-availability-adr-2026-09-12.md) §4 (state tách 1:1 khỏi envelope; availability theo contributor) và phần contributor/availability/token của [ADR P4-05](./phase-4-physical-shadow-schema-adr-2026-09-13.md) và [ADR P9-03](./phase-9-p9-03-projection-independent-note-adr-2026-09-30.md). Giữ nguyên các quyết định sản phẩm của [kế hoạch gốc](./study-interaction-trigger-algorithm-plan.md) §16.1. Kế hoạch thực thi: [P10](../task/decoupling/P10_EXECUTION_PLAN_2026-10-03.md).
 
 ## 1. Bối cảnh và bằng chứng
 
