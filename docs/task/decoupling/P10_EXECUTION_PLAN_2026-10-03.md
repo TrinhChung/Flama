@@ -1,0 +1,111 @@
+# Kế hoạch thực thi P10 — gộp tiến độ NOTE về một dòng
+
+> Lập 2026-10-03 theo yêu cầu chủ sản phẩm: tối ưu thiết kế và truy vấn trước, chưa dùng index/cache. Thiết kế: [ADR P10](../../architecture/phase-10-consolidated-note-progress-adr-2026-10-03.md). Bối cảnh đo: [tổng kết P9](./P9_CLOSEOUT_2026-10-03.md), [điều tra dashboard/study](../../architecture/LOCAL_PRODUCTION_STUDY_DASHBOARD_PERFORMANCE_2026-10-02.md).
+
+## 1. Mục tiêu và phạm vi
+
+Một dòng `study_progress_subjects` chứa định danh, state, revision CAS và availability của mỗi learner × Note. Mọi đọc/ghi NOTE ở profile `CONSOLIDATED_V1` không chạm `study_progress_states`, `study_authority_subject_tokens`, `study_progress_contributors`, `study_progress_availability`, `study_progress_lineage_refs` và `card_progress`.
+
+Không thuộc P10: index/cache mới; đổi wire, receipt, ReviewEvent; đổi quyết định tiến độ chung theo Note; giao diện; Phase 8.
+
+## 2. Đường đi
+
+Theo cách đã chứng minh ở P9: code mới chạy song song với code cũ phía sau storage profile, chuyển production một chiều trong write freeze ngắn, rồi mới gỡ code và bảng cũ.
+
+```text
+P10-01 ADR + kế hoạch
+P10-02 expand: migration 49, model, profile CONSOLIDATED_V1 (chưa bật)
+P10-03 lõi: repository dòng tiến độ + chiếu availability + CAS
+P10-04 reader CONSOLIDATED_V1 (+ parity với CANONICAL_V1)
+P10-05 writer CONSOLIDATED_V1 (review, vòng đời, đổi thuật toán, Anki/Connect, overlay)
+P10-06 gate: suite dưới CONSOLIDATED_V1 + guard bảng cũ, probe MySQL, A/B
+P10-07 switch CLI + rehearsal trên bản khôi phục production + runbook
+P10-08 production: deploy, backup, freeze, switch, postflight    [cần duyệt]
+P10-09 contraction: gỡ code CANONICAL_V1/P4 tooling, drop bảng cũ [cần duyệt phạm vi]
+```
+
+Mỗi bước là một PR có test; P10-02..P10-07 không đổi hành vi production vì profile production vẫn là `CANONICAL_V1` cho tới P10-08.
+
+## 3. Gói việc
+
+### P10-02 — Expand (không đổi hành vi)
+
+- Migration `20261003_000049`: thêm vào `study_progress_subjects` các cột ở ADR §2.1, đều NULL được (riêng `authority_revision` NOT NULL DEFAULT 0); CHECK “nhóm state/availability cùng có hoặc cùng NULL”, độ dài hash, queue chuẩn hóa. Expand thuần, chạy được khi release cũ còn phục vụ (cột mới không ai đọc).
+- Model `StudyProgressSubject` thêm cột; `STORAGE_PROFILES` thêm `CONSOLIDATED_V1`; `SUPPORTED_STORAGE_PROFILES` của release chưa gồm nó (switch bị chặn bằng `RELEASE_DOES_NOT_SUPPORT_*`).
+- Test: migration SQLite + MySQL (upgrade/downgrade, CHECK), model/migration parity, startup `create_all` không lệch.
+
+### P10-03 — Lõi dòng tiến độ
+
+- `app/repositories/note_progress_repository.py`: khóa dòng theo `(learner, logical_note_key)` hàng loạt; đọc không khóa; INSERT bulk dòng pristine; UPDATE state + revision + availability; reset generation; truy vấn tổng hợp cho analytics/hàng đợi.
+- Chiếu availability theo Note: hàm thuần từ state + burial (tái dùng phần Note của `project_note_card`), cùng semantic hash như hiện tại để lease/receipt không đổi.
+- `LockedStudyAuthoritySubject` ở profile mới dựng từ một dòng (state/token là view trên dòng) để pin, wire identity, receipt dùng lại không đổi.
+- Test: CAS (revision/hash sai bị từ chối), non-material write bị từ chối, ràng buộc dòng, chiếu availability bằng hệt `project_note_card` trên mọi queue/suspend/bury/learning/relearning.
+
+### P10-04 — Reader
+
+| Entry point | File chính |
+|---|---|
+| Dashboard, overview, cây deck | `note_analytics_read_repository`, `deck_aggregation_service`, `stats_overview` |
+| `/api/study/next`, MCP counts/queue/get_card | `study_authority_read_service`, `mcp/study_tools` |
+| Browse danh sách/cây/lọc | `browse_card_service` |
+| Thống kê hôm nay/tương lai | `stats_today_future` |
+| Reps marketplace | `flashcards_share_repository` |
+| Mở phiên (đọc state, ghim) | `study_session_authority_pin_service`, `study_session_service` |
+| Audit/readiness | `cli.study-authority-read-audit`, `study_phase9_readiness_service` |
+
+Gate: với cùng dữ liệu, hai profile trả kết quả giống hệt (test parity chuyển profile trong test). Câu đếm dashboard đọc `notes ⋈ subjects` (± `cards`), không kiểm tra chéo.
+
+### P10-05 — Writer và vòng đời
+
+| Entry point | File chính |
+|---|---|
+| Trả lời REST/MCP, commit phiên v4, batch NOTE | `study_service`, `study_authority_command_service`, `study_authority_receipt_service`, `study_session_service`, `study_note_batch_service` |
+| Note mới, materialize pristine | `study_note_pristine_service`, `study_canonical_materialization_service`, `flashcard_content_service` |
+| Thêm/xóa Template, xóa Card/Note/NoteType/deck, reset | `study_note_template_service`, `study_content_delete_service`, `deck_management_service`, `browse_card_service`, `mcp/note_tools` |
+| Đổi thuật toán, history cut | `study_algorithm_switch_service`, `study_algorithm_history_cut_service` |
+| Anki/Connect snapshot, revlog, import | `anki_sync_service`, `connect/import_cards` |
+| Overlay, clone rekey | `flashcards_share_service`, `flashcards_share_repository` |
+| Enrollment | `study_authority_enrollment_service` |
+
+Gate: writer matrix ở ADR §5.3; mỗi câu trả lời một UPDATE tiến độ; history fact khớp theo `logical_card_key` + generation.
+
+### P10-06 — Gate tích hợp
+
+- `scripts/trace_card_progress_callsites.py --profile CONSOLIDATED_V1` mở rộng theo dõi bốn bảng cũ: không SQL nào ngoài DELETE dọn dẹp đã khai báo; lỗi còn lại chỉ thuộc test khẳng định nội tạng bảng cũ, liệt kê từng test.
+- Probe MySQL đồng thời/replay/batch trên profile mới; `bench_p9_storage_profile_ab_mysql.py` thêm profile mới; workload probe trên bản khôi phục production.
+- Mục tiêu đo (cùng máy, so với `CANONICAL_V1`): commit 50 câu ≤ 60% SQL và ≤ 60% dòng ghi; câu đếm dashboard user 1 ≤ 0,5 s trên dữ liệu production khôi phục; mở phiên không xấu đi.
+
+### P10-07 — Switch
+
+- `flask study-storage-profile-switch --target CONSOLIDATED_V1` (dry-run mặc định): blocker (batch chưa xong, learner không NOTE, release chưa hỗ trợ), một UPDATE JOIN chép state/token/availability/contributor sang dòng subject, kiểm đối chiếu 100% (đếm, hash, revision, availability tính lại từ state), tăng epoch, khóa độc quyền dòng profile.
+- Rehearsal trên `pre-p906` dump khôi phục (sau switch P9-06 rồi switch P10), workload probe, read audit hai learner, lease v4 qua switch.
+- Runbook `P10_CONSOLIDATED_SWITCH_RUNBOOK.md`.
+
+### P10-08 — Production (cần chủ sản phẩm duyệt cửa sổ)
+
+Deploy release hỗ trợ hai profile → backup có watermark → freeze → switch → mở lại → readiness, read audit, SQL trace, postflight như P9-06.
+
+### P10-09 — Contraction (cần duyệt phạm vi)
+
+Gỡ nhánh `CANONICAL_V1`, công cụ P4 (mirror, backfill, reconciliation), đổi profile mặc định của test, migration drop bốn bảng + lineage ref + backfill + lifecycle event sau archive, bỏ cột envelope cũ. Gỡ `card_progress`, LEGACY, `PROJECTION_V1` là quyết định riêng (phạm vi compatibility đã giữ ở P9).
+
+## 4. Ước lượng và rủi ro
+
+| Bước | Ước lượng tập trung |
+|---|---|
+| P10-02 | 0,5 ngày |
+| P10-03 | 1–2 ngày |
+| P10-04 | 2–3 ngày |
+| P10-05 | 4–6 ngày |
+| P10-06, P10-07 | 2–3 ngày |
+| P10-09 | 3–5 ngày |
+
+Rủi ro chính: số entry point lớn trong các file rủi ro cao (`study_session_service`, `flashcards_share_service`, lifecycle). Giảm bằng: code profile mới nằm ở module riêng, nhánh tại entry point; test parity hai profile; guard SQL trên toàn suite; rehearsal trên dữ liệu production thật trước switch.
+
+## 5. Trạng thái
+
+| ID | Trạng thái |
+|---|---|
+| P10-01 | DONE — ADR + kế hoạch |
+| P10-02 | IN PROGRESS |
+| P10-03..P10-09 | TODO |

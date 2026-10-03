@@ -99,6 +99,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_p9_backup_restore_mysql.py",
             "scripts/probe_p9_canonical_workload_mysql.py",
             "scripts/bench_p9_storage_profile_ab_mysql.py",
+            "scripts/probe_p10_schema_mysql.py",
+            "migrations/versions/20261003_000049_consolidate_note_progress_row.py",
             "deploy/flama-study-retention.service",
             "deploy/flama-study-retention.timer",
             "models/study_application.py",
@@ -154,6 +156,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_phase6_continuity.py",
             "tests/test_study_session_retention.py",
             "tests/test_study_session_install_usage.py",
+            "tests/test_study_consolidated_schema.py",
             "tests/test_study_phase9_readiness.py",
             "tests/test_study_retirement_telemetry.py",
             "tests/test_study_backup_restore_probe.py",
@@ -871,6 +874,8 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "scripts/bench_p9_profile_migration_mysql.py",
     # Migration 48: one ALTER with a CHECK on connect_source_card_refs.
     "scripts/probe_p9_connect_fence_mysql.py",
+    # Migration 49: consolidated progress CHECKs copy study_progress_subjects.
+    "scripts/probe_p10_schema_mysql.py",
     # Phase 7 foreign-key behavior (cascades from membership to pins) only runs on InnoDB.
     "app/services/study_session_retention_service.py",
     "scripts/probe_p7_session_retention_mysql.py",

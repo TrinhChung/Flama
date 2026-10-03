@@ -50,8 +50,36 @@ CONTRIBUTOR_RAW_EVIDENCE_COLUMNS = (
 )
 
 # One system-wide NOTE storage profile, switched once in a write freeze.
-STORAGE_PROFILES = ("PROJECTION_V1", "CANONICAL_V1")
+# CONSOLIDATED_V1 (ADR P10) keeps state, revision and availability on the
+# subject row instead of the state/token/contributor/availability tables.
+STORAGE_PROFILES = ("PROJECTION_V1", "CANONICAL_V1", "CONSOLIDATED_V1")
 DEFAULT_STORAGE_PROFILE = "PROJECTION_V1"
+CONSOLIDATED_STORAGE_PROFILE = "CONSOLIDATED_V1"
+
+# ADR P10 §2.1: the consolidated subject row. The state group, the
+# availability group and the history/provenance pair are all present for a
+# Note with current progress and all NULL for a Note without one.
+SUBJECT_STATE_COLUMNS = (
+    "algorithm_key",
+    "algorithm_version",
+    "state_schema_version",
+    "storage_codec",
+    "state_payload",
+    "state_payload_size",
+    "algorithm_state_hash",
+    "semantic_state_hash",
+)
+SUBJECT_AVAILABILITY_COLUMNS = (
+    "projection_version",
+    "normalized_queue",
+    "is_suspended",
+    "is_buried",
+)
+SUBJECT_AVAILABILITY_NULLABLE_COLUMNS = ("due_at", "due_day", "buried_until_day")
+SUBJECT_HISTORY_COLUMNS = ("history_completeness_code", "current_provenance_code")
+SUBJECT_PROGRESS_COLUMNS = (
+    SUBJECT_STATE_COLUMNS + SUBJECT_AVAILABILITY_COLUMNS + SUBJECT_HISTORY_COLUMNS
+)
 
 POINTER_STATUSES = (
     "VALID",
@@ -184,3 +212,42 @@ def contributor_evidence_check() -> str:
         f"(evidence_kind = 'LEGACY_PROJECTION' AND {present}) OR "
         f"(evidence_kind = 'CANONICAL' AND {absent})"
     )
+
+
+def subject_progress_checks() -> dict[str, str]:
+    """CHECK expressions of the consolidated subject row (ADR P10 §2.1).
+
+    A row either carries the whole current progress (state, availability,
+    history/provenance) or none of it; the per-value checks admit NULL so the
+    group check alone decides presence.
+    """
+
+    present = " AND ".join(f"{name} IS NOT NULL" for name in SUBJECT_PROGRESS_COLUMNS)
+    absent = " AND ".join(
+        f"{name} IS NULL"
+        for name in SUBJECT_PROGRESS_COLUMNS + SUBJECT_AVAILABILITY_NULLABLE_COLUMNS
+    )
+    return {
+        "ck_sp_subject_progress_group": f"({present}) OR ({absent})",
+        "ck_sp_subject_authority_revision": "authority_revision >= 0",
+        "ck_sp_subject_state_size": (
+            "state_payload_size IS NULL OR state_payload_size BETWEEN 0 AND 16384"
+        ),
+        "ck_sp_subject_algorithm_hash": (
+            "algorithm_state_hash IS NULL OR length(algorithm_state_hash) = 32"
+        ),
+        "ck_sp_subject_semantic_hash": (
+            "semantic_state_hash IS NULL OR length(semantic_state_hash) = 32"
+        ),
+        "ck_sp_subject_queue": (
+            "normalized_queue IS NULL OR " + sql_allowlist("normalized_queue", NORMALIZED_QUEUES)
+        ),
+        "ck_sp_subject_history_code": (
+            "history_completeness_code IS NULL OR "
+            + sql_allowlist("history_completeness_code", HISTORY_COMPLETENESS_CODES)
+        ),
+        "ck_sp_subject_provenance_code": (
+            "current_provenance_code IS NULL OR "
+            + sql_allowlist("current_provenance_code", PROVENANCE_CODES)
+        ),
+    }
