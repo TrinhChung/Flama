@@ -976,6 +976,7 @@ def _verify_note_authority_import_status(
     requested_cards: dict[str, list[dict[str, Any]]],
     refs_by_external_id: dict[str, ConnectSourceNoteRef],
     card_refs_by_external_id: dict[str, ConnectSourceCardRef],
+    consolidated: bool = False,
 ) -> None:
     """Validate every sibling before exposing a NOTE source-progress cursor."""
 
@@ -1033,7 +1034,8 @@ def _verify_note_authority_import_status(
         if (
             subject is None
             or str(subject.live_note_id or "") != str(note.id)
-            or int(subject.contributor_count) != len(note.cards)
+            # CONSOLIDATED_V1 (ADR P10): Cards carry no progress, nothing to count.
+            or (not consolidated and int(subject.contributor_count) != len(note.cards))
         ):
             raise ConnectAuthorityReadError(
                 "INCOMPLETE_AUTHORITY_COMPATIBILITY",
@@ -1148,6 +1150,7 @@ def get_import_note_statuses(
             requested_cards=requested_cards,
             refs_by_external_id=refs_by_external_id,
             card_refs_by_external_id=card_refs_by_external_id,
+            consolidated=route.storage_profile == "CONSOLIDATED_V1",
         )
     orphan_review_card_ids = {
         row[0]
@@ -1179,18 +1182,23 @@ def get_import_note_statuses(
 
         fenced_card_ids = sorted({str(row.card_id) for row in card_refs if row.card_id})
         if fenced_card_ids:
+            query = db.session.query(Card.id, (
+                # ADR P10: the revision is a column of the Note's own row.
+                StudyProgressSubject.authority_revision
+                if route.storage_profile == "CONSOLIDATED_V1"
+                else StudyAuthoritySubjectToken.authority_revision
+            )).join(StudyProgressSubject, db.and_(
+                StudyProgressSubject.learner_user_id == user_id,
+                StudyProgressSubject.live_note_id == Card.note_id,
+            ))
+            if route.storage_profile != "CONSOLIDATED_V1":
+                query = query.join(
+                    StudyAuthoritySubjectToken,
+                    StudyAuthoritySubjectToken.subject_id == StudyProgressSubject.id,
+                )
             token_revision_by_card_id = {
                 str(card_id): int(revision)
-                for card_id, revision in db.session.query(
-                    Card.id, StudyAuthoritySubjectToken.authority_revision
-                )
-                .join(StudyProgressSubject, db.and_(
-                    StudyProgressSubject.learner_user_id == user_id,
-                    StudyProgressSubject.live_note_id == Card.note_id,
-                ))
-                .join(StudyAuthoritySubjectToken, StudyAuthoritySubjectToken.subject_id == StudyProgressSubject.id)
-                .filter(Card.id.in_(fenced_card_ids))
-                .all()
+                for card_id, revision in query.filter(Card.id.in_(fenced_card_ids)).all()
             }
 
     results: list[dict[str, Any]] = []

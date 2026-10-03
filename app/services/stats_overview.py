@@ -191,7 +191,7 @@ def _canonical_future_due_day_counts(
     worst = max((int(row[0] or 0) for row in fetched), default=0)
     if not worst:
         worst = note_reads.subject_vector_violation(
-            db.session, scope=scope, learner_user_id=user_id
+            db.session, scope=scope, learner_user_id=user_id, storage_profile=storage_profile
         )
     error = note_reads.violation_error(worst)
     if error is not None:

@@ -178,13 +178,15 @@ def aggregate_deck_study_counts(
     )
     scope = (union_all(owned, overlay) if overlay is not None else owned).subquery("counted_cards")
 
+    storage_profile = None
     if is_note_mode:
         from app.repositories.study_authority_repository import read_study_storage_profile
 
+        storage_profile = read_study_storage_profile(session)
         rows = note_reads.note_card_rows(
             scope,
             learner_user_id=learner_user_id,
-            storage_profile=read_study_storage_profile(session),
+            storage_profile=storage_profile,
         ).subquery("rows")
     else:
         rows = (
@@ -247,7 +249,8 @@ def aggregate_deck_study_counts(
         worst = max((int(row[5] or 0) for row in aggregated), default=0)
         if not worst:
             worst = note_reads.subject_vector_violation(
-                session, scope=scope, learner_user_id=learner_user_id
+                session, scope=scope, learner_user_id=learner_user_id,
+                storage_profile=storage_profile,
             )
         error = note_reads.violation_error(worst)
         if error is not None:

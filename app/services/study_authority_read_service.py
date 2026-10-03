@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityRoute,
+    is_consolidated,
     lock_study_authority_route,
 )
 from app.repositories.study_repository import card_state_from_progress
@@ -181,6 +182,60 @@ _AVAILABILITY_FIELDS = (
 )
 
 
+def _availability_from_subject(subject, *, card) -> StudyAuthorityAvailabilityRead:
+    return StudyAuthorityAvailabilityRead(
+        normalized_queue=str(subject.normalized_queue),
+        due_at=subject.due_at,
+        due_day=int(subject.due_day) if subject.due_day is not None else None,
+        is_suspended=bool(subject.is_suspended),
+        is_buried=bool(subject.is_buried),
+        buried_until_day=(
+            int(subject.buried_until_day) if subject.buried_until_day is not None else None
+        ),
+        card_created_at=card.created_at,
+        card_order_key=str(card.id).encode("utf-8"),
+    )
+
+
+def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilityRead:
+    """A locked consolidated row must agree with its own state (ADR P10 §2.7).
+
+    In memory only: the row's availability and semantic hash are recomputed
+    from its state and burial. Readers that do not lock skip this check.
+    """
+
+    from app.services.study_note_card_projection import project_note_state
+
+    try:
+        projected = project_note_state(
+            subject.state_payload,
+            burial=NoteCardBurial(
+                is_buried=bool(subject.is_buried),
+                buried_until_day=(
+                    int(subject.buried_until_day) if subject.buried_until_day is not None else None
+                ),
+            ),
+        )
+    except StudyProgressCodecError as exc:
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Note {card.note_id} NOTE state cannot be projected: {exc}",
+        ) from exc
+    if (
+        projected.semantic_state_hash != bytes(subject.semantic_state_hash)
+        or projected.normalized_queue != subject.normalized_queue
+        or projected.due_at != subject.due_at
+        or projected.due_day != subject.due_day
+        or projected.is_suspended != bool(subject.is_suspended)
+        or projected.projection_version != subject.projection_version
+    ):
+        raise StudyAuthorityReadError(
+            "AUTHORITY_READ_PARITY_DIVERGED",
+            f"Note {card.note_id} availability differs from its NOTE state.",
+        )
+    return _availability_from_subject(subject, card=card)
+
+
 def validate_study_authority_canonical(*, card, locked, contributor, availability_row):
     """Validate one Card's stored availability against NOTE state alone (P9-04).
 
@@ -269,16 +324,42 @@ def load_study_authority_availability_snapshot(
     from models.study_progress_subject import StudyProgressSubject
 
     from app.repositories.study_authority_repository import read_study_storage_profile
+    from app.services.study_progress_contract import CONSOLIDATED_STORAGE_PROFILE
 
+    storage_profile = read_study_storage_profile(session)
+    if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+        # ADR P10 §2.7: one row per Note, no cross-table evidence to check.
+        stateful = {
+            str(card_id): subject
+            for card_id, subject in session.execute(
+                select(scope.c.card_id, StudyProgressSubject)
+                .select_from(scope)
+                .join(StudyProgressSubject, and_(
+                    StudyProgressSubject.learner_user_id == int(learner_user_id),
+                    StudyProgressSubject.logical_note_key == cast(scope.c.note_id, LargeBinary),
+                ))
+                .where(StudyProgressSubject.state_payload.isnot(None))
+            ).all()
+        }
+        return MappingProxyType({
+            str(card.id): StudyAuthorityAvailabilitySnapshot(
+                availability=(
+                    _availability_from_subject(stateful[str(card.id)], card=card)
+                    if str(card.id) in stateful
+                    else _availability_from_legacy(card=card, progress=None, now_utc=now_utc)
+                )
+            )
+            for card in cards
+        })
     rows = note_reads.note_card_rows(
         scope,
         learner_user_id=learner_user_id,
-        storage_profile=read_study_storage_profile(session),
+        storage_profile=storage_profile,
     ).subquery("queue_rows")
     worst = int(session.execute(select(func.max(rows.c.violation))).scalar() or 0)
     if not worst:
         worst = note_reads.subject_vector_violation(
-            session, scope=scope, learner_user_id=learner_user_id
+            session, scope=scope, learner_user_id=learner_user_id, storage_profile=storage_profile
         )
     error = note_reads.violation_error(worst)
     if error is not None:
@@ -467,6 +548,31 @@ def load_study_authority_card_reads(
             "INCOMPLETE_AUTHORITY_COMPATIBILITY",
             "NOTE read Card is missing from the live sibling vector.",
         )
+    if is_consolidated(route):
+        # ADR P10 §2.7: the locked subject row holds state and availability.
+        for card_id in sorted(card_by_id):
+            if card_id not in requested_card_by_id:
+                continue
+            card = card_by_id[card_id]
+            logical_note_key = str(card.note_id)
+            locked = subjects.locked_by_logical_note_key[logical_note_key]
+            result[card_id] = StudyAuthorityCardRead(
+                route=route,
+                state=subjects.state_by_logical_note_key[logical_note_key],
+                state_version=note_authority_review_state_version(
+                    enrollment_epoch=route.epoch,
+                    logical_note_key=logical_note_key,
+                    subject_generation=int(locked.subject.subject_generation),
+                    authority_revision=int(locked.token.authority_revision),
+                    semantic_state_hash=bytes(locked.token.semantic_state_hash),
+                    deck_options=deck_options_by_card_id[card_id],
+                    timezone_name=timezone_name,
+                ),
+                progress=None,
+                authority_revision=int(locked.token.authority_revision),
+                availability=validate_consolidated_subject(card=card, subject=locked.subject),
+            )
+        return MappingProxyType(dict(sorted(result.items())))
     # PROJECTION_V1 still writes the projection, so it must agree too;
     # CANONICAL_V1 has frozen it and reads nothing from it.
     reads_projection = route.storage_profile == "PROJECTION_V1"

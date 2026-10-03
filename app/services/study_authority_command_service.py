@@ -23,6 +23,7 @@ from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySiblings,
     LockedStudyAuthoritySubject,
     StudyAuthorityRoute,
+    is_consolidated,
 )
 from app.services.study_authority_cas_service import (
     StudyAuthorityCASExpectation,
@@ -344,6 +345,39 @@ def apply_existing_state_note_review(
         )
 
     reviewed_card_id = str(command.review.card.id)
+    if is_consolidated(command.route):
+        # ADR P10 §2.4: state, revision and availability are one row.
+        from app.services import study_consolidated_progress_service as consolidated
+
+        projection = consolidated.project_subject_state(
+            next_state.state_payload, burial=consolidated.note_burial(command.locked.subject)
+        )
+        write_result = apply_study_authority_canonical_write(
+            session,
+            route=command.route,
+            locked=command.locked,
+            expected=command.expected,
+            next_state=next_state,
+            semantic_state_hash=projection.semantic_state_hash,
+            now_utc=command.now_utc,
+        )
+        evidence = consolidated.finalize_consolidated_review(
+            route=command.route,
+            locked=command.locked,
+            write_result=write_result,
+            projection=projection,
+            review_event=review_event,
+            now_utc=command.now_utc,
+        )
+        return _with_history_fact(
+            session,
+            command=command,
+            review_event=review_event,
+            projection=None,
+            write_result=write_result,
+            evidence=evidence,
+            before_state_hash=before_state_hash,
+        )
     if command.route.storage_profile != "PROJECTION_V1":
         projections = _canonical_sibling_projections(command, next_state)
         write_result = apply_study_authority_canonical_write(
@@ -453,7 +487,13 @@ def _with_history_fact(
     before_state_hash: bytes,
 ) -> ExistingStateNoteReviewResult:
     reviewed_card_id = str(command.review.card.id)
-    reviewed_contributor = evidence.contributor_by_card_id[reviewed_card_id]
+    if is_consolidated(command.route):
+        # History facts key the Card by logical identity; no contributor row.
+        reviewed_contributor = None
+        completeness = str(command.locked.subject.history_completeness_code)
+    else:
+        reviewed_contributor = evidence.contributor_by_card_id[reviewed_card_id]
+        completeness = str(reviewed_contributor.history_completeness_code)
     history = append_native_history_fact(
         session,
         command=NativeHistoryFactInput(
@@ -461,9 +501,7 @@ def _with_history_fact(
             subject=command.locked.subject,
             contributor=reviewed_contributor,
             review_event=review_event,
-            history_completeness_code=str(
-                reviewed_contributor.history_completeness_code
-            ),
+            history_completeness_code=completeness,
             before_state_hash=before_state_hash,
             after_state_hash=write_result.semantic_state_hash,
             require_scheduler_grade=True,

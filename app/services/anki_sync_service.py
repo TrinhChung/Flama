@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySiblings,
     StudyAuthorityRoute,
+    is_consolidated,
     lock_study_authority_compatibility,
     lock_study_authority_route,
     lock_study_authority_siblings,
@@ -718,6 +719,7 @@ def _apply_canonical_progress_snapshot(
         finalize_canonical_external_evidence,
     )
     from app.services.study_authority_write_service import apply_study_authority_canonical_write
+    from app.services import study_consolidated_progress_service as consolidated_progress
     from app.services.study_note_card_projection import NoteCardBurial, project_note_card
 
     if locked.state is None or locked.token.semantic_state_hash is None:
@@ -749,10 +751,16 @@ def _apply_canonical_progress_snapshot(
     values = _progress_snapshot_values(session, record)
     if values is None:
         return "due_unresolved", "ANKI_DUE_UNRESOLVED", control.legacy_unversioned
-    contributor = compatibility.contributor_by_card_id[str(requested_card.id)]
+    consolidated = is_consolidated(route)
+    if consolidated:
+        # ADR P10: the Note's burial anchors are on its own row.
+        availability = locked.subject
+    else:
+        contributor = compatibility.contributor_by_card_id[str(requested_card.id)]
+        availability = compatibility.availability_by_contributor_id[int(contributor.id)]
     candidate_values = _state_progress_values(
         state_payload=dict(locked.state.state_payload),
-        availability=compatibility.availability_by_contributor_id[int(contributor.id)],
+        availability=availability,
         learner_user_id=session.user_id,
         card_id=str(requested_card.id),
         now_utc=now_utc,
@@ -781,6 +789,15 @@ def _apply_canonical_progress_snapshot(
     if mapped.semantic_state_hash == current_semantic_hash:
         source_card.applied_authority_revision = token_revision
         source_card.applied_local_revision_state = "AUTHORITY"
+        if consolidated:
+            consolidated_progress.finalize_consolidated_external(
+                route=route, locked=locked, context=contexts[str(requested_card.id)],
+                projection=None, now_utc=now_utc)
+            return (
+                "applied",
+                "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
+                control.legacy_unversioned,
+            )
         finalize_canonical_external_evidence(
             db.session,
             route=route,
@@ -801,11 +818,17 @@ def _apply_canonical_progress_snapshot(
         is_buried=bool(candidate_values["is_buried"]),
         buried_until_day=candidate_values["buried_until_day"],
     )
-    projections = {
-        str(card.id): project_note_card(
-            mapped.state.payload, burial=burial, card_id=str(card.id), card_created_at=card.created_at)
-        for card in siblings.cards
-    }
+    if consolidated:
+        note_projection = consolidated_progress.project_subject_state(mapped.state.payload, burial=burial)
+        semantic_hash = note_projection.semantic_state_hash
+        projections = {str(card.id): note_projection for card in siblings.cards}
+    else:
+        projections = {
+            str(card.id): project_note_card(
+                mapped.state.payload, burial=burial, card_id=str(card.id), card_created_at=card.created_at)
+            for card in siblings.cards
+        }
+        semantic_hash = projections[str(requested_card.id)].semantic_state_hash
     write = apply_study_authority_canonical_write(
         db.session,
         route=route,
@@ -825,13 +848,22 @@ def _apply_canonical_progress_snapshot(
             state_payload_size=mapped.state.size,
             algorithm_state_hash=mapped.algorithm_state_hash,
         ),
-        semantic_state_hash=projections[str(requested_card.id)].semantic_state_hash,
+        semantic_state_hash=semantic_hash,
         now_utc=now_utc,
     )
     for source_ref in sibling_source_refs:
         if str(source_ref.card_id) in projections:
             source_ref.applied_authority_revision = int(write.authority_revision)
             source_ref.applied_local_revision_state = "AUTHORITY"
+    if consolidated:
+        consolidated_progress.finalize_consolidated_external(
+            route=route, locked=locked, context=contexts[str(requested_card.id)],
+            projection=note_projection, now_utc=now_utc)
+        return (
+            "applied",
+            "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
+            control.legacy_unversioned,
+        )
     finalize_canonical_external_evidence(
         db.session,
         route=route,

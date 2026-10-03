@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.repositories.study_authority_repository import (
+    is_consolidated,
     lock_study_authority_compatibility,
     lock_study_authority_route,
     lock_study_authority_siblings,
@@ -209,7 +210,11 @@ def apply_study_algorithm_switch(
     ):
         raise _fail("SWITCH_INITIALIZER_CONTRACT", "Initializer did not return the exact target state.")
 
-    if route.storage_profile != "PROJECTION_V1":
+    if is_consolidated(route):
+        write = _apply_consolidated_switch(
+            session, route=route, locked=locked, expected=expected, next_state=next_state,
+            now_utc=now_utc)
+    elif route.storage_profile != "PROJECTION_V1":
         write = _apply_canonical_switch(
             session, route=route, locked=locked, expected=expected, next_state=next_state,
             siblings=siblings, compatibility=compatibility, now_utc=now_utc)
@@ -222,6 +227,28 @@ def apply_study_algorithm_switch(
         siblings=siblings, preflight=preflight, write=write, current_revision=current_revision,
         operation_key=operation_key, operation_key_hash=operation_key_hash,
         fingerprint=fingerprint, now_utc=now_utc)
+
+
+def _apply_consolidated_switch(session, *, route, locked, expected, next_state, now_utc):
+    """CONSOLIDATED_V1: the target state must project onto the Note's row (ADR P10)."""
+
+    from app.services import study_consolidated_progress_service as consolidated
+
+    try:
+        projection = consolidated.project_subject_state(
+            next_state.state_payload, burial=consolidated.note_burial(locked.subject))
+    except consolidated.StudyConsolidatedProgressError as exc:
+        raise _fail("SWITCH_TARGET_NOT_PROJECTABLE", str(exc), blockers=(exc.code,)) from exc
+    try:
+        write = apply_study_authority_canonical_write(
+            session, route=route, locked=locked, expected=expected, next_state=next_state,
+            semantic_state_hash=projection.semantic_state_hash, now_utc=now_utc,
+            allow_algorithm_identity_change=True)
+    except StudyAuthorityWriteError as exc:
+        raise _fail(exc.code, str(exc)) from exc
+    consolidated.finalize_consolidated_rewrite(
+        route=route, locked=locked, write_result=write, projection=projection, now_utc=now_utc)
+    return write
 
 
 def _apply_canonical_switch(session, *, route, locked, expected, next_state, siblings, compatibility, now_utc):

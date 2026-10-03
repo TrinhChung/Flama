@@ -268,9 +268,13 @@ def _note_type_purge_scope(
             )
         )
         collect_learner_ids(subject_query)
-    from app.repositories.study_authority_repository import projection_is_live
+    from app.repositories.study_authority_repository import (
+        projection_is_live,
+        read_study_storage_profile,
+    )
 
     projection_live = projection_is_live(db.session)
+    consolidated = read_study_storage_profile(db.session) == "CONSOLIDATED_V1"
     for offset in range(0, len(card_ids), 500):
         card_chunk = card_ids[offset : offset + 500]
         if projection_live:
@@ -279,14 +283,16 @@ def _note_type_purge_scope(
                     CardProgress.card_id.in_(card_chunk)
                 )
             )
-        collect_learner_ids(
-            db.session.query(StudyProgressSubject.learner_user_id)
-            .join(
-                StudyProgressContributor,
-                StudyProgressContributor.subject_id == StudyProgressSubject.id,
+        if not consolidated:
+            # CONSOLIDATED_V1: the Note subjects above are the whole progress.
+            collect_learner_ids(
+                db.session.query(StudyProgressSubject.learner_user_id)
+                .join(
+                    StudyProgressContributor,
+                    StudyProgressContributor.subject_id == StudyProgressSubject.id,
+                )
+                .filter(StudyProgressContributor.live_card_id.in_(card_chunk))
             )
-            .filter(StudyProgressContributor.live_card_id.in_(card_chunk))
-        )
         collect_learner_ids(
             db.session.query(StudySession.user_id)
             .join(StudySessionCard, StudySessionCard.session_id == StudySession.id)

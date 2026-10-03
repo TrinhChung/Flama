@@ -214,7 +214,7 @@ def lock_study_session_authority_subjects(
                 "Study Session authority subject is detached from its live Note.",
             )
     # Two locking reads for the whole vector instead of two per Note.
-    locked_rows = lock_study_authority_subject_rows(session, subjects=subjects)
+    locked_rows = lock_study_authority_subject_rows(session, subjects=subjects, route=route)
     for logical_key in sorted(encoded_by_key, key=lambda item: encoded_by_key[item]):
         encoded_key = encoded_by_key[logical_key]
         subject = subject_by_encoded_key[encoded_key]

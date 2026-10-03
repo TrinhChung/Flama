@@ -22,10 +22,14 @@ linkage is evidence any more.
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, and_, case, cast, false, func, not_, null, or_, select
+from sqlalchemy import LargeBinary, and_, case, cast, false, func, literal, not_, null, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from app.services.study_progress_contract import DEFAULT_STORAGE_PROFILE, PROJECTION_VERSION
+from app.services.study_progress_contract import (
+    CONSOLIDATED_STORAGE_PROFILE,
+    DEFAULT_STORAGE_PROFILE,
+    PROJECTION_VERSION,
+)
 from models.card import Card
 from models.card_progress import CardProgress
 from models.study_authority_subject_token import StudyAuthoritySubjectToken
@@ -80,6 +84,29 @@ def note_card_rows(
     """
 
     subject = aliased(StudyProgressSubject)
+    if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+        # ADR P10 §2.7: the Note's row holds its availability; nothing to cross-check.
+        stateful = subject.semantic_state_hash.isnot(None)
+        return (
+            select(
+                scope.c.deck_id.label("deck_id"),
+                scope.c.card_id.label("card_id"),
+                scope.c.note_id.label("note_id"),
+                case((stateful, subject.id), else_=null()).label("state_subject_id"),
+                subject.normalized_queue.label("queue"),
+                subject.due_day.label("due_day"),
+                subject.due_at.label("due_at"),
+                subject.is_suspended.label("is_suspended"),
+                subject.is_buried.label("is_buried"),
+                subject.buried_until_day.label("buried_until_day"),
+                literal(0).label("violation"),
+            )
+            .select_from(scope)
+            .outerjoin(subject, and_(
+                subject.learner_user_id == int(learner_user_id),
+                subject.logical_note_key == cast(scope.c.note_id, LargeBinary),
+            ))
+        )
     state = aliased(StudyProgressState)
     token = aliased(StudyAuthoritySubjectToken)
     contributor = aliased(StudyProgressContributor)
@@ -182,9 +209,20 @@ def note_card_rows(
     ))
 
 
-def subject_vector_violation(session: Session, *, scope, learner_user_id: int) -> int:
-    """I5: each stateful subject covers exactly its live Cards with ACTIVE contributors."""
+def subject_vector_violation(
+    session: Session,
+    *,
+    scope,
+    learner_user_id: int,
+    storage_profile: str = DEFAULT_STORAGE_PROFILE,
+) -> int:
+    """I5: each stateful subject covers exactly its live Cards with ACTIVE contributors.
 
+    Under CONSOLIDATED_V1 there are no contributors: the invariant does not exist.
+    """
+
+    if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+        return 0
     subject = aliased(StudyProgressSubject)
     active_contributors = (
         select(func.count(StudyProgressContributor.id))
@@ -234,8 +272,13 @@ def learner_note_scope(
             StudyProgressSubject.learner_user_id == int(learner_user_id),
             StudyProgressSubject.live_note_id == Card.note_id,
         ))
-        .join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
     )
+    if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+        stateful_cards = stateful_cards.where(StudyProgressSubject.semantic_state_hash.isnot(None))
+    else:
+        stateful_cards = stateful_cards.join(
+            StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id
+        )
     projected_cards = (
         select(
             Card.id.label("card_id"),

@@ -9,6 +9,7 @@ from typing import Any
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
+    is_consolidated,
     lock_study_authority_route,
 )
 from app.services import (
@@ -156,7 +157,11 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
             if (
                 subject is None
                 or str(subject.live_note_id or "") != str(note.id)
-                or int(subject.contributor_count) != len(note.cards)
+                # CONSOLIDATED_V1 (ADR P10): Cards carry no progress, nothing to count.
+                or (
+                    not is_consolidated(route)
+                    and int(subject.contributor_count) != len(note.cards)
+                )
             ):
                 raise StudyAuthorityReadError(
                     "INCOMPLETE_AUTHORITY_COMPATIBILITY",

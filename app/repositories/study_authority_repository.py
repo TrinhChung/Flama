@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.repositories.study_inserted_rows import SUBJECT, inserted_in_transaction
 from app.services.study_progress_contract import (
+    CONSOLIDATED_STORAGE_PROFILE,
     DEFAULT_STORAGE_PROFILE,
     RAW_SCHEMA_VERSION,
     STORAGE_CODEC,
@@ -113,14 +114,106 @@ def _with_supported_profile(route: "StudyAuthorityRoute", profile_code: str) -> 
     return replace(route, storage_profile=profile_code)
 
 
+def is_consolidated(route: "StudyAuthorityRoute") -> bool:
+    """Whether NOTE progress lives on the subject row (ADR P10)."""
+
+    return route.storage_profile == CONSOLIDATED_STORAGE_PROFILE
+
+
+class _SubjectRowView:
+    """Read and write one attribute group of a consolidated subject row."""
+
+    __slots__ = ("subject",)
+    _FIELDS: tuple[str, ...] = ()
+
+    def __init__(self, subject: StudyProgressSubject) -> None:
+        object.__setattr__(self, "subject", subject)
+
+    def __getattr__(self, name: str):
+        if name == "subject_id":
+            return self.subject.id
+        if name in self._FIELDS:
+            return getattr(self.subject, name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        if name not in self._FIELDS:
+            raise AttributeError(f"{type(self).__name__} has no writable {name!r}.")
+        if getattr(self.subject, name) != value:
+            setattr(self.subject, name, value)
+
+
+class ConsolidatedSubjectToken(_SubjectRowView):
+    """CAS token of a CONSOLIDATED_V1 subject: its own row (ADR P10 §2.4)."""
+
+    __slots__ = ()
+    _FIELDS = (
+        "subject_generation",
+        "authority_revision",
+        "semantic_state_hash",
+        "created_at",
+        "updated_at",
+    )
+
+
+class ConsolidatedSubjectState(_SubjectRowView):
+    """Current Algorithm State of a CONSOLIDATED_V1 subject: its own row."""
+
+    __slots__ = ()
+    _FIELDS = (
+        "subject_generation",
+        "mirror_revision",
+        "algorithm_key",
+        "algorithm_version",
+        "state_schema_version",
+        "storage_codec",
+        "state_payload",
+        "state_payload_size",
+        "algorithm_state_hash",
+        "semantic_state_hash",
+        "created_at",
+        "updated_at",
+    )
+
+
 @dataclass(frozen=True)
 class LockedStudyAuthoritySubject:
-    """Locked subject/token/state triple; the caller owns the transaction."""
+    """Locked subject/token/state triple; the caller owns the transaction.
+
+    Under CONSOLIDATED_V1 ``token`` and ``state`` are views of the subject row.
+    """
 
     subject: StudyProgressSubject
-    token: StudyAuthoritySubjectToken
-    state: StudyProgressState | None
+    token: StudyAuthoritySubjectToken | ConsolidatedSubjectToken
+    state: StudyProgressState | ConsolidatedSubjectState | None
     token_created: bool
+
+
+def consolidated_locked_subject(subject: StudyProgressSubject) -> LockedStudyAuthoritySubject:
+    """The locked triple of a subject row already selected ``FOR UPDATE``."""
+
+    revision = int(subject.authority_revision or 0)
+    if revision < 0:
+        raise StudyAuthorityFenceError(
+            "INVALID_AUTHORITY_TOKEN", "Authority revision must be non-negative."
+        )
+    has_state = subject.state_payload is not None
+    semantic_hash = _validate_hash(
+        bytes(subject.semantic_state_hash) if subject.semantic_state_hash is not None else None,
+        nullable=not has_state,
+        field_name="subject.semantic_state_hash",
+    )
+    if not has_state and semantic_hash is not None:
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_STATE_DIVERGED",
+            "Authority revision references a missing current state.",
+        )
+    return LockedStudyAuthoritySubject(
+        subject=subject,
+        token=ConsolidatedSubjectToken(subject),
+        state=ConsolidatedSubjectState(subject) if has_state else None,
+        token_created=False,
+    )
 
 
 @dataclass(frozen=True)
@@ -294,6 +387,7 @@ def lock_study_authority_subject_rows(
     session: Session,
     *,
     subjects,
+    route: StudyAuthorityRoute | None = None,
 ) -> dict[int, tuple[StudyAuthoritySubjectToken, StudyProgressState]]:
     """Lock the existing token and state rows of many locked subjects at once.
 
@@ -303,9 +397,12 @@ def lock_study_authority_subject_rows(
     subject locks already serialize their writers) and returned current. A
     subject whose token or state is missing from the result is left to
     ``lock_study_authority_subject``'s per-row path, which creates or rejects
-    it exactly as before.
+    it exactly as before. Under CONSOLIDATED_V1 the subject rows, already
+    locked by the caller, are the whole authority: there is nothing more.
     """
 
+    if route is not None and is_consolidated(route):
+        return {}
     subject_ids = sorted({int(subject.id) for subject in subjects})
     if not subject_ids:
         return {}
@@ -404,6 +501,8 @@ def lock_study_authority_subject(
         raise StudyAuthorityFenceError(
             "INVALID_AUTHORITY_TIME", "Authority time must be naive UTC."
         )
+    if is_consolidated(route):
+        return consolidated_locked_subject(subject)
 
     if locked_rows is not None:
         token, state = locked_rows
@@ -777,6 +876,18 @@ def lock_study_authority_compatibility(
         raise StudyAuthorityFenceError(
             "AUTHORITY_CONTEXT_DIVERGED",
             "Authority compatibility inputs do not describe one fenced subject.",
+        )
+    if is_consolidated(route):
+        # ADR P10 §2.3: availability is the subject row's; no per-Card vector.
+        return LockedStudyAuthorityCompatibility(
+            learner_user_id=route.learner_user_id,
+            subject_id=subject_id,
+            subject_generation=generation,
+            expected_mirror_revision=int(subject.mirror_revision),
+            contributor_by_card_id=MappingProxyType({}),
+            availability_by_contributor_id=MappingProxyType({}),
+            contributor_revision_by_card_id=MappingProxyType({}),
+            contributor_raw_hash_by_card_id=MappingProxyType({}),
         )
     if route.storage_profile != "PROJECTION_V1":
         return _lock_canonical_compatibility(session, route=route, locked=locked, siblings=siblings)

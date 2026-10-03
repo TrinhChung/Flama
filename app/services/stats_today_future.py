@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask_login import current_user
+from sqlalchemy.orm import contains_eager
 
 from app.repositories.deck_tree_query import (
     collect_subtree_ids,
@@ -29,6 +30,7 @@ from app.services.study_authority_read_service import (
     StudyAuthorityCardRead,
     load_study_authority_card_reads,
 )
+from app.services.study_progress_contract import CONSOLIDATED_STORAGE_PROFILE
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
 from models import db
@@ -341,25 +343,32 @@ def _load_canonical_scope_reads(
                 StudyProgressSubject.learner_user_id == user_id,
                 StudyProgressSubject.live_note_id == Card.note_id,
             ),
-        ).join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
+        )
+        if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+            query = query.filter(StudyProgressSubject.semantic_state_hash.isnot(None))
+        else:
+            query = query.join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
     if scope_deck_ids is not None:
         if not scope_deck_ids:
             return [], {}
         query = query.filter(Note.deck_id.in_(scope_deck_ids))
-    cards = query.order_by(Card.id.asc()).all()
+    # The query already joins Note: load it with each Card, not once per Card.
+    cards = query.options(contains_eager(Card.note)).order_by(Card.id.asc()).all()
+    # Deck options once per deck, not once per Card (as P5-11b did for MCP).
+    options_by_deck_id: dict[Any, Any] = {}
+    deck_options_by_card_id = {}
+    for card in cards:
+        deck_id = card.note.deck_id
+        if deck_id not in options_by_deck_id:
+            options_by_deck_id[deck_id] = resolve_deck_options(user_id=user_id, deck_id=deck_id)
+        deck_options_by_card_id[str(card.id)] = options_by_deck_id[deck_id]
     reads = load_study_authority_card_reads(
         db.session,
         learner_user_id=user_id,
         cards=tuple(cards),
         now_utc=now_utc,
         timezone_name=timezone_name,
-        deck_options_by_card_id={
-            str(card.id): resolve_deck_options(
-                user_id=user_id,
-                deck_id=card.note.deck_id,
-            )
-            for card in cards
-        },
+        deck_options_by_card_id=deck_options_by_card_id,
     )
     return cards, dict(reads)
 

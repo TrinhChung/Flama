@@ -784,6 +784,30 @@ def register_cli_commands(app: Flask) -> None:
             raise SystemExit(1) from exc
         click.echo(json.dumps(result, sort_keys=True))
 
+    @app.cli.command("study-consolidated-switch")
+    @click.option("--apply", "apply_switch", is_flag=True, default=False,
+                  help="Copy and switch now (one-way); without it, only print the plan.")
+    def study_consolidated_switch(apply_switch: bool) -> None:
+        """P10: switch NOTE storage CANONICAL_V1 -> CONSOLIDATED_V1 (write freeze only)."""
+
+        from app.services.study_consolidated_switch_service import (
+            ConsolidatedSwitchError,
+            apply_consolidated_switch,
+            plan_consolidated_switch,
+        )
+
+        if not apply_switch:
+            click.echo(json.dumps(plan_consolidated_switch(db.session), sort_keys=True, default=str))
+            return
+        try:
+            result = apply_consolidated_switch(db.session)
+            db.session.commit()
+        except ConsolidatedSwitchError as exc:
+            db.session.rollback()
+            click.echo(json.dumps({"error": exc.code, "message": str(exc), "blockers": list(exc.blockers)}))
+            raise SystemExit(1) from exc
+        click.echo(json.dumps(result, sort_keys=True))
+
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
     @click.option(

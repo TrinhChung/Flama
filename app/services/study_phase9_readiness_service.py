@@ -161,7 +161,9 @@ def _build_phase9_readiness(
     # D9-02 replaced D6-02: NOTE keeps new data and repairs come from backup,
     # so the projection gate is technical, not a product decision.
     projection_blockers = []
-    if storage_profile not in {"PROJECTION_V1", "CANONICAL_V1"}:
+    # CONSOLIDATED_V1 (ADR P10) is reached from CANONICAL_V1: also projection-free.
+    projection_free = storage_profile in {"CANONICAL_V1", "CONSOLIDATED_V1"}
+    if storage_profile not in {"PROJECTION_V1", "CANONICAL_V1", "CONSOLIDATED_V1"}:
         projection_blockers.append("UNKNOWN_STORAGE_PROFILE")
     if legacy_learners:
         projection_blockers.append("LEGACY_LEARNERS")
@@ -191,10 +193,10 @@ def _build_phase9_readiness(
                 "card_progress_rows_written_since": projection_writes_since,
                 "evidence_scope": "surviving_rows_only",
             },
-            "blocking_reasons": ["PROFILE_NOT_CANONICAL"] if storage_profile != "CANONICAL_V1" else [],
+            "blocking_reasons": [] if projection_free else ["PROFILE_NOT_CANONICAL"],
             "status": (
                 "unknown" if projection_writes_since is None
-                else "ready" if projection_writes_since == 0 and storage_profile == "CANONICAL_V1" else "waiting"
+                else "ready" if projection_writes_since == 0 and projection_free else "waiting"
             ),
         },
         "work_drain": {

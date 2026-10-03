@@ -22,7 +22,7 @@ from app.services.study_authority_command_service import (
     ExistingStateNoteReviewResult,
     apply_existing_state_note_review,
 )
-from app.repositories.study_authority_repository import StudyAuthorityRoute
+from app.repositories.study_authority_repository import ConsolidatedSubjectToken, StudyAuthorityRoute
 from app.services.study_progress_contract import AUTHORITY_RECEIPT_SCHEMA_VERSION
 from app.services.study_progress_shadow_codec import (
     StudyProgressCodecError,
@@ -34,6 +34,7 @@ from app.services.study_progress_shadow_mapper import encode_identity
 from app.services.study_service import normalize_review_duration
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_authority_subject_token import StudyAuthoritySubjectToken
+from models.study_progress_subject import StudyProgressSubject
 
 DIRECT_REPLAY_SCHEMA = "study-direct-note-replay.v1"
 
@@ -213,12 +214,19 @@ def _token_snapshot_is_current(session: Session, *, locked) -> bool:
     """
 
     token = locked.token
+    # CONSOLIDATED_V1 keeps the revision on the subject row (ADR P10 §2.4).
+    source = (
+        StudyProgressSubject
+        if isinstance(token, ConsolidatedSubjectToken)
+        else StudyAuthoritySubjectToken
+    )
+    key = StudyProgressSubject.id if source is StudyProgressSubject else StudyAuthoritySubjectToken.subject_id
     snapshot = session.execute(
         select(
-            StudyAuthoritySubjectToken.subject_generation,
-            StudyAuthoritySubjectToken.authority_revision,
-            StudyAuthoritySubjectToken.semantic_state_hash,
-        ).where(StudyAuthoritySubjectToken.subject_id == int(locked.subject.id))
+            source.subject_generation,
+            source.authority_revision,
+            source.semantic_state_hash,
+        ).where(key == int(locked.subject.id))
     ).first()
     return snapshot is not None and (
         int(snapshot.subject_generation) == int(token.subject_generation)

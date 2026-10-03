@@ -256,6 +256,19 @@ def _card_reps_query(user_id: int):
     from app.repositories.study_authority_repository import read_study_authority_route
 
     route = read_study_authority_route(db.session, learner_user_id=user_id)
+    if route.mode_code == "NOTE" and route.storage_profile == "CONSOLIDATED_V1":
+        # ADR P10: the Note's state is on its subject row.
+        reps = db.cast(StudyProgressSubject.state_payload["reps"].as_string(), db.Integer)
+        return (
+            db.session.query(db.func.coalesce(db.func.sum(reps), 0))
+            .select_from(Card)
+            .join(Note, Card.note_id == Note.id)
+            .join(StudyProgressSubject, db.and_(
+                StudyProgressSubject.learner_user_id == user_id,
+                StudyProgressSubject.live_note_id == Card.note_id,
+            ))
+            .filter(StudyProgressSubject.semantic_state_hash.isnot(None))
+        )
     if route.mode_code == "NOTE" and route.storage_profile != "PROJECTION_V1":
         reps = db.cast(StudyProgressState.state_payload["reps"].as_string(), db.Integer)
         return (

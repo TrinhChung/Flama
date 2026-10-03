@@ -17,9 +17,12 @@ from sqlalchemy import select
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
+    is_consolidated,
     lock_study_authority_route,
     projection_is_live,
+    read_study_storage_profile,
 )
+from app.services.study_progress_contract import CONSOLIDATED_STORAGE_PROFILE
 from app.services import study_progress_lifecycle_mirror_service as lifecycle
 from models.card import Card
 from models.card_progress import CardProgress
@@ -75,15 +78,23 @@ def discover_content_learner_ids(session, *, card_ids, note_ids, current_read=Fa
                 | StudyProgressSubject.logical_note_key.in_([value.encode("utf-8") for value in chunk])
             ))).scalars())
     projection_live = projection_is_live(session)
+    consolidated = read_study_storage_profile(session) == CONSOLIDATED_STORAGE_PROFILE
     for chunk in _chunks(sorted(set(card_ids))):
         if projection_live:
             learner_ids.update(session.execute(read(
                 select(CardProgress.user_id).where(CardProgress.card_id.in_(chunk)))).scalars())
-        learner_ids.update(session.execute(read(
-            select(StudyProgressSubject.learner_user_id).join(
-                StudyProgressContributor,
-                StudyProgressContributor.subject_id == StudyProgressSubject.id,
-            ).where(StudyProgressContributor.live_card_id.in_(chunk)))).scalars())
+        if consolidated:
+            # ADR P10 §2.3: progress is the Note's row; reach it through the Card's Note.
+            learner_ids.update(session.execute(read(
+                select(StudyProgressSubject.learner_user_id).join(
+                    Card, Card.note_id == StudyProgressSubject.live_note_id,
+                ).where(Card.id.in_(chunk)))).scalars())
+        else:
+            learner_ids.update(session.execute(read(
+                select(StudyProgressSubject.learner_user_id).join(
+                    StudyProgressContributor,
+                    StudyProgressContributor.subject_id == StudyProgressSubject.id,
+                ).where(StudyProgressContributor.live_card_id.in_(chunk)))).scalars())
         learner_ids.update(session.execute(read(
             select(StudySession.user_id).join(
                 StudySessionCard, StudySessionCard.session_id == StudySession.id
@@ -138,6 +149,8 @@ def verify_content_delete_scope(session, *, routes, card_ids, deleted_note_ids):
 
 def _prepare_note_sibling_removal(session, *, route, partial_card_ids, card_note, now_utc):
     """Plan a NOTE learner's partial removal only for Notes it holds state on."""
+    if is_consolidated(route):
+        return None
     partial_note_ids = sorted({card_note[card_id] for card_id in partial_card_ids})
     target_note_ids = set()
     for chunk in _chunks(partial_note_ids):
@@ -204,10 +217,17 @@ def prepare_content_delete(session, *, routes, card_ids, note_ids, now_utc=None,
                 raise StudyAuthorityFenceError("PARTIAL_CONTENT_DELETE", "Deletion must include every affected Note.")
             # A broken/cardless Note must not leave a live canonical state
             # behind merely because the Card-driven reset planner found none.
-            live_states = session.execute(select(StudyProgressSubject).join(
-                StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id).where(
+            live_states = (
+                session.execute(select(StudyProgressSubject).where(
                     StudyProgressSubject.learner_user_id == route.learner_user_id,
-                    StudyProgressSubject.live_note_id.in_(note_ids)).with_for_update()).scalars()
+                    StudyProgressSubject.live_note_id.in_(note_ids),
+                    StudyProgressSubject.semantic_state_hash.isnot(None)).with_for_update()).scalars()
+                if is_consolidated(route)
+                else session.execute(select(StudyProgressSubject).join(
+                    StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id).where(
+                        StudyProgressSubject.learner_user_id == route.learner_user_id,
+                        StudyProgressSubject.live_note_id.in_(note_ids)).with_for_update()).scalars()
+            )
             if any(str(subject.live_note_id) not in covered for subject in live_states):
                 raise StudyAuthorityFenceError("AUTHORITY_DELETE_INCOMPLETE", "Canonical state is outside the complete deletion plan.")
             if plan is not None:
@@ -273,7 +293,7 @@ def prepare_content_expansion(session, *, routes, note_ids, now_utc=None):
     card_note = _card_note_ids(session, _note_card_ids(session, note_ids))
     plans = []
     for route in routes:
-        if route.mode_code != "NOTE":
+        if route.mode_code != "NOTE" or is_consolidated(route):
             continue
         targets = set()
         for chunk in _chunks(note_ids):

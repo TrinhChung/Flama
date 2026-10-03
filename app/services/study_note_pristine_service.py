@@ -21,6 +21,7 @@ from app.repositories.study_authority_repository import (
     StudyAuthorityRoute,
 )
 from app.services import study_progress_lifecycle_mirror_service as lifecycle
+from app.services.study_progress_contract import CONSOLIDATED_STORAGE_PROFILE
 from models.card import Card
 from models.card_progress import CardProgress
 from models.study_progress_contributor import StudyProgressContributor
@@ -34,6 +35,31 @@ def _chunks(values):
     values = tuple(values)
     for offset in range(0, len(values), _CHUNK):
         yield values[offset : offset + _CHUNK]
+
+
+def _classify_consolidated(session, *, learner_user_id, note_ids, read) -> tuple[frozenset[str], frozenset[str]]:
+    """CONSOLIDATED_V1 (ADR P10 §2.5): a Note is stateful iff its row holds state."""
+
+    stateful: set[str] = set()
+    for chunk in _chunks(note_ids):
+        for subject in session.execute(read(
+            select(StudyProgressSubject).where(
+                StudyProgressSubject.learner_user_id == int(learner_user_id),
+                StudyProgressSubject.logical_note_key.in_([value.encode("utf-8") for value in chunk]),
+            ).order_by(StudyProgressSubject.logical_note_key.asc())
+        )).scalars():
+            key = bytes(subject.logical_note_key).decode("utf-8")
+            if subject.state_payload is not None:
+                stateful.add(key)
+            elif not (
+                str(subject.status_code) == "NO_CURRENT_PROGRESS"
+                and str(subject.live_note_id or "") == key
+            ):
+                raise StudyAuthorityFenceError(
+                    "INCOMPLETE_AUTHORITY_COVERAGE",
+                    "A Note has non-pristine authority evidence without current NOTE state.",
+                )
+    return frozenset(stateful), frozenset(set(note_ids) - stateful)
 
 
 def classify_note_authority_keys(
@@ -56,6 +82,9 @@ def classify_note_authority_keys(
 
     def read(statement):
         return statement.with_for_update() if for_update else statement
+
+    if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+        return _classify_consolidated(session, learner_user_id=learner_user_id, note_ids=note_ids, read=read)
 
     subjects = []
     for chunk in _chunks(note_ids):
