@@ -111,10 +111,41 @@ Rủi ro chính: số entry point lớn trong các file rủi ro cao (`study_ses
 | P10-03 | DONE — view dòng (`ConsolidatedSubjectToken/State`), `project_note_state`, `study_consolidated_progress_service` |
 | P10-04 | DONE (local) — dashboard, overview, cây deck, `/api/study/next`, Browse, hôm nay/tương lai, reps marketplace, MCP, read audit |
 | P10-05 | DONE (local) — trả lời REST/MCP, phiên v4, batch async, Note mới/enrollment, Template thêm/xóa, reset, xóa Note/deck, đổi thuật toán, Anki/Connect + note-status, overlay |
-| P10-06 | IN PROGRESS — test SQLite có guard bảng cũ xong (`tests/test_study_consolidated_*`); còn probe MySQL, A/B, workload probe |
-| P10-07 | IN PROGRESS — CLI `study-consolidated-switch` + test; còn rehearsal trên bản khôi phục và runbook |
+| P10-06 | DONE — test SQLite có guard bảng cũ (`tests/test_study_consolidated_*`), A/B MySQL, workload probe trên bản khôi phục (§6) |
+| P10-07 | DONE — CLI `study-consolidated-switch` + test, rehearsal trên bản khôi phục (§6), [runbook](../../runbooks/P10_CONSOLIDATED_SWITCH_RUNBOOK.md); còn đưa `CONSOLIDATED_V1` vào `SUPPORTED_STORAGE_PROFILES` ở một release trước P10-08 |
 | P10-08, P10-09 | TODO — cần chủ sản phẩm duyệt |
 
 Đo sơ bộ (SQLite, một câu trả lời REST dưới `CONSOLIDATED_V1`): 46 SQL, trong đó ghi đúng 1 UPDATE tiến độ + 4 INSERT (ReviewEvent, history fact, receipt, audit). 40 SELECT còn lại là đọc lặp ở route và phần xem trước thẻ kế (`cards` ×7, `decks` ×6, `study_progress_subjects` ×6, `users` ×5, enrollment/profile/scheduler settings ×3). Gom các đọc này là hạng mục tối ưu truy vấn tiếp theo, không thuộc gộp bảng.
 
 Ghi chú gate trace: `--profile CONSOLIDATED_V1` ép profile mà không chạy switch, nên các test tự dựng `StudyAuthorityRoute`, ghi thẳng bảng cũ hoặc khẳng định nội tạng bảng cũ vẫn lỗi/được liệt kê (LEGACY, shadow mirror, backfill, reconciliation, startup DDL). Gate thực cho từng writer/reader là các test chạy switch thật và bắt mọi SQL chạm bảng cũ.
+
+## 6. Bằng chứng gate (2026-10-03, MySQL 8 local)
+
+**Rehearsal trên bản khôi phục production** (`pre-p906.sql.gz`, `scripts/probe_p10_consolidated_workload_mysql.py`, máy rảnh): migration 49 1,4 s; switch P9-06 rồi P10: kế hoạch 0 blocker/0 problem (12,9 s), `--apply` 40.849 subject trong 48,5 s; reader của user 1 (owned, 39.283 thẻ) và user 4 (installed) trả **payload giống hệt** giữa hai profile (trừ `move_alias` sinh từ token có dấu thời gian); read audit PASS cả hai; workload ghi (commit v4, REST, MCP, Note mới, reset deck) **0 SQL chạm bảng cũ**; integrity 0. Status `PASS`.
+
+| Reader (median, s) | CANONICAL_V1 | CONSOLIDATED_V1 |
+|---|---|---|
+| user 1 dashboard | 4,605 | 1,632 (−65%) |
+| user 1 overview | 3,022 | 1,870 (−38%) |
+| user 1 cây Browse | 3,507 | 1,494 (−57%) |
+| user 4 dashboard | 0,714 | 0,468 (−34%) |
+| user 4 cây Browse | 0,805 | 0,578 (−28%) |
+
+**A/B** (`bench_p9_storage_profile_ab_mysql.py --notes 2000 --runs 3 --overlay 200`, median):
+
+| Bước | CANONICAL_V1 s / SQL / dòng ghi | CONSOLIDATED_V1 s / SQL / dòng ghi |
+|---|---|---|
+| commit 50 câu | 1,666 / 928 / 503 | 1,003 / 424 / 203 |
+| overlay commit 50 | 1,433 / 999 / 508 | 0,788 / 495 / 208 |
+| 20 câu REST | 30,8 / 1.780 / 220 | 21,0 / 1.200 / 100 |
+| mở phiên lần đầu | 3,173 / 51 | 2,974 / 39 |
+| dashboard | 0,131 / 17 | 0,069 / 16 |
+| overview | 0,120 / 11 | 0,048 / 10 |
+| `/api/study/next` | 1,494 / 48 | 0,977 / 34 |
+
+Mục tiêu §P10-06 đạt: commit 50 câu còn 46% SQL và 40% dòng ghi. Switch 2.000 subject ≈ 2,4 s.
+
+Bench đo đúng đường hôm nay/tương lai (`scope=collection`) lộ một N+1 có từ trước: 6.617 SQL / 9,1 s cho 2.000 Note (deck options và Note nạp theo từng Card). Đã sửa (Note nạp cùng Card, deck options một lần mỗi deck): CANONICAL_V1 32 SQL / 1,44 s, CONSOLIDATED_V1 18 SQL / 0,92 s.
+
+Việc tối ưu truy vấn còn lại (không thuộc gộp bảng): `/api/study/next` và câu trả lời REST tính lại hàng đợi cả scope bằng Python (~1 s cho 2.000 thẻ một deck); đọc lặp trong route trả lời (§5).
+

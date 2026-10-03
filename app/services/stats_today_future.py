@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask_login import current_user
+from sqlalchemy.orm import contains_eager
 
 from app.repositories.deck_tree_query import (
     collect_subtree_ids,
@@ -351,20 +352,23 @@ def _load_canonical_scope_reads(
         if not scope_deck_ids:
             return [], {}
         query = query.filter(Note.deck_id.in_(scope_deck_ids))
-    cards = query.order_by(Card.id.asc()).all()
+    # The query already joins Note: load it with each Card, not once per Card.
+    cards = query.options(contains_eager(Card.note)).order_by(Card.id.asc()).all()
+    # Deck options once per deck, not once per Card (as P5-11b did for MCP).
+    options_by_deck_id: dict[Any, Any] = {}
+    deck_options_by_card_id = {}
+    for card in cards:
+        deck_id = card.note.deck_id
+        if deck_id not in options_by_deck_id:
+            options_by_deck_id[deck_id] = resolve_deck_options(user_id=user_id, deck_id=deck_id)
+        deck_options_by_card_id[str(card.id)] = options_by_deck_id[deck_id]
     reads = load_study_authority_card_reads(
         db.session,
         learner_user_id=user_id,
         cards=tuple(cards),
         now_utc=now_utc,
         timezone_name=timezone_name,
-        deck_options_by_card_id={
-            str(card.id): resolve_deck_options(
-                user_id=user_id,
-                deck_id=card.note.deck_id,
-            )
-            for card in cards
-        },
+        deck_options_by_card_id=deck_options_by_card_id,
     )
     return cards, dict(reads)
 
