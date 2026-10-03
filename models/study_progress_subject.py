@@ -82,18 +82,6 @@ class StudyProgressSubject(db.Model):
     created_at = db.Column(datetime6(), nullable=False)
     updated_at = db.Column(datetime6(), nullable=False)
 
-    state = db.relationship(
-        "StudyProgressState",
-        back_populates="subject",
-        uselist=False,
-        passive_deletes="all",
-    )
-    contributors = db.relationship(
-        "StudyProgressContributor",
-        back_populates="subject",
-        passive_deletes="all",
-    )
-
     __table_args__ = (
         db.UniqueConstraint(
             "learner_user_id", "logical_note_key", name="uq_sp_subject_user_note"

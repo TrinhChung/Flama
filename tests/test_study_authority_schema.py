@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from app import create_app
 from models import db
 from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
+from migrations.retired_note_progress_tables import StudyAuthoritySubjectToken, StudyProgressState
 from models.user import User
 
 
@@ -37,6 +37,8 @@ class StudyAuthoritySchemaTests(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        # Revision 40 follows 39, which created the (since retired) state table.
+        StudyProgressState.__table__.create(bind=db.engine)
 
     def tearDown(self):
         op._proxy = None
@@ -129,7 +131,10 @@ class StudyAuthoritySchemaTests(unittest.TestCase):
         db.session.add(User(email="p5@example.test", username="p5-user"))
         db.session.commit()
         self.assertEqual(StudyAuthorityEnrollment.query.count(), 0)
-        self.assertEqual(StudyAuthoritySubjectToken.query.count(), 0)
+        self.assertEqual(
+            db.session.execute(sa.select(sa.func.count()).select_from(StudyAuthoritySubjectToken.__table__)).scalar_one(),
+            0,
+        )
 
         user = User.query.filter_by(username="p5-user").one()
         now = datetime(2026, 9, 21)

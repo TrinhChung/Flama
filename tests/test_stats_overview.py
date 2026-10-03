@@ -15,7 +15,6 @@ from models.deck import Deck
 from models.card_progress import CardProgress
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_subject import StudyProgressSubject
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 
 
 class StatsOverviewTests(unittest.TestCase):
@@ -387,16 +386,6 @@ class StatsOverviewTests(unittest.TestCase):
                 updated_at=now_utc,
             )
             db.session.add_all([enrollment, subject])
-            db.session.flush()
-
-            token = StudyAuthoritySubjectToken(
-                subject_id=subject.id,
-                subject_generation=1,
-                authority_revision=0,
-                created_at=now_utc,
-                updated_at=now_utc,
-            )
-            db.session.add(token)
             db.session.commit()
 
             executed_clauses = []

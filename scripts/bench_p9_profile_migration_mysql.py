@@ -255,6 +255,10 @@ def run_bench(contributors: int) -> dict:
         app = _probe_app(_database_uri(settings, name))
         with app.app_context():
             db.metadata.create_all(bind=db.engine)
+            # Migration 47 altered the contributor table that P10-09 retired.
+            from migrations.retired_note_progress_tables import RETIRED_METADATA, StudyProgressContributor
+
+            RETIRED_METADATA.create_all(bind=db.engine, tables=[StudyProgressContributor.__table__])
             report["reconstruct_head_46_seconds"] = _run(migration.downgrade)
             head_46 = (
                 _raw_not_null()

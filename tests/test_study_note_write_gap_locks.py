@@ -145,18 +145,15 @@ class NoteWriteGapLockTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_json())
         return response.get_json()
 
-    def test_first_review_never_reads_absent_receipt_fact_or_lineage_rows_with_locking_shapes(self):
+    def test_first_review_never_reads_absent_receipt_or_fact_rows_with_locking_shapes(self):
         with self._statements() as seen:
             self._answer()
         receipt_entity_lookups = [s for s in seen if "FROM study_authority_command_receipts" in s
                                   and "study_authority_command_receipts.response_payload" in s]
         fact_lookups = [s for s in seen if "FROM study_progress_history_facts" in s
                         and "fact_identity_hash =" in s]
-        lineage_ranges = [s for s in seen if "study_progress_lineage_refs.source_row_key" in s
-                          and "study_progress_lineage_refs.contributor_id IN" in s]
         self.assertEqual(receipt_entity_lookups, [])
         self.assertEqual(fact_lookups, [])
-        self.assertEqual(lineage_ranges, [])
 
     def test_retry_still_replays_the_original_receipt(self):
         key = str(uuid4())

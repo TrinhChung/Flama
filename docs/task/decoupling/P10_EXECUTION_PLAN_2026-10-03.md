@@ -98,7 +98,7 @@ Chủ sản phẩm duyệt 2026-10-03: dump rồi drop năm bảng `study_progre
   - Read audit không còn so thứ tự với SQL `card_progress` (chỉ có ý nghĩa ở `PROJECTION_V1`); vẫn kiểm từng dòng (availability dựng lại từ state).
   - `card_progress` đông cứng của learner NOTE không phải bằng chứng: xóa nội dung không bị chặn bởi nó (giống `CONSOLIDATED_V1` trên production từ P10-08).
   - Probe CI cập nhật: `probe_p5_concurrency_mysql` (revision trên dòng, mỗi câu trả lời đúng một history fact), `probe_p5_direct_replay_mysql`, `probe_p5_study_batch_mysql`, `probe_p9_backup_restore_mysql`; helper chung `scripts/mysql_probe_db.py`.
-- **PR-B — dump + migration 50.** Dump năm bảng trên production (kiểm sha256), migration drop năm bảng và FK `study_progress_history_facts.contributor_id` (giữ cột), gỡ model, gỡ `bench_p9_profile_migration_mysql` khỏi CI.
+- **PR-B — dump + migration 50.** Dump năm bảng trên production (kiểm sha256 + khôi phục thử), migration 50 drop năm bảng và FK + index `study_progress_history_facts.contributor_id` (giữ cột), gỡ năm model. Migration 39/40 dựng bảng từ model nên định nghĩa được đông cứng ở `migrations/retired_note_progress_tables.py` (MetaData riêng, DDL MySQL/SQLite trùng khớp model cũ); chuỗi migration mới trên MySQL đi qua 39 → 50. Chuỗi mới luôn seed `PROJECTION_V1` (migration 47) với năm bảng rỗng: migration 50 nâng profile lên `CONSOLIDATED_V1` cho DB như vậy, còn từ chối khi profile cũ mà năm bảng có dòng. Probe `scripts/probe_p10_drop_mysql.py` (CI); bench migration 47 dựng bảng contributor đông cứng. [Runbook](../../runbooks/P10_09_RETIRED_TABLES_DROP_RUNBOOK.md).
 
 ## 4. Ước lượng và rủi ro
 

@@ -35,11 +35,8 @@ class StudyProgressHistoryFact(db.Model):
     )
     logical_note_key = db.Column(binary_string(144), nullable=True)
     subject_generation = db.Column(bigint(), nullable=True)
-    contributor_id = db.Column(
-        bigint(),
-        db.ForeignKey("study_progress_contributors.id", ondelete="SET NULL"),
-        nullable=True,
-    )
+    # The retired per-Card contributor of a pre-P10 fact; no table since migration 50.
+    contributor_id = db.Column(bigint(), nullable=True)
     logical_card_key = db.Column(binary_string(256), nullable=False)
     review_event_id = db.Column(
         db.Integer,
@@ -70,7 +67,6 @@ class StudyProgressHistoryFact(db.Model):
     created_at = db.Column(datetime6(), nullable=False)
 
     subject = db.relationship("StudyProgressSubject")
-    contributor = db.relationship("StudyProgressContributor")
     review_event = db.relationship("ReviewEvent")
 
     __table_args__ = (
