@@ -394,6 +394,45 @@ class StudyConsolidatedSwitchCliTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(int(StudyProgressSubject.query.one().authority_revision), 2)
 
+    def test_v4_lease_opened_before_the_switch_commits_after_it(self):
+        self.app.config["STUDY_WIRE_V4_ENABLED"] = True
+        self.addCleanup(self.app.config.__setitem__, "STUDY_WIRE_V4_ENABLED", False)
+        with self.app.app_context():
+            card = db.session.get(Card, self.card_ids[0])
+            self.note_id, self.note_type_id = card.note_id, card.note.note_type_id
+            self.template_ids = [db.session.get(Card, card_id).template_id for card_id in self.card_ids]
+        snapshot = StudyConsolidatedProgressTests._open(self)
+        code, applied = self._cli("--apply")
+        self.assertEqual((code, applied["profile"]), (0, "CONSOLIDATED_V1"))
+        # The pin's revision and hash were copied onto the row: the lease stays valid.
+        committed = StudyConsolidatedProgressTests._commit(self, snapshot, ["good", "easy"])
+        self.assertEqual(committed.status_code, 200, committed.get_json())
+        with self.app.app_context():
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual((int(subject.authority_revision), subject.current_provenance_code),
+                             (2, "NATIVE_SESSION"))
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 2)
+
+    def test_this_release_supports_the_profile_and_an_older_one_fails_closed(self):
+        from app.repositories import study_authority_repository as repository
+        from app.repositories.study_authority_repository import StudyAuthorityFenceError
+
+        mock.patch.stopall()
+        self.assertIn("CONSOLIDATED_V1", repository.SUPPORTED_STORAGE_PROFILES)
+        code, plan = self._cli()
+        self.assertNotIn("RELEASE_DOES_NOT_SUPPORT_CONSOLIDATED_V1", plan["blockers"])
+        self.assertEqual(self._cli("--apply")[0], 0)
+        older = mock.patch.object(repository, "SUPPORTED_STORAGE_PROFILES",
+                                  frozenset({"PROJECTION_V1", "CANONICAL_V1"}))
+        older.start()
+        self.addCleanup(older.stop)
+        with self.app.app_context():
+            with self.assertRaises(StudyAuthorityFenceError) as raised:
+                repository.lock_study_authority_route(
+                    db.session, learner_user_id=self.user_id, allow_note_authority=True)
+            self.assertEqual(raised.exception.code, "STORAGE_PROFILE_UNSUPPORTED")
+            db.session.rollback()
+
     def test_divergent_evidence_or_a_legacy_learner_blocks_without_writing(self):
         from models.study_progress_availability import StudyProgressAvailability
         from models.user import User
