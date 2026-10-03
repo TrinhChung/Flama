@@ -62,6 +62,13 @@ def _reconstruct_head_45() -> None:
     """Create the current metadata, then remove every migration-46 artifact."""
 
     db.metadata.create_all(bind=db.engine)
+    # Revision 45 still had the NOTE progress tables migration 50 drops (P10-09).
+    from migrations.retired_note_progress_tables import RETIRED_METADATA
+
+    RETIRED_METADATA.create_all(bind=db.engine, tables=[
+        RETIRED_METADATA.tables[name] for name in (
+            "study_progress_states", "study_authority_subject_tokens", "study_progress_contributors",
+            "study_progress_availability", "study_progress_lineage_refs")])
     inspector = sa.inspect(db.engine)
     for fk in inspector.get_foreign_keys("cards"):
         if fk.get("referred_table") == migration.APPLICATIONS:
