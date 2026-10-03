@@ -109,11 +109,12 @@ Rủi ro chính: số entry point lớn trong các file rủi ro cao (`study_ses
 | P10-01 | DONE — ADR + kế hoạch |
 | P10-02 | DONE — migration 49, model, profile (commit `6981312`) |
 | P10-03 | DONE — view dòng (`ConsolidatedSubjectToken/State`), `project_note_state`, `study_consolidated_progress_service` |
-| P10-04 | DONE (local) — dashboard, overview, cây deck, `/api/study/next`, Browse, hôm nay/tương lai, reps marketplace, MCP, read audit |
-| P10-05 | DONE (local) — trả lời REST/MCP, phiên v4, batch async, Note mới/enrollment, Template thêm/xóa, reset, xóa Note/deck, đổi thuật toán, Anki/Connect + note-status, overlay |
+| P10-04 | DONE — dashboard, overview, cây deck, `/api/study/next`, Browse, hôm nay/tương lai, reps marketplace, MCP, read audit |
+| P10-05 | DONE — trả lời REST/MCP, phiên v4, batch async, Note mới/enrollment, Template thêm/xóa, reset, xóa Note/deck, đổi thuật toán, Anki/Connect + note-status, overlay |
 | P10-06 | DONE — test SQLite có guard bảng cũ (`tests/test_study_consolidated_*`), A/B MySQL, workload probe trên bản khôi phục (§6) |
-| P10-07 | DONE — CLI `study-consolidated-switch` + test, rehearsal trên bản khôi phục (§6), [runbook](../../runbooks/P10_CONSOLIDATED_SWITCH_RUNBOOK.md); còn đưa `CONSOLIDATED_V1` vào `SUPPORTED_STORAGE_PROFILES` ở một release trước P10-08 |
-| P10-08, P10-09 | TODO — cần chủ sản phẩm duyệt |
+| P10-07 | DONE — CLI `study-consolidated-switch` + test, rehearsal trên bản khôi phục (§6), [runbook](../../runbooks/P10_CONSOLIDATED_SWITCH_RUNBOOK.md); release `d812f00` (#204) hỗ trợ `CONSOLIDATED_V1` |
+| P10-08 | DONE — production 2026-10-03, T0 `06:38:52Z`, epoch 3, freeze 67 s, 18/18 audit PASS trước/sau ([báo cáo](./P10_08_CUTOVER_REPORT_2026-10-03.md)) |
+| P10-09 | TODO — cần chủ sản phẩm duyệt phạm vi (gỡ code `CANONICAL_V1`/P4, drop bảng cũ) |
 
 Đo sơ bộ (SQLite, một câu trả lời REST dưới `CONSOLIDATED_V1`): 46 SQL, trong đó ghi đúng 1 UPDATE tiến độ + 4 INSERT (ReviewEvent, history fact, receipt, audit). 40 SELECT còn lại là đọc lặp ở route và phần xem trước thẻ kế (`cards` ×7, `decks` ×6, `study_progress_subjects` ×6, `users` ×5, enrollment/profile/scheduler settings ×3). Gom các đọc này là hạng mục tối ưu truy vấn tiếp theo, không thuộc gộp bảng.
 

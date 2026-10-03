@@ -453,6 +453,13 @@ def submit_review(
 # ---------------------------------------------------------------------------
 
 
+def _is_consolidated_profile() -> bool:
+    from app.repositories.study_authority_repository import read_study_storage_profile
+    from app.services.study_progress_contract import CONSOLIDATED_STORAGE_PROFILE
+
+    return read_study_storage_profile(db.session) == CONSOLIDATED_STORAGE_PROFILE
+
+
 def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
     """Return learning and review stats for a specific deck."""
     deck = Deck.query.filter_by(id=deck_id, owner_user_id=user_id, deleted_at=None).first()
@@ -480,7 +487,25 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
     young_count = 0
     mature_count = 0
     if card_ids:
-        if due_counts["authority_mode"] == "NOTE":
+        if due_counts["authority_mode"] == "NOTE" and _is_consolidated_profile():
+            # ADR P10 §2.7: one non-locking SELECT over the deck's Note rows.
+            from app.repositories.note_analytics_read_repository import (
+                consolidated_card_rows,
+                state_interval_days,
+            )
+
+            for row in consolidated_card_rows(
+                Card.query.join(Note, Card.note_id == Note.id)
+                .filter(Note.deck_id == deck_id, Note.user_id == user_id),
+                learner_user_id=user_id,
+            ).all():
+                if row[5] != "review":
+                    continue
+                if state_interval_days(row[6]) >= 21:
+                    mature_count += 1
+                else:
+                    young_count += 1
+        elif due_counts["authority_mode"] == "NOTE":
             try:
                 authority_reads = load_study_authority_card_reads(
                     db.session,

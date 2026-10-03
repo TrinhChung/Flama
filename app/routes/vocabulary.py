@@ -5,8 +5,6 @@ from __future__ import annotations
 import io
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Dict, List
 
 UTC = timezone.utc
 
@@ -26,35 +24,13 @@ from app.spa import serve_react_spa
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories import vocabulary_repository as vocabulary_ctrl
-from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
-from app.repositories.study_authority_repository import (
-    StudyAuthorityFenceError,
-    lock_study_authority_route,
-)
-from app.repositories.study_repository import (
-    apply_card_state_to_progress as _apply_card_state_to_progress,
-    card_state_from_progress as _card_state_from_progress,
-    load_card_progress_map as _load_card_progress_map_for_user,
-    select_next_due_card_from_loaded as _select_next_due_card_from_loaded,
-    summarize_pending_learning_from_loaded as _summarize_pending_learning_from_loaded,
-)
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.utils.redirects import resolve_safe_next_url
 from app.services import deck_management_service, flashcards_share_service
-from app.services.study_action_runtime import compute_review_previews
-from app.services.study_authority_read_service import (
-    StudyAuthorityReadError,
-    load_study_authority_card_reads,
-    summarize_study_authority_queue,
-)
-from app.services.scheduler_config_service import resolve_deck_options
-from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.stats_overview import get_effective_timezone_name
 from models import db
-from models.flashcard import Card, Note
 from models.deck import Deck
-from models.card_progress import CardProgress
 
 vocabulary_bp = Blueprint("vocabulary", __name__, url_prefix="/vocabulary")
 
@@ -666,72 +642,6 @@ def topic(topic_id: int):
     return _legacy_structure_removed_response()
 
 
-def _select_next_note_card(
-    cards: List[Card],
-    progress_map: Dict[str, CardProgress],
-    now: datetime,
-    *,
-    timezone_name: str,
-):
-    return _select_next_due_card_from_loaded(
-        cards,
-        progress_map,
-        now=now,
-        timezone_name=timezone_name,
-        user_id=current_user.id,
-    )
-
-
-def _build_note_study_card_payload(card_obj: Card | None) -> SimpleNamespace | None:
-    return vocabulary_ctrl.build_note_study_card_payload(card_obj)
-
-
-def _render_note_study_flashcard(card_obj: Card | None) -> dict:
-    return vocabulary_ctrl.render_note_study_flashcard(card_obj)
-
-
-def _query_study_cards_for_deck_ids(deck_ids: list[int]) -> list[Card]:
-    return vocabulary_ctrl.query_study_cards_for_deck_ids(
-        user_id=current_user.id,
-        deck_ids=deck_ids,
-    )
-
-
-def _load_card_progress_map(card_ids: list[str]) -> dict[str, CardProgress]:
-    return _load_card_progress_map_for_user(user_id=current_user.id, card_ids=card_ids)
-
-
-def _count_due_note_cards(
-    cards: list[Card],
-    progress_map: dict[str, CardProgress],
-    *,
-    now: datetime,
-    timezone_name: str,
-) -> tuple[int, int, int]:
-    return vocabulary_ctrl.count_due_note_cards(
-        cards,
-        progress_map,
-        now=now,
-        timezone_name=timezone_name,
-    )
-
-
-def _summarize_pending_learning_cards(
-    cards: list[Card],
-    progress_map: dict[str, CardProgress],
-    *,
-    now: datetime,
-    timezone_name: str,
-) -> tuple[int, datetime | None]:
-    return _summarize_pending_learning_from_loaded(
-        cards,
-        progress_map,
-        now=now,
-        timezone_name=timezone_name,
-        user_id=current_user.id,
-    )
-
-
 @vocabulary_bp.route("/study/topic/<int:topic_id>")
 @login_required
 def study_topic(topic_id: int):
@@ -741,204 +651,16 @@ def study_topic(topic_id: int):
 @vocabulary_bp.route("/study/deck/<int:deck_id>")
 @login_required
 def study_deck(deck_id: int):
-    """Study cards across a deck subtree using Note/Card as the source of truth."""
+    """Serve the React Study page for a deck subtree.
+
+    ``serve_react_spa`` ignores template context: the SPA loads its queue,
+    card and counts from ``/api/study/*``. Building them here (a full locking
+    read of every Card of the subtree) only delayed the page.
+    """
     root_deck = Deck.query.get(deck_id)
     if not root_deck:
         abort(404)
-    subtree_ids = _collect_deck_subtree_ids(root_deck.id)
-
-    cards = _query_study_cards_for_deck_ids(subtree_ids)
-    now = _utcnow()
-    timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
-    try:
-        authority_route = lock_study_authority_route(
-            db.session,
-            learner_user_id=int(current_user.id),
-            allow_note_authority=True,
-        )
-        authority_reads = None
-        if authority_route.mode_code == "NOTE":
-            authority_reads = load_study_authority_card_reads(
-                db.session,
-                learner_user_id=int(current_user.id),
-                cards=tuple(cards),
-                now_utc=now,
-                timezone_name=timezone_name,
-                deck_options_by_card_id={
-                    str(card.id): resolve_deck_options(
-                        user_id=current_user.id,
-                        deck_id=getattr(card.note, "deck_id", None),
-                    )
-                    for card in cards
-                },
-            )
-            queue_summary = summarize_study_authority_queue(
-                cards=tuple(cards),
-                reads_by_card_id=authority_reads,
-                learner_user_id=int(current_user.id),
-                now_utc=now,
-                timezone_name=timezone_name,
-            )
-            selected_card = next(
-                (
-                    card
-                    for card in cards
-                    if str(card.id) == queue_summary.selected_card_id
-                ),
-                None,
-            )
-            due_new = queue_summary.new_count
-            due_learn = queue_summary.learn_count
-            due_review = queue_summary.due_count
-            pending_learning_count = queue_summary.pending_learning_count
-            next_learning_due_at = queue_summary.next_due_at
-            progress_map = {}
-        else:
-            card_ids = [card_obj.id for card_obj in cards]
-            progress_map = _load_card_progress_map(card_ids)
-            selected_card = _select_next_note_card(
-                cards,
-                progress_map,
-                now,
-                timezone_name=timezone_name,
-            )
-            due_new, due_learn, due_review = _count_due_note_cards(
-                cards,
-                progress_map,
-                now=now,
-                timezone_name=timezone_name,
-            )
-            pending_learning_count, next_learning_due_at = (
-                _summarize_pending_learning_cards(
-                    cards,
-                    progress_map,
-                    now=now,
-                    timezone_name=timezone_name,
-                )
-            )
-    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-        db.session.rollback()
-        return jsonify({"error": str(exc.code), "message": str(exc)}), 409
-
-    next_intervals_preview = None
-    if selected_card:
-        deck_options = resolve_deck_options(
-            user_id=current_user.id,
-            deck_id=getattr(selected_card.note, "deck_id", None),
-        )
-        card_state = (
-            authority_reads[str(selected_card.id)].state
-            if authority_reads is not None
-            else _card_state_from_progress(
-                progress_map.get(selected_card.id),
-                now,
-                timezone_name=timezone_name,
-                user_id=current_user.id,
-                options=deck_options,
-            )
-        )
-        next_intervals_preview = compute_review_previews(
-            state=card_state,
-            options=deck_options,
-            now=now,
-            timezone_name=timezone_name,
-        )
-
-    rendered_data = _render_note_study_flashcard(selected_card)
-    card_payload = _build_note_study_card_payload(selected_card)
-    from app.services import flashcards_share as share_ctrl
-
-    can_edit_current_card = bool(
-        selected_card
-        and selected_card.note
-        and selected_card.note.user_id == current_user.id
-    )
-
-    clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
-        user_id=current_user.id,
-        local_deck_id=root_deck.id,
-    )
-    if (
-        clone_scope is not None
-        and selected_card is not None
-        and share_ctrl.is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card)
-    ):
-        source_note_type_id = (clone_scope.install.source_note_type_id or selected_card.note.note_type_id or "").strip()
-        if source_note_type_id:
-            schema_view = share_ctrl.build_clone_schema_view(
-                install=clone_scope.install,
-                source_note_type_id=source_note_type_id,
-            )
-            overlay_field_defs = schema_view.field_defs or selected_card.note.note_type.field_defs
-            overlay_field_values = share_ctrl.apply_clone_note_field_overrides(
-                install=clone_scope.install,
-                source_note=selected_card.note,
-                schema_view=schema_view,
-            )
-            try:
-                rendered = render_template_pair(
-                    template=selected_card.template,
-                    field_defs=overlay_field_defs,
-                    field_values=overlay_field_values,
-                    media_assets=selected_card.note.media_assets,
-                )
-                rendered_data = {
-                    "front": rendered.get("front_html", ""),
-                    "back": rendered.get("back_html", ""),
-                    "front_payload": rendered.get("front_renderer_payload"),
-                    "back_payload": rendered.get("back_renderer_payload"),
-                }
-                if card_payload is not None:
-                    card_payload.field_values = {
-                        str(key): "" if value is None else str(value)
-                        for key, value in overlay_field_values.items()
-                    }
-                    card_payload.field_defs = [
-                        {
-                            "name": field_def.name,
-                            "field_type": field_def.field_type,
-                            "required": bool(field_def.required),
-                            "position": int(field_def.position or 0),
-                        }
-                        for field_def in overlay_field_defs
-                    ]
-            except TemplateCompileError:
-                pass
-
-    user_decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
-    user_decks_payload = [{"id": d.id, "name": d.name} for d in user_decks]
-    return serve_react_spa(
-        "vocabulary_study.html",
-        selected_deck=root_deck,
-        user_decks=user_decks,
-        user_decks_payload=user_decks_payload,
-        card=card_payload,
-        rendered_front=rendered_data.get("front"),
-        rendered_back=rendered_data.get("back"),
-        rendered_front_payload=rendered_data.get("front_payload"),
-        rendered_back_payload=rendered_data.get("back_payload"),
-        due_new=due_new,
-        due_learn=due_learn,
-        due_review=due_review,
-        due_total=due_new + due_learn + due_review,
-        is_waiting_session=bool(pending_learning_count and next_learning_due_at is not None),
-        next_learning_due_at_iso=(
-            f"{next_learning_due_at.isoformat(timespec='seconds')}Z"
-            if next_learning_due_at is not None
-            else None
-        ),
-        study_scope="deck",
-        study_scope_id=root_deck.id,
-        next_study_url=url_for("vocabulary.study_deck", deck_id=root_deck.id),
-        next_intervals_preview=next_intervals_preview,
-        answer_url=(url_for("flashcards.study_answer", card_id=selected_card.id) if selected_card else None),
-        can_edit_current_card=can_edit_current_card,
-        edit_card_api_url=(
-            url_for("flashcards.study_edit_card", card_id=selected_card.id)
-            if can_edit_current_card and selected_card
-            else None
-        ),
-    )
+    return serve_react_spa("vocabulary_study.html")
 
 
 @vocabulary_bp.route("/study/lesson/<int:lesson_id>")

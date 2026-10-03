@@ -2149,14 +2149,14 @@ class StudySessionApiTests(unittest.TestCase):
             {"total": 1, "new": 1, "learn": 0, "due": 0},
         )
 
-    def test_legacy_study_deck_page_uses_note_authority_queue(self):
+    def test_study_deck_page_serves_the_spa_without_reading_progress(self):
         self._enable_existing_state_note_authority(epoch=19)
-        with patch(
-            "app.routes.vocabulary._load_card_progress_map",
-            side_effect=AssertionError("legacy Study page must not serve NOTE"),
-        ):
+        refuse = AssertionError("the Study page shell must not read progress")
+        with patch("app.services.study_authority_read_service.load_study_authority_card_reads",
+                   side_effect=refuse),                 patch("app.repositories.study_repository.load_card_progress_map", side_effect=refuse):
             response = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(response.status_code, 200)
+        self.assertIn('<div id="root"></div>', response.get_data(as_text=True))
 
     def test_reused_commit_id_with_another_payload_settles_on_the_stored_receipt(self):
         # Production 2026-10-01: a browser lost the receipt of a commit and
