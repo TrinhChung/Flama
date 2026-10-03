@@ -33,7 +33,7 @@ Trong code, queue/due/suspended đều suy từ state của Note (`study_note_ca
 
 Giữ: `id`, `learner_user_id`, `logical_note_key`, `live_note_id`, `subject_generation`, `status_code`, `created_at`, `updated_at`. Các cột chỉ phục vụ bằng chứng chuyển đổi (`mirror_revision`, `contributor_count`, `authority_vector_hash`, `lineage_vector_hash`, `mapper_version`, `last_mirrored_at`) không còn được đọc ở profile mới và bị bỏ ở bước contraction.
 
-Ràng buộc trên chính dòng thay cho kiểm tra chéo: nhóm state, `semantic_state_hash`, `authority_revision > 0` và nhóm availability cùng có hoặc cùng NULL; độ dài hash 32; `normalized_queue` thuộc danh sách chuẩn hóa.
+Ràng buộc trên chính dòng thay cho kiểm tra chéo: nhóm state, nhóm availability và nhóm lịch sử/nguồn gốc cùng có hoặc cùng NULL; `authority_revision ≥ 0` (0 cho state pristine vừa materialize, như token mới trước đây); độ dài hash 32; `normalized_queue` thuộc danh sách chuẩn hóa.
 
 ### 2.2 Availability contract
 
@@ -82,7 +82,7 @@ Dashboard, overview, Browse, `/api/study/next`, MCP, thống kê hôm nay/tươn
 
 - Đọc: dashboard từ 7 bảng còn `notes` ⋈ một bảng; hàng đợi và Browse tương tự.
 - Ghi: mỗi câu trả lời một UPDATE tiến độ thay cho sáu; số dòng ghi khoảng 10 → 4–5.
-- Bỏ được ở contraction: `study_progress_states`, `study_authority_subject_tokens`, `study_progress_contributors`, `study_progress_availability`, `study_progress_lineage_refs`, cùng công cụ chỉ phục vụ chuyển đổi (mirror, backfill, reconciliation P4). Việc gỡ `card_progress`, nhánh LEGACY và profile `PROJECTION_V1` cần quyết định riêng của chủ sản phẩm vì liên quan phạm vi compatibility đã giữ ở P9.
+- Bỏ được ở contraction: `study_progress_states`, `study_authority_subject_tokens`, `study_progress_contributors`, `study_progress_availability`, `study_progress_lineage_refs`, cùng công cụ chỉ phục vụ chuyển đổi (mirror, backfill, reconciliation P4). **Giữ** `study_progress_lifecycle_events`: reset/xóa vẫn ghi sự kiện và history cut của đổi thuật toán đọc nó. Việc gỡ `card_progress`, nhánh LEGACY và profile `PROJECTION_V1` cần quyết định riêng của chủ sản phẩm vì liên quan phạm vi compatibility đã giữ ở P9.
 - Không đổi: wire v2/v3/v4, receipt, pin, ReviewEvent, history fact, ordinal Connect, overlay-only.
 
 ## 5. Kiểm chứng bắt buộc
@@ -92,3 +92,19 @@ Dashboard, overview, Browse, `/api/study/next`, MCP, thống kê hôm nay/tươn
 3. Writer matrix: trả lời trực tiếp/MCP/phiên/batch, mất ACK, Note mới, Template thêm/xóa, reset, xóa, đổi thuật toán, Anki/Connect, overlay; không mất/nhân đôi câu trả lời.
 4. MySQL: probe đồng thời, replay, switch trên bản khôi phục production; A/B ghi/đọc so với `CANONICAL_V1`.
 5. Switch: dry-run không blocker, kiểm đối chiếu 100%, lease v4 qua switch vẫn commit đúng.
+
+## 6. Ghi chú triển khai (2026-10-03)
+
+Những điểm code chốt khác hoặc chi tiết hơn §2:
+
+| Chủ đề | Thực tế |
+|---|---|
+| Cột envelope cũ | `mirror_revision` vẫn tăng ở mỗi lần ghi và được receipt echo (bộ đếm sổ sách, không phải CAS). `contributor_count`, `authority_vector_hash`, `lineage_vector_hash` giữ nguyên giá trị lúc switch và không reader nào ở profile mới đọc; bỏ ở contraction. |
+| `state_payload` | Kiểu `JSON(none_as_null=True)`: `None` của Python là SQL NULL, nếu không CHECK nhóm coi JSON `null` là có giá trị. |
+| Lineage ref | Không ghi ở profile mới; danh tính nguồn ngoài vẫn nằm ở `connect_source_card_refs`. |
+| Reset deck | Không xóa `card_progress` đã đóng băng; số trả về `deleted_progress_count` là số Card được reset. Xóa Content (Card/Note/NoteType/deck) vẫn xóa dòng `card_progress` của Card bị xóa như ở CANONICAL_V1 (dọn dẹp FK, không đọc). |
+| Đổi thuật toán | State đích chỉ cần chiếu được lên dòng của Note; state rộng hơn (trường riêng của thuật toán) được chấp nhận vì không còn projection rollback `card_progress`. History cut: blocker `CONTRIBUTOR_HISTORY_INCOMPLETE` lấy từ `history_completeness_code` của dòng (giữ mã để policy của initializer không đổi); `token_row_hash`/`state_row_hash` là NULL vì hash dòng subject đã ràng buộc cả hai. |
+| Anki/Connect | Burial lấy từ dòng; completeness theo cùng quy tắc với contributor ở CANONICAL_V1 (`HISTORY_SNAPSHOT_ONLY` trên lịch sử native → `HISTORY_MIXED_PARTIAL`). Kiểm topology import status không còn so `contributor_count`. |
+| Switch | `flask study-consolidated-switch` (in kế hoạch; `--apply` mới ghi). Chép theo lô 1.000 dòng bằng UPDATE theo khóa chính thay cho một UPDATE JOIN, sau khi kiểm từng subject: token/state/subject cùng generation + hash, mọi Card cùng một availability và bằng availability tính lại từ state (`project_note_state`). Bất kỳ lệch nào → blocker `SUBJECT_EVIDENCE_*`, không ghi gì. Blocker hệ thống: release chưa hỗ trợ, còn learner LEGACY, user chưa enroll, batch chưa xong. |
+| Learner mới | Enrollment và materialize Note mới ghi thẳng lên dòng (`NATIVE_DIRECT`/`NATIVE_MCP`/`UNKNOWN_LEGACY`). |
+

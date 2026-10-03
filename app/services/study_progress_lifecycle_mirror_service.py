@@ -21,6 +21,7 @@ from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySubject,
     StudyAuthorityFenceError,
     StudyAuthorityRoute,
+    is_consolidated,
     lock_study_authority_compatibility,
     lock_study_authority_siblings,
     lock_study_authority_subject,
@@ -413,6 +414,8 @@ def prepare_note_authority_reset(
         }
         if locked is None:
             continue
+        if is_consolidated(route) and locked.state is None:
+            continue
         if not note_progress_ids and not (canonical and locked.state is not None):
             active_contributor = session.execute(
                 select(StudyProgressContributor.id)
@@ -451,12 +454,13 @@ def prepare_note_authority_reset(
             locked=locked,
             siblings=siblings,
         )
-        _verify_note_authority_projection(
-            locked=locked,
-            siblings=siblings,
-            compatibility=compatibility,
-            storage_profile=route.storage_profile,
-        )
+        if not is_consolidated(route):
+            _verify_note_authority_projection(
+                locked=locked,
+                siblings=siblings,
+                compatibility=compatibility,
+                storage_profile=route.storage_profile,
+            )
         progress_rows = tuple(siblings.progress_by_card_id.values())
         from app.services.scheduler_config_service import resolve_deck_options
 
@@ -470,6 +474,21 @@ def prepare_note_authority_reset(
                     deck_id=note_deck_id,
                 ).startingEase
             )
+        if is_consolidated(route):
+            from app.services.study_consolidated_progress_service import is_pristine_row
+
+            if skip_pristine and is_pristine_row(locked.subject, starting_ease=starting_ease):
+                continue
+            old_vectors[int(locked.subject.id)] = _OldVectors(
+                topology_hash=None,
+                authority_hash=bytes(locked.subject.semantic_state_hash),
+                lineage_hash=None,
+                contributor_count=len(siblings.card_ids),
+            )
+            siblings_by_note_id[note_id] = siblings
+            compatibility_by_note_id[note_id] = compatibility
+            starting_ease_by_note_id[note_id] = starting_ease
+            continue
         if canonical:
             if skip_pristine and canonical_lifecycle.is_pristine_note(
                 locked=locked, compatibility=compatibility, starting_ease=starting_ease
@@ -562,6 +581,28 @@ def finalize_note_authority_reset(
     plan.finalized = True
     session = plan.session
     finalized_at = _utc_naive(now_utc)
+    if is_consolidated(plan.route):
+        from app.services.study_consolidated_progress_service import reset_consolidated_note
+
+        for note_id in sorted(plan.siblings_by_note_id, key=lambda value: value.encode("utf-8")):
+            reset_consolidated_note(
+                session,
+                learner_user_id=plan.route.learner_user_id,
+                subject=plan.locked_by_note_id[note_id].subject,
+                note_id=note_id,
+                cards=plan.siblings_by_note_id[note_id].cards,
+                starting_ease=float(plan.starting_ease_by_note_id[note_id]),
+                source_path=source_path,
+                operation_key=operation_key,
+                now_utc=finalized_at,
+            )
+        session.flush()
+        statuses = tuple(
+            str(plan.locked_by_note_id[note_id].subject.status_code) for note_id in plan.siblings_by_note_id
+        )
+        return LifecycleMirrorResult(
+            subject_count=len(statuses), lifecycle_event_count=len(statuses), statuses=statuses
+        )
     if plan.route.storage_profile != "PROJECTION_V1":
         return _finalize_canonical_reset(
             plan, source_path=source_path, operation_key=operation_key, finalized_at=finalized_at
@@ -764,6 +805,26 @@ def finalize_note_authority_delete(
     plan.finalized = True
     session = plan.session
     finalized_at = _utc_naive(now_utc)
+    if is_consolidated(plan.route):
+        from app.services.study_consolidated_progress_service import delete_consolidated_note
+
+        for note_id in sorted(plan.siblings_by_note_id, key=lambda value: value.encode("utf-8")):
+            delete_consolidated_note(
+                session,
+                learner_user_id=plan.route.learner_user_id,
+                subject=plan.locked_by_note_id[note_id].subject,
+                note_id=note_id,
+                card_ids=plan.siblings_by_note_id[note_id].card_ids,
+                source_path=source_path,
+                operation_key=operation_key,
+                now_utc=finalized_at,
+            )
+        session.flush()
+        count = len(plan.siblings_by_note_id)
+        return LifecycleMirrorResult(
+            subject_count=count, lifecycle_event_count=count,
+            statuses=("TOMBSTONED_SUBJECT_DELETED",) * count,
+        )
     # CANONICAL_V1 neither writes nor trusts card_progress: nothing to check.
     remaining = None if plan.route.storage_profile != "PROJECTION_V1" else session.execute(
         select(CardProgress.id)
@@ -1060,6 +1121,24 @@ def materialize_pristine_notes_bulk(
                 "AUTHORITY_SUBJECT_EXISTS",
                 "Note already has non-pristine authority evidence.",
             )
+    if is_consolidated(route):
+        # ADR P10 §2.5: the locked rows are the whole authority.
+        from app.services.study_consolidated_progress_service import materialize_consolidated_pristine
+
+        if any(subject.state_payload is not None for subject in subject_by_note.values()):
+            raise StudyAuthorityFenceError(
+                "AUTHORITY_STATE_DIVERGED", "New Note authority unexpectedly has current state.")
+        materialize_consolidated_pristine(
+            items=[
+                (note_id, subject_by_note[note_id], tuple(cards_by_note[note_id]),
+                 float(starting_ease_by_note_id[note_id]))
+                for note_id in ordered
+            ],
+            provenance_code=provenance_code,
+            now_utc=materialized_at,
+        )
+        session.flush()
+        return len(ordered)
     subject_ids = sorted(int(subject.id) for subject in subject_by_note.values())
 
     # The subject locks serialize every writer of these children, so plain
@@ -1323,8 +1402,10 @@ def _materialize_note_authority(
             "New Note already has compatibility progress.",
         )
     # A subject inserted by this transaction cannot have contributors yet
-    # (their foreign key references the uncommitted subject).
-    existing_contributor = None if subject_created else session.execute(
+    # (their foreign key references the uncommitted subject). CONSOLIDATED_V1
+    # has none at all.
+    consolidated = is_consolidated(route)
+    existing_contributor = None if subject_created or consolidated else session.execute(
         select(StudyProgressContributor.id)
         .where(StudyProgressContributor.subject_id == int(subject.id))
         .limit(1)
@@ -1344,6 +1425,22 @@ def _materialize_note_authority(
                 user_id=route.learner_user_id,
                 deck_id=note.deck_id,
             ).startingEase
+        )
+    if consolidated:
+        from app.services.study_consolidated_progress_service import materialize_consolidated_pristine
+
+        materialize_consolidated_pristine(
+            items=[(str(note.id), subject, card_rows, float(starting_ease))],
+            provenance_code=provenance_code,
+            now_utc=materialized_at,
+        )
+        session.flush()
+        return mirror.NativeMirrorResult(
+            subject_count=1,
+            contributor_count=0,
+            history_fact_count=0,
+            quarantine_count=0,
+            statuses=(str(subject.status_code),),
         )
     if canonical:
         state_hash = finalize_canonical_pristine_materialization(
@@ -1450,6 +1547,9 @@ def prepare_note_authority_sibling_expansion(
     """Lock and verify every NOTE subject before adding a Template sibling."""
 
     if route.mode_code == "LEGACY":
+        return None
+    if is_consolidated(route):
+        # ADR P10 §2.3: a new Card inherits its Note's row; nothing to stage.
         return None
     if route.mode_code != "NOTE":
         raise StudyAuthorityFenceError(
@@ -1764,6 +1864,9 @@ def prepare_note_authority_sibling_removal(
     """Lock and verify a partial sibling removal without deleting Note state."""
 
     if route.mode_code == "LEGACY":
+        return None
+    if is_consolidated(route):
+        # ADR P10 §2.3: a Card carries no progress; removing one changes none.
         return None
     card_ids = frozenset(str(value) for value in removed_card_ids if str(value))
     if not card_ids:

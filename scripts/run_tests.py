@@ -157,6 +157,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_session_retention.py",
             "tests/test_study_session_install_usage.py",
             "tests/test_study_consolidated_schema.py",
+            "tests/test_study_consolidated_progress.py",
+            "tests/test_study_consolidated_connect.py",
             "tests/test_study_phase9_readiness.py",
             "tests/test_study_retirement_telemetry.py",
             "tests/test_study_backup_restore_probe.py",

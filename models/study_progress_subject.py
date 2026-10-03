@@ -62,7 +62,8 @@ class StudyProgressSubject(db.Model):
     algorithm_version = db.Column(ascii_string(32), nullable=True)
     state_schema_version = db.Column(ascii_string(64), nullable=True)
     storage_codec = db.Column(ascii_string(64), nullable=True)
-    state_payload = db.Column(db.JSON, nullable=True)
+    # Python None must be SQL NULL: the CHECK group treats JSON 'null' as present.
+    state_payload = db.Column(db.JSON(none_as_null=True), nullable=True)
     state_payload_size = db.Column(db.SmallInteger, nullable=True)
     algorithm_state_hash = db.Column(binary_hash(), nullable=True)
     semantic_state_hash = db.Column(binary_hash(), nullable=True)

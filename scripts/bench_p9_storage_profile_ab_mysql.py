@@ -1,12 +1,14 @@
 """A/B the NOTE storage profiles on disposable local MySQL (P9-C evidence).
 
 Runs the same seeded workload under ``PROJECTION_V1`` (NOTE writes still
-maintain the ``card_progress`` projection) and ``CANONICAL_V1`` (ADR P9-03:
-no projection), each run on its own generated database: first session open
+maintain the ``card_progress`` projection), ``CANONICAL_V1`` (ADR P9-03:
+no projection) and ``CONSOLIDATED_V1`` (ADR P10: one progress row per
+learner x Note, reached through both one-way switches), each run on its own
+generated database: first session open
 (pristine materialization), a 50-answer v4 commit, direct REST answers, a
 second open, then the dashboard/overview/queue readers. For every step it
-records wall time, SQL statements, statements that name ``card_progress`` and
-rows written per table (INSERT/UPDATE/DELETE ``rowcount``). Profiles are
+records wall time, SQL statements, statements that name ``card_progress``,
+statements that name any table CONSOLIDATED_V1 retires, and rows written per table (INSERT/UPDATE/DELETE ``rowcount``). Profiles are
 interleaved run by run; the summary reports medians. Flags match production
 (wire v4, new learner NOTE, Note counts, shadow write on; async batch off).
 
@@ -41,7 +43,11 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from unittest import mock  # noqa: E402
+
 from app import create_app  # noqa: E402
+from app.repositories import study_authority_repository  # noqa: E402
+from app.services.study_consolidated_switch_service import apply_consolidated_switch  # noqa: E402
 from app.services.study_storage_profile_service import apply_storage_profile_switch  # noqa: E402
 from models import db  # noqa: E402
 from scripts.bench_p5_session_open_mysql import _seed, _seed_overlay  # noqa: E402
@@ -50,9 +56,15 @@ from scripts.probe_phase4_shadow_schema_mysql import (  # noqa: E402
     _connection_settings, _database_uri, _source_database_collation,
 )
 
-PROFILES = ("PROJECTION_V1", "CANONICAL_V1")
+PROFILES = ("PROJECTION_V1", "CANONICAL_V1", "CONSOLIDATED_V1")
+BASELINE = "CANONICAL_V1"
 PROBE_NAME_PATTERN = re.compile(r"^flama_p9_ab_probe_[0-9]+_[a-f0-9]{8}$")
 CARD_PROGRESS = re.compile(r"\bcard_progress\b", re.IGNORECASE)
+RETIRED_TABLES = re.compile(
+    r"\b(card_progress|study_progress_states|study_authority_subject_tokens|"
+    r"study_progress_contributors|study_progress_availability|study_progress_lineage_refs)\b",
+    re.IGNORECASE,
+)
 WRITE_VERBS = {"INSERT", "UPDATE", "DELETE"}
 
 
@@ -92,6 +104,7 @@ class _Counter:
         self.engine = engine
         self.statements = 0
         self.card_progress = Counter()
+        self.retired = Counter()
         self.rows_written = Counter()
 
     def __enter__(self):
@@ -107,6 +120,9 @@ class _Counter:
         verb = words[0].upper() if words else "?"
         if CARD_PROGRESS.search(statement):
             self.card_progress[verb] += 1
+        retired = RETIRED_TABLES.search(statement)
+        if retired:
+            self.retired[f"{verb} {retired.group(1).lower()}"] += 1
         if verb in WRITE_VERBS and cursor.rowcount and cursor.rowcount > 0:
             self.rows_written[_statement_table(verb, words)] += int(cursor.rowcount)
 
@@ -123,6 +139,7 @@ def _measure(app, report: dict, name: str, fn):
         "seconds": round(elapsed, 4),
         "statements": counter.statements,
         "card_progress_statements": dict(counter.card_progress),
+        "retired_table_statements": dict(counter.retired),
         "rows_written": sum(counter.rows_written.values()),
         "rows_written_by_table": dict(counter.rows_written.most_common()),
     }
@@ -138,6 +155,9 @@ def _one_run(*, profile: str, notes: int, answers: int, direct: int, child_decks
     created = False
     app = None
     report: dict = {"profile": profile}
+    # The release under test may not list CONSOLIDATED_V1 yet; the bench does.
+    supported = mock.patch.object(study_authority_repository, "SUPPORTED_STORAGE_PROFILES", frozenset(PROFILES))
+    supported.start()
     try:
         collation = _source_database_collation(admin)
         with admin.cursor() as cursor:
@@ -145,10 +165,16 @@ def _one_run(*, profile: str, notes: int, answers: int, direct: int, child_decks
             created = True
         app = _ab_app(_database_uri(settings, name))
         learner = _seed(app, notes=notes, child_decks=child_decks)
-        if profile == "CANONICAL_V1":
+        if profile in ("CANONICAL_V1", "CONSOLIDATED_V1"):
             with app.app_context():
                 apply_storage_profile_switch(db.session, now_utc=datetime.utcnow())
                 db.session.commit()
+        if profile == "CONSOLIDATED_V1":
+            with app.app_context():
+                started = time.perf_counter()
+                switched = apply_consolidated_switch(db.session, now_utc=datetime.utcnow())
+                db.session.commit()
+                report["consolidated_switch"] = {**switched, "seconds": round(time.perf_counter() - started, 4)}
         client = _client(app, learner["user_id"])
         open_body = {
             "scope": "deck", "scope_id": learner["deck_id"], "composition_id": learner["composition_id"],
@@ -207,7 +233,8 @@ def _one_run(*, profile: str, notes: int, answers: int, direct: int, child_decks
             ("dashboard", "/api/dashboard"),
             ("overview", "/api/statistics/overview?year=2026&timezone=Asia/Tokyo"),
             ("study_next", f"/api/study/next?scope=deck&scope_id={deck}"),
-            ("stats_today_future", "/api/statistics/today-future?timezone=Asia/Tokyo"),
+            # scope=deck without deck_id answers empty; collection reads every Card.
+            ("stats_today_future", "/api/statistics/today-future?scope=collection&timezone=Asia/Tokyo"),
         ):
             _measure(app, report, label, lambda url=url: client.get(url).status_code)
         with app.app_context():
@@ -218,6 +245,7 @@ def _one_run(*, profile: str, notes: int, answers: int, direct: int, child_decks
             )).scalar_one())
             db.session.rollback()
     finally:
+        supported.stop()
         if app is not None:
             with app.app_context():
                 db.session.remove()
@@ -261,14 +289,19 @@ def _summary(runs: list[dict]) -> dict:
                 "rows_written_median": statistics.median(s["rows_written"] for s in samples),
                 "card_progress_statements_max": max(
                     sum(s["card_progress_statements"].values()) for s in samples),
+                "retired_table_statements_max": max(
+                    sum(s.get("retired_table_statements", {}).values()) for s in samples),
             }
-        if len(row) == 2:
-            old, new = row["PROJECTION_V1"], row["CANONICAL_V1"]
+        base = row.get(BASELINE)
+        for profile in PROFILES:
+            if profile == BASELINE or profile not in row or base is None:
+                continue
+            new = row[profile]
 
-            def change(key):
-                return None if not old[key] else round((new[key] - old[key]) / old[key] * 100, 1)
+            def change(key, new=new):
+                return None if not base[key] else round((new[key] - base[key]) / base[key] * 100, 1)
 
-            row["change_pct"] = {
+            row[f"{profile}_vs_{BASELINE}_pct"] = {
                 "seconds": change("seconds_median"),
                 "statements": change("statements_median"),
                 "rows_written": change("rows_written_median"),

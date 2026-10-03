@@ -21,6 +21,7 @@ from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySiblings,
     LockedStudyAuthoritySubject,
     StudyAuthorityRoute,
+    is_consolidated,
 )
 from app.services.study_authority_cas_service import (
     StudyAuthorityCASExpectation,
@@ -199,6 +200,8 @@ def freeze_study_algorithm_history_cut(
     subject = locked.subject
     subject_id = verified.subject_id
     generation = verified.subject_generation
+    # CONSOLIDATED_V1 (ADR P10): no contributors; the row carries completeness.
+    consolidated = is_consolidated(route)
     if (
         not isinstance(siblings, LockedStudyAuthoritySiblings)
         or not isinstance(compatibility, LockedStudyAuthorityCompatibility)
@@ -208,14 +211,17 @@ def freeze_study_algorithm_history_cut(
         or compatibility.subject_id != subject_id
         or siblings.subject_generation != generation
         or compatibility.subject_generation != generation
-        or set(siblings.card_ids) != set(compatibility.contributor_by_card_id)
+        or (
+            not consolidated
+            and set(siblings.card_ids) != set(compatibility.contributor_by_card_id)
+        )
     ):
         raise StudyAlgorithmHistoryCutError(
             "INCOMPLETE_HISTORY_CUT_LOCKS",
             "History cut requires the full locked sibling and compatibility vectors.",
         )
 
-    contributor_rows = tuple(
+    contributor_rows = () if consolidated else tuple(
         session.execute(
             select(StudyProgressContributor)
             .where(StudyProgressContributor.subject_id == subject_id)
@@ -319,7 +325,11 @@ def freeze_study_algorithm_history_cut(
         card_id.encode("utf-8"): int(row.id)
         for card_id, row in compatibility.contributor_by_card_id.items()
     }
-    if (
+    if consolidated:
+        # Same blocker code: initializer policies key on it, not on storage.
+        if subject.history_completeness_code != "HISTORY_NATIVE_COMPLETE":
+            blockers.add("CONTRIBUTOR_HISTORY_INCOMPLETE")
+    elif (
         len(current_contributors) != int(subject.contributor_count)
         or {int(row.id) for row in current_contributors} != expected_contributor_ids
         or len(current_contributors) != len(siblings.card_ids)
@@ -576,10 +586,14 @@ def freeze_study_algorithm_history_cut(
 
     digest = hashlib.sha256()
     subject_row = _freeze_row(subject, field_name="StudyProgressSubject")
-    token_row = _freeze_row(locked.token, field_name="StudyAuthoritySubjectToken")
+    # Under CONSOLIDATED_V1 the subject row already binds token and state.
+    token_row = (
+        None if consolidated
+        else _freeze_row(locked.token, field_name="StudyAuthoritySubjectToken")
+    )
     state_row = (
         _freeze_row(locked.state, field_name="StudyProgressState")
-        if locked.state is not None
+        if locked.state is not None and not consolidated
         else None
     )
     _append_cut_material(
@@ -617,7 +631,7 @@ def freeze_study_algorithm_history_cut(
                 if current_state_document is not None else None
             ),
             "subject_row_hash": subject_row.digest.hex(),
-            "token_row_hash": token_row.digest.hex(),
+            "token_row_hash": token_row.digest.hex() if token_row else None,
             "state_row_hash": state_row.digest.hex() if state_row else None,
             "blocker_codes": sorted(blockers),
         },

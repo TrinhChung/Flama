@@ -29,6 +29,7 @@ from app.services.study_authority_read_service import (
     StudyAuthorityCardRead,
     load_study_authority_card_reads,
 )
+from app.services.study_progress_contract import CONSOLIDATED_STORAGE_PROFILE
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
 from models import db
@@ -341,7 +342,11 @@ def _load_canonical_scope_reads(
                 StudyProgressSubject.learner_user_id == user_id,
                 StudyProgressSubject.live_note_id == Card.note_id,
             ),
-        ).join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
+        )
+        if storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+            query = query.filter(StudyProgressSubject.semantic_state_hash.isnot(None))
+        else:
+            query = query.join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
     if scope_deck_ids is not None:
         if not scope_deck_ids:
             return [], {}

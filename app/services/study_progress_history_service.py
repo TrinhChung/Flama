@@ -76,7 +76,9 @@ class StudyProgressHistoryError(RuntimeError):
 class NativeHistoryFactInput:
     learner_user_id: int
     subject: StudyProgressSubject
-    contributor: StudyProgressContributor
+    # None under CONSOLIDATED_V1 (ADR P10 §2.4): the fact keys its Card by
+    # logical identity on the subject generation, not by a contributor row.
+    contributor: StudyProgressContributor | None
     review_event: ReviewEvent
     history_completeness_code: str
     before_state_hash: str | bytes | None = None
@@ -244,7 +246,7 @@ def append_native_history_fact(
     subject = command.subject
     contributor = command.contributor
     event = command.review_event
-    if subject.id is None or contributor.id is None or event.id is None:
+    if subject.id is None or event.id is None or (contributor is not None and contributor.id is None):
         raise _fail(
             "UNFLUSHED_HISTORY_EVIDENCE",
             "Subject, contributor and ReviewEvent must be persisted before history append.",
@@ -260,32 +262,51 @@ def append_native_history_fact(
             "ReviewEvent belongs to another learner.",
         )
     generation = int(subject.subject_generation)
-    if generation < 1 or int(contributor.subject_generation) != generation:
+    if generation < 1:
         raise _fail(
             "HISTORY_GENERATION_MISMATCH",
-            "History contributor generation differs from its subject.",
-        )
-    if int(contributor.subject_id) != int(subject.id):
-        raise _fail(
-            "HISTORY_CONTRIBUTOR_MISMATCH",
-            "History contributor belongs to another subject.",
-        )
-    if str(contributor.contributor_status) != "ACTIVE":
-        raise _fail(
-            "HISTORY_CONTRIBUTOR_INACTIVE",
-            "History contributor is not active.",
+            "History subject generation must be positive.",
         )
     logical_card_key = str(event.card_id or "").strip()
     if not logical_card_key:
         raise _fail("INVALID_HISTORY_CONTEXT", "ReviewEvent has no Card identity.")
-    if (
-        bytes(contributor.logical_card_key) != logical_card_key.encode("utf-8")
-        or str(contributor.live_card_id or "") != logical_card_key
-    ):
-        raise _fail(
-            "HISTORY_CARD_MISMATCH",
-            "ReviewEvent Card differs from its active contributor.",
-        )
+    if contributor is not None:
+        if int(contributor.subject_generation) != generation:
+            raise _fail(
+                "HISTORY_GENERATION_MISMATCH",
+                "History contributor generation differs from its subject.",
+            )
+        if int(contributor.subject_id) != int(subject.id):
+            raise _fail(
+                "HISTORY_CONTRIBUTOR_MISMATCH",
+                "History contributor belongs to another subject.",
+            )
+        if str(contributor.contributor_status) != "ACTIVE":
+            raise _fail(
+                "HISTORY_CONTRIBUTOR_INACTIVE",
+                "History contributor is not active.",
+            )
+        if (
+            bytes(contributor.logical_card_key) != logical_card_key.encode("utf-8")
+            or str(contributor.live_card_id or "") != logical_card_key
+        ):
+            raise _fail(
+                "HISTORY_CARD_MISMATCH",
+                "ReviewEvent Card differs from its active contributor.",
+            )
+    else:
+        # No contributor row: the reviewed Card must still belong to the subject's live Note.
+        from models.card import Card
+
+        card_note_id = event.note_id or session.execute(
+            select(Card.note_id).where(Card.id == logical_card_key)
+        ).scalar_one_or_none()
+        if not subject.live_note_id or str(card_note_id or "") != str(subject.live_note_id):
+            raise _fail(
+                "HISTORY_CARD_MISMATCH",
+                "ReviewEvent Card is outside the subject's live Note.",
+            )
+    contributor_id = int(contributor.id) if contributor is not None else None
     completeness = str(command.history_completeness_code or "")
     if completeness not in HISTORY_COMPLETENESS_CODES:
         raise _fail(
@@ -381,7 +402,7 @@ def append_native_history_fact(
             or bytes(existing.fact_payload_hash) != fact_document.digest
             or existing.subject_id != int(subject.id)
             or existing.subject_generation != generation
-            or existing.contributor_id != int(contributor.id)
+            or existing.contributor_id != contributor_id
             or bytes(existing.logical_note_key or b"") != logical_note_key
             or bytes(existing.logical_card_key) != encoded_card_key
             or existing.history_completeness_code != completeness
@@ -428,7 +449,7 @@ def append_native_history_fact(
         subject_id=int(subject.id),
         logical_note_key=logical_note_key,
         subject_generation=generation,
-        contributor_id=int(contributor.id),
+        contributor_id=contributor_id,
         logical_card_key=encoded_card_key,
         review_event_id=int(event.id),
         fact_identity_hash=fact_identity,

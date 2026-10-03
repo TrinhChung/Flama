@@ -61,14 +61,31 @@ def _burial_anchors(burial: NoteCardBurial) -> tuple[bool, int | None]:
     return burial.is_buried, until
 
 
-def project_note_card(
+@dataclass(frozen=True)
+class NoteStateProjection:
+    """The Note-level part of a projection: every sibling Card shares it."""
+
+    algorithm_state_hash: bytes
+    semantic_state_hash: bytes
+    projection_version: str
+    normalized_queue: str
+    due_at: datetime | None
+    due_day: int | None
+    is_suspended: bool
+    is_buried: bool
+    buried_until_day: int | None
+    state_schema_version: str
+
+
+def project_note_state(
     state_payload: Mapping[str, Any],
     *,
     burial: NoteCardBurial,
-    card_id: str,
-    card_created_at: datetime,
-) -> NoteCardProjection:
-    """Return what ``map_card_progress`` derives for this Card, from state alone."""
+) -> NoteStateProjection:
+    """Availability anchors and semantic hash of one Note state (ADR P10 §2.2).
+
+    Nothing here depends on a Card: siblings differ only in their order key.
+    """
 
     if not isinstance(state_payload, Mapping):
         raise StudyProgressCodecError(
@@ -103,12 +120,6 @@ def project_note_card(
             "INVALID_STATE_VALUE", "due_day must be null or non-negative."
         )
     is_buried, buried_until_day = _burial_anchors(burial)
-    encoded_card_key = encode_identity(card_id, max_bytes=144, field_name="card_order_key")
-    if not isinstance(card_created_at, datetime):
-        raise StudyProgressCodecError(
-            "MISSING_CARD_CREATED_AT", "A projected Card requires Card.created_at."
-        )
-
     algorithm_hash = algorithm_state_hash(payload)
     semantic_anchors = {
         "algorithm_state_hash": algorithm_hash.hex(),
@@ -126,21 +137,50 @@ def project_note_card(
     semantic_hash = canonical_document(
         semantic_anchors, too_large_code="STATE_PAYLOAD_TOO_LARGE"
     ).digest
-    return NoteCardProjection(
+    return NoteStateProjection(
         algorithm_state_hash=algorithm_hash,
         semantic_state_hash=semantic_hash,
+        projection_version=PROJECTION_VERSION,
+        normalized_queue=queue,
+        due_at=due_at,
+        due_day=due_day,
+        is_suspended=suspended,
+        is_buried=is_buried,
+        buried_until_day=buried_until_day,
+        state_schema_version=STATE_SCHEMA_VERSION,
+    )
+
+
+def project_note_card(
+    state_payload: Mapping[str, Any],
+    *,
+    burial: NoteCardBurial,
+    card_id: str,
+    card_created_at: datetime,
+) -> NoteCardProjection:
+    """Return what ``map_card_progress`` derives for this Card, from state alone."""
+
+    note = project_note_state(state_payload, burial=burial)
+    encoded_card_key = encode_identity(card_id, max_bytes=144, field_name="card_order_key")
+    if not isinstance(card_created_at, datetime):
+        raise StudyProgressCodecError(
+            "MISSING_CARD_CREATED_AT", "A projected Card requires Card.created_at."
+        )
+    return NoteCardProjection(
+        algorithm_state_hash=note.algorithm_state_hash,
+        semantic_state_hash=note.semantic_state_hash,
         availability=AvailabilityProjection(
-            projection_version=PROJECTION_VERSION,
-            normalized_queue=queue,
-            due_at=due_at,
-            due_day=due_day,
-            is_suspended=suspended,
-            is_buried=is_buried,
-            buried_until_day=buried_until_day,
+            projection_version=note.projection_version,
+            normalized_queue=note.normalized_queue,
+            due_at=note.due_at,
+            due_day=note.due_day,
+            is_suspended=note.is_suspended,
+            is_buried=note.is_buried,
+            buried_until_day=note.buried_until_day,
             card_created_at=card_created_at,
             card_order_key=encoded_card_key,
-            state_schema_version=STATE_SCHEMA_VERSION,
-            semantic_state_hash=semantic_hash,
+            state_schema_version=note.state_schema_version,
+            semantic_state_hash=note.semantic_state_hash,
         ),
     )
 

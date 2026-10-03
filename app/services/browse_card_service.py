@@ -17,6 +17,7 @@ from app.repositories import browse_card_repository, note_analytics_read_reposit
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
+    is_consolidated,
     lock_study_authority_route,
 )
 from app.repositories import study_repository
@@ -356,10 +357,25 @@ def _load_mode_aware_browse_progress(
     )
 
 
-def _join_note_availability(query, *, learner_user_id: int):
+def _join_note_availability(query, *, learner_user_id: int, consolidated: bool = False):
     """Outer-join each Card's ACTIVE availability; expose CardProgress-named columns."""
 
     subject = aliased(StudyProgressSubject)
+    if consolidated:
+        # ADR P10 §2.7: the Note's row holds availability for all its Cards.
+        query = query.outerjoin(subject, db.and_(
+            subject.learner_user_id == int(learner_user_id),
+            subject.live_note_id == Card.note_id,
+        ))
+        return query, SimpleNamespace(
+            id=case((subject.semantic_state_hash.isnot(None), subject.id), else_=None),
+            queue=subject.normalized_queue,
+            due_at=subject.due_at,
+            due_day=subject.due_day,
+            is_suspended=subject.is_suspended,
+            is_buried=subject.is_buried,
+            buried_until_day=subject.buried_until_day,
+        )
     contributor = aliased(StudyProgressContributor)
     availability = aliased(StudyProgressAvailability)
     query = (
@@ -481,7 +497,9 @@ def list_browse_cards(
     ):
         # CANONICAL_V1 froze card_progress: status and due order come from the
         # learner's availability row (verified below), NULL for pristine Notes.
-        query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
+        query, progress_alias = _join_note_availability(
+            query, learner_user_id=user_id, consolidated=is_consolidated(authority_route),
+        )
     else:
         progress_alias = aliased(CardProgress)
         query = query.outerjoin(progress_alias, db.and_(
@@ -790,7 +808,8 @@ def list_browse_cards(
         worst = int(db.session.execute(select(func.max(verified.c.violation))).scalar() or 0)
         if not worst:
             worst = note_analytics_read_repository.subject_vector_violation(
-                db.session, scope=candidate_scope, learner_user_id=user_id
+                db.session, scope=candidate_scope, learner_user_id=user_id,
+                storage_profile=authority_route.storage_profile,
             )
         violation = note_analytics_read_repository.violation_error(worst)
         if violation is not None:

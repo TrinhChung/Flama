@@ -77,7 +77,7 @@ Gate: writer matrix ở ADR §5.3; mỗi câu trả lời một UPDATE tiến đ
 
 ### P10-07 — Switch
 
-- `flask study-storage-profile-switch --target CONSOLIDATED_V1` (dry-run mặc định): blocker (batch chưa xong, learner không NOTE, release chưa hỗ trợ), một UPDATE JOIN chép state/token/availability/contributor sang dòng subject, kiểm đối chiếu 100% (đếm, hash, revision, availability tính lại từ state), tăng epoch, khóa độc quyền dòng profile.
+- `flask study-consolidated-switch` (dry-run mặc định, `--apply` để chuyển): blocker (batch chưa xong, learner không NOTE, release chưa hỗ trợ), một UPDATE JOIN chép state/token/availability/contributor sang dòng subject, kiểm đối chiếu 100% (đếm, hash, revision, availability tính lại từ state), tăng epoch, khóa độc quyền dòng profile.
 - Rehearsal trên `pre-p906` dump khôi phục (sau switch P9-06 rồi switch P10), workload probe, read audit hai learner, lease v4 qua switch.
 - Runbook `P10_CONSOLIDATED_SWITCH_RUNBOOK.md`.
 
@@ -87,7 +87,7 @@ Deploy release hỗ trợ hai profile → backup có watermark → freeze → sw
 
 ### P10-09 — Contraction (cần duyệt phạm vi)
 
-Gỡ nhánh `CANONICAL_V1`, công cụ P4 (mirror, backfill, reconciliation), đổi profile mặc định của test, migration drop bốn bảng + lineage ref + backfill + lifecycle event sau archive, bỏ cột envelope cũ. Gỡ `card_progress`, LEGACY, `PROJECTION_V1` là quyết định riêng (phạm vi compatibility đã giữ ở P9).
+Gỡ nhánh `CANONICAL_V1`, công cụ P4 (mirror, backfill, reconciliation), đổi profile mặc định của test, migration drop bốn bảng + lineage ref + bảng backfill sau archive, bỏ cột envelope cũ. `study_progress_lifecycle_events` được giữ (history cut đọc nó). Gỡ `card_progress`, LEGACY, `PROJECTION_V1` là quyết định riêng (phạm vi compatibility đã giữ ở P9).
 
 ## 4. Ước lượng và rủi ro
 
@@ -107,5 +107,14 @@ Rủi ro chính: số entry point lớn trong các file rủi ro cao (`study_ses
 | ID | Trạng thái |
 |---|---|
 | P10-01 | DONE — ADR + kế hoạch |
-| P10-02 | IN PROGRESS |
-| P10-03..P10-09 | TODO |
+| P10-02 | DONE — migration 49, model, profile (commit `6981312`) |
+| P10-03 | DONE — view dòng (`ConsolidatedSubjectToken/State`), `project_note_state`, `study_consolidated_progress_service` |
+| P10-04 | DONE (local) — dashboard, overview, cây deck, `/api/study/next`, Browse, hôm nay/tương lai, reps marketplace, MCP, read audit |
+| P10-05 | DONE (local) — trả lời REST/MCP, phiên v4, batch async, Note mới/enrollment, Template thêm/xóa, reset, xóa Note/deck, đổi thuật toán, Anki/Connect + note-status, overlay |
+| P10-06 | IN PROGRESS — test SQLite có guard bảng cũ xong (`tests/test_study_consolidated_*`); còn probe MySQL, A/B, workload probe |
+| P10-07 | IN PROGRESS — CLI `study-consolidated-switch` + test; còn rehearsal trên bản khôi phục và runbook |
+| P10-08, P10-09 | TODO — cần chủ sản phẩm duyệt |
+
+Đo sơ bộ (SQLite, một câu trả lời REST dưới `CONSOLIDATED_V1`): 46 SQL, trong đó ghi đúng 1 UPDATE tiến độ + 4 INSERT (ReviewEvent, history fact, receipt, audit). 40 SELECT còn lại là đọc lặp ở route và phần xem trước thẻ kế (`cards` ×7, `decks` ×6, `study_progress_subjects` ×6, `users` ×5, enrollment/profile/scheduler settings ×3). Gom các đọc này là hạng mục tối ưu truy vấn tiếp theo, không thuộc gộp bảng.
+
+Ghi chú gate trace: `--profile CONSOLIDATED_V1` ép profile mà không chạy switch, nên các test tự dựng `StudyAuthorityRoute`, ghi thẳng bảng cũ hoặc khẳng định nội tạng bảng cũ vẫn lỗi/được liệt kê (LEGACY, shadow mirror, backfill, reconciliation, startup DDL). Gate thực cho từng writer/reader là các test chạy switch thật và bắt mọi SQL chạm bảng cũ.
