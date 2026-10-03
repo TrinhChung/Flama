@@ -46,7 +46,6 @@ from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 
@@ -268,13 +267,9 @@ def _note_type_purge_scope(
             )
         )
         collect_learner_ids(subject_query)
-    from app.repositories.study_authority_repository import (
-        projection_is_live,
-        read_study_storage_profile,
-    )
+    from app.repositories.study_authority_repository import projection_is_live
 
     projection_live = projection_is_live(db.session)
-    consolidated = read_study_storage_profile(db.session) == "CONSOLIDATED_V1"
     for offset in range(0, len(card_ids), 500):
         card_chunk = card_ids[offset : offset + 500]
         if projection_live:
@@ -282,16 +277,6 @@ def _note_type_purge_scope(
                 db.session.query(CardProgress.user_id).filter(
                     CardProgress.card_id.in_(card_chunk)
                 )
-            )
-        if not consolidated:
-            # CONSOLIDATED_V1: the Note subjects above are the whole progress.
-            collect_learner_ids(
-                db.session.query(StudyProgressSubject.learner_user_id)
-                .join(
-                    StudyProgressContributor,
-                    StudyProgressContributor.subject_id == StudyProgressSubject.id,
-                )
-                .filter(StudyProgressContributor.live_card_id.in_(card_chunk))
             )
         collect_learner_ids(
             db.session.query(StudySession.user_id)

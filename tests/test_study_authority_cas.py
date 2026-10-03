@@ -1,4 +1,4 @@
-"""P5-04 subject-token/state CAS contract remains inert and fail-closed."""
+"""P5-04 CAS contract on the consolidated row (ADR P10): inert and fail-closed."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ from app.services.study_authority_cas_service import (
 )
 from app.services.study_progress_shadow_mapper import MappedCardProgress, map_card_progress
 from models import db
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
 
@@ -117,24 +116,26 @@ class StudyAuthorityCASTests(unittest.TestCase):
         ).scalar_one()
 
     def _add_state(self) -> MappedCardProgress:
-        mapped = _mapped_state()
-        db.session.add(
-            StudyProgressState(
-                subject_id=self.subject_id,
-                subject_generation=1,
-                mirror_revision=3,
-                algorithm_key=mapped.algorithm_key,
-                algorithm_version=mapped.algorithm_version,
-                state_schema_version=mapped.state_schema_version,
-                storage_codec=mapped.storage_codec,
-                state_payload=mapped.state.payload,
-                state_payload_size=mapped.state.size,
-                algorithm_state_hash=mapped.algorithm_state_hash,
-                semantic_state_hash=mapped.semantic_state_hash,
-                created_at=NOW,
-                updated_at=NOW,
-            )
+        from app.services.study_consolidated_progress_service import (
+            apply_note_availability,
+            note_burial,
+            project_subject_state,
         )
+
+        mapped = _mapped_state()
+        subject = db.session.get(StudyProgressSubject, self.subject_id)
+        subject.algorithm_key = mapped.algorithm_key
+        subject.algorithm_version = mapped.algorithm_version
+        subject.state_schema_version = mapped.state_schema_version
+        subject.storage_codec = mapped.storage_codec
+        subject.state_payload = mapped.state.payload
+        subject.state_payload_size = mapped.state.size
+        subject.algorithm_state_hash = mapped.algorithm_state_hash
+        subject.semantic_state_hash = mapped.semantic_state_hash
+        subject.history_completeness_code = "HISTORY_NATIVE_COMPLETE"
+        subject.current_provenance_code = "UNKNOWN_LEGACY"
+        apply_note_availability(
+            subject, project_subject_state(mapped.state.payload, burial=note_burial(subject)), now_utc=NOW)
         db.session.commit()
         return mapped
 
@@ -159,10 +160,10 @@ class StudyAuthorityCASTests(unittest.TestCase):
         values.update(overrides)
         return StudyAuthorityCASExpectation(**values)  # type: ignore[arg-type]
 
-    def test_first_token_initializes_from_exact_existing_state(self):
+    def test_row_is_the_token_of_its_exact_state(self):
         mapped = self._add_state()
         locked = self._lock()
-        self.assertTrue(locked.token_created)
+        self.assertFalse(locked.token_created)
         self.assertEqual(locked.token.authority_revision, 0)
         self.assertEqual(locked.token.semantic_state_hash, mapped.semantic_state_hash)
 
@@ -174,21 +175,21 @@ class StudyAuthorityCASTests(unittest.TestCase):
         self.assertEqual(checked.subject_id, self.subject_id)
         self.assertTrue(checked.has_current_state)
 
-    def test_first_token_without_state_has_null_hash(self):
+    def test_row_without_state_has_null_hash(self):
         locked = self._lock()
         checked = verify_study_authority_cas(
             route=self._route(),
             locked=locked,
             expected=self._expected(),
         )
-        self.assertTrue(locked.token_created)
+        self.assertFalse(locked.token_created)
         self.assertIsNone(locked.token.semantic_state_hash)
         self.assertFalse(checked.has_current_state)
 
-    def test_existing_token_is_locked_without_resetting_revision(self):
+    def test_existing_row_is_locked_without_resetting_revision(self):
         mapped = self._add_state()
-        first = self._lock()
-        first.token.authority_revision = 7
+        self._lock()
+        db.session.get(StudyProgressSubject, self.subject_id).authority_revision = 7
         db.session.commit()
 
         second = self._lock()
@@ -201,7 +202,7 @@ class StudyAuthorityCASTests(unittest.TestCase):
         )
         self.assertEqual(checked.authority_revision, 7)
 
-    def test_wrong_learner_and_generation_divergence_fail_closed(self):
+    def test_wrong_learner_fails_closed(self):
         other_route = StudyAuthorityRoute(
             learner_user_id=self.user_id + 1,
             mode_code="NOTE",
@@ -213,31 +214,23 @@ class StudyAuthorityCASTests(unittest.TestCase):
         self.assertEqual(wrong_learner.exception.code, "WRONG_LEARNER")
         db.session.rollback()
 
-        token = self._lock().token
-        token.subject_generation = 2
+    def test_state_that_its_hashes_do_not_describe_fails_closed(self):
+        mapped = self._add_state()
+        subject = db.session.get(StudyProgressSubject, self.subject_id)
+        subject.algorithm_state_hash = b"x" * 32
         db.session.commit()
-        with self.assertRaises(StudyAuthorityFenceError) as generation:
-            self._lock()
-        self.assertEqual(generation.exception.code, "AUTHORITY_GENERATION_DIVERGED")
-
-    def test_state_token_and_mirror_divergence_fail_closed(self):
-        self._add_state()
-        locked = self._lock()
-        locked.token.semantic_state_hash = b"x" * 32
-        db.session.commit()
-        with self.assertRaises(StudyAuthorityFenceError) as hash_failure:
-            self._lock()
-        self.assertEqual(hash_failure.exception.code, "AUTHORITY_STATE_DIVERGED")
+        with self.assertRaises(StudyAuthorityCASError) as decoder_failure:
+            verify_study_authority_cas(route=self._route(), locked=self._lock(), expected=self._expected(mapped))
+        self.assertEqual(decoder_failure.exception.code, "STATE_HASH_MISMATCH")
         db.session.rollback()
 
-        token = db.session.get(type(locked.token), self.subject_id)
-        token.semantic_state_hash = _mapped_state().semantic_state_hash
-        state = db.session.get(StudyProgressState, self.subject_id)
-        state.mirror_revision = 2
+        subject = db.session.get(StudyProgressSubject, self.subject_id)
+        subject.algorithm_state_hash = mapped.algorithm_state_hash
+        subject.state_payload_size = int(subject.state_payload_size) + 1
         db.session.commit()
-        with self.assertRaises(StudyAuthorityFenceError) as revision_failure:
-            self._lock()
-        self.assertEqual(revision_failure.exception.code, "AUTHORITY_STATE_DIVERGED")
+        with self.assertRaises(StudyAuthorityCASError) as size_failure:
+            verify_study_authority_cas(route=self._route(), locked=self._lock(), expected=self._expected(mapped))
+        self.assertEqual(size_failure.exception.code, "STATE_HASH_MISMATCH")
 
     def test_each_cas_component_has_a_distinct_conflict(self):
         mapped = self._add_state()

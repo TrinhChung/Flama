@@ -4,6 +4,8 @@
 
 **Đã thực hiện 2026-10-03:** T0 `2026-10-03T06:38:52Z`, `CONSOLIDATED_V1`, epoch 3, freeze 67 giây. Xem [báo cáo cutover](../task/decoupling/P10_08_CUTOVER_REPORT_2026-10-03.md). Lệnh `--apply` lần sau bị từ chối (`PROFILE_NOT_CANONICAL`); không cần chạy lại cho user/Note tạo sau T0.
 
+**Đã gỡ ở P10-09 (contraction):** lệnh `study-consolidated-switch` không còn trong release; release chỉ phục vụ `CONSOLIDATED_V1` (DB không có dòng profile = cài mới `CONSOLIDATED_V1`, DB còn `PROJECTION_V1`/`CANONICAL_V1` bị từ chối). Runbook này chỉ còn là hồ sơ lịch sử.
+
 Helper `flama_cli` như trong [P5 runbook](./P5_NOTE_AUTHORITY_RUNBOOK.md).
 
 ## 1. Điều kiện trước (ngày hôm trước)

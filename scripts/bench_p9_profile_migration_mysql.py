@@ -43,7 +43,7 @@ if str(ROOT_DIR) not in sys.path:
 from app import create_app  # noqa: E402
 from app.services.study_progress_contract import CONTRIBUTOR_RAW_EVIDENCE_COLUMNS  # noqa: E402
 from models import db  # noqa: E402
-from scripts.probe_phase4_shadow_schema_mysql import (  # noqa: E402
+from scripts.mysql_probe_db import (  # noqa: E402
     _connection_settings, _database_uri, _source_database_collation,
 )
 

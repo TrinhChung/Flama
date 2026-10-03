@@ -297,13 +297,9 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 db.session.get(StudySession, other_session_id).status,
                 "open",
             )
-            subject = StudyProgressSubject.query.one()
-            self.assertEqual(subject.learner_user_id, self.admin_id)
-            self.assertEqual(subject.status_code, "TOMBSTONED_RESET")
-            self.assertEqual((subject.subject_generation, subject.mirror_revision), (2, 1))
-            lifecycle = StudyProgressLifecycleEvent.query.one()
-            self.assertEqual(lifecycle.transition_code, "TOMBSTONED_RESET")
-            self.assertEqual((lifecycle.old_generation, lifecycle.new_generation), (1, 2))
+            # LEGACY progress lives only in card_progress (P10-09): no row, no lifecycle event.
+            self.assertEqual(StudyProgressSubject.query.count(), 0)
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_non_admin_owner_can_reset_owned_deck_without_clone_install(self):
         with self.app.app_context():

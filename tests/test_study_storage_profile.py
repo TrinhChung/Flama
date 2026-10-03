@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 import importlib
 import unittest
-from unittest import mock
 
 from alembic import op
 from alembic.migration import MigrationContext
@@ -145,25 +144,19 @@ class StudyStorageProfileTests(unittest.TestCase):
         db.session.add(self._contributor(b"card-2", evidence_kind="CANONICAL", **NO_RAW))
         db.session.commit()
 
-    def test_absent_profile_row_means_projection(self):
+    def test_absent_profile_row_means_a_fresh_consolidated_install(self):
         self._enroll_note()
-        self.assertEqual(read_study_storage_profile(db.session), "PROJECTION_V1")
+        self.assertEqual(read_study_storage_profile(db.session), "CONSOLIDATED_V1")
         route = lock_study_authority_route(
             db.session, learner_user_id=self.user.id, allow_note_authority=True
         )
-        self.assertEqual((route.mode_code, route.storage_profile), ("NOTE", "PROJECTION_V1"))
+        self.assertEqual((route.mode_code, route.storage_profile), ("NOTE", "CONSOLIDATED_V1"))
         db.session.rollback()
 
     def test_release_refuses_note_routes_under_an_unsupported_profile(self):
         self._enroll_note()
+        # A database still on a profile retired by P10-09 fails closed.
         self._set_profile("CANONICAL_V1")
-        # A release older than P9-05d (rollback past the switch) fails closed.
-        old_release = mock.patch(
-            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES",
-            frozenset({"PROJECTION_V1"}),
-        )
-        old_release.start()
-        self.addCleanup(old_release.stop)
         for resolve in (
             lambda: lock_study_authority_route(
                 db.session, learner_user_id=self.user.id, allow_note_authority=True
@@ -176,9 +169,13 @@ class StudyStorageProfileTests(unittest.TestCase):
             db.session.rollback()
 
     def test_legacy_routes_ignore_the_profile(self):
+        from app.repositories.study_authority_repository import is_consolidated
+
         self._set_profile("CANONICAL_V1")
         route = lock_study_authority_route(db.session, learner_user_id=self.user.id)
-        self.assertEqual((route.mode_code, route.storage_profile), ("LEGACY", "PROJECTION_V1"))
+        self.assertEqual(route.mode_code, "LEGACY")
+        # LEGACY progress lives only in card_progress, whatever the profile.
+        self.assertFalse(is_consolidated(route))
         db.session.rollback()
 
     def test_profile_row_is_a_checked_singleton(self):

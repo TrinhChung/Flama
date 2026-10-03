@@ -16,7 +16,6 @@ from sqlalchemy.exc import IntegrityError
 from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySiblings,
     StudyAuthorityRoute,
-    is_consolidated,
     lock_study_authority_compatibility,
     lock_study_authority_route,
     lock_study_authority_siblings,
@@ -24,21 +23,9 @@ from app.repositories.study_authority_repository import (
 from app.repositories.review_event_repository import create_review_event_record
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
-from app.services import study_progress_shadow_mirror_service
+from app.services import study_consolidated_progress_service as consolidated_progress
 from app.services.study_authority_cas_service import StudyAuthorityCASExpectation
-from app.services.study_authority_projection_encoder import (
-    LegacyProjectionMetadata,
-    LegacySiblingBaseline,
-    encode_note_state_to_legacy_cards,
-)
-from app.services.study_authority_write_service import (
-    StudyAuthorityStateWrite,
-    apply_study_authority_material_write,
-)
-from app.services.study_progress_shadow_codec import (
-    RAW_CARD_PROGRESS_FIELDS,
-    serialize_raw_card_progress,
-)
+from app.services.study_authority_write_service import StudyAuthorityStateWrite
 from app.services.study_progress_shadow_mapper import MappingFailure, map_card_progress
 from app.services.study_session_authority_pin_service import (
     lock_study_session_authority_subjects,
@@ -375,22 +362,13 @@ def _lock_note_source_card_refs(
     return requested_card, refs
 
 
-def _note_progress_snapshot_contexts(
-    *,
-    siblings: LockedStudyAuthoritySiblings,
-    requested_card_id: str,
-    source_card: ConnectSourceCardRef,
-    source_note: ConnectSourceNoteRef,
-) -> dict[str, study_progress_shadow_mirror_service.ExternalProgressMirrorContext]:
-    return {
-        str(card.id): study_progress_shadow_mirror_service.ExternalProgressMirrorContext(
-            provenance_code="CONNECT_PROGRESS_SNAPSHOT",
-            history_completeness_code="HISTORY_SNAPSHOT_ONLY",
-            source_card_ref=(source_card if str(card.id) == requested_card_id else None),
-            source_note_ref=(source_note if str(card.id) == requested_card_id else None),
-        )
-        for card in siblings.cards
-    }
+def _note_progress_snapshot_context():
+    from app.services.study_consolidated_progress_service import ExternalProgressContext
+
+    return ExternalProgressContext(
+        provenance_code="CONNECT_PROGRESS_SNAPSHOT",
+        history_completeness_code="HISTORY_SNAPSHOT_ONLY",
+    )
 
 
 def _apply_note_authority_progress_snapshot(
@@ -446,182 +424,20 @@ def _apply_note_authority_progress_snapshot(
         locked=locked,
         siblings=siblings,
     )
-    if route.storage_profile != "PROJECTION_V1":
-        return _apply_canonical_progress_snapshot(
-            session,
-            route=route,
-            requested_card=requested_card,
-            source_card=source_card,
-            sibling_source_refs=sibling_source_refs,
-            source_note=source_note,
-            record=record,
-            now_utc=now_utc,
-            locked=locked,
-            siblings=siblings,
-            compatibility=compatibility,
-            control=control,
-            previous_snapshot_hash=previous_snapshot_hash,
-        )
-    progress = siblings.progress_by_card_id[str(requested_card.id)]
-
-    # A newly discovered external Card has no accepted local revision yet. Its
-    # first snapshot is allowed to establish lineage from the already-enrolled
-    # NOTE state. Once a source snapshot exists, the local revision is a real
-    # optimistic-concurrency fence.
-    local_diverged = previous_snapshot_hash is not None and (
-        source_card.applied_local_revision is None
-        or int(progress.revision or 0) != int(source_card.applied_local_revision)
-    )
-    same_snapshot = previous_snapshot_hash == control.snapshot_hash
-    force_reapply = control.force and local_diverged
-    if same_snapshot and not force_reapply:
-        return "unchanged", "PROGRESS_UNCHANGED", control.legacy_unversioned
-    if (
-        control.base_snapshot_supplied
-        and (control.base_snapshot_hash or "") != (previous_snapshot_hash or "")
-        and not control.force
-    ):
-        return "source_conflict", "SOURCE_SNAPSHOT_CHANGED", control.legacy_unversioned
-    if local_diverged and not control.force:
-        return "local_conflict", "LOCAL_PROGRESS_CHANGED", control.legacy_unversioned
-
-    values = _progress_snapshot_values(session, record)
-    if values is None:
-        return "due_unresolved", "ANKI_DUE_UNRESOLVED", control.legacy_unversioned
-
-    candidate_values = {
-        field_name: getattr(progress, field_name)
-        for field_name in RAW_CARD_PROGRESS_FIELDS
-    }
-    candidate_values.update(values)
-    candidate_values["revision"] = int(progress.revision or 0) + 1
-    candidate_values["updated_at"] = now_utc
-    candidate = SimpleNamespace(**candidate_values)
-    mapped = map_card_progress(
-        candidate,
-        card_created_at=requested_card.created_at,
-        card_order_key=str(requested_card.id),
-    )
-    if isinstance(mapped, MappingFailure):
-        raise AnkiProgressConflict(
-            mapped.code,
-            f"Anki snapshot cannot become NOTE authority: {mapped.message}",
-        )
-
-    mirror_plan = study_progress_shadow_mirror_service.compose_locked_lifecycle_plan(
-        db.session,
-        learner_user_id=session.user_id,
-        note_id=str(requested_card.note_id),
-        subject=locked.subject,
-        cards=siblings.cards,
-        progress_rows=siblings.progress_by_card_id.values(),
-        prepared_at=now_utc,
-    )
-    contexts = _note_progress_snapshot_contexts(
-        siblings=siblings,
-        requested_card_id=str(requested_card.id),
-        source_card=source_card,
-        source_note=source_note,
-    )
-    current_semantic_hash = (
-        bytes(locked.token.semantic_state_hash)
-        if locked.token.semantic_state_hash is not None
-        else None
-    )
-    if current_semantic_hash is None:
-        raise AnkiProgressConflict(
-            "AUTHORITY_STATE_REQUIRED",
-            "NOTE authority has no current state for the imported snapshot.",
-        )
-
-    source_card.snapshot_hash = control.snapshot_hash
-    if mapped.semantic_state_hash == current_semantic_hash:
-        source_card.applied_local_revision = int(progress.revision or 0)
-        study_progress_shadow_mirror_service.finalize_external_progress_mirror(
-            mirror_plan,
-            applied_contexts={str(requested_card.id): contexts[str(requested_card.id)]},
-            now_utc=now_utc,
-        )
-        return (
-            "applied",
-            "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
-            control.legacy_unversioned,
-        )
-
-    state_write = StudyAuthorityStateWrite(
-        algorithm_key=mapped.algorithm_key,
-        algorithm_version=mapped.algorithm_version,
-        state_schema_version=mapped.state_schema_version,
-        storage_codec=mapped.storage_codec,
-        state_payload=mapped.state.payload,
-        state_payload_size=mapped.state.size,
-        algorithm_state_hash=mapped.algorithm_state_hash,
-    )
-    baselines: list[LegacySiblingBaseline] = []
-    for card in siblings.cards:
-        sibling_progress = siblings.progress_by_card_id[str(card.id)]
-        raw = serialize_raw_card_progress(sibling_progress)
-        baselines.append(
-            LegacySiblingBaseline(
-                card_id=str(card.id),
-                expected_base_revision=int(sibling_progress.revision or 0),
-                card_created_at=card.created_at,
-                raw_payload=raw.payload,
-                raw_payload_size=raw.size,
-                raw_payload_hash=raw.digest,
-                projected_last_review_event_id=sibling_progress.last_review_event_id,
-            )
-        )
-    projection = encode_note_state_to_legacy_cards(
-        expected_learner_user_id=session.user_id,
-        algorithm_key=mapped.algorithm_key,
-        algorithm_version=mapped.algorithm_version,
-        state_schema_version=mapped.state_schema_version,
-        storage_codec=mapped.storage_codec,
-        state_payload=mapped.state.payload,
-        expected_state_payload_size=mapped.state.size,
-        expected_algorithm_state_hash=mapped.algorithm_state_hash,
-        metadata=LegacyProjectionMetadata(
-            interval_days_rounded=int(candidate.interval_days),
-            is_buried=bool(candidate.is_buried),
-            buried_until_day=candidate.buried_until_day,
-            last_leech_at=candidate.last_leech_at,
-            last_leech_lapses=int(candidate.last_leech_lapses),
-            projected_at=now_utc,
-        ),
-        siblings=tuple(baselines),
-    )
-    write = apply_study_authority_material_write(
-        db.session,
+    return _apply_canonical_progress_snapshot(
+        session,
         route=route,
+        requested_card=requested_card,
+        source_card=source_card,
+        sibling_source_refs=sibling_source_refs,
+        source_note=source_note,
+        record=record,
+        now_utc=now_utc,
         locked=locked,
-        expected=StudyAuthorityCASExpectation(
-            enrollment_epoch=route.epoch,
-            subject_generation=int(locked.subject.subject_generation),
-            authority_revision=int(locked.token.authority_revision),
-            semantic_state_hash=current_semantic_hash,
-        ),
-        next_state=state_write,
         siblings=siblings,
-        projection=projection,
-        now_utc=now_utc,
-    )
-    projected_by_card_id = {
-        str(row.card_id): row for row in write.projected_progress
-    }
-    for source_ref in sibling_source_refs:
-        projected = projected_by_card_id.get(str(source_ref.card_id))
-        if projected is not None:
-            source_ref.applied_local_revision = int(projected.revision or 0)
-    study_progress_shadow_mirror_service.finalize_external_progress_mirror(
-        mirror_plan,
-        applied_contexts=contexts,
-        now_utc=now_utc,
-    )
-    return (
-        "applied",
-        "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
-        control.legacy_unversioned,
+        compatibility=compatibility,
+        control=control,
+        previous_snapshot_hash=previous_snapshot_hash,
     )
 
 
@@ -707,7 +523,7 @@ def _apply_canonical_progress_snapshot(
     control,
     previous_snapshot_hash: str | None,
 ) -> tuple[str, str, bool]:
-    """CANONICAL_V1 snapshot apply; the fence is the Note authority revision.
+    """Snapshot apply on the Note's row; the fence is its authority revision.
 
     A ref without a confirmed authority revision (projection-era refs the
     switch could not map, ``NEEDS_CONFIRMATION``) is confirmed when the
@@ -715,12 +531,8 @@ def _apply_canonical_progress_snapshot(
     unless forced (ADR P9-03 §2.6).
     """
 
-    from app.services.study_authority_evidence_service import (
-        finalize_canonical_external_evidence,
-    )
     from app.services.study_authority_write_service import apply_study_authority_canonical_write
-    from app.services import study_consolidated_progress_service as consolidated_progress
-    from app.services.study_note_card_projection import NoteCardBurial, project_note_card
+    from app.services.study_note_card_projection import NoteCardBurial
 
     if locked.state is None or locked.token.semantic_state_hash is None:
         raise AnkiProgressConflict(
@@ -751,13 +563,8 @@ def _apply_canonical_progress_snapshot(
     values = _progress_snapshot_values(session, record)
     if values is None:
         return "due_unresolved", "ANKI_DUE_UNRESOLVED", control.legacy_unversioned
-    consolidated = is_consolidated(route)
-    if consolidated:
-        # ADR P10: the Note's burial anchors are on its own row.
-        availability = locked.subject
-    else:
-        contributor = compatibility.contributor_by_card_id[str(requested_card.id)]
-        availability = compatibility.availability_by_contributor_id[int(contributor.id)]
+    # ADR P10: the Note's burial anchors are on its own row.
+    availability = locked.subject
     candidate_values = _state_progress_values(
         state_payload=dict(locked.state.state_payload),
         availability=availability,
@@ -779,56 +586,25 @@ def _apply_canonical_progress_snapshot(
     if mapped.semantic_state_hash != current_semantic_hash and local_diverged and not control.force:
         return "local_conflict", "LOCAL_PROGRESS_CHANGED", control.legacy_unversioned
 
-    contexts = _note_progress_snapshot_contexts(
-        siblings=siblings,
-        requested_card_id=str(requested_card.id),
-        source_card=source_card,
-        source_note=source_note,
+    context = _note_progress_snapshot_context()
+    applied = (
+        "applied",
+        "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
+        control.legacy_unversioned,
     )
     source_card.snapshot_hash = control.snapshot_hash
     if mapped.semantic_state_hash == current_semantic_hash:
         source_card.applied_authority_revision = token_revision
         source_card.applied_local_revision_state = "AUTHORITY"
-        if consolidated:
-            consolidated_progress.finalize_consolidated_external(
-                route=route, locked=locked, context=contexts[str(requested_card.id)],
-                projection=None, now_utc=now_utc)
-            return (
-                "applied",
-                "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
-                control.legacy_unversioned,
-            )
-        finalize_canonical_external_evidence(
-            db.session,
-            route=route,
-            locked=locked,
-            siblings=siblings,
-            compatibility=compatibility,
-            projections_by_card_id=None,
-            applied_contexts={str(requested_card.id): contexts[str(requested_card.id)]},
-            now_utc=now_utc,
-        )
-        return (
-            "applied",
-            "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
-            control.legacy_unversioned,
-        )
+        consolidated_progress.finalize_consolidated_external(
+            route=route, locked=locked, context=context, projection=None, now_utc=now_utc)
+        return applied
 
     burial = NoteCardBurial(
         is_buried=bool(candidate_values["is_buried"]),
         buried_until_day=candidate_values["buried_until_day"],
     )
-    if consolidated:
-        note_projection = consolidated_progress.project_subject_state(mapped.state.payload, burial=burial)
-        semantic_hash = note_projection.semantic_state_hash
-        projections = {str(card.id): note_projection for card in siblings.cards}
-    else:
-        projections = {
-            str(card.id): project_note_card(
-                mapped.state.payload, burial=burial, card_id=str(card.id), card_created_at=card.created_at)
-            for card in siblings.cards
-        }
-        semantic_hash = projections[str(requested_card.id)].semantic_state_hash
+    note_projection = consolidated_progress.project_subject_state(mapped.state.payload, burial=burial)
     write = apply_study_authority_canonical_write(
         db.session,
         route=route,
@@ -848,37 +624,17 @@ def _apply_canonical_progress_snapshot(
             state_payload_size=mapped.state.size,
             algorithm_state_hash=mapped.algorithm_state_hash,
         ),
-        semantic_state_hash=semantic_hash,
+        semantic_state_hash=note_projection.semantic_state_hash,
         now_utc=now_utc,
     )
+    sibling_ids = set(siblings.card_ids)
     for source_ref in sibling_source_refs:
-        if str(source_ref.card_id) in projections:
+        if str(source_ref.card_id) in sibling_ids:
             source_ref.applied_authority_revision = int(write.authority_revision)
             source_ref.applied_local_revision_state = "AUTHORITY"
-    if consolidated:
-        consolidated_progress.finalize_consolidated_external(
-            route=route, locked=locked, context=contexts[str(requested_card.id)],
-            projection=note_projection, now_utc=now_utc)
-        return (
-            "applied",
-            "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
-            control.legacy_unversioned,
-        )
-    finalize_canonical_external_evidence(
-        db.session,
-        route=route,
-        locked=locked,
-        siblings=siblings,
-        compatibility=compatibility,
-        projections_by_card_id=projections,
-        applied_contexts=contexts,
-        now_utc=now_utc,
-    )
-    return (
-        "applied",
-        "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
-        control.legacy_unversioned,
-    )
+    consolidated_progress.finalize_consolidated_external(
+        route=route, locked=locked, context=context, projection=note_projection, now_utc=now_utc)
+    return applied
 
 
 def import_progress(
@@ -928,30 +684,11 @@ def import_progress(
                         )
                     )
                 else:
-                    mirror_plan = (
-                        study_progress_shadow_mirror_service.prepare_native_mirror(
-                            db.session,
-                            learner_user_id=session.user_id,
-                            cards=(requested_card,),
-                        )
-                    )
                     state, code, legacy_unversioned = _apply_progress_snapshot(
                         session,
                         source_card,
                         record,
                     )
-                    if state == "applied":
-                        study_progress_shadow_mirror_service.finalize_external_progress_mirror(
-                            mirror_plan,
-                            applied_contexts={
-                                str(source_card.card_id): study_progress_shadow_mirror_service.ExternalProgressMirrorContext(
-                                    provenance_code="CONNECT_PROGRESS_SNAPSHOT",
-                                    history_completeness_code="HISTORY_SNAPSHOT_ONLY",
-                                    source_card_ref=source_card,
-                                    source_note_ref=source_note_ref,
-                                )
-                            },
-                        )
                 db.session.flush()
             result = {
                 "sourceCardId": external_card_id,
@@ -1165,17 +902,15 @@ def import_reviews(
                     allow_note_authority=True,
                 )
                 history_ingested_at = datetime.utcnow().replace(microsecond=0)
-                shadow_history: list[
-                    study_progress_shadow_mirror_service.ExternalMirrorHistoryEvent
-                ] = []
+                imported_history: list = []
                 for current_record in sorted(
                     card_records,
                     key=lambda item: int(item.get("sourceReviewId") or 0),
                 ):
                     state, ref = _import_review(session, current_record)
                     if state in {"imported", "repaired"} and ref.review_event is not None:
-                        shadow_history.append(
-                            study_progress_shadow_mirror_service.ExternalMirrorHistoryEvent(
+                        imported_history.append(
+                            consolidated_progress.ExternalHistoryEvent(
                                 review_event=ref.review_event,
                                 source_ref=ref,
                                 import_state=state,
@@ -1189,7 +924,8 @@ def import_reviews(
                             "state": state,
                         }
                     )
-                if shadow_history:
+                # History facts are NOTE evidence; LEGACY keeps its ReviewEvents.
+                if imported_history and authority_route.mode_code == "NOTE":
                     source_card = ConnectSourceCardRef.query.filter_by(
                         user_id=session.user_id,
                         source_key=session.source_key,
@@ -1202,51 +938,25 @@ def import_reviews(
                     )
                     if source_card is None or source_card_obj is None:
                         raise AnkiSyncError("source card has not been mapped")
-                    if authority_route.mode_code == "NOTE":
-                        locked_subjects = lock_study_session_authority_subjects(
-                            db.session,
-                            route=authority_route,
-                            logical_note_keys=(str(source_card_obj.note_id),),
-                            now_utc=history_ingested_at,
-                        )
-                        locked = locked_subjects.locked_by_logical_note_key[
-                            str(source_card_obj.note_id)
-                        ]
-                        siblings = lock_study_authority_siblings(
-                            db.session,
-                            route=authority_route,
-                            locked=locked,
-                            requested_card_id=str(source_card_obj.id),
-                        )
-                        lock_study_authority_compatibility(
-                            db.session,
-                            route=authority_route,
-                            locked=locked,
-                            siblings=siblings,
-                        )
-                        mirror_plan = (
-                            study_progress_shadow_mirror_service.compose_locked_lifecycle_plan(
-                                db.session,
-                                learner_user_id=session.user_id,
-                                note_id=str(source_card_obj.note_id),
-                                subject=locked.subject,
-                                cards=siblings.cards,
-                                progress_rows=siblings.progress_by_card_id.values(),
-                                prepared_at=history_ingested_at,
-                            )
-                        )
-                    else:
-                        mirror_plan = (
-                            study_progress_shadow_mirror_service.prepare_native_mirror(
-                                db.session,
-                                learner_user_id=session.user_id,
-                                cards=(source_card_obj,),
-                                now_utc=history_ingested_at,
-                            )
-                        )
-                    study_progress_shadow_mirror_service.append_external_history_facts(
-                        mirror_plan,
-                        history_events=shadow_history,
+                    locked_subjects = lock_study_session_authority_subjects(
+                        db.session,
+                        route=authority_route,
+                        logical_note_keys=(str(source_card_obj.note_id),),
+                        now_utc=history_ingested_at,
+                    )
+                    locked = locked_subjects.locked_by_logical_note_key[str(source_card_obj.note_id)]
+                    siblings = lock_study_authority_siblings(
+                        db.session,
+                        route=authority_route,
+                        locked=locked,
+                        requested_card_id=str(source_card_obj.id),
+                    )
+                    consolidated_progress.append_consolidated_external_history(
+                        db.session,
+                        learner_user_id=session.user_id,
+                        subject=locked.subject,
+                        cards=siblings.cards,
+                        history_events=imported_history,
                         now_utc=history_ingested_at,
                     )
                 db.session.flush()

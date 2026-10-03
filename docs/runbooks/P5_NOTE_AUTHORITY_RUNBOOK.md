@@ -54,6 +54,8 @@ Rollback R0: deploy lại release trước theo workflow. Không downgrade schem
 Làm liền một mạch trong giờ vắng. Enrollment đòi mọi Note đã học có subject Phase 4 ở trạng thái `MIRRORED_*`; production chưa từng chạy backfill nên bước 4.1 là bắt buộc.
 
 ### 4.1 Backfill shadow
+> **Đã gỡ ở P10-09:** mirror shadow và lệnh `study-progress-backfill` không còn trong release; cờ `STUDY_PROGRESS_SHADOW_*` không còn tác dụng. Mục này chỉ còn là hồ sơ R1 lịch sử.
+
 1. Thêm `STUDY_PROGRESS_SHADOW_WRITE_ENABLED=1` và `STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED=1` vào `/etc/flama/flama.env`; `systemctl restart flama.service flama-connect.service`. Từ đây mọi writer LEGACY ghi mirror cùng transaction.
 2. Thử khô: `flama_cli study-progress-backfill` → đọc `source_count`, `quarantined_count`, `unresolvable_count`.
 3. Chạy thật: backfill ghi commit của code vào run, mà thư mục release là `git archive` (không có `.git`), nên truyền SHA của release qua `FLAMA_BUILD_COMMIT` (tên thư mục release chính là SHA):

@@ -6,7 +6,6 @@ import unittest
 from app.repositories.study_authority_repository import lock_study_authority_route
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_authority_read_service import (
-    StudyAuthorityReadError,
     load_study_authority_availability_snapshot,
     load_study_authority_card_reads,
     summarize_study_authority_queue,
@@ -14,7 +13,6 @@ from app.services.study_authority_read_service import (
 from models import db
 from models.card import Card
 from models.note import Note
-from models.study_progress_availability import StudyProgressAvailability
 from tests import test_study_direct_note_replay as fixtures
 
 
@@ -61,18 +59,6 @@ class StudyAvailabilitySnapshotTests(unittest.TestCase):
                                                 learner_user_id=self.user_id, now_utc=now, timezone_name="UTC"),
             )
             db.session.rollback()
-
-    def test_snapshot_fails_closed_on_missing_availability(self):
-        self._answer()
-        with self.app.app_context():
-            db.session.delete(StudyProgressAvailability.query.first())
-            db.session.commit()
-            scope, cards = self._scope_and_cards()
-            with self.assertRaises(StudyAuthorityReadError) as refused:
-                load_study_authority_availability_snapshot(
-                    db.session, learner_user_id=self.user_id, cards=cards, scope=scope,
-                    now_utc=datetime.now(timezone.utc).replace(tzinfo=None))
-            self.assertEqual(refused.exception.code, "INCOMPLETE_AUTHORITY_COMPATIBILITY")
 
 
 if __name__ == "__main__":

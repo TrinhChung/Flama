@@ -11,7 +11,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
-    is_consolidated,
     lock_study_authority_route,
 )
 from app.repositories.deck_tree_query import (
@@ -24,7 +23,6 @@ from models import db
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
 from models.card_progress import CardProgress
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_subject import StudyProgressSubject
 from app.utils.deck_move_token import parse_deck_move_token
 
@@ -155,13 +153,9 @@ def _deck_purge_scope(
             )
         )
     card_ids = tuple(sorted(card_ids_found))
-    from app.repositories.study_authority_repository import (
-        projection_is_live,
-        read_study_storage_profile,
-    )
+    from app.repositories.study_authority_repository import projection_is_live
 
     projection_live = projection_is_live(db.session)
-    consolidated = read_study_storage_profile(db.session) == "CONSOLIDATED_V1"
     for offset in range(0, len(card_ids), 500):
         card_chunk = card_ids[offset : offset + 500]
         if projection_live:
@@ -169,16 +163,6 @@ def _deck_purge_scope(
                 db.session.query(CardProgress.user_id).filter(
                     CardProgress.card_id.in_(card_chunk)
                 )
-            )
-        if not consolidated:
-            # CONSOLIDATED_V1: the Note subjects above are the whole progress.
-            collect_learner_ids(
-                db.session.query(StudyProgressSubject.learner_user_id)
-                .join(
-                    StudyProgressContributor,
-                    StudyProgressContributor.subject_id == StudyProgressSubject.id,
-                )
-                .filter(StudyProgressContributor.live_card_id.in_(card_chunk))
             )
         collect_learner_ids(
             db.session.query(StudySession.user_id)
@@ -618,48 +602,26 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
             session.status = "cancelled"
 
         if authority_route.mode_code == "NOTE":
-            lifecycle_plan = (
-                study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
-                    db.session,
-                    route=authority_route,
-                    removed_card_ids=card_id_set,
-                    starting_ease_by_note_id=starting_ease_by_note_id,
-                )
-            )
-        else:
-            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-                db.session,
-                removed_card_ids=card_id_set,
-                learner_user_ids=(user_id,),
-            )
-        if authority_route.mode_code == "NOTE" and lifecycle_plan is None:
-            db.session.commit()
-            return 0
-        reset_card_ids = (
-            lifecycle_plan.removed_card_ids
-            if authority_route.mode_code == "NOTE"
-            else card_id_set
-        )
-        if is_consolidated(authority_route):
             # ADR P10: progress lives on the Note row; card_progress is frozen.
-            deleted_count = len(reset_card_ids)
-        else:
-            deleted_count = CardProgress.query.filter(
-                CardProgress.user_id == user_id,
-                CardProgress.card_id.in_(sorted(reset_card_ids)),
-            ).delete(synchronize_session=False) or 0
-        if authority_route.mode_code == "NOTE":
+            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_note_authority_reset(
+                db.session,
+                route=authority_route,
+                removed_card_ids=card_id_set,
+                starting_ease_by_note_id=starting_ease_by_note_id,
+            )
+            if lifecycle_plan is None:
+                db.session.commit()
+                return 0
+            deleted_count = len(lifecycle_plan.removed_card_ids)
             study_progress_lifecycle_mirror_service.finalize_note_authority_reset(
                 lifecycle_plan,
                 source_path="deck.progress_reset",
                 operation_key=f"deck-reset:{deck_obj.id}:user:{user_id}",
             )
         else:
-            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-                lifecycle_plan,
-                transition_code="TOMBSTONED_RESET",
-                source_path="deck.progress_reset",
-                operation_key=f"deck-reset:{deck_obj.id}:user:{user_id}",
-            )
+            deleted_count = CardProgress.query.filter(
+                CardProgress.user_id == user_id,
+                CardProgress.card_id.in_(sorted(card_id_set)),
+            ).delete(synchronize_session=False) or 0
         db.session.commit()
     return deleted_count

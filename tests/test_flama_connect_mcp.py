@@ -939,7 +939,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
     def test_submit_review_note_operation_key_replays_original_result(self):
         from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
         from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
-        from models.study_authority_subject_token import StudyAuthoritySubjectToken
+        from models.study_progress_subject import StudyProgressSubject
 
         with self.app.app_context():
             stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
@@ -970,7 +970,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 2)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 2)
-            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, 2)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, 2)
 
     def test_submit_review_operation_key_is_note_only_and_validated(self):
         response = self._submit_with_operation_key("legacy-must-not-promise-replay")

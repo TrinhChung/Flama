@@ -29,7 +29,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from app import create_app
 from models import db
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings, _database_uri, _source_database_collation,
 )
 from tests.test_study_direct_note_replay import StudyDirectNoteReplayTests
@@ -113,7 +113,6 @@ def _concurrent_first_state_answers(case):
     from app.services import study_service
     from models.card_progress import CardProgress
     from models.review_event import ReviewEvent
-    from models.study_authority_subject_token import StudyAuthoritySubjectToken
     from models.study_progress_subject import StudyProgressSubject
 
     case._install_overlay()
@@ -153,12 +152,12 @@ def _concurrent_first_state_answers(case):
         subjects = StudyProgressSubject.query.filter_by(
             learner_user_id=case.user_id, logical_note_key=case.source_note_id.encode()).all()
         case.assertEqual(len(subjects), 1)
-        token = StudyAuthoritySubjectToken.query.filter_by(subject_id=subjects[0].id).one()
-        case.assertEqual(int(token.authority_revision), len(succeeded))
+        case.assertEqual(int(subjects[0].authority_revision), len(succeeded))
         case.assertEqual(
             ReviewEvent.query.filter(ReviewEvent.card_id.in_(case.source_card_ids)).count(), len(succeeded))
+        # The Note's one row holds the state; no Card carries progress (ADR P10).
         case.assertEqual(
-            CardProgress.query.filter(CardProgress.card_id.in_(case.source_card_ids)).count(), 2)
+            CardProgress.query.filter(CardProgress.card_id.in_(case.source_card_ids)).count(), 0)
 
 
 def _template_preview_race(case, *, change_count):

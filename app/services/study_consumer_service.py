@@ -18,9 +18,7 @@ from app.services.study_worker_service import drain_study_queue, recover_admitte
 from models import db
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_history_fact import StudyProgressHistoryFact
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_authority_pin import StudySessionAuthorityPin
@@ -62,9 +60,8 @@ def probe_study_worker_database():
     try:
         for model in (
             StudySessionBatch, StudySession, StudySessionAuthorityPin,
-            StudyAuthorityEnrollment, StudyAuthoritySubjectToken,
-            StudyAuthorityCommandReceipt, StudyProgressSubject, StudyProgressState,
-            StudyProgressHistoryFact,
+            StudyAuthorityEnrollment, StudyAuthorityCommandReceipt,
+            StudyProgressSubject, StudyProgressHistoryFact,
         ):
             db.session.execute(select(model.__table__).limit(0)).close()
     finally:

@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import create_app
 from app.services.study_authority_enrollment_service import (
+    StudyAuthorityEnrollmentError,
     stage_legacy_authority_enrollment,
     stage_note_authority_enrollment,
 )
@@ -128,7 +129,7 @@ class StudyAuthorityNoteEnrollmentTests(unittest.TestCase):
         row = db.session.get(StudyAuthorityEnrollment, self.user_id)
         self.assertEqual(row.mode_code, "LEGACY")
 
-    def test_empty_learner_can_enroll_and_roll_back_without_subjects(self):
+    def test_empty_learner_enrolls_and_the_legacy_rollback_is_retired(self):
         enrolled = stage_note_authority_enrollment(
             db.session,
             learner_user_id=self.user_id,
@@ -140,21 +141,19 @@ class StudyAuthorityNoteEnrollmentTests(unittest.TestCase):
         self.assertEqual(enrolled.card_count, 0)
         db.session.commit()
 
-        rolled_back = stage_legacy_authority_enrollment(
-            db.session,
-            learner_user_id=self.user_id,
-            now_utc=datetime(2026, 9, 22, 8, 1, 0),
-        )
-        self.assertEqual(rolled_back.previous_mode, "NOTE")
-        self.assertEqual(rolled_back.mode_code, "LEGACY")
-        self.assertEqual(rolled_back.epoch, 2)
-        self.assertEqual(rolled_back.subject_count, 0)
-        self.assertEqual(rolled_back.card_count, 0)
-        db.session.commit()
+        # P10-09: there is no LEGACY projection to return to.
+        with self.assertRaises(StudyAuthorityEnrollmentError) as refused:
+            stage_legacy_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 22, 8, 1, 0),
+            )
+        self.assertEqual(refused.exception.code, "LEGACY_ROLLBACK_RETIRED")
+        db.session.rollback()
 
         enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
-        self.assertEqual(enrollment.mode_code, "LEGACY")
-        self.assertEqual(enrollment.epoch, 2)
+        self.assertEqual(enrollment.mode_code, "NOTE")
+        self.assertEqual(enrollment.epoch, 1)
 
 
 if __name__ == "__main__":

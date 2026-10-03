@@ -12,6 +12,7 @@ the learner fence and the subject row ``FOR UPDATE`` and own the transaction.
 from __future__ import annotations
 
 from datetime import datetime
+from dataclasses import dataclass
 from types import MappingProxyType
 
 from app.repositories.study_authority_repository import (
@@ -261,8 +262,6 @@ def materialize_consolidated_pristine(
     locked pristine rows. The revision stays 0, as a new token's did.
     """
 
-    from app.services.study_canonical_materialization_service import pristine_state
-
     state_by_ease = {}
     for note_id, subject, cards, starting_ease in items:
         if not cards:
@@ -293,8 +292,6 @@ def materialize_consolidated_pristine(
 
 def is_pristine_row(subject: StudyProgressSubject, *, starting_ease: float) -> bool:
     """Never answered since (re)materialization: the pristine state, unburied."""
-
-    from app.services.study_canonical_materialization_service import pristine_state
 
     return bool(
         subject.state_payload is not None
@@ -440,3 +437,196 @@ def delete_consolidated_note(
         old_generation=old_generation, old_hash=old_hash, new_hash=None,
         removed_card_ids=card_ids, deleted_note=True, finalized_at=now_utc,
     )
+
+
+@dataclass(frozen=True)
+class ExternalProgressContext:
+    """Provenance of an applied external snapshot (Anki/Connect)."""
+
+    provenance_code: str
+    history_completeness_code: str
+
+
+@dataclass(frozen=True)
+class ExternalHistoryEvent:
+    """One imported revlog review; never a current-state mutation."""
+
+    review_event: ReviewEvent
+    source_ref: object
+    import_state: str
+
+
+_REVLOG_PAYLOAD_FIELDS = (
+    "rating",
+    "mode",
+    "review_kind",
+    "queue_before",
+    "queue_after",
+    "interval_days_before",
+    "interval_days_after",
+    "due_day_before",
+    "due_day_after",
+    "days_late",
+    "ease_factor_before",
+    "ease_factor_after",
+    "memory_stability_before",
+    "memory_stability_after",
+    "memory_difficulty_before",
+    "memory_difficulty_after",
+    "leeched_after",
+    "suspended_after",
+    "sequence_no",
+)
+
+
+def append_consolidated_external_history(
+    session,
+    *,
+    learner_user_id: int,
+    subject: StudyProgressSubject,
+    cards,
+    history_events,
+    now_utc: datetime,
+) -> int:
+    """Append imported revlog facts for a locked row; its state is unchanged.
+
+    The row's history completeness follows the rule the contributor rows used:
+    native or snapshot history mixed with imported history is partial.
+    """
+
+    from sqlalchemy import select
+
+    from app.services.study_progress_contract import HISTORY_SCHEMA_VERSION, STORAGE_CODEC
+    from app.services.study_progress_history_service import _decode_digest
+    from app.services.study_progress_shadow_codec import canonical_document, canonical_typed_document
+    from app.services.study_progress_shadow_mapper import encode_identity
+    from models.study_progress_history_fact import StudyProgressHistoryFact
+
+    card_ids = {str(card.id) for card in cards}
+    note_id = str(subject.live_note_id or "")
+    session.flush()
+    inserted = 0
+    for supplied in history_events:
+        event = supplied.review_event
+        source_ref = supplied.source_ref
+        if event.id is None or source_ref.id is None:
+            raise _fail("UNFLUSHED_HISTORY_EVIDENCE", "External history requires flushed event/ref identities.")
+        if int(event.user_id) != int(learner_user_id) or int(source_ref.user_id) != int(learner_user_id):
+            raise _fail("HISTORY_LEARNER_MISMATCH", "External history belongs to another learner.")
+        if source_ref.review_event_id != event.id:
+            raise _fail("HISTORY_CARD_MISMATCH", "External history reference does not match its event.")
+        if str(event.card_id) not in card_ids:
+            raise _fail("HISTORY_CARD_MISMATCH", "External history Card is outside its locked Note.")
+        fact_identity = canonical_document(
+            {"connect_review_event_ref_id": str(source_ref.id), "source": "connect_review_event_refs"},
+            too_large_code="STATE_PAYLOAD_TOO_LARGE",
+        ).digest
+        existing = session.execute(
+            select(StudyProgressHistoryFact)
+            .where(
+                StudyProgressHistoryFact.learner_user_id == int(learner_user_id),
+                StudyProgressHistoryFact.fact_identity_hash == fact_identity,
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        material = {field: getattr(event, field) for field in _REVLOG_PAYLOAD_FIELDS}
+        material.update({
+            "connect_review_event_ref_id": str(source_ref.id),
+            "source_key": str(source_ref.source_key),
+            "external_review_id": str(source_ref.external_review_id),
+            "external_card_id": str(source_ref.external_card_id),
+            "source_payload_hash": str(source_ref.payload_hash),
+            "source_status": str(source_ref.status),
+        })
+        fact = canonical_typed_document(material, too_large_code="STATE_PAYLOAD_TOO_LARGE")
+        if existing is not None:
+            if bytes(existing.fact_payload_hash) != fact.digest:
+                raise _fail(
+                    "HISTORY_FACT_CONFLICT", "External history identity was reused with different evidence."
+                )
+            continue
+        repaired = supplied.import_state == "repaired"
+        session.add(StudyProgressHistoryFact(
+            learner_user_id=int(learner_user_id),
+            subject_id=int(subject.id),
+            logical_note_key=note_id.encode("utf-8"),
+            subject_generation=int(subject.subject_generation),
+            contributor_id=None,
+            logical_card_key=encode_identity(str(event.card_id), max_bytes=256, field_name="logical_card_key"),
+            review_event_id=int(event.id),
+            fact_identity_hash=fact_identity,
+            history_schema_version=HISTORY_SCHEMA_VERSION,
+            storage_codec=STORAGE_CODEC,
+            occurred_at=event.reviewed_at,
+            ingested_at=now_utc,
+            provenance_code="CONNECT_REVLOG",
+            source_operation_key=encode_identity(
+                f"{source_ref.source_key}:{source_ref.external_review_id}",
+                max_bytes=512,
+                field_name="source_operation_key",
+            ),
+            action_key="anki.revlog.rating",
+            action_version="revlog-v1",
+            review_kind=str(event.review_kind or "") or None,
+            algorithm_key=str(event.scheduler_algorithm or "") or None,
+            algorithm_version=str(event.algorithm_version or "") or None,
+            state_schema_version=None,
+            scheduler_config_hash=_decode_digest(event.scheduler_config_hash, field_name="scheduler_config_hash"),
+            before_state_hash=None,
+            after_state_hash=None,
+            history_completeness_code="HISTORY_REPAIRED_PARTIAL" if repaired else "HISTORY_IMPORTED_PARTIAL",
+            gap_reason_code="REPAIRED_EXTERNAL_PROJECTION" if repaired else "EXTERNAL_HISTORY_RANGE_UNPROVEN",
+            fact_payload=fact.payload,
+            fact_payload_size=fact.size,
+            fact_payload_hash=fact.digest,
+            created_at=now_utc,
+        ))
+        current = str(subject.history_completeness_code or "")
+        if current in {"HISTORY_NATIVE_COMPLETE", "HISTORY_SNAPSHOT_ONLY", "HISTORY_MIXED_PARTIAL"}:
+            subject.history_completeness_code = MIXED_PARTIAL
+        elif current == "HISTORY_IMPORTED_PARTIAL" and repaired:
+            subject.history_completeness_code = "HISTORY_REPAIRED_PARTIAL"
+        subject.updated_at = now_utc
+        inserted += 1
+    session.flush()
+    return inserted
+
+
+_PRISTINE_CARD_KEY = "pristine-card"
+_PRISTINE_TIME = datetime(2000, 1, 1)
+
+
+def pristine_state(starting_ease: float):
+    """The Algorithm State of a never-reviewed Note with this starting ease.
+
+    It is exactly what ``map_card_progress`` derives from a ``new`` LEGACY row.
+    Row identity (id, learner, Card, timestamps) is not part of Algorithm
+    State, so this in-memory row is never persisted and its placeholder
+    identity reaches no stored value.
+    """
+
+    from types import SimpleNamespace
+
+    from app.repositories.study_authority_repository import StudyAuthorityFenceError
+    from app.services.study_progress_shadow_mapper import MappedCardProgress, map_card_progress
+
+    mapped = map_card_progress(
+        SimpleNamespace(
+            id=1, user_id=1, card_id=_PRISTINE_CARD_KEY, queue="new", step_index=0,
+            due_at=None, due_day=None, interval_days=0, interval_days_raw=0.0,
+            is_suspended=False, is_buried=False, buried_until_day=None,
+            review_kind="review", scheduler_mode="legacy", ease_factor=float(starting_ease),
+            memory_stability=None, memory_difficulty=None, suspension_reason=None,
+            last_leech_at=None, last_leech_lapses=0, last_review_event_id=None,
+            reps=0, lapses=0, last_reviewed_at=None, revision=0,
+            created_at=_PRISTINE_TIME, updated_at=_PRISTINE_TIME,
+        ),
+        card_created_at=_PRISTINE_TIME,
+        card_order_key=_PRISTINE_CARD_KEY,
+    )
+    if not isinstance(mapped, MappedCardProgress):
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_MATERIALIZATION_INCOMPLETE",
+            f"Pristine state cannot be built: {mapped.code}.",
+        )
+    return mapped

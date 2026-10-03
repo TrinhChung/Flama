@@ -74,11 +74,6 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
         db.session.add_all([note_type, *templates, deck, note, *cards])
         db.session.flush()
         note.deck_id = int(deck.id)
-        progress_rows = tuple(
-            CardProgress(user_id=self.learner_id, card_id=str(card.id))
-            for card in cards
-        )
-        db.session.add_all(progress_rows)
         subject = StudyProgressSubject(
             learner_user_id=self.learner_id,
             logical_note_key=str(note.id).encode("utf-8"),
@@ -122,7 +117,10 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
             now_utc=NOW,
         )
 
-    def test_source_owned_overlay_note_resolves_complete_learner_progress(self):
+    def test_source_owned_overlay_note_resolves_its_cards_without_card_progress(self):
+        # A frozen card_progress row kept from before NOTE is never read (ADR P10).
+        db.session.add(CardProgress(user_id=self.learner_id, card_id="sibling-card-b"))
+        db.session.commit()
         locked = self._locked()
         siblings = lock_study_authority_siblings(
             db.session,
@@ -132,27 +130,7 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
         )
         self.assertNotEqual(self.publisher_id, self.learner_id)
         self.assertEqual(siblings.card_ids, self.card_ids)
-        self.assertEqual(set(siblings.progress_by_card_id), set(self.card_ids))
-        self.assertTrue(
-            all(
-                row.user_id == self.learner_id
-                for row in siblings.progress_by_card_id.values()
-            )
-        )
-
-    def test_missing_progress_fails_instead_of_creating_an_implicit_shell(self):
-        missing = CardProgress.query.filter_by(card_id="sibling-card-b").one()
-        db.session.delete(missing)
-        db.session.commit()
-        locked = self._locked()
-        with self.assertRaises(StudyAuthorityFenceError) as failure:
-            lock_study_authority_siblings(
-                db.session,
-                route=self._route(),
-                locked=locked,
-            )
-        self.assertEqual(failure.exception.code, "MISSING_LEGACY_PROGRESS")
-        self.assertEqual(CardProgress.query.count(), 1)
+        self.assertEqual(dict(siblings.progress_by_card_id), {})
 
     def test_requested_card_must_belong_to_the_locked_subject(self):
         locked = self._locked()
@@ -193,14 +171,8 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
         self.assertEqual(detached.exception.code, "DETACHED_AUTHORITY_SUBJECT")
 
     def test_legacy_route_and_cardless_note_fail_closed(self):
-        legacy_route = self._route(mode="LEGACY")
-        locked = self._locked(legacy_route)
         with self.assertRaises(StudyAuthorityFenceError) as mode:
-            lock_study_authority_siblings(
-                db.session,
-                route=legacy_route,
-                locked=locked,
-            )
+            self._locked(self._route(mode="LEGACY"))
         self.assertEqual(mode.exception.code, "AUTHORITY_MODE_CONFLICT")
         db.session.rollback()
 

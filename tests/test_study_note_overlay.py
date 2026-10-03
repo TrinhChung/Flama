@@ -10,12 +10,12 @@ from tests import test_study_direct_note_replay as fixtures
 from app.services import browse_card_service, deck_management_service
 from app.services.study_authority_enrollment_service import (
     StudyAuthorityEnrollmentError,
-    stage_legacy_authority_enrollment,
     stage_note_authority_enrollment,
 )
 from app.services.study_authority_read_service import load_study_authority_card_reads
 from app.services.study_artifact_service import pristine_note_review_state_version
 from app.services.scheduler_config_service import resolve_deck_options
+from app.services.study_progress_shadow_codec import decode_float
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
@@ -27,8 +27,6 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.review_event import ReviewEvent
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session_authority_pin import StudySessionAuthorityPin
 from models.template import Template
@@ -118,13 +116,17 @@ class StudyNoteOverlayTests(unittest.TestCase):
             "list_total": listing["total"],
         }
 
-    def _assert_note_matches_legacy(self):
-        note_view = self._reader_view()
-        stage_legacy_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=_now())
-        db.session.commit()
-        legacy_view = self._reader_view()
-        self.assertEqual(note_view, legacy_view)
-        return note_view
+    def _assert_readers_share_the_note_row(self, queue):
+        view = self._reader_view()
+        self.assertEqual(view["list_total"], 2)
+        # Both source Cards read their Note's one state.
+        self.assertEqual({row[1] for row in view["list"]}, {queue})
+        dashboard = {deck_id: counts for deck_id, *counts in view["dashboard"]}
+        tree = {deck_id: json.loads(counts) for deck_id, counts in view["tree"]}
+        new, learn, due = dashboard[self.local_deck_id]
+        self.assertEqual((tree[self.local_deck_id]["new"], tree[self.local_deck_id]["learn"],
+                          tree[self.local_deck_id]["due"]), (new, learn, due))
+        return view
 
     def test_pristine_overlay_card_reads_new_without_writing(self):
         self._install_overlay()
@@ -151,11 +153,9 @@ class StudyNoteOverlayTests(unittest.TestCase):
             subject = self._source_subject()
             self.assertIsNotNone(subject)
             self.assertTrue(subject.status_code.startswith("MIRRORED_"))
-            token = db.session.get(StudyAuthoritySubjectToken, subject.id)
-            self.assertEqual(token.authority_revision, 1)
-            rows = CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).all()
-            self.assertEqual({row.user_id for row in rows}, {self.user_id})
-            self.assertEqual(len(rows), 2)
+            self.assertEqual(subject.authority_revision, 1)
+            # The learner's state is the Note's one row; no Card carries progress.
+            self.assertEqual(CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).count(), 0)
             self.assertEqual(ReviewEvent.query.filter_by(card_id=self.source_card_ids[0]).count(), 1)
             source = db.session.get(Note, self.source_note_id)
             self.assertEqual(source.field_values, {"Word": "共有"})
@@ -195,23 +195,20 @@ class StudyNoteOverlayTests(unittest.TestCase):
         with self.app.app_context():
             subject = self._source_subject()
             self.assertIsNotNone(subject)
-            self.assertEqual(db.session.get(StudyAuthoritySubjectToken, subject.id).authority_revision, 0)
-            self.assertIsNotNone(db.session.get(StudyProgressState, subject.id))
+            self.assertEqual(subject.authority_revision, 0)
+            self.assertIsNotNone(subject.state_payload)
             self.assertEqual(StudySessionAuthorityPin.query.filter_by(subject_id=subject.id).count(), 1)
-            self.assertEqual(CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).count(), 2)
+            self.assertEqual(CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).count(), 0)
 
-    def test_readers_match_legacy_for_pristine_and_studied_overlay(self):
+    def test_readers_share_the_note_row_for_pristine_and_studied_overlay(self):
         self._install_overlay()
         with self.app.app_context():
-            view = self._assert_note_matches_legacy()
-            self.assertEqual(view["list_total"], 2)
-            stage_note_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=_now())
-            db.session.commit()
+            self._assert_readers_share_the_note_row("new")
         self._answer_source()
         with self.app.app_context():
-            self._assert_note_matches_legacy()
+            self._assert_readers_share_the_note_row(self._source_subject().normalized_queue)
 
-    def test_admin_wide_browse_matches_legacy(self):
+    def test_admin_wide_browse_serves_the_note_row(self):
         self._install_overlay()
         self._answer_source()
 
@@ -228,10 +225,12 @@ class StudyNoteOverlayTests(unittest.TestCase):
                 json.dumps(detail.get("card", detail), sort_keys=True, default=str))
 
         with self.app.app_context():
-            note_view = admin_view()
-            stage_legacy_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=_now())
-            db.session.commit()
-            self.assertEqual(note_view, admin_view())
+            view = admin_view()
+            # The installed source Card's detail reads the learner's Note row;
+            # the admin-wide listing of owned pristine Cards reads NEW.
+            self.assertEqual(json.loads(view[2])["queue"], self._source_subject().normalized_queue)
+            self.assertEqual({row[1] for row in view[1]}, {"new"})
+            self.assertEqual(admin_view(), view)
 
     def test_read_audit_covers_overlay_state_and_owned_pristine_notes(self):
         self._install_overlay()
@@ -249,19 +248,18 @@ class StudyNoteOverlayTests(unittest.TestCase):
         self._answer_source()
         with self.app.app_context():
             subject = self._source_subject()
-            revision = db.session.get(StudyAuthoritySubjectToken, subject.id).authority_revision
+            revision = subject.authority_revision
             deleted = deck_management_service.reset_deck_progress(
                 deck_obj=db.session.get(Deck, self.local_deck_id), user_id=self.user_id)
             self.assertEqual(deleted, 2)
             db.session.expire_all()
-            token = db.session.get(StudyAuthoritySubjectToken, subject.id)
-            self.assertGreater(token.authority_revision, revision)
-            rows = CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).all()
-            self.assertEqual({row.queue for row in rows}, {"new"})
+            subject = self._source_subject()
+            self.assertGreater(subject.authority_revision, revision)
+            self.assertEqual(subject.normalized_queue, "new")
             expected_ease = resolve_deck_options(user_id=self.user_id, deck_id=self.local_deck_id).startingEase
-            self.assertEqual({float(row.ease_factor) for row in rows}, {float(expected_ease)})
+            self.assertEqual(decode_float(subject.state_payload["ease"], field_name="ease"), float(expected_ease))
 
-    def test_uninstall_keeps_overlay_state_and_rollback_stays_lossless(self):
+    def test_uninstall_keeps_overlay_state(self):
         self._install_overlay()
         self._answer_source()
         with self.app.app_context():
@@ -270,10 +268,8 @@ class StudyNoteOverlayTests(unittest.TestCase):
             self.assertIsNone(db.session.get(DeckInstall, self.install_id))
             subject = self._source_subject()
             self.assertTrue(subject.status_code.startswith("MIRRORED_"))
-            result = stage_legacy_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=_now())
-            db.session.commit()
-            self.assertEqual(result.mode_code, "LEGACY")
-            self.assertEqual(CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).count(), 2)
+            self.assertEqual(subject.authority_revision, 1)
+            self.assertIsNotNone(subject.state_payload)
 
     def test_enrollment_accepts_overlay_and_rejects_pending_clone_cutover(self):
         with self.app.app_context():
