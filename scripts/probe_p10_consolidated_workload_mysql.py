@@ -185,9 +185,16 @@ def run(backup: Path, *, mysql_binary: str) -> dict:
         from app.services.study_storage_profile_service import apply_storage_profile_switch
         from models import db
 
+        from app.repositories.study_authority_repository import read_study_storage_profile
+
         with app.app_context():
-            report["p9_switch"] = apply_storage_profile_switch(db.session, now_utc=datetime.utcnow())
-            db.session.commit()
+            # A dump taken after P9-06 is already CANONICAL_V1.
+            if read_study_storage_profile(db.session) == "PROJECTION_V1":
+                report["p9_switch"] = apply_storage_profile_switch(db.session, now_utc=datetime.utcnow())
+                db.session.commit()
+            else:
+                report["p9_switch"] = {"skipped": read_study_storage_profile(db.session)}
+                db.session.rollback()
         learners = _learners(app)
         decks = {}
         for role, user_id in learners.items():
