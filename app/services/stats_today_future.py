@@ -373,6 +373,42 @@ def _load_canonical_scope_reads(
     return cards, dict(reads)
 
 
+def _consolidated_due_rows_and_load(
+    *,
+    user_id: int,
+    scope_deck_ids: list[int] | None,
+) -> tuple[list[tuple[Any, Any, Any]], float]:
+    """CONSOLIDATED_V1: due rows and daily load from one non-locking SELECT.
+
+    Same Card set and arithmetic as the canonical path (``_canonical_due_rows``
+    and ``_canonical_daily_load``), read straight from each Note's row
+    (ADR P10 §2.7): no Card/Note entities, deck options or subject locks.
+    """
+
+    from app.repositories.note_analytics_read_repository import (
+        consolidated_card_rows,
+        state_interval_days,
+    )
+
+    if scope_deck_ids is not None and not scope_deck_ids:
+        return [], 0.0
+    query = Card.query.join(Note, Card.note_id == Note.id)
+    if scope_deck_ids is not None:
+        query = query.filter(Note.deck_id.in_(scope_deck_ids))
+    rows: list[tuple[Any, Any, Any]] = []
+    total = 0.0
+    for _card_id, queue, due_at, due_day, suspended, state_type, interval in consolidated_card_rows(
+        query, learner_user_id=user_id
+    ).all():
+        if suspended:
+            continue
+        if due_at is not None or due_day is not None:
+            rows.append((due_at, due_day, queue))
+        if normalize_progress_queue(state_type) == REVIEW_QUEUE:
+            total += 1.0 / max(1.0, state_interval_days(interval))
+    return rows, total
+
+
 def _canonical_due_rows(
     *,
     cards: list[Card],
@@ -476,7 +512,13 @@ def build_today_future_stats(
 
     canonical_cards: list[Card] = []
     canonical_reads: dict[str, StudyAuthorityCardRead] = {}
-    if authority_route.mode_code == "NOTE":
+    consolidated_load = None
+    if authority_route.mode_code == "NOTE" and authority_route.storage_profile == CONSOLIDATED_STORAGE_PROFILE:
+        rows, consolidated_load = _consolidated_due_rows_and_load(
+            user_id=user_id,
+            scope_deck_ids=scope_deck_ids,
+        )
+    elif authority_route.mode_code == "NOTE":
         canonical_cards, canonical_reads = _load_canonical_scope_reads(
             user_id=user_id,
             scope_deck_ids=scope_deck_ids,
@@ -513,7 +555,9 @@ def build_today_future_stats(
     due_tomorrow = _safe_int((due_by_offset.get(1) or {}).get("due_count"))
     average = (float(total_reviews) / float(window_days)) if window_days > 0 else 0.0
     daily_load = (
-        _canonical_daily_load(
+        consolidated_load
+        if consolidated_load is not None
+        else _canonical_daily_load(
             cards=canonical_cards,
             reads=canonical_reads,
         )

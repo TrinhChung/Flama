@@ -394,6 +394,42 @@ class StudyConsolidatedSwitchCliTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(int(StudyProgressSubject.query.one().authority_revision), 2)
 
+    def test_analytics_without_full_reads_match_the_canonical_answers(self):
+        from app.services.mcp import study_tools
+
+        self._answer({**self.payload, "rating": "easy", "operation_key": str(uuid4())})
+
+        def answers():
+            future = [self.client.get(path).get_json() for path in (
+                "/api/statistics/today-future?scope=collection",
+                f"/api/statistics/today-future?scope=deck&deck_id={self.deck_id}",
+            )]
+            with self.app.app_context():
+                stats = study_tools.get_deck_stats(user_id=self.user_id, deck_id=self.deck_id)
+                db.session.rollback()
+            return future, stats
+
+        canonical = answers()
+        self.assertGreater(canonical[1]["young_cards"], 0)
+        # A review state exercises both the due series and the daily load.
+        self.assertGreater(canonical[0][0]["totals"]["daily_load"], 0)
+        self.assertEqual(self._cli("--apply")[0], 0)
+        with self.app.app_context():
+            engine = db.engine
+        touched = []
+
+        def record(_conn, _cursor, statement, *_args):
+            if OLD_TABLES.search(statement):
+                touched.append(statement.split()[0])
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            consolidated = answers()
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        self.assertEqual(consolidated, canonical)
+        self.assertEqual(touched, [])
+
     def test_v4_lease_opened_before_the_switch_commits_after_it(self):
         self.app.config["STUDY_WIRE_V4_ENABLED"] = True
         self.addCleanup(self.app.config.__setitem__, "STUDY_WIRE_V4_ENABLED", False)

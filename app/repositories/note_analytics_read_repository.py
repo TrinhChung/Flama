@@ -209,6 +209,44 @@ def note_card_rows(
     ))
 
 
+def consolidated_card_rows(card_query, *, learner_user_id: int):
+    """Per Card of ``card_query``: its Note row's availability, state type and interval.
+
+    CONSOLIDATED_V1 only (ADR P10 §2.7): one non-locking SELECT over the rows of
+    Notes with current state, for analytics that need no full state read.
+    Yields ``(card_id, queue, due_at, due_day, is_suspended, state_type,
+    interval_token)``; decode the interval with :func:`state_interval_days`.
+    """
+
+    subject = StudyProgressSubject
+    return (
+        card_query.join(subject, and_(
+            subject.learner_user_id == int(learner_user_id),
+            subject.live_note_id == Card.note_id,
+        ))
+        .filter(subject.semantic_state_hash.isnot(None))
+        .with_entities(
+            Card.id,
+            subject.normalized_queue,
+            subject.due_at,
+            subject.due_day,
+            subject.is_suspended,
+            subject.state_payload["type"].as_string(),
+            subject.state_payload["interval_days"].as_string(),
+        )
+    )
+
+
+def state_interval_days(token) -> float:
+    """``interval_days`` of a canonical state payload (MySQL unquotes JSON null as 'null')."""
+
+    from app.services.study_progress_shadow_codec import decode_float
+
+    if token is None or token == "null":
+        return 0.0
+    return float(decode_float(token, field_name="interval_days") or 0.0)
+
+
 def subject_vector_violation(
     session: Session,
     *,
