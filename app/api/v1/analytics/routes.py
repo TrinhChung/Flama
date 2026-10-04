@@ -42,9 +42,14 @@ def _resolve_request_timezone() -> str:
 @analytics_bp.get("/dashboard")
 @login_required
 def dashboard():
+    compact = str(request.args.get("compact", "0")).strip().lower()
+    if compact not in {"0", "1", "false", "true"}:
+        return error_response(
+            "VALIDATION_ERROR", "compact must be a boolean.", status=400, field="compact"
+        )
     try:
         with analytics_read_transaction():
-            payload = build_dashboard_payload(current_user)
+            payload = build_dashboard_payload(current_user, compact=compact in {"1", "true"})
         return jsonify(payload)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()

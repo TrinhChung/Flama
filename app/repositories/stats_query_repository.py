@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import and_, case, func, or_, select, text
+
 from models import db
 from models.flashcard import Card, Note, ReviewEvent
 from models.card_progress import CardProgress
@@ -124,6 +126,65 @@ def _progress_due_local_day(
         timezone_name=timezone_name,
         day_boundary_hour_local=day_boundary_hour_local,
     )
+
+
+def query_canonical_future_due_day_counts_mysql(
+    *,
+    user_id: int,
+    timezone_name: str,
+    day_boundary_hour_local: int,
+    start_local_day: date,
+    end_local_day: date,
+    storage_profile: str,
+) -> dict[date, int]:
+    """Group the existing NOTE Card availability scope for fixed-offset zones.
+
+    Keep the canonical scope and availability joins: ``live_note_id`` and
+    ``logical_note_key`` agree on valid rows, but the database does not enforce
+    that identity relationship. Collapsing the joins would change reads of
+    detached or drifted evidence. Sibling Cards each contribute one count.
+    """
+    from app.repositories import note_analytics_read_repository as note_reads
+
+    offset = MYSQL_FIXED_OFFSET_MINUTES[str(timezone_name or "").strip().upper()]
+    shift = int(offset) - int(day_boundary_hour_local) * 60
+    scope = note_reads.learner_note_scope(
+        learner_user_id=user_id, storage_profile=storage_profile
+    )
+    rows = note_reads.note_card_rows(
+        scope, learner_user_id=user_id, storage_profile=storage_profile
+    ).subquery("availability")
+    # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
+    # Review due_day overrides due_at; every other queue uses its UTC timestamp.
+    day = case(
+        (
+            and_(
+                func.lower(func.trim(rows.c.queue)) == REVIEW_QUEUE,
+                rows.c.due_day.isnot(None),
+            ),
+            rows.c.due_day,
+        ),
+        else_=func.to_days(
+            func.date_add(rows.c.due_at, text(f"INTERVAL {shift} MINUTE"))
+        ) - 365,
+    )
+    folded = func.greatest(day, start_local_day.toordinal())
+    statement = (
+        select(folded.label("day_index"), func.count().label("cards"))
+        .select_from(rows)
+        .where(
+            or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
+            or_(rows.c.due_at.isnot(None), rows.c.due_day.isnot(None)),
+            # Match date.fromordinal's invalid-date rejection in the Python path.
+            day.between(1, date.max.toordinal()),
+            day < end_local_day.toordinal(),
+        )
+        .group_by(folded)
+    )
+    return {
+        date.fromordinal(int(day_index)): int(count)
+        for day_index, count in db.session.execute(statement).all()
+    }
 
 
 def _query_daily_review_aggregates_mysql(

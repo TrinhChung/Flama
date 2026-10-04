@@ -14,9 +14,10 @@ export function useDashboard() {
   })
 }
 
-export function useDashboardOverview(year: number) {
+export function useDashboardOverview(year: number, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['frontend', 'dashboard', 'overview', year],
     queryFn: () => appApi.getDashboardOverview(year),
+    enabled: options?.enabled,
   })
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertCircle, LoaderCircle } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -20,7 +20,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { DeckWorksheetModal } from '@/features/worksheets'
 import { dashboardQueryKey } from '../api'
 import {
   createDeckSchema,
@@ -33,6 +32,28 @@ import {
 import type { DashboardPayload, DeckNode, SelectedDeckAction } from '../types'
 import { suggestNextDeckPath } from '../utils/deckNaming'
 
+const DeckWorksheetModal = lazy(() =>
+  import('@/features/worksheets/components/DeckWorksheetModal').then((module) => ({
+    default: module.DeckWorksheetModal,
+  })),
+)
+
+function WorksheetLoadingDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Mẫu giấy luyện viết &amp; In ấn (A4)</DialogTitle>
+          <DialogDescription>Đang tải công cụ tạo bài tập…</DialogDescription>
+        </DialogHeader>
+        <div role="status" className="flex justify-center py-6">
+          <LoaderCircle className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+          <span className="sr-only">Đang tải…</span>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 type DeckOption = { value: string; label: string }
 
 function flattenDecks(nodes: DeckNode[], prefix = ''): DeckOption[] {
@@ -267,12 +288,14 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
 
   if (type === 'worksheet') {
     return (
-      <DeckWorksheetModal
-        open
-        onOpenChange={(open) => !open && onClose()}
-        deckId={deck.id}
-        deckName={deck.name}
-      />
+      <Suspense fallback={<WorksheetLoadingDialog onClose={onClose} />}>
+        <DeckWorksheetModal
+          open
+          onOpenChange={(open) => !open && onClose()}
+          deckId={deck.id}
+          deckName={deck.name}
+        />
+      </Suspense>
     )
   }
 

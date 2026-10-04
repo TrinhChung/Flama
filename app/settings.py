@@ -148,6 +148,7 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         "SQLALCHEMY_TRACK_MODIFICATIONS": False,
         "SQLALCHEMY_ENGINE_OPTIONS": engine_options,
         "CORS_ALLOWED_ORIGINS": comma_separated_env("CORS_ALLOWED_ORIGINS"),
+        "CORS_MAX_AGE": coerce_int_env("CORS_MAX_AGE", default=86400),
         "FRONTEND_URL": os.getenv("FRONTEND_URL", "").strip().rstrip("/"),
         # Browser-driven Anki imports now terminate on the canonical Flask API.
         # Keep the established package-service keys during the transport

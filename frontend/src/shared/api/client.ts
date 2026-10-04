@@ -11,6 +11,19 @@ type ErrorPayload = {
   details?: unknown
 }
 
+export type ApiRequestInit = RequestInit & {
+  /** Omit automatic timezone only when the endpoint ignores it or receives it in the query. */
+  includeTimezone?: boolean
+}
+
+export function getBrowserTimezone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+  } catch {
+    return undefined
+  }
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
@@ -103,21 +116,18 @@ async function refreshCsrfToken(): Promise<void> {
 
 async function apiFetch(
   url: string,
-  init: RequestInit = {},
+  init: ApiRequestInit = {},
   accept = 'application/json',
   retryCsrf = true,
 ): Promise<Response> {
+  const { includeTimezone, ...fetchInit } = init
   const method = String(init.method || 'GET').toUpperCase()
   const headers = new Headers(init.headers)
   headers.set('Accept', accept)
 
-  if (!headers.has('X-Timezone')) {
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-      if (tz) headers.set('X-Timezone', tz)
-    } catch {
-      // ignore
-    }
+  if (includeTimezone !== false && !headers.has('X-Timezone')) {
+    const tz = getBrowserTimezone()
+    if (tz) headers.set('X-Timezone', tz)
   }
 
   const effectiveCsrfToken = getCsrfToken()
@@ -144,7 +154,7 @@ async function apiFetch(
   let response: Response
   try {
     response = await fetch(resolveBackendUrl(url), {
-      ...init,
+      ...fetchInit,
       method,
       headers,
       credentials: 'include',
@@ -219,7 +229,7 @@ async function apiFetch(
 
 export async function apiRequest<T>(
   url: string,
-  init: RequestInit = {},
+  init: ApiRequestInit = {},
 ): Promise<T> {
   const response = await apiFetch(url, init)
   const contentType = response.headers.get('content-type') || ''

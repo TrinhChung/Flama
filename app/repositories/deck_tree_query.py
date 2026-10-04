@@ -31,39 +31,36 @@ def collect_accessible_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
             )
             .all()
         )
-        visible_ids = {d.id for d in initial_decks}
-        if not visible_ids:
+        if not initial_decks:
             return []
-        # Walk upward to include ancestor decks owned by other users
-        ancestor_frontier = set(visible_ids)
-        while ancestor_frontier:
-            parent_rows = (
-                db.session.query(Deck.parent_id)
-                .filter(
-                    Deck.id.in_(ancestor_frontier),
-                    Deck.parent_id.isnot(None),
+        by_id: dict[int, Deck] = {deck.id: deck for deck in initial_decks}
+        frontier = {
+            deck.parent_id
+            for deck in initial_decks
+            if deck.parent_id is not None
+        } - set(by_id)
+        while frontier:
+            parent_decks = (
+                Deck.query.filter(
+                    Deck.id.in_(frontier),
                     Deck.deleted_at.is_(None),
                 )
                 .all()
             )
-            parent_ids = {int(row[0]) for row in parent_rows if row and row[0] is not None}
-            next_parents = parent_ids - visible_ids
-            if not next_parents:
-                break
-            visible_ids.update(next_parents)
-            ancestor_frontier = next_parents
-        return (
-            Deck.query.filter(
-                Deck.id.in_(visible_ids),
-                Deck.deleted_at.is_(None),
-            )
-            .order_by(
-                Deck.parent_id.isnot(None),
-                Deck.position,
-                Deck.created_at,
-                Deck.id,
-            )
-            .all()
+            by_id.update({deck.id: deck for deck in parent_decks})
+            frontier = {
+                deck.parent_id
+                for deck in parent_decks
+                if deck.parent_id is not None
+            } - set(by_id)
+        return sorted(
+            by_id.values(),
+            key=lambda deck: (
+                deck.parent_id is not None,
+                deck.position or 0,
+                deck.created_at,
+                deck.id,
+            ),
         )
 
     owned_root_ids = {

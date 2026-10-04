@@ -1,0 +1,563 @@
+{
+  "schema_version": "dashboard-user1-performance.v1",
+  "observed_date": "2026-10-04",
+  "timezone": "Asia/Tokyo",
+  "measurement_status": "Production baseline and read-only A/B; reviewed local changes have not been deployed or measured in production.",
+  "production_environment": {
+    "code": "d747a5f5be6d3799a977b5efe73467072491a744",
+    "mysql": "8.0.46-0ubuntu0.22.04.4",
+    "buffer_pool_bytes": 134217728,
+    "migration": "20261003_000050",
+    "user_id": 1,
+    "timezone": "Asia/Tokyo",
+    "transaction_read_only": 1,
+    "startup_maintenance": false
+  },
+  "limits": [
+    "Five isolated audit endpoint samples and three A/B/HTTP trials are not p95 or load benchmarks.",
+    "Neither database caches nor production traffic were controlled.",
+    "Do not add medians from separate experiments into a fabricated end-to-end breakdown.",
+    "Browser DOM/next-frame marks approximate visibility; Response.json duration includes body transfer.",
+    "HTTP probe used warm persistent HTTP/1.1 connections; browser used its normal negotiated protocol.",
+    "Single-join SQL candidate was rejected after local logical/live identity-drift regression was demonstrated.",
+    "No verified production improvement or sub-800-ms guarantee is reported."
+  ],
+  "backend_audit": {
+    "dashboard": {
+      "endpoint_ms": {
+        "samples": 5,
+        "median": 1173.331,
+        "min": 1003.566,
+        "max": 1717.227
+      },
+      "sql_execute_fetch_ms": {
+        "samples": 5,
+        "median": 970.633,
+        "min": 840.744,
+        "max": 1123.52
+      },
+      "sql_count": {
+        "samples": 5,
+        "median": 14,
+        "min": 14,
+        "max": 14
+      },
+      "decoded_bytes": {
+        "samples": 5,
+        "median": 727689,
+        "min": 727689,
+        "max": 727689
+      },
+      "synthetic_gzip_bytes": {
+        "samples": 5,
+        "median": 77030,
+        "min": 77026,
+        "max": 77058
+      },
+      "stages_ms": {
+        "aggregate_deck_study_counts": {
+          "samples": 5,
+          "median": 895.299,
+          "min": 778.964,
+          "max": 1010.524
+        },
+        "asdict": {
+          "samples": 5,
+          "median": 22.299,
+          "min": 21.377,
+          "max": 52.172
+        },
+        "build_dashboard_data": {
+          "samples": 5,
+          "median": 1128.736,
+          "min": 960.669,
+          "max": 1498.692
+        },
+        "collect_accessible_decks": {
+          "samples": 5,
+          "median": 110.735,
+          "min": 96.845,
+          "max": 339.256
+        },
+        "create_deck_move_token": {
+          "samples": 5,
+          "median": 41.932,
+          "min": 38.574,
+          "max": 53.794
+        },
+        "url_for": {
+          "samples": 5,
+          "median": 10.324,
+          "min": 9.71,
+          "max": 30.237
+        }
+      },
+      "count_sql_ms": {
+        "samples": 5,
+        "median": 729.672,
+        "min": 616.484,
+        "max": 773.891
+      },
+      "note_type_fallback_sql_ms": {
+        "samples": 5,
+        "median": 151.833,
+        "min": 145.252,
+        "max": 194.98
+      },
+      "shape": {
+        "decks": 1527,
+        "roots": 8,
+        "max_depth": 4
+      }
+    },
+    "overview": {
+      "endpoint_ms": {
+        "samples": 5,
+        "median": 799.867,
+        "min": 715.438,
+        "max": 1107.491
+      },
+      "sql_execute_fetch_ms": {
+        "samples": 5,
+        "median": 688.399,
+        "min": 624.359,
+        "max": 929.859
+      },
+      "sql_count": {
+        "samples": 5,
+        "median": 10,
+        "min": 10,
+        "max": 10
+      },
+      "decoded_bytes": {
+        "samples": 5,
+        "median": 52704,
+        "min": 52704,
+        "max": 52704
+      },
+      "synthetic_gzip_bytes": {
+        "samples": 5,
+        "median": 6276,
+        "min": 6276,
+        "max": 6276
+      },
+      "stages_ms": {
+        "_canonical_future_due_day_counts": {
+          "samples": 5,
+          "median": 497.373,
+          "min": 390.282,
+          "max": 780.146
+        },
+        "query_daily_review_aggregates": {
+          "samples": 5,
+          "median": 249.601,
+          "min": 230.789,
+          "max": 267.929
+        }
+      }
+    }
+  },
+  "browser_baseline": {
+    "cold_collapsed": {
+      "rows": 8,
+      "dom_elements": 1076,
+      "closed_menu_dom_items": 0,
+      "first_row_ms": 3804,
+      "next_frame_ms": 3805.3,
+      "dashboard_json_complete_ms": 3759.7,
+      "json_complete_to_row_ms": 44.3,
+      "long_task_durations_ms": [
+        62
+      ],
+      "network_requests": 58,
+      "api_get_requests": 3,
+      "dashboard_encoded_transfer_bytes": 78041,
+      "dashboard_content_encoding": "zstd"
+    },
+    "spa_fresh": {
+      "rows": 8,
+      "dom_elements": 1090,
+      "closed_menu_dom_items": 0,
+      "first_row_ms": 42.6,
+      "next_frame_ms": 43.5,
+      "dashboard_json_complete_ms": null,
+      "json_complete_to_row_ms": null,
+      "long_task_durations_ms": [],
+      "network_requests": 0,
+      "api_get_requests": 0,
+      "dashboard_encoded_transfer_bytes": null,
+      "dashboard_content_encoding": null
+    },
+    "spa_stale": {
+      "rows": 8,
+      "dom_elements": 1090,
+      "closed_menu_dom_items": 0,
+      "first_row_ms": 40.6,
+      "next_frame_ms": 41.2,
+      "dashboard_json_complete_ms": 2491.2,
+      "json_complete_to_row_ms": null,
+      "long_task_durations_ms": [],
+      "network_requests": 4,
+      "api_get_requests": 2,
+      "dashboard_encoded_transfer_bytes": 77762,
+      "dashboard_content_encoding": "zstd",
+      "cached_row_before_revalidation_complete_ms": 2450.6,
+      "first_row_source": "React Query cached payload before background revalidation completes"
+    },
+    "warm_all": {
+      "rows": 1527,
+      "dom_elements": 20933,
+      "closed_menu_dom_items": 0,
+      "first_row_ms": 3450.7,
+      "next_frame_ms": 3451.4,
+      "dashboard_json_complete_ms": 2899,
+      "json_complete_to_row_ms": 551.7,
+      "long_task_durations_ms": [
+        545,
+        267
+      ],
+      "network_requests": 58,
+      "api_get_requests": 3,
+      "dashboard_encoded_transfer_bytes": 78474,
+      "dashboard_content_encoding": "zstd"
+    },
+    "warm_collapsed_1": {
+      "rows": 8,
+      "dom_elements": 1076,
+      "closed_menu_dom_items": 0,
+      "first_row_ms": 3441.5,
+      "next_frame_ms": 3446.5,
+      "dashboard_json_complete_ms": 3418.8,
+      "json_complete_to_row_ms": 22.7,
+      "long_task_durations_ms": [],
+      "network_requests": 58,
+      "api_get_requests": 3,
+      "dashboard_encoded_transfer_bytes": 78284,
+      "dashboard_content_encoding": "zstd"
+    },
+    "warm_collapsed_2": {
+      "rows": 8,
+      "dom_elements": 1076,
+      "closed_menu_dom_items": 0,
+      "first_row_ms": 3218.6,
+      "next_frame_ms": 3224,
+      "dashboard_json_complete_ms": 3196.4,
+      "json_complete_to_row_ms": 22.2,
+      "long_task_durations_ms": [],
+      "network_requests": 58,
+      "api_get_requests": 3,
+      "dashboard_encoded_transfer_bytes": 78507,
+      "dashboard_content_encoding": "zstd"
+    },
+    "warm_tettei": {
+      "rows": 183,
+      "dom_elements": 3361,
+      "closed_menu_dom_items": 0,
+      "first_row_ms": 3175,
+      "next_frame_ms": 3175.1,
+      "dashboard_json_complete_ms": 3075.2,
+      "json_complete_to_row_ms": 99.8,
+      "long_task_durations_ms": [
+        98,
+        65
+      ],
+      "network_requests": 58,
+      "api_get_requests": 3,
+      "dashboard_encoded_transfer_bytes": 77870,
+      "dashboard_content_encoding": "zstd"
+    }
+  },
+  "browser_payload_experiments": {
+    "variants": {
+      "full": {
+        "rawBytes": 715091,
+        "gzipBytes": 79373
+      },
+      "compact_keep_alias": {
+        "rawBytes": 321235,
+        "gzipBytes": 28580
+      },
+      "no_move": {
+        "rawBytes": 275425,
+        "gzipBytes": 16000
+      },
+      "root_only": {
+        "rawBytes": 1710,
+        "gzipBytes": 502
+      }
+    },
+    "offlineBrowserBenchmark": {
+      "iterations": 30,
+      "parse": {
+        "medianMs": 0.900000000372529,
+        "p95Ms": 1.6000000005587935,
+        "maxMs": 2.7999999998137355
+      },
+      "mapping": {
+        "medianMs": 0.20000000018626451,
+        "p95Ms": 1.199999999254942,
+        "maxMs": 1.5
+      }
+    },
+    "representation": "UTF-8 JSON.stringify of browser payload; CompressionStream gzip byte comparison, not original response bytes or deployed zstd transfer"
+  },
+  "http_scheduling_baseline": {
+    "protocol": "HTTP/1.1 over TLS; persistent connections per endpoint",
+    "samples_per_mode": 3,
+    "endpoint_medians": [
+      {
+        "mode": "isolated",
+        "endpoint": "dashboard",
+        "samples": 3,
+        "ttfb_headers_ms": 1234.575,
+        "body_ms": 317.616,
+        "get_total_ms": 1552.191,
+        "decode_ms": 1.936,
+        "compressed_body_bytes": 77410,
+        "decoded_body_bytes": 727689
+      },
+      {
+        "mode": "isolated",
+        "endpoint": "overview",
+        "samples": 3,
+        "ttfb_headers_ms": 1061.516,
+        "body_ms": 84.155,
+        "get_total_ms": 1151.253,
+        "decode_ms": 0.348,
+        "compressed_body_bytes": 6272,
+        "decoded_body_bytes": 52704
+      },
+      {
+        "mode": "simultaneous",
+        "endpoint": "dashboard",
+        "samples": 3,
+        "ttfb_headers_ms": 1359.796,
+        "body_ms": 340.79,
+        "get_total_ms": 1747.19,
+        "decode_ms": 1.519,
+        "compressed_body_bytes": 77474,
+        "decoded_body_bytes": 727689
+      },
+      {
+        "mode": "simultaneous",
+        "endpoint": "overview",
+        "samples": 3,
+        "ttfb_headers_ms": 1146.449,
+        "body_ms": 85.907,
+        "get_total_ms": 1256.78,
+        "decode_ms": 0.229,
+        "compressed_body_bytes": 6279,
+        "decoded_body_bytes": 52704
+      },
+      {
+        "mode": "dashboard_first_serial",
+        "endpoint": "dashboard",
+        "samples": 3,
+        "ttfb_headers_ms": 1259.612,
+        "body_ms": 361.162,
+        "get_total_ms": 1639.674,
+        "decode_ms": 1.348,
+        "compressed_body_bytes": 77500,
+        "decoded_body_bytes": 727689
+      },
+      {
+        "mode": "dashboard_first_serial",
+        "endpoint": "overview",
+        "samples": 3,
+        "ttfb_headers_ms": 1116.367,
+        "body_ms": 102.675,
+        "get_total_ms": 1131.019,
+        "decode_ms": 0.222,
+        "compressed_body_bytes": 6279,
+        "decoded_body_bytes": 52704
+      },
+      {
+        "mode": "options",
+        "endpoint": "dashboard",
+        "samples": 3,
+        "ttfb_headers_ms": 108.978,
+        "body_ms": 0.022,
+        "get_total_ms": 108.998,
+        "decode_ms": 0.005,
+        "compressed_body_bytes": 0,
+        "decoded_body_bytes": 0
+      },
+      {
+        "mode": "options",
+        "endpoint": "overview",
+        "samples": 3,
+        "ttfb_headers_ms": 107.301,
+        "body_ms": 0.025,
+        "get_total_ms": 107.326,
+        "decode_ms": 0.006,
+        "compressed_body_bytes": 0,
+        "decoded_body_bytes": 0
+      }
+    ],
+    "both_endpoints_complete_ms": {
+      "dashboard_first_serial": {
+        "samples": 3,
+        "median": 2764.554,
+        "min": 2708.178,
+        "max": 2954.715
+      },
+      "simultaneous": {
+        "samples": 3,
+        "median": 1749.371,
+        "min": 1595.948,
+        "max": 1772.831
+      }
+    },
+    "preflight_included_in_get_timings": false
+  },
+  "overview_read_only_ab": {
+    "inventory": {
+      "timezone": "Asia/Tokyo",
+      "boundary": 4,
+      "today": "2026-10-04",
+      "raw_due_rows": 15246,
+      "mismatched_live_logical_keys": 0,
+      "duplicate_live_note_keys": 0
+    },
+    "variants_ms": {
+      "original_python": {
+        "samples": 3,
+        "median": 448.018,
+        "min": 346.665,
+        "max": 477.004
+      },
+      "grouped_same_joins": {
+        "samples": 3,
+        "median": 287.191,
+        "min": 286.499,
+        "max": 346.929
+      },
+      "grouped_single_join": {
+        "samples": 3,
+        "median": 116.435,
+        "min": 108.667,
+        "max": 162.313
+      }
+    },
+    "same_snapshot_parity": true,
+    "days": 30,
+    "cards_in_range": 15033,
+    "accepted_local_variant": "grouped_same_joins",
+    "rejected_variant": "grouped_single_join",
+    "rejection_reason": "The schema does not enforce logical_note_key == live_note_id; a mismatched key can change the availability row and count."
+  },
+  "backend_read_only_ab": {
+    "inventory": {
+      "decks": 1527,
+      "missing_note_type_decks": 1223,
+      "explicit_note_type_decks": 304,
+      "notes_with_cards": 39284,
+      "cards": 39284,
+      "note_containing_decks": 1464,
+      "notes_without_cards": 0,
+      "read_only": 1
+    },
+    "experiments": {
+      "fallback_ab": {
+        "baseline_median_ms": 152.461,
+        "missing_only_median_ms": 134.137
+      },
+      "note_grain_ab": {
+        "baseline_median_ms": 556.545,
+        "note_grain_median_ms": 502.565
+      },
+      "tree_ab": {
+        "baseline_median_ms": 112.503,
+        "single_load_median_ms": 38.797
+      }
+    },
+    "same_snapshot_parity": true
+  },
+  "reviewed_local_changes": {
+    "status": "Local working tree; production baseline remains d747a5f.",
+    "scope": [
+      "Repository SQL grouping with the original two subject joins and DST Python fallback",
+      "Admin tree avoids duplicate full ORM reads",
+      "Opt-in compact dashboard retains Copy Move ID alias and preserves default signed-token contract",
+      "Selective timezone transport and OPTIONS max-age",
+      "Dashboard route preload and lazy worksheet modal",
+      "Dashboard-first overview loading with heatmap skeleton"
+    ],
+    "validation": {
+      "stats_file_tests": {
+        "passed": 18,
+        "runner": "python scripts/run_tests.py --file tests/test_stats_overview.py --backend-only"
+      },
+      "mysql_due_count_parity": {
+        "configured_database_modified": false,
+        "dst_fallback_cases": 2,
+        "mysql_version": "8.0.40",
+        "parity_cases": 108,
+        "probe_database_dropped": true,
+        "problems": [],
+        "status": "PASS"
+      },
+      "focused_tests": {
+        "backend_passed": 48,
+        "backend_breakdown": {
+          "stats": 18,
+          "integration_cors_note_analytics": 28,
+          "note_count_flag_states": 2
+        },
+        "note_analytics_fixture_flag": false,
+        "note_count_false_and_true_tested_separately": true,
+        "frontend_passed": 27,
+        "frontend_breakdown": {
+          "transport_client_create_deck_modal": 21,
+          "dashboard_query_page": 6
+        }
+      },
+      "frontend_checks": {
+        "typecheck": "PASS",
+        "build": "PASS",
+        "lint": "PASS",
+        "warnings": [
+          "Existing lint warnings",
+          "Bundle chunk above 500 KB"
+        ]
+      },
+      "wsgi_smoke": {
+        "status": "PASS",
+        "database": "isolated in-memory SQLite",
+        "health_bootstrap": "PASS",
+        "cors_max_age": 7200,
+        "max_age_options_only": true
+      },
+      "browser_qa": {
+        "status": "PASS",
+        "target": "Local production build with mocked API; not a production performance measurement",
+        "isolated_profile": "dashboard-review-20261004",
+        "browser_closed": true,
+        "rows_initial": 1,
+        "rows_expanded": 2,
+        "correct_study_route": true,
+        "worksheet_chunk_absent_before_open": true,
+        "worksheet_chunk_delay_ms": 2000,
+        "loading_dialog_visible_and_escape_cancellable": true,
+        "real_worksheet_component_field_mapping_and_close": true,
+        "page_errors": 0,
+        "session_dashboard_overview_omit_timezone_header": true,
+        "overview_timezone_query": "Asia/Tokyo",
+        "worksheet_meta_keeps_timezone_header": true
+      }
+    },
+    "count_units": {
+      "overview_future_due": "Card, unchanged from original heatmap reader",
+      "deck_badges": "Note for NOTE learners when STUDY_NOTE_COUNT_ENABLED is true; Card otherwise",
+      "user1_snapshot": "One Card per Note; multi-Card behavior covered by local parity fixtures"
+    },
+    "overview_gate_limit": "Delays initial/stale mount fetch; does not cancel an already running overview or prevent all overlap during global invalidation/refetch."
+  },
+  "sanitization": {
+    "contains_auth_material": false,
+    "contains_response_bodies": false,
+    "contains_card_or_deck_content": false,
+    "contains_sql_parameters": false,
+    "raw_sources": "gitignored output/ files; only aggregate timing, counts, bytes and environment facts are retained here"
+  }
+}

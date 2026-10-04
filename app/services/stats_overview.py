@@ -14,6 +14,8 @@ from app.repositories.study_authority_repository import read_study_authority_rou
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.services.scheduler_config_service import resolve_deck_options
 from app.repositories.stats_query_repository import (
+    can_use_mysql_local_day_sql,
+    query_canonical_future_due_day_counts_mysql,
     query_active_review_days,
     query_daily_review_aggregates,
 )
@@ -163,11 +165,33 @@ def _canonical_future_due_day_counts(
     learner Card with a due value, not suspended; overdue counts today).
     Divergent NOTE evidence raises; there is no ``card_progress`` fallback.
     """
-    from app.repositories import note_analytics_read_repository as note_reads
     from app.repositories.stats_query_repository import (
         _progress_due_local_day,
         _utc_to_business_day,
     )
+
+    start_local_day = _utc_to_business_day(
+        start_utc,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+    )
+    end_local_day = _utc_to_business_day(
+        end_utc,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+    )
+
+    if can_use_mysql_local_day_sql(timezone_name=timezone_name):
+        return query_canonical_future_due_day_counts_mysql(
+            user_id=user_id,
+            timezone_name=timezone_name,
+            day_boundary_hour_local=day_boundary_hour_local,
+            start_local_day=start_local_day,
+            end_local_day=end_local_day,
+            storage_profile=storage_profile,
+        )
+
+    from app.repositories import note_analytics_read_repository as note_reads
     from app.services.study_authority_read_service import StudyAuthorityReadError
 
     scope = note_reads.learner_note_scope(
@@ -196,17 +220,6 @@ def _canonical_future_due_day_counts(
     error = note_reads.violation_error(worst)
     if error is not None:
         raise StudyAuthorityReadError(*error)
-
-    start_local_day = _utc_to_business_day(
-        start_utc,
-        timezone_name=timezone_name,
-        day_boundary_hour_local=day_boundary_hour_local,
-    )
-    end_local_day = _utc_to_business_day(
-        end_utc,
-        timezone_name=timezone_name,
-        day_boundary_hour_local=day_boundary_hour_local,
-    )
 
     avail_rows = [(due_at, due_day, queue) for _violation, due_at, due_day, queue in fetched]
 
