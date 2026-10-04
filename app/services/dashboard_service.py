@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple
@@ -42,7 +43,7 @@ class DeckNode:
     children: List["DeckNode"] = field(default_factory=list)
 
 
-def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, bool]:
+def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> Tuple[List[DeckNode], int, int, int, bool]:
     admin_mode = is_admin_user(current_user)
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     # Same study-day boundary as the learner's Study queue counts.
@@ -91,9 +92,19 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
     move_alias_by_deck_id: Dict[int, str] = {}
     move_token_by_deck_id: Dict[int, str] = {}
     used_move_aliases: set[str] = set()
+    alias_key = str(current_app.config.get("SECRET_KEY") or "").encode("utf-8")
     for deck in decks:
-        move_token = create_deck_move_token(deck.id, current_user.id)
-        digest = hashlib.sha256(move_token.encode("utf-8")).hexdigest().upper()
+        if include_move_tokens:
+            token = create_deck_move_token(deck.id, current_user.id)
+            move_token_by_deck_id[deck.id] = token
+            digest = hashlib.sha256(token.encode("utf-8")).hexdigest().upper()
+        else:
+            # Display identifier only; numeric PATCH IDs still own authorization.
+            digest = hmac.new(
+                alias_key,
+                f"deck-move-alias-v1:{current_user.id}:{deck.id}".encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest().upper()
         alias_len = 10
         move_alias = f"MID-{digest[:alias_len]}"
         while move_alias in used_move_aliases and alias_len < len(digest):
@@ -104,7 +115,6 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
 
         used_move_aliases.add(move_alias)
         move_alias_by_deck_id[deck.id] = move_alias
-        move_token_by_deck_id[deck.id] = move_token
 
     subtree_card_counts_cache: Dict[int, Dict[str, int]] = {}
 
@@ -153,7 +163,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                     parent_move_alias=move_alias_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
                     parent_move_token=move_token_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
                     label=deck.name,
-                    href=url_for("vocabulary.study_deck", deck_id=deck.id),
+                    href=url_for("vocabulary.study_deck", deck_id=deck.id) if include_move_tokens else "",
                     depth=depth,
                     new_count=deck_new,
                     learn_count=deck_learn,

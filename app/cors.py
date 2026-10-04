@@ -40,5 +40,8 @@ def init_cors(app) -> None:
         response.headers["Access-Control-Allow-Headers"] = _ALLOWED_HEADERS
         response.headers["Access-Control-Allow-Methods"] = _ALLOWED_METHODS
         response.headers["Access-Control-Expose-Headers"] = _EXPOSED_HEADERS
+        max_age = app.config.get("CORS_MAX_AGE", 86400)
+        if request.method == "OPTIONS" and max_age is not None:
+            response.headers["Access-Control-Max-Age"] = str(max_age)
         response.vary.add("Origin")
         return response

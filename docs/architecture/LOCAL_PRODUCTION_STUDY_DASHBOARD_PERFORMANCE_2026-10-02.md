@@ -1,5 +1,7 @@
 # Local / production: điều tra tốc độ dashboard và study Tettei N1
 
+> Báo cáo lịch sử trước P10. SQL và số đo Dashboard hiện tại sau `CONSOLIDATED_V1` được kiểm chứng lại tại [điều tra User 1 ngày 04/10](DASHBOARD_USER1_PERFORMANCE_INVESTIGATION_2026-10-04.md).
+
 > Ngày: 2026-10-02 (JST) | Mode: INVESTIGATE | Production: MySQL 8.0.46, release `438b2835bcf632b5eacec95e3ef9d7c19f272c44`
 > Local: MySQL 8.0.40, DB `nihongo`, branch `refactor/fe-phase1-pilot-mcp-tokens`, HEAD `f1310b7`
 > Phạm vi study được người dùng xác nhận: các deck Tettei N1.

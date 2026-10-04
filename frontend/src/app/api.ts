@@ -27,6 +27,7 @@ import {
   apiJson,
   apiJsonKeepalive,
   apiRequest,
+  getBrowserTimezone,
   setCsrfToken,
 } from '../shared/api/client'
 import type {
@@ -91,11 +92,11 @@ type DashboardRow = {
   deck_id: number
   parent_id: number | null
   move_alias: string
-  move_token: string
-  parent_move_alias: string | null
-  parent_move_token: string | null
+  move_token?: string
+  parent_move_alias?: string | null
+  parent_move_token?: string | null
   label: string
-  href: string
+  href?: string
   depth: number
   new_count: number
   learn_count: number
@@ -156,9 +157,9 @@ function toDeckNode(row: DashboardRow): DeckNode {
     },
     move: {
       alias: row.move_alias,
-      token: row.move_token,
-      parent_alias: row.parent_move_alias,
-      parent_token: row.parent_move_token,
+      token: row.move_token ?? '',
+      parent_alias: row.parent_move_alias ?? null,
+      parent_token: row.parent_move_token ?? null,
     },
     actions: {
       rename: `${API_BASE}/decks/${row.deck_id}`,
@@ -231,7 +232,7 @@ export const appApi = {
   },
 
   async getBootstrap(): Promise<FrontendBootstrap> {
-    const payload = await apiRequest<SessionResponse>(`${API_BASE}/session`)
+    const payload = await apiRequest<SessionResponse>(`${API_BASE}/session`, { includeTimezone: false })
     return toBootstrap(payload)
   },
 
@@ -287,15 +288,19 @@ export const appApi = {
 
   async getDashboard(): Promise<DashboardPayload> {
     const payload = await apiRequest<DashboardResponse>(
-      `${API_BASE}/dashboard`,
+      `${API_BASE}/dashboard?compact=1`,
+      { includeTimezone: false },
     )
     return toDashboard(payload)
   },
 
   async getDashboardOverview(year: number): Promise<DashboardOverview> {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const query = new URLSearchParams({ year: String(year) })
+    const tz = getBrowserTimezone()
+    if (tz) query.set('timezone', tz)
     return apiRequest<DashboardOverview>(
-      `${API_BASE}/statistics/overview?year=${encodeURIComponent(year)}&timezone=${encodeURIComponent(tz)}`,
+      `${API_BASE}/statistics/overview?${query}`,
+      { includeTimezone: false },
     )
   },
 

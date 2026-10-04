@@ -368,5 +368,43 @@ describe('apiJsonKeepalive', () => {
     expect(unavailable).not.toHaveBeenCalled()
     unsubscribe()
   })
+
+  it('omits automatic timezone only when the caller opts out', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(
+      JSON.stringify({ ok: true }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiRequest('/api/dashboard', { method: 'GET', includeTimezone: false })
+    const getRequest = fetchMock.mock.calls[0][1] as RequestInit
+    const getHeaders = getRequest.headers as Headers
+    expect(getHeaders.has('X-Timezone')).toBe(false)
+
+    await apiRequest('/api/health', { method: 'HEAD' })
+    const headRequest = fetchMock.mock.calls[1][1] as RequestInit
+    const headHeaders = headRequest.headers as Headers
+    expect(headHeaders.get('X-Timezone')).toBeTruthy()
+  })
+
+  it('attaches X-Timezone header on unsafe mutation requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ ok: true }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiRequest('/api/decks', { method: 'POST', body: JSON.stringify({ name: 'test' }) })
+    const postRequest = fetchMock.mock.calls[0][1] as RequestInit
+    const postHeaders = postRequest.headers as Headers
+    expect(postHeaders.has('X-Timezone')).toBe(true)
+    expect(postHeaders.get('X-Timezone')).toBeTruthy()
+  })
 })
 
