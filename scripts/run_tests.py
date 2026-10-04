@@ -100,6 +100,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/mysql_probe_db.py",
             "app/services/audit_connection_safety.py",
             "migrations/versions/20261003_000049_consolidate_note_progress_row.py",
+            "migrations/versions/20261003_000050_drop_retired_note_progress_tables.py",
+            "migrations/retired_note_progress_tables.py",
+            "scripts/probe_p10_drop_mysql.py",
             "deploy/flama-study-retention.service",
             "deploy/flama-study-retention.timer",
             "models/study_application.py",
@@ -152,6 +155,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_session_retention.py",
             "tests/test_study_session_install_usage.py",
             "tests/test_study_consolidated_schema.py",
+            "tests/test_study_retired_tables_migration.py",
             "tests/test_study_consolidated_progress.py",
             "tests/test_study_consolidated_connect.py",
             "tests/test_study_phase9_readiness.py",
@@ -847,6 +851,9 @@ MYSQL_CONTRACT_SOURCE_PATTERNS = (
     "scripts/probe_p9_connect_fence_mysql.py",
     # Migration 49: consolidated progress CHECKs copy study_progress_subjects.
     "scripts/probe_p10_schema_mysql.py",
+    # Migration 50: FK/index drops and DROP TABLE order are InnoDB behavior.
+    "migrations/versions/20261003_000050_drop_retired_note_progress_tables.py",
+    "scripts/probe_p10_drop_mysql.py",
     # Phase 7 foreign-key behavior (cascades from membership to pins) only runs on InnoDB.
     "app/services/study_session_retention_service.py",
     "scripts/probe_p7_session_retention_mysql.py",

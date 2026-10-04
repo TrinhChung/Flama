@@ -38,6 +38,7 @@ engines/
 !/migrations/env.py
 !/migrations/alembic.ini
 !/migrations/script.py.mako
+!/migrations/retired_note_progress_tables.py
 !/migrations/versions/
 !/migrations/versions/*.py
 
