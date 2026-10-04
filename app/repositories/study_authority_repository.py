@@ -14,7 +14,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping
 
-from sqlalchemy import select
+from sqlalchemy import literal, select, union_all
 from sqlalchemy.orm import Session
 
 from app.services.study_progress_contract import (
@@ -532,3 +532,89 @@ def lock_study_authority_compatibility(
         subject_generation=generation,
         expected_mirror_revision=int(subject.mirror_revision),
     )
+
+
+def lock_study_authority_siblings_many(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked_by_logical_note_key: Mapping[str, LockedStudyAuthoritySubject],
+) -> Mapping[str, LockedStudyAuthoritySiblings]:
+    """Read-lock complete sibling vectors after all session Subjects are locked.
+
+    Session callers already hold learner -> session -> every Subject lock in
+    logical-key order. Acquire shared Note/Card locks in bounded, deterministic
+    groups; direct review continues using its single-Subject helper. No learner
+    ownership predicate is applied to Notes: overlay source Notes belong to the
+    publisher, while progress ownership remains on the locked Subject.
+    """
+    if not isinstance(route, StudyAuthorityRoute) or route.mode_code != "NOTE":
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_MODE_CONFLICT", "Complete sibling locking requires NOTE authority.",
+        )
+    keys = sorted(locked_by_logical_note_key, key=lambda value: value.encode("utf-8"))
+    for key in keys:
+        locked = locked_by_logical_note_key[key]
+        if not isinstance(locked, LockedStudyAuthoritySubject):
+            raise StudyAuthorityFenceError(
+                "INVALID_AUTHORITY_SUBJECT", "Locked authority subject is missing.",
+            )
+        subject = locked.subject
+        if int(subject.learner_user_id) != route.learner_user_id:
+            raise StudyAuthorityFenceError("WRONG_LEARNER", "Authority subject belongs to another learner.")
+        live_note_id = str(subject.live_note_id or "").strip()
+        if not live_note_id:
+            raise StudyAuthorityFenceError(
+                "DETACHED_AUTHORITY_SUBJECT", "Detached authority subject has no resolvable live Note.",
+            )
+        if key != live_note_id or bytes(subject.logical_note_key) != live_note_id.encode("utf-8"):
+            raise StudyAuthorityFenceError(
+                "UNSUPPORTED_AUTHORITY_IDENTITY", "Authority subject logical identity does not match its live Note.",
+            )
+
+    result: dict[str, LockedStudyAuthoritySiblings] = {}
+    for offset in range(0, len(keys), 500):
+        chunk = keys[offset:offset + 500]
+        # Only existence is needed, but this is a current locking read just as
+        # in the per-Note helper. Keep the full Card vector, including siblings
+        # outside the selected session composition.
+        note_read = select(Note.id).where(Note.id.in_(chunk))
+        if session.get_bind().dialect.name == "mysql":
+            # A covering PRIMARY scan for IN(...) can lock unrelated Notes
+            # under REPEATABLE READ, even with FORCE INDEX. Drive point reads
+            # from the bounded key relation instead. UNION prevents merging
+            # it into a Note scan; STRAIGHT_JOIN keeps the keys on the left.
+            key_rows = union_all(*(
+                select(literal(key).label("note_id")) for key in chunk
+            )).subquery("session_note_keys")
+            note_read = (
+                select(Note.id).select_from(key_rows)
+                .join(Note, Note.id == key_rows.c.note_id)
+                .prefix_with("STRAIGHT_JOIN", dialect="mysql")
+                .with_hint(Note, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+            )
+        existing = set(session.execute(
+            note_read.order_by(Note.id.asc()).with_for_update(read=True)
+        ).scalars())
+        if existing != set(chunk):
+            raise StudyAuthorityFenceError("AUTHORITY_NOTE_NOT_FOUND", "Authority Note no longer exists.")
+        cards_by_note: dict[str, list[Card]] = {key: [] for key in chunk}
+        for card in session.execute(
+            select(Card).where(Card.note_id.in_(chunk))
+            .with_hint(Card, "FORCE INDEX (ix_cards_note_id)", dialect_name="mysql")
+            .order_by(Card.note_id.asc(), Card.id.asc()).with_for_update(read=True)
+        ).scalars():
+            cards_by_note[str(card.note_id)].append(card)
+        for key in chunk:
+            cards = tuple(cards_by_note[key])
+            if not cards:
+                raise StudyAuthorityFenceError("AUTHORITY_SIBLINGS_EMPTY", "Authority Note has no active Card sibling.")
+            subject = locked_by_logical_note_key[key].subject
+            result[key] = LockedStudyAuthoritySiblings(
+                learner_user_id=route.learner_user_id,
+                subject_id=int(subject.id),
+                subject_generation=int(subject.subject_generation),
+                live_note_id=key,
+                cards=cards,
+            )
+    return MappingProxyType(result)

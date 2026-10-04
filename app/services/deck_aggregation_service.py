@@ -37,6 +37,8 @@ def _deck_note_types(
 ) -> Dict[int, str]:
     """Owned Notes first (oldest Note type per deck), then install note types."""
 
+    if not visible_deck_ids:
+        return {}
     rows = session.execute(
         select(Note.deck_id, Note.note_type_id, func.min(Note.created_at))
         .where(
@@ -52,8 +54,10 @@ def _deck_note_types(
         rows, key=lambda row: (int(row[0]), str(row[2] or ""), str(row[1]))
     ):
         note_types.setdefault(int(deck_id), str(note_type_id))
+    requested_decks = set(visible_deck_ids)
     for deck_id, note_type_id in overlay_types:
-        note_types.setdefault(deck_id, note_type_id)
+        if deck_id in requested_decks:
+            note_types.setdefault(deck_id, note_type_id)
     return note_types
 
 
@@ -139,6 +143,8 @@ def aggregate_deck_study_counts(
     admin_mode: bool = False,
     count_by_note: bool = False,
     owned_by_any_user: bool = False,
+    include_note_types: bool = True,
+    note_type_deck_ids: list[int] | None = None,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
     """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
@@ -148,6 +154,9 @@ def aggregate_deck_study_counts(
     all its Cards share one state, so a Note with two Templates is one due item.
     ``owned_by_any_user`` (admin-wide Browse) counts every Note in the visible
     decks with the learner's own state, not only the learner's Notes.
+    Metadata is optional: counts-only callers set ``include_note_types=False``.
+    ``note_type_deck_ids`` restricts fallback metadata to visible decks that
+    need it, without changing the counted scope or oldest-Note precedence.
     Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
     """
 
@@ -268,10 +277,13 @@ def aggregate_deck_study_counts(
                 "learn": int(learn or 0),
                 "due": int(due or 0),
             }
+    metadata_deck_ids = visible_deck_ids if note_type_deck_ids is None else [
+        deck_id for deck_id in note_type_deck_ids if deck_id in counts
+    ]
     note_types = _deck_note_types(
         session,
         learner_user_id=learner_user_id,
-        visible_deck_ids=visible_deck_ids,
+        visible_deck_ids=metadata_deck_ids,
         overlay_types=overlay_types,
-    )
+    ) if include_note_types else {}
     return counts, note_types

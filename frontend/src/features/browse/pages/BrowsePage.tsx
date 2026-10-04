@@ -173,8 +173,8 @@ import { BrowseCardEditor } from '../components/BrowseCardEditor'
 import { BrowseTtsModal } from '../components/BrowseTtsModal'
 import { BrowseStrokeModal } from '../components/BrowseStrokeModal'
 import { BrowseAudioSelectorModal } from '../components/BrowseAudioSelectorModal'
-import { DeckWorksheetModal } from '@/features/worksheets'
-import { ContextHelpButton } from '@/features/guide'
+import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { ContextHelpButton } from '@/features/guide/components/ContextHelpButton'
 
 export function BrowsePage() {
   const navigate = useNavigate()
@@ -573,7 +573,7 @@ export function BrowsePage() {
 
       {/* Printable Worksheet Generator Modal */}
       {browse.isWorksheetModalOpen && (
-        <DeckWorksheetModal
+        <LazyDeckWorksheetModal
           open={browse.isWorksheetModalOpen}
           onOpenChange={browse.setIsWorksheetModalOpen}
           deckId={browse.worksheetTargetDeckId || browse.selectedDeckId || 1}

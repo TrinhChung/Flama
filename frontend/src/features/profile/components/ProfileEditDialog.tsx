@@ -25,6 +25,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { profileApi } from '../api/profileApi'
+import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 import {
   type PasswordFieldErrors,
   mapApiErrorToFieldErrors,
@@ -124,7 +125,7 @@ export function ProfileEditDialog({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
-      void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       toast.success(
         activeTab === 'password'
           ? 'Mật khẩu đã được thay đổi thành công.'

@@ -20,7 +20,7 @@ from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_compatibility,
     lock_study_authority_route,
-    lock_study_authority_siblings,
+    lock_study_authority_siblings_many,
 )
 from app.repositories.study_repository import (
     card_state_from_progress,
@@ -90,7 +90,7 @@ from app.services.scheduler_config_service import (
     resolve_deck_options,
     resolve_scheduler_runtime_settings,
 )
-from app.services.study_policy_service import build_scheduler_policy
+from app.services.study_policy_service import build_scheduler_policy, serialize_deck_options
 from app.services.study_worker_readiness_service import has_ready_study_worker
 from app.validators.review_event import (
     ReviewEventPayloadError,
@@ -601,6 +601,35 @@ def open_study_session(
     # request, so resolve each once instead of once per Card.
     deck_by_id: dict[int, Any] = {}
     options_by_deck_id: dict[int | None, Any] = {}
+    runtime = resolve_scheduler_runtime_settings(user_id=int(user.id))
+    policies_by_deck_id: dict[int | None, dict[str, Any]] = {}
+    policies_by_material: dict[str, dict[str, Any]] = {}
+    template_artifacts: dict[str, dict[str, Any]] = {}
+
+    # Both first-state policy selection and artifact construction use this
+    # membership. An empty loaded set must not fall back to per-Card queries.
+    clone_added_note_ids: frozenset[str] | None = None
+    note_override_rows_by_note_id: dict[str, list] | None = None
+    if clone_scope is not None:
+        from app.repositories.flashcards_share_repository import (
+            get_clone_note_field_overrides_batch,
+        )
+
+        install_id = str(clone_scope.install.id)
+        clone_added_note_ids = frozenset(
+            str(value)
+            for value in db.session.execute(
+                select(DeckCloneAddedNote.note_id).where(
+                    DeckCloneAddedNote.deck_install_id == install_id
+                )
+            ).scalars()
+        )
+        note_override_rows_by_note_id = {
+            str(note_id): rows
+            for (_install, note_id), rows in get_clone_note_field_overrides_batch(
+                [install_id], sorted({str(card.note_id) for card in cards})
+            ).items()
+        }
 
     def local_deck_for(deck_id: int | None):
         if deck_id is None:
@@ -615,8 +644,28 @@ def open_study_session(
                 user_id=int(user.id),
                 deck_id=deck_id,
                 deck_obj=local_deck_for(deck_id),
+                runtime_settings=runtime,
             )
         return options_by_deck_id[deck_id]
+
+    def policy_for(deck_id: int | None):
+        if deck_id not in policies_by_deck_id:
+            options = options_for(deck_id)
+            # The options were resolved once per deck and remain immutable
+            # during issuance. Reuse only policies with identical executable
+            # inputs, including timezone; different deck presets may coincide.
+            material_key = study_artifact_service.canonical_digest({
+                "config": serialize_deck_options(options),
+                "timezone": timezone_name,
+                "algorithm_key": DEFAULT_ALGORITHM_IDENTITY.key,
+                "algorithm_version": DEFAULT_ALGORITHM_IDENTITY.version,
+            })
+            if material_key not in policies_by_material:
+                policies_by_material[material_key] = build_scheduler_policy(
+                    options=options, timezone_name=timezone_name,
+                )
+            policies_by_deck_id[deck_id] = policies_by_material[material_key]
+        return policies_by_deck_id[deck_id]
 
     authority_subjects = None
     if authority_route.mode_code == "NOTE":
@@ -633,6 +682,7 @@ def open_study_session(
                 effective_deck_id = study_service.resolve_effective_study_deck_id(
                     card=card,
                     clone_scope=clone_scope,
+                    clone_added_note_ids=clone_added_note_ids,
                 )
                 starting_ease_by_note_id[str(card.note_id)] = float(
                     options_for(effective_deck_id).startingEase
@@ -664,7 +714,6 @@ def open_study_session(
             card_ids=[str(card.id) for card in cards],
         )
     )
-    runtime = resolve_scheduler_runtime_settings(user_id=int(user.id))
     session_id = str(uuid4())
     token = secrets.token_urlsafe(32)
     policies: dict[str, Any] = {}
@@ -675,42 +724,16 @@ def open_study_session(
     session_card_values: list[dict[str, Any]] = []
     frozen_binding: dict[str, Any] | None = None
 
-    # Overlay content: load the install's added Notes and field overrides once.
-    clone_added_note_ids: frozenset[str] | None = None
-    note_override_rows_by_note_id: dict[str, list] | None = None
-    if clone_scope is not None:
-        from app.repositories.flashcards_share_repository import (
-            get_clone_note_field_overrides_batch,
-        )
-
-        install_id = str(clone_scope.install.id)
-        clone_added_note_ids = frozenset(
-            str(value)
-            for value in db.session.execute(
-                select(DeckCloneAddedNote.note_id).where(
-                    DeckCloneAddedNote.deck_install_id == install_id
-                )
-            ).scalars()
-        )
-        note_override_rows_by_note_id = {
-            str(note_id): rows
-            for (_install, note_id), rows in get_clone_note_field_overrides_batch(
-                [install_id], sorted({str(card.note_id) for card in cards})
-            ).items()
-        }
-
     for ordinal, card in enumerate(cards):
         note = card.note
         local_deck_id = study_service.resolve_effective_study_deck_id(
             card=card,
             clone_scope=clone_scope,
+            clone_added_note_ids=clone_added_note_ids,
         )
         local_deck = local_deck_for(local_deck_id)
         options = options_for(local_deck_id)
-        policy = build_scheduler_policy(
-            options=options,
-            timezone_name=timezone_name,
-        )
+        policy = policy_for(local_deck_id)
         policy_key = policy["config_hash"]
         if policy_key not in policies:
             policies[policy_key] = {
@@ -742,7 +765,13 @@ def open_study_session(
             clone_added_note_ids=clone_added_note_ids,
             note_override_rows_by_note_id=note_override_rows_by_note_id,
         )
-        template = study_artifact_service.build_template_artifact(context)
+        # template_version covers raw sources, CSS, renderer ABI and effective
+        # field definitions, so an overlay rename/schema change cannot reuse
+        # the wrong sanitized artifact. The cache lives only in this issuance.
+        artifact_version = study_artifact_service.template_version(context)
+        if artifact_version not in template_artifacts:
+            template_artifacts[artifact_version] = study_artifact_service.build_template_artifact(context)
+        template = template_artifacts[artifact_version]
         content = study_artifact_service.build_content_artifact(context)
         template_key = f"{template['id']}:{template['version']}"
         content_key = f"{content['id']}:{content['version']}"
@@ -1559,6 +1588,11 @@ def _replay_session_events(
     last_offset = -1
     touched_ids: set[str] = set()
     event_ids: set[str] = set()
+    siblings_by_note: dict[str, list[StudySessionCard]] = {}
+    if note_authority_pins is not None:
+        for member in session_cards:
+            identity = note_authority_pins.identity_by_session_card_id[int(member.id)]
+            siblings_by_note.setdefault(identity.logical_note_key, []).append(member)
 
     for index, raw_event in enumerate(raw_events, start=1):
         if not isinstance(raw_event, dict):
@@ -1759,13 +1793,9 @@ def _replay_session_events(
             note_identity = note_authority_pins.identity_by_session_card_id[
                 int(session_card.id)
             ]
-            for sibling in session_cards:
-                sibling_identity = note_authority_pins.identity_by_session_card_id[
-                    int(sibling.id)
-                ]
-                if sibling_identity.logical_note_key == note_identity.logical_note_key:
-                    states[sibling.card_id] = after
-                    touched_ids.add(sibling.card_id)
+            for sibling in siblings_by_note[note_identity.logical_note_key]:
+                states[sibling.card_id] = after
+                touched_ids.add(sibling.card_id)
 
     return states, replayed_events, touched_ids, event_ids
 
@@ -1867,14 +1897,15 @@ def _lock_note_session_context(
                 deck_install_id=install.id
             ).all()
         }
+        local_added_note_ids = frozenset(db.session.execute(
+            select(DeckCloneAddedNote.note_id).where(
+                DeckCloneAddedNote.deck_install_id == install.id,
+                DeckCloneAddedNote.note_id.in_(sorted({card.note_id for card in card_rows.values()})),
+            )
+        ).scalars()) if card_rows else frozenset()
         for card_id, card in card_rows.items():
             membership = membership_by_card_id[card_id]
-            is_local_added = bool(
-                DeckCloneAddedNote.query.filter_by(
-                    deck_install_id=install.id,
-                    note_id=card.note_id,
-                ).first()
-            )
+            is_local_added = str(card.note_id) in local_added_note_ids
             if is_local_added:
                 valid = (
                     int(card.note.user_id) == int(user.id)
@@ -1918,13 +1949,13 @@ def _lock_note_session_context(
                 now_utc=committed_at,
                 create_token_if_missing=create_token_if_missing,
             )
+            siblings_by_note = lock_study_authority_siblings_many(
+                db.session, route=route,
+                locked_by_logical_note_key=locked_subjects.locked_by_logical_note_key,
+            )
             for note_key in sorted(note_keys, key=lambda value: value.encode("utf-8")):
                 locked = locked_subjects.locked_by_logical_note_key[note_key]
-                siblings = lock_study_authority_siblings(
-                    db.session,
-                    route=route,
-                    locked=locked,
-                )
+                siblings = siblings_by_note[note_key]
                 compatibility = lock_study_authority_compatibility(
                     db.session,
                     route=route,
@@ -1981,6 +2012,10 @@ def _commit_note_authority_session(
     projected_revisions: dict[str, int] = {}
     seen_note_events: dict[str, int] = {}
     usage = study_service.ReviewUsageTouches()
+    membership_identity_by_note = {
+        identity.logical_note_key: identity
+        for identity in pins.identity_by_session_card_id.values()
+    }
     try:
         if note_batch is not None:
             note_batch = verify_note_batch_continuation(
@@ -1990,10 +2025,8 @@ def _commit_note_authority_session(
         for note_key in sorted(note_keys):
             locked = locked_subjects.locked_by_logical_note_key[note_key]
             membership_identity = (
-                note_batch.expected_by_note[note_key] if note_batch is not None else next(
-                    identity for identity in pins.identity_by_session_card_id.values()
-                    if identity.logical_note_key == note_key
-                )
+                note_batch.expected_by_note[note_key]
+                if note_batch is not None else membership_identity_by_note[note_key]
             )
             current_identity = build_note_authority_wire_identity(
                 enrollment_epoch=route.epoch,

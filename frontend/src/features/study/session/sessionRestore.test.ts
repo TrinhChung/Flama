@@ -644,4 +644,41 @@ describe('persisted study session normalization', () => {
     expect(result.session.events).toEqual([])
     expect(result.session.in_flight_batches).toEqual([])
   })
+
+  it('validates large event lists with linear Card lookup work and preserves event identity', () => {
+    const stored = persistedSession()
+    const cardCount = 1000
+    const eventCount = 50
+    let cardIdReads = 0
+    const base = stored.snapshot.cards[0]
+    stored.snapshot.cards = Array.from({ length: cardCount }, (_, index) => ({
+      ...base,
+      get card_id() {
+        cardIdReads += 1
+        return `card-${index}`
+      },
+    }))
+    stored.events = Array.from({ length: eventCount }, (_, index) => ({
+      ...stored.events[0],
+      event_id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      sequence: index + 1,
+      card_id: `card-${cardCount - eventCount + index}`,
+      scheduler_offset_ms: (index + 1) * 1000,
+    }))
+
+    const result = normalizePersistedStudySession(stored)
+    expect(result.status).toBe('restored')
+    if (result.status !== 'restored') return
+    expect(result.session.events.map((event) => event.card_id)).toEqual(
+      stored.events.map((event) => event.card_id),
+    )
+    // A scan of all Cards for each late-session event exceeds this budget.
+    // Counting reads avoids brittle wall-clock performance assertions.
+    expect(cardIdReads).toBeLessThan(10 * (cardCount + eventCount))
+
+    stored.events[0].card_id = 'outside-session'
+    expect(normalizePersistedStudySession(stored)).toMatchObject({
+      status: 'quarantine', quarantine: { reason: 'EVENT_CONTRACT_MISMATCH' },
+    })
+  })
 })

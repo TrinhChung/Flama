@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useBootstrap } from '@/shared/api/bootstrap'
+import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
 import { AuthCard } from '../components/AuthCard'
 import { requestEmailVerification, verifyEmail } from '../api'
 
@@ -73,7 +73,7 @@ export function VerifyEmailPage() {
         setIsVerifiedSuccess(true)
         toast.info(data.message || 'Email của bạn đã được xác thực trước đó.')
         void queryClient.invalidateQueries({ queryKey: ['profile'] })
-        void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+        void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       } else {
         toast.success(
           data.message || 'Mã xác thực 6 chữ số đã được gửi tới email của bạn.'
@@ -103,7 +103,7 @@ export function VerifyEmailPage() {
           : 'Xác thực địa chỉ email thành công!'
       )
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
-      void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
     },
     onError: (err: unknown) => {

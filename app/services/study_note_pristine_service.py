@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable, Mapping
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.repositories.study_authority_repository import (
@@ -54,18 +54,30 @@ def classify_note_authority_keys(
 
     stateful: set[str] = set()
     for chunk in _chunks(note_ids):
-        for subject in session.execute(read(
-            select(StudyProgressSubject).where(
+        # Classification needs only presence and identity, not the Algorithm
+        # JSON document. Preserve JSON null's Python-None semantics as well as
+        # SQL NULL; the full state is loaded later under the same row locks.
+        has_state = and_(
+            StudyProgressSubject.state_payload.isnot(None),
+            func.lower(func.json_type(StudyProgressSubject.state_payload)) != "null",
+        )
+        for logical_key, status, live_note_id, state_present in session.execute(read(
+            select(
+                StudyProgressSubject.logical_note_key,
+                StudyProgressSubject.status_code,
+                StudyProgressSubject.live_note_id,
+                has_state.label("has_state"),
+            ).where(
                 StudyProgressSubject.learner_user_id == int(learner_user_id),
                 StudyProgressSubject.logical_note_key.in_([value.encode("utf-8") for value in chunk]),
             ).order_by(StudyProgressSubject.logical_note_key.asc())
-        )).scalars():
-            key = bytes(subject.logical_note_key).decode("utf-8")
-            if subject.state_payload is not None:
+        )):
+            key = bytes(logical_key).decode("utf-8")
+            if state_present:
                 stateful.add(key)
             elif not (
-                str(subject.status_code) == "NO_CURRENT_PROGRESS"
-                and str(subject.live_note_id or "") == key
+                str(status) == "NO_CURRENT_PROGRESS"
+                and str(live_note_id or "") == key
             ):
                 raise StudyAuthorityFenceError(
                     "INCOMPLETE_AUTHORITY_COVERAGE",

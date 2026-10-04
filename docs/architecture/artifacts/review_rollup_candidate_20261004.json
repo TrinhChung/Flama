@@ -1,0 +1,183 @@
+{
+  "observed_utc": "2026-10-04T13:25:48.286580+00:00",
+  "environment": "Disposable local MySQL, synthetic minimal ReviewEvent schema; not production latency",
+  "policy": {
+    "timezone": "Asia/Tokyo",
+    "day_boundary_hour": 4,
+    "shift_minutes": 300,
+    "year": 2026
+  },
+  "trials": 5,
+  "cases": [
+    {
+      "total_events": 4000,
+      "annual_event_rows": 1826,
+      "annual_rollup_rows": 365,
+      "parity": true,
+      "raw_read_median_ms": 7.787,
+      "rollup_read_median_ms": 3.324,
+      "raw_read_samples_ms": [
+        7.443,
+        7.229,
+        8.01,
+        7.787,
+        8.21
+      ],
+      "rollup_read_samples_ms": [
+        3.422,
+        3.721,
+        3.216,
+        3.261,
+        3.324
+      ],
+      "raw_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "ALL",
+          "user_id,ix_user_time",
+          null,
+          null,
+          null,
+          3998,
+          11.11,
+          "Using where; Using temporary; Using filesort"
+        ]
+      ],
+      "rollup_explain": [
+        [
+          1,
+          "SIMPLE",
+          "daily_rollups",
+          null,
+          "range",
+          "PRIMARY",
+          "PRIMARY",
+          "15",
+          null,
+          365,
+          100.0,
+          "Using where"
+        ]
+      ]
+    },
+    {
+      "total_events": 40000,
+      "annual_event_rows": 19927,
+      "annual_rollup_rows": 365,
+      "parity": true,
+      "raw_read_median_ms": 76.227,
+      "rollup_read_median_ms": 3.309,
+      "raw_read_samples_ms": [
+        92.283,
+        76.599,
+        75.224,
+        74.544,
+        76.227
+      ],
+      "rollup_read_samples_ms": [
+        3.309,
+        4.669,
+        3.098,
+        3.743,
+        3.119
+      ],
+      "raw_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "ref",
+          "user_id,ix_user_time",
+          "user_id",
+          "4",
+          "const",
+          19999,
+          11.11,
+          "Using where; Using temporary; Using filesort"
+        ]
+      ],
+      "rollup_explain": [
+        [
+          1,
+          "SIMPLE",
+          "daily_rollups",
+          null,
+          "range",
+          "PRIMARY",
+          "PRIMARY",
+          "15",
+          null,
+          365,
+          100.0,
+          "Using where"
+        ]
+      ]
+    },
+    {
+      "total_events": 100000,
+      "annual_event_rows": 49997,
+      "annual_rollup_rows": 365,
+      "parity": true,
+      "raw_read_median_ms": 193.642,
+      "rollup_read_median_ms": 4.5,
+      "raw_read_samples_ms": [
+        193.179,
+        193.642,
+        205.856,
+        192.496,
+        199.847
+      ],
+      "rollup_read_samples_ms": [
+        5.098,
+        5.077,
+        4.5,
+        3.463,
+        3.917
+      ],
+      "raw_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "ref",
+          "user_id,ix_user_time",
+          "user_id",
+          "4",
+          "const",
+          49999,
+          11.11,
+          "Using where; Using temporary; Using filesort"
+        ]
+      ],
+      "rollup_explain": [
+        [
+          1,
+          "SIMPLE",
+          "daily_rollups",
+          null,
+          "range",
+          "PRIMARY",
+          "PRIMARY",
+          "15",
+          null,
+          365,
+          100.0,
+          "Using where"
+        ]
+      ]
+    }
+  ],
+  "mysql_version": "8.0.40",
+  "duplicate_before_rollup_and_rollback_sanity": true,
+  "limitations": [
+    "Counters built by backfill, not integrated into application writers.",
+    "Duplicate/rollback checks are transaction sanity only, not complete writer idempotency coverage.",
+    "No timezone change, DST, outbox crash, concurrent writer, import or deck-scope parity claimed.",
+    "No MySQL temporary table or IO metrics collected; EXPLAIN estimates are not exact rows examined."
+  ]
+}

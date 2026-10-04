@@ -1,0 +1,10 @@
+# /assets/ is reserved for Vite output with content hashes in filenames.
+# Public files with stable names (logo, icons) and HTML keep Pages revalidation.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
