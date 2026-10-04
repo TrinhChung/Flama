@@ -101,6 +101,16 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertEqual(backend_tests, set(run_tests.discover_all_backend_tests()))
         self.assertEqual(frontend_tests, set())
 
+    def test_queue_metadata_repository_runs_study_regressions(self):
+        modules, backend_tests, frontend_tests = run_tests.map_files_to_modules(
+            ["app/repositories/study_queue_repository.py"]
+        )
+        self.assertEqual(modules, {"study"})
+        self.assertIn("tests/test_study_queue_metadata.py", backend_tests)
+        self.assertIn("tests/test_study_session_scaling.py", backend_tests)
+        self.assertNotEqual(backend_tests, set(run_tests.discover_all_backend_tests()))
+        self.assertEqual(frontend_tests, set())
+
     def test_seed_and_migration_changes_have_explicit_modules(self):
         seed_modules, seed_tests, _ = run_tests.map_files_to_modules(
             ["scripts/seed_flama_template.py"]

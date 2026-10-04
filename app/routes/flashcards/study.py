@@ -28,6 +28,7 @@ from app.repositories.study_repository import (
     query_next_due_card_id as _query_next_due_card_id,
     query_study_queue_counts as _query_study_queue_counts,
 )
+from app.repositories.study_queue_repository import query_study_queue_card_refs
 
 from app.routes.flashcards import (
     _resolve_clone_scope_for_local_deck,
@@ -233,9 +234,8 @@ def _build_study_next_payload(
     authority_reads = None
     selected_cards_by_id = None
     if route.mode_code == "NOTE":
-        cards = query.options(selectinload(Card.note)).order_by(Card.id.asc()).all()
-        selected_cards_by_id = {str(card.id): card for card in cards}
         if is_consolidated(route):
+            cards = query_study_queue_card_refs(query)
             # ADR P10 §2.7: count and order the scope set-wise from the rows,
             # without locks or per-Card re-derivation (the offline audit does
             # that); only the returned Card takes the full locking read below.
@@ -258,6 +258,8 @@ def _build_study_next_payload(
                 now_utc=now,
             )
         else:
+            cards = query.options(selectinload(Card.note)).order_by(Card.id.asc()).all()
+            selected_cards_by_id = {str(card.id): card for card in cards}
             # Options depend only on (learner, deck): resolve each deck once.
             options_by_deck_id: dict[Any, Any] = {}
             deck_options_by_card_id = {}

@@ -214,6 +214,7 @@ def resolve_effective_study_deck_id(
     card: Card,
     clone_scope: flashcards_share_service.CloneDeckScope | None,
     requested_scope_id: int | None = None,
+    clone_added_note_ids: frozenset[str] | None = None,
 ) -> int | None:
     """Resolve the local deck supplying scheduler policy and usage attribution."""
 
@@ -223,9 +224,13 @@ def resolve_effective_study_deck_id(
     if (
         source_deck_id is not None
         and int(source_deck_id) in set(clone_scope.local_deck_ids)
-        and flashcards_share_service.is_clone_added_note(
-            scope=clone_scope,
-            note_id=card.note.id,
+        and (
+            str(card.note.id) in clone_added_note_ids
+            if clone_added_note_ids is not None
+            else flashcards_share_service.is_clone_added_note(
+                scope=clone_scope,
+                note_id=card.note.id,
+            )
         )
     ):
         return int(source_deck_id)

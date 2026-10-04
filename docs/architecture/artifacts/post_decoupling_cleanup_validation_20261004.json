@@ -1,0 +1,3184 @@
+{
+  "environment": "Local probes and isolated browser with mocked API; not production speedup",
+  "base_commit": "e1ab03dcbba783a36ac586a3ca276840ffb5aec7",
+  "probes": {
+    "study": {
+      "environment": "Isolated in-memory SQLite, local Windows Python; not production latency",
+      "revision": "Uncommitted cleanup branch based on e1ab03d; all current branch changes included",
+      "requests": [
+        {
+          "notes": 10,
+          "decks": 1,
+          "selected_cards": 10,
+          "events": 0,
+          "trials": [
+            {
+              "status": 201,
+              "elapsed_ms": 72.732,
+              "sql_execute_ms": 2.172,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.043
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 15.152
+                },
+                "content_artifact": {
+                  "calls": 10,
+                  "ms": 0.479
+                }
+              },
+              "response_bytes": 25343,
+              "gzip_bytes": 3440
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 26.073,
+              "sql_execute_ms": 0.863,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.048
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 1.017
+                },
+                "content_artifact": {
+                  "calls": 10,
+                  "ms": 0.642
+                }
+              },
+              "response_bytes": 25343,
+              "gzip_bytes": 3437
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 28.081,
+              "sql_execute_ms": 1.101,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.038
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 1.253
+                },
+                "content_artifact": {
+                  "calls": 10,
+                  "ms": 0.61
+                }
+              },
+              "response_bytes": 25343,
+              "gzip_bytes": 3442
+            }
+          ],
+          "stable_snapshot_across_issuance_trials": true,
+          "status_request": {
+            "status": 200,
+            "elapsed_ms": 31.489,
+            "sql_execute_ms": 1.809,
+            "sql_counts": {
+              "SELECT": 16
+            },
+            "select_table_counts": {
+              "users": 2,
+              "study_authority_enrollments": 1,
+              "study_authority_storage_profile": 1,
+              "study_sessions": 1,
+              "study_session_batches": 1,
+              "study_session_cards": 3,
+              "study_session_authority_pins": 1,
+              "cards": 4,
+              "notes": 3,
+              "study_progress_subjects": 1,
+              "review_events": 1,
+              "study_authority_command_receipts": 1,
+              "templates": 1
+            },
+            "stages": {},
+            "response_bytes": 430,
+            "gzip_bytes": 253
+          }
+        },
+        {
+          "notes": 100,
+          "decks": 1,
+          "selected_cards": 100,
+          "events": 0,
+          "trials": [
+            {
+              "status": 201,
+              "elapsed_ms": 79.543,
+              "sql_execute_ms": 3.69,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.035
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 1.193
+                },
+                "content_artifact": {
+                  "calls": 100,
+                  "ms": 5.21
+                }
+              },
+              "response_bytes": 204083,
+              "gzip_bytes": 22074
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 77.579,
+              "sql_execute_ms": 2.655,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.036
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 0.944
+                },
+                "content_artifact": {
+                  "calls": 100,
+                  "ms": 4.985
+                }
+              },
+              "response_bytes": 204083,
+              "gzip_bytes": 22069
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 72.776,
+              "sql_execute_ms": 2.356,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.046
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 0.685
+                },
+                "content_artifact": {
+                  "calls": 100,
+                  "ms": 4.61
+                }
+              },
+              "response_bytes": 204083,
+              "gzip_bytes": 22072
+            }
+          ],
+          "stable_snapshot_across_issuance_trials": true,
+          "status_request": {
+            "status": 200,
+            "elapsed_ms": 43.413,
+            "sql_execute_ms": 2.0,
+            "sql_counts": {
+              "SELECT": 16
+            },
+            "select_table_counts": {
+              "users": 2,
+              "study_authority_enrollments": 1,
+              "study_authority_storage_profile": 1,
+              "study_sessions": 1,
+              "study_session_batches": 1,
+              "study_session_cards": 3,
+              "study_session_authority_pins": 1,
+              "cards": 4,
+              "notes": 3,
+              "study_progress_subjects": 1,
+              "review_events": 1,
+              "study_authority_command_receipts": 1,
+              "templates": 1
+            },
+            "stages": {},
+            "response_bytes": 430,
+            "gzip_bytes": 253
+          }
+        },
+        {
+          "notes": 500,
+          "decks": 1,
+          "selected_cards": 500,
+          "events": 0,
+          "trials": [
+            {
+              "status": 201,
+              "elapsed_ms": 396.315,
+              "sql_execute_ms": 11.988,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.036
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 0.834
+                },
+                "content_artifact": {
+                  "calls": 500,
+                  "ms": 24.969
+                }
+              },
+              "response_bytes": 999283,
+              "gzip_bytes": 99137
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 442.099,
+              "sql_execute_ms": 13.813,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.052
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 1.099
+                },
+                "content_artifact": {
+                  "calls": 500,
+                  "ms": 34.859
+                }
+              },
+              "response_bytes": 999283,
+              "gzip_bytes": 99129
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 550.754,
+              "sql_execute_ms": 14.274,
+              "sql_counts": {
+                "SELECT": 22,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 4,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.036
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 0.632
+                },
+                "content_artifact": {
+                  "calls": 500,
+                  "ms": 36.041
+                }
+              },
+              "response_bytes": 999283,
+              "gzip_bytes": 99121
+            }
+          ],
+          "stable_snapshot_across_issuance_trials": true,
+          "status_request": {
+            "status": 200,
+            "elapsed_ms": 106.879,
+            "sql_execute_ms": 3.996,
+            "sql_counts": {
+              "SELECT": 16
+            },
+            "select_table_counts": {
+              "users": 2,
+              "study_authority_enrollments": 1,
+              "study_authority_storage_profile": 1,
+              "study_sessions": 1,
+              "study_session_batches": 1,
+              "study_session_cards": 3,
+              "study_session_authority_pins": 1,
+              "cards": 4,
+              "notes": 3,
+              "study_progress_subjects": 1,
+              "review_events": 1,
+              "study_authority_command_receipts": 1,
+              "templates": 1
+            },
+            "stages": {},
+            "response_bytes": 430,
+            "gzip_bytes": 253
+          }
+        },
+        {
+          "notes": 100,
+          "decks": 20,
+          "selected_cards": 100,
+          "events": 0,
+          "trials": [
+            {
+              "status": 201,
+              "elapsed_ms": 80.137,
+              "sql_execute_ms": 3.876,
+              "sql_counts": {
+                "SELECT": 42,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 24,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.036
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 0.753
+                },
+                "content_artifact": {
+                  "calls": 100,
+                  "ms": 4.455
+                }
+              },
+              "response_bytes": 204193,
+              "gzip_bytes": 22223
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 88.102,
+              "sql_execute_ms": 2.624,
+              "sql_counts": {
+                "SELECT": 42,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 24,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.049
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 1.003
+                },
+                "content_artifact": {
+                  "calls": 100,
+                  "ms": 5.617
+                }
+              },
+              "response_bytes": 204193,
+              "gzip_bytes": 22227
+            },
+            {
+              "status": 201,
+              "elapsed_ms": 84.347,
+              "sql_execute_ms": 3.009,
+              "sql_counts": {
+                "SELECT": 42,
+                "INSERT": 3,
+                "EXECUTEMANY": 2
+              },
+              "select_table_counts": {
+                "users": 2,
+                "decks": 24,
+                "deck_installs": 1,
+                "notes": 4,
+                "cards": 3,
+                "note_types": 2,
+                "templates": 2,
+                "study_authority_enrollments": 1,
+                "study_authority_storage_profile": 1,
+                "media_assets": 1,
+                "user_scheduler_settings": 1,
+                "study_progress_subjects": 2,
+                "field_defs": 1,
+                "study_session_cards": 1
+              },
+              "stages": {
+                "scheduler_policy": {
+                  "calls": 1,
+                  "ms": 0.056
+                },
+                "template_artifact": {
+                  "calls": 1,
+                  "ms": 0.756
+                },
+                "content_artifact": {
+                  "calls": 100,
+                  "ms": 4.641
+                }
+              },
+              "response_bytes": 204193,
+              "gzip_bytes": 22226
+            }
+          ],
+          "stable_snapshot_across_issuance_trials": true,
+          "status_request": {
+            "status": 200,
+            "elapsed_ms": 28.92,
+            "sql_execute_ms": 1.748,
+            "sql_counts": {
+              "SELECT": 16
+            },
+            "select_table_counts": {
+              "users": 2,
+              "study_authority_enrollments": 1,
+              "study_authority_storage_profile": 1,
+              "study_sessions": 1,
+              "study_session_batches": 1,
+              "study_session_cards": 3,
+              "study_session_authority_pins": 1,
+              "cards": 4,
+              "notes": 3,
+              "study_progress_subjects": 1,
+              "review_events": 1,
+              "study_authority_command_receipts": 1,
+              "templates": 1
+            },
+            "stages": {},
+            "response_bytes": 430,
+            "gzip_bytes": 253
+          }
+        }
+      ],
+      "commits": [
+        {
+          "notes": 10,
+          "events": 10,
+          "selected_cards": 10,
+          "summary": {
+            "status": 200,
+            "elapsed_ms": 86.545,
+            "sql_execute_ms": 5.669,
+            "sql_counts": {
+              "SELECT": 41,
+              "INSERT": 32,
+              "UPDATE": 11
+            },
+            "select_table_counts": {
+              "users": 2,
+              "study_authority_enrollments": 1,
+              "study_authority_storage_profile": 1,
+              "study_sessions": 1,
+              "study_session_commits": 1,
+              "study_session_batches": 1,
+              "study_session_cards": 1,
+              "study_session_authority_pins": 1,
+              "review_events": 1,
+              "cards": 2,
+              "notes": 2,
+              "study_progress_subjects": 11,
+              "study_authority_command_receipts": 10,
+              "note_type_installs": 2,
+              "decks": 2,
+              "deck_installs": 2
+            },
+            "stages": {},
+            "response_bytes": 4211,
+            "gzip_bytes": 769
+          },
+          "replay": {
+            "pin_identity_reads": 30,
+            "elapsed_ms": 2.051
+          }
+        },
+        {
+          "notes": 100,
+          "events": 100,
+          "selected_cards": 100,
+          "summary": {
+            "status": 200,
+            "elapsed_ms": 622.001,
+            "sql_execute_ms": 37.567,
+            "sql_counts": {
+              "SELECT": 221,
+              "INSERT": 302,
+              "UPDATE": 101
+            },
+            "select_table_counts": {
+              "users": 2,
+              "study_authority_enrollments": 1,
+              "study_authority_storage_profile": 1,
+              "study_sessions": 1,
+              "study_session_commits": 1,
+              "study_session_batches": 1,
+              "study_session_cards": 1,
+              "study_session_authority_pins": 1,
+              "review_events": 1,
+              "cards": 2,
+              "notes": 2,
+              "study_progress_subjects": 101,
+              "study_authority_command_receipts": 100,
+              "note_type_installs": 2,
+              "decks": 2,
+              "deck_installs": 2
+            },
+            "stages": {},
+            "response_bytes": 38683,
+            "gzip_bytes": 3571
+          },
+          "replay": {
+            "pin_identity_reads": 300,
+            "elapsed_ms": 22.469
+          }
+        },
+        {
+          "notes": 300,
+          "events": 300,
+          "selected_cards": 300,
+          "summary": {
+            "status": 200,
+            "elapsed_ms": 2293.136,
+            "sql_execute_ms": 150.694,
+            "sql_counts": {
+              "SELECT": 621,
+              "INSERT": 902,
+              "UPDATE": 301
+            },
+            "select_table_counts": {
+              "users": 2,
+              "study_authority_enrollments": 1,
+              "study_authority_storage_profile": 1,
+              "study_sessions": 1,
+              "study_session_commits": 1,
+              "study_session_batches": 1,
+              "study_session_cards": 1,
+              "study_session_authority_pins": 1,
+              "review_events": 1,
+              "cards": 2,
+              "notes": 2,
+              "study_progress_subjects": 301,
+              "study_authority_command_receipts": 300,
+              "note_type_installs": 2,
+              "decks": 2,
+              "deck_installs": 2
+            },
+            "stages": {},
+            "response_bytes": 115283,
+            "gzip_bytes": 9648
+          },
+          "replay": {
+            "pin_identity_reads": 900,
+            "elapsed_ms": 44.231
+          }
+        }
+      ],
+      "catalog": [
+        {
+          "notes": 1,
+          "cards": 1,
+          "templates": 1,
+          "summary": {
+            "status": 200,
+            "elapsed_ms": 14.526,
+            "sql_execute_ms": 1.443,
+            "sql_counts": {
+              "SELECT": 9
+            },
+            "select_table_counts": {
+              "users": 1,
+              "decks": 3,
+              "deck_installs": 1,
+              "notes": 2,
+              "cards": 2,
+              "note_types": 1,
+              "templates": 2
+            },
+            "stages": {},
+            "response_bytes": 1799,
+            "gzip_bytes": 403
+          },
+          "returned": 1
+        },
+        {
+          "notes": 1,
+          "cards": 5,
+          "templates": 5,
+          "summary": {
+            "status": 200,
+            "elapsed_ms": 9.42,
+            "sql_execute_ms": 0.969,
+            "sql_counts": {
+              "SELECT": 9
+            },
+            "select_table_counts": {
+              "users": 1,
+              "decks": 3,
+              "deck_installs": 1,
+              "notes": 2,
+              "cards": 2,
+              "note_types": 1,
+              "templates": 2
+            },
+            "stages": {},
+            "response_bytes": 7474,
+            "gzip_bytes": 632
+          },
+          "returned": 5
+        },
+        {
+          "notes": 1,
+          "cards": 20,
+          "templates": 20,
+          "summary": {
+            "status": 200,
+            "elapsed_ms": 12.032,
+            "sql_execute_ms": 1.168,
+            "sql_counts": {
+              "SELECT": 9
+            },
+            "select_table_counts": {
+              "users": 1,
+              "decks": 3,
+              "deck_installs": 1,
+              "notes": 2,
+              "cards": 2,
+              "note_types": 1,
+              "templates": 2
+            },
+            "stages": {},
+            "response_bytes": 29124,
+            "gzip_bytes": 1405
+          },
+          "returned": 20
+        }
+      ],
+      "limitations": "Single status/commit samples; three issuance trials. SQL counts and call scaling are primary evidence. Timings include instrumentation."
+    },
+    "study_mysql": {
+      "environment": "Disposable local MySQL; generated schema only",
+      "mysql_version": "8.0.40",
+      "transaction_isolation": "REPEATABLE-READ",
+      "checks": {
+        "owned_complete_vector_parity": true,
+        "both_reads_shared_locking": true,
+        "overlapping_batch_subject_lock_blocked": true,
+        "writes_succeed_after_release": true,
+        "required_lock_protection_matches_single_helper": true,
+        "outside_update_breadth_not_increased": true,
+        "outside_updates_unblocked": true,
+        "publisher_overlay_vector_parity": true,
+        "chunk_boundary_complete_vector": true,
+        "chunk_boundary_four_selects": true,
+        "note_point_plans_at_high_fraction": true,
+        "card_index_plans_at_high_fraction": true,
+        "high_fraction_outside_updates_unblocked": true
+      },
+      "owned_fixture": {
+        "notes": 10,
+        "templates": 2,
+        "selected_cards": 10,
+        "complete_cards": 20,
+        "old_sibling_selects": 20,
+        "new_sibling_selects": 2
+      },
+      "small_fixture_plans": [
+        [
+          {
+            "table": "<derived2>",
+            "type": "ALL",
+            "key": null,
+            "rows": 10,
+            "Extra": "Using temporary; Using filesort"
+          },
+          {
+            "table": "notes",
+            "type": "eq_ref",
+            "key": "PRIMARY",
+            "rows": 1,
+            "Extra": "Using index"
+          }
+        ],
+        [
+          {
+            "table": "cards",
+            "type": "range",
+            "key": "ix_cards_note_id",
+            "rows": 200,
+            "Extra": "Using index condition"
+          }
+        ]
+      ],
+      "batched_helper_blocked_writes": {
+        "unselected_card_update": true,
+        "note_update": true,
+        "subject_update": true,
+        "new_sibling_insert": true,
+        "outside_card_update": false,
+        "outside_note_update": false
+      },
+      "single_helper_blocked_writes": {
+        "unselected_card_update": true,
+        "note_update": true,
+        "subject_update": true,
+        "new_sibling_insert": true,
+        "outside_card_update": false,
+        "outside_note_update": false
+      },
+      "overlay_fixture": {
+        "notes": 4,
+        "selected_cards": 4,
+        "publisher_owned": true
+      },
+      "chunk_fixture": {
+        "notes": 501,
+        "selected_cards": 501,
+        "complete_cards": 1002,
+        "sibling_selects": 4,
+        "plans": [
+          [
+            {
+              "table": "<derived2>",
+              "type": "ALL",
+              "key": null,
+              "rows": 500,
+              "Extra": "Using temporary; Using filesort"
+            },
+            {
+              "table": "notes",
+              "type": "eq_ref",
+              "key": "PRIMARY",
+              "rows": 1,
+              "Extra": "Using index"
+            }
+          ],
+          [
+            {
+              "table": "cards",
+              "type": "range",
+              "key": "ix_cards_note_id",
+              "rows": 1000,
+              "Extra": "Using index condition"
+            }
+          ],
+          [
+            {
+              "table": "<derived2>",
+              "type": "system",
+              "key": null,
+              "rows": 1,
+              "Extra": null
+            },
+            {
+              "table": "notes",
+              "type": "const",
+              "key": "PRIMARY",
+              "rows": 1,
+              "Extra": "Using index"
+            }
+          ],
+          [
+            {
+              "table": "cards",
+              "type": "ref",
+              "key": "ix_cards_note_id",
+              "rows": 2,
+              "Extra": null
+            }
+          ]
+        ]
+      },
+      "disposable_schema_removed": true
+    },
+    "persistence": {
+      "engine": "SQLite in-memory",
+      "production_contacted": false,
+      "fixture_notes": 201,
+      "fixture_cards": 202,
+      "stateful_notes": 201,
+      "fixture_reviews_due_400_days_later": 200,
+      "read_phase_dml_guard": true,
+      "queries": [
+        {
+          "label": "browse_tree",
+          "sql_count": 16,
+          "table_statement_counts": {
+            "users": 2,
+            "study_authority_enrollments": 1,
+            "study_authority_storage_profile": 2,
+            "decks": 2,
+            "notes": 3,
+            "deck_installs": 3,
+            "user_scheduler_settings": 2,
+            "note_types": 1,
+            "cards": 1,
+            "study_progress_subjects": 1
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "full_note_payload_selects": 0,
+          "project_note_state_calls": 0,
+          "loaded_entities": {},
+          "selected_canonical_scalar_rows": [],
+          "loaded_note_field_values_bytes": 0,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        },
+        {
+          "label": "browse_list",
+          "sql_count": 24,
+          "table_statement_counts": {
+            "users": 3,
+            "study_authority_enrollments": 2,
+            "study_authority_storage_profile": 2,
+            "decks": 3,
+            "notes": 5,
+            "deck_installs": 2,
+            "cards": 4,
+            "study_progress_subjects": 5,
+            "templates": 1,
+            "note_types": 1,
+            "field_defs": 1,
+            "user_scheduler_settings": 1
+          },
+          "full_subject_selects": 1,
+          "subject_selects": 2,
+          "note_type_min_selects": 0,
+          "full_note_payload_selects": 1,
+          "project_note_state_calls": 201,
+          "loaded_entities": {
+            "Card": 202,
+            "Note": 201
+          },
+          "selected_canonical_scalar_rows": [],
+          "loaded_note_field_values_bytes": 826106,
+          "future_due_total_reviews": null,
+          "response_items": 202
+        },
+        {
+          "label": "today_future",
+          "sql_count": 7,
+          "table_statement_counts": {
+            "users": 2,
+            "study_authority_enrollments": 1,
+            "study_authority_storage_profile": 1,
+            "user_scheduler_settings": 1,
+            "review_events": 1,
+            "cards": 1,
+            "study_progress_subjects": 1,
+            "notes": 1
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "full_note_payload_selects": 0,
+          "project_note_state_calls": 0,
+          "loaded_entities": {},
+          "selected_canonical_scalar_rows": [
+            202
+          ],
+          "loaded_note_field_values_bytes": 0,
+          "future_due_total_reviews": 2,
+          "response_items": 0
+        },
+        {
+          "label": "study_next",
+          "sql_count": 13,
+          "table_statement_counts": {
+            "users": 2,
+            "decks": 3,
+            "deck_installs": 1,
+            "cards": 4,
+            "notes": 4,
+            "study_authority_enrollments": 1,
+            "study_authority_storage_profile": 1,
+            "study_progress_subjects": 1,
+            "user_scheduler_settings": 1
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "full_note_payload_selects": 0,
+          "project_note_state_calls": 0,
+          "loaded_entities": {},
+          "selected_canonical_scalar_rows": [],
+          "loaded_note_field_values_bytes": 0,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        }
+      ]
+    },
+    "classifier_mysql": {
+      "configured_database_modified": false,
+      "parity_cases": 7,
+      "mismatches": [],
+      "mysql_version": "8.0.40",
+      "status": "PASS",
+      "probe_database_dropped": true
+    },
+    "frontend_bundle_before": {
+      "build_mtime": 1791098243.3967092,
+      "entry": "index-C-3oo8Vn.js",
+      "largest_chunks": [
+        {
+          "name": "index-C-3oo8Vn.js",
+          "raw": 514750,
+          "gzip": 152893
+        },
+        {
+          "name": "ComposedChart-CFQvPBuG.js",
+          "raw": 370611,
+          "gzip": 106063
+        },
+        {
+          "name": "DeckWorksheetModal-BEyksTFu.js",
+          "raw": 208638,
+          "gzip": 44538
+        },
+        {
+          "name": "sync.worker-CUg2IHSq.js",
+          "raw": 175264,
+          "gzip": 72116
+        },
+        {
+          "name": "AnkiSyncPage-C0V9E4jx.js",
+          "raw": 152563,
+          "gzip": 57947
+        },
+        {
+          "name": "GuidePage-CEPQCp-7.js",
+          "raw": 145084,
+          "gzip": 36556
+        },
+        {
+          "name": "StaticPages-BicwI6ln.js",
+          "raw": 134157,
+          "gzip": 35364
+        },
+        {
+          "name": "BrowsePage-C09N0NR2.js",
+          "raw": 125370,
+          "gzip": 29179
+        },
+        {
+          "name": "MarketplacePages-BERE0eaS.js",
+          "raw": 121808,
+          "gzip": 24965
+        },
+        {
+          "name": "free-solid-svg-icons-BoRDkHiU.js",
+          "raw": 114588,
+          "gzip": 30921
+        },
+        {
+          "name": "StudyPage-CJRcErtM.js",
+          "raw": 109417,
+          "gzip": 27672
+        },
+        {
+          "name": "McpTokensManager-7X1nKXYu.js",
+          "raw": 107389,
+          "gzip": 25678
+        },
+        {
+          "name": "sessionStore-BIn4I8C8.js",
+          "raw": 85231,
+          "gzip": 29261
+        },
+        {
+          "name": "DeckAudioGeneratorPage-C-pMLzs_.js",
+          "raw": 59192,
+          "gzip": 14627
+        },
+        {
+          "name": "schemas-C_lPglu9.js",
+          "raw": 58798,
+          "gzip": 15823
+        },
+        {
+          "name": "ProfilePage-BxHDqi4r.js",
+          "raw": 48913,
+          "gzip": 11510
+        },
+        {
+          "name": "MarketplacePublishDeckPage-DNHJgaMf.js",
+          "raw": 46206,
+          "gzip": 11636
+        },
+        {
+          "name": "FileImportPage-DhkpjNcH.js",
+          "raw": 44021,
+          "gzip": 11246
+        },
+        {
+          "name": "button-a5mQ1ReM.js",
+          "raw": 43337,
+          "gzip": 14368
+        },
+        {
+          "name": "AdminTaxonomyPage-C8v1rBJ9.js",
+          "raw": 35784,
+          "gzip": 6804
+        }
+      ],
+      "routes": {
+        "DashboardPage-": {
+          "name": "DashboardPage-OWeKCDcl.js",
+          "chunk_count": 33,
+          "incremental_raw": 152972,
+          "incremental_gzip": 49460,
+          "incremental_chunks": [
+            "DashboardPage-OWeKCDcl.js",
+            "Page-5nyRs7aN.js",
+            "PageState-BKwK2HQm.js",
+            "StudyHeatmap-DnqSzV50.js",
+            "alert-BIzO_uV5.js",
+            "checkbox-CC8l0y2F.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "circle-play-CVWn_zo_.js",
+            "copy-x_O8XGSm.js",
+            "dialog-NBoqdwHA.js",
+            "label-BujaZzDN.js",
+            "native-select-Ips7yBo2.js",
+            "pencil-DXtC-yAm.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "schemas-C_lPglu9.js",
+            "share-2-DV88P_Rg.js",
+            "trash-2-DOqKCg0D.js",
+            "zod-VGgkZPvv.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/alert.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/checkbox.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/dashboard/api.ts",
+            "../../src/features/dashboard/components/DeckModals.tsx",
+            "../../src/features/dashboard/components/DeckRow.tsx",
+            "../../src/features/dashboard/components/DeckTree.tsx",
+            "../../src/features/dashboard/hooks/useDashboardPage.tsx",
+            "../../src/features/dashboard/hooks/useDeckTreeDragDrop.ts",
+            "../../src/features/dashboard/hooks/useDeckTreeExpanded.ts",
+            "../../src/features/dashboard/pages/DashboardPage.tsx",
+            "../../src/features/dashboard/schemas.ts",
+            "../../src/features/dashboard/utils/deckNaming.ts",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx",
+            "../../src/shared/components/Page.tsx",
+            "../../src/shared/components/PageState.tsx",
+            "../../src/shared/components/StudyHeatmap.tsx"
+          ]
+        },
+        "StudyPage-": {
+          "name": "StudyPage-CJRcErtM.js",
+          "chunk_count": 51,
+          "incremental_raw": 462134,
+          "incremental_gzip": 127400,
+          "incremental_chunks": [
+            "CardDisplay-Dg4RD9ab.js",
+            "DeckSelectionTreeView-DG06ndex.js",
+            "DeckWorksheetModal-BEyksTFu.js",
+            "PageState-BKwK2HQm.js",
+            "StudyPage-CJRcErtM.js",
+            "alert-BIzO_uV5.js",
+            "arrow-right-left-BN1UCBtY.js",
+            "checkbox-CC8l0y2F.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "circle-play-CVWn_zo_.js",
+            "clock-Crvvn3V3.js",
+            "code-xml-9My-M2Fk.js",
+            "copy-x_O8XGSm.js",
+            "database-BmOYoE1g.js",
+            "dialog-NBoqdwHA.js",
+            "eye-CCmxZPtX.js",
+            "file-text-CrNoEMbZ.js",
+            "folder-5scGr8n5.js",
+            "folder-open-hlq8Tsim.js",
+            "folder-tree-DTh6ch50.js",
+            "imageCompression-B0CbRaZO.js",
+            "label-BujaZzDN.js",
+            "link-2-R9wh0p4F.js",
+            "list-ordered-CYvZa5Ie.js",
+            "native-select-Ips7yBo2.js",
+            "pencil-DXtC-yAm.js",
+            "play-CoCpjbr-.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "save-CX4I61og.js",
+            "sessionStore-BIn4I8C8.js",
+            "shield-alert-DG4nCAbw.js",
+            "shopping-bag-BrK-a8Sx.js",
+            "table-PVOmGf-L.js",
+            "tag-BfB5r1Jf.js",
+            "textarea-C7td3b6g.js",
+            "worksheets-C5ewztJv.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/alert.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/checkbox.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/textarea.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/browse/components/BrowseStrokeModal.tsx",
+            "../../src/features/browse/components/MediaFieldPreview.tsx",
+            "../../src/features/browse/services/strokeStorage.ts",
+            "../../src/features/import/components/DeckSelectionTreeView.tsx",
+            "../../src/features/study/api.ts",
+            "../../src/features/study/components/CardDisplay.tsx",
+            "../../src/features/study/components/CardRendererFrame.tsx",
+            "../../src/features/study/components/StudyBottomBar.tsx",
+            "../../src/features/study/components/StudyCardRendererFrame.tsx",
+            "../../src/features/study/components/StudyCompletionCard.tsx",
+            "../../src/features/study/components/StudyExitConfirmDialog.tsx",
+            "../../src/features/study/components/StudyHeaderToolbar.tsx",
+            "../../src/features/study/components/StudyModeSelector.tsx",
+            "../../src/features/study/components/StudyQuickEditDialog.tsx",
+            "../../src/features/study/components/StudyScopeErrorCard.tsx",
+            "../../src/features/study/components/StudySessionConflict.tsx",
+            "../../src/features/study/components/StudyWaitingCard.tsx",
+            "../../src/features/study/hooks/useStudySession.ts",
+            "../../src/features/study/hooks/useStudySessionLease.ts",
+            "../../src/features/study/interactions/ReviewInteractionControls.tsx",
+            "../../src/features/study/interactions/reviewInteraction.ts",
+            "../../src/features/study/pages/StudyPage.tsx",
+            "../../src/features/study/renderer/clientRenderer.ts",
+            "../../src/features/study/scheduler/algorithmRegistry.ts",
+            "../../src/features/study/scheduler/legacyEngine.ts",
+            "../../src/features/study/scheduler/noteStoragePrecision.ts",
+            "../../src/features/study/scheduler/queue.ts",
+            "../../src/features/study/scheduler/time.ts",
+            "../../src/features/study/session/batchReceipt.ts",
+            "../../src/features/study/session/canonicalDigest.ts",
+            "../../src/features/study/session/noteBatchTransport.ts",
+            "../../src/features/study/session/sessionRestore.ts",
+            "../../src/features/study/session/sessionStore.ts",
+            "../../src/features/study/session/studySessionEngine.ts",
+            "../../src/features/study/session/studySessionLease.ts",
+            "../../src/features/study/session/wireContract.ts",
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/imageCompression.ts",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx",
+            "../../src/shared/components/PageState.tsx"
+          ]
+        },
+        "BrowsePage-": {
+          "name": "BrowsePage-C09N0NR2.js",
+          "chunk_count": 63,
+          "incremental_raw": 749297,
+          "incremental_gzip": 201280,
+          "incremental_chunks": [
+            "BrowsePage-C09N0NR2.js",
+            "DeckSelectionTreeView-DG06ndex.js",
+            "DeckWorksheetModal-BEyksTFu.js",
+            "GuidePage-CEPQCp-7.js",
+            "Page-5nyRs7aN.js",
+            "PageState-BKwK2HQm.js",
+            "alert-BIzO_uV5.js",
+            "arrow-up-down-CBVHygX7.js",
+            "audioScanService-BSe6zw-B.js",
+            "checkbox-CC8l0y2F.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "circle-plus-DuN7kMab.js",
+            "circle-x-DEkrfV5x.js",
+            "clock-Crvvn3V3.js",
+            "code-xml-9My-M2Fk.js",
+            "copy-x_O8XGSm.js",
+            "database-BmOYoE1g.js",
+            "dialog-NBoqdwHA.js",
+            "external-link-vIhjCdDJ.js",
+            "eye-CCmxZPtX.js",
+            "eye-off-BvDEI12G.js",
+            "file-text-CrNoEMbZ.js",
+            "flamaAudioClient-B3oUqqEn.js",
+            "folder-5scGr8n5.js",
+            "folder-open-hlq8Tsim.js",
+            "folder-tree-DTh6ch50.js",
+            "free-solid-svg-icons-BoRDkHiU.js",
+            "globe-CJkZY0hc.js",
+            "guide-B7jvfFjP.js",
+            "imageCompression-B0CbRaZO.js",
+            "label-BujaZzDN.js",
+            "link-2-R9wh0p4F.js",
+            "list-ordered-CYvZa5Ie.js",
+            "native-select-Ips7yBo2.js",
+            "play-CoCpjbr-.js",
+            "plus-BQvHIGni.js",
+            "progress-C_yZ2Uow.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "save-CX4I61og.js",
+            "sessionStore-BIn4I8C8.js",
+            "share-2-DV88P_Rg.js",
+            "table-DWavozrR.js",
+            "table-PVOmGf-L.js",
+            "tag-BfB5r1Jf.js",
+            "textarea-C7td3b6g.js",
+            "timer-CWtEyLFn.js",
+            "trash-2-DOqKCg0D.js",
+            "volume-2-C-Ra2ILr.js",
+            "worksheets-C5ewztJv.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/alert.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/checkbox.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/progress.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/table.tsx",
+            "../../src/components/ui/textarea.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/audio/components/AudioAdvancedSettings.tsx",
+            "../../src/features/audio/components/BatchProgressList.tsx",
+            "../../src/features/audio/components/LocalAudioDialog.tsx",
+            "../../src/features/audio/hooks/useLocalAudioEngine.ts",
+            "../../src/features/audio/services/audioScanService.ts",
+            "../../src/features/audio/services/localAudioStorage.ts",
+            "../../src/features/audio/services/ttsTextNormalizer.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/browse/components/BrowseAudioSelectorModal.tsx",
+            "../../src/features/browse/components/BrowseCardEditor.tsx",
+            "../../src/features/browse/components/BrowseCardTable.tsx",
+            "../../src/features/browse/components/BrowseDeckSidebar.tsx",
+            "../../src/features/browse/components/BrowsePagination.tsx",
+            "../../src/features/browse/components/BrowseStrokeModal.tsx",
+            "../../src/features/browse/components/BrowseToolbar.tsx",
+            "../../src/features/browse/components/BrowseTtsModal.tsx",
+            "../../src/features/browse/components/MediaFieldPreview.tsx",
+            "../../src/features/browse/hooks/useBrowseState.ts",
+            "../../src/features/browse/pages/BrowsePage.tsx",
+            "../../src/features/browse/services/strokeStorage.ts",
+            "../../src/features/browse/services/ttsSettingsStorage.ts",
+            "../../src/features/browse/utils/formatter.ts",
+            "../../src/features/guide/components/ContextHelpButton.tsx",
+            "../../src/features/guide/components/GuideArticleRenderer.tsx",
+            "../../src/features/guide/components/GuideBreadcrumb.tsx",
+            "../../src/features/guide/components/GuideHomePage.tsx",
+            "../../src/features/guide/components/McpInteractiveGuide.tsx",
+            "../../src/features/guide/components/McpToolsExplorer.tsx",
+            "../../src/features/guide/components/YomitanInteractiveGuide.tsx",
+            "../../src/features/guide/components/YomitanMarkersExplorer.tsx",
+            "../../src/features/guide/guideData.ts",
+            "../../src/features/guide/pages/GuidePage.tsx",
+            "../../src/features/import/components/DeckSelectionTreeView.tsx",
+            "../../src/features/study/interactions/reviewInteraction.ts",
+            "../../src/features/study/renderer/clientRenderer.ts",
+            "../../src/features/study/scheduler/algorithmRegistry.ts",
+            "../../src/features/study/scheduler/legacyEngine.ts",
+            "../../src/features/study/scheduler/noteStoragePrecision.ts",
+            "../../src/features/study/scheduler/time.ts",
+            "../../src/features/study/session/canonicalDigest.ts",
+            "../../src/features/study/session/sessionRestore.ts",
+            "../../src/features/study/session/sessionStore.ts",
+            "../../src/features/study/session/wireContract.ts",
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/flamaAudioClient.ts",
+            "../../src/lib/imageCompression.ts",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/api/noteMedia.ts",
+            "../../src/shared/components/Brand.tsx",
+            "../../src/shared/components/Page.tsx",
+            "../../src/shared/components/PageState.tsx"
+          ]
+        },
+        "WorksheetsPage-": {
+          "name": "WorksheetsPage-mOVAQfyj.js",
+          "chunk_count": 31,
+          "incremental_raw": 228649,
+          "incremental_gzip": 53586,
+          "incremental_chunks": [
+            "DeckSelectionTreeView-DG06ndex.js",
+            "DeckWorksheetModal-BEyksTFu.js",
+            "WorksheetsPage-mOVAQfyj.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "database-BmOYoE1g.js",
+            "dialog-NBoqdwHA.js",
+            "eye-CCmxZPtX.js",
+            "file-text-CrNoEMbZ.js",
+            "folder-5scGr8n5.js",
+            "folder-open-hlq8Tsim.js",
+            "folder-tree-DTh6ch50.js",
+            "label-BujaZzDN.js",
+            "list-ordered-CYvZa5Ie.js",
+            "native-select-Ips7yBo2.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "table-PVOmGf-L.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/import/components/DeckSelectionTreeView.tsx",
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/pages/WorksheetsPage.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx"
+          ]
+        },
+        "DeckWorksheetModal-": {
+          "name": "DeckWorksheetModal-BEyksTFu.js",
+          "chunk_count": 30,
+          "incremental_raw": 222421,
+          "incremental_gzip": 51732,
+          "incremental_chunks": [
+            "DeckSelectionTreeView-DG06ndex.js",
+            "DeckWorksheetModal-BEyksTFu.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "database-BmOYoE1g.js",
+            "dialog-NBoqdwHA.js",
+            "eye-CCmxZPtX.js",
+            "file-text-CrNoEMbZ.js",
+            "folder-5scGr8n5.js",
+            "folder-open-hlq8Tsim.js",
+            "folder-tree-DTh6ch50.js",
+            "label-BujaZzDN.js",
+            "list-ordered-CYvZa5Ie.js",
+            "native-select-Ips7yBo2.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "table-PVOmGf-L.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/import/components/DeckSelectionTreeView.tsx",
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx"
+          ]
+        }
+      },
+      "initial": {
+        "chunk_count": 12,
+        "raw": 627028,
+        "gzip": 192959,
+        "chunks": [
+          "api-B2-SzgJa.js",
+          "button-a5mQ1ReM.js",
+          "client-FiacbjkH.js",
+          "dist-BKu_1E7v.js",
+          "dist-BzF8Z-AX.js",
+          "dist-CtZj6Sa2.js",
+          "dist-CwbbndDc.js",
+          "dist-jGSiCanb.js",
+          "es2015-B-sngEXt.js",
+          "index-C-3oo8Vn.js",
+          "react-dom-D5e_bP6I.js",
+          "useQuery-IQgE_vnN.js"
+        ]
+      },
+      "study_compatibility_sources": [
+        {
+          "chunk": "sessionStore-BIn4I8C8.js",
+          "sources": [
+            "../../src/features/study/scheduler/legacyEngine.ts",
+            "../../src/features/study/scheduler/algorithmRegistry.ts",
+            "../../src/features/study/session/wireContract.ts",
+            "../../src/features/study/session/sessionRestore.ts",
+            "../../src/features/study/session/sessionStore.ts"
+          ]
+        }
+      ],
+      "chunks_with_worksheet": [
+        {
+          "chunk": "DeckWorksheetModal-BEyksTFu.js",
+          "raw": 208638,
+          "gzip": 44538,
+          "sources": [
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx"
+          ]
+        },
+        {
+          "chunk": "WorksheetsPage-mOVAQfyj.js",
+          "raw": 6228,
+          "gzip": 1854,
+          "sources": [
+            "../../src/features/worksheets/pages/WorksheetsPage.tsx"
+          ]
+        }
+      ],
+      "summary_note": "Static import closure totals exclude shared shell; source breakdown omitted here; full local probe retains module graph. Not actual network bytes."
+    },
+    "frontend_bundle_after": {
+      "build_mtime": 1791120638.1289718,
+      "entry": "index-DlDEjV9o.js",
+      "largest_chunks": [
+        {
+          "name": "index-DlDEjV9o.js",
+          "raw": 514999,
+          "gzip": 153032
+        },
+        {
+          "name": "ComposedChart-CFQvPBuG.js",
+          "raw": 370611,
+          "gzip": 106063
+        },
+        {
+          "name": "DeckWorksheetModal-DvpxH1PN.js",
+          "raw": 208274,
+          "gzip": 44402
+        },
+        {
+          "name": "sync.worker-CUg2IHSq.js",
+          "raw": 175264,
+          "gzip": 72116
+        },
+        {
+          "name": "AnkiSyncPage-BVChB1nb.js",
+          "raw": 152563,
+          "gzip": 57944
+        },
+        {
+          "name": "GuidePage-iItETqEh.js",
+          "raw": 144538,
+          "gzip": 36411
+        },
+        {
+          "name": "StaticPages-EhAGrLpa.js",
+          "raw": 134197,
+          "gzip": 35395
+        },
+        {
+          "name": "BrowsePage-CggJI-d0.js",
+          "raw": 125354,
+          "gzip": 29204
+        },
+        {
+          "name": "MarketplacePages-C9uUTbot.js",
+          "raw": 121808,
+          "gzip": 24965
+        },
+        {
+          "name": "free-solid-svg-icons-BoRDkHiU.js",
+          "raw": 114588,
+          "gzip": 30921
+        },
+        {
+          "name": "StudyPage-ZBJvWA7l.js",
+          "raw": 109464,
+          "gzip": 27687
+        },
+        {
+          "name": "McpTokensManager-B6_wZS2O.js",
+          "raw": 107389,
+          "gzip": 25680
+        },
+        {
+          "name": "sessionStore-Cd1yBozR.js",
+          "raw": 85240,
+          "gzip": 29248
+        },
+        {
+          "name": "DeckAudioGeneratorPage-B6GZb1_B.js",
+          "raw": 59311,
+          "gzip": 14695
+        },
+        {
+          "name": "schemas-C_lPglu9.js",
+          "raw": 58798,
+          "gzip": 15823
+        },
+        {
+          "name": "ProfilePage-0EQrPY-Q.js",
+          "raw": 48866,
+          "gzip": 11498
+        },
+        {
+          "name": "MarketplacePublishDeckPage-BzNv7s0W.js",
+          "raw": 46206,
+          "gzip": 11638
+        },
+        {
+          "name": "FileImportPage-qbvxxBKS.js",
+          "raw": 44103,
+          "gzip": 11290
+        },
+        {
+          "name": "button-a5mQ1ReM.js",
+          "raw": 43337,
+          "gzip": 14368
+        },
+        {
+          "name": "AdminTaxonomyPage-BQh_AH6E.js",
+          "raw": 35784,
+          "gzip": 6808
+        }
+      ],
+      "routes": {
+        "DashboardPage-": {
+          "name": "DashboardPage-BT68u4rr.js",
+          "chunk_count": 34,
+          "incremental_raw": 153780,
+          "incremental_gzip": 50147,
+          "incremental_chunks": [
+            "DashboardPage-BT68u4rr.js",
+            "LazyDeckWorksheetModal-53ev_-4O.js",
+            "Page-6q6ROo8A.js",
+            "PageState-CsiyMRPM.js",
+            "StudyHeatmap-bwgY9Lvf.js",
+            "alert-BIzO_uV5.js",
+            "checkbox-CSdG8StI.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "circle-play-CVWn_zo_.js",
+            "copy-x_O8XGSm.js",
+            "dialog-Dhk_QDX6.js",
+            "label-BujaZzDN.js",
+            "native-select-Ips7yBo2.js",
+            "pencil-DXtC-yAm.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "schemas-C_lPglu9.js",
+            "share-2-DV88P_Rg.js",
+            "trash-2-DOqKCg0D.js",
+            "zod-VGgkZPvv.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/alert.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/checkbox.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/dashboard/api.ts",
+            "../../src/features/dashboard/components/DeckModals.tsx",
+            "../../src/features/dashboard/components/DeckRow.tsx",
+            "../../src/features/dashboard/components/DeckTree.tsx",
+            "../../src/features/dashboard/hooks/useDashboardPage.tsx",
+            "../../src/features/dashboard/hooks/useDeckTreeDragDrop.ts",
+            "../../src/features/dashboard/hooks/useDeckTreeExpanded.ts",
+            "../../src/features/dashboard/pages/DashboardPage.tsx",
+            "../../src/features/dashboard/schemas.ts",
+            "../../src/features/dashboard/utils/deckNaming.ts",
+            "../../src/features/worksheets/components/LazyDeckWorksheetModal.tsx",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx",
+            "../../src/shared/components/Page.tsx",
+            "../../src/shared/components/PageState.tsx",
+            "../../src/shared/components/StudyHeatmap.tsx"
+          ]
+        },
+        "StudyPage-": {
+          "name": "StudyPage-ZBJvWA7l.js",
+          "chunk_count": 43,
+          "incremental_raw": 248677,
+          "incremental_gzip": 80483,
+          "incremental_chunks": [
+            "BrowseStrokeModal-D50ku0CV.js",
+            "CardDisplay-Dg4RD9ab.js",
+            "LazyDeckWorksheetModal-53ev_-4O.js",
+            "PageState-CsiyMRPM.js",
+            "StudyPage-ZBJvWA7l.js",
+            "alert-BIzO_uV5.js",
+            "arrow-right-left-BN1UCBtY.js",
+            "checkbox-CSdG8StI.js",
+            "chevron-down-CSos32rl.js",
+            "circle-alert-BFoaPopG.js",
+            "circle-play-CVWn_zo_.js",
+            "clock-Crvvn3V3.js",
+            "code-xml-9My-M2Fk.js",
+            "copy-x_O8XGSm.js",
+            "dialog-Dhk_QDX6.js",
+            "eye-CCmxZPtX.js",
+            "imageCompression-B0CbRaZO.js",
+            "label-BujaZzDN.js",
+            "link-2-R9wh0p4F.js",
+            "native-select-Ips7yBo2.js",
+            "pen-tool-AkDVKbAG.js",
+            "pencil-DXtC-yAm.js",
+            "play-CoCpjbr-.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "save-CX4I61og.js",
+            "sessionStore-Cd1yBozR.js",
+            "shield-alert-DG4nCAbw.js",
+            "shopping-bag-BrK-a8Sx.js",
+            "tag-BfB5r1Jf.js",
+            "textarea-C7td3b6g.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/alert.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/checkbox.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/textarea.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/browse/components/BrowseStrokeModal.tsx",
+            "../../src/features/browse/components/MediaFieldPreview.tsx",
+            "../../src/features/browse/services/strokeStorage.ts",
+            "../../src/features/study/api.ts",
+            "../../src/features/study/components/CardDisplay.tsx",
+            "../../src/features/study/components/CardRendererFrame.tsx",
+            "../../src/features/study/components/StudyBottomBar.tsx",
+            "../../src/features/study/components/StudyCardRendererFrame.tsx",
+            "../../src/features/study/components/StudyCompletionCard.tsx",
+            "../../src/features/study/components/StudyExitConfirmDialog.tsx",
+            "../../src/features/study/components/StudyHeaderToolbar.tsx",
+            "../../src/features/study/components/StudyModeSelector.tsx",
+            "../../src/features/study/components/StudyQuickEditDialog.tsx",
+            "../../src/features/study/components/StudyScopeErrorCard.tsx",
+            "../../src/features/study/components/StudySessionConflict.tsx",
+            "../../src/features/study/components/StudyWaitingCard.tsx",
+            "../../src/features/study/hooks/useStudySession.ts",
+            "../../src/features/study/hooks/useStudySessionLease.ts",
+            "../../src/features/study/interactions/ReviewInteractionControls.tsx",
+            "../../src/features/study/interactions/reviewInteraction.ts",
+            "../../src/features/study/pages/StudyPage.tsx",
+            "../../src/features/study/renderer/clientRenderer.ts",
+            "../../src/features/study/scheduler/algorithmRegistry.ts",
+            "../../src/features/study/scheduler/legacyEngine.ts",
+            "../../src/features/study/scheduler/noteStoragePrecision.ts",
+            "../../src/features/study/scheduler/queue.ts",
+            "../../src/features/study/scheduler/time.ts",
+            "../../src/features/study/session/batchReceipt.ts",
+            "../../src/features/study/session/canonicalDigest.ts",
+            "../../src/features/study/session/noteBatchTransport.ts",
+            "../../src/features/study/session/sessionRestore.ts",
+            "../../src/features/study/session/sessionStore.ts",
+            "../../src/features/study/session/studySessionEngine.ts",
+            "../../src/features/study/session/studySessionLease.ts",
+            "../../src/features/study/session/wireContract.ts",
+            "../../src/features/worksheets/components/LazyDeckWorksheetModal.tsx",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/imageCompression.ts",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx",
+            "../../src/shared/components/PageState.tsx"
+          ]
+        },
+        "BrowsePage-": {
+          "name": "BrowsePage-CggJI-d0.js",
+          "chunk_count": 52,
+          "incremental_raw": 273282,
+          "incremental_gzip": 85609,
+          "incremental_chunks": [
+            "BrowsePage-CggJI-d0.js",
+            "BrowseStrokeModal-D50ku0CV.js",
+            "ContextHelpButton-DI6NtjPu.js",
+            "LazyDeckWorksheetModal-53ev_-4O.js",
+            "alert-BIzO_uV5.js",
+            "arrow-up-down-CBVHygX7.js",
+            "audioScanService-BSe6zw-B.js",
+            "checkbox-CSdG8StI.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "circle-x-DEkrfV5x.js",
+            "clock-Crvvn3V3.js",
+            "code-xml-9My-M2Fk.js",
+            "copy-x_O8XGSm.js",
+            "cpu-DCcW0T77.js",
+            "dialog-Dhk_QDX6.js",
+            "eye-CCmxZPtX.js",
+            "eye-off-BvDEI12G.js",
+            "flamaAudioClient-B3oUqqEn.js",
+            "folder-5scGr8n5.js",
+            "folder-open-hlq8Tsim.js",
+            "globe-CJkZY0hc.js",
+            "imageCompression-B0CbRaZO.js",
+            "label-BujaZzDN.js",
+            "link-2-R9wh0p4F.js",
+            "native-select-Ips7yBo2.js",
+            "pen-tool-AkDVKbAG.js",
+            "play-CoCpjbr-.js",
+            "plus-BQvHIGni.js",
+            "progress-C_yZ2Uow.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "save-CX4I61og.js",
+            "sessionStore-Cd1yBozR.js",
+            "sliders-vertical-BL_7_m0R.js",
+            "table-DWavozrR.js",
+            "tag-BfB5r1Jf.js",
+            "textarea-C7td3b6g.js",
+            "trash-2-DOqKCg0D.js",
+            "volume-2-C-Ra2ILr.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/alert.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/checkbox.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/progress.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/table.tsx",
+            "../../src/components/ui/textarea.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/audio/components/AudioAdvancedSettings.tsx",
+            "../../src/features/audio/components/BatchProgressList.tsx",
+            "../../src/features/audio/components/LocalAudioDialog.tsx",
+            "../../src/features/audio/hooks/useLocalAudioEngine.ts",
+            "../../src/features/audio/services/audioScanService.ts",
+            "../../src/features/audio/services/localAudioStorage.ts",
+            "../../src/features/audio/services/ttsTextNormalizer.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/browse/components/BrowseAudioSelectorModal.tsx",
+            "../../src/features/browse/components/BrowseCardEditor.tsx",
+            "../../src/features/browse/components/BrowseCardTable.tsx",
+            "../../src/features/browse/components/BrowseDeckSidebar.tsx",
+            "../../src/features/browse/components/BrowsePagination.tsx",
+            "../../src/features/browse/components/BrowseStrokeModal.tsx",
+            "../../src/features/browse/components/BrowseToolbar.tsx",
+            "../../src/features/browse/components/BrowseTtsModal.tsx",
+            "../../src/features/browse/components/MediaFieldPreview.tsx",
+            "../../src/features/browse/hooks/useBrowseState.ts",
+            "../../src/features/browse/pages/BrowsePage.tsx",
+            "../../src/features/browse/services/strokeStorage.ts",
+            "../../src/features/browse/services/ttsSettingsStorage.ts",
+            "../../src/features/browse/utils/formatter.ts",
+            "../../src/features/guide/components/ContextHelpButton.tsx",
+            "../../src/features/study/interactions/reviewInteraction.ts",
+            "../../src/features/study/renderer/clientRenderer.ts",
+            "../../src/features/study/scheduler/algorithmRegistry.ts",
+            "../../src/features/study/scheduler/legacyEngine.ts",
+            "../../src/features/study/scheduler/noteStoragePrecision.ts",
+            "../../src/features/study/scheduler/time.ts",
+            "../../src/features/study/session/canonicalDigest.ts",
+            "../../src/features/study/session/sessionRestore.ts",
+            "../../src/features/study/session/sessionStore.ts",
+            "../../src/features/study/session/wireContract.ts",
+            "../../src/features/worksheets/components/LazyDeckWorksheetModal.tsx",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/flamaAudioClient.ts",
+            "../../src/lib/imageCompression.ts",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/api/noteMedia.ts",
+            "../../src/shared/components/Brand.tsx"
+          ]
+        },
+        "WorksheetsPage-": {
+          "name": "WorksheetsPage-DHPHdscc.js",
+          "chunk_count": 33,
+          "incremental_raw": 228904,
+          "incremental_gzip": 53895,
+          "incremental_chunks": [
+            "DeckSelectionTreeView-CRncGTwb.js",
+            "DeckWorksheetModal-DvpxH1PN.js",
+            "WorksheetsPage-DHPHdscc.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "database-BmOYoE1g.js",
+            "dialog-Dhk_QDX6.js",
+            "eye-CCmxZPtX.js",
+            "file-text-CrNoEMbZ.js",
+            "folder-5scGr8n5.js",
+            "folder-open-hlq8Tsim.js",
+            "folder-tree-DTh6ch50.js",
+            "label-BujaZzDN.js",
+            "list-ordered-CYvZa5Ie.js",
+            "native-select-Ips7yBo2.js",
+            "pen-tool-AkDVKbAG.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "sliders-vertical-BL_7_m0R.js",
+            "table-PVOmGf-L.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/import/components/DeckSelectionTreeView.tsx",
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/pages/WorksheetsPage.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx"
+          ]
+        },
+        "DeckWorksheetModal-": {
+          "name": "DeckWorksheetModal-DvpxH1PN.js",
+          "chunk_count": 32,
+          "incremental_raw": 222659,
+          "incremental_gzip": 52038,
+          "incremental_chunks": [
+            "DeckSelectionTreeView-CRncGTwb.js",
+            "DeckWorksheetModal-DvpxH1PN.js",
+            "chevron-down-CSos32rl.js",
+            "chevron-left-CnE7hd5C.js",
+            "circle-alert-BFoaPopG.js",
+            "database-BmOYoE1g.js",
+            "dialog-Dhk_QDX6.js",
+            "eye-CCmxZPtX.js",
+            "file-text-CrNoEMbZ.js",
+            "folder-5scGr8n5.js",
+            "folder-open-hlq8Tsim.js",
+            "folder-tree-DTh6ch50.js",
+            "label-BujaZzDN.js",
+            "list-ordered-CYvZa5Ie.js",
+            "native-select-Ips7yBo2.js",
+            "pen-tool-AkDVKbAG.js",
+            "plus-BQvHIGni.js",
+            "rotate-ccw-C9DB0U0x.js",
+            "sliders-vertical-BL_7_m0R.js",
+            "table-PVOmGf-L.js"
+          ],
+          "app_sources": [
+            "../../src/App.tsx",
+            "../../src/app/api.ts",
+            "../../src/components/ambient-background.tsx",
+            "../../src/components/app-sidebar.tsx",
+            "../../src/components/nav-main.tsx",
+            "../../src/components/nav-user.tsx",
+            "../../src/components/site-footer.tsx",
+            "../../src/components/site-mascot.tsx",
+            "../../src/components/ui/avatar.tsx",
+            "../../src/components/ui/badge.tsx",
+            "../../src/components/ui/button.tsx",
+            "../../src/components/ui/card.tsx",
+            "../../src/components/ui/dialog.tsx",
+            "../../src/components/ui/dropdown-menu.tsx",
+            "../../src/components/ui/input.tsx",
+            "../../src/components/ui/label.tsx",
+            "../../src/components/ui/native-select.tsx",
+            "../../src/components/ui/separator.tsx",
+            "../../src/components/ui/sheet.tsx",
+            "../../src/components/ui/sidebar.tsx",
+            "../../src/components/ui/skeleton.tsx",
+            "../../src/components/ui/sonner.tsx",
+            "../../src/components/ui/tooltip.tsx",
+            "../../src/config/env.ts",
+            "../../src/features/auth/components/RequireAuth.tsx",
+            "../../src/features/auth/components/RequireCreator.tsx",
+            "../../src/features/import/components/DeckSelectionTreeView.tsx",
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/hooks/use-mobile.ts",
+            "../../src/layouts/AppLayout.tsx",
+            "../../src/lib/utils.ts",
+            "../../src/main.tsx",
+            "../../src/pages/LandingPage.tsx",
+            "../../src/pages/MaintenancePage.tsx",
+            "../../src/pages/NotFoundPage.tsx",
+            "../../src/shared/api/backendAvailability.ts",
+            "../../src/shared/api/bootstrap.ts",
+            "../../src/shared/api/client.ts",
+            "../../src/shared/components/Brand.tsx"
+          ]
+        }
+      },
+      "initial": {
+        "chunk_count": 12,
+        "raw": 627277,
+        "gzip": 193098,
+        "chunks": [
+          "api-B2-SzgJa.js",
+          "button-a5mQ1ReM.js",
+          "client-FiacbjkH.js",
+          "dist-BKu_1E7v.js",
+          "dist-BzF8Z-AX.js",
+          "dist-CtZj6Sa2.js",
+          "dist-CwbbndDc.js",
+          "dist-jGSiCanb.js",
+          "es2015-B-sngEXt.js",
+          "index-DlDEjV9o.js",
+          "react-dom-D5e_bP6I.js",
+          "useQuery-IQgE_vnN.js"
+        ]
+      },
+      "study_compatibility_sources": [
+        {
+          "chunk": "sessionStore-Cd1yBozR.js",
+          "sources": [
+            "../../src/features/study/scheduler/legacyEngine.ts",
+            "../../src/features/study/scheduler/algorithmRegistry.ts",
+            "../../src/features/study/session/wireContract.ts",
+            "../../src/features/study/session/sessionRestore.ts",
+            "../../src/features/study/session/sessionStore.ts"
+          ]
+        }
+      ],
+      "chunks_with_worksheet": [
+        {
+          "chunk": "DeckWorksheetModal-DvpxH1PN.js",
+          "raw": 208274,
+          "gzip": 44402,
+          "sources": [
+            "../../src/features/worksheets/api.ts",
+            "../../src/features/worksheets/components/KanjiGridBox.tsx",
+            "../../src/features/worksheets/components/WorksheetPageRenderer.tsx",
+            "../../src/features/worksheets/utils/printEngine.tsx",
+            "../../src/features/worksheets/components/WorksheetWizardStepper.tsx",
+            "../../src/features/worksheets/components/WorksheetDeckSelectStep.tsx",
+            "../../src/features/worksheets/utils/worksheetStorage.ts",
+            "../../src/features/worksheets/components/WorksheetFieldMappingStep.tsx",
+            "../../src/features/worksheets/components/WorksheetTemplateSelectStep.tsx",
+            "../../src/features/worksheets/components/DeckWorksheetModal.tsx"
+          ]
+        },
+        {
+          "chunk": "LazyDeckWorksheetModal-53ev_-4O.js",
+          "raw": 2588,
+          "gzip": 1321,
+          "sources": [
+            "../../src/features/worksheets/components/LazyDeckWorksheetModal.tsx"
+          ]
+        },
+        {
+          "chunk": "WorksheetsPage-DHPHdscc.js",
+          "raw": 6245,
+          "gzip": 1857,
+          "sources": [
+            "../../src/features/worksheets/pages/WorksheetsPage.tsx"
+          ]
+        }
+      ],
+      "summary_note": "Static import closure totals exclude shared shell; source breakdown omitted here; full local probe retains module graph. Not actual network bytes."
+    },
+    "frontend_session_before": {
+      "runtime": "v22.22.2",
+      "chunk": "sessionStore-BIn4I8C8.js",
+      "data": "Synthetic valid v4 snapshot with one template and one content per Card; no application/user data",
+      "note": "saveStudySession measures synchronous full normalization with unavailable IndexedDB memory fallback; structuredClone separately approximates CPU copying, not browser IndexedDB transaction latency. Events reference final 50 Cards (late lookup case).",
+      "cases": [
+        {
+          "cards": 100,
+          "events": 0,
+          "field_chars": 40,
+          "snapshot_json_bytes": 151306,
+          "save_normalize_memory_fallback": {
+            "median_ms": 1.523,
+            "max_ms": 3.386,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 0.978,
+            "max_ms": 1.763,
+            "count": 10
+          }
+        },
+        {
+          "cards": 100,
+          "events": 0,
+          "field_chars": 500,
+          "snapshot_json_bytes": 243306,
+          "save_normalize_memory_fallback": {
+            "median_ms": 2.485,
+            "max_ms": 3.085,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 1.438,
+            "max_ms": 2.288,
+            "count": 10
+          }
+        },
+        {
+          "cards": 100,
+          "events": 50,
+          "field_chars": 40,
+          "snapshot_json_bytes": 189887,
+          "save_normalize_memory_fallback": {
+            "median_ms": 2.032,
+            "max_ms": 2.602,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 1.392,
+            "max_ms": 1.707,
+            "count": 10
+          }
+        },
+        {
+          "cards": 100,
+          "events": 50,
+          "field_chars": 500,
+          "snapshot_json_bytes": 281887,
+          "save_normalize_memory_fallback": {
+            "median_ms": 1.275,
+            "max_ms": 1.882,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 1.419,
+            "max_ms": 1.86,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 0,
+          "field_chars": 40,
+          "snapshot_json_bytes": 1491406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 6.861,
+            "max_ms": 9.773,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 11.296,
+            "max_ms": 14.796,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 0,
+          "field_chars": 500,
+          "snapshot_json_bytes": 2411406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 6.466,
+            "max_ms": 8.955,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 10.587,
+            "max_ms": 13.742,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 50,
+          "field_chars": 40,
+          "snapshot_json_bytes": 1530137,
+          "save_normalize_memory_fallback": {
+            "median_ms": 7.201,
+            "max_ms": 12.971,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 11.232,
+            "max_ms": 11.73,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 50,
+          "field_chars": 500,
+          "snapshot_json_bytes": 2450137,
+          "save_normalize_memory_fallback": {
+            "median_ms": 9.091,
+            "max_ms": 9.743,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 11.758,
+            "max_ms": 13.438,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 0,
+          "field_chars": 40,
+          "snapshot_json_bytes": 7475406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 22.666,
+            "max_ms": 28.359,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 60.434,
+            "max_ms": 81.801,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 0,
+          "field_chars": 500,
+          "snapshot_json_bytes": 12075406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 25.757,
+            "max_ms": 27.235,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 69.82,
+            "max_ms": 81.482,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 50,
+          "field_chars": 40,
+          "snapshot_json_bytes": 7514287,
+          "save_normalize_memory_fallback": {
+            "median_ms": 29.022,
+            "max_ms": 32.436,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 69.973,
+            "max_ms": 80.282,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 50,
+          "field_chars": 500,
+          "snapshot_json_bytes": 12114287,
+          "save_normalize_memory_fallback": {
+            "median_ms": 35.634,
+            "max_ms": 42.692,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 78.574,
+            "max_ms": 92.992,
+            "count": 10
+          }
+        }
+      ]
+    },
+    "frontend_session_after": {
+      "runtime": "v22.22.2",
+      "chunk": "sessionStore-Cd1yBozR.js",
+      "data": "Synthetic valid v4 snapshot with one template and one content per Card; no application/user data",
+      "note": "saveStudySession measures synchronous full normalization with unavailable IndexedDB memory fallback; structuredClone separately approximates CPU copying, not browser IndexedDB transaction latency. Events reference final 50 Cards (late lookup case).",
+      "cases": [
+        {
+          "cards": 100,
+          "events": 0,
+          "field_chars": 40,
+          "snapshot_json_bytes": 151306,
+          "save_normalize_memory_fallback": {
+            "median_ms": 1.957,
+            "max_ms": 2.423,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 0.986,
+            "max_ms": 1.442,
+            "count": 10
+          }
+        },
+        {
+          "cards": 100,
+          "events": 0,
+          "field_chars": 500,
+          "snapshot_json_bytes": 243306,
+          "save_normalize_memory_fallback": {
+            "median_ms": 1.266,
+            "max_ms": 2.035,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 1.244,
+            "max_ms": 1.772,
+            "count": 10
+          }
+        },
+        {
+          "cards": 100,
+          "events": 50,
+          "field_chars": 40,
+          "snapshot_json_bytes": 189887,
+          "save_normalize_memory_fallback": {
+            "median_ms": 3.993,
+            "max_ms": 5.463,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 2.354,
+            "max_ms": 3.132,
+            "count": 10
+          }
+        },
+        {
+          "cards": 100,
+          "events": 50,
+          "field_chars": 500,
+          "snapshot_json_bytes": 281887,
+          "save_normalize_memory_fallback": {
+            "median_ms": 2.168,
+            "max_ms": 3.295,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 1.599,
+            "max_ms": 3.105,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 0,
+          "field_chars": 40,
+          "snapshot_json_bytes": 1491406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 7.1,
+            "max_ms": 8.219,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 13.708,
+            "max_ms": 16.399,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 0,
+          "field_chars": 500,
+          "snapshot_json_bytes": 2411406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 5.934,
+            "max_ms": 7.156,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 9.518,
+            "max_ms": 12.252,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 50,
+          "field_chars": 40,
+          "snapshot_json_bytes": 1530137,
+          "save_normalize_memory_fallback": {
+            "median_ms": 5.633,
+            "max_ms": 8.008,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 10.029,
+            "max_ms": 11.327,
+            "count": 10
+          }
+        },
+        {
+          "cards": 1000,
+          "events": 50,
+          "field_chars": 500,
+          "snapshot_json_bytes": 2450137,
+          "save_normalize_memory_fallback": {
+            "median_ms": 5.514,
+            "max_ms": 8.421,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 10.306,
+            "max_ms": 12.774,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 0,
+          "field_chars": 40,
+          "snapshot_json_bytes": 7475406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 23.963,
+            "max_ms": 29.101,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 59.705,
+            "max_ms": 78.872,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 0,
+          "field_chars": 500,
+          "snapshot_json_bytes": 12075406,
+          "save_normalize_memory_fallback": {
+            "median_ms": 25.955,
+            "max_ms": 28.773,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 70.105,
+            "max_ms": 94.199,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 50,
+          "field_chars": 40,
+          "snapshot_json_bytes": 7514287,
+          "save_normalize_memory_fallback": {
+            "median_ms": 26.927,
+            "max_ms": 32.839,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 61.064,
+            "max_ms": 77.316,
+            "count": 10
+          }
+        },
+        {
+          "cards": 5000,
+          "events": 50,
+          "field_chars": 500,
+          "snapshot_json_bytes": 12114287,
+          "save_normalize_memory_fallback": {
+            "median_ms": 27.93,
+            "max_ms": 31.637,
+            "count": 10
+          },
+          "whole_snapshot_structured_clone": {
+            "median_ms": 65.13,
+            "max_ms": 87.437,
+            "count": 10
+          }
+        }
+      ]
+    },
+    "frontend_browser": {
+      "date": "2026-10-04",
+      "origin": "http://127.0.0.1:5184",
+      "build_entry": "index-DlDEjV9o.js",
+      "profile": "C:/Users/chung/.codex/chrome-profiles/frontend-scaling-20261004",
+      "data": "Mock API fixtures only; no production/browser account data",
+      "dashboard": {
+        "initial_rows": 1,
+        "expanded_rows": 2,
+        "initial_worksheet_chunk": false,
+        "study_href": "/study?deck_id=42",
+        "pending_cancel_reopen_load": true,
+        "page_errors": []
+      },
+      "dashboard_to_browse_spa_session_requests": 1,
+      "browse": {
+        "initial_worksheet_chunk": false,
+        "pending_cancel_reopen_load": true
+      },
+      "study_completion": {
+        "initial_worksheet_chunk": false,
+        "pending_cancel_reopen_load": true
+      },
+      "failed_chunk": {
+        "error_dialog_is_local": true,
+        "escape_closes": true,
+        "page_remains_usable": true,
+        "expected_console_errors": 2
+      },
+      "unexpected_page_errors": [],
+      "note": "Current local build functional/visual QA only; no production timing or browser IndexedDB speedup measurement. Preview and isolated browser closed after QA."
+    },
+    "mcp_queue": {
+      "engine": "SQLite in-memory",
+      "production_contacted": false,
+      "baseline_mcp_source_commit": "e1ab03d",
+      "shared_current_availability_reader": true,
+      "all_current_bodies_equal_baseline": true,
+      "fixture_notes": 201,
+      "fixture_cards": 202,
+      "stateful_notes": 201,
+      "fixture_reviews_due_400_days_later": 200,
+      "read_phase_dml_guard": true,
+      "queries": [
+        {
+          "label": "baseline_counts",
+          "body_parity_against_baseline": null,
+          "sql_count": 11,
+          "table_statement_counts": {
+            "users": 2,
+            "study_authority_enrollments": 1,
+            "study_authority_storage_profile": 1,
+            "decks": 2,
+            "notes": 3,
+            "deck_installs": 1,
+            "cards": 2,
+            "study_progress_subjects": 1,
+            "user_scheduler_settings": 1
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "outer_full_note_payload_selects": 1,
+          "project_note_state_calls": 0,
+          "loaded_entities": {
+            "Note": 201,
+            "Card": 202
+          },
+          "selected_canonical_scalar_rows": [],
+          "selected_queue_ref_rows": [],
+          "availability_snapshot_card_input_sizes": [
+            202
+          ],
+          "loaded_note_field_values_bytes": 826106,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        },
+        {
+          "label": "current_counts",
+          "body_parity_against_baseline": true,
+          "sql_count": 11,
+          "table_statement_counts": {
+            "users": 2,
+            "study_authority_enrollments": 1,
+            "study_authority_storage_profile": 1,
+            "decks": 2,
+            "notes": 3,
+            "deck_installs": 1,
+            "cards": 2,
+            "study_progress_subjects": 1,
+            "user_scheduler_settings": 1
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "outer_full_note_payload_selects": 0,
+          "project_note_state_calls": 0,
+          "loaded_entities": {},
+          "selected_canonical_scalar_rows": [],
+          "selected_queue_ref_rows": [
+            202
+          ],
+          "availability_snapshot_card_input_sizes": [
+            202
+          ],
+          "loaded_note_field_values_bytes": 0,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        },
+        {
+          "label": "baseline_stats",
+          "body_parity_against_baseline": null,
+          "sql_count": 16,
+          "table_statement_counts": {
+            "decks": 3,
+            "notes": 6,
+            "cards": 4,
+            "users": 2,
+            "study_authority_enrollments": 1,
+            "study_authority_storage_profile": 2,
+            "deck_installs": 1,
+            "study_progress_subjects": 2,
+            "user_scheduler_settings": 1
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "outer_full_note_payload_selects": 2,
+          "project_note_state_calls": 0,
+          "loaded_entities": {
+            "Note": 201,
+            "Card": 202
+          },
+          "selected_canonical_scalar_rows": [
+            202
+          ],
+          "selected_queue_ref_rows": [],
+          "availability_snapshot_card_input_sizes": [
+            202
+          ],
+          "loaded_note_field_values_bytes": 826106,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        },
+        {
+          "label": "current_stats",
+          "body_parity_against_baseline": true,
+          "sql_count": 16,
+          "table_statement_counts": {
+            "decks": 3,
+            "notes": 6,
+            "users": 2,
+            "study_authority_enrollments": 1,
+            "study_authority_storage_profile": 2,
+            "deck_installs": 1,
+            "cards": 4,
+            "study_progress_subjects": 2,
+            "user_scheduler_settings": 1
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "outer_full_note_payload_selects": 0,
+          "project_note_state_calls": 0,
+          "loaded_entities": {},
+          "selected_canonical_scalar_rows": [
+            202
+          ],
+          "selected_queue_ref_rows": [
+            202
+          ],
+          "availability_snapshot_card_input_sizes": [
+            202
+          ],
+          "loaded_note_field_values_bytes": 0,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        },
+        {
+          "label": "baseline_queue",
+          "body_parity_against_baseline": null,
+          "sql_count": 22,
+          "table_statement_counts": {
+            "users": 3,
+            "study_authority_enrollments": 2,
+            "study_authority_storage_profile": 2,
+            "decks": 5,
+            "notes": 6,
+            "deck_installs": 2,
+            "cards": 4,
+            "study_progress_subjects": 2,
+            "user_scheduler_settings": 2
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "outer_full_note_payload_selects": 2,
+          "project_note_state_calls": 0,
+          "loaded_entities": {
+            "Note": 402,
+            "Card": 404
+          },
+          "selected_canonical_scalar_rows": [],
+          "selected_queue_ref_rows": [],
+          "availability_snapshot_card_input_sizes": [
+            202,
+            202
+          ],
+          "loaded_note_field_values_bytes": 1652212,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        },
+        {
+          "label": "current_queue",
+          "body_parity_against_baseline": true,
+          "sql_count": 22,
+          "table_statement_counts": {
+            "users": 3,
+            "study_authority_enrollments": 2,
+            "study_authority_storage_profile": 2,
+            "decks": 5,
+            "notes": 6,
+            "deck_installs": 2,
+            "cards": 4,
+            "study_progress_subjects": 2,
+            "user_scheduler_settings": 2
+          },
+          "full_subject_selects": 0,
+          "subject_selects": 0,
+          "note_type_min_selects": 0,
+          "outer_full_note_payload_selects": 0,
+          "project_note_state_calls": 0,
+          "loaded_entities": {},
+          "selected_canonical_scalar_rows": [],
+          "selected_queue_ref_rows": [
+            202,
+            202
+          ],
+          "availability_snapshot_card_input_sizes": [
+            202,
+            202
+          ],
+          "loaded_note_field_values_bytes": 0,
+          "future_due_total_reviews": null,
+          "response_items": 0
+        }
+      ]
+    }
+  },
+  "validation": {
+    "backend_modular_run": {
+      "command": "python scripts/run_tests.py --changed --backend-only",
+      "tests": 1320,
+      "skipped": 1,
+      "initial_failures": 3,
+      "causes": [
+        "Card-unit analytics fixture inherited local Note-count rollout flag",
+        "Prior Dashboard probe missing modular source mapping"
+      ],
+      "resolution": "Pin Card-unit fixture explicitly; register prior Dashboard probe and new queue/scaling source/test files"
+    },
+    "resolved_failure_rerun": {
+      "command": "python scripts/run_tests.py --file tests/test_note_analytics_read.py tests/test_test_mapping_coverage.py tests/test_modular_test_runner.py --backend-only",
+      "tests": 30,
+      "exit_code": 0
+    },
+    "focused_study": {
+      "tests": 156,
+      "pass": true,
+      "final_helper_sqlite_rerun": 14
+    },
+    "focused_db_reads": {
+      "tests": 57,
+      "pass": true
+    },
+    "focused_queue": {
+      "new_tests": 8,
+      "related_tests": 56,
+      "pass": true
+    },
+    "focused_composition": {
+      "tests": 8,
+      "pass": true
+    },
+    "frontend": {
+      "tests": 43,
+      "pass": true,
+      "typecheck": "pass",
+      "build": "pass",
+      "lint": "pass with 37 existing warnings"
+    },
+    "mysql_probes": "classifier 7 cases and sibling scaling 13 aggregate checks pass; disposable schemas removed",
+    "limits": [
+      "No final full-suite repeat after fixture/mapping-only corrections; the exact affected suites were rerun.",
+      "No production deployment or post-deployment speedup claim.",
+      "SQLite timing samples may overlap other local test processes."
+    ]
+  }
+}

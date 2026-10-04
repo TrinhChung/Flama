@@ -26,7 +26,14 @@ def _now():
 
 
 class NoteAnalyticsReadTests(unittest.TestCase):
-    setUpClass = classmethod(fixtures.StudyDirectNoteReplayTests.setUpClass.__func__)
+    @classmethod
+    def setUpClass(cls):
+        fixtures.StudyDirectNoteReplayTests.setUpClass.__func__(cls)
+        # These assertions exercise Card units (two Templates on one Note).
+        # Keep a developer's .env Note-count rollout flag out of this fixture;
+        # test_study_note_level_counts covers both units explicitly.
+        cls.app.config["STUDY_NOTE_COUNT_ENABLED"] = False
+
     setUp = fixtures.StudyDirectNoteReplayTests.setUp
     _cleanup = fixtures.StudyDirectNoteReplayTests._cleanup
     _install_overlay = overlay_fixtures.StudyNoteOverlayTests._install_overlay

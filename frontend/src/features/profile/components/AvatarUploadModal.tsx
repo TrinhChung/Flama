@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { profileApi } from '../api/profileApi'
+import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 
 export function AvatarUploadModal({
   open,
@@ -51,7 +52,7 @@ export function AvatarUploadModal({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
-      void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       toast.success('Đã cập nhật ảnh đại diện thành công!')
       onOpenChange(false)
       setSelectedFile(null)
@@ -67,7 +68,7 @@ export function AvatarUploadModal({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
-      void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       toast.success('Đã gỡ ảnh đại diện.')
       onOpenChange(false)
       setSelectedFile(null)

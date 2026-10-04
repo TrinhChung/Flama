@@ -1,0 +1,137 @@
+{
+  "observed_utc": "2026-10-04T13:22:33.048249+00:00",
+  "method": "Metadata and bounded indexed COUNTs; session transaction read only; no app startup",
+  "production_release": "d747a5f5be6d3799a977b5efe73467072491a744",
+  "mysql": {
+    "read_only": 1,
+    "mysql_version": "8.0.46-0ubuntu0.22.04.4",
+    "buffer_pool_bytes": 134217728,
+    "old_blocks_time_ms": 1000,
+    "index_dive_limit": 200
+  },
+  "table_estimates": [
+    {
+      "TABLE_NAME": "audit_logs",
+      "estimated_rows": 70652,
+      "DATA_LENGTH": 37371904,
+      "INDEX_LENGTH": 15810560
+    },
+    {
+      "TABLE_NAME": "cards",
+      "estimated_rows": 37609,
+      "DATA_LENGTH": 12812288,
+      "INDEX_LENGTH": 32227328
+    },
+    {
+      "TABLE_NAME": "notes",
+      "estimated_rows": 35872,
+      "DATA_LENGTH": 113934336,
+      "INDEX_LENGTH": 15007744
+    },
+    {
+      "TABLE_NAME": "review_events",
+      "estimated_rows": 123110,
+      "DATA_LENGTH": 103268352,
+      "INDEX_LENGTH": 95191040
+    },
+    {
+      "TABLE_NAME": "study_authority_command_receipts",
+      "estimated_rows": 215,
+      "DATA_LENGTH": 262144,
+      "INDEX_LENGTH": 65536
+    },
+    {
+      "TABLE_NAME": "study_progress_history_facts",
+      "estimated_rows": 215,
+      "DATA_LENGTH": 311296,
+      "INDEX_LENGTH": 114688
+    },
+    {
+      "TABLE_NAME": "study_progress_subjects",
+      "estimated_rows": 35724,
+      "DATA_LENGTH": 60440576,
+      "INDEX_LENGTH": 12910592
+    }
+  ],
+  "indexes": [
+    {
+      "TABLE_NAME": "audit_logs",
+      "physical_index_count": 3
+    },
+    {
+      "TABLE_NAME": "notes",
+      "physical_index_count": 4
+    },
+    {
+      "TABLE_NAME": "review_events",
+      "physical_index_count": 17
+    },
+    {
+      "TABLE_NAME": "study_authority_command_receipts",
+      "physical_index_count": 5
+    },
+    {
+      "TABLE_NAME": "study_progress_history_facts",
+      "physical_index_count": 7
+    }
+  ],
+  "note_indexes": [
+    {
+      "INDEX_NAME": "ix_notes_deck_id",
+      "COLUMN_NAME": "deck_id",
+      "SEQ_IN_INDEX": 1
+    },
+    {
+      "INDEX_NAME": "ix_notes_note_type_id",
+      "COLUMN_NAME": "note_type_id",
+      "SEQ_IN_INDEX": 1
+    },
+    {
+      "INDEX_NAME": "ix_notes_user_id",
+      "COLUMN_NAME": "user_id",
+      "SEQ_IN_INDEX": 1
+    },
+    {
+      "INDEX_NAME": "PRIMARY",
+      "COLUMN_NAME": "id",
+      "SEQ_IN_INDEX": 1
+    }
+  ],
+  "user1_all_reviews": {
+    "row_count": 118359,
+    "single_count_ms": 61.891
+  },
+  "user1_2026_reviews": {
+    "row_count": 76543,
+    "single_count_ms": 25.606
+  },
+  "users_with_reviews": 6,
+  "host_memory": {
+    "MemTotal": "8127308 kB",
+    "MemAvailable": "5354388 kB"
+  },
+  "host_runtime_observation": {
+    "observed_utc": "2026-10-04T13:41:05.242845+00:00",
+    "method": "Read-only SSH os-release, getconf and systemctl show",
+    "os": "Ubuntu 22.04.5 LTS",
+    "vcpus": 2,
+    "gunicorn": {
+      "workers": 2,
+      "threads_per_worker": 4,
+      "worker_class": "gthread",
+      "timeout_seconds": 120
+    },
+    "deployment": "systemd /opt/flama/venv, not Docker Compose"
+  },
+  "card_index_observation": {
+    "observed_utc": "2026-10-04T13:59:12.365447+00:00",
+    "method": "Read-only information_schema.statistics lookup",
+    "card_note_lookup_index": [
+      [
+        "ix_cards_note_id",
+        "note_id",
+        1
+      ]
+    ]
+  }
+}

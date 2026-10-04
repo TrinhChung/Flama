@@ -16,6 +16,7 @@ from app.repositories.study_authority_repository import (
 )
 from app.repositories.study_repository import card_state_from_progress
 from app.repositories import study_repository
+from app.repositories.study_queue_repository import StudyQueueCardRef
 from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
 from app.services.anki_scheduler import CardState, DeckOptions
 from app.services.study_artifact_service import (
@@ -158,7 +159,7 @@ def load_study_authority_availability_snapshot(
     session: Session,
     *,
     learner_user_id: int,
-    cards: Sequence[Card],
+    cards: Sequence[Card | StudyQueueCardRef],
     scope,
     now_utc: datetime,
 ) -> Mapping[str, StudyAuthorityAvailabilitySnapshot]:
@@ -364,12 +365,16 @@ def load_study_authority_card_reads(
             "NOTE read Card is missing from the live sibling vector.",
         )
     # ADR P10 §2.7: the locked subject row holds state and availability.
+    validated_note_keys: set[str] = set()
     for card_id in sorted(card_by_id):
         if card_id not in requested_card_by_id:
             continue
         card = card_by_id[card_id]
         logical_note_key = str(card.note_id)
         locked = subjects.locked_by_logical_note_key[logical_note_key]
+        if logical_note_key not in validated_note_keys:
+            validate_consolidated_subject(card=card, subject=locked.subject)
+            validated_note_keys.add(logical_note_key)
         result[card_id] = StudyAuthorityCardRead(
             route=route,
             state=subjects.state_by_logical_note_key[logical_note_key],
@@ -384,15 +389,15 @@ def load_study_authority_card_reads(
             ),
             progress=None,
             authority_revision=int(locked.token.authority_revision),
-            availability=validate_consolidated_subject(card=card, subject=locked.subject),
+            availability=_availability_from_subject(locked.subject, card=card),
         )
     return MappingProxyType(dict(sorted(result.items())))
 
 
 def summarize_study_authority_queue(
     *,
-    cards: Sequence[Card],
-    reads_by_card_id: Mapping[str, StudyAuthorityCardRead],
+    cards: Sequence[Card | StudyQueueCardRef],
+    reads_by_card_id: Mapping[str, StudyAuthorityCardRead | StudyAuthorityAvailabilitySnapshot],
     learner_user_id: int,
     now_utc: datetime,
     timezone_name: str,

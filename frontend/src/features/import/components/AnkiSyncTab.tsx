@@ -23,6 +23,7 @@ import {
   buildExactAnkiModelQuery,
 } from '@/lib/ankiSyncEngine'
 import { getCsrfToken } from '@/shared/api/client'
+import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 import { sanitizeAnkiHtml } from '@/lib/ankiHtmlSanitizer'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
@@ -475,7 +476,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
       })
 
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['bootstrap'] }),
+        queryClient.invalidateQueries({ queryKey: bootstrapQueryKey }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['decks'] }),
         queryClient.invalidateQueries({ queryKey: ['import-options'] }),

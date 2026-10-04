@@ -76,13 +76,13 @@ vi.mock('../components/BrowseTtsModal', () => ({
 vi.mock('../components/BrowseStrokeModal', () => ({
   BrowseStrokeModal: () => null,
 }))
-vi.mock('@/features/worksheets', () => ({
-  DeckWorksheetModal: () => null,
+vi.mock('@/features/worksheets/components/LazyDeckWorksheetModal', () => ({
+  LazyDeckWorksheetModal: () => null,
 }))
 vi.mock('@/features/audio/components/LocalAudioDialog', () => ({
   LocalAudioDialog: () => null,
 }))
-vi.mock('@/features/guide', () => ({
+vi.mock('@/features/guide/components/ContextHelpButton', () => ({
   ContextHelpButton: () => <div data-testid="mock-guide-button" />,
 }))
 vi.mock('@/shared/api/bootstrap', () => ({

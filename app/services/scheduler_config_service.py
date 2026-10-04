@@ -158,9 +158,14 @@ def resolve_deck_options(
     deck_obj: Deck | None = None,
     settings_row: UserSchedulerSettings | None = None,
     preset_row: SchedulerPreset | None = None,
+    runtime_settings: SchedulerRuntimeSettings | None = None,
 ) -> DeckOptions:
     defaults = default_deck_options()
-    runtime = resolve_scheduler_runtime_settings(user_id=user_id, settings_row=settings_row)
+    # A request resolving several decks may already have read the learner's
+    # settings, including the default result when no settings row exists.
+    runtime = runtime_settings if runtime_settings is not None else resolve_scheduler_runtime_settings(
+        user_id=user_id, settings_row=settings_row,
+    )
     preset = preset_row if preset_row is not None else resolve_scheduler_preset_for_deck(
         deck_id=deck_id,
         deck_obj=deck_obj,

@@ -13,6 +13,8 @@ import random
 import unittest
 from uuid import uuid4
 
+from sqlalchemy import event
+
 from app import create_app
 from app.repositories.study_repository import _today_day_index, counter_bucket_for_progress_values
 from app.services.anki_scheduler import _day_index_to_datetime
@@ -948,6 +950,88 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 is_note_mode=True,
             )
             self.assertEqual(counts[self.owned_deck_id], {"total": 1, "new": 1, "learn": 0, "due": 0})
+
+    def test_counts_only_skips_metadata_without_changing_counts(self):
+        with self.app.app_context():
+            today_day = self._install_overlay_with_source_card()
+            self._create_note_and_cards(
+                user_id=self.learner_id, deck_id=self.owned_deck_id, card_count=2,
+            )
+            db.session.commit()
+            for is_note_mode, count_by_note in ((False, False), (True, False), (True, True)):
+                args = dict(
+                    learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.owned_deck_id, self.local_deck_id],
+                    today_day_index=today_day, day_cutoff_utc=_next_day_start(today_day),
+                    is_note_mode=is_note_mode, count_by_note=count_by_note,
+                )
+                expected, expected_types = aggregate_deck_study_counts(db.session, **args)
+                self.assertTrue(expected_types)
+                statements = []
+                def capture(_conn, _cursor, statement, *_args):
+                    statements.append(statement.lower())
+                event.listen(db.engine, "before_cursor_execute", capture)
+                try:
+                    actual, metadata = aggregate_deck_study_counts(
+                        db.session, **args, include_note_types=False,
+                    )
+                finally:
+                    event.remove(db.engine, "before_cursor_execute", capture)
+                self.assertEqual(actual, expected)
+                self.assertEqual(metadata, {})
+                self.assertFalse(any("min(notes.created_at)" in sql for sql in statements))
+
+    def test_metadata_subset_preserves_oldest_note_and_owned_overlay_precedence(self):
+        with self.app.app_context():
+            today_day = self._install_overlay_with_source_card(note_type_id="install-type")
+            self._create_note_and_cards(
+                user_id=self.learner_id, deck_id=self.local_deck_id,
+                note_type_id="old-owned-type", created_at=datetime(2026, 1, 1),
+                card_count=0,
+            )
+            self._create_note_and_cards(
+                user_id=self.learner_id, deck_id=self.local_deck_id,
+                note_type_id="new-owned-type", created_at=datetime(2026, 2, 1),
+            )
+            self._create_note_and_cards(
+                user_id=self.learner_id, deck_id=self.owned_deck_id,
+                note_type_id="explicit-deck-type",
+            )
+            db.session.commit()
+            args = dict(
+                learner_user_id=self.learner_id,
+                visible_deck_ids=[self.owned_deck_id, self.local_deck_id],
+                today_day_index=today_day, day_cutoff_utc=_next_day_start(today_day),
+                is_note_mode=True, count_by_note=True,
+            )
+            expected, expected_types = aggregate_deck_study_counts(db.session, **args)
+            actual, metadata = aggregate_deck_study_counts(
+                db.session, **args,
+                note_type_deck_ids=[self.local_deck_id, self.source_deck_id],
+            )
+            self.assertEqual(actual, expected)
+            self.assertEqual(metadata, {self.local_deck_id: "old-owned-type"})
+            self.assertEqual(metadata[self.local_deck_id], expected_types[self.local_deck_id])
+
+    def test_empty_metadata_subset_skips_scan_and_overlay_fallback(self):
+        with self.app.app_context():
+            today_day = self._install_overlay_with_source_card()
+            statements = []
+            def capture(_conn, _cursor, statement, *_args):
+                statements.append(statement.lower())
+            event.listen(db.engine, "before_cursor_execute", capture)
+            try:
+                counts, metadata = aggregate_deck_study_counts(
+                    db.session, learner_user_id=self.learner_id,
+                    visible_deck_ids=[self.local_deck_id], today_day_index=today_day,
+                    day_cutoff_utc=_next_day_start(today_day), is_note_mode=True,
+                    note_type_deck_ids=[],
+                )
+            finally:
+                event.remove(db.engine, "before_cursor_execute", capture)
+            self.assertEqual(counts[self.local_deck_id]["total"], 1)
+            self.assertEqual(metadata, {})
+            self.assertFalse(any("min(notes.created_at)" in sql for sql in statements))
 
 
 if __name__ == "__main__":

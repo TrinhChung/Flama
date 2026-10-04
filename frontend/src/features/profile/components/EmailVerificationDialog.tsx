@@ -23,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { profileApi } from '../api/profileApi'
+import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 import type { ProfileUser } from '../types/profile'
 
 interface EmailVerificationDialogProps {
@@ -70,7 +71,7 @@ export function EmailVerificationDialog({
       if (data.already_verified) {
         toast.info(data.message || 'Email của bạn đã được xác thực trước đó.')
         queryClient.invalidateQueries({ queryKey: ['profile'] })
-        queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+        queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
         onOpenChange(false)
       } else {
         toast.success(data.message || 'Mã xác thực đã được gửi đến email của bạn.')
@@ -96,7 +97,7 @@ export function EmailVerificationDialog({
           : 'Xác thực địa chỉ email thành công!'
       )
       queryClient.invalidateQueries({ queryKey: ['profile'] })
-      queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       setTimeout(() => {
         onOpenChange(false)
       }, 1500)

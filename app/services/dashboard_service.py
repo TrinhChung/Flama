@@ -73,6 +73,7 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
         db.session,
         learner_user_id=int(current_user.id),
         visible_deck_ids=visible_deck_ids,
+        note_type_deck_ids=[int(deck.id) for deck in decks if not deck.note_type_id],
         today_day_index=today_day_index,
         day_cutoff_utc=day_cutoff_utc,
         is_note_mode=authority_route.mode_code == "NOTE",

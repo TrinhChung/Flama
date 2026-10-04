@@ -217,6 +217,7 @@ def build_browse_deck_tree(
                 # D6-04: all Cards of a Note share one NOTE state.
                 count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
                 owned_by_any_user=admin_mode,
+                include_note_types=False,
             )
 
             def rebuild_counts(node: dict[str, Any]) -> dict[str, int]:
