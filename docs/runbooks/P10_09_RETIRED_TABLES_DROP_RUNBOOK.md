@@ -2,6 +2,8 @@
 
 > Bước **phá hủy có bản sao**: migration `20261003_000050` drop `study_progress_lineage_refs`, `study_progress_availability`, `study_progress_contributors`, `study_progress_states`, `study_authority_subject_tokens` và FK + index `study_progress_history_facts.contributor_id` (giữ cột). Chủ sản phẩm duyệt 2026-10-03 ("dump rồi xóa"). Cơ sở: [kế hoạch P10](../task/decoupling/P10_EXECUTION_PLAN_2026-10-03.md) §P10-09, [ADR P10](../architecture/phase-10-consolidated-note-progress-adr-2026-10-03.md).
 
+**Đã thực hiện 2026-10-04:** dump `/root/backups/flama-p10-09-retired-tables-20261003T152452Z.sql.gz` (sha256 `f10031f12d487880…`, khôi phục thử trùng số dòng và checksum), backup đầy đủ `flama-pre-p10-09-20261003T152452Z.sql.gz`; migration 50 chạy với release `d747a5f`; hậu kiểm §4 đạt (dữ liệu không đổi, audit 18/18 PASS). Lần deploy đầu fail vì runner GitHub hết giờ SSH tới VPS (mạng tạm thời); chạy lại job deploy là đủ.
+
 Helper `flama_cli` như trong [P5 runbook](./P5_NOTE_AUTHORITY_RUNBOOK.md). Mọi lệnh MySQL dưới đây chạy bằng `--defaults-file=/etc/mysql/debian.cnf` trên VPS.
 
 ## 1. Điều kiện trước
