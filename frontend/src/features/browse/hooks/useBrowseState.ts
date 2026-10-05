@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
 import { apiBlob } from '@/shared/api/client'
-import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
+import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
 import {
   type BrowseTtsSettings,
   loadStoredBrowseTtsSettings,
@@ -654,7 +654,7 @@ export function useBrowseState() {
       setInitialTags(editTags)
       if (activeCardId) {
         const noteId = cardDetailQuery.data?.note?.id ? String(cardDetailQuery.data.note.id) : null
-        await updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
+        await updateCardFieldValues({ cardId: activeCardId, fieldValues: editFieldValues, noteId })
       }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })

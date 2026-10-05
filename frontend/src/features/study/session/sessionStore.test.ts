@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import '@/app/studyContentSync'
+import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
 import type { StudySessionSnapshot } from '../types'
 import { createPersistedSession } from './studySessionEngine'
 import {
@@ -124,6 +126,33 @@ afterEach(() => {
 })
 
 describe('study session quarantine fallback', () => {
+  it('persists content from the app boundary before any Study page is mounted', async () => {
+    vi.stubGlobal('indexedDB', undefined)
+    const first = createPersistedSession(snapshot())
+    const secondSnapshot = snapshot()
+    secondSnapshot.scope = { type: 'deck', id: '78', name: 'Another deck' }
+    secondSnapshot.session_id = '44444444-4444-4444-8444-444444444444'
+    // A different card for the same note must receive the audio edit too.
+    secondSnapshot.cards[0].card_id = 'card-2'
+    const second = createPersistedSession(secondSnapshot)
+    await saveStudySession(first)
+    await saveStudySession(second)
+
+    await updateCardFieldValues({
+      cardId: 'card-1', noteId: 'note-1', fieldValues: { Audio: '/media/proxy/audio-1' },
+    })
+    for (const session of [first, second]) {
+      const restored = await loadStudySessionWithDurability(session.scope_key)
+      const key = restored.session!.snapshot.cards[0].content_key
+      expect(restored.session!.snapshot.contents[key].field_values.Audio).toBe('/media/proxy/audio-1')
+      expect(restored.session!.snapshot.templates).toEqual(session.snapshot.templates)
+      expect(restored.session!.events).toEqual(session.events)
+    }
+    // Pure patching must leave each pre-edit snapshot untouched.
+    expect(first.snapshot.contents.content.field_values).toEqual({ Word: 'cat' })
+    expect(second.snapshot.contents.content.field_values).toEqual({ Word: 'cat' })
+  })
+
   it('updates card content live while keeping template artifacts frozen after authoring updates', async () => {
     vi.stubGlobal('indexedDB', undefined)
     const session = createPersistedSession(snapshot())

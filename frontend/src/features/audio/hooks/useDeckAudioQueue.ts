@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
+import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { uploadNoteMediaBlob } from '@/shared/api/noteMedia'
 import {
@@ -66,7 +66,11 @@ export function useDeckAudioQueue() {
       )
 
       if (res.url && item.cardId) {
-        updateCardFieldValuesInSessions(item.cardId, { [item.destinationField]: res.url })
+        await updateCardFieldValues({
+          cardId: item.cardId,
+          noteId: item.noteId,
+          fieldValues: { [item.destinationField]: res.url },
+        })
       }
 
       return { success: true, assetUrl: res.url }

@@ -1,0 +1,120 @@
+// @vitest-environment jsdom
+
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CardRendererFrame } from './CardRendererFrame'
+
+describe('CardRendererFrame', () => {
+  afterEach(() => {
+    document.body.replaceChildren()
+    delete window.FlamaCardRendererHost
+  })
+
+  it('keeps one live-patch controller across visibility changes and cleans it up', async () => {
+    const render = vi.fn()
+    const reveal = vi.fn()
+    const destroy = vi.fn()
+    const createRendererFrameController = vi.fn(() => ({
+      render,
+      reveal,
+      destroy,
+    }))
+    window.FlamaCardRendererHost = {
+      createRendererFrameController,
+      normalizeRendererSidePayload: (payload) => ({
+        html: String((payload as { html?: string })?.html || ''),
+        allowed_media_urls: [],
+        allowed_audio_urls: [],
+      }),
+      createNoticeHtml: (message) => `<p>${message}</p>`,
+    }
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const props = {
+      cardId: 'card-1',
+      noteId: 'note-1',
+      revealed: false,
+      frontPayload: { html: '<p>front</p>' },
+      active: false,
+      enableLivePatch: true,
+      fillHeight: true,
+    }
+
+    await act(async () => {
+      root.render(<CardRendererFrame {...props} />)
+    })
+
+    expect(createRendererFrameController).toHaveBeenCalledTimes(1)
+    expect(createRendererFrameController).toHaveBeenCalledWith(
+      expect.any(HTMLIFrameElement),
+      expect.objectContaining({
+        autoHeight: false,
+        enableLivePatch: true,
+        fillHeight: true,
+      }),
+    )
+    expect(render).not.toHaveBeenCalled()
+    expect(reveal).not.toHaveBeenCalled()
+
+    await act(async () => {
+      root.render(<CardRendererFrame {...props} active />)
+    })
+
+    expect(createRendererFrameController).toHaveBeenCalledTimes(1)
+    expect(render).toHaveBeenCalledTimes(1)
+    expect(reveal).toHaveBeenCalledWith({
+      side: 'front',
+      reason: 'load_card',
+    })
+
+    await act(async () => {
+      root.unmount()
+    })
+    expect(destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders abstract slots correctly', async () => {
+    window.FlamaCardRendererHost = {
+      createRendererFrameController: () => ({
+        render: vi.fn(),
+        reveal: vi.fn(),
+        destroy: vi.fn(),
+      }),
+      normalizeRendererSidePayload: () => ({
+        html: '<p>content</p>',
+        allowed_media_urls: [],
+        allowed_audio_urls: [],
+      }),
+      createNoticeHtml: (msg) => `<p>${msg}</p>`,
+    }
+
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <CardRendererFrame
+          cardId="card-slot-test"
+          revealed={false}
+          slots={{
+            header: <div data-testid="test-header">Header Slot</div>,
+            toolbar: <div data-testid="test-toolbar">Toolbar Slot</div>,
+            footer: <div data-testid="test-footer">Footer Slot</div>,
+          }}
+        />,
+      )
+    })
+
+    expect(container.querySelector('[data-testid="test-header"]')?.textContent).toBe('Header Slot')
+    expect(container.querySelector('[data-testid="test-toolbar"]')?.textContent).toBe('Toolbar Slot')
+    expect(container.querySelector('[data-testid="test-footer"]')?.textContent).toBe('Footer Slot')
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+})

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   loadQuarantine: null as null | { reason: string; message: string },
   acknowledgeQuarantine: vi.fn(),
   saveSession: vi.fn(),
+  updateStoredCardContent: vi.fn().mockResolvedValue(undefined),
   removeSession: vi.fn(),
   removeSessionIfMatches: vi.fn(),
   quarantineSession: vi.fn(),
@@ -60,6 +61,7 @@ vi.mock('../session/sessionStore', () => ({
     quarantine: mocks.loadQuarantine ?? undefined,
   }),
   saveStudySession: mocks.saveSession,
+  updateCardFieldValuesInSessions: mocks.updateStoredCardContent,
   removeStudySession: mocks.removeSession,
   removeStudySessionIfMatches: mocks.removeSessionIfMatches,
   quarantineStudySession: mocks.quarantineSession,
@@ -960,6 +962,7 @@ describe('useStudySession cross-tab ownership', () => {
   it('updates card content live while deferring template authoring changes', async () => {
     await openReadySession()
     mocks.saveSession.mockClear()
+    mocks.updateStoredCardContent.mockClear()
 
     await act(async () => {
       await latest.updateCardContent('card-1', { Word: 'dog' }, { noteId: 'note-1' })
@@ -991,6 +994,9 @@ describe('useStudySession cross-tab ownership', () => {
       render_context: { Word: 'dog' },
     })
     expect(mocks.saveSession).toHaveBeenCalled()
+    expect(mocks.updateStoredCardContent).toHaveBeenCalledExactlyOnceWith('card-1', { Word: 'dog' }, {
+      noteId: 'note-1', media: undefined,
+    })
   })
 
   it('admits only one same-tick answer while the owner is becoming durable', async () => {
