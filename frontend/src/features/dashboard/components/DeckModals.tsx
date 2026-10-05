@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { DeckCardTypesDialog } from './DeckCardTypesDialog'
 import { dashboardQueryKey } from '../api'
 import {
   createDeckSchema,
@@ -268,6 +269,17 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
   if (type === 'worksheet') {
     return (
       <LazyDeckWorksheetModal
+        open
+        onOpenChange={(open) => !open && onClose()}
+        deckId={deck.id}
+        deckName={deck.name}
+      />
+    )
+  }
+
+  if (type === 'card-types') {
+    return (
+      <DeckCardTypesDialog
         open
         onOpenChange={(open) => !open && onClose()}
         deckId={deck.id}

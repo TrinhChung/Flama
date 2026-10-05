@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { Printer } from 'lucide-react'
+import { Layers, Printer } from 'lucide-react'
 import type { DeckNode, SelectedDeckAction } from '../types'
 
 export interface DeckRowProps {
@@ -258,6 +258,14 @@ export function DeckRow({
                 >
                   <Upload className="size-4 text-muted-foreground" />
                   <span>Import thẻ</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  className="cursor-pointer text-sm py-2 px-2.5 font-medium flex items-center gap-2"
+                  onSelect={() => onAction({ type: 'card-types', deck: node })}
+                >
+                  <Layers className="size-4 text-orange-600" />
+                  <span>Kiểu thẻ (template)</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
