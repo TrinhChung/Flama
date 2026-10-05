@@ -8,10 +8,10 @@ Kế hoạch tổng: [TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.
 |---|---|---|---|---|---|
 | CT-00 | Chốt Q1–Q5, chạy baseline | Claude | Planned | người dùng duyệt | kế hoạch §7 |
 | CT-01 | ADR definition/version/fork, đóng băng Contract A/D/E | Claude | Planned | CT-00 | kế hoạch §7 |
-| GT-01 | Nội dung mặc định template theo field thật | Gemini | Planned | CT-00 | [GT-01](GT-01_DEFAULT_TEMPLATE_CONTENT.md) |
-| GT-02 | `note_count` trong danh sách template | Gemini | Planned | CT-00 | [GT-02](GT-02_TEMPLATE_NOTE_COUNT.md) |
-| GT-03 | `include_counts` cho compositions | Gemini | Planned | CT-00 | [GT-03](GT-03_COMPOSITION_NOTE_COUNTS.md) |
-| GT-04 | Entity `card-template` (frontend) | Gemini | Planned | CT-00 | [GT-04](GT-04_CARD_TEMPLATE_ENTITY.md) |
+| GT-01 | Nội dung mặc định template theo field thật | Gemini | Completed | CT-00 | [GT-01](GT-01_DEFAULT_TEMPLATE_CONTENT.md) |
+| GT-02 | `note_count` trong danh sách template | Gemini | Completed | CT-00 | [GT-02](GT-02_TEMPLATE_NOTE_COUNT.md) |
+| GT-03 | `include_counts` cho compositions | Gemini | Completed | CT-00 | [GT-03](GT-03_COMPOSITION_NOTE_COUNTS.md) |
+| GT-04 | Entity `card-template` (frontend) | Gemini | Completed | CT-00 | [GT-04](GT-04_CARD_TEMPLATE_ENTITY.md) |
 | GT-05 | Tách `TemplateCodeEditor` (không đổi giao diện) | Gemini | Planned | GT-04 | [GT-05](GT-05_EXTRACT_TEMPLATE_CODE_EDITOR.md) |
 | GT-06 | Quản lý template trên trang loại thẻ | Gemini | Planned | GT-02, GT-04, GT-05 | [GT-06](GT-06_TEMPLATE_MANAGEMENT_UI.md) |
 | GT-07 | Dialog "Kiểu thẻ" trên dashboard | Gemini | Planned | GT-03, GT-04 | [GT-07](GT-07_DECK_CARD_TYPES_DIALOG.md) |
@@ -101,3 +101,4 @@ agy --print $taskPrompt --model gemini-3.7-flash-high --effort high --mode accep
 | Ngày | Sự kiện |
 |---|---|
 | 2026-10-05 | Claude lập kế hoạch và spec GT-01..GT-15. Chưa giao task, chưa chạy baseline (container lập kế hoạch không có dependency). |
+| 2026-10-05 | Gemini / teamwork_preview hoàn thành và kiểm thử toàn diện Milestone M1 (GT-01..GT-04). Pass 100% test suites (30 unit tests, 15 adversarial tests, 52 Vitest, typecheck, lint, 24 flashcard backend suites). |

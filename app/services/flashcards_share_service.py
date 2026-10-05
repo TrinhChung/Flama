@@ -157,6 +157,28 @@ def _is_mysql_deadlock(exc: Exception) -> bool:
     return "deadlock" in message or "lock wait timeout" in message
 
 
+def default_template_sources(field_rows: list[tuple[int, str]]) -> tuple[str, str]:
+    """Return (front_html, back_html) for a new template.
+
+    field_rows: (position, name) of the NoteType's fields, any order.
+    """
+    cleaned = [
+        (int(pos), str(name).strip())
+        for pos, name in field_rows
+        if name and str(name).strip()
+    ]
+    cleaned.sort(key=lambda item: (item[0], item[1]))
+    if not cleaned:
+        return "{{Word}}", "{{Word}}"
+    names = [name for _, name in cleaned]
+    first = "{{" + names[0] + "}}"
+    if len(names) >= 2:
+        back = first + "<hr>" + "{{" + names[1] + "}}"
+    else:
+        back = first
+    return first, back
+
+
 def create_note_type(
     user_id: int,
     payload: dict,
@@ -221,8 +243,14 @@ def create_note_type(
         )
 
     template_payload = payload.get("template") or {}
-    front_html = (template_payload.get("front_html") or "{{Word}}").strip()
-    back_html = (template_payload.get("back_html") or "{{Word}}").strip()
+    default_front, default_back = default_template_sources(
+        [
+            (int(row.get("position", idx)), str(row.get("name") or "").strip())
+            for idx, row in enumerate(input_fields)
+        ]
+    )
+    front_html = (template_payload.get("front_html") or default_front).strip()
+    back_html = (template_payload.get("back_html") or default_back).strip()
     shared_css = (template_payload.get("shared_css") or "").strip()
     template = Template(
         note_type_id=note_type.id,
@@ -262,8 +290,11 @@ def create_template(
         return None, "Note type not found."
         
     name = (payload.get("name") or "").strip() or f"Card {Template.query.filter_by(note_type_id=note_type.id).count() + 1}"
-    front_html = (payload.get("front_html") or "{{Word}}").strip()
-    back_html = (payload.get("back_html") or "{{Word}}").strip()
+    default_front, default_back = default_template_sources(
+        [(int(field.position or 0), str(field.name or "")) for field in note_type.field_defs]
+    )
+    front_html = (payload.get("front_html") or default_front).strip()
+    back_html = (payload.get("back_html") or default_back).strip()
     shared_css = (payload.get("shared_css") or "").strip()
     
     max_pos = db.session.query(db.func.max(Template.position)).filter_by(

@@ -161,6 +161,18 @@ class StudySessionInstallUsageTests(unittest.TestCase):
             install = db.session.get(DeckInstall, self.install_id)
             self.assertEqual((install.first_use_at, install.last_activity_at), (earlier, last))
 
+    def test_compositions_include_counts_for_installed_deck(self):
+        self._install_overlay(3)
+        response = self.client.get(
+            f"/api/study/scopes/deck/{self.local_deck_id}/compositions?include_counts=1"
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        body = response.get_json()
+        self.assertEqual(len(body["compositions"]), 1)
+        composition_id = body["compositions"][0]["composition_id"]
+        self.assertEqual(body["compositions"][0]["context_kind"], "installed_source")
+        self.assertEqual(body["note_counts"], {composition_id: 3})
+
 
 if __name__ == "__main__":
     unittest.main()

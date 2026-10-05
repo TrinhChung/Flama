@@ -2,19 +2,21 @@
 ## Master Engineering Specification & Baseline Characterization for Flama React SPA Migration
 
 - **Mã tài liệu**: `FLAMA-DOC-2026-FE-G00`
-- **Phiên bản**: 1.0 (Chính thức)
-- **Tác giả tổng hợp**: Worker 1 (`teamwork_preview_worker_g00_1`)
+- **Phiên bản**: 2.0 (Cập nhật nghiệm thu Gate C00)
+- **Tác giả tổng hợp**: Worker G00 Updater (`worker_g00_updater`) & Worker 1 (`teamwork_preview_worker_g00_1`)
 - **Nguồn khảo sát thực tế**:
-  - Explorer 1: Báo cáo Kiểm kê Baseline Code và Lệnh Chất lượng Frontend (`teamwork_preview_explorer_g00_1`)
-  - Explorer 2: Báo cáo và Catalog Kiến trúc 6 tầng FSD (`teamwork_preview_explorer_g00_2`)
-  - Explorer 3: Báo cáo Runtime Contracts và Ranh giới Gate G01 (`teamwork_preview_explorer_g00_3`)
+  - Explorer 1: Báo cáo Kỹ thuật Toàn diện Khảo sát Codebase & Gỡ bỏ 8 Findings Codex (`explorer_survey_1`)
+  - Codex Review Report: `docs/task/frontend-migration/G00_CODEX_REVIEW_2026-10-04.md`
+  - Codex Renderer Review: `docs/task/frontend-migration/FLASHCARD_EXTRACTION_CODEX_REVIEW_2026-10-05.md`
+  - Explorer 1, 2, 3: Báo cáo Baseline, Catalog FSD và Runtime Contracts ban đầu
 - **Tài liệu tham chiếu**:
   - `docs/plans/proposals/FLAMA_FRONTEND_CODEX_GEMINI_EXECUTION_PLAN_2026-10-04.md`
   - `docs/plans/proposals/FLAMA_FRONTEND_STRUCTURE_MIGRATION_PLAN_2026-10-03.md`
   - `skills/flama-frontend-architecture/SKILL.md`
   - `AGENTS.md`
-- **Ngày phát hành**: 2026-10-04 (Asia/Tokyo)
-- **Trạng thái**: Đã nghiệm thu khảo sát 100% Read-Only, sẵn sàng làm căn cứ kỹ thuật cho Codex và Gemini.
+- **Ngày phát hành ban đầu**: 2026-10-04 (Asia/Tokyo)
+- **Ngày cập nhật hoàn tất**: 2026-10-05 (Asia/Tokyo)
+- **Trạng thái**: **Updated for Gate C00 Acceptance** (Đã cập nhật toàn diện giải quyết dứt điểm 8 findings R1–R8 từ Codex Review `G00_CODEX_REVIEW_2026-10-04.md`; sẵn sàng để Codex thẩm định lại và phê duyệt chính thức mở Gate C00).
 
 ---
 
@@ -42,16 +44,16 @@
    - 4.1 Bảng Phân cấp Định tuyến (Routes), Parameters và Query Strings
    - 4.2 Cơ chế Kiểm soát Quyền (Access Guards & Availability Redirect)
    - 4.3 Ma trận TanStack Query Keys, Cache Identity và Phân tích Dual Bootstrap
-   - 4.4 Danh mục Client Storage & Hợp đồng Kênh Truyền thông Trình duyệt (LocalStorage, SessionStorage, IndexedDB, BroadcastChannel)
+   - 4.4 Danh mục Client Storage & Hợp đồng Kênh Truyền thông Trình duyệt (LocalStorage, SessionStorage, IndexedDB, BroadcastChannel, Cookie)
    - 4.5 Hợp đồng Web Worker, Đồng bộ Anki và Dịch vụ Đồng hành Ngoại vi
 5. [PHẦN 5: HIỆN TRẠNG TEST BASELINE VÀ KHOẢNG TRỐNG KIỂM THỬ (TEST GAPS)](#phần-5-hiện-trạng-test-baseline-và-khoảng-trống-kiểm-thử-test-gaps)
    - 5.1 Kết quả Thực thi Bộ Lệnh Chất lượng Baseline
    - 5.2 Phân loại và Đánh giá 37 Cảnh báo Linter Hiện hữu
    - 5.3 Định danh Khoảng trống Kiểm thử (Test Gaps) trên 9 Feature Chưa có Test
-   - 5.4 Yêu cầu Bộ Kiểm thử Đặc tả Hành vi (Characterization Suites)
+   - 5.4 Yêu cầu Bộ Kiểm thử Đặc tả Hành vi & Tiêu chuẩn Visual Chống Hồi quy
 6. [PHẦN 6: ĐỀ XUẤT PHẠM VI CHI TIẾT CHO GÓI G01 (SHARED PRIMITIVES & UTILITIES)](#phần-6-đề-xuất-phạm-vi-chi-tiết-cho-gói-g01-shared-primitives--utilities)
-   - 6.1 Mục tiêu và Ranh giới Kỹ thuật Gói G01
-   - 6.2 Danh sách Tệp Được phép Chỉnh sửa / Tạo mới (Whitelist)
+   - 6.1 Mục tiêu và Ranh giới Kỹ thuật Gói G01 (Phân tách G01.a và G01.b)
+   - 6.2 Danh sách Tệp Được phép Chỉnh sửa / Tạo mới (Whitelist G01.a & G01.b)
    - 6.3 Danh sách Tệp và Thư mục Nghiêm cấm Chạm vào (Gate G01 Blacklist)
    - 6.4 Ranh giới Caller Scope và Cơ chế Re-export Shim Bắt buộc (Zero Caller Regression)
    - 6.5 Tiêu chí Nghiệm thu Khắt khe cho Gate G01 (Acceptance Criteria)
@@ -61,15 +63,19 @@
 ## PHẦN 1: GIT STATUS / CHECKPOINT VÀ CÁC THAY ĐỔI CẦN BẢO VỆ
 
 ### 1.1 Thông tin Nhánh và HEAD Commit Checkpoint
-Toàn bộ khảo sát và lập kế hoạch di chuyển kiến trúc frontend Flama SPA được thực hiện trực tiếp trên workspace hiện tại:
-- **Tên nhánh hiện tại**: `phase10/contraction-drop`
-- **HEAD Commit SHA ban đầu**: `8ea41587fdd613272e9edd0dc675277950e5cee6`
-- **Nhiệm vụ song song trên repo khi bắt đầu G00**: Agent Backend Decoupling Phase 10 (P10) thực hiện việc loại bỏ các bảng tiến trình học tập cũ đã nghỉ hưu (retired note progress tables) và hoàn thiện lớp bảo vệ dữ liệu MySQL.
+Toàn bộ khảo sát và lập kế hoạch di chuyển kiến trúc frontend Flama SPA được thực hiện và đối chiếu qua các mốc checkpoint:
 
-> **CẬP NHẬT CHECKPOINT P10 (2026-10-04 00:23 JST)**:
-> Agent P10 đã hoàn tất xuất sắc toàn bộ nhiệm vụ và đã commit an toàn vào nhánh `phase10/contraction-drop` tại **SHA `5b21b1b`** (*"feat(phase10): drop the five retired NOTE progress tables (P10-09 PR-B)"*).
-> Toàn bộ 5 tệp staged, 13 tệp unstaged và các migration backend mô tả tại Mục 1.2 đã được sáp nhập vĩnh viễn vào lịch sử git của nhánh.
-> **Hiện trạng working tree**: Thư mục backend, database models, migrations và toàn bộ `frontend/src/` hoàn toàn sạch sẽ (0 modified, 0 staged, 0 untracked source files). Nguy cơ xung đột working tree với P10 chính thức triệt tiêu 100%.
+#### A. Mốc Lịch sử Ban đầu (P10 Baseline - 2026-10-04):
+- **Tên nhánh**: `phase10/contraction-drop`
+- **HEAD Commit SHA ban đầu**: `8ea41587fdd613272e9edd0dc675277950e5cee6`
+- **Hoàn tất P10**: Commit `5b21b1b` (*"feat(phase10): drop the five retired NOTE progress tables (P10-09 PR-B)"*). Toàn bộ 5 tệp staged và 13 tệp unstaged của Agent P10 đã được sáp nhập an toàn vào nhánh.
+
+#### B. Mốc Checkpoint Hiện hành (Frontend FSD Refactor Baseline - 2026-10-05):
+- **Tên nhánh hiện tại**: `refactor/frontend-fsd-renderer-boundary`
+- **HEAD Commit SHA hiện tại**: `faa3c7d` (*"refactor"*)
+- **Tiến độ đã đạt được**: Đã bóc tách thành công gói C02 (`entities/flashcard` và `app/studyContentSync.ts`, 69 tests pass) theo đúng báo cáo `FLASHCARD_EXTRACTION_CODEX_REVIEW_2026-10-05.md`.
+- **Hiện trạng working tree**: Thư mục backend, database models, migrations và toàn bộ `frontend/src/` hoàn toàn sạch sẽ (0 modified, 0 staged, 0 untracked source files).
+- **Cảnh báo ranh giới (Caveat theo R8)**: Việc working tree hiện tại đang sạch sẽ **KHÔNG đồng nghĩa** với việc rủi ro xung đột được triệt tiêu 100%. Trước khi bắt đầu bất kỳ gói công việc nào (C01, G01.a, G01.b...), agent thực thi bắt buộc phải kiểm tra lại checkpoint SHA và đối chiếu file locks độc quyền.
 
 ### 1.2 Snapshot Chi tiết Thay đổi của Agent P10 (Backend/Database)
 Tại thời điểm bắt đầu Gói G00, working tree đang ghi nhận chính xác các thay đổi sau thuộc sở hữu độc quyền của Agent P10:
@@ -170,7 +176,7 @@ Khảo sát quét mã tĩnh bằng AST Parser trên toàn bộ thư mục `front
 | STT | Vị trí / Thư mục | Source Files | Source LOC | Test Files | Test LOC | Total TS/TSX | Mục đích & Chi tiết Thành phần |
 |:---:|:---|:---:|:---:|:---:|:---:|:---:|:---|
 | 1 | `app/` | 1 | 465 | 0 | 0 | 1 | `app/api.ts`: API Gateway kế thừa tập trung (chứa các hàm gọi axios/fetch bọc quanh REST endpoints, phụ thuộc ngược vào domain types). |
-| 2 | `components/` | 36 | 4.104 | 1 | 126 | 37 | Chứa các shell layout component (`app-sidebar.tsx`, `site-footer.tsx`, `site-mascot.tsx`, `nav-main.tsx`, `nav-user.tsx`) và toàn bộ 29 primitives shadcn UI tại `components/ui/`. |
+| 2 | `components/` | 36 | 4.104 | 1 | 126 | 37 | Chứa các shell layout component (`app-sidebar.tsx`, `site-footer.tsx`, `site-mascot.tsx`, `nav-main.tsx`, `nav-user.tsx`) và toàn bộ 30 primitives shadcn UI tại `components/ui/`. |
 | 3 | `lib/` | 10 | 2.137 | 4 | 425 | 14 | Thư viện cầu nối & tiện ích cốt lõi: Client AnkiConnect, IndexedDB sync adapter, web worker đồng bộ (`sync.worker.ts`), client Flama Audio, nén ảnh client-side, HTML sanitizer. |
 | 4 | `shared/` | 21 | 3.682 | 10 | 1.777 | 31 | Thành phần dùng chung đa tầng: `shared/api` (bootstrap, client, backendAvailability), `shared/components`, `shared/types`, và 8 UI primitives tại `shared/ui`. |
 | 5 | `pages/` | 4 | 1.752 | 2 | 1.028 | 6 | Các trang độc lập / hệ thống: `LandingPage.tsx`, `NotFoundPage.tsx`, `MaintenancePage.tsx`, `StaticPages.tsx` (Điều khoản sử dụng, chính sách quyền riêng tư). |
@@ -241,249 +247,215 @@ Phân tích đồ thị có hướng (Directed Graph) giữa các feature phát 
   - *Kết luận*: Module evaluation lúc runtime của Vite không bị deadlock, nhưng cấu trúc type definitions bị lồng ghép chặt chẽ, đòi hỏi phải bóc tách DTO xuống tầng `entities`.
 
 ### 2.6 Vi phạm Phân tầng Kiến trúc (Layer Boundary Inversions)
-Khảo sát phát hiện 2 điểm vi phạm nguyên tắc kiến trúc đơn hướng nghiêm trọng:
+Khảo sát và rà soát của Codex phát hiện 6 điểm vi phạm nguyên tắc kiến trúc đơn hướng FSD cần được khắc phục dứt điểm:
 1. **Tầng dùng chung (`shared`) phụ thuộc tầng ứng dụng (`app`)**:
    - `shared/api/bootstrap.ts` (dòng 2) gọi `import { appApi } from '../../app/api'`.
    - Trong khi đó, `app/api.ts` lại import DTO từ `features/auth`, `features/dashboard`, `features/statistics`.
    - *Hệ quả*: Tầng thấp nhất (`shared`) vô tình kéo theo toàn bộ ứng dụng và các domain feature, phá vỡ tính độc lập của các package.
-2. **Tầng tiện ích (`lib`) phụ thuộc tầng nghiệp vụ (`features`)**:
+2. **Tầng dùng chung (`shared`) phụ thuộc trạng thái phiên (`session bootstrap`)**:
+   - `shared/components/Brand.tsx` (dòng 3, 20) gọi `useBootstrap()` từ `@/shared/api/bootstrap` để sinh destination URL `/dashboard` hoặc `/`.
+   - *Hệ quả*: Một presentation component dùng chung lại phụ thuộc vào query cache phiên của ứng dụng.
+3. **Tầng tiện ích (`lib`) phụ thuộc tầng nghiệp vụ (`features`)**:
    - `lib/ankiSyncEngine.ts` (dòng 8–9) gọi `import { ankiImportApi } from '@/features/import/api'`.
    - `lib/flamaAudioClient.ts` (dòng 1–7) gọi `import type { EnginePackageState... } from '@/features/audio/types'`.
+4. **Tầng tiện ích (`utils`) phụ thuộc components và DTO nghiệp vụ**:
+   - `features/worksheets/utils/printEngine.tsx` (dòng 4–5) import trực tiếp `WorksheetPageRenderer` và worksheet DTOs.
+   - *Hệ quả*: Không thể chuyển nguyên khối `printEngine.tsx` xuống `shared/lib/print` vì sẽ tạo thêm phụ thuộc ngược `shared` $\to$ `features/worksheets`.
+5. **Thành phần Entity/Model phụ thuộc tầng App và Feature**:
+   - `features/marketplace/hooks/useTaxonomySchema.ts` (dòng 2, 65) gọi `appApi` từ `@/app/api` và fallback constants từ `features/marketplace/utils/publishTaxonomyConstants`.
+   - *Hệ quả*: Không thể chuyển file này trực tiếp vào `entities/marketplace-item` nếu chưa bóc tách API query và constants độc lập.
+6. **Feature phụ thuộc Widget (Inversion across Upper Layers)**:
+   - `features/settings/components/McpTokensTab.tsx` import component quản lý `<McpTokensManager />`. Nếu `McpTokensManager` được đặt ở `widgets/`, thì feature `settings` đang vi phạm FSD khi import từ tầng widget. Việc composition phải thuộc về tầng `pages`.
 
 ---
 
 ## PHẦN 3: BẢNG MAPPING SOURCE -> TARGET 6 TẦNG FSD CHI TIẾT
 
-### 3.1 Khung Kiến trúc 6 Tầng Chuẩn FSD và Quy tắc Đơn hướng
+### 3.1 Khung Kiến trúc 6 Tầng Chuẩn FSD và Ma trận Phụ thuộc Đơn hướng
 Hệ thống frontend mới chuẩn hóa theo 6 tầng Feature-Sliced Design (FSD):
 
 ```
 frontend/src/
-  ├── app/          [Tier 1] Khởi tạo ứng dụng, routing root, providers, styles toàn cục
-  ├── pages/        [Tier 2] Các màn hình tương ứng với route của react-router
-  ├── widgets/      [Tier 3] Các khối giao diện phức hợp ghép từ nhiều feature và entity
-  ├── features/     [Tier 4] Các luồng hành vi tương tác và nghiệp vụ của người dùng
-  ├── entities/     [Tier 5] Thực thể dữ liệu nghiệp vụ, DTO, schema và UI card nguyên tử
-  └── shared/       [Tier 6] Primitives UI dùng chung, HTTP client, tiện ích và cấu hình
+  ├── app/          [Tier 1 / Level 6] Khởi tạo ứng dụng, routing root, providers, styles toàn cục
+  ├── pages/        [Tier 2 / Level 5] Các màn hình tương ứng với route của react-router
+  ├── widgets/      [Tier 3 / Level 4] Các khối giao diện phức hợp ghép từ nhiều feature và entity
+  ├── features/     [Tier 4 / Level 3] Các luồng hành vi tương tác và nghiệp vụ của người dùng
+  ├── entities/     [Tier 5 / Level 2] Thực thể dữ liệu nghiệp vụ, DTO, schema và UI card nguyên tử
+  └── shared/       [Tier 6 / Level 1] Primitives UI dùng chung, HTTP client, tiện ích và cấu hình
 ```
 
-#### Quy tắc Đơn hướng Sắt đá ($N \to < N$):
-1. **Chiều phụ thuộc**: Một tầng $N$ chỉ được phép import từ các tầng $< N$ (các tầng thấp hơn nó).
-   - `pages` (2) $\to$ `widgets` (3), `features` (4), `entities` (5), `shared` (6).
-   - `widgets` (3) $\to$ `features` (4), `entities` (5), `shared` (6).
-   - `features` (4) $\to$ `entities` (5), `shared` (6). **Feature TUYỆT ĐỐI KHÔNG import Feature khác.**
-   - `entities` (5) $\to$ `shared` (6). **Entity TUYỆT ĐỐI KHÔNG import Entity khác hoặc Feature.**
-   - `shared` (6) **TUYỆT ĐỐI KHÔNG import bất kỳ tầng nào bên trên nó.**
-2. **Rào chắn Public API (`index.ts`)**:
-   - Mọi slice trong `widgets/`, `features/`, `entities/`, `shared/` bắt buộc phải có `index.ts`.
-   - Các module bên ngoài CHỈ ĐƯỢC PHÉP import qua root slice (ví dụ: `@/entities/deck`, `@/features/study`), **nghiêm cấm** import sâu vào file nội bộ (như `@/features/study/session/sessionStore`).
-   - Các file trong cùng một slice phải dùng đường dẫn tương đối (`./ui/...`, `./model/...`) và không được import qua `index.ts` của chính mình để tránh circular evaluation.
+#### Quy tắc Đơn hướng Sắt đá (Unidirectional Dependency Rule):
+Hệ thống tuân thủ nghiêm ngặt nguyên tắc phụ thuộc một chiều từ trên xuống dưới theo chuỗi:
+$$\text{app (Tier 1)} \longrightarrow \text{pages (Tier 2)} \longrightarrow \text{widgets (Tier 3)} \longrightarrow \text{features (Tier 4)} \longrightarrow \text{entities (Tier 5)} \longrightarrow \text{shared (Tier 6)}$$
+
+1. **Chiều phụ thuộc**: Một tầng chỉ được phép import từ các tầng nằm sâu hơn bên dưới trong chuỗi phân cấp (nghĩa là với chỉ số Tier $T \in \{1..6\}$, module tại Tier $T_A$ chỉ được phép import từ Tier $T_B$ khi $T_B > T_A$; hoặc xét theo độ cao kiến trúc Level $L \in \{6..1\}$, tầng có Level $L$ chỉ được import từ các tầng có Level $< L$):
+   - `app` (Tier 1) $\longrightarrow$ có thể import `pages` (2), `widgets` (3), `features` (4), `entities` (5), `shared` (6).
+   - `pages` (Tier 2) $\longrightarrow$ có thể import `widgets` (3), `features` (4), `entities` (5), `shared` (6).
+   - `widgets` (Tier 3) $\longrightarrow$ có thể import `features` (4), `entities` (5), `shared` (6).
+   - `features` (Tier 4) $\longrightarrow$ có thể import `entities` (5), `shared` (6). **Feature TUYỆT ĐỐI KHÔNG import Feature khác và KHÔNG import Widget.**
+   - `entities` (Tier 5) $\longrightarrow$ có thể import `shared` (6). **Entity TUYỆT ĐỐI KHÔNG import Entity khác hoặc Feature/Widget/Page/App.**
+   - `shared` (Tier 6) $\longrightarrow$ **TUYỆT ĐỐI KHÔNG import bất kỳ tầng nào bên trên nó.**
+
+#### Ma trận Phụ thuộc Hợp lệ (Architectural Dependency Matrix):
+
+| Source Layer (Gọi) \ Target Layer (Được gọi) | `app` (1) | `pages` (2) | `widgets` (3) | `features` (4) | `entities` (5) | `shared` (6) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **`app` (Tier 1 / Level 6)** | 🔷 Nội bộ | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép |
+| **`pages` (Tier 2 / Level 5)** | ❌ CẤM | 🔷 Nội bộ | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép |
+| **`widgets` (Tier 3 / Level 4)** | ❌ CẤM | ❌ CẤM | 🔷 Nội bộ | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép |
+| **`features` (Tier 4 / Level 3)** | ❌ CẤM | ❌ CẤM | ❌ CẤM (R3) | ❌ CẤM (cross) | ✅ Cho phép | ✅ Cho phép |
+| **`entities` (Tier 5 / Level 2)** | ❌ CẤM | ❌ CẤM | ❌ CẤM | ❌ CẤM | ❌ CẤM (cross) | ✅ Cho phép |
+| **`shared` (Tier 6 / Level 1)** | ❌ CẤM (R2) | ❌ CẤM | ❌ CẤM | ❌ CẤM | ❌ CẤM | 🔷 Nội bộ |
+
+2. **Rào chắn Public API (`index.ts`) & Lazy Boundary**:
+   - Mọi slice trong `widgets/`, `features/`, `entities/` bắt buộc phải có `index.ts` để công khai interface.
+   - Các module bên ngoài CHỈ ĐƯỢC PHÉP import qua root slice (ví dụ: `@/entities/flashcard`, `@/features/study`), **nghiêm cấm** import sâu vào file nội bộ (trừ khi có adapter headless được cấu hình tại tầng `app`).
+   - Các file trong cùng một slice phải dùng relative path (`./ui/...`, `./model/...`) và không được import qua `index.ts` của chính mình để tránh circular evaluation.
+   - **Quy tắc Lazy Boundary cho `shared`**: Không bắt buộc phải có một public root barrel chung gom toàn bộ mọi primitive tại `src/shared/index.ts` nếu việc này làm mất ranh giới lazy-loading và làm phình to bundle ban đầu; thay vào đó, các sub-path exports phải rõ ràng và tường minh (`@/shared/ui`, `@/shared/api/client`, `@/shared/lib/utils`).
 
 ---
 
-### 3.2 Bảng Phân bổ Định lượng 414 Tệp theo 6 Tầng Target
+### 3.2 Bảng Phân bổ Định lượng và Catalog Bóc tách Đa Đích (1-to-Many Extraction)
 
-| FSD Tier | Thư mục Đích | Số lượng Tệp | Thành phần Cốt lõi bên trong |
+Bảng phân bổ dưới đây phản ánh cấu trúc chuyển đổi sang 6 tầng FSD, đồng thời hỗ trợ đầy đủ các module cần bóc tách đa đích (1-to-many extractions) thay vì ép buộc ánh xạ 1-to-1 máy móc:
+
+| FSD Tier | Thư mục Đích | Số lượng Tệp (Dự kiến Đích) | Thành phần Cốt lõi bên trong |
 |---|---|---:|---|
-| **Tier 1: app** | `src/app/` | **6** | `App.tsx`, `main.tsx`, `index.css`, `RequireAuth`, `RequireCreator`, `vite-env.d.ts` |
-| **Tier 2: pages** | `src/pages/` | **71** | 48 route pages trên toàn bộ 22 feature domains + các trang static/legal/404 |
-| **Tier 3: widgets** | `src/widgets/` | **20** | `app-shell`, `worksheet-studio`, `mcp-token-manager`, `collaboration-diff`, `dashboard-workspace`, `browse-workspace`, `study-workspace`, `admin-analytics` |
-| **Tier 4: features** | `src/features/` | **234** | Các luồng tương tác: `auth`, `browse`, `study`, `deck-management`, `note-editor`, `anki-sync`, `audio`, `marketplace-publish`, `deck-install`, `onboarding` |
-| **Tier 5: entities** | `src/entities/` | **18** | **18 tệp mã nguồn hiện hữu chuyển đổi 1-to-1** (xem bảng chi tiết bên dưới).<br>*(Ghi chú: Các slice `support-ticket`, `order`, `wallet`, `user` là các **Planned Extractions** dự kiến bóc tách trong các gói C04–C07 / G03–G06)* |
-| **Tier 6: shared** | `src/shared/` | **65** | 8 Flama UI primitives + 30 Shadcn UI primitives, HTTP client, `utils`, `imageCompression`, `env` |
-| **TỔNG CỘNG** | `frontend/src/` | **414** | **Bao quát chính xác 100% toàn bộ cây thư mục nguồn frontend (331 source + 83 non-source/test/style).** |
+| **Tier 1: app** | `src/app/` | **7** | `App.tsx`, `main.tsx`, `index.css`, `studyContentSync.ts`, `RequireAuth`, `RequireCreator`, `vite-env.d.ts` |
+| **Tier 2: pages** | `src/pages/` | **71** | 48 route pages trên toàn bộ các feature domains + các trang static/legal/404 |
+| **Tier 3: widgets** | `src/widgets/` | **22** | `app-shell`, `worksheet-studio` (Wizard Shell), `mcp-token-manager`, `collaboration-diff`, `dashboard-workspace`, `browse-workspace`, `study-workspace`, `admin-analytics` |
+| **Tier 4: features** | `src/features/` | **240+** | Các luồng tương tác và controllers: `auth`, `browse` (tách 3 controllers), `study`, `worksheets` (tách step views & print utils), `deck-management`, `note-editor`, `anki-sync`, `audio`, `marketplace-publish`, `deck-install`, `onboarding` |
+| **Tier 5: entities** | `src/entities/` | **25+** | Thực thể nghiệp vụ:<br>- `entities/flashcard`: **15 tệp (8 src + 7 test)** — *Đã hoàn tất bóc tách ngày 2026-10-05 (Gói C02)*.<br>- `entities/deck`: 3 tệp (`DeckSelectionTreeView`, `StudyHeatmap`).<br>- `entities/marketplace-item`: 3 tệp (`DeckCard`, decoupled taxonomy schema).<br>- `entities/mcp-token`: 1 tệp (`scopes`, `types`).<br>- `entities/session`: DTOs phiên và headless session bootstrap.<br>- `entities/media`: `noteMedia.ts`.<br>- **Planned Extractions**: `support-ticket` (tách từ `admin`/`support` ở G10/G12), `order` (tách từ `orders`), `wallet` (tách từ `wallet`), `user` (tách từ `profile`). |
+| **Tier 6: shared** | `src/shared/` | **70+** | 8 Flama UI primitives + 30 Shadcn UI primitives (`shared/ui/shadcn/`), HTTP transport client (`client.ts`), `utils.ts`, `imageCompression.ts`, `useMobile.ts`, `BrandView` (presentation thuần). |
 
-#### Danh mục Chi tiết 18 Tệp Vật lý Hiện hữu Ánh xạ vào Tier 5 (`entities`):
-Để đảm bảo tính nhất quán tuyệt đối giữa số liệu thống kê AST (414 tệp) và phân loại kiến trúc, danh mục 18 tệp nguồn hiện có được định tuyến trực tiếp vào 6 slices của Tier 5 như sau:
+#### Catalog Bóc tách Đa Đích cho các Tệp Monolith Trọng yếu:
 
-| Entity Slice Đích | Số tệp | Danh sách Tệp Nguồn Hiện tại trong Codebase |
-|:---|:---:|:---|
-| **`entities/flashcard`** | **9** | - `features/browse/components/MediaFieldPreview.tsx`<br>- `features/browse/components/MediaFieldPreview.test.tsx`<br>- `features/study/components/CardDisplay.tsx`<br>- `features/study/components/CardDisplay.test.tsx`<br>- `features/study/components/CardRendererFrame.tsx`<br>- `features/study/components/CardRendererFrame.test.tsx`<br>- `features/study/components/CardRendererHost.test.ts`<br>- `features/study/renderer/clientRenderer.ts`<br>- `features/study/renderer/clientRenderer.test.ts` |
-| **`entities/deck`** | **3** | - `features/import/components/DeckSelectionTreeView.tsx`<br>- `features/import/components/DeckSelectionTreeView.test.tsx`<br>- `shared/components/StudyHeatmap.tsx` |
-| **`entities/marketplace-item`** | **3** | - `features/marketplace/components/DeckCard.tsx`<br>- `features/marketplace/components/DeckCard.test.tsx`<br>- `features/marketplace/hooks/useTaxonomySchema.ts` |
-| **`entities/mcp-token`** | **1** | - `features/mcp/types.ts` |
-| **`entities/session`** | **1** | - `shared/api/bootstrap.ts` |
-| **`entities/media`** | **1** | - `shared/api/noteMedia.ts` |
-| **TỔNG CỘNG TIER 5** | **18** | **Đúng 18 tệp vật lý hiện hữu (11 source files + 7 test files). Khớp 100% với catalog mapping.** |
-
-> **LÀM RÕ VỀ CÁC ENTITY SLICE DỰ KIẾN (PLANNED EXTRACTIONS)**:
-> Các miền thực thể `support-ticket`, `order`, `wallet`, `user` được nêu trong thiết kế đích của FSD hiện **chưa có tệp vật lý độc lập** trong 414 tệp hiện tại. Các kiểu dữ liệu và thành phần UI của chúng hiện đang nằm phân tán bên trong các trang hoặc tính năng nguyên khối (ví dụ: `TicketItem` nằm trong `AdminTicketsPage.tsx`, các DTO đơn hàng nằm trong `OrdersPage.tsx`, DTO ví nằm trong `WalletPage.tsx`).
-> Các slice này sẽ được tạo mới qua quy trình bóc tách (extraction) trong các gói triển khai tương ứng của Codex và Gemini (C04–C07 / G03–G06). Ví dụ: `TicketStatusBadge` (nêu tại Mục 3.5.D) là một UI primitive mới sẽ được trích xuất từ logic trạng thái vé hỗ trợ trong gói bóc tách admin/support.
+| Tệp Nguồn Hiện tại | Kích thước | Các Phần Đích Sau Khi Bóc Tách (1-to-Many Mapping) | Trách nhiệm Phân công |
+|:---|:---:|:---|:---:|
+| `features/worksheets/components/DeckWorksheetModal.tsx` | 4.387 LOC | 1. `widgets/worksheet-studio/DeckWorksheetModal.tsx` (Wizard Modal Shell < 300 LOC)<br>2. `features/worksheets/components/steps/WorksheetDeckSelectStep.tsx` (< 250 LOC)<br>3. `features/worksheets/components/steps/WorksheetTemplateStep.tsx` (< 300 LOC)<br>4. `features/worksheets/components/steps/WorksheetConfigStep.tsx` (< 300 LOC)<br>5. `features/worksheets/components/steps/WorksheetPreviewStep.tsx` (< 300 LOC)<br>6. `features/worksheets/hooks/useWorksheetStudioState.ts` (Wizard Controller Hook) | Gemini (UI/Steps)<br>Codex (State/Geometry) |
+| `features/worksheets/components/WorksheetPageRenderer.tsx` & `printEngine.tsx` | 1.718 + 144 LOC | 1. `features/worksheets/components/renderers/` (Tách riêng 6 renderers mẫu in)<br>2. `features/worksheets/utils/printEngine.tsx` (**GIỮ NGUYÊN tại worksheets utils**, không hạ xuống shared)<br>3. `shared/lib/print/printCssHelpers.ts` (Chỉ chứa CSS page-break và helpers in ấn trung lập) | Codex (Print Math & Geometry) |
+| `features/browse/hooks/useBrowseState.ts` | 1.052 LOC | 1. `features/browse/hooks/useBrowseFilters.ts` (Bộ lọc tìm kiếm, sort, sortDir & URL sync)<br>2. `features/browse/hooks/useBrowseSelection.ts` (Chọn đa thẻ, bulk tag, bulk move)<br>3. `features/browse/hooks/useBrowseNoteEditor.ts` (Modal chỉnh sửa thẻ & card detail cache) | Codex (State Orchestration) |
+| `features/admin/pages/AdminTicketsPage.tsx` & `features/support/pages/FeedbackPage.tsx` | ~1.400 LOC | 1. `pages/admin/AdminTicketsPage.tsx` & `pages/support/FeedbackPage.tsx` (Route Views)<br>2. `entities/support-ticket/` (`TicketItem`, `TicketStatusBadge`, `types.ts`) — **Owner: G10/G12 (Admin/Support)**, KHÔNG gán cho worksheets | Gemini (UI Badge)<br>Codex (Ticket Schema) |
+| `shared/components/Brand.tsx` | 66 LOC | 1. `shared/components/Brand.tsx` $\to$ `BrandView` (Presentation thuần túy nhận `homeHref`, `size`, `compact` qua props, KHÔNG gọi `useBootstrap`)<br>2. `components/Brand.tsx` hoặc `widgets/app-shell/` $\to$ Wrapper kết nối `useBootstrap()` và truyền `destination` | Gemini (UI Decoupling) |
+| `features/marketplace/hooks/useTaxonomySchema.ts` | 118 LOC | 1. `shared/api/taxonomy.ts` (Endpoint query độc lập)<br>2. `entities/marketplace-item/model/taxonomyConstants.ts` (Fallbacks)<br>3. `entities/marketplace-item/model/useTaxonomySchema.ts` (Hook độc lập không import `app/api`) | Codex (API Extraction) |
 
 ### 3.3 Ma trận Chuyển đổi Chi tiết 22 Feature và Thành phần Chung
 
 | Feature Hiện tại | Vị trí Đích (6 Tầng FSD) | Public Exports (`index.ts`) | Chiến lược Điều phối Phân công (Codex / Gemini) |
 |---|---|---|---|
-| **`admin`** | - `pages/admin/` (12 pages)<br>- `widgets/admin-analytics/`<br>- `features/admin-management/`<br>- `entities/support-ticket/` | `AdminAnalyticsWidget`, `AdminUsersManager`, `AdminTaxonomyManager` | - Gemini: Tách các page và controller UI cục bộ.<br>- Codex: Quản lý quyền, xử lý dòng tiền PayOS, ticket/token contracts. |
-| **`audio`** | - `pages/audio/`<br>- `features/audio/`<br>- `entities/media/`<br>- `shared/lib/japanese/` | `LocalAudioDialog`, `useDeckAudioQueue`, `cleanTextForTts` | - Gemini: Tách UI dialogs và rule cards.<br>- Codex: Giữ desktop companion client (port 4791), queue storage, cancel token. |
+| **`admin`** | - `pages/admin/` (12 pages)<br>- `widgets/admin-analytics/`<br>- `features/admin-management/`<br>- `entities/support-ticket/` | `AdminAnalyticsWidget`, `AdminUsersManager`, `AdminTaxonomyManager` | - Gemini: Tách các page và controller UI cục bộ.<br>- Codex: Quản lý quyền, xử lý dòng tiền PayOS, ticket/token contracts. `entities/support-ticket` thuộc owner Admin/Support (G10/G12). |
+| **`audio`** | - `pages/audio/`<br>- `features/audio/`<br>- `entities/media/`<br>- `shared/lib/japanese/` | `LocalAudioDialog`, `useDeckAudioQueue`, `cleanTextForTts` | - Gemini: Tách UI dialogs và rule cards.<br>- Codex: Giữ desktop companion client (port 4791), queue storage, cancel token. Gọi cập nhật thẻ qua `@/entities/flashcard/model/cardContentUpdates`, KHÔNG import `features/study`. |
 | **`auth`** | - `pages/auth/` (5 pages)<br>- `app/router/guards/`<br>- `features/auth/`<br>- `entities/session/` | `AuthCard`, `useLoginForm`, `useRegisterForm`, `RequireAuth`, `RequireCreator` | - Gemini: Chuyển forms và auth views.<br>- Codex: Session bootstrap DTO, auth state, cookie/CSRF handling. |
-| **`browse`** | - `pages/browse/`<br>- `widgets/browse-workspace/`<br>- `features/browse/`<br>- `features/note-editor/`<br>- `entities/flashcard/` | `BrowseWorkspace`, `useBrowseFilters`, `MediaFieldPreview`, `BrowseStrokeModal` | - Gemini: Chuyển toolbar, table, split sidebar, pagination UI.<br>- Codex: Phân rã 1.052 LOC `useBrowseState`, quản lý cache/selection/mutations. |
+| **`browse`** | - `pages/browse/`<br>- `widgets/browse-workspace/`<br>- `features/browse/`<br>- `features/note-editor/`<br>- `entities/flashcard/` | `BrowseWorkspace`, `useBrowseFilters`, `MediaFieldPreview`, `BrowseStrokeModal` | - Gemini: Chuyển toolbar, table, split sidebar, pagination UI.<br>- Codex: Phân rã 1.052 LOC `useBrowseState` thành 3 controllers chuyên trách. Cập nhật thẻ qua `@/entities/flashcard/model/cardContentUpdates`, KHÔNG import `features/study`. |
 | **`dashboard`** | - `pages/dashboard/`<br>- `widgets/dashboard-workspace/`<br>- `features/deck-management/`<br>- `entities/deck/` | `DashboardWorkspace`, `DeckModals`, `StudyHeatmap`, `DeckTree` | - Gemini: Thực hiện pilot chuyển đổi UI và kéo thả deck tree.<br>- Codex: Chốt query contract và mutation invalidations. |
 | **`deck-collaboration`** | - `pages/deck-collaboration/` (5 pages)<br>- `widgets/collaboration-diff/`<br>- `features/deck-collaboration/`<br>- `entities/deck/` | `DiffWorkspace`, `ChangeRequestStatusBadge`, `useDeckCollaboration` | - Gemini: Chuyển trang và diff layout.<br>- Codex: Quản lý thuật toán 3-way rebase, conflict resolution và overlay clone. |
 | **`guide`** | - `pages/guide/`<br>- `widgets/guide-explorer/`<br>- `features/guide/`<br>- `shared/lib/guide/` | `ContextHelpButton`, `GuideArticleRenderer`, `McpToolsExplorer` | - Gemini: Chuyển toàn bộ views và static markdown data.<br>- Codex: Chuẩn hóa public export `ContextHelpButton` cho 8 caller features. |
 | **`import`** | - `pages/import/`<br>- `features/import/`<br>- `features/anki-sync/`<br>- `entities/deck/` | `DeckSelectionTreeView`, `FileImportWizard`, `AnkiSyncTab` | - Gemini: Chuyển wizard import CSV/TSV và UI sync.<br>- Codex: Giữ AnkiConnect client, sync worker (`sync.worker.ts`), IndexedDB. |
 | **`library`** | - `pages/library/`<br>- `features/deck-install/`<br>- `entities/marketplace-item/` | `InstalledDecksPage`, `useInstalledDecks` | - Gemini: Chuyển trang thư viện.<br>- Codex: Quản lý logic cập nhật phiên bản phát hành và overlay clone cutover. |
-| **`marketplace`** | - `pages/marketplace/` (6 pages)<br>- `widgets/marketplace-catalog/`<br>- `features/marketplace-publish/`<br>- `features/deck-install/`<br>- `entities/marketplace-item/` | `DeckCard`, `MarketplaceCatalog`, `RedeemDeckKeyModal` | - Gemini: Chuyển catalog, detail page, publish wizard steps UI.<br>- Codex: Quản lý pricing, payment redirection, preview contract. |
-| **`mcp`** | - `widgets/mcp-token-manager/`<br>- `features/mcp-access/`<br>- `entities/mcp-token/` | `McpTokensManager`, `useMcpTokens`, `ALL_MCP_SCOPES`, `McpPolicy` | - Gemini: Chuyển widget manager và modal UI.<br>- Codex: Thống nhất scopes/policy entity, xóa bỏ circular dependency với settings. |
-| **`note-types`** | - `pages/note-types/` (4 pages)<br>- `features/note-type-editor/`<br>- `entities/flashcard/` | `NoteTypeLivePreview`, `NoteTypeEditor`, `NoteTypeAiGuideModal` | - Gemini: Chuyển editor UI và template cards.<br>- Codex: Quản lý template patch adapter và sandbox renderer contract. |
+| **`marketplace`** | - `pages/marketplace/` (6 pages)<br>- `widgets/marketplace-catalog/`<br>- `features/marketplace-publish/`<br>- `features/deck-install/`<br>- `entities/marketplace-item/` | `DeckCard`, `MarketplaceCatalog`, `RedeemDeckKeyModal` | - Gemini: Chuyển catalog, detail page, publish wizard steps UI.<br>- Codex: Quản lý pricing, payment redirection; tách `useTaxonomySchema` khỏi `app/api`. |
+| **`mcp`** | - `widgets/mcp-token-manager/`<br>- `features/mcp/`<br>- `entities/mcp-token/` | `McpTokensManager`, `useMcpTokens`, `ALL_MCP_SCOPES`, `McpPolicy` | - Gemini: Chuyển widget manager và modal UI.<br>- Codex: Thống nhất scopes/policy entity. Widget được ghép tại `pages`, `features/settings` KHÔNG import widget. |
+| **`note-types`** | - `pages/note-types/` (4 pages)<br>- `features/note-type-editor/`<br>- `entities/flashcard/` | `NoteTypeLivePreview`, `NoteTypeEditor`, `NoteTypeAiGuideModal` | - Gemini: Chuyển editor UI và template cards.<br>- Codex: Quản lý template authoring (không mutate active study lease) và tiêu thụ `entities/flashcard`. |
 | **`oauth`** | - `pages/oauth/`<br>- `features/oauth-consent/` | `OAuthConsentPage`, `useOAuthConsent` | - Gemini: Chuyển trang và UI consent card.<br>- Codex: Quản lý security redirect, code challenge và authorization code. |
 | **`onboarding`** | - `features/onboarding/`<br>- `entities/user/` | `OnboardingModal`, `DashboardSpotlightTour`, `useOnboarding` | - Gemini: Chuyển modal và spotlight tour, giữ nguyên localStorage keys.<br>- Codex: Xác nhận schema mục tiêu học tập. |
 | **`orders`** | - `pages/orders/`<br>- `entities/order/` | `OrdersPage`, `OrderReceiptCard` | - Gemini: Chuyển UI bảng đơn hàng.<br>- Codex: Quản lý PayOS webhook verification status. |
 | **`profile`** | - `pages/profile/`<br>- `features/account/`<br>- `entities/user/` | `ProfileHeroCard`, `ProfileEditDialog`, `AvatarUploadModal` | - Gemini: Chuyển các modal chỉnh sửa thông tin và avatar.<br>- Codex: Quản lý xác thực sinh viên, avatar upload và session update. |
-| **`settings`** | - `pages/settings/` (3 pages)<br>- `features/account/`<br>- `features/yomitan-connect/`<br>- `widgets/mcp-token-manager/` | `StudyGoalsForm`, `YomitanTokensTab` | - Gemini: Chuyển settings views, nhúng `<McpTokensManager mode="user" />`.<br>- Codex: Quản lý OAuth client CRUD và session invalidation. |
+| **`settings`** | - `pages/settings/` (3 pages)<br>- `features/account/`<br>- `features/yomitan-connect/` | `StudyGoalsForm`, `YomitanTokensTab` | - Gemini: Chuyển settings views. Nhúng `<McpTokensManager mode="user" />` tại Page level (`McpTokensPage.tsx`), không import widget vào tab component.<br>- Codex: Quản lý OAuth client CRUD và session invalidation. |
 | **`statistics`** | - `pages/statistics/`<br>- `widgets/statistics-overview/`<br>- `entities/deck/api/` | `StatisticsOverviewWidget`, `UserStudyTimeChart`, `FutureDueChart` | - Gemini: Chuyển charts và trang thống kê.<br>- Codex: Quản lý timezone offset và query filter contract. |
-| **`study`** | - `pages/study/`<br>- `widgets/study-workspace/`<br>- `features/study/`<br>- `entities/flashcard/` | `StudyWorkspace`, `patchStudyCardContent`, `CardDisplay` | - Gemini: Chuyển header toolbar, bottom bar, completion card UI.<br>- Codex: Giữ độc quyền 1.463 LOC `useStudySession`, SM-2 engine, IndexedDB durability. |
-| **`support`** | - `pages/support/` (5 pages)<br>- `features/support/`<br>- `entities/support-ticket/` | `SupportFeedbackDialog`, `TicketStatusBadge`, `TicketItem` | - Gemini: Chuyển form gửi phản hồi và các trang guide.<br>- Codex: Quản lý support donation PayOS bridge và ticket status schema. |
+| **`study`** | - `pages/study/`<br>- `widgets/study-workspace/`<br>- `features/study/`<br>- `entities/flashcard/` | `StudyWorkspace`, `CardDisplay`, `CardRendererFrame` | - Gemini: Chuyển header toolbar, bottom bar, completion card UI.<br>- Codex: Giữ độc quyền 1.463 LOC `useStudySession`, SM-2 engine, IndexedDB durability. Đã tách `entities/flashcard` (C02). |
+| **`support`** | - `pages/support/` (5 pages)<br>- `features/support/`<br>- `entities/support-ticket/` | `SupportFeedbackDialog`, `TicketStatusBadge`, `TicketItem` | - Gemini: Chuyển form gửi phản hồi và các trang guide.<br>- Codex: Quản lý support donation PayOS bridge; `entities/support-ticket` thuộc owner G10/G12. |
 | **`wallet`** | - `pages/wallet/`<br>- `features/wallet/`<br>- `entities/wallet/` | `WalletSummaryCard`, `WalletTransactionsTable` | - Gemini: Chuyển trang và bảng giao dịch.<br>- Codex: Quản lý payout request validation và ledger balance. |
-| **`worksheets`** | - `pages/worksheets/`<br>- `widgets/worksheet-studio/`<br>- `features/worksheets/`<br>- `shared/lib/print/` | `DeckWorksheetModal`, `WorksheetPageRenderer`, `printEngine` | - Gemini: Phân rã 4.387 LOC modal theo từng wizard step.<br>- Codex: Giữ layout math geometry, SVG stroke parser, print stylesheet. |
+| **`worksheets`** | - `pages/worksheets/`<br>- `widgets/worksheet-studio/`<br>- `features/worksheets/` | `DeckWorksheetModal`, `WorksheetPageRenderer`, `printEngine` | - Gemini: Phân rã 4.387 LOC modal theo từng wizard step.<br>- Codex: Giữ layout math geometry, SVG parser; `printEngine.tsx` giữ trong `features/worksheets/utils/`, không hạ xuống shared. |
 
 ### 3.4 Chiến lược Tháo gỡ 5 Điểm nghẽn Kiến trúc và Vòng lặp Trọng yếu
 
-#### 1. Tháo gỡ Vòng lặp `mcp` $\longleftrightarrow$ `settings`:
-- **Thực trạng**: `features/mcp/types.ts` import scope từ `features/settings/hooks/useMcpTokenCRUD.ts`; ngược lại `settings` import hook và manager từ `mcp`.
+#### 1. Tháo gỡ Vòng lặp `mcp` $\longleftrightarrow$ `settings` & Tuân thủ Phân tầng:
+- **Thực trạng**: `features/mcp/types.ts` import scope từ `features/settings/hooks/useMcpTokenCRUD.ts`; ngược lại `settings` import hook và manager từ `mcp`. Đồng thời, việc `McpTokensTab.tsx` import widget vi phạm FSD (Feature không được import Widget).
 - **Giải pháp dứt điểm**:
   1. Trích xuất toàn bộ kiểu dữ liệu, `ALL_MCP_SCOPES`, `SCOPE_CATEGORIES`, `SCOPE_PRESETS` và `McpPolicy` xuống `src/entities/mcp-token/model/scopes.ts` và `types.ts`.
   2. Gom cụm `<McpTokensManager />` vào `src/widgets/mcp-token-manager/`.
-  3. Cả `features/admin/pages/AdminMcpTokensPage.tsx` và `features/settings/components/McpTokensTab.tsx` đều chỉ import `<McpTokensManager />` từ `@/widgets/mcp-token-manager`. Triệt tiêu 100% vòng lặp.
+  3. Cả `features/admin/pages/AdminMcpTokensPage.tsx` và trang người dùng `src/pages/settings/McpTokensPage.tsx` thực hiện việc composition tại **tầng Pages**, nhúng `<McpTokensManager mode="admin" />` hoặc `<McpTokensManager mode="user" />`. Component tab `McpTokensTab.tsx` chỉ đóng vai trò trình bày hoặc controller mà **KHÔNG import widget**. Triệt tiêu 100% vòng lặp và vi phạm phân tầng.
 
-#### 2. Tháo gỡ Phụ thuộc Ngược `shared/api/bootstrap.ts` $\longrightarrow$ `app/api.ts`:
-- **Thực trạng**: `shared/api/bootstrap.ts` gọi `appApi` từ `app/api.ts`; trong khi `app/api.ts` lại import DTO từ `features/auth`, `features/dashboard`, `features/statistics`.
-- **Giải pháp dứt điểm**:
-  1. Chuyển hàm fetch session bootstrap sang `src/entities/session/api/bootstrap.ts`.
-  2. `entities/session/api/bootstrap.ts` gọi trực tiếp HTTP client trung lập `shared/api/client.ts` (`apiJson('/api/bootstrap')`).
-  3. Chuyển các endpoint domain khác về đúng `entities/deck/api`, `features/auth/api`. Giữ `app/api.ts` như một facade re-export tạm thời trong quá trình chuyển đổi.
+#### 2. Tháo gỡ Phụ thuộc Ngược `shared/api/bootstrap.ts` $\longrightarrow$ `app/api.ts` & Chuẩn hóa Wire Contract:
+- **Thực trạng**: `shared/api/bootstrap.ts` gọi `appApi` từ `app/api.ts`; trong khi `app/api.ts` lại import DTO từ `features/auth`, `features/dashboard`, `features/statistics`. Bản dự thảo cũ của G00 từng đề xuất sai endpoint `apiJson('/api/bootstrap')` (gây lỗi typecheck và đứt gãy luồng khởi tạo).
+- **Giải pháp dứt điểm (Chuẩn hóa Wire Contract & Decoupling)**:
+  1. **Đúng Wire Endpoint**: Endpoint backend thực tế trên wire là `GET ${API_BASE_URL}/session` với `{ includeTimezone: false }`.
+  2. **Đúng Transport Method**: `shared/api/client.ts` cung cấp `apiRequest<T>` cho các request đọc (GET), trong khi `apiJson<T>` chỉ phục vụ các mutations có method (`POST | PUT | PATCH | DELETE`) và body. Do đó, hàm session fetcher gọi:
+     ```typescript
+     const payload = await apiRequest<SessionResponse>(`${API_BASE_URL}/session`, { includeTimezone: false })
+     ```
+  3. **Bảo toàn Response Mapping (`toBootstrap`)**: Payload raw `SessionResponse` (`authenticated`, `user`, `csrf_token`) bắt buộc phải được chuyển đổi qua hàm `toBootstrap(payload)` để tạo đối tượng `FrontendBootstrap`:
+     - Tự động thiết lập token: `setCsrfToken(payload.csrf_token)`.
+     - Kiểm tra quyền quản trị: `isAdmin = Boolean(payload.user?.is_admin)`.
+     - Bổ sung cấu trúc liên kết điều hướng `links` (các admin links chỉ được gán khi `isAdmin === true`, ngược lại là `null`).
+     - Gán giá trị mặc định: `api_version: 'v1'`, `messages: []`, `support_contact_email: ''`.
+  4. **Thống nhất Query Key**: Toàn bộ ứng dụng sử dụng duy nhất hằng số:
+     ```typescript
+     export const bootstrapQueryKey = ['frontend', 'bootstrap'] as const
+     ```
+  5. **Loại bỏ Hoàn toàn Reverse Import**: Chuyển hàm fetch session độc lập này vào `src/entities/session/api/bootstrap.ts` hoặc trích xuất vào module transport độc lập. `shared/api/bootstrap.ts` tiêu thụ hàm này mà tuyệt đối **KHÔNG import `app/api.ts`**. `app/api.ts` chỉ đóng vai trò facade tương thích ngược tạm thời.
 
-#### 3. Tháo gỡ Mutation Xuyên Thấu vào Study Persistence (`audio`, `browse`, `note-types`):
+#### 3. Tháo gỡ Mutation Xuyên Thấu vào Study Persistence & Khóa chặt Bất biến Template (Template Immutability in Active Lease):
 - **Thực trạng**: 
-  Các tính năng chỉnh sửa dữ liệu (`browse` khi sửa trường thẻ inline, `audio` khi sinh giọng đọc gắn URL media, `note-types` khi sửa CSS/HTML template) đang gọi trực tiếp hàm nội bộ `updateCardFieldValuesInSessions` và `updateTemplateInSessions` sâu bên trong `@/features/study/session/sessionStore.ts`.
-  Điều này vi phạm nghiêm trọng nguyên tắc đóng gói module FSD (Feature-to-Feature deep import) và tạo ra phụ thuộc xoắn ốc giữa các feature.
-- **Ràng buộc Kỹ thuật Cốt lõi (Tránh Lỗ hổng React Lifecycle)**:
-  Adapter đồng bộ thẻ **TUYỆT ĐỐI KHÔNG** được thiết kế dưới dạng React listener hay callback đăng ký khi component mount (như `StudyPage` mount). Khi người dùng đang ở `/browse` hoặc `/audio/generate`, `StudyPage` hoàn toàn không mount; mọi cơ chế dựa trên React listener sẽ dẫn đến no-op âm thầm (silent failure) và làm phân rã dữ liệu phiên học trên IndexedDB.
-- **Giải pháp dứt điểm: Headless Persistent Content Patch Adapter (`studyContentPatchAdapter`)**:
-  1. `features/study` tạo adapter lưu trữ độc lập tại `src/features/study/model/studyContentPatchAdapter.ts` và export công khai tại `src/features/study/index.ts`.
-  2. Adapter là **hàm headless thuần túy**, chạy bất đồng bộ trực tiếp xuống IndexedDB `flama-study` (object store `sessions`) mà không đòi hỏi bất kỳ React component nào phải hiển thị.
-  3. Cung cấp chữ ký hàm chuẩn hóa:
-     ```typescript
-     // src/features/study/model/studyContentPatchAdapter.ts
-     import {
-       openStudyDatabase,
-       loadStudySession,
-       saveStudySession,
-       memoryFallback,
-       STORE_SESSIONS,
-     } from '../session/sessionStore'
-     import { patchRenderContext } from '../renderer/renderContext'
-     import { canonicalDigest } from '../renderer/canonicalDigest'
-     import type { StudyMediaArtifact, StudyFieldDef } from '../types'
+  Các tính năng chỉnh sửa dữ liệu (`browse` khi sửa trường thẻ inline, `audio` khi sinh giọng đọc gắn URL media, `note-types` khi sửa CSS/HTML template) từng gọi trực tiếp hàm nội bộ `updateCardFieldValuesInSessions` và `updateTemplateInSessions` sâu bên trong `@/features/study/session/sessionStore.ts`.
+- **Phân định Rạch ròi giữa Card-Content Patch và Template Authoring**:
+  Rà soát của Codex (`G00_CODEX_REVIEW_2026-10-04.md`, R1) đã xác định rõ:
+  1. **Cập nhật Dữ liệu Thẻ Động (Dynamic Card-Content Updates - Hỗ trợ Realtime)**:
+     - Khi người dùng sửa giá trị trường từ vựng (ví dụ: sửa nghĩa, kanji) hoặc gắn file audio TTS mới, dữ liệu này cần được cập nhật vào tất cả các phiên học dở dang để người dùng thấy nội dung mới nhất.
+     - Cơ chế này được thực hiện qua **Headless Port độc lập** tại `src/entities/flashcard/model/cardContentUpdates.ts`:
+       ```typescript
+       // src/entities/flashcard/model/cardContentUpdates.ts
+       import type { CardMediaArtifact } from './types'
 
-     export interface PatchCardOptions {
-       noteId?: string | null
-       media?: StudyMediaArtifact[]
-     }
-
-     export interface PatchTemplateOptions {
-       fieldDefs?: StudyFieldDef[]
-       css?: string
-       templates?: Record<string, { qfmt: string; afmt: string }>
-     }
-
-     /**
-      * Cập nhật giá trị trường và media vào tất cả các phiên học dở dang.
-      * Hoạt động HEADLESS trực tiếp trên IndexedDB, không phụ thuộc vào React lifecycle.
-      */
-     export async function patchStudyCardContent(
-       cardId: string,
-       newFieldValues: Record<string, string>,
-       options?: PatchCardOptions
-     ): Promise<void> {
-       try {
-         const keys = await getActiveSessionScopeKeys()
-         for (const key of keys) {
-           const session = await loadStudySession(key)
-           if (!session) continue
-
-           let isDirty = false
-           const snapshot = session.snapshot
-
-           for (const card of snapshot.cards) {
-             if (card.card_id === cardId || (options?.noteId && card.note_id === options.noteId)) {
-               const contentKey = card.content_key
-               const existingContent = snapshot.contents[contentKey]
-               if (!existingContent) continue
-
-               const combinedMedia = options?.media && options.media.length > 0
-                 ? [...options.media]
-                 : [...(existingContent.media || [])]
-
-               // Tự động phân tích các URL media proxy mới trong giá trị trường
-               extractAndMergeProxyMedia(newFieldValues, combinedMedia)
-
-               const mergedFieldValues = { ...existingContent.field_values, ...newFieldValues }
-               const nextRenderContext = patchRenderContext(
-                 existingContent.render_context || {},
-                 newFieldValues,
-                 snapshot.templates[card.template_key]?.field_defs,
-                 combinedMedia
-               )
-               const nextVersion = canonicalDigest({
-                 schema_version: 'study-content.v1',
-                 renderer_abi: existingContent.renderer_abi,
-                 note_id: existingContent.note_id,
-                 field_values: mergedFieldValues,
-                 media: combinedMedia,
-               })
-               const newContentKey = `${existingContent.id}:${nextVersion}`
-
-               snapshot.contents[newContentKey] = {
-                 ...existingContent,
-                 version: nextVersion,
-                 field_values: mergedFieldValues,
-                 render_context: nextRenderContext,
-                 media: combinedMedia,
-               }
-               card.content_key = newContentKey
-               isDirty = true
-             }
-           }
-
-           if (isDirty) {
-             await saveStudySession(session)
-           }
-         }
-
-         // Phát thông báo đồng bộ realtime (nếu có StudyPage đang mở ở tab khác hoặc background)
-         broadcastStudySyncEvent('CARD_UPDATED', { cardId, noteId: options?.noteId || null, fieldValues: newFieldValues })
-       } catch (error) {
-         console.warn('[studyContentPatchAdapter] Failed to patch active sessions in IndexedDB:', error)
+       export interface CardContentUpdate {
+         cardId: string
+         noteId?: string | null
+         fieldValues: Record<string, string>
+         media?: CardMediaArtifact[]
        }
-     }
 
-     /**
-      * Cập nhật template cấu trúc thẻ vào các phiên học dở dang.
-      */
-     export async function patchStudyTemplateContent(
-       templateKey: string,
-       patch: PatchTemplateOptions
-     ): Promise<void> {
-       // Quét IndexedDB và cập nhật snapshot.templates[templateKey], sau đó broadcast TEMPLATE_UPDATED
-     }
-     ```
-  4. **Cơ chế hoạt động kép (Dual Persistence & Live Broadcast)**:
-     - **Trường hợp `StudyPage` KHÔNG mở**: Dữ liệu phiên học được ghi ngay lập tức vào IndexedDB. Khi người dùng mở trang học, hook `useStudySession` đọc snapshot mới nhất từ IndexedDB, đảm bảo 100% tính nhất quán.
-     - **Trường hợp `StudyPage` ĐANG mở** (chạy nền hoặc tab khác): Kênh `BroadcastChannel('flama_study_sync_channel')` và `CustomEvent('flama_study_card_updated')` kích hoạt callback trong `useStudySession`, cập nhật in-memory state ngay tại chỗ mà không cần reload trang.
-  5. **Caller Integration**: Các module `browse`, `audio`, `note-types` chỉ cần gọi:
-     ```typescript
-     import { patchStudyCardContent } from '@/features/study'
-     // Hoặc import { patchStudySessionCards } from '@/entities/session' (theo lộ trình bóc tách Tier 5)
-     ```
-     Ranh giới nội bộ của `sessionStore` được bảo vệ an toàn tuyệt đối, triệt tiêu vi phạm FSD.
+       type CardContentUpdater = (update: CardContentUpdate) => Promise<void>
+       let contentUpdater: CardContentUpdater | undefined
 
-#### 4. Bóc tách Iframe Sandbox Flashcard Renderer (`CardDisplay`):
-- **Thực trạng**: `marketplace` và `note-types` import `CardDisplay` từ `features/study/components/CardDisplay`.
-- **Giải pháp dứt điểm**:
-  1. Di chuyển `CardDisplay.tsx`, `CardRendererFrame.tsx` và `clientRenderer.ts` sang `src/entities/flashcard/ui/` và `src/entities/flashcard/lib/`.
-  2. Bảo toàn nguyên vẹn cơ chế iframe sandbox, CSP headers, postMessage channel và invariant luôn render cả 2 mặt thẻ đồng thời (`question` và `answer`).
-  3. Cả `study`, `marketplace`, `note-types` đều import `<CardDisplay />` từ `@/entities/flashcard`.
+       export function configureCardContentUpdater(updater: CardContentUpdater): () => void {
+         const previous = contentUpdater
+         contentUpdater = updater
+         return () => {
+           if (contentUpdater === updater) contentUpdater = previous
+         }
+       }
+
+       export async function updateCardFieldValues(update: CardContentUpdate): Promise<void> {
+         if (!contentUpdater) throw new Error('Card content persistence is not configured')
+         await contentUpdater(update)
+       }
+       ```
+     - Ráp nối tại Tầng Ứng dụng (`src/app/studyContentSync.ts`):
+       ```typescript
+       // src/app/studyContentSync.ts
+       import { configureCardContentUpdater } from '@/entities/flashcard/model/cardContentUpdates'
+
+       configureCardContentUpdater(async ({ cardId, fieldValues, noteId, media }) => {
+         const { updateCardFieldValuesInSessions } = await import('@/features/study/contentUpdates')
+         await updateCardFieldValuesInSessions(cardId, fieldValues, { noteId, media })
+       })
+       ```
+     - **Nguyên lý Headless**: Hoạt động trực tiếp trên IndexedDB `flama-study` (store `sessions`) và memory fallback; không đòi hỏi `StudyPage` phải mount. Nếu có `StudyPage` đang mở ở tab khác, phát sự kiện `CARD_UPDATED` qua `BroadcastChannel('flama_study_sync_channel')` để cập nhật RAM state.
+  2. **Bất biến Mẫu Thẻ trong Phiên Học Đang Mở (Template Immutability in Active Lease Epoch)**:
+     - **TUYỆT ĐỐI KHÔNG** cập nhật cấu trúc template (`templates[templateKey]`) vào snapshot của phiên học đang mở!
+     - Mã nguồn hiện tại cố ý khóa chặt hành vi này:
+       - `sessionStore.ts`, hàm `updateTemplateInSessions` (dòng 616): **là no-op**.
+       - `useStudySession.ts`, hàm `updateTemplateContent` (dòng 1243): **cũng là no-op**.
+       - `sessionStore.test.ts` (dòng 127): **test khóa chặt hành vi**: content được patch nhưng template giữ nguyên vẹn sau khi tác giả sửa mẫu thẻ.
+     - **Lý do bảo vệ kiến trúc**: Snapshot của một phiên học đang hoạt động (active lease) bắt buộc phải bất biến về mặt template để bảo vệ tính toàn vẹn của mã băm snapshot (`snapshot_hash`), tránh crash/reload iframe sandbox ngoài ý muốn và bảo đảm khả năng hoàn tác (deterministic undo stack).
+     - Thay đổi về template trong NoteType Editor chỉ có hiệu lực khi người dùng **mở một phiên học mới** (khi snapshot mới được khởi tạo từ backend/cache).
+  3. **Caller Integration**: `browse` và `audio` chỉ cần import `updateCardFieldValues` từ `@/entities/flashcard/model/cardContentUpdates`, hoàn toàn loại bỏ việc import vào `features/study`.
+
+#### 4. Bóc tách Iframe Sandbox Flashcard Renderer (`CardDisplay` & `CardRendererFrame`):
+- **Thực trạng**: `marketplace` và `note-types` từng import `CardDisplay` từ `features/study/components/CardDisplay`.
+- **Hiện trạng Đã Nghiệm thu (Gói C02 - 2026-10-05)**:
+  1. Codex đã hoàn tất xuất sắc việc trích xuất `CardDisplay.tsx`, `CardRendererFrame.tsx` và `clientRenderer.ts` sang `src/entities/flashcard/` (8 src files + 7 test files, 69 tests pass).
+  2. Bảo toàn nguyên vẹn cơ chế iframe sandbox, CSP headers, postMessage channel hai chiều, và cơ chế giữ mounted cả hai mặt Front/Back thẻ.
+  3. Cả `study`, `marketplace`, `note-types` hiện đều tiêu thụ qua public API của `@/entities/flashcard`.
 
 #### 5. Bóc tách Cây Chọn Bộ Thẻ Dùng Chung (`DeckSelectionTreeView`):
 - **Thực trạng**: `audio` và `worksheets` import `DeckSelectionTreeView` từ `features/import/components/DeckSelectionTreeView`.
@@ -494,22 +466,34 @@ frontend/src/
 
 ### 3.5 Đặc tả Mã nguồn Public API Export (`index.ts`)
 
-#### A. `src/entities/flashcard/index.ts`
+#### A. `src/entities/flashcard/index.ts` (Hiện trạng Nghiệm thu C02 & Planned Contracts)
 ```typescript
-// Public API for Flashcard Entity (Tier 5)
+/**
+ * Public UI & DTO entry for Flashcard Entity (Tier 5)
+ * Bóc tách hoàn tất tại Gói C02 (2026-10-05) - 69 tests pass.
+ */
+export { CardRendererFrame } from './ui/CardRendererFrame'
 export { CardDisplay } from './ui/CardDisplay'
-export type { CardDisplayProps } from './ui/CardDisplay'
-export { MediaFieldPreview } from './ui/MediaFieldPreview'
+export { MediaFieldPreview, resolveDisplayUrl } from './ui/MediaFieldPreview'
 export type { MediaFieldPreviewProps } from './ui/MediaFieldPreview'
 export type {
-  Note,
-  Card,
-  NoteType,
-  NoteField,
-  CardTemplate,
-  RenderedCardSide,
+  CardRendererFrameProps,
+  CardDisplayProps,
+  CardRendererSlots,
+  CardRendererSlotContext,
+  SlotRenderer,
+  FieldDef,
+  CardMediaArtifact,
+  CardRenderTemplate,
+  CardRenderContent,
+  CardRenderPayload,
+  RendererSidePayload,
 } from './model/types'
-export { renderCardHtml } from './lib/clientRenderer'
+
+// Headless renderer functions export từ lib (Renderer hiện hữu export renderStudySide):
+export { renderStudySide } from './lib/clientRenderer'
+
+// [Planned API]: renderCardHtml (Dự kiến chuẩn hóa ở C04 bởi Codex phục vụ in ấn/export tĩnh)
 ```
 
 #### B. `src/entities/deck/index.ts`
@@ -551,10 +535,10 @@ export {
 ```
 
 #### D. `src/entities/support-ticket/index.ts`
-> **Ghi chú phân loại**: Slice `entities/support-ticket` là một **Planned Extraction** thuộc gói triển khai tiếp theo (Codex C05 / Gemini G05). Kiểu `TicketItem` sẽ được di dời từ `features/admin/pages/AdminTicketsPage.tsx` sang đây, và `TicketStatusBadge` sẽ được tạo mới như một component hiển thị trạng thái chuẩn hóa thay thế cho các badge rời rạc hiện nay.
+> **Ghi chú phân loại & Sở hữu (Owner Correction theo R6)**: Slice `entities/support-ticket` là một **Planned Extraction** thuộc gói triển khai **G10 / G12 (Admin & Support)** theo phân công của Codex, **TUYỆT ĐỐI KHÔNG** thuộc về các gói worksheets (C05/G05). Kiểu `TicketItem` sẽ được di dời từ `features/admin/pages/AdminTicketsPage.tsx` sang đây, và `TicketStatusBadge` sẽ được tạo mới như một component hiển thị trạng thái chuẩn hóa thay thế cho các badge rời rạc hiện nay.
 
 ```typescript
-// Public API for Support Ticket Entity (Tier 5)
+// Public API for Support Ticket Entity (Tier 5 - Owner: G10/G12 Admin & Support)
 export type {
   TicketItem,
   TicketPriority,
@@ -584,13 +568,13 @@ export type { DeckWorksheetModalProps } from './ui/DeckWorksheetModal'
 ## PHẦN 4: DANH MỤC RUNTIME CONTRACTS BẮT BUỘC BẢO TOÀN
 
 ### 4.1 Bảng Phân cấp Định tuyến (Routes), Parameters và Query Strings
-Định tuyến của Flama được khai báo tập trung tại `frontend/src/App.tsx` (dòng 328–632). Toàn bộ kiến trúc gồm 95 khai báo route, được phân định nghiêm ngặt thành hai nhóm:
-1. **Các tuyến đường hiển thị component trực tiếp (Canonical & Direct Component Routes)**: Gồm 52 tuyến đường chuẩn và alias hiển thị trang.
-2. **Các tuyến đường chuyển hướng phía client (`<Navigate replace />` Redirect Routes)**: Gồm đúng 18 tuyến đường bảo tồn tương thích ngược các URL lịch sử, bookmark cũ của người dùng và các shortcut URL ngắn.
+Định tuyến của Flama được khai báo tập trung tại `frontend/src/App.tsx` (dòng 328–632). Toàn bộ kiến trúc gồm đúng **95 khai báo route** (bao quát đầy đủ 95 path/index entries), được phân định nghiêm ngặt thành hai nhóm:
+1. **Các tuyến đường hiển thị component trực tiếp (Canonical & Direct Component Routes)**: Gồm chính xác **77 tuyến đường** (59 tuyến đường canonical chuẩn và 18 aliases hiển thị component trực tiếp).
+2. **Các tuyến đường chuyển hướng phía client (`<Navigate replace />` Redirect Routes)**: Gồm đúng **18 tuyến đường** bảo tồn tương thích ngược các URL lịch sử, bookmark cũ của người dùng và các shortcut URL ngắn.
 
 Mọi hoạt động tái cấu trúc thư mục (FSD Migration) bắt buộc phải bảo toàn 100% các route paths, parameters và dynamic query strings dưới đây.
 
-#### 4.1.A Bảng Tuyến đường Trực tiếp & Chuẩn (Canonical & Direct Component Routes)
+#### 4.1.A Bảng 77 Tuyến đường Trực tiếp & Chuẩn (Canonical & Direct Component Routes)
 
 | Đường dẫn Tuyến đường (Route Path) | Component Tương ứng | Chế độ Tải | Access Guard | Phân loại | Params / Query Strings Bắt buộc Bảo toàn |
 |---|---|---|---|:---:|---|
@@ -658,18 +642,18 @@ Mọi hoạt động tái cấu trúc thư mục (FSD Migration) bắt buộc ph
 | `/profile` | `ProfilePage` | Lazy | `<RequireAuth />` | Canonical | Trang cá nhân của người dùng hiện tại |
 | `/profile/:username` | `ProfilePage` | Lazy | `<RequireAuth />` | Canonical | Param optional: `:username` (Trang cá nhân công khai của tác giả) |
 | `/wallet` | `WalletPage` | Lazy | `<RequireAuth />` | Canonical | Quản lý số dư, lịch sử giao dịch và rút tiền của creator |
-| `/admin/analytics` | `AdminAnalyticsPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Dashboard phân tích KPI tài chính, tăng trưởng và gắn kết |
-| `/admin/users` | `AdminUsersPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Quản lý người dùng, trạng thái kích hoạt và phân quyền |
-| `/admin/payments` | `AdminPaymentsPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Bảng kiểm soát giao dịch, đơn hàng PayOS và xử lý hoàn tiền |
-| `/admin/fees` | `AdminFeesPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Quản lý biểu phí hoa hồng sàn và chính sách chiết khấu |
-| `/admin/tts` | `AdminTtsPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Quản lý và cấu hình VoiceVox / TTS providers hệ thống |
-| `/admin/image-library` | `AdminImageLibraryPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Quản lý kho hình ảnh hệ thống dùng chung |
-| `/admin/permissions` | `AdminPermissionsPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Quản lý phân quyền đặc biệt. Query: `selected_ids` |
-| `/admin/mcp-tokens` | `AdminMcpTokensPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Giám sát toàn bộ API token MCP cấp cho AI trên hệ thống |
-| `/admin/support` | `AdminSupportConfigPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Cấu hình tài khoản ngân hàng, mã QR và thông tin ủng hộ |
-| `/admin/tickets` | `AdminTicketsPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Hộp thư quản trị tiếp nhận và giải quyết vé hỗ trợ người dùng |
-| `/admin/tickets/:id` | `AdminTicketDetailPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Param: `:id` (Xử lý chi tiết vé hỗ trợ cụ thể) |
-| `/admin/taxonomy` | `AdminTaxonomyPage` | Lazy | `<RequireAuth />` + Admin | Canonical | Quản lý cây danh mục, cấp độ JLPT, môn học, mappings |
+| `/admin/analytics` | `AdminAnalyticsPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Dashboard phân tích KPI tài chính, tăng trưởng và gắn kết |
+| `/admin/users` | `AdminUsersPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Quản lý người dùng, trạng thái kích hoạt và phân quyền |
+| `/admin/payments` | `AdminPaymentsPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Bảng kiểm soát giao dịch, đơn hàng PayOS và xử lý hoàn tiền |
+| `/admin/fees` | `AdminFeesPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Quản lý biểu phí hoa hồng sàn và chính sách chiết khấu |
+| `/admin/tts` | `AdminTtsPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Quản lý và cấu hình VoiceVox / TTS providers hệ thống |
+| `/admin/image-library` | `AdminImageLibraryPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Quản lý kho hình ảnh hệ thống dùng chung |
+| `/admin/permissions` | `AdminPermissionsPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Quản lý phân quyền đặc biệt. Query: `selected_ids` |
+| `/admin/mcp-tokens` | `AdminMcpTokensPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Giám sát toàn bộ API token MCP cấp cho AI trên hệ thống |
+| `/admin/support` | `AdminSupportConfigPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Cấu hình tài khoản ngân hàng, mã QR và thông tin ủng hộ |
+| `/admin/tickets` | `AdminTicketsPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Hộp thư quản trị tiếp nhận và giải quyết vé hỗ trợ người dùng |
+| `/admin/tickets/:id` | `AdminTicketDetailPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Param: `:id` (Xử lý chi tiết vé hỗ trợ cụ thể) |
+| `/admin/taxonomy` | `AdminTaxonomyPage` | Lazy | `<RequireAuth />` (Server Role Enforced) | Canonical | Quản lý cây danh mục, cấp độ JLPT, môn học, mappings |
 | `*` | `NotFoundPage` | Eager | Public | Catch-all | Trang 404 cho mọi URL không khớp với bất kỳ tuyến đường nào |
 
 #### 4.1.B Bảng 18 Tuyến đường Chuyển hướng Phía Client (`<Navigate replace />` Redirect Routes)
@@ -706,29 +690,29 @@ Bảng dưới đây kiểm kê chính xác 18 tuyến đường sử dụng com
 2. **`RequireCreator` (`features/auth/components/RequireCreator.tsx`)**:
    - Kiểm tra quyền: `data?.user?.is_admin || data?.user?.role?.code === 'creator'`.
    - Nếu không đủ quyền: Tự động điều hướng về `/dashboard` với flag `replace: true`.
-3. **Phân quyền Quản trị Admin (`/admin/*`)**:
-   - Giao diện client: Menu Admin chỉ render khi `user?.is_admin === true`.
-   - Tầng API: Mọi endpoint dưới `/api/admin/` kiểm tra role tại backend Flask; nếu vi phạm trả về HTTP 403 Forbidden.
+3. **Phân quyền Quản trị Admin (`/admin/*`) (Làm rõ theo R8)**:
+   - Giao diện Client: Tuyến đường `/admin/*` trên router client hiện tại được bảo vệ bởi `<RequireAuth />` để đảm bảo đã đăng nhập. Menu điều hướng Admin chỉ render khi `user?.is_admin === true`.
+   - Tầng API Backend Enforcement: Toàn bộ quyền truy cập dữ liệu và thao tác quản trị được kiểm soát và cưỡng chế bởi Flask backend (`@admin_required` / `@login_required`); nếu tài khoản không có quyền admin, backend trả về HTTP 403 Forbidden. Quá trình refactor cấu trúc tuyệt đối **KHÔNG tự ý bổ sung thêm guard client-side** ngoài baseline hiện có.
 4. **Backend Availability Guard (`shared/api/backendAvailability.ts`)**:
    - Tự động bắt các mã lỗi HTTP Gateway: 502, 503, 504, 521, 522, 523, 524.
    - Lưu URL vào `sessionStorage` (`flama:maintenance:return-path`) và chuyển hướng sang `/maintenance`. Khi backend hoạt động trở lại, tự động phục hồi người dùng về đúng trang đang thao tác dở.
 
 ### 4.3 Ma trận TanStack Query Keys, Cache Identity và Phân tích Dual Bootstrap
 
-#### A. Trọng điểm Phân kỳ Cache Bootstrap Cần Thống nhất:
-- Trong `shared/api/bootstrap.ts`, hằng số query key chuẩn được định nghĩa là:
+#### A. Trọng điểm Phân kỳ Cache Bootstrap và Hợp đồng Wire Thực tế (R2 Resolution):
+- **Chuẩn hóa Query Key**: Hằng số query key chuẩn duy nhất trong toàn hệ thống được định nghĩa tại `shared/api/bootstrap.ts`:
   ```typescript
   export const bootstrapQueryKey = ['frontend', 'bootstrap'] as const
   ```
-- Tuy nhiên, khảo sát mã nguồn thực tế phát hiện có đúng 7 tệp đang tự tay gọi chuỗi hardcoded `['bootstrap']`:
-  1. `features/browse/hooks/useBrowseState.ts` (dòng 108, 622, 706)
-  2. `features/import/hooks/useAnkiSyncPage.ts`
-  3. `features/import/components/AnkiSyncTab.tsx`
-  4. `features/profile/components/AvatarUploadModal.tsx` (dòng 54, 70)
-  5. `features/profile/components/EmailVerificationDialog.tsx` (dòng 73, 99)
-  6. `features/profile/components/ProfileEditDialog.tsx` (dòng 127)
-  7. `features/auth/pages/VerifyEmailPage.tsx`
-- **Hành động bảo vệ ranh giới**: Hai query keys này đang tồn tại song song như hai entry cache độc lập trong runtime. Codex sẽ thống nhất hằng số này trong gói C01/C02. Trong gói G01, Gemini tuyệt đối không tự ý đổi chuỗi query key để tránh làm hỏng các test cases hiện có.
+- **Hiện trạng 7 file gọi hardcoded `['bootstrap']`**: Cả 7 file (`useBrowseState.ts`, `useAnkiSyncPage.ts`, `AnkiSyncTab.tsx`, `AvatarUploadModal.tsx`, `EmailVerificationDialog.tsx`, `ProfileEditDialog.tsx`, `VerifyEmailPage.tsx`) cần được đồng bộ sử dụng hằng số `bootstrapQueryKey`.
+- **Hợp đồng Wire & Transport Thực tế**:
+  - Endpoint backend thực tế: `GET ${API_BASE_URL}/session` với tham số `{ includeTimezone: false }`.
+  - Phương thức gọi: `apiRequest<SessionResponse>` từ `shared/api/client.ts` (`apiJson` chỉ dùng cho mutations).
+  - Quy trình Response Mapping: Payload raw `SessionResponse` được biến đổi qua `toBootstrap(payload)` để tạo `FrontendBootstrap`:
+    - Gọi `setCsrfToken(payload.csrf_token)`.
+    - Kiểm tra `isAdmin = Boolean(payload.user?.is_admin)`.
+    - Gán `links` (chỉ mở admin links khi `isAdmin === true`).
+    - Khởi tạo `messages: []`, `support_contact_email: ''`, `api_version: 'v1'`.
 
 #### B. Ma trận Toàn bộ TanStack Query Keys Theo 16 Miền Chức năng (Đầy đủ 100%):
 
@@ -737,7 +721,7 @@ Toàn bộ 413 tệp mã nguồn frontend tiêu thụ hơn 75 biểu thức `que
 | Miền Nghiệp vụ (Domain) | Cấu trúc Query Key | Tệp / Hook Tiêu thụ | Mục đích Dữ liệu & Cache Policy |
 |---|---|---|---|
 | **1. Bootstrap** | `['frontend', 'bootstrap']` | `useBootstrap()`, `MaintenancePage` | Thông tin phiên người dùng, feature flags, system config (Canonical) |
-| | `['bootstrap']` | `useBrowseState`, `ProfileEditDialog`... (7 files) | Phiên bản hardcoded legacy (cần thống nhất ở C01/C02) |
+| | `['bootstrap']` | `useBrowseState`, `ProfileEditDialog`... (7 files) | Phiên bản hardcoded legacy (cần thống nhất về `bootstrapQueryKey` ở C01) |
 | **2. Dashboard** | `['frontend', 'dashboard']` / `['dashboard']` | `DashboardPage`, `useDashboardPage` | Tổng quan số thẻ cần ôn, due cards, cây bộ thẻ học tập |
 | | `['frontend', 'dashboard', 'overview', year]` | `DashboardPage` | Bản đồ nhiệt (Activity Heatmap) học tập theo năm |
 | **3. Statistics** | `['frontend', 'statistics', 'config']` | `StatisticsPage` | Cấu hình hiển thị thống kê và deck selector |
@@ -745,7 +729,7 @@ Toàn bộ 413 tệp mã nguồn frontend tiêu thụ hơn 75 biểu thức `que
 | | `['stats', 'today-future', filters]` | `useStatistics` | Dự báo khối lượng ôn tập SRS theo ngày (Forecast chart) |
 | | `['stats', 'study-time', filters]` | `useStatistics` | Biểu đồ phân bổ thời gian học tập và tốc độ phản xạ |
 | **4. Browse & Vocab** | `['browse', 'decks']` | `useBrowseState` | Danh sách cây bộ thẻ phục vụ bộ lọc tìm kiếm |
-| | `['browse', 'cards', query, deckId, status, sort, page, perPage]` | `useBrowseState` | Danh sách thẻ tìm kiếm với đầy đủ tham số phân trang và bộ lọc |
+| | `['browse', 'cards', query, deckId, status, sortBy, sortDir, page, perPage]` | `useBrowseState` | Danh sách thẻ tìm kiếm với đầy đủ tham số phân trang, bộ lọc và chiều sắp xếp (`sortBy`, `sortDir`) (R5 Parity) |
 | | `['browse', 'card-detail', activeCardId]` | `useBrowseState`, `StudyQuickEditDialog` | Chi tiết nội dung trường, tags, và metadata của 1 thẻ |
 | | `['browse', 'card-detail-sample', sampleCardId]` | `useBrowseState` | Dữ liệu thẻ mẫu xem trước |
 | | `['voicevox-profile']` | `useBrowseState` | Cấu hình endpoint và profile kết nối VoiceVox TTS |
@@ -758,10 +742,9 @@ Toàn bộ 413 tệp mã nguồn frontend tiêu thụ hơn 75 biểu thức `que
 | **6. Note Types** | `['note-types']` | `NoteTypeManagerPage`, `useBrowseState` | Danh sách toàn bộ Note Types của người dùng và hệ thống |
 | | `['note-type-detail', noteTypeId]` | `NoteTypeDetailPage`, `NoteTypeFieldsPage` | Thông tin chi tiết mẫu thẻ, CSS, và danh sách template mặt trước/sau |
 | | `['note-type-fields', noteTypeId]` | `NoteTypeFieldsPage` | Danh sách định nghĩa các trường dữ liệu và thứ tự hiển thị |
-| **7. Marketplace** | `['marketplace', mode, query, category, domain, subject, level, diff, pricing, sort]` | `SharedDecksPage` | Danh mục học liệu chia sẻ với 10 tham số lọc nâng cao |
+| **7. Marketplace** | `['marketplace', mode, query, category, domain, subject, level, diff, pricing, sort, page, perPage]` | `SharedDecksPage`, `SharedNoteTypesPage` (`MarketplacePages.tsx`) | Danh mục học liệu chia sẻ (dùng chung cho cả `mode='decks'` và `mode='note_types'` với 11 tham số lọc/phân trang) (R5 Parity) |
 | | `['shared-deck-detail', id]` | `SharedDeckDetailPage` | Chi tiết bộ thẻ marketplace, thông tin tác giả, giá bán |
 | | `['shared-deck-preview', id, templateId, sampleNoteId]` | `SharedDeckDetailPage` | Thẻ mẫu xem trước trong bộ thẻ đang xem |
-| | `['shared-note-types', query, sort, page]` | `SharedNoteTypesPage` | Danh mục mẫu thẻ được chia sẻ công khai |
 | | `['shared-note-type-detail', id]` | `SharedNoteTypeDetailPage` | Chi tiết mẫu thẻ chia sẻ |
 | | `['shared-note-type-preview', id, selectedTemplateId]` | `SharedNoteTypeDetailPage` | Xem trước giao diện mẫu thẻ chia sẻ |
 | | `['my-decks-for-publish']` | `MarketplacePublishDeckPage` | Danh sách bộ thẻ cá nhân đủ điều kiện đăng lên chợ |
@@ -883,10 +866,14 @@ Nhằm đảm bảo trải nghiệm người dùng không bị gián đoạn và
 | 23 | `flama-study-lease-epoch:${scopeKey}` | `LEASE_EPOCH_PREFIX`<br>`features/study/session/studySessionLease.ts:1` | Study / String Integer (epoch counter) | Số nguyên epoch tăng dần quản lý quyền điều khiển phiên học SRS đa tab độc quyền. |
 | 24 | `[dynamic storageKey]` | Dynamic Prop<br>`shared/ui/SplitPane.tsx:43` | UI Primitive / String Float (px) | Kích thước chia đôi màn hình kéo giãn (px) theo prop `storageKey` truyền vào component `SplitPane`. |
 
-#### B. SessionStorage Keys:
-- **`flama:maintenance:return-path`**:
-  - File quản lý: `frontend/src/pages/MaintenancePage.tsx`.
-  - Mục đích: Lưu URL người dùng đang truy cập trước khi server gặp sự cố kết nối hoặc bảo trì (502/503) để tự động phục hồi điều hướng khi hệ thống hoạt động trở lại.
+#### B. SessionStorage & Cookie Contracts:
+1. **SessionStorage: `flama:maintenance:return-path`**:
+   - File quản lý: `frontend/src/pages/MaintenancePage.tsx`.
+   - Mục đích: Lưu URL người dùng đang truy cập trước khi server gặp sự cố kết nối hoặc bảo trì (502/503) để tự động phục hồi điều hướng khi hệ thống hoạt động trở lại.
+2. **Cookie: `sidebar_state` (R8 Cookie Contract)**:
+   - File quản lý: `frontend/src/components/ui/sidebar.tsx` (`useSidebar()`, `SidebarProvider`).
+   - Định dạng: `document.cookie = 'sidebar_state=true|false; path=/; max-age=604800'` (`SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7` — 7 ngày).
+   - Mục đích: Lưu trữ trạng thái thu gọn (`collapsed`) hoặc mở rộng (`expanded`) của thanh điều hướng chính `app-sidebar` trên trình duyệt, giữ nguyên trạng thái UI khi tải lại trang hoặc điều hướng giữa các màn hình. Khi G01 chuyển primitive này sang `shared/ui/shadcn/sidebar.tsx`, hợp đồng cookie này bắt buộc phải được bảo toàn 100%.
 
 #### C. Danh mục Cơ sở Dữ liệu IndexedDB:
 1. **`FlamaAnkiSyncDB_v2` (Version 1)**:
@@ -906,26 +893,22 @@ Nhằm đảm bảo trải nghiệm người dùng không bị gián đoạn và
 Hệ thống sử dụng đúng 2 kênh `BroadcastChannel` chuẩn hóa để đồng bộ dữ liệu theo thời gian thực giữa các tab mà không cần tải lại trang:
 
 1. **Kênh Đồng bộ Nội dung Học: `'flama_study_sync_channel'` (Tên cố định)**:
-   - File gửi (Senders): `frontend/src/features/study/session/sessionStore.ts` (khi sửa trường thẻ hoặc cập nhật giao diện mẫu thẻ).
-   - File nhận (Receivers): `frontend/src/features/study/hooks/useStudySession.ts` (lắng nghe để cập nhật session state trong RAM).
-   - Hợp đồng Payload:
+   - File gửi (Senders): `entities/flashcard/model/cardContentUpdates.ts` (qua app binding `studyContentSync.ts`) và `features/study/contentUpdates.ts` (khi sửa trường thẻ).
+   - File nhận (Receivers): `frontend/src/features/study/hooks/useStudySession.ts` (lắng nghe để cập nhật session state trong RAM nếu có phiên học đang mở).
+   - Hợp đồng Payload Thực tế (R5 Wire Parity):
      ```typescript
-     // Sự kiện cập nhật trường thẻ:
+     // Sự kiện cập nhật trường thẻ (CARD_UPDATED):
      {
        type: 'CARD_UPDATED',
-       cardId: number,
-       noteId: number | null,
+       cardId: string, // ID chuỗi ký tự theo chuẩn Wire và sessionStore (R5 Parity)
+       noteId?: string | null,
        fieldValues: Record<string, string>,
-       media?: Record<string, string>
-     }
-
-     // Sự kiện cập nhật mẫu template thẻ:
-     {
-       type: 'TEMPLATE_UPDATED',
-       templateId: number,
-       updated: UpdatedTemplatePayload
+       media?: StudyMediaArtifact[] // Mảng đối tượng artifact, không phải Record thô (R5 Parity)
      }
      ```
+   - **Làm rõ về Template Immutability (R1 Resolution)**:
+     - Trong active session lease, cấu trúc template là **bất biến**. Hàm `updateTemplateInSessions` trong `sessionStore.ts:616` và `updateTemplateContent` trong `useStudySession.ts:1243` **hoàn toàn là no-op** (được khóa chặt bởi `sessionStore.test.ts:127`).
+     - Do đó, sender hiện tại **cố ý không phát sự kiện `TEMPLATE_UPDATED`** để tránh mutate snapshot dở dang; mọi listener tương thích ngược cũ (nếu còn) không được coi là bằng chứng rằng active session cho phép patch template. Template mới chỉ có hiệu lực khi mở phiên học mới.
    - Quy tắc an toàn: Mọi thao tác gửi/nhận kênh đều phải bọc trong khối `try { ... } catch {}` để đảm bảo hệ thống không bị crash trên các trình duyệt cũ hoặc webview hạn chế API.
 
 2. **Kênh Nhượng quyền Phiên học: `'flama-study-handoff:v1:${scopeKey}'` (Tên động theo Scope Key)**:
@@ -1007,26 +990,64 @@ Khảo sát phát hiện có đúng **9 feature hoàn toàn chưa có tệp ki�
 | 8 | `support` | 5 | 2.767 | **Trung bình**: Form gửi ticket và hướng dẫn cài đặt TTS. |
 | 9 | `wallet` | 6 | 475 | **Trung bình**: Bảng hiển thị số dư thu nhập và yêu cầu rút tiền của creator. |
 
-### 5.4 Yêu cầu Bộ Kiểm thử Đặc tả Hành vi (Characterization Suites)
-Trước khi bất kỳ agent nào bắt tay vào chỉnh sửa mã nguồn của 9 feature trên trong các gói tương ứng (từ G03 trở đi):
-1. Bắt buộc phải viết **Characterization Tests** để khóa chặt hành vi hiện tại trước khi chạm vào mã nguồn sản xuất (tương tự quy chuẩn đã thực hiện mẫu mực tại `AdminMcpTokensBaseline.characterization.test.tsx` và `McpTokensBaseline.characterization.test.tsx`).
-2. Kiểm thử chụp ảnh DOM (DOM Snapshot) hoặc bounding box đối với các màn hình trực quan phức tạp để đảm bảo Zero Visual Regression.
+### 5.4 Yêu cầu Bộ Kiểm thử Đặc tả Hành vi & Tiêu chuẩn Visual Chống Hồi quy (R7 Resolution)
+1. **Thừa nhận Khoảng trống Kiểm thử Trực quan Hiện hữu (Visual Test Gaps)**:
+   - Khảo sát xác nhận hiện trạng repo **hoàn toàn chưa có bộ kiểm thử visual snapshot tự động** cho 344 source files.
+   - Các phương pháp kiểm tra cấu trúc DOM đơn thuần (DOM Snapshot) hoặc đo kích thước bounding box **KHÔNG ĐỦ** để chứng minh giữ nguyên 100% token màu OKLCH, dải gradient thương hiệu, font chữ, đổ bóng (box-shadow) và trạng thái hiển thị của các Radix UI portals/popovers.
+2. **Quy trình Kiểm thử Trực quan Chống Hồi quy (Zero Visual Regression Protocol)**:
+   - Đối với các gói di chuyển UI (G01, G05, v.v.): Bắt buộc phải thực hiện đối chiếu ảnh chụp màn hình (screenshot comparison) trước và sau khi refactor trên cùng fixture dữ liệu mẫu, kích thước viewport chuẩn (Desktop 1440x900, Mobile 375x667), cùng trạng thái animation.
+   - **Môi trường Trình duyệt Cách ly (Isolated Chrome Profile)**: Mọi thao tác kiểm tra trình duyệt hoặc chạy Chrome DevTools MCP **BẮT BUỘC** phải sử dụng profile độc lập cô lập tại đường dẫn:
+     `C:\Users\chung\.gemini\chrome-profiles\flama-devtools`
+   - **RÀNG BUỘC SỐNG CÒN**: Tuyệt đối **KHÔNG ĐƯỢC PHÉP** mở, can thiệp hoặc truy cập vào profile Chrome cá nhân mặc định của người dùng nhằm bảo vệ dữ liệu cá nhân và tránh xung đột cookie/session.
+3. **Chính sách Kiểm thử Thực tế Theo Ranh giới Kỹ thuật (Realistic Seam-Based Test Policy)**:
+   - Phù hợp với test policy tinh gọn của repository: **KHÔNG bắt buộc** phải tốn tài nguyên viết characterization test suites đồ sộ cho toàn bộ 9 feature tĩnh/ít thay đổi khi chỉ thực hiện các thao tác di chuyển file thuần túy (pure 1-to-1 file moves) có shim bảo vệ.
+   - Thay vào đó, tập trung nguồn lực kiểm thử tự động và characterization tests vào các **mối nối kỹ thuật trọng yếu (critical architectural seams)** có sự thay đổi về trách nhiệm, luồng dữ liệu hoặc vòng đời (như phân rã monolith `useBrowseState`, bóc tách `DeckWorksheetModal` / `printEngine`, hoặc đóng băng hợp đồng phiên học `useStudySession`).
 
 ---
 
 ## PHẦN 6: ĐỀ XUẤT PHẠM VI CHI TIẾT CHO GÓI G01 (SHARED PRIMITIVES & UTILITIES)
 
-### 6.1 Mục tiêu và Ranh giới Kỹ thuật Gói G01
+### 6.1 Mục tiêu và Ranh giới Kỹ thuật Gói G01 (Phân tách G01.a và G01.b theo R4)
 - **Tên gói**: Gói G01 — Shared Primitives & Utilities Consolidation.
 - **Agent chịu trách nhiệm thực thi**: Gemini (`agy` worker).
 - **Mục tiêu**: Chuẩn hóa toàn bộ 8 Flama UI Primitives, 30 Shadcn Radix UI components và các tiện ích trung lập không mang nghiệp vụ vào tầng `src/shared/`.
-- **Ràng buộc an toàn số 1**: Tạo lớp **Re-export Shim** tương thích ngược tại các vị trí cũ để 331 file mã nguồn hiện có tiếp tục compile bình thường, không gây ra diff hàng loạt làm đứt gãy working tree.
+- **Phân kỳ Thực thi Hai Giai đoạn An toàn (Phased Sub-packages)**:
+  - **Gói G01.a (Neutral Utilities Consolidation)**: Gom cụm các tiện ích trung lập độc lập (`shared/lib/utils.ts`, `shared/lib/hooks/useMobile.ts`, `shared/lib/imageCompression.ts`) kèm thiết lập re-export shims tại vị trí cũ.
+  - **Gói G01.b (Shadcn Primitives & Tooling Configuration)**: Gom cụm chính xác 30 Shadcn UI primitives về thư mục chuẩn duy nhất `src/shared/ui/shadcn/`, sửa đổi internal imports, thiết lập 30 re-export shims tại `src/components/ui/`, và đồng bộ cấu hình generator tại `frontend/components.json`.
+- **Ràng buộc an toàn số 1**: Tạo lớp **Re-export Shim** tương thích ngược tại các vị trí cũ để 344 file mã nguồn và test callers hiện có tiếp tục compile bình thường, không gây ra diff hàng loạt làm đứt gãy working tree.
 
-### 6.2 Danh sách Tệp Được phép Chỉnh sửa / Tạo mới (Whitelist)
-Gemini chỉ được phép tạo mới, di chuyển và hiệu chỉnh các tệp nằm trong Whitelist sau:
+### 6.2 Danh sách Tệp Được phép Chỉnh sửa / Tạo mới (Whitelist G01.a & G01.b)
+Gemini được cấp quyền rõ ràng để tạo mới, di chuyển và hiệu chỉnh các tệp nằm trong Whitelist sau:
 
-#### A. 8 Flama UI Primitives (`frontend/src/shared/ui/`):
-1. `SearchInput.tsx` & `SearchInput.test.tsx` (Bảo toàn cờ `isComposing` chống giật IME tiếng Nhật, badge phím tắt, loading spinner).
+#### A. Gói G01.a — Tiện ích Trung lập Dùng chung (`frontend/src/shared/lib/` & Shims):
+1. `frontend/src/shared/lib/utils.ts` (Tạo mới: Tiện ích gộp class `cn`).
+2. `frontend/src/lib/utils.ts` (Cấp quyền sửa thành Shim: `export * from '@/shared/lib/utils'`).
+3. `frontend/src/shared/lib/hooks/useMobile.ts` (Tạo mới: Hook phát hiện màn hình di động `useIsMobile`).
+4. `frontend/src/hooks/use-mobile.ts` (Cấp quyền sửa thành Shim: `export * from '@/shared/lib/hooks/useMobile'`).
+5. `frontend/src/shared/lib/imageCompression.ts` & `imageCompression.test.ts` (Tạo mới / di chuyển: Nén ảnh client-side).
+6. `frontend/src/lib/imageCompression.ts` (Cấp quyền sửa thành Shim: `export * from '@/shared/lib/imageCompression'`).
+*(LƯU Ý R4: Giữ nguyên `frontend/src/lib/ankiHtmlSanitizer.ts` tại `lib/`, KHÔNG đưa vào G01; quyền xử lý thuộc về Codex trong gói C06.a).*
+
+#### B. Gói G01.b — 30 Shadcn UI Primitives (`frontend/src/shared/ui/shadcn/` & Shims):
+- **Thư mục Đích Chuẩn (Canonical Destination)**: `frontend/src/shared/ui/shadcn/<primitive>.tsx` (đúng 30 tệp, KHÔNG ghi nước đôi):
+  `alert.tsx`, `avatar.tsx`, `badge.tsx`, `breadcrumb.tsx`, `button.tsx`, `card.tsx`, `chart.tsx`, `checkbox.tsx`, `collapsible.tsx`, `dialog.tsx`, `drawer.tsx`, `dropdown-menu.tsx`, `field.tsx`, `input.tsx`, `label.tsx`, `native-select.tsx`, `pagination.tsx`, `progress.tsx`, `scroll-area.tsx`, `select.tsx`, `separator.tsx`, `sheet.tsx`, `sidebar.tsx`, `skeleton.tsx`, `sonner.tsx`, `switch.tsx`, `table.tsx`, `tabs.tsx`, `textarea.tsx`, `tooltip.tsx`.
+- **30 Tệp Shim Tương thích Ngược Cũ**: Cấp quyền rõ ràng cho Gemini sửa 30 tệp tại `frontend/src/components/ui/<primitive>.tsx` thành re-export shim:
+  ```typescript
+  export * from '@/shared/ui/shadcn/<primitive>'
+  ```
+- **Cập nhật Cấu hình Công cụ Sinh mã (Generator Tooling)**: Cấp quyền sửa tệp `frontend/components.json` để đồng bộ aliases:
+  ```json
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/shared/lib/utils",
+    "ui": "@/shared/ui/shadcn",
+    "lib": "@/shared/lib",
+    "hooks": "@/shared/lib/hooks"
+  }
+  ```
+
+#### C. 8 Flama UI Primitives Chuẩn hóa (`frontend/src/shared/ui/`):
+1. `SearchInput.tsx` & `SearchInput.test.tsx` (Bảo toàn cờ `isComposing` Japanese IME, badge phím tắt, loading spinner).
 2. `ConfirmDialog.tsx` & `ConfirmDialog.test.tsx` (Bảo toàn Radix dialog accessibility, async loading spinner).
 3. `StatusPill.tsx` & `StatusPill.test.tsx` (Bảo toàn 8 trạng thái CVA và token màu OKLCH).
 4. `CodeSnippetBox.tsx` & `CodeSnippetBox.test.tsx` (Bảo toàn copy clipboard animation tích xanh, dark mode).
@@ -1036,30 +1057,15 @@ Gemini chỉ được phép tạo mới, di chuyển và hiệu chỉnh các t�
 8. `CardFieldsForm.tsx` & `CardFieldsForm.test.tsx` (Giữ nguyên tại đây như một shim cho đến khi Codex C02 tách Flashcard Entity).
 9. `index.ts` & `index.test.ts` (Public API exports của `shared/ui`).
 
-#### B. 30 Shadcn UI Primitives (`frontend/src/shared/ui/shadcn/` hoặc `components/ui/`):
-- `alert.tsx`, `avatar.tsx`, `badge.tsx`, `breadcrumb.tsx`, `button.tsx`, `card.tsx`, `chart.tsx`, `checkbox.tsx`, `collapsible.tsx`, `dialog.tsx`, `drawer.tsx`, `dropdown-menu.tsx`, `field.tsx`, `input.tsx`, `label.tsx`, `native-select.tsx`, `pagination.tsx`, `progress.tsx`, `scroll-area.tsx`, `select.tsx`, `separator.tsx`, `sheet.tsx`, `sidebar.tsx`, `skeleton.tsx`, `sonner.tsx`, `switch.tsx`, `table.tsx`, `tabs.tsx`, `textarea.tsx`, `tooltip.tsx`.
-
-#### C. Tiện ích Trung lập Dùng chung (`frontend/src/shared/lib/`):
-1. `frontend/src/shared/lib/utils.ts`: Tiện ích gộp class `cn` (kế thừa từ `lib/utils.ts`).
-2. `frontend/src/shared/lib/imageCompression.ts` & `imageCompression.test.ts`: Nén ảnh client-side qua Canvas.
-3. `frontend/src/shared/lib/ankiHtmlSanitizer.ts` & `ankiHtmlSanitizer.test.ts`: Làm sạch HTML thẻ từ vựng trung lập.
-4. `frontend/src/shared/lib/hooks/useMobile.ts`: Hook phát hiện màn hình di động (kế thừa từ `hooks/use-mobile.ts`).
-
-#### D. Thành phần Giao diện Chung Hiện có (`frontend/src/shared/components/` & `shared/types/`):
-1. `frontend/src/shared/components/Brand.tsx`
-2. `frontend/src/shared/components/Icons.tsx`
-3. `frontend/src/shared/components/Page.tsx`
-4. `frontend/src/shared/components/PageState.tsx`
-5. `frontend/src/shared/components/SpotlightTour.tsx`
-6. `frontend/src/shared/types/api.ts` & `heatmap.ts`
+*(LƯU Ý R4: Các component dùng chung có nghiệp vụ/session như `Brand.tsx`, domain DTOs và shell layout KHÔNG nằm trong whitelist G01 mà do owner tương ứng xử lý).*
 
 ### 6.3 Danh sách Tệp và Thư mục Nghiêm cấm Chạm vào (Gate G01 Blacklist)
 
-Mục tiêu duy nhất của Gói G01 là **chuẩn hóa và cô lập Shared Primitives / Utilities vào `src/shared/` và thiết lập các Re-export Shims tại vị trí cũ**. Gói G01 **TUYỆT ĐỐI KHÔNG REFACTOR CALLERS**. Bất kỳ hành vi chỉnh sửa nào nằm ngoài Whitelist (Mục 6.2) sẽ ngay lập tức bị từ chối nghiệm thu:
+Mục tiêu duy nhất của Gói G01 là **chuẩn hóa và cô lập Shared Primitives / Utilities vào `src/shared/` và thiết lập các Re-export Shims tại vị trí cũ**. Gói G01 **TUYỆT ĐỐI KHÔNG REFACTOR CALLERS**. Mọi chỉnh sửa nằm ngoài Whitelist (Mục 6.2) sẽ ngay lập tức bị từ chối nghiệm thu:
 
-1. **Toàn bộ 22 Thư mục Feature Nghiệp vụ (`frontend/src/features/**`)**:
-   - Cấm tuyệt đối chỉnh sửa bất kỳ tệp nào trong `frontend/src/features/**` (bao gồm `admin`, `analytics`, `audio`, `auth`, `browse`, `dashboard`, `deck-collaboration`, `guide`, `import`, `landing`, `library`, `marketplace`, `mcp`, `note-types`, `notifications`, `oauth`, `onboarding`, `settings`, `statistics`, `study`, `support`, `worksheets`).
-   - Tất cả các feature components và hooks tiếp tục import từ đường dẫn cũ (`@/components/ui/...`, `@/lib/utils`, `@/lib/imageCompression`...). Các import này sẽ được giải quyết trơn tru thông qua lớp Re-export Shim tại Mục 6.4 mà không làm thay đổi dù chỉ một ký tự trong `features/**`.
+1. **Toàn bộ các Thư mục Feature Nghiệp vụ (`frontend/src/features/**`)**:
+   - Cấm tuyệt đối chỉnh sửa bất kỳ tệp nào trong `frontend/src/features/**` (bao gồm `admin`, `audio`, `auth`, `browse`, `dashboard`, `deck-collaboration`, `guide`, `import`, `library`, `marketplace`, `mcp`, `note-types`, `oauth`, `onboarding`, `orders`, `profile`, `settings`, `statistics`, `study`, `support`, `wallet`, `worksheets`).
+   - Mọi feature components và hooks tiếp tục import từ đường dẫn cũ (`@/components/ui/...`, `@/lib/utils`...); các import này được đáp ứng trọn vẹn qua các shim mà không thay đổi bất kỳ ký tự nào trong `features/**`.
 2. **Toàn bộ Tầng Pages & Views (`frontend/src/pages/**`)**:
    - Cấm sửa đổi các tệp `frontend/src/pages/**` (`StaticPages.tsx`, `MaintenancePage.tsx`...).
 3. **Tầng App Root, Router & Entry Points (Thẩm quyền Codex C01, C03)**:
@@ -1067,36 +1073,30 @@ Mục tiêu duy nhất của Gói G01 là **chuẩn hóa và cô lập Shared Pr
 4. **Tầng Network Transport & Session (Thẩm quyền Codex C01)**:
    - Cấm sửa đổi `frontend/src/shared/api/client.ts`, `bootstrap.ts`, `backendAvailability.ts`, `config/env.ts`.
 5. **Toàn bộ Core Runtime, Storage, Anki Worker & Audio Client (Thẩm quyền Codex C02, C06, C08)**:
-   - Cấm sửa đổi `frontend/src/lib/anki*`, `frontend/src/lib/sync.worker.ts`, `frontend/src/lib/flamaAudioClient.ts`.
+   - Cấm tuyệt đối sửa đổi `frontend/src/lib/anki*` (bao gồm `ankiHtmlSanitizer.ts`, `ankiIndexedDB.ts`, `ankiSyncEngine.ts`), `frontend/src/lib/sync.worker.ts`, `frontend/src/lib/flamaAudioClient.ts`.
 6. **Tầng App Shell Layouts & Navigation (Thẩm quyền Gói G02 / C03)**:
    - Cấm sửa đổi `frontend/src/layouts/**` (`AppLayout.tsx`).
    - Cấm sửa đổi các layout components: `frontend/src/components/app-sidebar.tsx`, `site-footer.tsx`, `nav-main.tsx`, `nav-user.tsx`, `site-mascot.tsx`, `feedback-dialog.tsx`.
+   *(Ngoại lệ duy nhất tại `components/`: 30 file shims trong `components/ui/*.tsx` đã được cấp quyền trong Whitelist).*
 7. **Tệp Cấu hình Xây dựng Frontend (Build & Tooling Configuration)**:
-   - Cấm tuyệt đối can thiệp hoặc sửa đổi:
-     - `frontend/package.json`, `frontend/package-lock.json` (Không cài thêm hoặc gỡ bỏ dependencies).
-     - `frontend/vite.config.ts` (Không sửa cấu hình bundler).
-     - `frontend/tsconfig.json`, `frontend/tsconfig.app.json`, `frontend/tsconfig.node.json` (Không sửa path alias hay compiler options).
-     - `frontend/tailwind.config.js`, `frontend/postcss.config.js` (Không sửa cấu hình CSS pipeline).
-8. **Dịch vụ Đồng hành Ngoại vi (Companion Services) & Scripts / Tests Backend**:
-   - Cấm chạm vào `connect_wsgi.py` (Flama Connect bridge Yomitan cổng 4790).
-   - Cấm chạm vào `flama-audio/**` (Bộ desktop audio engine .NET 8 WPF cổng 4791).
-   - Cấm chạm vào `scripts/**` (Toàn bộ các test runner và migration scripts).
-   - Cấm chạm vào `tests/**` (Toàn bộ test suites của backend Python).
-9. **Mã nguồn Backend Flask & Database Persistence**:
-   - Cấm chạm vào `app/**`, `models/**`, `migrations/**`, `wsgi.py`.
-10. **Kỷ luật Git Trạng thái & Working Tree**:
-    - TUYỆT ĐỐI KHÔNG tự ý `git checkout` chuyển nhánh.
-    - TUYỆT ĐỐI KHÔNG chạy `git commit`, `git add`, `git reset`, `git restore`, `git stash`, hay `git push`.
-    - Bảo toàn 100% commit SHA `5b21b1b` của Agent P10 và trạng thái sạch sẽ của working tree.
-
----
+   - Cấm can thiệp hoặc sửa đổi:
+     - `frontend/package.json`, `frontend/package-lock.json`
+     - `frontend/vite.config.ts`
+     - `frontend/tsconfig.json`, `frontend/tsconfig.app.json`, `frontend/tsconfig.node.json`
+     - `frontend/tailwind.config.js`, `frontend/postcss.config.js`
+   *(Ngoại lệ duy nhất về tooling: `frontend/components.json` được cấp quyền cập nhật aliases theo Whitelist).*
+8. **Dịch vụ Đồng hành Ngoại vi & Backend Python**:
+   - Cấm chạm vào `connect_wsgi.py`, `flama-audio/**`, `scripts/**`, `tests/**`, `app/**`, `models/**`, `migrations/**`, `wsgi.py`.
+9. **Kỷ luật Git Bất biến**:
+   - TUYỆT ĐỐI KHÔNG tự ý `git checkout` chuyển nhánh.
+   - TUYỆT ĐỐI KHÔNG chạy `git commit`, `git add`, `git reset`, `git restore`, `git stash`, hay `git push`.
 
 ### 6.4 Ranh giới Caller Scope và Cơ chế Re-export Shim Bắt buộc (Zero Caller Regression)
 
-Để đảm bảo **không một file nào trong số 331 file source và test callers bị lỗi import hay đứt gãy kiểm thử** khi di chuyển primitives sang `src/shared/`, Gate G01 **bắt buộc phải thiết lập 5 nhóm Re-export Shim tương thích ngược hoàn toàn tại các vị trí cũ**:
+Để đảm bảo **không một file nào trong số các file source và test callers bị lỗi import hay đứt gãy kiểm thử** khi di chuyển primitives sang `src/shared/`, Gate G01 **bắt buộc phải duy trì lớp Re-export Shim tương thích ngược hoàn toàn tại các vị trí cũ**:
 
 #### 1. Re-export Shims cho 30 Shadcn UI Primitives (`components/ui/*.tsx`):
-Tại vị trí cũ `frontend/src/components/ui/<component>.tsx`, giữ nguyên file và tạo shim re-export toàn bộ sang vị trí mới:
+Tại vị trí cũ `frontend/src/components/ui/<component>.tsx`, giữ nguyên file và tạo shim re-export tường minh:
 ```typescript
 // Ví dụ: frontend/src/components/ui/button.tsx
 export * from '@/shared/ui/shadcn/button'
@@ -1105,6 +1105,7 @@ export * from '@/shared/ui/shadcn/button'
 export * from '@/shared/ui/shadcn/dialog'
 ```
 *Áp dụng đồng bộ cho toàn bộ 30 tệp UI*: `alert.tsx`, `avatar.tsx`, `badge.tsx`, `breadcrumb.tsx`, `button.tsx`, `card.tsx`, `chart.tsx`, `checkbox.tsx`, `collapsible.tsx`, `dialog.tsx`, `drawer.tsx`, `dropdown-menu.tsx`, `field.tsx`, `input.tsx`, `label.tsx`, `native-select.tsx`, `pagination.tsx`, `progress.tsx`, `scroll-area.tsx`, `select.tsx`, `separator.tsx`, `sheet.tsx`, `sidebar.tsx`, `skeleton.tsx`, `sonner.tsx`, `switch.tsx`, `table.tsx`, `tabs.tsx`, `textarea.tsx`, `tooltip.tsx`.
+*Owner thu hồi shim*: Các shim này sẽ được duy trì cho đến khi các gói di chuyển feature tương ứng (G03–G09) hoàn tất việc chuyển đổi import trực tiếp sang `@/shared/ui/shadcn` hoặc `@/shared/ui`.
 
 #### 2. Re-export Shim cho Tiện ích Lớp Gộp `cn` (`lib/utils.ts`):
 Tại vị trí cũ `frontend/src/lib/utils.ts`, thiết lập shim trỏ sang `shared/lib/utils`:
@@ -1120,45 +1121,27 @@ Tại vị trí cũ `frontend/src/lib/imageCompression.ts`, thiết lập shim t
 // frontend/src/lib/imageCompression.ts
 export * from '@/shared/lib/imageCompression'
 ```
-*Bảo vệ*:
-- `frontend/src/shared/ui/ImageUploadDropzone.tsx:6`: `import { compressImage } from "@/lib/imageCompression"`
-- `frontend/src/features/browse/components/MediaFieldPreview.tsx:19`: `import { compressImage, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/imageCompression'`
-- `frontend/src/features/support/pages/FeedbackPage.tsx:44`: `import { compressImage, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/imageCompression'`
-- `frontend/src/features/browse/components/MediaFieldPreview.test.tsx:172`: Dynamic import `const imageCompression = await import('@/lib/imageCompression')`.
+*Bảo vệ*: Các callers trong `shared/ui/ImageUploadDropzone.tsx`, `features/browse/MediaFieldPreview.tsx`, `features/support/FeedbackPage.tsx`.
 
-#### 4. Re-export Shim cho Bộ Làm sạch HTML Thẻ Từ vựng (`lib/ankiHtmlSanitizer.ts`):
-Tại vị trí cũ `frontend/src/lib/ankiHtmlSanitizer.ts`, thiết lập shim trỏ sang `shared/lib/ankiHtmlSanitizer`:
-```typescript
-// frontend/src/lib/ankiHtmlSanitizer.ts
-export * from '@/shared/lib/ankiHtmlSanitizer'
-```
-*Bảo vệ*:
-- `frontend/src/lib/ankiSyncEngine.ts:28`: `import { ... } from '@/lib/ankiHtmlSanitizer'`
-- `frontend/src/features/import/components/AnkiSyncTab.tsx:26`: `import { sanitizeAnkiHtml } from '@/lib/ankiHtmlSanitizer'`
-
-#### 5. Re-export Shim cho Hook Nhận diện Màn hình Di động (`hooks/use-mobile.ts`):
+#### 4. Re-export Shim cho Hook Nhận diện Màn hình Di động (`hooks/use-mobile.ts`):
 Tại vị trí cũ `frontend/src/hooks/use-mobile.ts`, thiết lập shim trỏ sang `shared/lib/hooks/useMobile`:
 ```typescript
 // frontend/src/hooks/use-mobile.ts
 export * from '@/shared/lib/hooks/useMobile'
 ```
-*Bảo vệ*:
-- `frontend/src/components/ui/sidebar.tsx:5`: `import { useIsMobile } from "@/hooks/use-mobile"`
-
-#### 6. Bảo vệ Tính Toàn vẹn và Vị trí Tạm thời của `CardFieldsForm.tsx`:
-Tiếp tục export `CardFieldsForm` qua `frontend/src/shared/ui/index.ts`. Component này đóng vai trò là shim chuyển tiếp tạm thời tại tầng UI Primitives cho đến khi Codex thực hiện bóc tách thực thể Flashcard tại Gói C02.
+*Bảo vệ*: Callers trong `components/ui/sidebar.tsx` và `components/app-sidebar.tsx`.
 
 ### 6.5 Tiêu chí Nghiệm thu Khắt khe cho Gate G01 (Acceptance Criteria)
-Gate G01 chỉ được đóng và nghiệm thu chuyển sang G02 khi vượt qua toàn bộ 7 tiêu chí:
+Gate G01 chỉ được đóng và nghiệm thu chuyển sang các gói tiếp theo khi vượt qua toàn bộ 7 tiêu chí:
 1. **Typecheck Latch**: `npm --prefix frontend run typecheck` vượt qua với **0 lỗi (exit code 0)**.
 2. **Lint Latch**: `npm --prefix frontend run lint` không phát sinh thêm bất kỳ lỗi hoặc cảnh báo mới nào.
-3. **Build Latch**: `npm --prefix frontend run build` đóng gói bundle thành công với exit code 0.
+3. **Build Latch**: `npm --prefix frontend run build:ci` đóng gói bundle thành công với exit code 0.
 4. **Test Suite Latch**:
    - `npm --prefix frontend test -- shared/ui` đạt **100% pass (43/43 tests passed)**.
-   - `npm --prefix frontend test -- imageCompression ankiHtmlSanitizer` đạt **100% pass (10/10 tests passed)**.
-5. **Zero Visual Regression**: Giữ nguyên 100% styling CVA, token màu OKLCH, padding, border-radius, font-size và box-shadow.
-6. **Zero Runtime Regression**: Cờ `isComposing` Japanese IME của `SearchInput`, LocalStorage sync của `SplitPane` và Radix accessibility của `ConfirmDialog` hoạt động chuẩn mực.
-7. **Bảo tồn Working Tree Git**: Working tree trên nhánh `phase10/contraction-drop` không có commit mới; toàn bộ thay đổi của Agent P10 được bảo toàn nguyên vẹn 100%.
+   - `npm --prefix frontend test -- imageCompression` đạt **100% pass**.
+5. **Zero Visual Regression**: Đối chiếu ảnh chụp màn hình bằng Chrome profile cô lập (`C:\Users\chung\.gemini\chrome-profiles\flama-devtools`), giữ nguyên 100% styling CVA, token màu OKLCH, padding, border-radius, font-size và box-shadow.
+6. **Zero Runtime Regression**: Cờ `isComposing` Japanese IME của `SearchInput`, cookie contract `sidebar_state` của `sidebar.tsx`, LocalStorage sync của `SplitPane` và Radix accessibility của `ConfirmDialog` hoạt động chuẩn mực.
+7. **Bảo tồn Working Tree Git**: Không có commit mới trên working branch; toàn bộ working tree được bảo toàn nguyên vẹn.
 
 ---
-*Tài liệu Master Specification G00 được hoàn thành và xác thực độc quyền bởi Worker 1 (`teamwork_preview_worker_g00_1`) tại mốc bàn giao Package G00.*
+*Tài liệu Master Specification G00 được hoàn thành và xác thực độc quyền bởi Worker G00 Updater (`worker_g00_updater`) tại mốc bàn giao Gate C00.*

@@ -822,7 +822,7 @@ def study_scope_compositions(scope_type: str, scope_id: str):
         clone_scope=clone_scope,
     )
     groups = group_available_compositions(compositions)
-    return jsonify({
+    payload = {
         "schema_version": COMPOSITION_SCOPE_SCHEMA_VERSION,
         "scope_type": normalized_scope,
         "scope_id": scope_id,
@@ -834,7 +834,17 @@ def study_scope_compositions(scope_type: str, scope_id: str):
         ),
         "groups": [group.to_dict() for group in groups],
         "compositions": [c.to_dict() for c in compositions],
-    })
+    }
+    include_counts = str(request.args.get("include_counts") or "").strip().lower()
+    if include_counts in {"1", "true", "yes"}:
+        from app.services.study_composition_service import count_notes_by_composition
+
+        payload["note_counts"] = count_notes_by_composition(
+            query,
+            clone_scope=clone_scope,
+            compositions=compositions,
+        )
+    return jsonify(payload)
 
 
 @flashcards_bp.route("/api/study/sessions", methods=["POST"])

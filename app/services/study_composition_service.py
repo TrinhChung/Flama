@@ -335,6 +335,64 @@ def group_available_compositions(
     ]
 
 
+def count_notes_by_composition(
+    query: Any,
+    *,
+    clone_scope: flashcards_share_service.CloneDeckScope | None,
+    compositions: list[AppliedComposition],
+) -> dict[str, int]:
+    """Count distinct Notes per composition inside one effective scope query.
+
+    ``compositions`` must come from ``list_available_compositions_for_query``
+    for the same query and clone scope. Every composition id gets a count.
+    """
+
+    counts = {item.composition_id: 0 for item in compositions}
+    if not compositions:
+        return counts
+    key_to_id = {
+        (str(item.template_id), item.context_kind): item.composition_id
+        for item in compositions
+    }
+    eligible_card_ids = (
+        query.with_entities(Card.id.label("card_id"))
+        .order_by(None)
+        .subquery()
+    )
+    rows = (
+        db.session.query(
+            Card.template_id,
+            Note.deck_id,
+            Note.user_id,
+            db.func.count(db.distinct(Card.note_id)),
+        )
+        .join(Note, Card.note_id == Note.id)
+        .filter(Card.id.in_(db.session.query(eligible_card_ids.c.card_id)))
+        .order_by(None)
+        .group_by(Card.template_id, Note.deck_id, Note.user_id)
+        .all()
+    )
+    local_deck_ids = (
+        set(clone_scope.local_deck_ids) if clone_scope is not None else set()
+    )
+    for template_id, deck_id, note_user_id, note_count in rows:
+        context_kind = CONTEXT_OWNED
+        if clone_scope is not None:
+            is_local = (
+                deck_id is not None
+                and int(deck_id) in local_deck_ids
+                and int(note_user_id) == int(clone_scope.install.user_id)
+            )
+            context_kind = (
+                CONTEXT_INSTALLED_LOCAL if is_local else CONTEXT_INSTALLED_SOURCE
+            )
+        composition_id = key_to_id.get((str(template_id), context_kind))
+        if composition_id is None:
+            continue
+        counts[composition_id] += int(note_count or 0)
+    return counts
+
+
 def resolve_composition_selection(
     query: Any,
     *,
