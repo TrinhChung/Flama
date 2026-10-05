@@ -19,6 +19,7 @@ from app.repositories.deck_tree_query import (
 )
 from app.services import study_progress_lifecycle_mirror_service
 from app.services.scheduler_config_service import resolve_deck_options
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
@@ -210,12 +211,14 @@ def create_decks_path(*, tokens: List[str], parent_id: Optional[int] = None) -> 
         final_deck = node
         current_parent_id = node.id
 
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
     return created_count, final_deck
 
 def rename_deck(*, deck_obj: Deck, new_name: str) -> None:
     """Renames a deck and commits the transaction."""
     deck_obj.name = new_name
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
 
 def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
@@ -231,6 +234,7 @@ def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
         raise ValueError(guard_error)
     deck_obj.parent_id = new_parent_id
     deck_obj.position = vocabulary_ctrl.next_deck_position(new_parent_id)
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
 
 def _purge_deck_subtree(*, deck_obj: Deck, user_id: int, authority_learner_id: int) -> str:
@@ -321,6 +325,9 @@ def _purge_deck_subtree(*, deck_obj: Deck, user_id: int, authority_learner_id: i
     # 4. ReviewEvent is an immutable analytics fact. Detach the deleted
     # deck snapshot instead of erasing study history and breaking imported
     # Anki provenance links.
+    from app.services.review_analytics_projection_service import invalidate_review_analytics
+
+    invalidate_review_analytics(db.session, scope.learner_user_ids)
     ReviewEvent.query.filter(
         ReviewEvent.deck_id.in_(deck_ids_to_delete)
     ).update({ReviewEvent.deck_id: None}, synchronize_session=False)
@@ -353,6 +360,7 @@ def _purge_deck_subtree(*, deck_obj: Deck, user_id: int, authority_learner_id: i
 
     # 8. Delete the deck object itself
     db.session.delete(deck_obj)
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
     return "purged"
 
@@ -413,6 +421,7 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
         for marketplace_item in marketplace_items:
             marketplace_item.publish_status = "archived"
             marketplace_item.archived_at = deleted_at
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         return "archived"
 
@@ -492,6 +501,7 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
         Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
 
     db.session.delete(deck_obj)
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
     return "deleted"
 
@@ -610,6 +620,7 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
                 starting_ease_by_note_id=starting_ease_by_note_id,
             )
             if lifecycle_plan is None:
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
                 return 0
             deleted_count = len(lifecycle_plan.removed_card_ids)
@@ -623,5 +634,6 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
                 CardProgress.user_id == user_id,
                 CardProgress.card_id.in_(sorted(card_id_set)),
             ).delete(synchronize_session=False) or 0
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     return deleted_count

@@ -132,6 +132,17 @@ def _overlay_scope(
     return overlay, overlay_types
 
 
+def deck_note_type_metadata(session, *, learner_user_id, deck_ids, admin_mode=False):
+    """Read fallback presentation metadata independently of cached counters."""
+    if not deck_ids:
+        return {}
+    overlay_types = [] if admin_mode else _overlay_scope(
+        session, learner_user_id=learner_user_id, visible_deck_ids=deck_ids,
+    )[1]
+    return _deck_note_types(session, learner_user_id=learner_user_id,
+                            visible_deck_ids=deck_ids, overlay_types=overlay_types)
+
+
 def aggregate_deck_study_counts(
     session: Session,
     *,

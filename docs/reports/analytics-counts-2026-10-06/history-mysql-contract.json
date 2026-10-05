@@ -1,0 +1,94 @@
+{
+  "database": "nihongo",
+  "host": "localhost",
+  "user1_before": {
+    "source": {
+      "events": 118579,
+      "first_id": 9,
+      "last_id": 131650,
+      "sum_ids": 7170566605,
+      "projected_checksum": 254503941252525
+    },
+    "projection": {
+      "review_analytics_heads": {
+        "rows": 1,
+        "sha256": "0df82020f46c215591301c6f1abe1344294e69ad42c01295339fe832bbe3bec4"
+      },
+      "review_analytics_generations": {
+        "rows": 2,
+        "sha256": "8eb1a618696befc070328a2ffd50cf7e41e7c7371d67d78ddf022081d17ac931"
+      },
+      "daily_review_counts": {
+        "rows": 5572,
+        "sha256": "0950737951379ab675cb011d35f3d73200651de4c7ddcc575ff563d0403f8e96"
+      }
+    }
+  },
+  "passed": true,
+  "checks": {
+    "existing_mysql_schema_migration_idempotent": true,
+    "cascade_preflight_review_events": true,
+    "cascade_preflight_review_analytics_heads": true,
+    "ready_49": true,
+    "source_counter_atomic_commit": true,
+    "outer_rollback_reverts_raw_counter_revision": true,
+    "duplicate_rollback_does_not_increment": true,
+    "savepoint_rollback_and_released_descendant_discard": true,
+    "nested_finalizer_refused": true,
+    "missing_fence_guard": true,
+    "missing_finalizer_guard": true,
+    "ready_51": true,
+    "concurrent_same_day_no_lost_updates": true,
+    "out_of_order_higher_id_committed_first": true,
+    "admission_drains_lower_id_uncommitted_writer": true,
+    "out_of_order_baseline_exact_publication": true,
+    "chunk_baseline_admitted": true,
+    "chunk_crash_rolls_back_counts_and_cursor": true,
+    "chunk_retry_counts_baseline_once": true,
+    "baseline_and_live_tail_exact_parity": true,
+    "ready_54": true,
+    "projected_purge_marks_dirty_and_clears_proof": true,
+    "readonly_summary_uses_counts_without_raw_scan": true,
+    "mysql_readonly_snapshot_rejects_write": true,
+    "dirty_generation_reader_falls_back_to_raw": true,
+    "fixture_user_cascade_cleanup": true,
+    "user1_source_and_projection_preserved": true
+  },
+  "details": {
+    "readonly_summary_uses_counts_without_raw_scan": {
+      "statement_count": 3
+    }
+  },
+  "user1_after": {
+    "source": {
+      "events": 118579,
+      "first_id": 9,
+      "last_id": 131650,
+      "sum_ids": 7170566605,
+      "projected_checksum": 254503941252525
+    },
+    "projection": {
+      "review_analytics_heads": {
+        "rows": 1,
+        "sha256": "0df82020f46c215591301c6f1abe1344294e69ad42c01295339fe832bbe3bec4"
+      },
+      "review_analytics_generations": {
+        "rows": 2,
+        "sha256": "8eb1a618696befc070328a2ffd50cf7e41e7c7371d67d78ddf022081d17ac931"
+      },
+      "daily_review_counts": {
+        "rows": 5572,
+        "sha256": "0950737951379ab675cb011d35f3d73200651de4c7ddcc575ff563d0403f8e96"
+      }
+    }
+  },
+  "fixture_user_ids": [
+    49,
+    50,
+    51,
+    52,
+    53,
+    54
+  ],
+  "errors": []
+}

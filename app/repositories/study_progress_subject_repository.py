@@ -82,7 +82,7 @@ def ensure_and_lock_subject(
         # The upsert cannot tell an insert from an existing row (PyMySQL runs
         # with CLIENT_FOUND_ROWS), so this path never marks the subject as
         # inserted and its readers keep their locks.
-        session.execute(statement)
+        session.execute(statement.execution_options(flama_pristine_subject_envelope=True))
 
     return session.execute(
         select(StudyProgressSubject)

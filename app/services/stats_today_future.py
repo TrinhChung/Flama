@@ -19,7 +19,7 @@ from app.repositories.stats_query_repository import (
     query_today_review_summary,
     query_user_daily_study_time,
 )
-from app.repositories.study_authority_repository import lock_study_authority_route
+from app.repositories.study_authority_repository import read_study_authority_route
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
@@ -367,10 +367,9 @@ def build_today_future_stats(
 
     timezone_effective = _effective_timezone_name(timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    authority_route = lock_study_authority_route(
+    authority_route = read_study_authority_route(
         db.session,
         learner_user_id=user_id,
-        allow_note_authority=True,
     )
     day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
     today_day_index = _day_index(
@@ -398,6 +397,8 @@ def build_today_future_stats(
         scope_deck_ids=scope_deck_ids,
         today_start_utc=today_start_utc,
         tomorrow_start_utc=tomorrow_start_utc,
+        timezone_name=timezone_effective,
+        day_boundary_hour_local=day_boundary_hour,
     )
     today_minutes = _round2(today_duration_ms / 60000.0)
     today_sec_per_card = _round2((today_duration_ms / 1000.0) / today_cards) if today_cards > 0 else 0.0

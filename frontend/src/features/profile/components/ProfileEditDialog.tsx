@@ -122,10 +122,17 @@ export function ProfileEditDialog({
       new_password?: string
       confirm_password?: string
     }) => profileApi.updateProfile(payload),
-    onSuccess: () => {
+    onSuccess: (_response, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
+      if (variables.timezone && variables.timezone !== user.timezone) {
+        void queryClient.invalidateQueries({ queryKey: ['stats'] })
+        void queryClient.invalidateQueries({ queryKey: ['stats-overview'] })
+        void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        void queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] })
+        void queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] })
+      }
       toast.success(
         activeTab === 'password'
           ? 'Mật khẩu đã được thay đổi thành công.'

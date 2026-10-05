@@ -325,6 +325,9 @@ def lock_study_authority_route(
             raise StudyAuthorityFenceError(
                 "LEARNER_NOT_FOUND", "Learner authority fence row does not exist."
             )
+        from app.services.review_analytics_projection_service import record_review_analytics_fence
+
+        record_review_analytics_fence(session, learner_id)
         enrollment = session.execute(
             select(StudyAuthorityEnrollment)
             .where(StudyAuthorityEnrollment.learner_user_id == learner_id)

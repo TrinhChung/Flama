@@ -107,6 +107,7 @@ from app.validators.study_session_wire import (
     select_session_schema,
     validate_review_event_wire_contract,
 )
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -1011,6 +1012,7 @@ def open_study_session(
         except StudySessionAuthorityPinError as exc:
             db.session.rollback()
             raise StudySessionError(exc.code, str(exc), status=409) from exc
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
     return {
         **snapshot_material,
@@ -1502,6 +1504,7 @@ def enqueue_study_session_batch(
         )
         db.session.add(batch_row)
         try:
+            flush_review_analytics_deltas(db.session)
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
@@ -2174,6 +2177,7 @@ def _commit_note_authority_session(
                 },
             )
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         return response
     except IntegrityError:
@@ -2749,6 +2753,7 @@ def commit_study_session(
                 },
             )
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
