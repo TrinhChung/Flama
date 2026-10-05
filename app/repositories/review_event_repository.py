@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from models import db
 from models.flashcard import ReviewEvent
+# Registers capture/rollback/commit guards for canonical ReviewEvent writers.
+from app.services import review_analytics_projection_service as _analytics_projection  # noqa: F401
 
 UTC = timezone.utc
 

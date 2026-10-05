@@ -1,5 +1,7 @@
 # Review roadmap O(N) và phương án bảng count — 04/10/2026
 
+**Implementation 06/10/2026:** [Count lịch sử + Dashboard snapshot, số đo User 1 và giới hạn rollout](../../reports/ANALYTICS_COUNTS_IMPLEMENTATION_2026-10-06.md).
+
 **Kết luận: nên lên kế hoạch triển khai bảng tổng hợp lịch sử theo user/ngày.** Lợi ích đã có bằng chứng đọc; chi phí ghi, tính nhất quán và phạm vi tính toán cần kiểm chứng trước khi chuyển production. Bảng count trạng thái deck cũng đáng khảo sát, nhưng là read model khác, cần xử lý clock/due, scope và các thao tác thay đổi nội dung. Không dùng một bảng để thay cả hai.
 
 Đây là review độc lập của tài liệu trong workspace `docs/plans/O_N_PERFORMANCE_INVESTIGATION_ROADMAP.md`, có tiêu đề **MASTER TECHNICAL REPORT & OPTIMIZATION ROADMAP: SYSTEMIC O(N) LINEAR PERFORMANCE BOTTLENECKS**. Giữ nguyên tài liệu đầu vào. Các SQL, schema và con số mục tiêu trong đó chưa đủ cơ sở để gọi là roadmap đã verified.
@@ -141,3 +143,5 @@ Delta phải phủ: accepted answer, reset/suspend/bury/unbury, Note/Card tạo/
 Gates tối thiểu của daily rollup: parity collection/deck/NULL-deck/multi-template; nhiều reviews cùng Card vẫn nhiều events; passed-ratings gồm cả `good/easy` và legacy `'3'/'4'` như query hiện tại; timezone/DST/boundary/year switch; duplicate/retry/rollback/concurrent commit; backdated imports; đổi attribution/xóa nếu được hỗ trợ; backfill/live race và worker crash; version mismatch/fallback; commit p95/lock budget do nhóm chốt sau baseline. Count cache/state model phải có thêm clock/bury/reset/overlay/template/move parity.
 
 **Ưu tiên đề xuất:** triển khai thử daily history rollup có kiểm soát vì số đọc đã chứng minh lợi ích; khảo sát deck-state counters tiếp theo để xử lý phần count Dashboard. Giữ các mục archival và TTL receipt ngoài đợt tối ưu này cho tới khi có hợp đồng dữ liệu đầy đủ.
+
+**Kế hoạch triển khai chi tiết ngày 05/10:** [Analytics count table design](../../architecture/ANALYTICS_COUNT_TABLE_DESIGN_2026-10-05.md) cụ thể hóa 3 bảng daily history, synchronous finalizer/SAVEPOINT, barrier backfill/verification/publish, 3 bảng deck snapshot/revision dự kiến, task theo PR, test matrix, acceptance gates và rollback. Đây vẫn là thiết kế đề xuất, chưa thêm schema hoặc triển khai runtime.

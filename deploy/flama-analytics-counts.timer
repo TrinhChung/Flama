@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh Flama configured deck counts each minute
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+RandomizedDelaySec=5s
+Persistent=false
+Unit=flama-analytics-counts.service
+
+[Install]
+WantedBy=timers.target

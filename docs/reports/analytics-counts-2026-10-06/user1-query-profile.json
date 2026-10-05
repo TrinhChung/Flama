@@ -1,0 +1,366 @@
+{
+  "host": "localhost",
+  "database": "nihongo",
+  "user_id": 1,
+  "now_utc": "2026-10-06T03:00:00",
+  "repetitions": 1,
+  "source_before": {
+    "events": 118579,
+    "first_id": 9,
+    "last_id": 131650,
+    "sum_ids": 7170566605,
+    "projected_checksum": 254503941252525
+  },
+  "metrics": {
+    "overview": {
+      "raw": {
+        "median_ms": 1234.39,
+        "max_ms": 1234.39,
+        "samples_ms": [
+          1234.39
+        ],
+        "statements": 6,
+        "raw_history_selects": 2,
+        "card_count_scans": 2,
+        "projection_selects": 0,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 1.21,
+            "sql_prefix": "SELECT study_authority_enrollments.learner_user_id, study_authority_enrollments.mode_code, study_authority_enrollments.epoch, study_authority_enrollments.created_at, study_authorit"
+          },
+          {
+            "cursor_ms": 1.11,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 1.14,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 352.23,
+            "sql_prefix": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day, count(review_events.id) AS cards, coalesce(sum(CASE WHEN (review_even"
+          },
+          {
+            "cursor_ms": 718.79,
+            "sql_prefix": "SELECT greatest(CASE WHEN (lower(trim(availability.queue)) = %(lower_1)s AND availability.due_day IS NOT NULL) THEN availability.due_day ELSE to_days(date_add(availability.due_at, "
+          },
+          {
+            "cursor_ms": 148.58,
+            "sql_prefix": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day FROM review_events WHERE review_events.user_id = %(user_id_1)s AND rev"
+          }
+        ]
+      },
+      "summary": {
+        "median_ms": 453.17,
+        "max_ms": 453.17,
+        "samples_ms": [
+          453.17
+        ],
+        "statements": 8,
+        "raw_history_selects": 0,
+        "card_count_scans": 1,
+        "projection_selects": 2,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 0.61,
+            "sql_prefix": "SELECT study_authority_enrollments.learner_user_id, study_authority_enrollments.mode_code, study_authority_enrollments.epoch, study_authority_enrollments.created_at, study_authorit"
+          },
+          {
+            "cursor_ms": 0.7,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 0.75,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 0.95,
+            "sql_prefix": "SELECT review_analytics_generations.generation FROM review_analytics_generations INNER JOIN review_analytics_heads ON review_analytics_heads.user_id = review_analytics_generations."
+          },
+          {
+            "cursor_ms": 3.19,
+            "sql_prefix": "SELECT daily_review_counts.study_day, sum(daily_review_counts.review_event_count) AS sum_1, sum(daily_review_counts.positive_duration_ms) AS sum_2, sum(daily_review_counts.passed_r"
+          },
+          {
+            "cursor_ms": 429.15,
+            "sql_prefix": "SELECT greatest(CASE WHEN (lower(trim(availability.queue)) = %(lower_1)s AND availability.due_day IS NOT NULL) THEN availability.due_day ELSE to_days(date_add(availability.due_at, "
+          },
+          {
+            "cursor_ms": 0.89,
+            "sql_prefix": "SELECT review_analytics_generations.generation FROM review_analytics_generations INNER JOIN review_analytics_heads ON review_analytics_heads.user_id = review_analytics_generations."
+          },
+          {
+            "cursor_ms": 2.82,
+            "sql_prefix": "SELECT daily_review_counts.study_day FROM daily_review_counts WHERE daily_review_counts.user_id = %(user_id_1)s AND daily_review_counts.generation = %(generation_1)s AND daily_revi"
+          }
+        ]
+      },
+      "exact_payload_parity": true
+    },
+    "today_future": {
+      "raw": {
+        "median_ms": 1793.25,
+        "max_ms": 1793.25,
+        "samples_ms": [
+          1793.25
+        ],
+        "statements": 5,
+        "raw_history_selects": 1,
+        "card_count_scans": 0,
+        "projection_selects": 0,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 0.71,
+            "sql_prefix": "SELECT study_authority_enrollments.learner_user_id, study_authority_enrollments.mode_code, study_authority_enrollments.epoch, study_authority_enrollments.created_at, study_authorit"
+          },
+          {
+            "cursor_ms": 0.57,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 0.74,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 1.11,
+            "sql_prefix": "SELECT count(review_events.id) AS count_1, coalesce(sum(CASE WHEN (review_events.duration_ms IS NOT NULL AND review_events.duration_ms > %(duration_ms_1)s) THEN review_events.durat"
+          },
+          {
+            "cursor_ms": 1347.51,
+            "sql_prefix": "SELECT cards.id AS cards_id, study_progress_subjects.normalized_queue AS study_progress_subjects_normalized_queue, study_progress_subjects.due_at AS study_progress_subjects_due_at,"
+          }
+        ]
+      },
+      "summary": {
+        "median_ms": 761.39,
+        "max_ms": 761.39,
+        "samples_ms": [
+          761.39
+        ],
+        "statements": 6,
+        "raw_history_selects": 0,
+        "card_count_scans": 0,
+        "projection_selects": 1,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 1.18,
+            "sql_prefix": "SELECT study_authority_enrollments.learner_user_id, study_authority_enrollments.mode_code, study_authority_enrollments.epoch, study_authority_enrollments.created_at, study_authorit"
+          },
+          {
+            "cursor_ms": 0.83,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 0.65,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 0.74,
+            "sql_prefix": "SELECT review_analytics_generations.generation FROM review_analytics_generations INNER JOIN review_analytics_heads ON review_analytics_heads.user_id = review_analytics_generations."
+          },
+          {
+            "cursor_ms": 0.76,
+            "sql_prefix": "SELECT daily_review_counts.study_day, sum(daily_review_counts.review_event_count) AS sum_1, sum(daily_review_counts.positive_duration_ms) AS sum_2, sum(daily_review_counts.passed_r"
+          },
+          {
+            "cursor_ms": 442.74,
+            "sql_prefix": "SELECT cards.id AS cards_id, study_progress_subjects.normalized_queue AS study_progress_subjects_normalized_queue, study_progress_subjects.due_at AS study_progress_subjects_due_at,"
+          }
+        ]
+      },
+      "exact_payload_parity": true
+    },
+    "study_time_all": {
+      "raw": {
+        "median_ms": 751.63,
+        "max_ms": 751.63,
+        "samples_ms": [
+          751.63
+        ],
+        "statements": 2,
+        "raw_history_selects": 1,
+        "card_count_scans": 0,
+        "projection_selects": 0,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 1.28,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 744.61,
+            "sql_prefix": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day, count(review_events.id) AS total_reviews, coalesce(sum(CASE WHEN (rev"
+          }
+        ]
+      },
+      "summary": {
+        "median_ms": 9.71,
+        "max_ms": 9.71,
+        "samples_ms": [
+          9.71
+        ],
+        "statements": 3,
+        "raw_history_selects": 0,
+        "card_count_scans": 0,
+        "projection_selects": 1,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 0.94,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 0.79,
+            "sql_prefix": "SELECT review_analytics_generations.generation FROM review_analytics_generations INNER JOIN review_analytics_heads ON review_analytics_heads.user_id = review_analytics_generations."
+          },
+          {
+            "cursor_ms": 3.53,
+            "sql_prefix": "SELECT daily_review_counts.study_day, sum(daily_review_counts.review_event_count) AS sum_1, sum(daily_review_counts.positive_duration_ms) AS sum_2, sum(daily_review_counts.passed_r"
+          }
+        ]
+      },
+      "exact_payload_parity": true
+    },
+    "dashboard_compact": {
+      "raw": {
+        "median_ms": 1321.95,
+        "max_ms": 1321.95,
+        "samples_ms": [
+          1321.95
+        ],
+        "statements": 8,
+        "raw_history_selects": 0,
+        "card_count_scans": 1,
+        "projection_selects": 0,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 0.65,
+            "sql_prefix": "SELECT user_roles.id AS user_roles_id, user_roles.code AS user_roles_code, user_roles.name AS user_roles_name, user_roles.description AS user_roles_description, user_roles.is_admin"
+          },
+          {
+            "cursor_ms": 0.67,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 0.81,
+            "sql_prefix": "SELECT study_authority_enrollments.learner_user_id, study_authority_enrollments.mode_code, study_authority_enrollments.epoch, study_authority_enrollments.created_at, study_authorit"
+          },
+          {
+            "cursor_ms": 1.79,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 23.87,
+            "sql_prefix": "SELECT decks.id AS decks_id, decks.parent_id AS decks_parent_id, decks.owner_user_id AS decks_owner_user_id, decks.note_type_id AS decks_note_type_id, decks.scheduler_preset_id AS "
+          },
+          {
+            "cursor_ms": 0.68,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 945.24,
+            "sql_prefix": "SELECT `rows`.deck_id, count(distinct(`rows`.card_id)) AS count_1, count(distinct(CASE WHEN ((`rows`.is_suspended IS NULL OR `rows`.is_suspended IS false) AND NOT (`rows`.is_buried"
+          },
+          {
+            "cursor_ms": 160.12,
+            "sql_prefix": "SELECT notes.deck_id, notes.note_type_id, min(notes.created_at) AS min_1 FROM notes WHERE notes.user_id = %(user_id_1)s AND notes.deck_id IN (%(deck_id_1_1)s, %(deck_id_1_2)s, %(de"
+          }
+        ]
+      },
+      "summary": {
+        "median_ms": 446.11,
+        "max_ms": 446.11,
+        "samples_ms": [
+          446.11
+        ],
+        "statements": 16,
+        "raw_history_selects": 0,
+        "card_count_scans": 1,
+        "projection_selects": 1,
+        "locking_selects": 0,
+        "last_sample_query_profile": [
+          {
+            "cursor_ms": 0.7,
+            "sql_prefix": "SELECT user_roles.id AS user_roles_id, user_roles.code AS user_roles_code, user_roles.name AS user_roles_name, user_roles.description AS user_roles_description, user_roles.is_admin"
+          },
+          {
+            "cursor_ms": 0.71,
+            "sql_prefix": "SELECT user_scheduler_settings.id AS user_scheduler_settings_id, user_scheduler_settings.user_id AS user_scheduler_settings_user_id, user_scheduler_settings.scheduler_mode AS user_"
+          },
+          {
+            "cursor_ms": 0.62,
+            "sql_prefix": "SELECT study_authority_enrollments.learner_user_id, study_authority_enrollments.mode_code, study_authority_enrollments.epoch, study_authority_enrollments.created_at, study_authorit"
+          },
+          {
+            "cursor_ms": 0.53,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 36.8,
+            "sql_prefix": "SELECT decks.id AS decks_id, decks.parent_id AS decks_parent_id, decks.owner_user_id AS decks_owner_user_id, decks.note_type_id AS decks_note_type_id, decks.scheduler_preset_id AS "
+          },
+          {
+            "cursor_ms": 1.47,
+            "sql_prefix": "SELECT study_authority_enrollments.learner_user_id, study_authority_enrollments.mode_code, study_authority_enrollments.epoch, study_authority_enrollments.created_at, study_authorit"
+          },
+          {
+            "cursor_ms": 0.6,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 25.76,
+            "sql_prefix": "SELECT decks.id, decks.parent_id, decks.owner_user_id FROM decks WHERE decks.owner_user_id = %(owner_user_id_1)s AND decks.deleted_at IS NULL AND decks.id IN (%(id_1_1)s, %(id_1_2)"
+          },
+          {
+            "cursor_ms": 6.54,
+            "sql_prefix": "SELECT deck_clone_deck_maps.local_deck_id FROM deck_clone_deck_maps WHERE deck_clone_deck_maps.local_deck_id IN (%(local_deck_id_1_1)s, %(local_deck_id_1_2)s, %(local_deck_id_1_3)s"
+          },
+          {
+            "cursor_ms": 4.34,
+            "sql_prefix": "SELECT deck_installs.local_deck_id FROM deck_installs WHERE deck_installs.local_deck_id IN (%(local_deck_id_1_1)s, %(local_deck_id_1_2)s, %(local_deck_id_1_3)s, %(local_deck_id_1_4"
+          },
+          {
+            "cursor_ms": 4.13,
+            "sql_prefix": "SELECT deck_count_content_revisions.physical_deck_id, deck_count_content_revisions.revision FROM deck_count_content_revisions WHERE deck_count_content_revisions.physical_deck_id IN"
+          },
+          {
+            "cursor_ms": 4.29,
+            "sql_prefix": "SELECT deck_count_learner_revisions.effective_deck_id, deck_count_learner_revisions.revision FROM deck_count_learner_revisions WHERE deck_count_learner_revisions.user_id = %(user_i"
+          },
+          {
+            "cursor_ms": 51.32,
+            "sql_prefix": "SELECT deck_study_count_snapshots.user_id, deck_study_count_snapshots.effective_deck_id, deck_study_count_snapshots.contract_code, deck_study_count_snapshots.unit_code, deck_study_"
+          },
+          {
+            "cursor_ms": 0.99,
+            "sql_prefix": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+          },
+          {
+            "cursor_ms": 1.32,
+            "sql_prefix": "SELECT `rows`.deck_id, count(distinct(`rows`.card_id)) AS count_1, count(distinct(CASE WHEN ((`rows`.is_suspended IS NULL OR `rows`.is_suspended IS false) AND NOT (`rows`.is_buried"
+          },
+          {
+            "cursor_ms": 149.87,
+            "sql_prefix": "SELECT notes.deck_id, notes.note_type_id, min(notes.created_at) AS min_1 FROM notes WHERE notes.user_id = %(user_id_1)s AND notes.deck_id IN (%(deck_id_1_1)s, %(deck_id_1_2)s, %(de"
+          }
+        ]
+      },
+      "exact_payload_parity": true
+    }
+  },
+  "history_bucket_rows": 5572,
+  "source_after": {
+    "events": 118579,
+    "first_id": 9,
+    "last_id": 131650,
+    "sum_ids": 7170566605,
+    "projected_checksum": 254503941252525
+  },
+  "source_preserved": true,
+  "passed": true
+}
