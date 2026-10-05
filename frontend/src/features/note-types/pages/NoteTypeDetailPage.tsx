@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faArrowLeft,
@@ -16,11 +16,16 @@ import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AmbientBackground } from '@/components/ambient-background'
+import {
+  cardTemplateQueryKeys,
+  fetchNoteTypeTemplates,
+  TemplateCodeEditor,
+} from '@/entities/card-template'
 import { NoteTypeLivePreview } from '../components/NoteTypeLivePreview'
+import { TemplateManagementBar } from '../components/TemplateManagementBar'
+import { templateErrorMessage } from '../lib/templateErrors'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
@@ -37,6 +42,7 @@ type TemplateItem = {
   front_html?: string
   back_html?: string
   shared_css?: string
+  is_default?: boolean
 }
 
 type NoteTypeDetail = {
@@ -69,11 +75,15 @@ export function NoteTypeDetailPage() {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
-  const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-
   const detailQuery = useQuery({
     queryKey: ['note-type-detail', noteTypeId],
     queryFn: () => appApi.get<NoteTypeDetail>(`/note-types/${noteTypeId}`),
+    enabled: Boolean(noteTypeId),
+  })
+
+  const templatesWithCountsQuery = useQuery({
+    queryKey: cardTemplateQueryKeys.noteTypeTemplates(noteTypeId ?? ''),
+    queryFn: ({ signal }) => fetchNoteTypeTemplates(noteTypeId as string, signal),
     enabled: Boolean(noteTypeId),
   })
 
@@ -84,6 +94,16 @@ export function NoteTypeDetailPage() {
   const selectedTemplate = useMemo(() => {
     return templates.find((t) => t.id === selectedTemplateId) || templates[0] || null
   }, [templates, selectedTemplateId])
+
+  const selectedNoteCount =
+    templatesWithCountsQuery.data?.items.find((item) => item.id === selectedTemplate?.id)?.note_count ?? null
+
+  const invalidateTemplates = () => {
+    void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
+    void queryClient.invalidateQueries({
+      queryKey: cardTemplateQueryKeys.noteTypeTemplates(noteTypeId ?? ''),
+    })
+  }
 
   // Auto select initial template
   useEffect(() => {
@@ -110,10 +130,10 @@ export function NoteTypeDetailPage() {
       appApi.mutate(`/note-types/${noteTypeId}/templates/${selectedTemplateId}`, 'PATCH', payload),
     onSuccess: () => {
       toast.success('Đã lưu Template.')
-      void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
+      invalidateTemplates()
     },
-    onError: (error: Error) => {
-      toast.error('Không thể lưu Template', { description: error.message })
+    onError: (error: unknown) => {
+      toast.error('Không thể lưu Template', { description: templateErrorMessage(error) })
     },
   })
 
@@ -122,16 +142,14 @@ export function NoteTypeDetailPage() {
     mutationFn: () =>
       appApi.mutate<TemplateItem>(`/note-types/${noteTypeId}/templates`, 'POST', {
         name: `Card ${templates.length + 1}`,
-        front_html: '{{Word}}',
-        back_html: '{{Word}}',
       }),
     onSuccess: (created) => {
       toast.success('Đã tạo Template mới.')
       setSelectedTemplateId(created.id)
-      void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
+      invalidateTemplates()
     },
-    onError: (error: Error) => {
-      toast.error('Không thể tạo Template', { description: error.message })
+    onError: (error: unknown) => {
+      toast.error('Không thể tạo Template', { description: templateErrorMessage(error) })
     },
   })
 
@@ -147,10 +165,10 @@ export function NoteTypeDetailPage() {
       setFrontHtml(reset.front_html || '')
       setBackHtml(reset.back_html || '')
       setSharedCss(reset.shared_css || '')
-      void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
+      invalidateTemplates()
     },
-    onError: (error: Error) => {
-      toast.error('Không thể đặt lại Template', { description: error.message })
+    onError: (error: unknown) => {
+      toast.error('Không thể đặt lại Template', { description: templateErrorMessage(error) })
     },
   })
 
@@ -192,32 +210,6 @@ export function NoteTypeDetailPage() {
       clearTimeout(timer)
     }
   }, [noteTypeId, selectedTemplateId, frontHtml, backHtml, sharedCss])
-
-  // Placeholder Toolbar Click Handler
-  const insertPlaceholder = (fieldName: string) => {
-    const placeholder = `{{${fieldName}}}`
-    const textarea = activeTextareaRef.current
-
-    if (activeTab === 'front') {
-      if (textarea) {
-        const start = textarea.selectionStart || 0
-        const end = textarea.selectionEnd || 0
-        setFrontHtml((prev) => prev.slice(0, start) + placeholder + prev.slice(end))
-      } else {
-        setFrontHtml((prev) => prev + placeholder)
-      }
-    } else if (activeTab === 'back') {
-      if (textarea) {
-        const start = textarea.selectionStart || 0
-        const end = textarea.selectionEnd || 0
-        setBackHtml((prev) => prev.slice(0, start) + placeholder + prev.slice(end))
-      } else {
-        setBackHtml((prev) => prev + placeholder)
-      }
-    } else {
-      setSharedCss((prev) => prev + `/* ${placeholder} */`)
-    }
-  }
 
   if (detailQuery.isPending) return <PageLoading label="Đang tải thông tin NoteType…" />
   if (detailQuery.error) return <Page><PageError error={detailQuery.error} /></Page>
@@ -276,10 +268,30 @@ export function NoteTypeDetailPage() {
       <div className="grid gap-5 lg:grid-cols-12 items-stretch">
         {/* Left Column: Template Editor */}
         <div className="lg:col-span-6 flex flex-col">
-          <Card className="p-4 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl bg-card">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
-              <h3 className="text-sm font-bold text-foreground">Trình Soạn Thảo Template</h3>
-              <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
+          <TemplateManagementBar
+            noteTypeId={noteTypeId ?? ''}
+            template={
+              selectedTemplate
+                ? {
+                    id: selectedTemplate.id,
+                    name: selectedTemplate.name,
+                    is_default: Boolean(selectedTemplate.is_default),
+                  }
+                : null
+            }
+            noteCount={selectedNoteCount}
+            templateCount={templates.length}
+            onRenamed={invalidateTemplates}
+            onDeleted={(deletedId) => {
+              // Chọn ngay template còn lại; không để selectedTemplateId trỏ template đã xóa.
+              setSelectedTemplateId(templates.find((item) => item.id !== deletedId)?.id ?? null)
+              invalidateTemplates()
+            }}
+          />
+
+          <TemplateCodeEditor
+            headerActions={
+              <>
                 <NativeSelect
                   value={selectedTemplateId || ''}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
@@ -314,92 +326,18 @@ export function NoteTypeDetailPage() {
                 >
                   <FontAwesomeIcon icon={faRotateLeft} className="text-xs" /> Reset
                 </Button>
-              </div>
-            </div>
-
-            {/* Placeholder Toolbar with Horizontal Touch Scroll & Wrap */}
-            <div className="mb-3 space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                <span>Chèn trường dữ liệu (Placeholders):</span>
-                <span className="text-[10px] font-normal sm:hidden text-muted-foreground">(Chạm để chèn)</span>
-              </div>
-              <div
-                className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none touch-pan-x overscroll-x-contain sm:flex-wrap"
-                style={{ WebkitOverflowScrolling: 'touch' }}
-              >
-                {fields.map((field) => (
-                  <Button
-                    key={field.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => insertPlaceholder(field.name)}
-                    className="shrink-0 h-7 px-2.5 text-xs font-mono text-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-all cursor-pointer rounded-lg border-border/80"
-                  >
-                    {`{{${field.name}}}`}
-                  </Button>
-                ))}
-                {!fields.length ? (
-                  <span className="text-xs text-muted-foreground italic">Chưa có trường nào</span>
-                ) : null}
-              </div>
-            </div>
-
-            <Tabs
-              value={activeTab}
-              onValueChange={(val) => setActiveTab(val as 'front' | 'back' | 'css')}
-              className="flex-1 flex flex-col"
-            >
-              <TabsList className="grid grid-cols-3 w-full h-9 p-1 mb-2 rounded-xl">
-                <TabsTrigger value="front" className="text-xs font-semibold py-1 rounded-lg">
-                  Front HTML
-                </TabsTrigger>
-                <TabsTrigger value="back" className="text-xs font-semibold py-1 rounded-lg">
-                  Back HTML
-                </TabsTrigger>
-                <TabsTrigger value="css" className="text-xs font-semibold py-1 rounded-lg">
-                  Shared CSS
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="front" className="flex-1 mt-0">
-                <textarea
-                  ref={(el) => {
-                    if (activeTab === 'front') activeTextareaRef.current = el
-                  }}
-                  value={frontHtml}
-                  onChange={(e) => setFrontHtml(e.target.value)}
-                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
-                  placeholder="<h2>{{Word}}</h2>"
-                />
-              </TabsContent>
-
-              <TabsContent value="back" className="flex-1 mt-0">
-                <textarea
-                  ref={(el) => {
-                    if (activeTab === 'back') activeTextareaRef.current = el
-                  }}
-                  value={backHtml}
-                  onChange={(e) => setBackHtml(e.target.value)}
-                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
-                  placeholder="<h2>{{Word}}</h2><hr/><p>{{Meaning}}</p>"
-                />
-              </TabsContent>
-
-              <TabsContent value="css" className="flex-1 mt-0">
-                <textarea
-                  ref={(el) => {
-                    if (activeTab === 'css') activeTextareaRef.current = el
-                  }}
-                  value={sharedCss}
-                  onChange={(e) => setSharedCss(e.target.value)}
-                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
-                  placeholder=".card { text-align: center; color: #333; }"
-                />
-              </TabsContent>
-            </Tabs>
-
-            <div className="pt-3 flex justify-start border-t mt-3">
+              </>
+            }
+            fields={fields}
+            activeTab={activeTab}
+            onActiveTabChange={setActiveTab}
+            frontHtml={frontHtml}
+            backHtml={backHtml}
+            sharedCss={sharedCss}
+            onFrontHtmlChange={setFrontHtml}
+            onBackHtmlChange={setBackHtml}
+            onSharedCssChange={setSharedCss}
+            footer={
               <Button
                 size="sm"
                 disabled={saveMutation.isPending}
@@ -414,8 +352,8 @@ export function NoteTypeDetailPage() {
               >
                 <FontAwesomeIcon icon={faCheck} className="text-xs" /> Lưu Template
               </Button>
-            </div>
-          </Card>
+            }
+          />
         </div>
 
         {/* Right Column: Live Preview Frame */}

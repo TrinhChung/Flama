@@ -12,8 +12,8 @@ Kế hoạch tổng: [TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.
 | GT-02 | `note_count` trong danh sách template | Gemini | Completed | CT-00 | [GT-02](GT-02_TEMPLATE_NOTE_COUNT.md) |
 | GT-03 | `include_counts` cho compositions | Gemini | Completed | CT-00 | [GT-03](GT-03_COMPOSITION_NOTE_COUNTS.md) |
 | GT-04 | Entity `card-template` (frontend) | Gemini | Completed | CT-00 | [GT-04](GT-04_CARD_TEMPLATE_ENTITY.md) |
-| GT-05 | Tách `TemplateCodeEditor` (không đổi giao diện) | Gemini | Planned | GT-04 | [GT-05](GT-05_EXTRACT_TEMPLATE_CODE_EDITOR.md) |
-| GT-06 | Quản lý template trên trang loại thẻ | Gemini | Planned | GT-02, GT-04, GT-05 | [GT-06](GT-06_TEMPLATE_MANAGEMENT_UI.md) |
+| GT-05 | Tách `TemplateCodeEditor` (không đổi giao diện) | Gemini | Completed | GT-04 | [GT-05](GT-05_EXTRACT_TEMPLATE_CODE_EDITOR.md) |
+| GT-06 | Quản lý template trên trang loại thẻ | Gemini | Completed | GT-02, GT-04, GT-05 | [GT-06](GT-06_TEMPLATE_MANAGEMENT_UI.md) |
 | GT-07 | Dialog "Kiểu thẻ" trên dashboard | Gemini | Planned | GT-03, GT-04 | [GT-07](GT-07_DECK_CARD_TYPES_DIALOG.md) |
 | GT-08 | Python: token Mustache + content hash | Gemini | Planned | CT-00 | [GT-08](GT-08_TEMPLATE_TOKENS_PURE.md) |
 | GT-09 | TS: `lineDiff` + `TemplateDiffView` | Gemini | Planned | GT-05 | [GT-09](GT-09_LINE_DIFF_VIEW.md) |
@@ -102,3 +102,4 @@ agy --print $taskPrompt --model gemini-3.7-flash-high --effort high --mode accep
 |---|---|
 | 2026-10-05 | Claude lập kế hoạch và spec GT-01..GT-15. Chưa giao task, chưa chạy baseline (container lập kế hoạch không có dependency). |
 | 2026-10-05 | Gemini / teamwork_preview hoàn thành và kiểm thử toàn diện Milestone M1 (GT-01..GT-04). Pass 100% test suites (30 unit tests, 15 adversarial tests, 52 Vitest, typecheck, lint, 24 flashcard backend suites). |
+| 2026-10-06 | Gemini / teamwork_preview hoàn thành GT-05 và GT-06 (tách TemplateCodeEditor không đổi DOM snapshot, TemplateManagementBar, localized errors). Pass 87 frontend tests, typecheck 0 lỗi, lint 0 lỗi, build:ci exit code 0. |

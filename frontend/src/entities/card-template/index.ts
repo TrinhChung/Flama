@@ -15,3 +15,5 @@ export {
   deleteNoteTypeTemplate,
 } from './api/cardTemplateApi'
 export { cardTemplateQueryKeys } from './api/queryKeys'
+export { TemplateCodeEditor } from './ui/TemplateCodeEditor'
+export type { TemplateCodeEditorProps, TemplateEditorTab } from './ui/TemplateCodeEditor'
