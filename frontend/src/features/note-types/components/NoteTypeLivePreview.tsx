@@ -3,7 +3,7 @@ import { Eye, Loader2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { CardDisplay } from '@/features/study/components/CardDisplay'
+import { CardDisplay, type CardRendererSlots } from '@/entities/flashcard'
 
 export interface PreviewTemplateOption {
   id: string
@@ -31,6 +31,7 @@ export interface NoteTypeLivePreviewProps {
   className?: string
   containerHeightClass?: string
   showSideSelector?: boolean
+  slots?: CardRendererSlots
 }
 
 export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
@@ -54,6 +55,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
   className = '',
   containerHeightClass = 'h-[clamp(14rem,40vh,30rem)] min-h-[240px]',
   showSideSelector = true,
+  slots,
 }) => {
   const [internalSide, setInternalSide] = useState<'front' | 'back'>('front')
 
@@ -140,6 +142,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
             scope={scope}
             scopeId={scopeId}
             fieldDefs={fieldDefs}
+            slots={slots}
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">

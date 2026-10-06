@@ -481,6 +481,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
         queryClient.invalidateQueries({ queryKey: ['decks'] }),
         queryClient.invalidateQueries({ queryKey: ['import-options'] }),
         queryClient.invalidateQueries({ queryKey: ['stats-overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats'] }),
         queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
       ])

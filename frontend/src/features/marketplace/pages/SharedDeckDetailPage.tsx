@@ -50,7 +50,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
-import { CardDisplay } from '@/features/study/components/CardDisplay'
+import { CardDisplay } from '@/entities/flashcard'
 import { Page } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 

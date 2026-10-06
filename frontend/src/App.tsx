@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import './app/studyContentSync'
 import { LoaderCircle } from 'lucide-react'
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'

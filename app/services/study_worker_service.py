@@ -63,6 +63,7 @@ from app.validators.study_session_wire import (
     resolve_wire_envelope_contract,
     validate_review_event_wire_contract,
 )
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -185,6 +186,7 @@ def _process_admitted_note_batch(job, session, batch, *, user_id):
         current.status = "failed"
         current.error_message = json.dumps({"code": exc.code, "message": str(exc)})
         current.processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         push_to_dlq(job, str(exc))
         return {"status": "failed", "batch_id": batch_id, "error_code": exc.code}
@@ -330,6 +332,7 @@ def process_single_study_batch(
             if existing_batch is not None:
                 existing_batch.status = "failed"
                 existing_batch.error_message = err_msg
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()
@@ -457,6 +460,7 @@ def process_single_study_batch(
             if existing_batch is not None:
                 existing_batch.status = "failed"
                 existing_batch.error_message = f"{code}: {message}"
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()
@@ -648,6 +652,7 @@ def process_single_study_batch(
             if existing_batch is not None:
                 existing_batch.status = "failed"
                 existing_batch.error_message = err_msg
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()
@@ -905,6 +910,7 @@ def process_single_study_batch(
                 )
             )
 
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         mark_batch_processed(batch_identity)
 
@@ -969,6 +975,7 @@ def process_single_study_batch(
                 if attempts >= max_retries:
                     failed_batch.status = "failed"
                     failed_batch.error_message = str(exc)
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()

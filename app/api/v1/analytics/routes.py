@@ -144,15 +144,16 @@ def statistics_today_future():
 
     resolved_tz = _resolve_request_timezone()
     try:
-        payload = build_today_future_stats(
-            user_id=current_user.id,
-            timezone_name=resolved_tz,
-            scope=scope,
-            deck_id=deck_id,
-            history_range=history_range,
-            future_range=future_range,
-            backlog=backlog,
-        )
+        with analytics_read_transaction():
+            payload = build_today_future_stats(
+                user_id=current_user.id,
+                timezone_name=resolved_tz,
+                scope=scope,
+                deck_id=deck_id,
+                history_range=history_range,
+                future_range=future_range,
+                backlog=backlog,
+            )
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         return error_response(
@@ -183,8 +184,8 @@ def statistics_study_time():
         )
 
     resolved_tz = _resolve_request_timezone()
-    return jsonify(
-        build_user_study_time_stats(
+    with analytics_read_transaction():
+        payload = build_user_study_time_stats(
             user_id=current_user.id,
             timezone_name=resolved_tz,
             scope=scope,
@@ -193,4 +194,4 @@ def statistics_study_time():
             start_date_str=start_date,
             end_date_str=end_date,
         )
-    )
+    return jsonify(payload)

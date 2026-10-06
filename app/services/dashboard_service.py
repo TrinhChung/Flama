@@ -14,7 +14,8 @@ from models.deck import Deck
 from app.repositories.study_authority_repository import read_study_authority_route
 from app.repositories.study_repository import _today_day_index
 from app.services.anki_scheduler import _day_index_to_datetime
-from app.services.deck_aggregation_service import aggregate_deck_study_counts
+from app.services.deck_aggregation_service import aggregate_deck_study_counts, deck_note_type_metadata
+from app.services.deck_count_snapshot_service import resolve_cached_owned_deck_counts
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.services.stats_overview import get_effective_timezone_name
 from app.utils.deck_move_token import create_deck_move_token
@@ -69,17 +70,33 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
     decks = collect_accessible_decks(user_id=current_user.id, admin_mode=admin_mode)
 
     visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
+    count_by_note = bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False))
+    cached_counts, dirty_ids = resolve_cached_owned_deck_counts(
+        db.session, learner_user_id=int(current_user.id), visible_deck_ids=visible_deck_ids,
+        today_day_index=today_day_index, day_cutoff_utc=day_cutoff_utc,
+        timezone_name=timezone_name, day_boundary_hour_local=boundary_hour,
+        is_note_mode=authority_route.mode_code == "NOTE", admin_mode=admin_mode,
+        count_by_note=count_by_note, now_utc=now,
+    )
+    metadata_ids = [int(deck.id) for deck in decks if not deck.note_type_id]
     card_counts_by_deck, deck_note_types = aggregate_deck_study_counts(
         db.session,
         learner_user_id=int(current_user.id),
-        visible_deck_ids=visible_deck_ids,
-        note_type_deck_ids=[int(deck.id) for deck in decks if not deck.note_type_id],
+        visible_deck_ids=dirty_ids,
+        note_type_deck_ids=metadata_ids,
+        include_note_types=not bool(cached_counts),
         today_day_index=today_day_index,
         day_cutoff_utc=day_cutoff_utc,
         is_note_mode=authority_route.mode_code == "NOTE",
         admin_mode=admin_mode,
-        count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
+        count_by_note=count_by_note,
     )
+    card_counts_by_deck.update(cached_counts)
+    if cached_counts:
+        deck_note_types = deck_note_type_metadata(
+            db.session, learner_user_id=int(current_user.id), deck_ids=metadata_ids,
+            admin_mode=admin_mode,
+        )
 
     by_parent: Dict[int, List[Deck]] = {}
     for deck in decks:

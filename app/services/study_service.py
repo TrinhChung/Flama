@@ -48,6 +48,7 @@ from app.validators.review_event import (
     validate_native_client_payload,
     validate_review_duration,
 )
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -820,6 +821,7 @@ def _execute_note_authority_review_command(
             "NOTE review receipt has no projected revision for the reviewed Card.",
             status=500,
         )
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
     return NativeReviewCommandResult(
         current_state=current_state,
@@ -1054,6 +1056,7 @@ def execute_native_review_command(
                 "rating": transition.action.rating,
             },
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         return NativeReviewCommandResult(
             current_state=current_state,
