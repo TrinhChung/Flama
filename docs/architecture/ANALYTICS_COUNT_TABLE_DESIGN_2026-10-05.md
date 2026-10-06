@@ -1,5 +1,7 @@
 # Kế hoạch triển khai bảng count cho analytics và Dashboard
 
+**Cập nhật 06/10/2026:** Phase A và Phase B Dashboard owned-deck đã được triển khai trên worktree riêng và kiểm chứng DB local. Xem [kết quả, gate còn thiếu và chi phí tuyến tính](../reports/ANALYTICS_COUNTS_IMPLEMENTATION_2026-10-06.md), [runbook](../runbooks/ANALYTICS_COUNTS_RUNBOOK.md). Phần thiết kế bên dưới giữ mốc 05/10; chưa bật production.
+
 Ngày: **05/10/2026** · Trạng thái: **DESIGN / đề xuất triển khai**, chưa tạo bảng hoặc đổi runtime. Đối chiếu code tại `0d4c293`, nhánh `refactor/frontend-fsd-renderer-boundary`; các thay đổi khác đang có trong workspace không thuộc thiết kế này.
 
 **Đề xuất triển khai hai read model riêng:** daily count của lịch sử ReviewEvent để giảm quét lịch sử; snapshot count trạng thái từng deck để giảm quét Cards lặp lại ở Dashboard. Đợt đầu thêm **3 bảng lịch sử**. Đợt tiếp theo dự kiến thêm **3 bảng count/revision của deck**, sau khi hoàn tất kiểm kê invalidation và xác minh scope. Giữ ReviewEvent, state, receipts và history facts làm nguồn gốc; bảng mới có thể rebuild.

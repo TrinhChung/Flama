@@ -1,5 +1,7 @@
 # Review roadmap O(N) và phương án bảng count — 04/10/2026
 
+**Implementation 06/10/2026:** [Count lịch sử + Dashboard snapshot, số đo User 1 và giới hạn rollout](../../reports/ANALYTICS_COUNTS_IMPLEMENTATION_2026-10-06.md).
+
 **Kết luận: nên lên kế hoạch triển khai bảng tổng hợp lịch sử theo user/ngày.** Lợi ích đã có bằng chứng đọc; chi phí ghi, tính nhất quán và phạm vi tính toán cần kiểm chứng trước khi chuyển production. Bảng count trạng thái deck cũng đáng khảo sát, nhưng là read model khác, cần xử lý clock/due, scope và các thao tác thay đổi nội dung. Không dùng một bảng để thay cả hai.
 
 Đây là review độc lập của tài liệu trong workspace `docs/plans/O_N_PERFORMANCE_INVESTIGATION_ROADMAP.md`, có tiêu đề **MASTER TECHNICAL REPORT & OPTIMIZATION ROADMAP: SYSTEMIC O(N) LINEAR PERFORMANCE BOTTLENECKS**. Giữ nguyên tài liệu đầu vào. Các SQL, schema và con số mục tiêu trong đó chưa đủ cơ sở để gọi là roadmap đã verified.

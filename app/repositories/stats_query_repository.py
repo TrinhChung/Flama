@@ -279,7 +279,7 @@ def _query_daily_review_aggregates_python(
     return by_day
 
 
-def query_daily_review_aggregates(
+def _query_daily_review_aggregates_raw(
     *,
     user_id: int,
     timezone_name: str,
@@ -366,7 +366,7 @@ def _query_active_review_days_python(
     return result
 
 
-def query_active_review_days(
+def _query_active_review_days_raw(
     *,
     user_id: int,
     timezone_name: str,
@@ -389,7 +389,7 @@ def query_active_review_days(
     )
 
 
-def query_today_review_summary(
+def _query_today_review_summary_raw(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
@@ -862,7 +862,7 @@ def _query_user_daily_study_time_python(
     return by_day
 
 
-def query_user_daily_study_time(
+def _query_user_daily_study_time_raw(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
@@ -887,4 +887,125 @@ def query_user_daily_study_time(
         start_utc=start_utc,
         end_utc=end_utc,
         day_boundary_hour_local=day_boundary_hour_local,
+    )
+
+
+def query_daily_review_aggregates(
+    *, user_id: int, timezone_name: str, timezone_obj,
+    start_utc: datetime, end_utc: datetime, day_boundary_hour_local: int,
+) -> dict[date, dict[str, int]]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    def summary(generation, policy):
+        rows = projection.daily_measures(
+            user_id=user_id, generation=generation, policy=policy,
+            start_utc=start_utc, end_utc=end_utc,
+        )
+        if rows is None:
+            return None
+        return {day: {"cards": row["count"], "duration_ms": row["duration_ms"]}
+                for day, row in rows.items()}
+
+    return projection.read_or_raw(
+        metric="daily_reviews", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local, summary=summary,
+        raw=lambda: _query_daily_review_aggregates_raw(
+            user_id=user_id, timezone_name=timezone_name, timezone_obj=timezone_obj,
+            start_utc=start_utc, end_utc=end_utc,
+            day_boundary_hour_local=day_boundary_hour_local,
+        ),
+    )
+
+
+def query_active_review_days(
+    *, user_id: int, timezone_name: str, timezone_obj,
+    end_utc: datetime, day_boundary_hour_local: int,
+) -> set[date]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    return projection.read_or_raw(
+        metric="active_days", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+        summary=lambda generation, policy: projection.active_days(
+            user_id=user_id, generation=generation, policy=policy, end_utc=end_utc,
+        ),
+        raw=lambda: _query_active_review_days_raw(
+            user_id=user_id, timezone_name=timezone_name, timezone_obj=timezone_obj,
+            end_utc=end_utc, day_boundary_hour_local=day_boundary_hour_local,
+        ),
+    )
+
+
+def query_today_review_summary(
+    *, user_id: int, scope_deck_ids: list[int] | None,
+    today_start_utc: datetime, tomorrow_start_utc: datetime,
+    timezone_name: str | None = None, day_boundary_hour_local: int | None = None,
+) -> tuple[int, int]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    if scope_deck_ids is not None and not scope_deck_ids:
+        return 0, 0
+
+    def summary(generation, policy):
+        rows = projection.daily_measures(
+            user_id=user_id, generation=generation, policy=policy,
+            start_utc=today_start_utc, end_utc=tomorrow_start_utc,
+            scope_deck_ids=scope_deck_ids,
+        )
+        if rows is None:
+            return None
+        return sum(row["count"] for row in rows.values()), sum(
+            row["duration_ms"] for row in rows.values()
+        )
+
+    return projection.read_or_raw(
+        metric="today_reviews", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local, summary=summary,
+        raw=lambda: _query_today_review_summary_raw(
+            user_id=user_id, scope_deck_ids=scope_deck_ids,
+            today_start_utc=today_start_utc, tomorrow_start_utc=tomorrow_start_utc,
+        ),
+    )
+
+
+def query_user_daily_study_time(
+    *, user_id: int, scope_deck_ids: list[int] | None, timezone_name: str,
+    start_utc: datetime, end_utc: datetime, day_boundary_hour_local: int,
+) -> dict[date, dict[str, Any]]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    if scope_deck_ids is not None and not scope_deck_ids:
+        return {}
+
+    def summary(generation, policy):
+        rows = projection.daily_measures(
+            user_id=user_id, generation=generation, policy=policy,
+            start_utc=start_utc, end_utc=end_utc, scope_deck_ids=scope_deck_ids,
+        )
+        if rows is None:
+            return None
+        result = {}
+        for day, row in rows.items():
+            total, duration, passed = row["count"], row["duration_ms"], row["passed"]
+            minutes = round(duration / 60000.0, 1)
+            result[day] = {
+                "total_reviews": total,
+                "total_duration_ms": duration,
+                "total_duration_minutes": minutes,
+                "total_duration_hours": round(duration / 3600000.0, 2),
+                "avg_study_minutes": minutes,
+                "passed_reviews": passed,
+                "retention_pass_rate": round(passed / float(total) * 100.0, 1)
+                if total > 0 else 0.0,
+            }
+        return result
+
+    return projection.read_or_raw(
+        metric="study_time", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local, summary=summary,
+        raw=lambda: _query_user_daily_study_time_raw(
+            user_id=user_id, scope_deck_ids=scope_deck_ids, timezone_name=timezone_name,
+            start_utc=start_utc, end_utc=end_utc,
+            day_boundary_hour_local=day_boundary_hour_local,
+        ),
     )

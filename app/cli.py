@@ -150,14 +150,158 @@ def register_phase9_audit_commands(app: Flask) -> None:
         click.echo(json.dumps(result, sort_keys=True))
 
 
+def register_review_analytics_commands(app: Flask, *, allow_writes: bool = False) -> None:
+    """Operational read-only reports, plus an explicitly applied bounded job."""
+    def emit_report(report):
+        click.echo(json.dumps(report, sort_keys=True, ensure_ascii=False))
+        if not report.get("ok", False):
+            raise click.exceptions.Exit(1)
+
+    @app.cli.command("review-analytics-status")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    def review_analytics_status(user_id):
+        """Read current projection pointers and backfill progress without writes."""
+        from app.services.review_analytics_backfill_service import review_analytics_backfill_status
+
+        try:
+            report = review_analytics_backfill_status(user_id=user_id)
+        except (ValueError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit_report(report)
+
+    @app.cli.command("review-analytics-reconcile")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    @click.option("--generation", type=click.IntRange(1), default=None)
+    @click.option("--invalidate-on-drift", is_flag=True, default=False,
+                  help="On the normal app, mark the same failed generation DIRTY so readers use raw.")
+    def review_analytics_reconcile(user_id, generation, invalidate_on_drift):
+        """Compare every history bucket/measure in a read-only snapshot."""
+        from app.services.review_analytics_backfill_service import reconcile_review_analytics_counts
+
+        enabled = bool(app.config.get("REVIEW_ANALYTICS_WRITE_ENABLED", False))
+        if invalidate_on_drift and not allow_writes:
+            raise click.ClickException("Audit apps cannot invalidate counts; use the normal application CLI.")
+        if invalidate_on_drift and not enabled:
+            raise click.ClickException("Enable fully covered REVIEW_ANALYTICS_WRITE_ENABLED writers before invalidation.")
+        try:
+            report = reconcile_review_analytics_counts(user_id=user_id, generation=generation,
+                invalidate_on_drift=invalidate_on_drift, writer_coverage_enabled=enabled)
+        except (ValueError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit_report(report)
+
+    if not allow_writes:
+        return
+
+    @app.cli.command("review-analytics-backfill")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    @click.option("--apply", is_flag=True, default=False,
+                  help="Create/resume a projection generation; default only reports status.")
+    @click.option("--chunk-size", type=click.IntRange(1, 5000), default=500, show_default=True)
+    @click.option("--max-chunks", type=click.IntRange(1), default=None)
+    @click.option("--restart", is_flag=True, default=False,
+                  help="Create a new generation instead of resuming the current build.")
+    @click.option("--publish/--no-publish", default=True, show_default=True)
+    def review_analytics_backfill(user_id, apply, chunk_size, max_chunks, restart, publish):
+        """Backfill in fresh fenced transactions, then verify before publication."""
+        from app.services.review_analytics_backfill_service import (
+            review_analytics_backfill_status, run_review_analytics_backfill,
+        )
+
+        enabled = bool(app.config.get("REVIEW_ANALYTICS_WRITE_ENABLED", False))
+        if apply and not enabled:
+            raise click.ClickException(
+                "Enable fully covered REVIEW_ANALYTICS_WRITE_ENABLED writers before --apply."
+            )
+        try:
+            if not apply:
+                report = review_analytics_backfill_status(user_id=user_id)
+                report["dry_run"] = True
+            else:
+                report = run_review_analytics_backfill(
+                    user_id=user_id, writer_coverage_enabled=enabled, chunk_size=chunk_size,
+                    max_chunks=max_chunks, restart=restart, publish=publish,
+                )
+        except (ValueError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit_report(report)
+
+
+def register_deck_count_commands(app: Flask, *, allow_writes: bool = False) -> None:
+    @app.cli.command("deck-counts-status")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    def deck_counts_status(user_id):
+        """Report derived rows without refreshing or mutating counts."""
+        from sqlalchemy import func, select
+        from models.deck_count_snapshot import DeckStudyCountSnapshot
+        from app.services.study_analytics_read_service import analytics_read_transaction
+
+        with analytics_read_transaction():
+            rows = db.session.execute(select(func.count()).select_from(DeckStudyCountSnapshot).where(
+                DeckStudyCountSnapshot.user_id == user_id,
+            )).scalar_one()
+        click.echo(json.dumps({"ok": True, "user_id": user_id, "snapshot_rows": int(rows),
+                              "read_mode": app.config.get("DECK_COUNT_READ_MODE", "raw")}))
+
+    if not allow_writes:
+        return
+
+    @app.cli.command("deck-counts-prewarm")
+    @click.option("--user-id", type=click.IntRange(1), multiple=True)
+    @click.option("--configured", is_flag=True, help="Use DECK_COUNT_PREWARM_USER_IDS (bounded canary scope).")
+    @click.option("--apply", is_flag=True, help="Publish derived rows; default only reports requested scope.")
+    @click.option("--force", is_flag=True, help="Recompute valid rows too for a complete refresh.")
+    def deck_counts_prewarm(user_id, configured, apply, force):
+        """Refresh missing/dirty direct decks outside request transactions."""
+        from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
+
+        ids = set(user_id)
+        if configured:
+            try:
+                ids.update(int(value) for value in app.config.get("DECK_COUNT_PREWARM_USER_IDS", ()))
+            except (TypeError, ValueError) as exc:
+                raise click.ClickException("Invalid DECK_COUNT_PREWARM_USER_IDS") from exc
+        if not ids or len(ids) > 100 or any(value <= 0 for value in ids):
+            raise click.ClickException("Choose 1 to 100 explicit/configured learner IDs")
+        if apply and not app.config.get("DECK_COUNT_WRITE_ENABLED", False):
+            raise click.ClickException("Enable covered DECK_COUNT_WRITE_ENABLED writers before --apply")
+        if not apply:
+            click.echo(json.dumps({"ok": True, "dry_run": True, "user_ids": sorted(ids)}))
+            return
+        for learner_id in sorted(ids):
+            try:
+                report = prewarm_owned_deck_counts(user_id=learner_id, force=force)
+            except (ValueError, RuntimeError) as exc:
+                raise click.ClickException(str(exc)) from exc
+            click.echo(json.dumps(report, sort_keys=True))
+            if not report["ok"]:
+                raise click.exceptions.Exit(1)
+
+    @app.cli.command("deck-counts-invalidate")
+    @click.option("--apply", is_flag=True, help="Advance the global epoch before resuming writer coverage.")
+    def deck_counts_invalidate(apply):
+        """Invalidate every old snapshot without deleting monotonic tokens."""
+        if apply:
+            if not app.config.get("DECK_COUNT_WRITE_ENABLED", False):
+                raise click.ClickException("Enable DECK_COUNT_WRITE_ENABLED before --apply")
+            from app.services.deck_count_projection_service import invalidate_all_deck_counts
+            invalidate_all_deck_counts(db.session)
+            db.session.commit()
+        click.echo(json.dumps({"ok": True, "dry_run": not apply, "scope": "global"}))
+
+
 def register_audit_cli_commands(app: Flask) -> None:
     """Register ONLY read-only audit commands on audit Flask app instances."""
     register_phase9_audit_commands(app)
+    register_review_analytics_commands(app)
+    register_deck_count_commands(app)
 
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
     register_phase9_audit_commands(app)
+    register_review_analytics_commands(app, allow_writes=True)
+    register_deck_count_commands(app, allow_writes=True)
 
     @app.cli.command("study-authority-enrollment")
     @click.option(
