@@ -25,7 +25,6 @@ from app.services import (
     deck_working_tree_service,
     flashcards_share_service,
     study_artifact_service,
-    study_progress_shadow_mirror_service,
 )
 from app.services.anki_scheduler import CardState, DeckOptions, _day_index
 from app.services.db_errors import domain_error_code
@@ -49,6 +48,7 @@ from app.validators.review_event import (
     validate_native_client_payload,
     validate_review_duration,
 )
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -215,6 +215,7 @@ def resolve_effective_study_deck_id(
     card: Card,
     clone_scope: flashcards_share_service.CloneDeckScope | None,
     requested_scope_id: int | None = None,
+    clone_added_note_ids: frozenset[str] | None = None,
 ) -> int | None:
     """Resolve the local deck supplying scheduler policy and usage attribution."""
 
@@ -224,9 +225,13 @@ def resolve_effective_study_deck_id(
     if (
         source_deck_id is not None
         and int(source_deck_id) in set(clone_scope.local_deck_ids)
-        and flashcards_share_service.is_clone_added_note(
-            scope=clone_scope,
-            note_id=card.note.id,
+        and (
+            str(card.note.id) in clone_added_note_ids
+            if clone_added_note_ids is not None
+            else flashcards_share_service.is_clone_added_note(
+                scope=clone_scope,
+                note_id=card.note.id,
+            )
         )
     ):
         return int(source_deck_id)
@@ -258,6 +263,59 @@ def _append_audit(
     )
 
 
+class ReviewUsageTouches:
+    """Marketplace install usage of several reviews in one transaction.
+
+    A per-review touch sets ``first_use_at`` once, moves ``last_activity_at``
+    forward and re-evaluates a market-activity flag that cannot turn off while
+    reviews only add reps. Touching each install key at its first and last
+    review time, in time order, leaves the same rows and counters as touching
+    it after every review, without repeating the install lookups per answer.
+    """
+
+    _NOTE_TYPE, _DECK = 0, 1
+
+    def __init__(self) -> None:
+        self._times: dict[tuple[int, int, Any], tuple[datetime, datetime]] = {}
+
+    def record(
+        self,
+        *,
+        user_id: int,
+        note_type_id: str,
+        local_deck_id: int | None,
+        reviewed_at: datetime,
+    ) -> None:
+        self._note((int(user_id), self._NOTE_TYPE, str(note_type_id)), reviewed_at)
+        if local_deck_id is not None:
+            self._note((int(user_id), self._DECK, int(local_deck_id)), reviewed_at)
+
+    def _note(self, key: tuple[int, int, Any], reviewed_at: datetime) -> None:
+        first, last = self._times.get(key, (reviewed_at, reviewed_at))
+        self._times[key] = (min(first, reviewed_at), max(last, reviewed_at))
+
+    def apply(self) -> None:
+        calls = []
+        for order, (key, (first, last)) in enumerate(self._times.items()):
+            calls.append((first, key[1], order, key))
+            if last != first:
+                calls.append((last, key[1], order, key))
+        self._times.clear()
+        for activity_at, kind, _order, (user_id, _kind, value) in sorted(calls):
+            if kind == self._NOTE_TYPE:
+                flashcards_share_service.touch_note_type_install_usage(
+                    user_id=user_id,
+                    installed_note_type_id=value,
+                    activity_at=activity_at,
+                )
+            else:
+                flashcards_share_service.touch_deck_install_usage(
+                    user_id=user_id,
+                    local_deck_id=value,
+                    activity_at=activity_at,
+                )
+
+
 def _apply_review_side_effects(
     *,
     user_id: int,
@@ -265,6 +323,7 @@ def _apply_review_side_effects(
     transition: ReviewTransitionResult,
     local_deck_id: int | None,
     reviewed_at: datetime,
+    usage: ReviewUsageTouches | None = None,
 ) -> None:
     if transition.state.leeched and int(card.note.user_id) == int(user_id):
         tags = [
@@ -280,6 +339,14 @@ def _apply_review_side_effects(
         ):
             card.note.tags = tags + ["leech"]
 
+    if usage is not None:
+        usage.record(
+            user_id=int(user_id),
+            note_type_id=str(card.note.note_type_id),
+            local_deck_id=local_deck_id,
+            reviewed_at=reviewed_at,
+        )
+        return
     flashcards_share_service.touch_note_type_install_usage(
         user_id=int(user_id),
         installed_note_type_id=str(card.note.note_type_id),
@@ -318,6 +385,7 @@ def _record_native_review_transition(
     review_event = create_review_event_record(
         user_id=int(user_id),
         card_id=str(card.id),
+        note_id=card.note_id,
         deck_id=local_deck_id,
         note_type_id=str(note_type_id or card.note.note_type_id),
         scheduler_preset_id=scheduler_preset_id,
@@ -430,8 +498,16 @@ def stage_native_review_event(
     )
 
 
-def stage_native_review_side_effects(command: NativeReviewMutationInput) -> None:
-    """Stage leech and marketplace usage effects in the caller transaction."""
+def stage_native_review_side_effects(
+    command: NativeReviewMutationInput,
+    *,
+    usage: ReviewUsageTouches | None = None,
+) -> None:
+    """Stage leech and marketplace usage effects in the caller transaction.
+
+    With ``usage`` the install touches are collected for the caller to apply
+    once (``ReviewUsageTouches.apply``) before it commits.
+    """
 
     if not isinstance(command, NativeReviewMutationInput):
         raise TypeError("Native review mutation input is required.")
@@ -441,6 +517,7 @@ def stage_native_review_side_effects(command: NativeReviewMutationInput) -> None
         transition=command.transition,
         local_deck_id=command.local_deck_id,
         reviewed_at=command.reviewed_at,
+        usage=usage,
     )
 
 
@@ -744,6 +821,7 @@ def _execute_note_authority_review_command(
             "NOTE review receipt has no projected revision for the reviewed Card.",
             status=500,
         )
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
     return NativeReviewCommandResult(
         current_state=current_state,
@@ -847,25 +925,14 @@ def execute_native_review_command(
                 "operation_key is available only for NOTE authority reviews.",
                 status=422,
             )
-        mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
-            db.session,
-            learner_user_id=int(user.id),
-            cards=(card,),
-            now_utc=reviewed_at,
-        )
-        if mirror_plan is not None:
-            progress = study_progress_shadow_mirror_service.locked_progress_map(
-                mirror_plan
-            ).get(str(card.id))
-        else:
-            progress = (
-                CardProgress.query.filter_by(
-                    user_id=int(user.id),
-                    card_id=str(card.id),
-                )
-                .with_for_update()
-                .first()
+        progress = (
+            CardProgress.query.filter_by(
+                user_id=int(user.id),
+                card_id=str(card.id),
             )
+            .with_for_update()
+            .first()
+        )
         if require_review_state_version:
             requested_version = str(review_state_version or "").strip()
             current_version = study_artifact_service.review_state_version(
@@ -989,11 +1056,7 @@ def execute_native_review_command(
                 "rating": transition.action.rating,
             },
         )
-        study_progress_shadow_mirror_service.finalize_native_mirror(
-            mirror_plan,
-            review_events=(review_event,),
-            now_utc=reviewed_at,
-        )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         return NativeReviewCommandResult(
             current_state=current_state,

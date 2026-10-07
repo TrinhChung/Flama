@@ -43,7 +43,6 @@ from models.note import Note
 from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
@@ -51,7 +50,7 @@ from models.study_session_authority_pin import StudySessionAuthorityPin
 from models.study_session_batch import StudySessionBatch
 from models.template import Template
 from models.user import User
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings,
     _database_uri,
     _source_database_collation,
@@ -345,26 +344,18 @@ def _probe_note_batch_command(app, *, recovery_uri: str | None = None, continuou
         return result
 
     def check(revision, status="open"):
-        from app.services.study_progress_shadow_mapper import map_card_progress
-        from models.study_progress_state import StudyProgressState
+        from app.services.study_progress_shadow_codec import decode_float
 
         db.session.expire_all()  # Verify stored MySQL values, not assignment cache.
-        tokens = StudyAuthoritySubjectToken.query.join(
-            StudyProgressSubject, StudyProgressSubject.id == StudyAuthoritySubjectToken.subject_id,
-        ).filter(StudyProgressSubject.learner_user_id == user_id).all()
-        progress = CardProgress.query.filter_by(user_id=user_id).all()
-        if len(tokens) != 1 or tokens[0].authority_revision != revision:
-            raise AssertionError("NOTE authority token advanced incorrectly.")
-        if len(progress) != 2 or any(row.revision != revision for row in progress):
-            raise AssertionError("NOTE sibling projection is incomplete.")
-        state = db.session.get(StudyProgressState, tokens[0].subject_id)
-        for row in progress:
-            expected_ease = {1: 2.5, 2: 2.35, 4: 2.05}[revision]
-            if row.ease_factor != expected_ease:
-                raise AssertionError("NOTE mixed-rating numeric state changed on MySQL read.")
-            mapped = map_card_progress(row, card_created_at=row.card.created_at, card_order_key=row.card_id)
-            if mapped.state.payload != state.state_payload or mapped.semantic_state_hash != state.semantic_state_hash:
-                raise AssertionError("MySQL numeric projection differs from Note authority.")
+        subjects = StudyProgressSubject.query.filter_by(learner_user_id=user_id).all()
+        if len(subjects) != 1 or subjects[0].authority_revision != revision:
+            raise AssertionError("NOTE authority row advanced incorrectly.")
+        # The Note's one row holds the state; no Card carries progress (ADR P10).
+        if CardProgress.query.filter_by(user_id=user_id).count():
+            raise AssertionError("A consolidated NOTE learner wrote card_progress.")
+        expected_ease = {1: 2.5, 2: 2.35, 4: 2.05}[revision]
+        if decode_float(subjects[0].state_payload["ease"], field_name="ease") != expected_ease:
+            raise AssertionError("NOTE mixed-rating numeric state changed on MySQL read.")
         if ReviewEvent.query.filter_by(study_session_id=session_id).count() != revision:
             raise AssertionError("NOTE batch duplicated or lost an event.")
         if StudyAuthorityCommandReceipt.query.filter_by(learner_user_id=user_id).count() != revision:
@@ -453,9 +444,7 @@ def _probe_note_batch_command(app, *, recovery_uri: str | None = None, continuou
             raise AssertionError("NOTE prefix fixture is not empty.")
         # Keep stale ORM objects as well as an old MySQL RR snapshot. Status
         # must refresh the canonical token/state before comparing continuation.
-        cached_tokens = StudyAuthoritySubjectToken.query.join(
-            StudyProgressSubject, StudyProgressSubject.id == StudyAuthoritySubjectToken.subject_id,
-        ).filter(StudyProgressSubject.learner_user_id == user_id).all()
+        cached_subjects = StudyProgressSubject.query.filter_by(learner_user_id=user_id).all()
         command = study_session_service.apply_idempotent_existing_state_note_review
         with patch.object(study_session_service, "apply_idempotent_existing_state_note_review", wraps=command) as applied:
             with ThreadPoolExecutor(max_workers=2) as executor:

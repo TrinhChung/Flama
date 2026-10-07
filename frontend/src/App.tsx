@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import './app/studyContentSync'
 import { LoaderCircle } from 'lucide-react'
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
@@ -38,11 +39,20 @@ const VerifyEmailPage = lazy(() =>
   })),
 )
 
-const DashboardPage = lazy(() =>
+const loadDashboardPage = () =>
   import('./features/dashboard/pages/DashboardPage').then((module) => ({
     default: module.DashboardPage,
-  })),
-)
+  }))
+
+const DashboardPage = lazy(loadDashboardPage)
+
+if (
+  typeof window !== 'undefined' &&
+  window.location.pathname.replace(/\/+$/, '') === '/dashboard'
+) {
+  // A failed speculative preload must not become an unhandled rejection.
+  void loadDashboardPage().catch(() => undefined)
+}
 const StatisticsPage = lazy(() =>
   import('./features/statistics/pages/StatisticsPage').then((module) => ({
     default: module.StatisticsPage,

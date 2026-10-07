@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { CardDisplay } from './CardDisplay'
-import { renderStudySide } from '../renderer/clientRenderer'
+import { adaptStudySessionToRenderPayload } from '../renderer/studyRendererAdapter'
 import type {
   StudyContentArtifact,
   StudyTemplateArtifact,
@@ -26,8 +26,8 @@ export function StudyCardRendererFrame({
   const rendered = useMemo(() => {
     try {
       return {
-        front: renderStudySide(template, content, 'front'),
-        back: renderStudySide(template, content, 'back'),
+        front: adaptStudySessionToRenderPayload(template, content, 'front'),
+        back: adaptStudySessionToRenderPayload(template, content, 'back'),
         error: null,
       }
     } catch (error) {

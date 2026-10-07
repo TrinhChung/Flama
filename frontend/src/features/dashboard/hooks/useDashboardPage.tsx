@@ -23,7 +23,9 @@ export function useDashboardPage() {
   const bootstrapQuery = useBootstrap()
   const dashboardQuery = useDashboard()
   const [year, setYear] = useState(() => new Date().getFullYear())
-  const overviewQuery = useDashboardOverview(year)
+  const overviewQuery = useDashboardOverview(year, {
+    enabled: Boolean(dashboardQuery.data) && !dashboardQuery.isFetching,
+  })
 
   const [createOpened, setCreateOpened] = useState(false)
   const [selection, setSelection] = useState<SelectedDeckAction | null>(null)

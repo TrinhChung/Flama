@@ -83,10 +83,27 @@ def build_session_payload(user) -> dict[str, Any]:
     }
 
 
-def build_dashboard_payload(user) -> dict[str, Any]:
-    rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(user)
+def build_dashboard_payload(user, *, compact: bool = False) -> dict[str, Any]:
+    rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(
+        user, include_move_tokens=not compact
+    )
+
+    def compact_node(row):
+        return {
+            "deck_id": row.deck_id,
+            "parent_id": row.parent_id,
+            "move_alias": row.move_alias,
+            "label": row.label,
+            "depth": row.depth,
+            "new_count": row.new_count,
+            "learn_count": row.learn_count,
+            "due_count": row.due_count,
+            "note_type_id": row.note_type_id,
+            "children": [compact_node(child) for child in row.children],
+        }
+
     return {
-        "items": [asdict(row) for row in rows],
+        "items": [compact_node(row) if compact else asdict(row) for row in rows],
         "summary": {
             "new": int(total_new),
             "learning": int(total_learn),

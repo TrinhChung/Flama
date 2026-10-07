@@ -13,13 +13,12 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
-from sqlalchemy import event as sql_event, select
+from sqlalchemy import event as sql_event
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app import create_app
 from app.services.db_errors import domain_error_code, run_with_deadlock_retry
 from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
-from app.services.study_authority_evidence_service import _lock_current_lineage_refs
 from app.services.study_authority_receipt_service import StudyAuthorityReceiptError
 from models import db
 from models.card import Card
@@ -28,8 +27,6 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_progress_contributor import StudyProgressContributor
-from models.study_progress_lineage_ref import StudyProgressLineageRef
 from models.template import Template
 from models.user import User
 
@@ -148,18 +145,15 @@ class NoteWriteGapLockTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_json())
         return response.get_json()
 
-    def test_first_review_never_reads_absent_receipt_fact_or_lineage_rows_with_locking_shapes(self):
+    def test_first_review_never_reads_absent_receipt_or_fact_rows_with_locking_shapes(self):
         with self._statements() as seen:
             self._answer()
         receipt_entity_lookups = [s for s in seen if "FROM study_authority_command_receipts" in s
                                   and "study_authority_command_receipts.response_payload" in s]
         fact_lookups = [s for s in seen if "FROM study_progress_history_facts" in s
                         and "fact_identity_hash =" in s]
-        lineage_ranges = [s for s in seen if "study_progress_lineage_refs.source_row_key" in s
-                          and "study_progress_lineage_refs.contributor_id IN" in s]
         self.assertEqual(receipt_entity_lookups, [])
         self.assertEqual(fact_lookups, [])
-        self.assertEqual(lineage_ranges, [])
 
     def test_retry_still_replays_the_original_receipt(self):
         key = str(uuid4())
@@ -168,36 +162,6 @@ class NoteWriteGapLockTests(unittest.TestCase):
         self.assertFalse(first["authority"]["replayed"])
         self.assertTrue(second["authority"]["replayed"])
         self.assertEqual(first["authority"]["authority_revision"], second["authority"]["authority_revision"])
-
-    def test_lineage_lock_matches_range_read_and_falls_back_on_unproven_hash(self):
-        self._answer()
-        self._answer()
-        with self.app.app_context():
-            contributor_ids = tuple(sorted(
-                db.session.execute(select(StudyProgressContributor.id)).scalars()))
-            expected = sorted(
-                (row.contributor_id, row.ref_kind, bytes(row.source_row_key), row.id)
-                for row in db.session.execute(select(StudyProgressLineageRef)).scalars())
-            self.assertTrue(expected)
-        with self._statements() as seen, self.app.app_context():
-            proven = _lock_current_lineage_refs(db.session, contributor_ids=contributor_ids)
-            self.assertEqual(
-                [(r.contributor_id, r.ref_kind, bytes(r.source_row_key), r.id) for r in proven], expected)
-            db.session.rollback()
-        self.assertFalse([s for s in seen if "study_progress_lineage_refs.source_row_key" in s
-                          and "study_progress_lineage_refs.contributor_id IN" in s])
-
-        with self.app.app_context():
-            contributor = db.session.get(StudyProgressContributor, contributor_ids[0])
-            contributor.lineage_vector_hash = b"\x01" * 32
-            db.session.commit()
-        with self._statements() as seen, self.app.app_context():
-            fallback = _lock_current_lineage_refs(db.session, contributor_ids=contributor_ids)
-            self.assertEqual(
-                [(r.contributor_id, r.ref_kind, bytes(r.source_row_key), r.id) for r in fallback], expected)
-            db.session.rollback()
-        self.assertTrue([s for s in seen if "study_progress_lineage_refs.source_row_key" in s
-                         and "study_progress_lineage_refs.contributor_id IN" in s])
 
     def test_new_learner_enrollment_locks_no_absent_enrollment_row(self):
         from app.services.auth_service import register_user_and_commit

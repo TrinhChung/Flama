@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import json
-import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -130,117 +129,6 @@ class SeedStats:
     shared_decks: int = 0
 
 
-def run_study_architecture_audit_command(
-    app: Flask | None = None,
-    compact: bool = False,
-    output_path: str | None = None,
-    observed_at: datetime | None = None,
-) -> int:
-    """Run read-only reconciliation gates for the study refactor and return exit code.
-
-    Guarantees:
-    - PASS: 0
-    - WARN: 1
-    - BLOCK / Error: 2
-    - Read-only by construction; does not mutate schema or data.
-    - Fails closed on output path errors or startup config errors.
-    - Sanitizes DB credentials / secrets from error output.
-    """
-    import json
-    import re
-    from pathlib import Path
-    from app.services.study_architecture_audit_service import (
-        SCHEMA_VERSION,
-        build_study_architecture_audit,
-    )
-
-    def _sanitize_error(err: Exception | str) -> str:
-        msg = str(err)
-        # Redact credentials in URLs: scheme://user:pass@host and scheme://:pass@host
-        msg = re.sub(r"://([^:@\s]*):([^@\s]+)@", r"://\1:***@", msg)
-        # Redact password parameters in connection strings/queries
-        msg = re.sub(r"(password|pwd)=([^;&\s]+)", r"\1=***", msg, flags=re.IGNORECASE)
-        # Redact secrets, tokens, api keys
-        msg = re.sub(r"(secret|api_key|token)=([^;&\s]+)", r"\1=***", msg, flags=re.IGNORECASE)
-        return msg
-
-    def _write_output_file(path_str: str, payload_str: str) -> None:
-        out_p = Path(path_str)
-        out_p.parent.mkdir(parents=True, exist_ok=True)
-        out_p.write_text(payload_str, encoding="utf-8")
-
-    try:
-        if app is None:
-            from app import create_audit_app
-
-            app = create_audit_app()
-        else:
-            # Guard: ensure the app instance has not enabled startup maintenance mutators
-            if (
-                app.config.get("STARTUP_RUN_MAINTENANCE")
-                or app.config.get("STARTUP_RUN_DB_CREATE_ALL")
-                or app.config.get("STARTUP_RUN_USER_MANAGEMENT_SCHEMA")
-                or app.config.get("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA")
-                or app.config.get("STARTUP_RUN_DEFAULT_USER_ROLE_SEED")
-                or app.config.get("STARTUP_RUN_DEFAULT_TAXONOMY_SEED")
-                or app.config.get("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED")
-                or app.config.get("STARTUP_RUN_CLONE_CUTOVER")
-            ):
-                raise RuntimeError(
-                    "Unsafe audit execution: cannot run audit on an app instance with startup maintenance enabled. "
-                    "Use wsgi_audit.py or create_audit_app()."
-                )
-
-        with app.app_context():
-            report = build_study_architecture_audit(now=observed_at)
-            payload = json.dumps(
-                report,
-                ensure_ascii=False,
-                sort_keys=True,
-                indent=None if compact else 2,
-            )
-            exit_code = int(report.get("verdicts", {}).get("exit_code", 0))
-
-            if output_path:
-                try:
-                    _write_output_file(output_path, payload)
-                except Exception as write_err:
-                    clean_write_err = _sanitize_error(write_err)
-                    raise RuntimeError(
-                        f"Failed to write audit output file '{output_path}': {clean_write_err}"
-                    ) from write_err
-
-            click.echo(payload)
-            return exit_code
-    except Exception as err:
-        clean_error = _sanitize_error(err)
-        error_report = {
-            "schema_version": SCHEMA_VERSION,
-            "error": clean_error,
-            "verdicts": {
-                "pass": [],
-                "warn": [],
-                "block": [f"Audit execution error: {clean_error}"],
-                "overall_status": "BLOCK",
-                "exit_code": 2,
-            },
-        }
-        error_payload = json.dumps(
-            error_report,
-            ensure_ascii=False,
-            sort_keys=True,
-            indent=None if compact else 2,
-        )
-        if output_path:
-            try:
-                _write_output_file(output_path, error_payload)
-            except Exception:
-                pass
-        click.echo(error_payload)
-        return 2
-
-
-
 def register_phase9_audit_commands(app: Flask) -> None:
     @app.cli.command("study-phase9-readiness")
     @click.option("--window-days", type=click.IntRange(30, 365), default=30, show_default=True)
@@ -262,51 +150,158 @@ def register_phase9_audit_commands(app: Flask) -> None:
         click.echo(json.dumps(result, sort_keys=True))
 
 
+def register_review_analytics_commands(app: Flask, *, allow_writes: bool = False) -> None:
+    """Operational read-only reports, plus an explicitly applied bounded job."""
+    def emit_report(report):
+        click.echo(json.dumps(report, sort_keys=True, ensure_ascii=False))
+        if not report.get("ok", False):
+            raise click.exceptions.Exit(1)
+
+    @app.cli.command("review-analytics-status")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    def review_analytics_status(user_id):
+        """Read current projection pointers and backfill progress without writes."""
+        from app.services.review_analytics_backfill_service import review_analytics_backfill_status
+
+        try:
+            report = review_analytics_backfill_status(user_id=user_id)
+        except (ValueError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit_report(report)
+
+    @app.cli.command("review-analytics-reconcile")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    @click.option("--generation", type=click.IntRange(1), default=None)
+    @click.option("--invalidate-on-drift", is_flag=True, default=False,
+                  help="On the normal app, mark the same failed generation DIRTY so readers use raw.")
+    def review_analytics_reconcile(user_id, generation, invalidate_on_drift):
+        """Compare every history bucket/measure in a read-only snapshot."""
+        from app.services.review_analytics_backfill_service import reconcile_review_analytics_counts
+
+        enabled = bool(app.config.get("REVIEW_ANALYTICS_WRITE_ENABLED", False))
+        if invalidate_on_drift and not allow_writes:
+            raise click.ClickException("Audit apps cannot invalidate counts; use the normal application CLI.")
+        if invalidate_on_drift and not enabled:
+            raise click.ClickException("Enable fully covered REVIEW_ANALYTICS_WRITE_ENABLED writers before invalidation.")
+        try:
+            report = reconcile_review_analytics_counts(user_id=user_id, generation=generation,
+                invalidate_on_drift=invalidate_on_drift, writer_coverage_enabled=enabled)
+        except (ValueError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit_report(report)
+
+    if not allow_writes:
+        return
+
+    @app.cli.command("review-analytics-backfill")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    @click.option("--apply", is_flag=True, default=False,
+                  help="Create/resume a projection generation; default only reports status.")
+    @click.option("--chunk-size", type=click.IntRange(1, 5000), default=500, show_default=True)
+    @click.option("--max-chunks", type=click.IntRange(1), default=None)
+    @click.option("--restart", is_flag=True, default=False,
+                  help="Create a new generation instead of resuming the current build.")
+    @click.option("--publish/--no-publish", default=True, show_default=True)
+    def review_analytics_backfill(user_id, apply, chunk_size, max_chunks, restart, publish):
+        """Backfill in fresh fenced transactions, then verify before publication."""
+        from app.services.review_analytics_backfill_service import (
+            review_analytics_backfill_status, run_review_analytics_backfill,
+        )
+
+        enabled = bool(app.config.get("REVIEW_ANALYTICS_WRITE_ENABLED", False))
+        if apply and not enabled:
+            raise click.ClickException(
+                "Enable fully covered REVIEW_ANALYTICS_WRITE_ENABLED writers before --apply."
+            )
+        try:
+            if not apply:
+                report = review_analytics_backfill_status(user_id=user_id)
+                report["dry_run"] = True
+            else:
+                report = run_review_analytics_backfill(
+                    user_id=user_id, writer_coverage_enabled=enabled, chunk_size=chunk_size,
+                    max_chunks=max_chunks, restart=restart, publish=publish,
+                )
+        except (ValueError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        emit_report(report)
+
+
+def register_deck_count_commands(app: Flask, *, allow_writes: bool = False) -> None:
+    @app.cli.command("deck-counts-status")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    def deck_counts_status(user_id):
+        """Report derived rows without refreshing or mutating counts."""
+        from sqlalchemy import func, select
+        from models.deck_count_snapshot import DeckStudyCountSnapshot
+        from app.services.study_analytics_read_service import analytics_read_transaction
+
+        with analytics_read_transaction():
+            rows = db.session.execute(select(func.count()).select_from(DeckStudyCountSnapshot).where(
+                DeckStudyCountSnapshot.user_id == user_id,
+            )).scalar_one()
+        click.echo(json.dumps({"ok": True, "user_id": user_id, "snapshot_rows": int(rows),
+                              "read_mode": app.config.get("DECK_COUNT_READ_MODE", "raw")}))
+
+    if not allow_writes:
+        return
+
+    @app.cli.command("deck-counts-prewarm")
+    @click.option("--user-id", type=click.IntRange(1), multiple=True)
+    @click.option("--configured", is_flag=True, help="Use DECK_COUNT_PREWARM_USER_IDS (bounded canary scope).")
+    @click.option("--apply", is_flag=True, help="Publish derived rows; default only reports requested scope.")
+    @click.option("--force", is_flag=True, help="Recompute valid rows too for a complete refresh.")
+    def deck_counts_prewarm(user_id, configured, apply, force):
+        """Refresh missing/dirty direct decks outside request transactions."""
+        from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
+
+        ids = set(user_id)
+        if configured:
+            try:
+                ids.update(int(value) for value in app.config.get("DECK_COUNT_PREWARM_USER_IDS", ()))
+            except (TypeError, ValueError) as exc:
+                raise click.ClickException("Invalid DECK_COUNT_PREWARM_USER_IDS") from exc
+        if not ids or len(ids) > 100 or any(value <= 0 for value in ids):
+            raise click.ClickException("Choose 1 to 100 explicit/configured learner IDs")
+        if apply and not app.config.get("DECK_COUNT_WRITE_ENABLED", False):
+            raise click.ClickException("Enable covered DECK_COUNT_WRITE_ENABLED writers before --apply")
+        if not apply:
+            click.echo(json.dumps({"ok": True, "dry_run": True, "user_ids": sorted(ids)}))
+            return
+        for learner_id in sorted(ids):
+            try:
+                report = prewarm_owned_deck_counts(user_id=learner_id, force=force)
+            except (ValueError, RuntimeError) as exc:
+                raise click.ClickException(str(exc)) from exc
+            click.echo(json.dumps(report, sort_keys=True))
+            if not report["ok"]:
+                raise click.exceptions.Exit(1)
+
+    @app.cli.command("deck-counts-invalidate")
+    @click.option("--apply", is_flag=True, help="Advance the global epoch before resuming writer coverage.")
+    def deck_counts_invalidate(apply):
+        """Invalidate every old snapshot without deleting monotonic tokens."""
+        if apply:
+            if not app.config.get("DECK_COUNT_WRITE_ENABLED", False):
+                raise click.ClickException("Enable DECK_COUNT_WRITE_ENABLED before --apply")
+            from app.services.deck_count_projection_service import invalidate_all_deck_counts
+            invalidate_all_deck_counts(db.session)
+            db.session.commit()
+        click.echo(json.dumps({"ok": True, "dry_run": not apply, "scope": "global"}))
+
+
 def register_audit_cli_commands(app: Flask) -> None:
     """Register ONLY read-only audit commands on audit Flask app instances."""
     register_phase9_audit_commands(app)
-
-    @app.cli.command("study-architecture-audit")
-    @click.option(
-        "--compact",
-        is_flag=True,
-        default=False,
-        help="Emit compact JSON instead of indented JSON.",
-    )
-    @click.option(
-        "--output",
-        "output_path",
-        type=str,
-        default=None,
-        help="Optional file path to write audit JSON.",
-    )
-    @click.option(
-        "--observed-at",
-        type=click.DateTime(formats=["%Y-%m-%dT%H:%M:%S"]),
-        default=None,
-        help="Freeze the audit observation time for repeatability.",
-    )
-    def study_architecture_audit(
-        compact: bool,
-        output_path: str | None,
-        observed_at: datetime | None,
-    ) -> None:
-        """Print read-only reconciliation gates for the study refactor."""
-        import sys
-
-        exit_code = run_study_architecture_audit_command(
-            app=app,
-            compact=compact,
-            output_path=output_path,
-            observed_at=observed_at,
-        )
-        if exit_code != 0:
-            sys.exit(exit_code)
+    register_review_analytics_commands(app)
+    register_deck_count_commands(app)
 
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
     register_phase9_audit_commands(app)
+    register_review_analytics_commands(app, allow_writes=True)
+    register_deck_count_commands(app, allow_writes=True)
 
     @app.cli.command("study-authority-enrollment")
     @click.option(
@@ -435,9 +430,8 @@ def register_cli_commands(app: Flask) -> None:
     def study_authority_read_audit(
         user_id: int, observed_at_utc: str | None, timezone_name: str | None
     ) -> None:
-        """Compare canonical NOTE queue semantics with the rollback projection."""
+        """Verify every NOTE row of a learner: availability re-derived from state."""
 
-        from app.repositories import study_repository
         from app.repositories.study_authority_repository import (
             StudyAuthorityFenceError,
             lock_study_authority_route,
@@ -542,7 +536,10 @@ def register_cli_commands(app: Flask) -> None:
                     ),
                 )
             )
-            cards = cards_query.order_by(Card.id.asc()).all()
+            from sqlalchemy.orm import contains_eager
+
+            # The query joins Note: load it with each Card, not once per Card.
+            cards = cards_query.options(contains_eager(Card.note)).order_by(Card.id.asc()).all()
             card_note_ids = {str(card.note_id).encode("utf-8") for card in cards}
             if not owned_note_ids.issubset(card_note_ids) or not active_subject_keys.issubset(
                 card_note_ids
@@ -551,6 +548,12 @@ def register_cli_commands(app: Flask) -> None:
                     "INCOMPLETE_AUTHORITY_COVERAGE",
                     "NOTE read audit requires Cards for every owned Note and active subject.",
                 )
+            # Options depend only on (learner, deck): resolve each deck once.
+            options_by_deck_id = {}
+            for card in cards:
+                if card.note.deck_id not in options_by_deck_id:
+                    options_by_deck_id[card.note.deck_id] = resolve_deck_options(
+                        user_id=user_id, deck_id=card.note.deck_id)
             reads = load_study_authority_card_reads(
                 db.session,
                 learner_user_id=user_id,
@@ -558,11 +561,7 @@ def register_cli_commands(app: Flask) -> None:
                 now_utc=observed_at,
                 timezone_name=timezone_name,
                 deck_options_by_card_id={
-                    str(card.id): resolve_deck_options(
-                        user_id=user_id,
-                        deck_id=card.note.deck_id,
-                    )
-                    for card in cards
+                    str(card.id): options_by_deck_id[card.note.deck_id] for card in cards
                 },
             )
             canonical = summarize_study_authority_queue(
@@ -572,15 +571,10 @@ def register_cli_commands(app: Flask) -> None:
                 now_utc=observed_at,
                 timezone_name=timezone_name,
             )
+            # The per-Card verification of each locked row (availability
+            # re-derived from its state) is the whole audit (ADR P10 §2.7).
             mismatches: list[str] = []
-            # CANONICAL_V1 froze card_progress: the per-Card canonical
-            # verification above is the whole audit (ADR P9-03 §2.7).
-            compare_projection = route.storage_profile == "PROJECTION_V1"
-            if compare_projection:
-                mismatches = _authority_read_mismatches(
-                    canonical, cards_query, user_id=user_id, observed_at=observed_at,
-                    timezone_name=timezone_name,
-                )
+            compare_projection = False
             payload = {
                 "schema_version": "study-authority-read-audit.v1",
                 "user_id": user_id,
@@ -623,55 +617,6 @@ def register_cli_commands(app: Flask) -> None:
             raise click.ClickException(
                 "AUTHORITY_READ_PARITY_DIVERGED: canonical and rollback reads differ."
             )
-
-    @app.cli.command("study-progress-backfill")
-    @click.option(
-        "--apply",
-        is_flag=True,
-        default=False,
-        help="Persist mirror/disposition/checkpoint batches; default is read-only dry-run.",
-    )
-    @click.option(
-        "--run-id",
-        type=str,
-        default=None,
-        help="Resume one existing apply run by canonical UUID.",
-    )
-    @click.option(
-        "--max-batches",
-        type=click.IntRange(1, 100_000),
-        default=None,
-        help="Stop cleanly after a bounded number of committed batches.",
-    )
-    def study_progress_backfill(
-        apply: bool,
-        run_id: str | None,
-        max_batches: int | None,
-    ) -> None:
-        """Dry-run or resume the fenced Phase 4 current-progress backfill."""
-
-        from app.services.study_progress_backfill_service import (
-            StudyProgressBackfillError,
-            run_current_progress_backfill,
-        )
-
-        try:
-            result = run_current_progress_backfill(
-                db.session,
-                apply=apply,
-                run_id=run_id,
-                max_batches=max_batches,
-            )
-        except StudyProgressBackfillError as exc:
-            raise click.ClickException(str(exc)) from exc
-        click.echo(
-            json.dumps(
-                result.to_dict(),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-        )
 
     @app.cli.command("study-phase6-attribution-backfill")
     @click.option(
@@ -759,30 +704,6 @@ def register_cli_commands(app: Flask) -> None:
             apply=apply,
         )
         click.echo(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
-
-    @app.cli.command("study-storage-profile-switch")
-    @click.option("--apply", "apply_switch", is_flag=True, default=False,
-                  help="Switch now (one-way); without it, only print the plan.")
-    def study_storage_profile_switch(apply_switch: bool) -> None:
-        """P9-06: switch the NOTE storage profile to CANONICAL_V1 (write freeze only)."""
-
-        from app.services.study_storage_profile_service import (
-            StorageProfileSwitchError,
-            apply_storage_profile_switch,
-            plan_storage_profile_switch,
-        )
-
-        if not apply_switch:
-            click.echo(json.dumps(plan_storage_profile_switch(db.session), sort_keys=True))
-            return
-        try:
-            result = apply_storage_profile_switch(db.session)
-            db.session.commit()
-        except StorageProfileSwitchError as exc:
-            db.session.rollback()
-            click.echo(json.dumps({"error": exc.code, "message": str(exc), "blockers": list(exc.blockers)}))
-            raise SystemExit(1) from exc
-        click.echo(json.dumps(result, sort_keys=True))
 
     @app.cli.command("startup-maintenance")
     @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
@@ -1827,33 +1748,3 @@ from app.services.seeding_service import (
 )
 
 
-def _authority_read_mismatches(canonical, cards_query, *, user_id, observed_at, timezone_name) -> list[str]:
-    """PROJECTION_V1 only: compare canonical queue reads with the legacy reader."""
-
-    from app.repositories import study_repository
-
-    legacy_counts = study_repository.query_study_queue_counts(
-        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
-    legacy_selected = study_repository.query_next_due_card_id(
-        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
-    legacy_pending = study_repository.query_pending_learning_summary(
-        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
-    legacy_due_order, legacy_ahead_order = study_repository.query_study_card_order(
-        cards_query, user_id=user_id, now=observed_at, timezone_name=timezone_name)
-    mismatches: list[str] = []
-    if (canonical.new_count, canonical.learn_count, canonical.due_count) != tuple(
-        int(value) for value in legacy_counts
-    ):
-        mismatches.append("queue_counts")
-    if canonical.selected_card_id != legacy_selected:
-        mismatches.append("selected_card_id")
-    if canonical.due_card_ids != legacy_due_order:
-        mismatches.append("due_order")
-    if canonical.learn_ahead_card_ids != legacy_ahead_order:
-        mismatches.append("learn_ahead_order")
-    if (
-        canonical.pending_learning_count != int(legacy_pending[0])
-        or canonical.next_due_at != legacy_pending[1]
-    ):
-        mismatches.append("pending_learning")
-    return mismatches

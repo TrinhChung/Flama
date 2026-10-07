@@ -8,6 +8,7 @@ import type {
   Rating,
   StudyBatchPayload,
   StudySessionEvent,
+  StudySessionCard,
   StudySessionSnapshot,
 } from '../types'
 import {
@@ -45,6 +46,7 @@ export type StudySessionQuarantineReason =
   | 'MALFORMED_SESSION'
   | 'SCOPE_MISMATCH'
   | 'COMMITTED_ELSEWHERE'
+  | 'LEASE_CLOSED'
 
 export type StudySessionQuarantine = Readonly<{
   reason: StudySessionQuarantineReason
@@ -107,6 +109,7 @@ function normalizeEvent(
   value: unknown,
   index: number,
   snapshot: StudySessionSnapshot,
+  cardsById: ReadonlyMap<string, StudySessionCard>,
 ): NormalizedEvent | StudySessionRestoreResult {
   if (!isRecord(value)) {
     return quarantine(
@@ -121,7 +124,7 @@ function normalizeEvent(
     )
   }
   const cardId = typeof value.card_id === 'string' ? value.card_id : ''
-  const card = snapshot.cards.find((row) => row.card_id === cardId)
+  const card = cardsById.get(cardId)
   if (!card) {
     return quarantine(
       'EVENT_CONTRACT_MISMATCH',
@@ -273,6 +276,7 @@ function normalizeBatch(
   value: unknown,
   index: number,
   snapshot: StudySessionSnapshot,
+  cardsById: ReadonlyMap<string, StudySessionCard>,
 ): NormalizedBatch | StudySessionRestoreResult {
   if (
     !isRecord(value)
@@ -330,7 +334,7 @@ function normalizeBatch(
   const events: StudySessionEvent[] = []
   let migrated = false
   for (let eventIndex = 0; eventIndex < value.events.length; eventIndex += 1) {
-    const normalized = normalizeEvent(value.events[eventIndex], eventIndex, snapshot)
+    const normalized = normalizeEvent(value.events[eventIndex], eventIndex, snapshot, cardsById)
     if ('status' in normalized) return normalized
     events.push(normalized.event)
     migrated ||= normalized.migrated
@@ -355,7 +359,7 @@ function normalizeBatch(
         )
       }
       const cardId = typeof item.card_id === 'string' ? item.card_id : ''
-      const card = snapshot.cards.find((row) => row.card_id === cardId)
+      const card = cardsById.get(cardId)
       if (
         !card
         || !touched.has(cardId)
@@ -727,6 +731,9 @@ export function normalizePersistedStudySession(
   }
 
   const snapshot = snapshotValue as StudySessionSnapshot
+  // Build once after validating unique Card IDs. Every event/final state shares
+  // the same lookup; validation and persistence still cover the full snapshot.
+  const cardsById = new Map(snapshot.cards.map((card) => [card.card_id, card]))
   try {
     validateSnapshotAlgorithmContract(snapshot)
   } catch (error) {
@@ -768,7 +775,7 @@ export function normalizePersistedStudySession(
     ? value.in_flight_batches as unknown[]
     : []
   for (let index = 0; index < rawBatches.length; index += 1) {
-    const normalized = normalizeBatch(rawBatches[index], index, snapshot)
+    const normalized = normalizeBatch(rawBatches[index], index, snapshot, cardsById)
     if ('status' in normalized) return normalized
     if (
       normalized.batch.batch_sequence <= previousBatchSequence
@@ -787,7 +794,7 @@ export function normalizePersistedStudySession(
 
   const events: StudySessionEvent[] = []
   for (let index = 0; index < value.events.length; index += 1) {
-    const normalized = normalizeEvent(value.events[index], index, snapshot)
+    const normalized = normalizeEvent(value.events[index], index, snapshot, cardsById)
     if ('status' in normalized) return normalized
     events.push(normalized.event)
     retainedEvents.push(normalized.event)

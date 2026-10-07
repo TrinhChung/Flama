@@ -19,24 +19,14 @@ from app.repositories.stats_query_repository import (
     query_today_review_summary,
     query_user_daily_study_time,
 )
-from app.repositories.study_authority_repository import lock_study_authority_route
+from app.repositories.study_authority_repository import read_study_authority_route
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
-from app.services.scheduler_config_service import (
-    resolve_day_boundary_hour_local,
-    resolve_deck_options,
-)
-from app.services.study_authority_read_service import (
-    StudyAuthorityCardRead,
-    load_study_authority_card_reads,
-)
+from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.note import Note
-from models.study_progress_state import StudyProgressState
-from models.study_progress_subject import StudyProgressSubject
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -316,91 +306,40 @@ def _compute_daily_load(*, user_id: int, scope_deck_ids: list[int] | None) -> fl
     return total
 
 
-def _load_canonical_scope_reads(
+def _consolidated_due_rows_and_load(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
-    now_utc: datetime,
-    timezone_name: str,
-    storage_profile: str,
-) -> tuple[list[Card], dict[str, StudyAuthorityCardRead]]:
-    # Same row set as LEGACY `build_progress_rows_query`: every learner
-    # CardProgress (owned or logical-overlay source), scoped by Note deck.
-    # NOTE state projects all siblings; never-studied Notes carry no load.
-    # CANONICAL_V1 froze that projection: every Card of a stateful Note.
-    query = Card.query.join(Note, Card.note_id == Note.id)
-    if storage_profile == "PROJECTION_V1":
-        query = query.join(
-            CardProgress,
-            db.and_(CardProgress.card_id == Card.id, CardProgress.user_id == user_id),
-        )
-    else:
-        query = query.join(
-            StudyProgressSubject,
-            db.and_(
-                StudyProgressSubject.learner_user_id == user_id,
-                StudyProgressSubject.live_note_id == Card.note_id,
-            ),
-        ).join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
-    if scope_deck_ids is not None:
-        if not scope_deck_ids:
-            return [], {}
-        query = query.filter(Note.deck_id.in_(scope_deck_ids))
-    cards = query.order_by(Card.id.asc()).all()
-    reads = load_study_authority_card_reads(
-        db.session,
-        learner_user_id=user_id,
-        cards=tuple(cards),
-        now_utc=now_utc,
-        timezone_name=timezone_name,
-        deck_options_by_card_id={
-            str(card.id): resolve_deck_options(
-                user_id=user_id,
-                deck_id=card.note.deck_id,
-            )
-            for card in cards
-        },
+) -> tuple[list[tuple[Any, Any, Any]], float]:
+    """CONSOLIDATED_V1: due rows and daily load from one non-locking SELECT.
+
+    Same Card set and arithmetic as the canonical path (``_canonical_due_rows``
+    and ``_canonical_daily_load``), read straight from each Note's row
+    (ADR P10 §2.7): no Card/Note entities, deck options or subject locks.
+    """
+
+    from app.repositories.note_analytics_read_repository import (
+        consolidated_card_rows,
+        state_interval_days,
     )
-    return cards, dict(reads)
 
-
-def _canonical_due_rows(
-    *,
-    cards: list[Card],
-    reads: dict[str, StudyAuthorityCardRead],
-) -> list[tuple[Any, Any, Any]]:
+    if scope_deck_ids is not None and not scope_deck_ids:
+        return [], 0.0
+    query = Card.query.join(Note, Card.note_id == Note.id)
+    if scope_deck_ids is not None:
+        query = query.filter(Note.deck_id.in_(scope_deck_ids))
     rows: list[tuple[Any, Any, Any]] = []
-    for card in cards:
-        availability = reads[str(card.id)].availability
-        if availability.is_suspended or (
-            availability.due_at is None and availability.due_day is None
-        ):
-            continue
-        rows.append(
-            (
-                availability.due_at,
-                availability.due_day,
-                availability.normalized_queue,
-            )
-        )
-    return rows
-
-
-def _canonical_daily_load(
-    *,
-    cards: list[Card],
-    reads: dict[str, StudyAuthorityCardRead],
-) -> float:
     total = 0.0
-    for card in cards:
-        authority_read = reads[str(card.id)]
-        if (
-            authority_read.availability.is_suspended
-            or normalize_progress_queue(authority_read.state.type) != REVIEW_QUEUE
-        ):
+    for _card_id, queue, due_at, due_day, suspended, state_type, interval in consolidated_card_rows(
+        query, learner_user_id=user_id
+    ).all():
+        if suspended:
             continue
-        total += 1.0 / max(1.0, float(authority_read.state.intervalDays or 0))
-    return total
+        if due_at is not None or due_day is not None:
+            rows.append((due_at, due_day, queue))
+        if normalize_progress_queue(state_type) == REVIEW_QUEUE:
+            total += 1.0 / max(1.0, state_interval_days(interval))
+    return rows, total
 
 
 def build_today_future_stats(
@@ -428,10 +367,9 @@ def build_today_future_stats(
 
     timezone_effective = _effective_timezone_name(timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    authority_route = lock_study_authority_route(
+    authority_route = read_study_authority_route(
         db.session,
         learner_user_id=user_id,
-        allow_note_authority=True,
     )
     day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
     today_day_index = _day_index(
@@ -459,25 +397,19 @@ def build_today_future_stats(
         scope_deck_ids=scope_deck_ids,
         today_start_utc=today_start_utc,
         tomorrow_start_utc=tomorrow_start_utc,
+        timezone_name=timezone_effective,
+        day_boundary_hour_local=day_boundary_hour,
     )
     today_minutes = _round2(today_duration_ms / 60000.0)
     today_sec_per_card = _round2((today_duration_ms / 1000.0) / today_cards) if today_cards > 0 else 0.0
 
     end_offset = _future_window_end_offset(effective_future_range)
 
-    canonical_cards: list[Card] = []
-    canonical_reads: dict[str, StudyAuthorityCardRead] = {}
+    consolidated_load = None
     if authority_route.mode_code == "NOTE":
-        canonical_cards, canonical_reads = _load_canonical_scope_reads(
+        rows, consolidated_load = _consolidated_due_rows_and_load(
             user_id=user_id,
             scope_deck_ids=scope_deck_ids,
-            now_utc=now_utc_naive,
-            timezone_name=timezone_effective,
-            storage_profile=authority_route.storage_profile,
-        )
-        rows = _canonical_due_rows(
-            cards=canonical_cards,
-            reads=canonical_reads,
         )
     else:
         rows = query_due_progress_rows(
@@ -504,15 +436,9 @@ def build_today_future_stats(
     due_tomorrow = _safe_int((due_by_offset.get(1) or {}).get("due_count"))
     average = (float(total_reviews) / float(window_days)) if window_days > 0 else 0.0
     daily_load = (
-        _canonical_daily_load(
-            cards=canonical_cards,
-            reads=canonical_reads,
-        )
-        if authority_route.mode_code == "NOTE"
-        else _compute_daily_load(
-            user_id=user_id,
-            scope_deck_ids=scope_deck_ids,
-        )
+        consolidated_load
+        if consolidated_load is not None
+        else _compute_daily_load(user_id=user_id, scope_deck_ids=scope_deck_ids)
     )
 
     return {

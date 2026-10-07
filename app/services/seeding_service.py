@@ -33,7 +33,6 @@ from app.services import (
     flashcard_content_service,
     flashcards_share,
     flashcards_share_service,
-    study_progress_lifecycle_mirror_service,
     study_service,
 )
 import click
@@ -736,24 +735,10 @@ def _seed_rows_to_deck(
                 .all()
                 if row and row[0]
             ]
-        if existing_card_ids:
-            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-                db.session,
-                removed_card_ids=existing_card_ids,
-                deleted_note_ids=existing_note_ids,
-            )
-            CardProgress.query.filter(
-                CardProgress.card_id.in_(existing_card_ids)
-            ).delete(synchronize_session=False)
-        else:
-            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-                db.session,
-                removed_card_ids=(),
-                deleted_note_ids=existing_note_ids,
-            )
-        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-            lifecycle_plan,
-            transition_code="TOMBSTONED_SUBJECT_DELETED",
+        # NOTE learners' rows are tombstoned like any content delete (ADR P10).
+        _tombstone_replaced_notes(
+            card_ids=existing_card_ids,
+            note_ids=existing_note_ids,
             source_path="seed.deck_replace",
             operation_key=f"seed-deck-replace:{deck.id}:{source_label}",
         )
@@ -1314,24 +1299,10 @@ def _seed_quiz_dump_for_user(
             .all()
             if row and row[0]
         ]
-        if existing_card_ids:
-            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-                db.session,
-                removed_card_ids=existing_card_ids,
-                deleted_note_ids=existing_note_ids,
-            )
-            CardProgress.query.filter(
-                CardProgress.card_id.in_(existing_card_ids)
-            ).delete(synchronize_session=False)
-        else:
-            lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-                db.session,
-                removed_card_ids=(),
-                deleted_note_ids=existing_note_ids,
-            )
-        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-            lifecycle_plan,
-            transition_code="TOMBSTONED_SUBJECT_DELETED",
+        # NOTE learners' rows are tombstoned like any content delete (ADR P10).
+        _tombstone_replaced_notes(
+            card_ids=existing_card_ids,
+            note_ids=existing_note_ids,
             source_path="seed.quiz_replace",
             operation_key=f"seed-quiz-replace:{quiz_deck.id}:{dump_filename}",
         )
@@ -1369,3 +1340,23 @@ def _seed_quiz_dump_for_user(
     stats.seeded_files += 1
     return quiz_deck, len(notes)
 
+
+def _tombstone_replaced_notes(*, card_ids, note_ids, source_path: str, operation_key: str) -> None:
+    """Fence every learner of the replaced Notes and tombstone their progress."""
+
+    from app.services import study_content_delete_service as content_delete
+
+    card_ids = [str(value) for value in card_ids]
+    note_ids = [str(value) for value in note_ids]
+    routes = content_delete.lock_content_delete_routes(
+        db.session, actor_user_ids=(), card_ids=card_ids, deleted_note_ids=note_ids
+    )
+    plan = content_delete.prepare_content_delete(
+        db.session, routes=routes, card_ids=card_ids, note_ids=note_ids, cancel_legacy_sessions=False
+    )
+    content_delete.verify_content_delete_scope(
+        db.session, routes=routes, card_ids=card_ids, deleted_note_ids=note_ids
+    )
+    if card_ids:
+        CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(synchronize_session=False)
+    content_delete.finalize_content_delete(plan, source_path=source_path, operation_key=operation_key)

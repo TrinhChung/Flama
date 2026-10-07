@@ -42,7 +42,6 @@ from app.services.study_progress_shadow_codec import (
 )
 from app.validators.review_event import classify_review_event_payload
 from models.review_event import ReviewEvent
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 
@@ -199,6 +198,7 @@ def freeze_study_algorithm_history_cut(
     subject = locked.subject
     subject_id = verified.subject_id
     generation = verified.subject_generation
+    # ADR P10: no contributors; the row carries history completeness.
     if (
         not isinstance(siblings, LockedStudyAuthoritySiblings)
         or not isinstance(compatibility, LockedStudyAuthorityCompatibility)
@@ -208,21 +208,12 @@ def freeze_study_algorithm_history_cut(
         or compatibility.subject_id != subject_id
         or siblings.subject_generation != generation
         or compatibility.subject_generation != generation
-        or set(siblings.card_ids) != set(compatibility.contributor_by_card_id)
     ):
         raise StudyAlgorithmHistoryCutError(
             "INCOMPLETE_HISTORY_CUT_LOCKS",
             "History cut requires the full locked sibling and compatibility vectors.",
         )
 
-    contributor_rows = tuple(
-        session.execute(
-            select(StudyProgressContributor)
-            .where(StudyProgressContributor.subject_id == subject_id)
-            .order_by(StudyProgressContributor.id.asc())
-            .with_for_update()
-        ).scalars()
-    )
     # Keep both predicates: the subject branch catches facts whose stored
     # logical key was corrupted, while the learner/key branch catches detached
     # or wrongly linked facts. Separate indexed lock ranges avoid the broad
@@ -307,30 +298,8 @@ def freeze_study_algorithm_history_cut(
     if generation != 1 or lifecycle_rows:
         blockers.add("LIFECYCLE_HISTORY_UNPROVEN")
 
-    current_contributors = tuple(
-        row
-        for row in contributor_rows
-        if row.contributor_status == "ACTIVE" and int(row.subject_generation) == generation
-    )
-    expected_contributor_ids = {
-        int(row.id) for row in compatibility.contributor_by_card_id.values()
-    }
-    contributor_id_by_card_key = {
-        card_id.encode("utf-8"): int(row.id)
-        for card_id, row in compatibility.contributor_by_card_id.items()
-    }
-    if (
-        len(current_contributors) != int(subject.contributor_count)
-        or {int(row.id) for row in current_contributors} != expected_contributor_ids
-        or len(current_contributors) != len(siblings.card_ids)
-    ):
-        blockers.add("CONTRIBUTOR_COVERAGE_INCOMPLETE")
-    if any(
-        row.contributor_status != "ACTIVE"
-        or int(row.subject_generation) != generation
-        or row.history_completeness_code != "HISTORY_NATIVE_COMPLETE"
-        for row in contributor_rows
-    ):
+    # Same blocker code as the contributor era: initializer policies key on it.
+    if subject.history_completeness_code != "HISTORY_NATIVE_COMPLETE":
         blockers.add("CONTRIBUTOR_HISTORY_INCOMPLETE")
 
     frozen_events: list[FrozenStudyReviewEvent] = []
@@ -415,8 +384,7 @@ def freeze_study_algorithm_history_cut(
             or row.subject_id != subject_id
             or row.subject_generation != generation
             or bytes(row.logical_note_key or b"") != bytes(subject.logical_note_key)
-            or row.contributor_id
-            != contributor_id_by_card_key.get(bytes(row.logical_card_key))
+            # A fact written before P10 kept its contributor id: history only.
             or bytes(row.logical_card_key) not in card_key_bytes
             or event_id is None
         ):
@@ -575,13 +543,8 @@ def freeze_study_algorithm_history_cut(
             blockers.add("STATE_LAST_REVIEW_UNPROVEN")
 
     digest = hashlib.sha256()
+    # The subject row binds token and state too (ADR P10 §2.4).
     subject_row = _freeze_row(subject, field_name="StudyProgressSubject")
-    token_row = _freeze_row(locked.token, field_name="StudyAuthoritySubjectToken")
-    state_row = (
-        _freeze_row(locked.state, field_name="StudyProgressState")
-        if locked.state is not None
-        else None
-    )
     _append_cut_material(
         digest,
         {
@@ -617,31 +580,11 @@ def freeze_study_algorithm_history_cut(
                 if current_state_document is not None else None
             ),
             "subject_row_hash": subject_row.digest.hex(),
-            "token_row_hash": token_row.digest.hex(),
-            "state_row_hash": state_row.digest.hex() if state_row else None,
+            "token_row_hash": None,
+            "state_row_hash": None,
             "blocker_codes": sorted(blockers),
         },
     )
-    for row in contributor_rows:
-        row_document = _freeze_row(row, field_name="StudyProgressContributor")
-        _append_cut_material(
-            digest,
-            {
-                "kind": "contributor",
-                "id": str(row.id),
-                "generation": str(row.subject_generation),
-                "status": str(row.contributor_status),
-                "history_completeness": str(row.history_completeness_code),
-                "current_provenance": str(row.current_provenance_code),
-                "logical_card_key": bytes(row.logical_card_key).hex(),
-                # CANONICAL contributors carry no raw CardProgress evidence.
-                "raw_progress_hash": (
-                    bytes(row.raw_progress_hash).hex()
-                    if row.raw_progress_hash is not None else None
-                ),
-                "row_hash": row_document.digest.hex(),
-            },
-        )
     for fact in frozen_facts:
         _append_cut_material(
             digest,

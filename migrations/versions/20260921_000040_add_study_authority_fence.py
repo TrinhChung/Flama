@@ -17,7 +17,8 @@ from alembic import op
 import sqlalchemy as sa
 
 from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
+# Retired by P10-09 (migration 50 drops it); frozen for a fresh chain.
+from migrations.retired_note_progress_tables import StudyAuthoritySubjectToken
 
 
 revision = "20260921_000040"

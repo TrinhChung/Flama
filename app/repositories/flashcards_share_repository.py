@@ -13,7 +13,6 @@ from sqlalchemy.orm import joinedload
 
 from models import db
 from models.card_progress import CardProgress
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.flashcard import (
@@ -256,8 +255,9 @@ def _card_reps_query(user_id: int):
     from app.repositories.study_authority_repository import read_study_authority_route
 
     route = read_study_authority_route(db.session, learner_user_id=user_id)
-    if route.mode_code == "NOTE" and route.storage_profile != "PROJECTION_V1":
-        reps = db.cast(StudyProgressState.state_payload["reps"].as_string(), db.Integer)
+    if route.mode_code == "NOTE":
+        # ADR P10: the Note's state is on its subject row.
+        reps = db.cast(StudyProgressSubject.state_payload["reps"].as_string(), db.Integer)
         return (
             db.session.query(db.func.coalesce(db.func.sum(reps), 0))
             .select_from(Card)
@@ -266,7 +266,7 @@ def _card_reps_query(user_id: int):
                 StudyProgressSubject.learner_user_id == user_id,
                 StudyProgressSubject.live_note_id == Card.note_id,
             ))
-            .join(StudyProgressState, StudyProgressState.subject_id == StudyProgressSubject.id)
+            .filter(StudyProgressSubject.semantic_state_hash.isnot(None))
         )
     return (
         db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))

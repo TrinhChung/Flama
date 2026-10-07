@@ -1,5 +1,7 @@
 # Study decoupling task backlog
 
+> **Status (2026-10-03): Phase 9 hoàn tất trong phạm vi đã chốt.** NOTE storage profile `CANONICAL_V1` từ T0 `2026-10-02T14:44:54Z`: `card_progress` không còn được đọc/ghi trên đường NOTE, retention chạy định kỳ, commit phiên không lặp marketplace usage touch theo từng câu. Chủ sản phẩm giữ compatibility v2/v3, fallback ordinal và bảng projection, nên P9-08/09/10 được loại khỏi đợt với điều kiện mở lại; P9-07 không bị baseline kích hoạt. [Tổng kết INT-06](./P9_CLOSEOUT_2026-10-03.md), [tracker](./P9_PROGRESS_2026-10-02.md).
+>
 > **Status (2026-09-30): Phase 5, Phase 6, Phase 7 chạy trên production.** P5-11 NOTE hardening deploy qua PR #173 (`6472e42`). Phase 6 (application occurrence, Note attribution, đếm theo Note) deploy qua PR #174 (`3e7fa3a`): backfill 128.650 event, dấu vân tay dữ liệu learner không đổi, audit 18/18 PASS, `STUDY_NOTE_COUNT_ENABLED=1` ([runbook P6](../../runbooks/P6_APPLICATION_OCCURRENCE_RUNBOOK.md)). Phase 7 retention membership phiên deploy qua PR #175 (`1e14106`), lần chạy đầu dọn 15.072 dòng membership, dữ liệu learner không đổi ([plan](./P7_EXECUTION_PLAN_2026-09-30.md), [runbook](../../runbooks/P7_SESSION_RETENTION_RUNBOOK.md)). Phase 8 chờ chủ sản phẩm chọn năng lực; Phase 9 chờ cửa sổ telemetry và phê duyệt riêng ([P8/P9 readiness](./P8_P9_READINESS_2026-09-30.md)).
 >
 > **Phase 6 preparation (2026-09-29):** [P6 execution plan](./P6_EXECUTION_PLAN_2026-09-29.md) records the code baseline (what Phase 5 already delivers for NOTE learners), nine owner decisions D6-01..D6-09, gates and work packages P6-00..P6-10/INT-04. No Phase 6 code, migration or flag exists. Phase 6 code stays on `phase6/*` branches until R0 (PR #168) is deployed; production enablement additionally needs every active learner on NOTE (new gate P5-T).
@@ -221,7 +223,17 @@ PR #175 deploy `1e14106`; lần chạy đầu xóa 15.072 dòng membership của
 
 ### Phase 8 / Phase 9
 
-[Điều kiện và bằng chứng](./P8_P9_READINESS_2026-09-30.md). `flask study-phase9-readiness` đo các cổng (đọc-only). Không bước Phase 9 nào xóa dữ liệu khi chưa có backup đã kiểm, chứng minh restore và phê duyệt riêng.
+Phase 8 chờ chủ sản phẩm chọn năng lực đầu tiên ([điều kiện](./P8_P9_READINESS_2026-09-30.md)).
+
+Phase 9 ([kế hoạch](./P9_EXECUTION_PLAN_2026-09-30.md), [tracker](./P9_PROGRESS_2026-10-02.md), [cutover](./P9_06_CUTOVER_REPORT_2026-10-02.md), [tổng kết INT-06](./P9_CLOSEOUT_2026-10-03.md)):
+
+| Mốc | Trạng thái |
+|---|---|
+| P9-A (P9-00, P9-02a, P9-03..P9-05d) | **DONE** — NOTE chạy không cần projection, không còn đường vào LEGACY |
+| P9-B (P9-06) | **DONE 2026-10-02** — backup + restore/PITR, freeze 43 s, `CANONICAL_V1` epoch 2, audit 18/18 PASS |
+| P9-C | **DONE trong phạm vi** — P9-01 timer, P9-02b telemetry, A/B ghi/đọc, gom usage touch; P9-07 không kích hoạt; P9-08/09/10 loại trừ theo quyết định giữ compatibility |
+
+`flask --app wsgi_audit.py study-phase9-readiness` đo các cổng (đọc-only). Không bước nào xóa dữ liệu khi chưa có backup đã kiểm, chứng minh restore và phê duyệt riêng.
 
 ### Cross-phase integration
 

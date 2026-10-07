@@ -113,7 +113,9 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         db.session.commit()
         t0 = now - timedelta(hours=1)
         report = build_phase9_readiness(now_utc=now, projection_since_utc=t0)
-        self.assertEqual(report["gates"]["projection_cutover"]["status"], "waiting")
+        # A database without a profile row is a fresh CONSOLIDATED_V1 install
+        # (P10-09); a row written before T0 does not block it.
+        self.assertEqual(report["gates"]["projection_cutover"]["status"], "ready")
         from models.study_authority_storage_profile import StudyAuthorityStorageProfile
 
         db.session.add(StudyAuthorityStorageProfile(id=1, profile_code="CANONICAL_V1", epoch=2,
@@ -122,6 +124,15 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         # No caller-supplied T0 is required once the persisted profile switched.
         report = build_phase9_readiness(now_utc=now)
         self.assertEqual(report["gates"]["projection_cutover"]["status"], "ready")
+        # The P10 profile is reached from CANONICAL_V1 and stays projection-free.
+        profile = db.session.get(StudyAuthorityStorageProfile, 1)
+        profile.profile_code = "CONSOLIDATED_V1"
+        db.session.commit()
+        report = build_phase9_readiness(now_utc=now)
+        self.assertEqual(report["gates"]["projection_cutover"]["status"], "ready")
+        self.assertNotIn("UNKNOWN_STORAGE_PROFILE", report["gates"]["legacy_projection_writes"]["blocking_reasons"])
+        profile.profile_code = "CANONICAL_V1"
+        db.session.commit()
         progress = CardProgress.query.one()
         progress.updated_at = now - timedelta(minutes=5)
         db.session.commit()

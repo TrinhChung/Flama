@@ -39,8 +39,7 @@ from models import db
 from models.card import Card
 from models.card_progress import CardProgress
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
-from models.study_progress_state import StudyProgressState
+from models.study_progress_subject import StudyProgressSubject
 
 SYNTHETIC = AlgorithmIdentity("synthetic-switch", "1.0.0", STATE_SCHEMA_VERSION)
 UNPROJECTABLE = AlgorithmIdentity("synthetic-wide", "1.0.0", "synthetic-wide-state.v1")
@@ -94,8 +93,10 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
             ("legacy-anki", "1.0.0", STATE_SCHEMA_VERSION, STORAGE_CODEC)]
         decoders = patch.dict(STATE_DECODERS._decoders, {
             (SYNTHETIC.key, SYNTHETIC.version, SYNTHETIC.state_schema_version, STORAGE_CODEC): legacy_decoder,
+            # Decodable, but its due day cannot become the Note row's availability.
             (UNPROJECTABLE.key, UNPROJECTABLE.version, UNPROJECTABLE.state_schema_version, STORAGE_CODEC):
-                lambda payload: legacy_decoder({key: value for key, value in payload.items() if key != "wide"}),
+                lambda payload: legacy_decoder({key: (None if key == "due_day" else value)
+                                                for key, value in payload.items() if key != "wide"}),
         })
         decoders.start()
         self.addCleanup(decoders.stop)
@@ -103,7 +104,7 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
         registry.register(identity=LegacyAnkiAlgorithmAdapter.identity,
             lifecycle_state=AlgorithmLifecycleState.ACTIVE, adapter=LegacyAnkiAlgorithmAdapter())
         self.initializers = {}
-        for identity, extra in ((SYNTHETIC, None), (UNPROJECTABLE, {"wide": 1})):
+        for identity, extra in ((SYNTHETIC, None), (UNPROJECTABLE, {"wide": 1, "due_day": "unprojectable"})):
             registry.register(identity=identity, lifecycle_state=AlgorithmLifecycleState.ACTIVE,
                 adapter=_SyntheticAdapter(identity))
             self.initializers[identity.key] = _Initializer(identity, extra=extra)
@@ -121,20 +122,19 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
         return apply_study_algorithm_switch(db.session, request=request, now_utc=_now())
 
     def _token(self):
-        return StudyAuthoritySubjectToken.query.one()
+        # The Note's one row is its CAS token and its state (ADR P10).
+        return StudyProgressSubject.query.one()
 
     def test_synthetic_target_switches_atomically_replays_and_is_forward_only(self):
         with self.app.app_context():
             before = self._token().authority_revision
-            revisions = {row.card_id: row.revision for row in CardProgress.query.all()}
             result = self._switch(operation_key="switch-1", expected=before)
             db.session.commit()
             self.assertFalse(result.replayed)
             self.assertEqual(result.response["to_algorithm"], {"key": SYNTHETIC.key, "version": "1.0.0"})
             self.assertEqual(self._token().authority_revision, before + 1)
-            self.assertEqual(StudyProgressState.query.one().algorithm_key, SYNTHETIC.key)
-            self.assertEqual({row.card_id: row.revision for row in CardProgress.query.all()},
-                {card_id: revision + 1 for card_id, revision in revisions.items()})
+            self.assertEqual(self._token().algorithm_key, SYNTHETIC.key)
+            self.assertEqual(CardProgress.query.count(), 0)
             receipt = StudyAuthorityCommandReceipt.query.one()
             self.assertEqual(receipt.receipt_schema_version, SWITCH_RECEIPT_SCHEMA_VERSION)
             self.assertIsNone(receipt.review_event_id)
@@ -153,13 +153,13 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
 
             with self.assertRaises(StudyAuthorityEnrollmentError) as rollback:
                 stage_legacy_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=_now())
-            self.assertEqual(rollback.exception.code, "ROLLBACK_ALGORITHM_NOT_LEGACY")
+            self.assertEqual(rollback.exception.code, "LEGACY_ROLLBACK_RETIRED")
             db.session.rollback()
         # Ordinary reviews cannot silently rewrite the switched identity.
         refused = self._answer(expected=409)
         self.assertEqual(refused["error"], "ALGORITHM_IDENTITY_CHANGE_UNAUTHORIZED")
 
-    def test_switched_note_reads_canonically_and_lifecycle_cannot_revert_it(self):
+    def test_switched_note_reads_canonically_and_a_new_template_keeps_its_identity(self):
         from app.services import flashcard_content_service as content
         from app.services.scheduler_config_service import resolve_deck_options
         from app.services.study_authority_read_service import load_study_authority_card_reads
@@ -174,13 +174,13 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
                 now_utc=_now(), timezone_name="UTC", deck_options_by_card_id={card.id: options for card in cards})
             self.assertEqual({read.authority_revision for read in reads.values()}, {1})
             db.session.rollback()
-            with self.assertRaises(content.ContentApiError) as failure:
-                content.create_template(user_id=self.user_id, note_type_id=NoteType.query.one().id,
-                    payload={"name": "Reverse"})
-            self.assertEqual(failure.exception.error, "ALGORITHM_IDENTITY_MIRROR_CONFLICT")
-            db.session.rollback()
-            self.assertEqual(StudyProgressState.query.one().algorithm_key, SYNTHETIC.key)
-            self.assertEqual(Card.query.count(), 2)
+            # A new Card shares the row; nothing is copied that could revert it.
+            content.create_template(user_id=self.user_id, note_type_id=NoteType.query.one().id,
+                payload={"name": "Reverse"})
+            db.session.expire_all()
+            self.assertEqual(self._token().algorithm_key, SYNTHETIC.key)
+            self.assertEqual(self._token().authority_revision, 1)
+            self.assertEqual(Card.query.count(), 3)
 
     def test_unprojectable_target_is_refused_before_any_write(self):
         with self.app.app_context():
@@ -190,7 +190,7 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
             self.assertEqual(failure.exception.code, "SWITCH_TARGET_NOT_PROJECTABLE")
             db.session.rollback()
             self.assertEqual(self._token().authority_revision, before)
-            self.assertEqual(StudyProgressState.query.one().algorithm_key, "legacy-anki")
+            self.assertEqual(self._token().algorithm_key, "legacy-anki")
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 0)
 
     def test_unknown_or_initializerless_target_fails_typed(self):

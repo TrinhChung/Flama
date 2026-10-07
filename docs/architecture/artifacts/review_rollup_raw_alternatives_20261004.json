@@ -1,0 +1,238 @@
+{
+  "observed_utc": "2026-10-04T13:46:10.850095+00:00",
+  "environment": "Disposable local MySQL, synthetic minimal ReviewEvent schema; not production latency",
+  "policy": {
+    "timezone": "Asia/Tokyo",
+    "day_boundary_hour": 4,
+    "shift_minutes": 300,
+    "year": 2026
+  },
+  "trials": 5,
+  "cases": [
+    {
+      "total_events": 4000,
+      "annual_event_rows": 1826,
+      "annual_rollup_rows": 365,
+      "parity": true,
+      "raw_read_median_ms": 7.502,
+      "rollup_read_median_ms": 3.502,
+      "raw_read_samples_ms": [
+        6.794,
+        7.335,
+        8.433,
+        7.502,
+        8.008
+      ],
+      "rollup_read_samples_ms": [
+        3.677,
+        3.308,
+        3.3,
+        3.502,
+        3.672
+      ],
+      "raw_forced_user_time_median_ms": 9.448,
+      "raw_covering_median_ms": 6.391,
+      "raw_covering_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "range",
+          "ix_probe_cover",
+          "ix_probe_cover",
+          "12",
+          null,
+          1826,
+          100.0,
+          "Using where; Using index; Using temporary; Using filesort"
+        ]
+      ],
+      "raw_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "ALL",
+          "user_id,ix_user_time",
+          null,
+          null,
+          null,
+          4000,
+          11.11,
+          "Using where; Using temporary; Using filesort"
+        ]
+      ],
+      "rollup_explain": [
+        [
+          1,
+          "SIMPLE",
+          "daily_rollups",
+          null,
+          "range",
+          "PRIMARY",
+          "PRIMARY",
+          "15",
+          null,
+          365,
+          100.0,
+          "Using where"
+        ]
+      ]
+    },
+    {
+      "total_events": 40000,
+      "annual_event_rows": 19927,
+      "annual_rollup_rows": 365,
+      "parity": true,
+      "raw_read_median_ms": 79.938,
+      "rollup_read_median_ms": 3.543,
+      "raw_read_samples_ms": [
+        79.938,
+        78.523,
+        80.516,
+        76.679,
+        83.96
+      ],
+      "rollup_read_samples_ms": [
+        4.47,
+        3.074,
+        4.508,
+        3.065,
+        3.543
+      ],
+      "raw_forced_user_time_median_ms": 56.632,
+      "raw_covering_median_ms": 30.903,
+      "raw_covering_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "range",
+          "ix_probe_cover",
+          "ix_probe_cover",
+          "12",
+          null,
+          20000,
+          100.0,
+          "Using where; Using index; Using temporary; Using filesort"
+        ]
+      ],
+      "raw_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "ref",
+          "user_id,ix_user_time",
+          "user_id",
+          "4",
+          "const",
+          20000,
+          11.11,
+          "Using where; Using temporary; Using filesort"
+        ]
+      ],
+      "rollup_explain": [
+        [
+          1,
+          "SIMPLE",
+          "daily_rollups",
+          null,
+          "range",
+          "PRIMARY",
+          "PRIMARY",
+          "15",
+          null,
+          365,
+          100.0,
+          "Using where"
+        ]
+      ]
+    },
+    {
+      "total_events": 100000,
+      "annual_event_rows": 49997,
+      "annual_rollup_rows": 365,
+      "parity": true,
+      "raw_read_median_ms": 212.189,
+      "rollup_read_median_ms": 4.89,
+      "raw_read_samples_ms": [
+        200.894,
+        187.282,
+        214.874,
+        213.495,
+        212.189
+      ],
+      "rollup_read_samples_ms": [
+        4.958,
+        4.338,
+        4.89,
+        4.964,
+        4.89
+      ],
+      "raw_forced_user_time_median_ms": 136.04,
+      "raw_covering_median_ms": 72.306,
+      "raw_covering_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "range",
+          "ix_probe_cover",
+          "ix_probe_cover",
+          "12",
+          null,
+          50000,
+          100.0,
+          "Using where; Using index; Using temporary; Using filesort"
+        ]
+      ],
+      "raw_explain": [
+        [
+          1,
+          "SIMPLE",
+          "review_events",
+          null,
+          "ref",
+          "user_id,ix_user_time",
+          "user_id",
+          "4",
+          "const",
+          50000,
+          11.11,
+          "Using where; Using temporary; Using filesort"
+        ]
+      ],
+      "rollup_explain": [
+        [
+          1,
+          "SIMPLE",
+          "daily_rollups",
+          null,
+          "range",
+          "PRIMARY",
+          "PRIMARY",
+          "15",
+          null,
+          365,
+          100.0,
+          "Using where"
+        ]
+      ]
+    }
+  ],
+  "mysql_version": "8.0.40",
+  "duplicate_before_rollup_and_rollback_sanity": true,
+  "limitations": [
+    "Counters built by backfill, not integrated into application writers.",
+    "Duplicate/rollback checks are transaction sanity only, not complete writer idempotency coverage.",
+    "No timezone change, DST, outbox crash, concurrent writer, import or deck-scope parity claimed.",
+    "No MySQL temporary table or IO metrics collected; EXPLAIN estimates are not exact rows examined.",
+    "Experimental covering index user_id/reviewed_at/duration_ms/rating was created and dropped only in disposable schema; index storage/write overhead not measured."
+  ]
+}

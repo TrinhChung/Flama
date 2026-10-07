@@ -40,8 +40,7 @@ import type {
   StudySessionAccumulatedStats,
   UpdatedTemplatePayload,
 } from '../session/sessionStore'
-import { patchRenderContext } from '../renderer/clientRenderer'
-import { canonicalDigest } from '../session/canonicalDigest'
+import { applyCardContentPatch } from '../session/contentPatchAdapter'
 import { hasUnacknowledgedStudyWork } from '../session/batchReceipt'
 import { flushNoteBatchStream, sendNoteBatchOnExit, usesNoteBatchTransport } from '../session/noteBatchTransport'
 import {
@@ -128,6 +127,60 @@ async function settleCommittedLease(value: unknown, session: PersistedStudySessi
     + 'Chọn Thử lại để mở phiên mới.'
   await quarantineStudySession(session.scope_key, session, { reason: 'COMMITTED_ELSEWHERE', message })
   throw new ApiError(message, 409, 'SESSION_ALREADY_COMMITTED')
+}
+
+function isTransientCommitFailure(caught: unknown) {
+  return !(caught instanceof ApiError)
+    || caught.code === 'BACKEND_UNAVAILABLE'
+    || caught.code === 'INVALID_COMMIT_RECEIPT'
+    || caught.status >= 500
+}
+
+/**
+ * A restored synchronous lease the server no longer holds open can only be
+ * settled by replaying the exact commit that closed it. Anything else can
+ * never be saved to that lease, so it is quarantined (kept, not deleted)
+ * instead of being retried on every visit. Resolves once the local copy is
+ * settled and may be removed; transient failures are rethrown untouched.
+ */
+async function settleClosedRestoredLease(
+  session: PersistedStudySession,
+  serverStatus: StudySessionStatus['status'] | 'missing',
+) {
+  if (
+    serverStatus === 'committed'
+    && session.status === 'pending_commit'
+    && session.commit_id
+  ) {
+    const prepared = prepareCommit(session)
+    try {
+      const response = await appApi.mutate<unknown>(
+        `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
+        'POST',
+        prepared.payload,
+      )
+      requireMatchingCommitReceipt(response, prepared.session)
+      return
+    } catch (caught) {
+      if (
+        caught instanceof ApiError
+        && caught.code === 'SESSION_ALREADY_COMMITTED'
+        && isCommitReceipt(caught.details)
+      ) {
+        await settleCommittedLease(caught.details, prepared.session)
+        return
+      }
+      if (isTransientCommitFailure(caught)) throw caught
+    }
+  }
+  const unsaved = session.events.length
+  const message = serverStatus === 'missing'
+    ? `Máy chủ không còn phiên học cũ trong trình duyệt này; ${unsaved} câu trả lời chưa lưu đã được cách ly (không xoá). `
+      + 'Chọn Thử lại để mở phiên mới.'
+    : `Phiên học cũ trong trình duyệt này đã đóng trên máy chủ (${serverStatus}); ${unsaved} câu trả lời chưa lưu đã được cách ly (không xoá). `
+      + 'Chọn Thử lại để mở phiên mới.'
+  await quarantineStudySession(session.scope_key, session, { reason: 'LEASE_CLOSED', message })
+  throw new ApiError(message, 409, 'SESSION_LEASE_CLOSED')
 }
 
 function openSnapshot(userId: number, deckId: string, compositionId: string) {
@@ -361,6 +414,10 @@ export function useStudySession(deckId: string | null) {
         }
         if (active) {
           const activeSessionId = active.snapshot.session_id
+          // NOTE batch streams settle through their own batch receipts.
+          const settlesSynchronously = !usesNoteBatchTransport(active)
+            && !active.in_flight_batches?.length
+          let closedLeaseStatus: StudySessionStatus['status'] | 'missing' | null = null
           try {
             const serverSession = await appApi.get<StudySessionStatus>(
               `/api/study/sessions/${activeSessionId}`,
@@ -373,6 +430,8 @@ export function useStudySession(deckId: string | null) {
               )
               if (!isThisLease()) return
               active = null
+            } else if (serverSession.status !== 'open') {
+              closedLeaseStatus = serverSession.status
             }
           } catch (caught) {
             if (!isThisLease()) return
@@ -384,11 +443,26 @@ export function useStudySession(deckId: string | null) {
               if (!isThisLease()) return
               active = null
             } else if (
+              caught instanceof ApiError
+              && caught.code === 'SESSION_NOT_FOUND'
+              && settlesSynchronously
+            ) {
+              closedLeaseStatus = 'missing'
+            } else if (
               !(caught instanceof ApiError)
               || caught.code !== 'BACKEND_UNAVAILABLE'
             ) {
               throw caught
             }
+          }
+          // Reviving a lease the server already closed would replay its old
+          // receipt (or fail) on every visit instead of opening a new session.
+          if (active && closedLeaseStatus && settlesSynchronously) {
+            await settleClosedRestoredLease(active, closedLeaseStatus)
+            if (!isThisLease()) return
+            await removeStudySessionIfMatches(key, activeSessionId)
+            if (!isThisLease()) return
+            active = null
           }
         }
         if (active) {
@@ -463,6 +537,7 @@ export function useStudySession(deckId: string | null) {
   useEffect(() => {
     if (!session || !view?.card?.card_id) return
     if (session.active_card_id === view.card.card_id) return
+    if (finalizedSessionRef.current === session.snapshot.session_id) return
     const controller = leaseControllerRef.current
     if (!controller || controller.signal.aborted || !hasLeaseRef.current) return
     void (async () => {
@@ -472,7 +547,7 @@ export function useStudySession(deckId: string | null) {
       try {
         if (!isCurrentLease(controller) || !hasLeaseRef.current) return
         const active = sessionRef.current
-        if (!active) return
+        if (!active || finalizedSessionRef.current === active.snapshot.session_id) return
         const selectedCardId = buildSessionView(active, now()).card?.card_id
         if (!selectedCardId || active.active_card_id === selectedCardId) return
         const nextSession: PersistedStudySession = {
@@ -700,6 +775,8 @@ export function useStudySession(deckId: string | null) {
           prepared.session.scope_key,
           prepared.session.snapshot.session_id,
         )
+        // The receipt closes this lease: nothing may persist or resend it.
+        finalizedSessionRef.current = prepared.session.snapshot.session_id
         if (!isThisLease()) return result
         const reconciled = applyCommitReceipt(prepared.session, result, {
           accumulated_stats: nextAccumulated,
@@ -779,6 +856,7 @@ export function useStudySession(deckId: string | null) {
               pending.scope_key,
               pending.snapshot.session_id,
             )
+            finalizedSessionRef.current = pending.snapshot.session_id
             if (!isThisLease()) return result
             const reconciled = applyCommitReceipt(pending, result, {
               accumulated_stats: nextAccumulated,
@@ -896,12 +974,24 @@ export function useStudySession(deckId: string | null) {
           sessionRef.current = prepared.session
         }
         sessionDurableRef.current = await saveStudySession(prepared.session)
-        const response = await appApi.mutateKeepalive<unknown>(
-          `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
-          'POST',
-          prepared.payload,
-        )
-        requireMatchingCommitReceipt(response, prepared.session)
+        try {
+          const response = await appApi.mutateKeepalive<unknown>(
+            `/api/study/sessions/${prepared.session.snapshot.session_id}/commit`,
+            'POST',
+            prepared.payload,
+          )
+          requireMatchingCommitReceipt(response, prepared.session)
+        } catch (caught) {
+          if (
+            !(caught instanceof ApiError)
+            || caught.code !== 'SESSION_ALREADY_COMMITTED'
+            || !isCommitReceipt(caught.details)
+          ) throw caught
+          // Same settlement as an in-page retry: a covering stored receipt
+          // clears the copy, anything else is quarantined, never revived.
+          await settleCommittedLease(caught.details, prepared.session)
+        }
+        finalizedSessionRef.current = prepared.session.snapshot.session_id
         await removeStudySessionIfMatches(
           prepared.session.scope_key,
           prepared.session.snapshot.session_id,
@@ -1031,98 +1121,14 @@ export function useStudySession(deckId: string | null) {
       if (!isCurrentLease(controller) || !hasLeaseRef.current) return
       const current = sessionRef.current
       if (!current) return
-      const targetCards = current.snapshot.cards.filter(
-        (c) => c.card_id === cardId || (options?.noteId && c.note_id === options.noteId),
+
+      const { updated, nextSession } = applyCardContentPatch(
+        current,
+        cardId,
+        updatedFieldValues,
+        options,
       )
-      if (targetCards.length === 0) return
-
-      const updatedContents = { ...current.snapshot.contents }
-      const updatedCards = [...current.snapshot.cards]
-      for (const card of targetCards) {
-        const contentKey = card.content_key
-        const template = current.snapshot.templates[card.template_key]
-        const existingContent = updatedContents[contentKey]
-        if (existingContent) {
-          // Merge media assets
-          const combinedMedia: StudyMediaArtifact[] = options?.media && options.media.length > 0
-            ? [...options.media]
-            : [...(existingContent.media || [])]
-
-          // Synthesize any proxy URLs found in updatedFieldValues not yet in combinedMedia
-          const existingProxyUrls = new Set(combinedMedia.map((m) => m.proxy_url))
-          for (const [fieldName, val] of Object.entries(updatedFieldValues)) {
-            if (typeof val === 'string') {
-              const matches = val.match(/\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}/g)
-              if (matches) {
-                for (const pUrl of matches) {
-                  if (!existingProxyUrls.has(pUrl)) {
-                    const assetId = pUrl.replace('/media/proxy/', '')
-                    const lk = fieldName.toLowerCase()
-                    const isAudio = lk.includes('audio') || lk.includes('sound') || lk.includes('voice')
-                    combinedMedia.push({
-                      id: assetId,
-                      field_name: fieldName,
-                      filename: `${assetId}`,
-                      mime_type: isAudio ? 'audio/mpeg' : 'image/jpeg',
-                      sha256: '',
-                      proxy_url: pUrl,
-                    })
-                    existingProxyUrls.add(pUrl)
-                  }
-                }
-              }
-            }
-          }
-
-          const mergedFieldValues = {
-            ...existingContent.field_values,
-            ...updatedFieldValues,
-          }
-
-          const nextRenderContext = patchRenderContext(
-            existingContent.render_context || {},
-            updatedFieldValues,
-            template?.field_defs,
-            combinedMedia,
-          )
-
-          const nextVersion = canonicalDigest({
-            schema_version: 'study-content.v1',
-            renderer_abi: existingContent.renderer_abi,
-            note_id: existingContent.note_id,
-            field_values: mergedFieldValues,
-            media: combinedMedia,
-          })
-          const newContentKey = `${existingContent.id}:${nextVersion}`
-
-          updatedContents[newContentKey] = {
-            ...existingContent,
-            version: nextVersion,
-            field_values: mergedFieldValues,
-            render_context: nextRenderContext,
-            media: combinedMedia,
-          }
-
-          for (let i = 0; i < updatedCards.length; i++) {
-            if (updatedCards[i].card_id === card.card_id) {
-              updatedCards[i] = {
-                ...updatedCards[i],
-                content_key: newContentKey,
-              }
-            }
-          }
-        }
-      }
-
-      const nextSession: PersistedStudySession = {
-        ...current,
-        snapshot: {
-          ...current.snapshot,
-          cards: updatedCards,
-          contents: updatedContents,
-        },
-        updated_at_ms: Date.now(),
-      }
+      if (!updated) return
 
       activateSession(nextSession)
       sessionDurableRef.current = await saveStudySession(nextSession)

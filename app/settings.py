@@ -146,8 +146,19 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         "SPA_TEST_SHELL_ENABLED": is_testing,
         "SQLALCHEMY_DATABASE_URI": database_uri,
         "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+        # Additive rollup rollout: deploy/migrate and cover ALL writers before
+        # backfill; only matching verified generations can serve summary reads.
+        "REVIEW_ANALYTICS_WRITE_ENABLED": coerce_bool_env("REVIEW_ANALYTICS_WRITE_ENABLED", default=False),
+        "REVIEW_ANALYTICS_READ_MODE": os.getenv("REVIEW_ANALYTICS_READ_MODE", "raw").strip().lower(),
+        "REVIEW_ANALYTICS_READ_USER_IDS": comma_separated_env("REVIEW_ANALYTICS_READ_USER_IDS"),
+        "REVIEW_ANALYTICS_SHADOW_SAMPLE_RATE": os.getenv("REVIEW_ANALYTICS_SHADOW_SAMPLE_RATE", "0.01"),
+        "REVIEW_ANALYTICS_TIMEZONE_RULES_VERSION": os.getenv("REVIEW_ANALYTICS_TIMEZONE_RULES_VERSION", ""),
+        "DECK_COUNT_WRITE_ENABLED": coerce_bool_env("DECK_COUNT_WRITE_ENABLED", default=False),
+        "DECK_COUNT_READ_MODE": os.getenv("DECK_COUNT_READ_MODE", "raw").strip().lower(),
+        "DECK_COUNT_PREWARM_USER_IDS": comma_separated_env("DECK_COUNT_PREWARM_USER_IDS"),
         "SQLALCHEMY_ENGINE_OPTIONS": engine_options,
         "CORS_ALLOWED_ORIGINS": comma_separated_env("CORS_ALLOWED_ORIGINS"),
+        "CORS_MAX_AGE": coerce_int_env("CORS_MAX_AGE", default=86400),
         "FRONTEND_URL": os.getenv("FRONTEND_URL", "").strip().rstrip("/"),
         # Browser-driven Anki imports now terminate on the canonical Flask API.
         # Keep the established package-service keys during the transport

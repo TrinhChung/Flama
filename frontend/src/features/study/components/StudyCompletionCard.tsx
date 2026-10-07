@@ -10,7 +10,7 @@ import {
   Printer,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { DeckWorksheetModal } from '@/features/worksheets'
+import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
 import type {
   StudySessionCommitReceipt,
   StudySessionEvent,
@@ -373,7 +373,7 @@ export function StudyCompletionCard({
 
       {/* Printable Worksheet Live Studio Modal */}
       {isWorksheetOpen ? (
-        <DeckWorksheetModal
+        <LazyDeckWorksheetModal
           open={isWorksheetOpen}
           onOpenChange={setIsWorksheetOpen}
           deckId={numericDeckId}

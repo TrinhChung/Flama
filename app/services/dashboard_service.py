@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple
@@ -13,7 +14,8 @@ from models.deck import Deck
 from app.repositories.study_authority_repository import read_study_authority_route
 from app.repositories.study_repository import _today_day_index
 from app.services.anki_scheduler import _day_index_to_datetime
-from app.services.deck_aggregation_service import aggregate_deck_study_counts
+from app.services.deck_aggregation_service import aggregate_deck_study_counts, deck_note_type_metadata
+from app.services.deck_count_snapshot_service import resolve_cached_owned_deck_counts
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.services.stats_overview import get_effective_timezone_name
 from app.utils.deck_move_token import create_deck_move_token
@@ -42,7 +44,7 @@ class DeckNode:
     children: List["DeckNode"] = field(default_factory=list)
 
 
-def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, bool]:
+def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> Tuple[List[DeckNode], int, int, int, bool]:
     admin_mode = is_admin_user(current_user)
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     # Same study-day boundary as the learner's Study queue counts.
@@ -68,16 +70,33 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
     decks = collect_accessible_decks(user_id=current_user.id, admin_mode=admin_mode)
 
     visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
+    count_by_note = bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False))
+    cached_counts, dirty_ids = resolve_cached_owned_deck_counts(
+        db.session, learner_user_id=int(current_user.id), visible_deck_ids=visible_deck_ids,
+        today_day_index=today_day_index, day_cutoff_utc=day_cutoff_utc,
+        timezone_name=timezone_name, day_boundary_hour_local=boundary_hour,
+        is_note_mode=authority_route.mode_code == "NOTE", admin_mode=admin_mode,
+        count_by_note=count_by_note, now_utc=now,
+    )
+    metadata_ids = [int(deck.id) for deck in decks if not deck.note_type_id]
     card_counts_by_deck, deck_note_types = aggregate_deck_study_counts(
         db.session,
         learner_user_id=int(current_user.id),
-        visible_deck_ids=visible_deck_ids,
+        visible_deck_ids=dirty_ids,
+        note_type_deck_ids=metadata_ids,
+        include_note_types=not bool(cached_counts),
         today_day_index=today_day_index,
         day_cutoff_utc=day_cutoff_utc,
         is_note_mode=authority_route.mode_code == "NOTE",
         admin_mode=admin_mode,
-        count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
+        count_by_note=count_by_note,
     )
+    card_counts_by_deck.update(cached_counts)
+    if cached_counts:
+        deck_note_types = deck_note_type_metadata(
+            db.session, learner_user_id=int(current_user.id), deck_ids=metadata_ids,
+            admin_mode=admin_mode,
+        )
 
     by_parent: Dict[int, List[Deck]] = {}
     for deck in decks:
@@ -91,9 +110,19 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
     move_alias_by_deck_id: Dict[int, str] = {}
     move_token_by_deck_id: Dict[int, str] = {}
     used_move_aliases: set[str] = set()
+    alias_key = str(current_app.config.get("SECRET_KEY") or "").encode("utf-8")
     for deck in decks:
-        move_token = create_deck_move_token(deck.id, current_user.id)
-        digest = hashlib.sha256(move_token.encode("utf-8")).hexdigest().upper()
+        if include_move_tokens:
+            token = create_deck_move_token(deck.id, current_user.id)
+            move_token_by_deck_id[deck.id] = token
+            digest = hashlib.sha256(token.encode("utf-8")).hexdigest().upper()
+        else:
+            # Display identifier only; numeric PATCH IDs still own authorization.
+            digest = hmac.new(
+                alias_key,
+                f"deck-move-alias-v1:{current_user.id}:{deck.id}".encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest().upper()
         alias_len = 10
         move_alias = f"MID-{digest[:alias_len]}"
         while move_alias in used_move_aliases and alias_len < len(digest):
@@ -104,7 +133,6 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
 
         used_move_aliases.add(move_alias)
         move_alias_by_deck_id[deck.id] = move_alias
-        move_token_by_deck_id[deck.id] = move_token
 
     subtree_card_counts_cache: Dict[int, Dict[str, int]] = {}
 
@@ -153,7 +181,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                     parent_move_alias=move_alias_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
                     parent_move_token=move_token_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
                     label=deck.name,
-                    href=url_for("vocabulary.study_deck", deck_id=deck.id),
+                    href=url_for("vocabulary.study_deck", deck_id=deck.id) if include_move_tokens else "",
                     depth=depth,
                     new_count=deck_new,
                     learn_count=deck_learn,

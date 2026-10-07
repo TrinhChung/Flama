@@ -2,12 +2,18 @@
 
 import unittest
 from unittest.mock import patch
+from datetime import datetime
+
+from sqlalchemy import event
 
 from app import create_app
 from app.services import login_rate_limit_service
 from models import db
 from models.deck import Deck
+from models.flashcard import Card, Note, NoteType, Template
 from models.user import User
+from app.utils.deck_move_token import parse_deck_move_token
+from app.repositories.deck_tree_query import collect_accessible_decks
 
 
 class RestApiV1Tests(unittest.TestCase):
@@ -190,6 +196,13 @@ class RestApiV1Tests(unittest.TestCase):
             self.child_deck_id,
         )
 
+        with self.app.app_context():
+            root = dashboard_payload["items"][0]
+            child = root["children"][0]
+            self.assertEqual(parse_deck_move_token(root["move_token"], user_id=self.admin_id), self.root_deck_id)
+            self.assertEqual(parse_deck_move_token(child["parent_move_token"], user_id=self.admin_id), self.root_deck_id)
+            self.assertEqual(root["href"], f"/vocabulary/study/deck/{self.root_deck_id}")
+
         statistics_response = self.client.get(
             f"/api/statistics?deck_id={self.child_deck_id}"
         )
@@ -209,6 +222,100 @@ class RestApiV1Tests(unittest.TestCase):
             invalid_year_response.get_json()["field"],
             "year",
         )
+
+    def test_compact_dashboard_preserves_tree_counts_and_note_types_without_tokens(self):
+        with self.app.app_context():
+            note_type = NoteType(user_id=self.admin_id, name="Dashboard type")
+            db.session.add(note_type)
+            db.session.flush()
+            templates = [Template(note_type_id=note_type.id, name=name) for name in ("Front", "Reverse")]
+            db.session.add_all(templates)
+            note = Note(user_id=self.admin_id, note_type_id=note_type.id, deck_id=self.child_deck_id)
+            db.session.add(note)
+            db.session.flush()
+            db.session.add_all([Card(note_id=note.id, template_id=template.id) for template in templates])
+            db.session.commit()
+            note_type_id = note_type.id
+
+        self._login_admin()
+        legacy = self.client.get("/api/dashboard").get_json()
+        # Compact reads must not sign tokens that the numeric deck REST API never uses.
+        with patch("app.services.dashboard_service.create_deck_move_token", side_effect=AssertionError("unexpected signing")):
+            response = self.client.get("/api/dashboard?compact=1")
+            repeated = self.client.get("/api/dashboard?compact=true")
+        self.assertEqual(response.status_code, 200)
+        compact = response.get_json()
+        self.assertEqual(compact, repeated.get_json())
+        self.assertEqual(compact["summary"], legacy["summary"])
+        self.assertEqual(compact["summary"]["new"], 2)
+        self.assertEqual(compact["items"][0]["children"][0]["note_type_id"], note_type_id)
+
+        omitted = {"move_token", "parent_move_token", "parent_move_alias", "href"}
+        aliases = []
+
+        def compare_rows(old_rows, new_rows):
+            self.assertEqual(len(old_rows), len(new_rows))
+            for old, new in zip(old_rows, new_rows):
+                self.assertTrue(omitted.isdisjoint(new))
+                for key in ("deck_id", "parent_id", "label", "depth", "new_count", "learn_count", "due_count", "note_type_id"):
+                    self.assertEqual(new[key], old[key], key)
+                self.assertRegex(new["move_alias"], r"^MID-[A-F0-9]{10,64}$")
+                aliases.append(new["move_alias"])
+                compare_rows(old["children"], new["children"])
+
+        compare_rows(legacy["items"], compact["items"])
+        self.assertEqual(len(aliases), len(set(aliases)))
+        self.assertLess(len(response.data), len(self.client.get("/api/dashboard").data))
+        moved = self.client.patch(
+            f"/api/decks/{self.child_deck_id}", json={"parent_id": None}
+        )
+        self.assertEqual(moved.status_code, 200)
+        self.assertIsNone(moved.get_json()["item"]["parent_id"])
+
+    def test_dashboard_rejects_invalid_compact_parameter(self):
+        self._login_admin()
+        response = self.client.get("/api/dashboard?compact=maybe")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["field"], "compact")
+        self.assertEqual(response.get_json()["error"], "VALIDATION_ERROR")
+
+    def test_admin_deck_collection_reads_once_when_all_ancestors_are_owned(self):
+        with self.app.app_context():
+            deck_queries = []
+            engine = db.engine
+
+            def capture(conn, cursor, statement, parameters, context, executemany):
+                if "from decks" in statement.lower():
+                    deck_queries.append(statement)
+
+            event.listen(engine, "before_cursor_execute", capture)
+            try:
+                rows = collect_accessible_decks(user_id=self.admin_id, admin_mode=True)
+            finally:
+                event.remove(engine, "before_cursor_execute", capture)
+            self.assertEqual([row.id for row in rows], [self.root_deck_id, self.child_deck_id])
+            self.assertEqual(len(deck_queries), 1, deck_queries)
+
+    def test_admin_deck_collection_keeps_foreign_ancestors_and_excludes_deleted_decks(self):
+        with self.app.app_context():
+            outsider = User(username="outsider", email="outsider@example.com")
+            db.session.add(outsider)
+            db.session.flush()
+            ancestor = Deck(name="Foreign ancestor", owner_user_id=outsider.id, position=-1)
+            unrelated = Deck(name="Other foreign root", owner_user_id=outsider.id)
+            deleted = Deck(name="Deleted own root", owner_user_id=self.admin_id, deleted_at=datetime(2026, 1, 1))
+            db.session.add_all([ancestor, unrelated, deleted])
+            db.session.flush()
+            parent = Deck(name="Foreign parent", parent_id=ancestor.id, owner_user_id=outsider.id)
+            db.session.add(parent)
+            db.session.flush()
+            db.session.get(Deck, self.child_deck_id).parent_id = parent.id
+            db.session.commit()
+
+            rows = collect_accessible_decks(user_id=self.admin_id, admin_mode=True)
+            self.assertEqual([row.id for row in rows], [ancestor.id, self.root_deck_id, self.child_deck_id, parent.id])
+            self.assertNotIn(unrelated.id, [row.id for row in rows])
+            self.assertNotIn(deleted.id, [row.id for row in rows])
 
     def test_deck_resource_create_update_reset_and_delete(self):
         self._login_admin()

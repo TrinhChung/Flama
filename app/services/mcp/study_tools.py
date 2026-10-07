@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy.orm import contains_eager
 
 from app.repositories import study_repository, vocabulary_repository
+from app.repositories.study_queue_repository import query_study_queue_card_refs
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_route,
@@ -38,6 +39,7 @@ from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.note import Note
+from models.note_type import NoteType
 from models.user import User
 
 # 5. Study & Card Review Operations
@@ -114,8 +116,7 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
         Note.user_id == user_id, Note.deck_id.in_(deck_ids)
     )
     if authority_route.mode_code == "NOTE":
-        # The Note is already joined; load it with the Card instead of per Card.
-        cards = cards_query.options(contains_eager(Card.note)).order_by(Card.id.asc()).all()
+        cards = query_study_queue_card_refs(cards_query)
         try:
             # Counts need availability only: read it set-wise (P5-11e).
             authority_reads = load_study_authority_availability_snapshot(
@@ -189,9 +190,12 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
         .filter(Note.user_id == user_id, Note.deck_id.in_(deck_ids))
     )
 
-    # Fetch candidate cards with their (joined) Notes in one query.
-    candidate_cards = cards_query.options(contains_eager(Card.note)).all()
-    studyable = tuple(card for card in candidate_cards if card.note is not None)
+    if counts["authority_mode"] == "NOTE":
+        studyable = query_study_queue_card_refs(cards_query)
+        candidate_cards = None
+    else:
+        candidate_cards = cards_query.options(contains_eager(Card.note)).all()
+        studyable = tuple(card for card in candidate_cards if card.note is not None)
     try:
         if counts["authority_mode"] == "NOTE":
             # Order the whole queue set-wise, then read the returned Cards fully.
@@ -218,12 +222,26 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
             now_utc=now,
             timezone_name=timezone_name,
         )
-        candidate_by_id = {str(card.id): card for card in candidate_cards}
-        returned = [
-            candidate_by_id[card_id]
-            for card_id in queue_summary.due_card_ids
-            if candidate_by_id[card_id].note.note_type is not None
-        ][:limit]
+        if counts["authority_mode"] == "NOTE":
+            # Keep skip-before-limit semantics for orphaned/missing NoteTypes,
+            # without loading every candidate's Note content to test it.
+            renderable_ids = {
+                str(row[0]) for row in cards_query.join(NoteType, Note.note_type_id == NoteType.id)
+                .with_entities(Card.id).all()
+            } if queue_summary.due_card_ids else set()
+            returned_ids = [card_id for card_id in queue_summary.due_card_ids if card_id in renderable_ids][:limit]
+            candidate_by_id = {
+                str(card.id): card for card in cards_query.filter(Card.id.in_(returned_ids))
+                .options(contains_eager(Card.note)).all()
+            } if returned_ids else {}
+            returned = [candidate_by_id[card_id] for card_id in returned_ids if card_id in candidate_by_id]
+        else:
+            candidate_by_id = {str(card.id): card for card in candidate_cards}
+            returned = [
+                candidate_by_id[card_id]
+                for card_id in queue_summary.due_card_ids
+                if candidate_by_id[card_id].note.note_type is not None
+            ][:limit]
         deck_options_by_card_id = _deck_options_by_card_id(user_id=user_id, cards=returned)
         authority_reads = load_study_authority_card_reads(
             db.session,
@@ -453,6 +471,13 @@ def submit_review(
 # ---------------------------------------------------------------------------
 
 
+def _is_consolidated_profile() -> bool:
+    from app.repositories.study_authority_repository import read_study_storage_profile
+    from app.services.study_progress_contract import CONSOLIDATED_STORAGE_PROFILE
+
+    return read_study_storage_profile(db.session) == CONSOLIDATED_STORAGE_PROFILE
+
+
 def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
     """Return learning and review stats for a specific deck."""
     deck = Deck.query.filter_by(id=deck_id, owner_user_id=user_id, deleted_at=None).first()
@@ -465,22 +490,43 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
         )
 
     note_count = Note.query.filter_by(deck_id=deck_id, user_id=user_id).count()
-    cards = (
+    due_counts = get_due_card_counts(user_id=user_id, deck_id=deck_id)
+    consolidated_note = due_counts["authority_mode"] == "NOTE" and _is_consolidated_profile()
+    cards_query = (
         Card.query.join(Note, Card.note_id == Note.id)
         .filter(Note.deck_id == deck_id, Note.user_id == user_id)
-        .options(contains_eager(Card.note))
-        .all()
     )
-    card_count = len(cards)
-
-    due_counts = get_due_card_counts(user_id=user_id, deck_id=deck_id)
+    if consolidated_note:
+        card_count = cards_query.count()
+        cards = ()
+    else:
+        cards = cards_query.options(contains_eager(Card.note)).all()
+        card_count = len(cards)
 
     # Progress breakdown
     card_ids = [c.id for c in cards]
     young_count = 0
     mature_count = 0
-    if card_ids:
-        if due_counts["authority_mode"] == "NOTE":
+    if card_count:
+        if consolidated_note:
+            # ADR P10 §2.7: one non-locking SELECT over the deck's Note rows.
+            from app.repositories.note_analytics_read_repository import (
+                consolidated_card_rows,
+                state_interval_days,
+            )
+
+            for row in consolidated_card_rows(
+                Card.query.join(Note, Card.note_id == Note.id)
+                .filter(Note.deck_id == deck_id, Note.user_id == user_id),
+                learner_user_id=user_id,
+            ).all():
+                if row[5] != "review":
+                    continue
+                if state_interval_days(row[6]) >= 21:
+                    mature_count += 1
+                else:
+                    young_count += 1
+        elif due_counts["authority_mode"] == "NOTE":
             try:
                 authority_reads = load_study_authority_card_reads(
                     db.session,

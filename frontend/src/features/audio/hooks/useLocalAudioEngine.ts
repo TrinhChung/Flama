@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
+import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { apiRequest } from '@/shared/api/client'
 import {
@@ -942,19 +942,23 @@ export function useLocalAudioEngine(options: {
         const res = await uploadNoteMediaBatch(batchPayload)
         const resultMap = new Map(res.items.map((it) => [it.item_id, it]))
 
-        currentBatch.forEach(({ index, item }) => {
+        for (const { index, item } of currentBatch) {
           const result = resultMap.get(String(index))
           if (result && result.status === 'success') {
             batchItems[index].status = 'done'
             if (result.url) {
-              updateCardFieldValuesInSessions(item.cardId, { [destinationField]: result.url })
+              await updateCardFieldValues({
+                cardId: item.cardId,
+                noteId: item.noteId,
+                fieldValues: { [destinationField]: result.url },
+              })
             }
           } else {
             batchItems[index].status = 'failed'
             batchItems[index].error = result?.message || result?.error || 'Tải lên thất bại'
           }
           completedCount++
-        })
+        }
       } catch {
         // Fallback to single upload per item if batch upload endpoint fails
         for (const { index, item, blob } of currentBatch) {
@@ -967,7 +971,11 @@ export function useLocalAudioEngine(options: {
             )
             batchItems[index].status = 'done'
             if (res.url) {
-              updateCardFieldValuesInSessions(item.cardId, { [destinationField]: res.url })
+              await updateCardFieldValues({
+                cardId: item.cardId,
+                noteId: item.noteId,
+                fieldValues: { [destinationField]: res.url },
+              })
             }
           } catch (err) {
             batchItems[index].status = 'failed'

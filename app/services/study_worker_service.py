@@ -19,7 +19,6 @@ from app.repositories.study_repository import is_progress_suspended
 from app.repositories.study_batch_repository import StudyBatchRecoveryCursor, read_admitted_batch_page
 from app.services import (
     study_artifact_service,
-    study_progress_shadow_mirror_service,
     study_service,
 )
 from app.services.anki_scheduler import DeckOptions
@@ -43,7 +42,6 @@ from app.services.study_session_service import (
     VALID_RATINGS,
     deserialize_card_state,
     deserialize_deck_options,
-    serialize_card_state,
     study_batch_job_from_admission,
     StudySessionError,
 )
@@ -65,6 +63,7 @@ from app.validators.study_session_wire import (
     resolve_wire_envelope_contract,
     validate_review_event_wire_contract,
 )
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -187,6 +186,7 @@ def _process_admitted_note_batch(job, session, batch, *, user_id):
         current.status = "failed"
         current.error_message = json.dumps({"code": exc.code, "message": str(exc)})
         current.processed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         push_to_dlq(job, str(exc))
         return {"status": "failed", "batch_id": batch_id, "error_code": exc.code}
@@ -332,6 +332,7 @@ def process_single_study_batch(
             if existing_batch is not None:
                 existing_batch.status = "failed"
                 existing_batch.error_message = err_msg
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()
@@ -459,6 +460,7 @@ def process_single_study_batch(
             if existing_batch is not None:
                 existing_batch.status = "failed"
                 existing_batch.error_message = f"{code}: {message}"
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()
@@ -650,6 +652,7 @@ def process_single_study_batch(
             if existing_batch is not None:
                 existing_batch.status = "failed"
                 existing_batch.error_message = err_msg
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()
@@ -672,32 +675,15 @@ def process_single_study_batch(
                 "BATCH_CARD_MISSING", "An admitted Card no longer exists."
             )
 
-        mirror_plan = None
-        if touched_ids and study_progress_shadow_mirror_service.shadow_writes_enabled():
-            mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
-                db.session,
-                learner_user_id=user_id,
-                cards=card_rows.values(),
-                now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
+        progress_rows = (
+            CardProgress.query.filter(
+                CardProgress.user_id == user_id,
+                CardProgress.card_id.in_(sorted(touched_ids)),
             )
-            locked_progress = (
-                study_progress_shadow_mirror_service.locked_progress_map(mirror_plan)
-            )
-            progress_rows = [
-                locked_progress[card_id]
-                for card_id in sorted(touched_ids)
-                if card_id in locked_progress
-            ]
-        else:
-            progress_rows = (
-                CardProgress.query.filter(
-                    CardProgress.user_id == user_id,
-                    CardProgress.card_id.in_(sorted(touched_ids)),
-                )
-                .populate_existing()
-                .with_for_update()
-                .all()
-            ) if touched_ids else []
+            .populate_existing()
+            .with_for_update()
+            .all()
+        ) if touched_ids else []
         progress_map = {str(row.card_id): row for row in progress_rows if row.card_id}
 
         # Initialize card states: use existing progress if present, else session card initial state
@@ -796,9 +782,6 @@ def process_single_study_batch(
             db.session.flush()
 
         last_review_event_by_card: dict[str, Any] = {}
-        mirror_history_events: list[
-            study_progress_shadow_mirror_service.NativeMirrorHistoryEvent
-        ] = []
         last_replay_index_by_card = {
             session_card.card_id: index
             for index, (_, session_card, *_rest) in enumerate(replayed_events)
@@ -859,17 +842,6 @@ def process_single_study_batch(
                 )
             )
             last_review_event_by_card[session_card.card_id] = mutation_result.review_event
-            mirror_history_events.append(
-                study_progress_shadow_mirror_service.NativeMirrorHistoryEvent(
-                    review_event=mutation_result.review_event,
-                    before_state_hash=study_artifact_service.canonical_digest(
-                        serialize_card_state(before)
-                    ),
-                    after_state_hash=study_artifact_service.canonical_digest(
-                        serialize_card_state(transition.state)
-                    ),
-                )
-            )
 
         db.session.flush()
 
@@ -881,12 +853,6 @@ def process_single_study_batch(
                 prog.last_review_event_id = int(last_ev.id)
 
         now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-
-        study_progress_shadow_mirror_service.finalize_native_mirror(
-            mirror_plan,
-            review_events=tuple(mirror_history_events),
-            now_utc=now_utc,
-        )
 
         # Step 7: Update or create StudySessionBatch record
         if existing_batch is None:
@@ -944,6 +910,7 @@ def process_single_study_batch(
                 )
             )
 
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         mark_batch_processed(batch_identity)
 
@@ -1008,6 +975,7 @@ def process_single_study_batch(
                 if attempts >= max_retries:
                     failed_batch.status = "failed"
                     failed_batch.error_message = str(exc)
+                flush_review_analytics_deltas(db.session)
                 db.session.commit()
             else:
                 db.session.rollback()

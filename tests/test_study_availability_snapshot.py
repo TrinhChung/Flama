@@ -2,19 +2,22 @@
 
 from datetime import datetime, timezone
 import unittest
+from unittest.mock import patch
 
-from app.repositories.study_authority_repository import lock_study_authority_route
+from sqlalchemy import JSON, event
+
+from app.repositories.study_authority_repository import StudyAuthorityFenceError, lock_study_authority_route
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_authority_read_service import (
-    StudyAuthorityReadError,
     load_study_authority_availability_snapshot,
     load_study_authority_card_reads,
+    StudyAuthorityReadError,
     summarize_study_authority_queue,
 )
 from models import db
 from models.card import Card
 from models.note import Note
-from models.study_progress_availability import StudyProgressAvailability
+from models.study_progress_subject import StudyProgressSubject
 from tests import test_study_direct_note_replay as fixtures
 
 
@@ -62,17 +65,88 @@ class StudyAvailabilitySnapshotTests(unittest.TestCase):
             )
             db.session.rollback()
 
-    def test_snapshot_fails_closed_on_missing_availability(self):
+    def test_classifier_keeps_locked_presence_reads_without_loading_state_document(self):
+        from app.services.study_note_pristine_service import classify_note_authority_keys
+
         self._answer()
         with self.app.app_context():
-            db.session.delete(StudyProgressAvailability.query.first())
+            card = db.session.get(Card, self.card_ids[0])
+            stateful_id = str(card.note_id)
+            pristine = Note(user_id=self.user_id, note_type_id=card.note.note_type_id,
+                            deck_id=self.deck_id, field_values={"Word": "pristine"})
+            db.session.add(pristine)
+            db.session.flush()
+            pristine_id = str(pristine.id)
             db.session.commit()
-            scope, cards = self._scope_and_cards()
-            with self.assertRaises(StudyAuthorityReadError) as refused:
-                load_study_authority_availability_snapshot(
-                    db.session, learner_user_id=self.user_id, cards=cards, scope=scope,
-                    now_utc=datetime.now(timezone.utc).replace(tzinfo=None))
-            self.assertEqual(refused.exception.code, "INCOMPLETE_AUTHORITY_COMPATIBILITY")
+            reads = []
+            def capture(_conn, statement, *_args):
+                if "FROM study_progress_subjects" in str(statement):
+                    reads.append((tuple(statement.selected_columns.keys()),
+                                  getattr(statement, "_for_update_arg", None) is not None))
+            event.listen(db.engine, "before_execute", capture)
+            try:
+                stateful, untouched = classify_note_authority_keys(
+                    db.session, learner_user_id=self.user_id,
+                    note_ids=[stateful_id, pristine_id],
+                )
+            finally:
+                event.remove(db.engine, "before_execute", capture)
+            self.assertEqual(stateful, frozenset([stateful_id]))
+            self.assertEqual(untouched, frozenset([pristine_id]))
+            self.assertEqual(reads, [(("logical_note_key", "status_code", "live_note_id", "has_state"), True)])
+            db.session.rollback()
+
+    def test_classifier_preserves_json_null_as_missing_state(self):
+        from app.services.study_note_pristine_service import classify_note_authority_keys
+
+        self._answer()
+        with self.app.app_context():
+            subject = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one()
+            note_id = str(subject.live_note_id)
+            subject.state_payload = JSON.NULL
+            db.session.commit()
+            with self.assertRaises(StudyAuthorityFenceError) as raised:
+                classify_note_authority_keys(db.session, learner_user_id=self.user_id, note_ids=[note_id])
+            self.assertEqual(raised.exception.code, "INCOMPLETE_AUTHORITY_COVERAGE")
+            db.session.rollback()
+
+    def test_siblings_validate_once_but_keep_card_specific_order_metadata(self):
+        from app.services import study_note_card_projection as projection
+
+        self._answer()
+        with self.app.app_context():
+            _scope, cards = self._scope_and_cards()
+            options = resolve_deck_options(user_id=self.user_id, deck_id=self.deck_id)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            with patch.object(projection, "project_note_state", wraps=projection.project_note_state) as projected:
+                reads = load_study_authority_card_reads(
+                    db.session, learner_user_id=self.user_id, cards=tuple(cards),
+                    now_utc=now, timezone_name="UTC",
+                    deck_options_by_card_id={str(card.id): options for card in cards},
+                )
+            self.assertEqual(projected.call_count, 1)
+            self.assertEqual(set(reads), set(self.card_ids))
+            for card in cards:
+                self.assertEqual(reads[str(card.id)].availability.card_order_key, str(card.id).encode())
+                self.assertEqual(reads[str(card.id)].availability.card_created_at, card.created_at)
+            db.session.rollback()
+
+    def test_memoized_sibling_validation_still_rejects_availability_drift(self):
+        self._answer()
+        with self.app.app_context():
+            subject = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one()
+            subject.normalized_queue = "new"
+            db.session.commit()
+            _scope, cards = self._scope_and_cards()
+            options = resolve_deck_options(user_id=self.user_id, deck_id=self.deck_id)
+            with self.assertRaises(StudyAuthorityReadError) as raised:
+                load_study_authority_card_reads(
+                    db.session, learner_user_id=self.user_id, cards=tuple(cards),
+                    now_utc=datetime.now(timezone.utc).replace(tzinfo=None), timezone_name="UTC",
+                    deck_options_by_card_id={str(card.id): options for card in cards},
+                )
+            self.assertEqual(raised.exception.code, "AUTHORITY_READ_PARITY_DIVERGED")
+            db.session.rollback()
 
 
 if __name__ == "__main__":

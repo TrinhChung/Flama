@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
 import { apiBlob } from '@/shared/api/client'
-import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
+import { updateCardFieldValues } from '@/entities/flashcard/model/cardContentUpdates'
 import {
   type BrowseTtsSettings,
   loadStoredBrowseTtsSettings,
@@ -104,10 +105,7 @@ export function useBrowseState() {
   const queryClient = useQueryClient()
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
 
-  const bootstrapQuery = useQuery({
-    queryKey: ['bootstrap'],
-    queryFn: () => appApi.getBootstrap(),
-  })
+  const bootstrapQuery = useBootstrap()
   const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
 
   // Left Pane: Deck Selection & Search
@@ -619,7 +617,7 @@ export function useBrowseState() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] }),
         queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] }),
-        queryClient.invalidateQueries({ queryKey: ['bootstrap'] }),
+        queryClient.invalidateQueries({ queryKey: bootstrapQueryKey }),
         newCardId
           ? queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', newCardId] })
           : Promise.resolve(),
@@ -656,7 +654,7 @@ export function useBrowseState() {
       setInitialTags(editTags)
       if (activeCardId) {
         const noteId = cardDetailQuery.data?.note?.id ? String(cardDetailQuery.data.note.id) : null
-        await updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
+        await updateCardFieldValues({ cardId: activeCardId, fieldValues: editFieldValues, noteId })
       }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })
@@ -703,7 +701,7 @@ export function useBrowseState() {
       setSelectedCards([])
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
-      void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
     },
     onError: (error: Error) => {
       toast.error('Lỗi khi xóa hàng loạt', { id: 'bulk-delete-cards', description: error.message })

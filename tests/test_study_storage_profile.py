@@ -1,11 +1,10 @@
-"""P9-03b: NOTE storage profile fence and CardProgress-free contributor evidence."""
+"""P9-03b: NOTE storage profile fence (the contributor table it altered is retired, P10-09)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 import importlib
 import unittest
-from unittest import mock
 
 from alembic import op
 from alembic.migration import MigrationContext
@@ -22,8 +21,8 @@ from app.repositories.study_authority_repository import (
 )
 from models import db
 from models.study_authority_enrollment import StudyAuthorityEnrollment
+from migrations.retired_note_progress_tables import StudyProgressContributor
 from models.study_authority_storage_profile import StudyAuthorityStorageProfile
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
 
@@ -65,6 +64,8 @@ class StudyStorageProfileTests(unittest.TestCase):
         )
         db.session.add(self.subject)
         db.session.commit()
+        # Migration 47 altered the (since retired) contributor table.
+        StudyProgressContributor.__table__.create(bind=db.engine)
 
     def tearDown(self):
         op._proxy = None
@@ -114,56 +115,19 @@ class StudyStorageProfileTests(unittest.TestCase):
     def _bind(connection):
         op._proxy = Operations(MigrationContext.configure(connection))
 
-    def test_existing_writers_keep_legacy_projection_evidence(self):
-        row = self._contributor()
-        db.session.add(row)
-        db.session.commit()
-        self.assertEqual(row.evidence_kind, "LEGACY_PROJECTION")
-
-    def test_evidence_kind_is_paired_with_raw_evidence(self):
-        for column in RAW:
-            with self.subTest(missing=column):
-                self._assert_rejected(self._contributor(**{column: None}))
-        self._assert_rejected(self._contributor(evidence_kind="CANONICAL"))
-        self._assert_rejected(self._contributor(evidence_kind="OTHER"))
-
-        canonical = self._contributor(evidence_kind="CANONICAL", **NO_RAW)
-        db.session.add(canonical)
-        db.session.commit()
-        stored = db.session.execute(sa.text(
-            "SELECT evidence_kind, raw_payload IS NULL, source_progress_id IS NULL "
-            "FROM study_progress_contributors WHERE id = :id"
-        ), {"id": canonical.id}).one()
-        self.assertEqual(tuple(stored), ("CANONICAL", 1, 1))
-
-    def test_one_contributor_per_card_and_generation(self):
-        db.session.add(self._contributor(evidence_kind="CANONICAL", **NO_RAW))
-        db.session.commit()
-        self._assert_rejected(self._contributor(evidence_kind="CANONICAL", **NO_RAW))
-        self._assert_rejected(self._contributor(**{**RAW, "source_progress_id": 12}))
-        db.session.add(self._contributor(subject_generation=2, evidence_kind="CANONICAL", **NO_RAW))
-        db.session.add(self._contributor(b"card-2", evidence_kind="CANONICAL", **NO_RAW))
-        db.session.commit()
-
-    def test_absent_profile_row_means_projection(self):
+    def test_absent_profile_row_means_a_fresh_consolidated_install(self):
         self._enroll_note()
-        self.assertEqual(read_study_storage_profile(db.session), "PROJECTION_V1")
+        self.assertEqual(read_study_storage_profile(db.session), "CONSOLIDATED_V1")
         route = lock_study_authority_route(
             db.session, learner_user_id=self.user.id, allow_note_authority=True
         )
-        self.assertEqual((route.mode_code, route.storage_profile), ("NOTE", "PROJECTION_V1"))
+        self.assertEqual((route.mode_code, route.storage_profile), ("NOTE", "CONSOLIDATED_V1"))
         db.session.rollback()
 
     def test_release_refuses_note_routes_under_an_unsupported_profile(self):
         self._enroll_note()
+        # A database still on a profile retired by P10-09 fails closed.
         self._set_profile("CANONICAL_V1")
-        # A release older than P9-05d (rollback past the switch) fails closed.
-        old_release = mock.patch(
-            "app.repositories.study_authority_repository.SUPPORTED_STORAGE_PROFILES",
-            frozenset({"PROJECTION_V1"}),
-        )
-        old_release.start()
-        self.addCleanup(old_release.stop)
         for resolve in (
             lambda: lock_study_authority_route(
                 db.session, learner_user_id=self.user.id, allow_note_authority=True
@@ -176,9 +140,13 @@ class StudyStorageProfileTests(unittest.TestCase):
             db.session.rollback()
 
     def test_legacy_routes_ignore_the_profile(self):
+        from app.repositories.study_authority_repository import is_consolidated
+
         self._set_profile("CANONICAL_V1")
         route = lock_study_authority_route(db.session, learner_user_id=self.user.id)
-        self.assertEqual((route.mode_code, route.storage_profile), ("LEGACY", "PROJECTION_V1"))
+        self.assertEqual(route.mode_code, "LEGACY")
+        # LEGACY progress lives only in card_progress, whatever the profile.
+        self.assertFalse(is_consolidated(route))
         db.session.rollback()
 
     def test_profile_row_is_a_checked_singleton(self):

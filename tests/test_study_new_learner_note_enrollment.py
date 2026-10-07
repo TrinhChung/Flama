@@ -131,19 +131,18 @@ class NewLearnerNoteEnrollmentTests(unittest.TestCase):
         db.session.rollback()
         self.assertEqual(User.query.count(), 0)
 
-    def test_one_time_cutover_keeps_future_signup_canonical_without_rerunning_migration(self):
+    def test_signup_lands_on_the_consolidated_row_without_card_progress(self):
+        from datetime import datetime
         from sqlalchemy import event
         import re
 
-        from app.repositories.study_authority_repository import lock_study_authority_route
-        from app.services.study_storage_profile_service import apply_storage_profile_switch, StorageProfileSwitchError
+        from app.repositories.study_authority_repository import (
+            StudyAuthorityFenceError,
+            lock_study_authority_route,
+        )
         from models.study_authority_storage_profile import StudyAuthorityStorageProfile
 
         self._make_app()
-        before = self._register("before_cutover")
-        switched = apply_storage_profile_switch(db.session)
-        db.session.commit()
-        self.assertEqual(self._mode(before.id), ("NOTE", 1))
         engine = db.engine
         statements = []
 
@@ -153,23 +152,38 @@ class NewLearnerNoteEnrollmentTests(unittest.TestCase):
 
         event.listen(engine, "before_cursor_execute", record)
         self.addCleanup(lambda: event.remove(engine, "before_cursor_execute", record))
-        after = self._register("after_cutover")
+        # A database without a profile row is a fresh CONSOLIDATED_V1 install;
+        # production carries the row the P10-08 switch wrote.
+        fresh = self._register("fresh_install")
+        db.session.add(StudyAuthorityStorageProfile(
+            id=1, profile_code="CONSOLIDATED_V1", epoch=3,
+            created_at=datetime(2026, 10, 3), updated_at=datetime(2026, 10, 3)))
+        db.session.commit()
+        after = self._register("after_switch")
         google, action = google_auth_service.resolve_or_create_user(
-            {"sub": "g-after-cutover", "email": "g-after-cutover@example.test"}
+            {"sub": "g-after-switch", "email": "g-after-switch@example.test"}
         )
         self.assertEqual(action, "created")
-        for user in (after, google):
+        for user in (fresh, after, google):
             self.assertEqual(self._mode(user.id), ("NOTE", 1))
             route = lock_study_authority_route(db.session, learner_user_id=user.id, allow_note_authority=True)
-            self.assertEqual(route.storage_profile, "CANONICAL_V1")
+            self.assertEqual(route.storage_profile, "CONSOLIDATED_V1")
             db.session.rollback()
-        with self.assertRaises(StorageProfileSwitchError) as repeated:
-            apply_storage_profile_switch(db.session)
-        db.session.rollback()
-        self.assertEqual(repeated.exception.code, "PROFILE_ALREADY_SWITCHED")
+        # Enrollment only probes for LEGACY progress it cannot migrate; it never writes it.
+        self.assertEqual(len(statements), 3)
+        self.assertTrue(all(
+            statement.split()[0].upper() == "SELECT" and "card_progress.user_id = ?" in statement
+            for statement in statements
+        ), statements)
+
+        # A database still on a retired profile is refused, fail closed.
         profile = db.session.get(StudyAuthorityStorageProfile, 1)
-        self.assertEqual((profile.profile_code, profile.epoch), ("CANONICAL_V1", switched["epoch"]))
-        self.assertEqual(statements, [])
+        profile.profile_code = "CANONICAL_V1"
+        db.session.commit()
+        with self.assertRaises(StudyAuthorityFenceError) as refused:
+            lock_study_authority_route(db.session, learner_user_id=after.id, allow_note_authority=True)
+        db.session.rollback()
+        self.assertEqual(refused.exception.code, "STORAGE_PROFILE_UNSUPPORTED")
 
 
 if __name__ == "__main__":

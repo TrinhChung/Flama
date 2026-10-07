@@ -1,0 +1,72 @@
+{
+  "host": "localhost",
+  "database": "nihongo",
+  "passed": true,
+  "fixture_decks": {
+    "6203": 61,
+    "6204": 61
+  },
+  "native_review_write_metrics": {
+    "counts_disabled": {
+      "median_ms": 27.76,
+      "samples_ms": [
+        29.55,
+        27.43,
+        29.33,
+        29.11,
+        27.92,
+        29.62,
+        27.6,
+        26.2,
+        26.18,
+        26.01
+      ]
+    },
+    "counts_enabled": {
+      "median_ms": 49.6,
+      "samples_ms": [
+        48.71,
+        45.69,
+        46.21,
+        51.6,
+        51.15,
+        50.57,
+        55.79,
+        50.5,
+        36.35,
+        36.26
+      ]
+    }
+  },
+  "checks": {
+    "fresh_mysql_snapshot_exact_parity": true,
+    "valid_prewarm_skips_raw_work": true,
+    "orm_progress_invalidates_only_affected_deck": true,
+    "dirty_prewarm_is_bounded_to_one_deck": true,
+    "post_review_snapshot_exact_parity": true,
+    "outer_rollback_preserves_tokens": true,
+    "released_descendant_rollback_preserves_tokens": true,
+    "concurrent_same_deck_no_lost_revision": true,
+    "concurrent_updates_snapshot_exact_parity": true,
+    "first_statement_bulk_invalidates_global_epoch": true,
+    "bulk_refresh_exact_parity": true,
+    "mysql_cache_hit_is_readonly_and_does_not_scan_cards": true,
+    "native_write_benchmark_counters_match_accepted_facts": true,
+    "fixture_user_cascade_cleanup": true,
+    "user1_source_preserved": true
+  },
+  "source_before": {
+    "events": 118579,
+    "first_id": 9,
+    "last_id": 131650,
+    "sum_ids": 7170566605,
+    "projected_checksum": 254503941252525
+  },
+  "source_after": {
+    "events": 118579,
+    "first_id": 9,
+    "last_id": 131650,
+    "sum_ids": 7170566605,
+    "projected_checksum": 254503941252525
+  }
+}

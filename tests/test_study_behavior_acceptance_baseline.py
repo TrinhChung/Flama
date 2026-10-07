@@ -23,7 +23,7 @@ from app.services import (
 from app.services.anki_scheduler import _day_index
 from app.services.connect.actions import add_note
 from app.services.mcp import study_tools as mcp_study_tools
-from app.services.study_architecture_audit_service import build_study_architecture_audit
+from app.validators.review_event import classify_review_event_payload
 from app.repositories.study_repository import (
     query_next_due_card_id,
     query_study_queue_counts,
@@ -51,6 +51,29 @@ from models.study_session_card import StudySessionCard
 from models.study_session_commit import StudySessionCommit
 from models.user import User
 
+
+
+def _review_event_provenance():
+    """Count ReviewEvents by payload disposition and provenance source path."""
+
+    counts = {}
+    for row in ReviewEvent.query.order_by(ReviewEvent.id.asc()).all():
+        disposition = classify_review_event_payload(
+            row.payload_json,
+            scheduler_algorithm=row.scheduler_algorithm,
+            algorithm_version=row.algorithm_version,
+            scheduler_config_hash=row.scheduler_config_hash,
+            study_session_id=row.study_session_id,
+            client_event_id=row.client_event_id,
+            sequence_no=row.sequence_no,
+        )
+        try:
+            provenance = (json.loads(row.payload_json or "{}") or {}).get("provenance") or {}
+        except (TypeError, ValueError, AttributeError):
+            provenance = {}
+        key = (disposition.category, provenance.get("source_path"))
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
     def setUp(self):
@@ -547,14 +570,12 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 self.assertEqual(runtime_a["scheduler_config_hash"], runtime_b["scheduler_config_hash"])
                 self.assertEqual(runtime_a, runtime_c)
 
-                # 7. Audit engine recognizes all native transports without conflict.
-                audit = build_study_architecture_audit()
-                rg = audit["review_event_gates"]
-                self.assertEqual(rg["native_direct_events"], 1)
-                self.assertEqual(rg["native_mcp_events"], 1)
-                self.assertEqual(rg["native_session_events"], 1)
-                self.assertEqual(rg["conflicting_provenance_events"], 0)
-                self.assertEqual(rg["unknown_provenance_events"], 0)
+                # 7. Every native transport records complete, distinct provenance.
+                self.assertEqual(_review_event_provenance(), {
+                    ("complete", "native.rest"): 1,
+                    ("complete", "native.mcp"): 1,
+                    ("complete", "native.session.commit"): 1,
+                })
 
     # -------------------------------------------------------------------------
     # 2. Batch Commit Idempotency, Atomic Rollback & Stale Revision Conflict
@@ -1293,13 +1314,11 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             runtime_meta = json.loads(native_event.payload_json)["_study_runtime"]
             self.assertEqual(runtime_meta["trigger_key"], "scheduler.review.good")
 
-            # 7. Audit Engine Verification
-            audit = build_study_architecture_audit()
-            rg = audit["review_event_gates"]
-            self.assertEqual(rg["anki_import_events"], 1)
-            self.assertEqual(rg["native_direct_events"], 1)
-            self.assertEqual(rg["conflicting_provenance_events"], 0)
-            self.assertEqual(rg["unknown_provenance_events"], 0)
+            # 7. Imported and native events keep distinct provenance.
+            self.assertEqual(_review_event_provenance(), {
+                ("complete", "external.anki.revlog"): 1,
+                ("complete", "native.rest"): 1,
+            })
 
     # -------------------------------------------------------------------------
     # 5. Shared Deck Logical Overlay via Real Service Path

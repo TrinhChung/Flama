@@ -51,14 +51,12 @@ from models.note import Note
 from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
-from models.study_progress_contributor import StudyProgressContributor
-from models.study_progress_lineage_ref import StudyProgressLineageRef
+from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
 from scripts.probe_p5_direct_replay_mysql import _probe_app
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings, _database_uri, _source_database_collation,
 )
 
@@ -304,22 +302,24 @@ def _integrity(app, learners: list[dict], accepted_by_user: dict[int, int]) -> d
                 select(func.count()).select_from(ReviewEvent).where(ReviewEvent.user_id == user_id)
             ).scalar_one()
             revisions = db.session.execute(
-                select(func.coalesce(func.sum(StudyAuthoritySubjectToken.authority_revision), 0))
-                .join(StudyProgressSubject, StudyProgressSubject.id == StudyAuthoritySubjectToken.subject_id)
+                select(func.coalesce(func.sum(StudyProgressSubject.authority_revision), 0))
                 .where(StudyProgressSubject.learner_user_id == user_id)
             ).scalar_one()
-            duplicate_pointers = db.session.execute(
+            # Each accepted answer leaves exactly one native history fact.
+            duplicate_facts = db.session.execute(
                 select(func.count()).select_from(
-                    select(StudyProgressLineageRef.contributor_id)
-                    .join(StudyProgressContributor,
-                          StudyProgressContributor.id == StudyProgressLineageRef.contributor_id)
-                    .join(StudyProgressSubject, StudyProgressSubject.id == StudyProgressContributor.subject_id)
-                    .where(StudyProgressSubject.learner_user_id == user_id,
-                           StudyProgressLineageRef.ref_kind == "LAST_REVIEW_EVENT")
-                    .group_by(StudyProgressLineageRef.contributor_id)
+                    select(StudyProgressHistoryFact.review_event_id)
+                    .where(StudyProgressHistoryFact.learner_user_id == user_id,
+                           StudyProgressHistoryFact.review_event_id.isnot(None))
+                    .group_by(StudyProgressHistoryFact.review_event_id)
                     .having(func.count() > 1)
                     .subquery()
                 )
+            ).scalar_one()
+            facts = db.session.execute(
+                select(func.count()).select_from(StudyProgressHistoryFact)
+                .where(StudyProgressHistoryFact.learner_user_id == user_id,
+                       StudyProgressHistoryFact.review_event_id.isnot(None))
             ).scalar_one()
             audit = runner.invoke(args=["study-authority-read-audit", "--user-id", str(user_id)])
             try:
@@ -328,12 +328,13 @@ def _integrity(app, learners: list[dict], accepted_by_user: dict[int, int]) -> d
                 audit_status = f"UNPARSEABLE(exit={audit.exit_code})"
             row = {
                 "user_id": user_id, "events": int(events), "accepted": accepted_by_user.get(user_id, 0),
-                "token_revisions": int(revisions), "duplicate_pointers": int(duplicate_pointers),
+                "row_revisions": int(revisions), "history_facts": int(facts),
+                "duplicate_facts": int(duplicate_facts),
                 "audit": audit_status, "audit_exit": audit.exit_code,
             }
             row["ok"] = (
-                row["events"] == row["accepted"] == row["token_revisions"]
-                and row["duplicate_pointers"] == 0 and audit.exit_code == 0 and audit_status == "PASS"
+                row["events"] == row["accepted"] == row["row_revisions"] == row["history_facts"]
+                and row["duplicate_facts"] == 0 and audit.exit_code == 0 and audit_status == "PASS"
             )
             report["ok"] = report["ok"] and row["ok"]
             report["learners"].append(row)

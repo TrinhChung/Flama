@@ -33,7 +33,7 @@ from app.services.study_progress_shadow_codec import (
 from app.services.study_progress_shadow_mapper import encode_identity
 from app.services.study_service import normalize_review_duration
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
+from models.study_progress_subject import StudyProgressSubject
 
 DIRECT_REPLAY_SCHEMA = "study-direct-note-replay.v1"
 
@@ -213,12 +213,13 @@ def _token_snapshot_is_current(session: Session, *, locked) -> bool:
     """
 
     token = locked.token
+    # The revision lives on the subject row (ADR P10 §2.4); a plain read is the snapshot.
     snapshot = session.execute(
         select(
-            StudyAuthoritySubjectToken.subject_generation,
-            StudyAuthoritySubjectToken.authority_revision,
-            StudyAuthoritySubjectToken.semantic_state_hash,
-        ).where(StudyAuthoritySubjectToken.subject_id == int(locked.subject.id))
+            StudyProgressSubject.subject_generation,
+            StudyProgressSubject.authority_revision,
+            StudyProgressSubject.semantic_state_hash,
+        ).where(StudyProgressSubject.id == int(locked.subject.id))
     ).first()
     return snapshot is not None and (
         int(snapshot.subject_generation) == int(token.subject_generation)
@@ -360,16 +361,8 @@ def _response_payload(
 
 
 def _card_revisions(base, result: ExistingStateNoteReviewResult) -> dict[str, int]:
-    if base.route.storage_profile == "PROJECTION_V1":
-        return {
-            str(row.card_id): int(row.revision)
-            for row in sorted(
-                result.write.projected_progress,
-                key=lambda progress: str(progress.card_id),
-            )
-        }
-    # CANONICAL_V1 writes no projection: every sibling reports the Note's
-    # authority revision (ADR P9-03 §2.9); clients only echo it back.
+    # No Card carries progress: every sibling reports the Note's authority
+    # revision (ADR P9-03 §2.9); clients only echo it back.
     revision = int(result.write.authority_revision)
     return {card_id: revision for card_id in sorted(base.siblings.card_ids)}
 

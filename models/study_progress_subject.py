@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
-from app.services.study_progress_contract import SUBJECT_STATUSES, sql_allowlist
+from app.services.study_progress_contract import (
+    SUBJECT_STATUSES,
+    sql_allowlist,
+    subject_progress_checks,
+)
 from models import db
 from models.study_progress_types import (
     MYSQL_TABLE_OPTIONS,
@@ -52,20 +56,31 @@ class StudyProgressSubject(db.Model):
     lineage_vector_hash = db.Column(binary_hash(), nullable=True)
     mapper_version = db.Column(ascii_string(32), nullable=True)
     last_mirrored_at = db.Column(datetime6(), nullable=True)
+    # ADR P10 §2.1 (migration 49): the consolidated progress row. Written only
+    # under CONSOLIDATED_V1; all NULL for a Note without current progress.
+    algorithm_key = db.Column(ascii_string(64), nullable=True)
+    algorithm_version = db.Column(ascii_string(32), nullable=True)
+    state_schema_version = db.Column(ascii_string(64), nullable=True)
+    storage_codec = db.Column(ascii_string(64), nullable=True)
+    # Python None must be SQL NULL: the CHECK group treats JSON 'null' as present.
+    state_payload = db.Column(db.JSON(none_as_null=True), nullable=True)
+    state_payload_size = db.Column(db.SmallInteger, nullable=True)
+    algorithm_state_hash = db.Column(binary_hash(), nullable=True)
+    semantic_state_hash = db.Column(binary_hash(), nullable=True)
+    authority_revision = db.Column(
+        bigint(), nullable=False, default=0, server_default=text("0")
+    )
+    projection_version = db.Column(ascii_string(32), nullable=True)
+    normalized_queue = db.Column(ascii_string(20), nullable=True)
+    due_at = db.Column(datetime6(), nullable=True)
+    due_day = db.Column(db.Integer, nullable=True)
+    is_suspended = db.Column(db.Boolean, nullable=True)
+    is_buried = db.Column(db.Boolean, nullable=True)
+    buried_until_day = db.Column(db.Integer, nullable=True)
+    history_completeness_code = db.Column(ascii_string(64), nullable=True)
+    current_provenance_code = db.Column(ascii_string(64), nullable=True)
     created_at = db.Column(datetime6(), nullable=False)
     updated_at = db.Column(datetime6(), nullable=False)
-
-    state = db.relationship(
-        "StudyProgressState",
-        back_populates="subject",
-        uselist=False,
-        passive_deletes="all",
-    )
-    contributors = db.relationship(
-        "StudyProgressContributor",
-        back_populates="subject",
-        passive_deletes="all",
-    )
 
     __table_args__ = (
         db.UniqueConstraint(
@@ -87,6 +102,10 @@ class StudyProgressSubject(db.Model):
         db.CheckConstraint(
             sql_allowlist("status_code", SUBJECT_STATUSES),
             name="ck_sp_subject_status",
+        ),
+        *(
+            db.CheckConstraint(expression, name=name)
+            for name, expression in subject_progress_checks().items()
         ),
         MYSQL_TABLE_OPTIONS,
     )

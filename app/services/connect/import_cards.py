@@ -36,8 +36,6 @@ from app.services import (
     flashcards_share_service,
     flama_connect_media_service,
     stats_overview,
-    study_progress_lifecycle_mirror_service,
-    study_progress_shadow_mirror_service,
     study_service,
 )
 from app.services.anki_content_normalizer import normalize_anki_field_values
@@ -294,21 +292,6 @@ def _migrate_cards_progress(
             raise ConnectError("cardsProgress lapses is out of range")
         progress_map[ord_value] = item
 
-    cards_in_scope = tuple(
-        card
-        for ord_idx, template in enumerate(templates)
-        if ord_idx in progress_map
-        for card in (existing_cards.get(template.id),)
-        if card is not None
-    )
-    mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
-        db.session,
-        learner_user_id=user_id,
-        cards=cards_in_scope,
-    )
-    applied_contexts: dict[
-        str, study_progress_shadow_mirror_service.ExternalProgressMirrorContext
-    ] = {}
     results: list[dict[str, Any]] = []
     for ord_idx, template in enumerate(templates):
         card = existing_cards.get(template.id)
@@ -492,18 +475,6 @@ def _migrate_cards_progress(
                 "code": "PROGRESS_APPLIED",
                 "revision": int(progress.revision or 0),
             }
-        )
-        applied_contexts[str(card.id)] = (
-            study_progress_shadow_mirror_service.ExternalProgressMirrorContext(
-                provenance_code="CONNECT_LEGACY_PROGRESS",
-                history_completeness_code="HISTORY_SNAPSHOT_ONLY",
-                source_note_ref=source_note_ref,
-            )
-        )
-    if applied_contexts:
-        study_progress_shadow_mirror_service.finalize_external_progress_mirror(
-            mirror_plan,
-            applied_contexts=applied_contexts,
         )
     return results
 
@@ -714,10 +685,6 @@ def _upsert_import_card(
         removed_cards = tuple(
             card for card in note.cards if card.template_id not in expected_template_ids
         )
-        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-            db.session,
-            removed_card_ids=(card.id for card in removed_cards),
-        )
         if removed_cards:
             CardProgress.query.filter(
                 CardProgress.card_id.in_([str(card.id) for card in removed_cards])
@@ -728,13 +695,6 @@ def _upsert_import_card(
             is_new_note=created,
             preserve_released_history=preserve_released_history,
         )
-        if lifecycle_plan is not None:
-            study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-                lifecycle_plan,
-                transition_code="DETACHED_CONTRIBUTOR_DELETED",
-                source_path="connect.import_cards.reconcile",
-                operation_key=reconcile_operation_key,
-            )
     cards_progress_payload = card_data.get("cardsProgress")
     progress_results: list[dict[str, Any]] = []
     if cards_progress_payload and authority_route.mode_code == "NOTE":
@@ -976,6 +936,7 @@ def _verify_note_authority_import_status(
     requested_cards: dict[str, list[dict[str, Any]]],
     refs_by_external_id: dict[str, ConnectSourceNoteRef],
     card_refs_by_external_id: dict[str, ConnectSourceCardRef],
+    consolidated: bool = False,
 ) -> None:
     """Validate every sibling before exposing a NOTE source-progress cursor."""
 
@@ -1033,7 +994,8 @@ def _verify_note_authority_import_status(
         if (
             subject is None
             or str(subject.live_note_id or "") != str(note.id)
-            or int(subject.contributor_count) != len(note.cards)
+            # CONSOLIDATED_V1 (ADR P10): Cards carry no progress, nothing to count.
+            or (not consolidated and int(subject.contributor_count) != len(note.cards))
         ):
             raise ConnectAuthorityReadError(
                 "INCOMPLETE_AUTHORITY_COMPATIBILITY",
@@ -1148,6 +1110,7 @@ def get_import_note_statuses(
             requested_cards=requested_cards,
             refs_by_external_id=refs_by_external_id,
             card_refs_by_external_id=card_refs_by_external_id,
+            consolidated=route.storage_profile == "CONSOLIDATED_V1",
         )
     orphan_review_card_ids = {
         row[0]
@@ -1169,28 +1132,24 @@ def get_import_note_statuses(
             if asset.sha256:
                 media_by_note.setdefault(asset.note_id, set()).add(asset.sha256.lower())
 
-    # CANONICAL_V1 fences refs on the Note authority revision (ADR P9-03 §2.6).
-    canonical = route.mode_code == "NOTE" and route.storage_profile != "PROJECTION_V1"
+    # NOTE fences refs on the Note row's authority revision (ADR P9-03 §2.6).
+    canonical = route.mode_code == "NOTE"
     token_revision_by_card_id: dict[str, int] = {}
     if canonical:
         from models.card import Card
-        from models.study_authority_subject_token import StudyAuthoritySubjectToken
         from models.study_progress_subject import StudyProgressSubject
 
         fenced_card_ids = sorted({str(row.card_id) for row in card_refs if row.card_id})
         if fenced_card_ids:
-            token_revision_by_card_id = {
-                str(card_id): int(revision)
-                for card_id, revision in db.session.query(
-                    Card.id, StudyAuthoritySubjectToken.authority_revision
-                )
-                .join(StudyProgressSubject, db.and_(
+            # ADR P10: the revision is a column of the Note's own row.
+            query = db.session.query(Card.id, StudyProgressSubject.authority_revision).join(
+                StudyProgressSubject, db.and_(
                     StudyProgressSubject.learner_user_id == user_id,
                     StudyProgressSubject.live_note_id == Card.note_id,
                 ))
-                .join(StudyAuthoritySubjectToken, StudyAuthoritySubjectToken.subject_id == StudyProgressSubject.id)
-                .filter(Card.id.in_(fenced_card_ids))
-                .all()
+            token_revision_by_card_id = {
+                str(card_id): int(revision)
+                for card_id, revision in query.filter(Card.id.in_(fenced_card_ids)).all()
             }
 
     results: list[dict[str, Any]] = []

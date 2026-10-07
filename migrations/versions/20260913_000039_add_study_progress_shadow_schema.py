@@ -14,15 +14,18 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-from models.study_progress_availability import StudyProgressAvailability
+# Retired by P10-09 (migration 50 drops them); frozen for a fresh chain.
+from migrations.retired_note_progress_tables import (
+    StudyProgressAvailability,
+    StudyProgressContributor,
+    StudyProgressLineageRef,
+    StudyProgressState,
+)
 from models.study_progress_backfill_checkpoint import StudyProgressBackfillCheckpoint
 from models.study_progress_backfill_disposition import StudyProgressBackfillDisposition
 from models.study_progress_backfill_run import StudyProgressBackfillRun
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
-from models.study_progress_lineage_ref import StudyProgressLineageRef
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.study_progress_types import align_mysql_parent_collations
 

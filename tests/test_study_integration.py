@@ -64,7 +64,10 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             
             # Simulate applyAnswer for "good" from learning
             from app.services.anki_scheduler import default_deck_options, applyAnswer
-            from app.routes.vocabulary import _card_state_from_progress, _apply_card_state_to_progress
+            from app.repositories.study_repository import (
+                apply_card_state_to_progress as _apply_card_state_to_progress,
+                card_state_from_progress as _card_state_from_progress,
+            )
             
             options = default_deck_options()
             now = datetime.utcnow()
@@ -91,7 +94,10 @@ class StudyCounterIntegrationTest(unittest.TestCase):
         """After graduating from learning to review, card should have due_day set."""
         with self.app.app_context():
             from app.services.anki_scheduler import default_deck_options, applyAnswer
-            from app.routes.vocabulary import _card_state_from_progress, _apply_card_state_to_progress
+            from app.repositories.study_repository import (
+                apply_card_state_to_progress as _apply_card_state_to_progress,
+                card_state_from_progress as _card_state_from_progress,
+            )
 
             # Create progress as learning
             progress = CardProgress(
@@ -131,7 +137,10 @@ class StudyCounterIntegrationTest(unittest.TestCase):
         """Stored review interval should match the rounded due-day offset."""
         with self.app.app_context():
             from app.services.anki_scheduler import _day_index, default_deck_options, applyAnswer
-            from app.routes.vocabulary import _card_state_from_progress, _apply_card_state_to_progress
+            from app.repositories.study_repository import (
+                apply_card_state_to_progress as _apply_card_state_to_progress,
+                card_state_from_progress as _card_state_from_progress,
+            )
 
             progress = CardProgress(
                 user_id=self.user_id,
@@ -165,7 +174,10 @@ class StudyCounterIntegrationTest(unittest.TestCase):
     def test_interday_learning_persists_boundary_due_time(self):
         with self.app.app_context():
             from app.services.anki_scheduler import default_deck_options, applyAnswer
-            from app.routes.vocabulary import _card_state_from_progress, _apply_card_state_to_progress
+            from app.repositories.study_repository import (
+                apply_card_state_to_progress as _apply_card_state_to_progress,
+                card_state_from_progress as _card_state_from_progress,
+            )
 
             progress = CardProgress(
                 user_id=self.user_id,

@@ -46,7 +46,6 @@ from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 
@@ -279,14 +278,6 @@ def _note_type_purge_scope(
                     CardProgress.card_id.in_(card_chunk)
                 )
             )
-        collect_learner_ids(
-            db.session.query(StudyProgressSubject.learner_user_id)
-            .join(
-                StudyProgressContributor,
-                StudyProgressContributor.subject_id == StudyProgressSubject.id,
-            )
-            .filter(StudyProgressContributor.live_card_id.in_(card_chunk))
-        )
         collect_learner_ids(
             db.session.query(StudySession.user_id)
             .join(StudySessionCard, StudySessionCard.session_id == StudySession.id)

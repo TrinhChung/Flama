@@ -32,7 +32,7 @@ if str(ROOT_DIR) not in sys.path:
 from app import create_app
 from app.services.study_note_attribution_service import backfill_phase6_attribution
 from models import db
-from scripts.probe_phase4_shadow_schema_mysql import (
+from scripts.mysql_probe_db import (
     _connection_settings, _database_uri, _source_database_collation,
 )
 
@@ -62,6 +62,13 @@ def _reconstruct_head_45() -> None:
     """Create the current metadata, then remove every migration-46 artifact."""
 
     db.metadata.create_all(bind=db.engine)
+    # Revision 45 still had the NOTE progress tables migration 50 drops (P10-09).
+    from migrations.retired_note_progress_tables import RETIRED_METADATA
+
+    RETIRED_METADATA.create_all(bind=db.engine, tables=[
+        RETIRED_METADATA.tables[name] for name in (
+            "study_progress_states", "study_authority_subject_tokens", "study_progress_contributors",
+            "study_progress_availability", "study_progress_lineage_refs")])
     inspector = sa.inspect(db.engine)
     for fk in inspector.get_foreign_keys("cards"):
         if fk.get("referred_table") == migration.APPLICATIONS:

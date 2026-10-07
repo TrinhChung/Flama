@@ -52,8 +52,6 @@ from app.validators import (
 )
 from models import db
 from models.card_progress import CardProgress
-from models.study_progress_availability import StudyProgressAvailability
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.flashcard import Card, DeckInstall, Note, NoteType
@@ -183,6 +181,8 @@ def build_browse_deck_tree(
             user_id=user_id,
             admin_mode=admin_mode,
             timezone_name=timezone_name,
+            # NOTE recounts every node below; skip the projection aggregate.
+            progress_counts=authority_route.mode_code != "NOTE",
         )
         if authority_route.mode_code == "NOTE":
             deck_ids: set[int] = set()
@@ -217,6 +217,7 @@ def build_browse_deck_tree(
                 # D6-04: all Cards of a Note share one NOTE state.
                 count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
                 owned_by_any_user=admin_mode,
+                include_note_types=False,
             )
 
             def rebuild_counts(node: dict[str, Any]) -> dict[str, int]:
@@ -355,36 +356,22 @@ def _load_mode_aware_browse_progress(
 
 
 def _join_note_availability(query, *, learner_user_id: int):
-    """Outer-join each Card's ACTIVE availability; expose CardProgress-named columns."""
+    """Outer-join each Card's Note row; expose CardProgress-named columns (ADR P10 §2.7)."""
 
     subject = aliased(StudyProgressSubject)
-    contributor = aliased(StudyProgressContributor)
-    availability = aliased(StudyProgressAvailability)
-    query = (
-        query.outerjoin(subject, db.and_(
-            subject.learner_user_id == int(learner_user_id),
-            subject.live_note_id == Card.note_id,
-        ))
-        .outerjoin(contributor, db.and_(
-            contributor.subject_id == subject.id,
-            contributor.live_card_id == Card.id,
-            contributor.contributor_status == "ACTIVE",
-        ))
-        .outerjoin(availability, db.and_(
-            availability.contributor_id == contributor.id,
-            availability.subject_id == subject.id,
-        ))
+    query = query.outerjoin(subject, db.and_(
+        subject.learner_user_id == int(learner_user_id),
+        subject.live_note_id == Card.note_id,
+    ))
+    return query, SimpleNamespace(
+        id=case((subject.semantic_state_hash.isnot(None), subject.id), else_=None),
+        queue=subject.normalized_queue,
+        due_at=subject.due_at,
+        due_day=subject.due_day,
+        is_suspended=subject.is_suspended,
+        is_buried=subject.is_buried,
+        buried_until_day=subject.buried_until_day,
     )
-    columns = SimpleNamespace(
-        id=availability.contributor_id,
-        queue=availability.normalized_queue,
-        due_at=availability.due_at,
-        due_day=availability.due_day,
-        is_suspended=availability.is_suspended,
-        is_buried=availability.is_buried,
-        buried_until_day=availability.buried_until_day,
-    )
-    return query, columns
 
 
 def list_browse_cards(
@@ -473,12 +460,9 @@ def list_browse_cards(
             selected_ids = {selected_deck_id}
 
     query = Card.query.join(Note, Card.note_id == Note.id)
-    if (
-        authority_route.mode_code == "NOTE"
-        and authority_route.storage_profile != "PROJECTION_V1"
-    ):
-        # CANONICAL_V1 froze card_progress: status and due order come from the
-        # learner's availability row (verified below), NULL for pristine Notes.
+    if authority_route.mode_code == "NOTE":
+        # Status and due order come from the learner's Note row (verified
+        # below), NULL for pristine Notes; card_progress is LEGACY only.
         query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
     else:
         progress_alias = aliased(CardProgress)
@@ -788,7 +772,8 @@ def list_browse_cards(
         worst = int(db.session.execute(select(func.max(verified.c.violation))).scalar() or 0)
         if not worst:
             worst = note_analytics_read_repository.subject_vector_violation(
-                db.session, scope=candidate_scope, learner_user_id=user_id
+                db.session, scope=candidate_scope, learner_user_id=user_id,
+                storage_profile=authority_route.storage_profile,
             )
         violation = note_analytics_read_repository.violation_error(worst)
         if violation is not None:

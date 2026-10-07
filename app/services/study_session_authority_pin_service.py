@@ -14,7 +14,6 @@ from app.repositories.study_authority_repository import (
     LockedStudyAuthoritySubject,
     StudyAuthorityRoute,
     lock_study_authority_subject,
-    lock_study_authority_subject_rows,
 )
 from app.services.anki_scheduler import CardState
 from app.services.db_errors import domain_error_code
@@ -31,8 +30,6 @@ from app.validators.study_session_wire import (
 from models.study_session import StudySession
 from models.study_session_authority_pin import StudySessionAuthorityPin
 from models.study_session_card import StudySessionCard
-from models.study_authority_enrollment import StudyAuthorityEnrollment
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 from models.study_progress_subject import StudyProgressSubject
 
 
@@ -213,8 +210,6 @@ def lock_study_session_authority_subjects(
                 "DETACHED_AUTHORITY_SUBJECT",
                 "Study Session authority subject is detached from its live Note.",
             )
-    # Two locking reads for the whole vector instead of two per Note.
-    locked_rows = lock_study_authority_subject_rows(session, subjects=subjects)
     for logical_key in sorted(encoded_by_key, key=lambda item: encoded_by_key[item]):
         encoded_key = encoded_by_key[logical_key]
         subject = subject_by_encoded_key[encoded_key]
@@ -225,7 +220,6 @@ def lock_study_session_authority_subjects(
                 subject=subject,
                 now_utc=now_utc,
                 create_token_if_missing=create_token_if_missing,
-                locked_rows=locked_rows.get(int(subject.id)),
             )
         except Exception as exc:
             code = domain_error_code(exc)
@@ -430,85 +424,3 @@ def lock_study_session_authority_pins(
         pin_by_session_card_id=MappingProxyType(pin_by_id),
         identity_by_session_card_id=MappingProxyType(identity_by_id),
     )
-
-
-def study_session_authority_pins_are_stale(
-    session: Session,
-    *,
-    study_session: StudySession,
-    session_cards: Sequence[StudySessionCard],
-) -> bool:
-    """Best-effort read check; commit locking remains the definitive fence."""
-
-    if study_session.wire_schema_version != SESSION_SCHEMA_V4:
-        return False
-    enrollment = session.get(
-        StudyAuthorityEnrollment,
-        int(study_session.user_id),
-    )
-    if (
-        enrollment is None
-        or str(enrollment.mode_code) != "NOTE"
-        or int(enrollment.epoch) < 1
-    ):
-        return True
-    membership_ids = {
-        int(row.id)
-        for row in session_cards
-        if row.id is not None and row.session_id == study_session.id
-    }
-    if len(membership_ids) != len(session_cards) or not membership_ids:
-        return True
-    pins = tuple(
-        session.execute(
-            select(StudySessionAuthorityPin).where(
-                StudySessionAuthorityPin.session_card_id.in_(
-                    sorted(membership_ids)
-                )
-            )
-        ).scalars()
-    )
-    if len(pins) != len(membership_ids):
-        return True
-    subject_ids = {
-        int(pin.subject_id) for pin in pins if pin.subject_id is not None
-    }
-    if len(subject_ids) == 0:
-        return True
-    token_by_subject_id = {
-        int(token.subject_id): token
-        for token in session.execute(
-            select(StudyAuthoritySubjectToken).where(
-                StudyAuthoritySubjectToken.subject_id.in_(
-                    sorted(subject_ids)
-                )
-            )
-        ).scalars()
-    }
-    identity_by_note: dict[str, StudyNoteAuthorityWireIdentity] = {}
-    for pin in pins:
-        try:
-            identity = decode_study_session_authority_pin(pin)
-        except StudySessionAuthorityPinError:
-            return True
-        token = (
-            token_by_subject_id.get(int(pin.subject_id))
-            if pin.subject_id is not None
-            else None
-        )
-        if (
-            int(pin.session_card_id) not in membership_ids
-            or int(pin.learner_user_id) != int(study_session.user_id)
-            or int(pin.enrollment_epoch) != int(enrollment.epoch)
-            or token is None
-            or int(token.subject_generation) != int(pin.subject_generation)
-            or int(token.authority_revision) != int(pin.base_authority_revision)
-            or bytes(token.semantic_state_hash or b"")
-            != bytes(pin.base_semantic_state_hash)
-        ):
-            return True
-        prior = identity_by_note.get(identity.logical_note_key)
-        if prior is not None and prior != identity:
-            return True
-        identity_by_note[identity.logical_note_key] = identity
-    return False

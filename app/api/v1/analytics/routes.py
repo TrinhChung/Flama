@@ -42,9 +42,14 @@ def _resolve_request_timezone() -> str:
 @analytics_bp.get("/dashboard")
 @login_required
 def dashboard():
+    compact = str(request.args.get("compact", "0")).strip().lower()
+    if compact not in {"0", "1", "false", "true"}:
+        return error_response(
+            "VALIDATION_ERROR", "compact must be a boolean.", status=400, field="compact"
+        )
     try:
         with analytics_read_transaction():
-            payload = build_dashboard_payload(current_user)
+            payload = build_dashboard_payload(current_user, compact=compact in {"1", "true"})
         return jsonify(payload)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
@@ -139,15 +144,16 @@ def statistics_today_future():
 
     resolved_tz = _resolve_request_timezone()
     try:
-        payload = build_today_future_stats(
-            user_id=current_user.id,
-            timezone_name=resolved_tz,
-            scope=scope,
-            deck_id=deck_id,
-            history_range=history_range,
-            future_range=future_range,
-            backlog=backlog,
-        )
+        with analytics_read_transaction():
+            payload = build_today_future_stats(
+                user_id=current_user.id,
+                timezone_name=resolved_tz,
+                scope=scope,
+                deck_id=deck_id,
+                history_range=history_range,
+                future_range=future_range,
+                backlog=backlog,
+            )
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         return error_response(
@@ -178,8 +184,8 @@ def statistics_study_time():
         )
 
     resolved_tz = _resolve_request_timezone()
-    return jsonify(
-        build_user_study_time_stats(
+    with analytics_read_transaction():
+        payload = build_user_study_time_stats(
             user_id=current_user.id,
             timezone_name=resolved_tz,
             scope=scope,
@@ -188,4 +194,4 @@ def statistics_study_time():
             start_date_str=start_date,
             end_date_str=end_date,
         )
-    )
+    return jsonify(payload)

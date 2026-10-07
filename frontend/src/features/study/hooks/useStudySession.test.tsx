@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   loadQuarantine: null as null | { reason: string; message: string },
   acknowledgeQuarantine: vi.fn(),
   saveSession: vi.fn(),
+  updateStoredCardContent: vi.fn().mockResolvedValue(undefined),
   removeSession: vi.fn(),
   removeSessionIfMatches: vi.fn(),
   quarantineSession: vi.fn(),
@@ -60,6 +61,7 @@ vi.mock('../session/sessionStore', () => ({
     quarantine: mocks.loadQuarantine ?? undefined,
   }),
   saveStudySession: mocks.saveSession,
+  updateCardFieldValuesInSessions: mocks.updateStoredCardContent,
   removeStudySession: mocks.removeSession,
   removeStudySessionIfMatches: mocks.removeSessionIfMatches,
   quarantineStudySession: mocks.quarantineSession,
@@ -414,9 +416,13 @@ async function waitForLeaseAbort(record: LeaseRecord) {
 }
 
 async function openReadySession() {
+  await openReadySessionWithId('session-1')
+}
+
+async function openReadySessionWithId(sessionId: string) {
   mocks.bootstrap = { data: { user: { id: 7 } } }
   await renderHarness()
-  await waitFor(() => expect(latest.session?.snapshot.session_id).toBe('session-1'))
+  await waitFor(() => expect(latest.session?.snapshot.session_id).toBe(sessionId))
 }
 
 beforeEach(() => {
@@ -956,6 +962,7 @@ describe('useStudySession cross-tab ownership', () => {
   it('updates card content live while deferring template authoring changes', async () => {
     await openReadySession()
     mocks.saveSession.mockClear()
+    mocks.updateStoredCardContent.mockClear()
 
     await act(async () => {
       await latest.updateCardContent('card-1', { Word: 'dog' }, { noteId: 'note-1' })
@@ -987,6 +994,9 @@ describe('useStudySession cross-tab ownership', () => {
       render_context: { Word: 'dog' },
     })
     expect(mocks.saveSession).toHaveBeenCalled()
+    expect(mocks.updateStoredCardContent).toHaveBeenCalledExactlyOnceWith('card-1', { Word: 'dog' }, {
+      noteId: 'note-1', media: undefined,
+    })
   })
 
   it('admits only one same-tick answer while the owner is becoming durable', async () => {
@@ -1181,6 +1191,147 @@ describe('useStudySession cross-tab ownership', () => {
     )
     expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
     expect(latest.error).toMatchObject({ code: 'SESSION_ALREADY_COMMITTED' })
+  })
+
+  async function restorePendingAfterLostReceipt(status: 'committed' | 'expired' | 'missing') {
+    await pendingAfterLostReceipt()
+    const pending = latest.session!
+    await act(async () => root?.unmount())
+    root = null
+    container?.remove()
+    container = null
+    for (const mock of [
+      mocks.mutate, mocks.mutateKeepalive, mocks.saveSession,
+      mocks.removeSessionIfMatches, mocks.quarantineSession,
+    ]) mock.mockClear()
+    mocks.loadSession.mockResolvedValue(pending)
+    const { ApiError } = await import('@/shared/api/client')
+    mocks.get.mockImplementation((path: string) => {
+      if (path.endsWith('/compositions')) return Promise.resolve(compositionAvailability())
+      if (status === 'missing') {
+        return Promise.reject(new ApiError('Study session was not found.', 404, 'SESSION_NOT_FOUND'))
+      }
+      return Promise.resolve({
+        schema_version: 'study-session-status.v1',
+        session_id: 'session-1',
+        status,
+        expires_at: '2099-02-23T09:00:00.000Z',
+        committed_at: status === 'committed' ? '2099-02-22T09:01:00.000Z' : null,
+      })
+    })
+    return pending
+  }
+
+  function commitAlreadySettled(details: StudySessionCommitReceipt) {
+    const rejectCommit = alreadyCommitted(details)
+    return (path: string) => (
+      path === '/api/study/sessions'
+        ? Promise.resolve({ ...snapshot(), session_id: 'session-2' })
+        : rejectCommit(path)
+    )
+  }
+
+  it('settles a restored lease the server already committed and opens a new session', async () => {
+    const pending = await restorePendingAfterLostReceipt('committed')
+    mocks.mutate.mockImplementation(commitAlreadySettled({
+      ...receipt(), commit_id: pending.commit_id!, commit_reason: 'auto_finish',
+    }))
+
+    await openReadySessionWithId('session-2')
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      '/api/study/sessions/session-1/commit',
+      'POST',
+      expect.objectContaining({ commit_id: pending.commit_id, commit_reason: 'auto_finish' }),
+    )
+    expect(latest.receipt).toBeNull()
+    expect(latest.error).toBeNull()
+    expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1')
+    expect(mocks.quarantineSession).not.toHaveBeenCalled()
+  })
+
+  it('quarantines a restored committed lease whose stored receipt does not cover local answers', async () => {
+    await restorePendingAfterLostReceipt('committed')
+    mocks.mutate.mockImplementation(commitAlreadySettled({ ...receipt(), applied_event_count: 0 }))
+
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness()
+    await waitFor(() => expect(latest.error).toMatchObject({ code: 'SESSION_ALREADY_COMMITTED' }))
+    expect(latest.session).toBeNull()
+    expect(mocks.quarantineSession).toHaveBeenCalledWith(
+      'user:7:deck:12',
+      expect.objectContaining({ events: [expect.anything()] }),
+      expect.objectContaining({ reason: 'COMMITTED_ELSEWHERE' }),
+    )
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+  })
+
+  it.each(['expired', 'missing'] as const)(
+    'quarantines unsaved answers of a restored %s lease instead of retrying them forever',
+    async (status) => {
+      await restorePendingAfterLostReceipt(status)
+
+      mocks.bootstrap = { data: { user: { id: 7 } } }
+      await renderHarness()
+      await waitFor(() => expect(latest.error).toMatchObject({ code: 'SESSION_LEASE_CLOSED', status: 409 }))
+      expect(latest.session).toBeNull()
+      expect(mocks.mutate).not.toHaveBeenCalled()
+      expect(mocks.quarantineSession).toHaveBeenCalledWith(
+        'user:7:deck:12',
+        expect.objectContaining({ events: [expect.anything()] }),
+        expect.objectContaining({ reason: 'LEASE_CLOSED' }),
+      )
+      expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+    },
+  )
+
+  it('keeps a restored committed lease for retry when settling it fails transiently', async () => {
+    await restorePendingAfterLostReceipt('committed')
+    mocks.mutate.mockImplementation((path: string) => (
+      path === '/api/study/sessions/session-1/commit'
+        ? Promise.reject(new TypeError('Network unavailable'))
+        : Promise.reject(new Error(`Unexpected mutation: ${path}`))
+    ))
+
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness()
+    await waitFor(() => expect(latest.error).toBeInstanceOf(TypeError))
+    expect(mocks.quarantineSession).not.toHaveBeenCalled()
+    expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
+  })
+
+  it('never revives or resends a lease after its final receipt when the page closes', async () => {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    mocks.mutate.mockImplementation((path: string) => (
+      path === '/api/study/sessions/session-1/commit'
+        ? Promise.resolve(receipt())
+        : Promise.reject(new Error(`Unexpected mutation: ${path}`))
+    ))
+    await act(async () => { await latest.commit({ reason: 'manual_exit' }) })
+    expect(latest.receipt?.commit_id).toBe(receipt().commit_id)
+    const savesAfterReceipt = mocks.saveSession.mock.calls.length
+
+    await act(async () => { window.dispatchEvent(new Event('pagehide')) })
+    await act(async () => root?.unmount())
+    root = null
+    expect(mocks.mutateKeepalive).not.toHaveBeenCalled()
+    expect(mocks.saveSession).toHaveBeenCalledTimes(savesAfterReceipt)
+  })
+
+  it('settles a page-exit commit the server already stored instead of keeping it', async () => {
+    await openReadySession()
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => { await latest.answer('card-1', 'good', decision, 250) })
+    const { ApiError } = await import('@/shared/api/client')
+    mocks.mutateKeepalive.mockImplementation((_path, _method, payload) => Promise.reject(new ApiError(
+      'Study session was already committed.', 409, 'SESSION_ALREADY_COMMITTED', undefined,
+      { ...receipt(), commit_id: payload.commit_id, commit_reason: 'page_exit' },
+    )))
+
+    await act(async () => { window.dispatchEvent(new Event('pagehide')) })
+    await waitFor(() => expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1'))
+    expect(mocks.quarantineSession).not.toHaveBeenCalled()
   })
 
   it('pagehide waits for the answer owner and flushes the latest durable state', async () => {

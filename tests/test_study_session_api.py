@@ -53,11 +53,7 @@ from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
-from models.study_progress_availability import StudyProgressAvailability
-from models.study_progress_contributor import StudyProgressContributor
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_authority_pin import StudySessionAuthorityPin
@@ -166,6 +162,14 @@ class StudySessionApiTests(unittest.TestCase):
     def _enable_existing_state_note_authority(
         self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token: bool | None = None
     ):
+        """A NOTE learner whose existing state lives on the Note's one row (ADR P10)."""
+
+        from app.services.study_consolidated_progress_service import (
+            apply_note_availability,
+            note_burial,
+            project_subject_state,
+        )
+
         with self.app.app_context():
             note_query = Note.query.filter_by(
                 user_id=self.user_id,
@@ -174,7 +178,9 @@ class StudySessionApiTests(unittest.TestCase):
             note = note_query.filter_by(id=note_id).one() if note_id else note_query.one()
             now = datetime(2026, 9, 21, 8, 0, 0)
             card = Card.query.filter_by(note_id=note.id).one()
+            # A transient card_progress shape is only the source of the state.
             progress = CardProgress(
+                    id=1,
                     user_id=self.user_id,
                     card_id=str(card.id),
                     queue="new",
@@ -195,9 +201,7 @@ class StudySessionApiTests(unittest.TestCase):
                 )
             for field_name, value in (initial_progress or {}).items():
                 setattr(progress, field_name, value)
-            db.session.add(progress)
-            db.session.flush()
-            mapped = map_card_progress(progress, card_created_at=card.created_at)
+            mapped = map_card_progress(progress, card_created_at=card.created_at, card_order_key=str(card.id))
             self.assertIsInstance(mapped, MappedCardProgress)
             subject = StudyProgressSubject(
                 learner_user_id=self.user_id,
@@ -211,77 +215,29 @@ class StudySessionApiTests(unittest.TestCase):
                 created_at=now,
                 updated_at=now,
             )
-            db.session.add(subject)
-            db.session.flush()
-            contributor = StudyProgressContributor(
-                subject_id=int(subject.id),
-                subject_generation=1,
-                source_progress_id=int(progress.id),
-                live_card_progress_id=int(progress.id),
-                logical_card_key=str(card.id).encode("utf-8"),
-                live_card_id=str(card.id),
-                card_progress_revision=0,
-                raw_schema_version=mapped.raw_schema_version,
-                storage_codec=mapped.storage_codec,
-                raw_payload=mapped.raw.payload,
-                raw_payload_size=mapped.raw.size,
-                raw_progress_hash=mapped.raw.digest,
-                pointer_status="ABSENT",
-                history_completeness_code="HISTORY_NATIVE_COMPLETE",
-                current_provenance_code="UNKNOWN_LEGACY",
-                lineage_vector_hash=b"\x44" * 32,
-                contributor_status="ACTIVE",
-                created_at=now,
-                updated_at=now,
-            )
-            db.session.add(contributor)
-            db.session.flush()
-            availability = mapped.availability
-            db.session.add_all(
-                [
-                    StudyProgressState(
-                        subject_id=int(subject.id),
-                        subject_generation=1,
-                        mirror_revision=1,
-                        algorithm_key=mapped.algorithm_key,
-                        algorithm_version=mapped.algorithm_version,
-                        state_schema_version=mapped.state_schema_version,
-                        storage_codec=mapped.storage_codec,
-                        state_payload=mapped.state.payload,
-                        state_payload_size=mapped.state.size,
-                        algorithm_state_hash=mapped.algorithm_state_hash,
-                        semantic_state_hash=mapped.semantic_state_hash,
-                        created_at=now,
-                        updated_at=now,
-                    ),
-                    StudyProgressAvailability(
-                        contributor_id=int(contributor.id),
-                        subject_id=int(subject.id),
-                        subject_generation=1,
-                        projection_version=availability.projection_version,
-                        normalized_queue=availability.normalized_queue,
-                        due_at=availability.due_at,
-                        due_day=availability.due_day,
-                        is_suspended=availability.is_suspended,
-                        is_buried=availability.is_buried,
-                        buried_until_day=availability.buried_until_day,
-                        card_created_at=availability.card_created_at,
-                        card_order_key=availability.card_order_key,
-                        state_schema_version=availability.state_schema_version,
-                        semantic_state_hash=availability.semantic_state_hash,
-                        created_at=now,
-                        updated_at=now,
-                    ),
-                ]
-            )
-            expected_hash = mapped.semantic_state_hash.hex()
             should_include_token = bool(enroll if include_token is None else include_token)
+            expected_hash = mapped.semantic_state_hash.hex()
+            if not should_include_token:
+                db.session.commit()
+                return str(note.id), expected_hash
             if should_include_token:
-                db.session.add(StudyAuthoritySubjectToken(
-                    subject_id=int(subject.id), subject_generation=1,
-                    authority_revision=0, semantic_state_hash=mapped.semantic_state_hash,
-                    created_at=now, updated_at=now,
-                ))
+                subject.algorithm_key = mapped.algorithm_key
+                subject.algorithm_version = mapped.algorithm_version
+                subject.state_schema_version = mapped.state_schema_version
+                subject.storage_codec = mapped.storage_codec
+                subject.state_payload = mapped.state.payload
+                subject.state_payload_size = mapped.state.size
+                subject.algorithm_state_hash = mapped.algorithm_state_hash
+                subject.semantic_state_hash = mapped.semantic_state_hash
+                subject.authority_revision = 0
+                subject.history_completeness_code = "HISTORY_NATIVE_COMPLETE"
+                subject.current_provenance_code = "UNKNOWN_LEGACY"
+                apply_note_availability(
+                    subject,
+                    project_subject_state(mapped.state.payload, burial=note_burial(subject)),
+                    now_utc=now,
+                )
+            db.session.add(subject)
             if enroll:
                 db.session.add(
                     StudyAuthorityEnrollment(
@@ -294,6 +250,10 @@ class StudySessionApiTests(unittest.TestCase):
                 )
             db.session.commit()
             return str(note.id), expected_hash
+
+    @staticmethod
+    def _live_rows():
+        return StudyProgressSubject.query.filter(StudyProgressSubject.state_payload.isnot(None))
 
     def _open_session_v4(self):
         previous_v4 = self.app.config["STUDY_WIRE_V4_ENABLED"]
@@ -333,30 +293,16 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.get_json()["deleted_progress_count"], 1)
 
         with self.app.app_context():
-            self.assertEqual(CardProgress.query.count(), 1)
-            self.assertEqual(StudyProgressState.query.count(), 1)
-            self.assertEqual(StudyProgressAvailability.query.count(), 1)
+            self.assertEqual(CardProgress.query.count(), 0)
             subject = StudyProgressSubject.query.one()
-            token = StudyAuthoritySubjectToken.query.one()
-            contributors = StudyProgressContributor.query.order_by(
-                StudyProgressContributor.id.asc()
-            ).all()
             lifecycle = StudyProgressLifecycleEvent.query.one()
             session = db.session.get(StudySession, snapshot["session_id"])
             self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
             self.assertEqual(int(subject.subject_generation), 2)
             self.assertEqual(int(subject.mirror_revision), 3)
-            self.assertEqual(int(subject.contributor_count), 1)
-            self.assertEqual(int(token.subject_generation), 2)
-            self.assertEqual(int(token.authority_revision), 2)
-            self.assertEqual(
-                bytes(token.semantic_state_hash),
-                bytes(StudyProgressState.query.one().semantic_state_hash),
-            )
-            self.assertEqual(len(contributors), 2)
-            self.assertEqual(contributors[0].contributor_status, "TOMBSTONED")
-            self.assertIsNone(contributors[0].live_card_progress_id)
-            self.assertEqual(contributors[1].contributor_status, "ACTIVE")
+            self.assertEqual(int(subject.authority_revision), 2)
+            self.assertEqual(subject.normalized_queue, "new")
+            self.assertIsNotNone(subject.semantic_state_hash)
             self.assertEqual(lifecycle.transition_code, "TOMBSTONED_RESET")
             self.assertEqual(
                 (int(lifecycle.old_generation), int(lifecycle.new_generation)),
@@ -383,25 +329,6 @@ class StudySessionApiTests(unittest.TestCase):
             json=self._commit_payload(after_repeat),
         )
         self.assertEqual(committed.status_code, 200, committed.get_json())
-
-    def test_note_authority_deck_reset_rolls_back_stale_projection(self):
-        self._enable_existing_state_note_authority(epoch=7)
-        with self.app.app_context():
-            StudyProgressAvailability.query.one().normalized_queue = "review"
-            db.session.commit()
-
-        response = self.client.post(f"/api/decks/{self.deck_id}/progress-reset")
-        self.assertEqual(response.status_code, 409, response.get_json())
-        self.assertEqual(response.get_json()["error"], "STALE_AUTHORITY_AVAILABILITY")
-
-        with self.app.app_context():
-            self.assertEqual(CardProgress.query.count(), 1)
-            self.assertEqual(StudyProgressState.query.count(), 1)
-            self.assertEqual(StudyProgressAvailability.query.count(), 1)
-            subject = StudyProgressSubject.query.one()
-            self.assertEqual(int(subject.subject_generation), 1)
-            self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
-            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_note_authority_new_note_materializes_before_first_review(self):
         self._enable_existing_state_note_authority(epoch=8)
@@ -439,20 +366,15 @@ class StudySessionApiTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertEqual(Note.query.count(), 2)
-            self.assertEqual(CardProgress.query.count(), 2)
+            self.assertEqual(CardProgress.query.count(), 0)
             self.assertEqual(StudyProgressSubject.query.count(), 2)
-            self.assertEqual(StudyProgressState.query.count(), 2)
-            self.assertEqual(StudyProgressContributor.query.count(), 2)
-            self.assertEqual(StudyProgressAvailability.query.count(), 2)
+            self.assertEqual(self._live_rows().count(), 2)
             new_subject = StudyProgressSubject.query.filter_by(
                 live_note_id=created.get_json()["id"]
             ).one()
-            new_token = db.session.get(
-                StudyAuthoritySubjectToken, int(new_subject.id)
-            )
             self.assertEqual(int(new_subject.subject_generation), 1)
             self.assertEqual(int(new_subject.mirror_revision), 2)
-            self.assertEqual(int(new_token.authority_revision), 1)
+            self.assertEqual(int(new_subject.authority_revision), 1)
             self.assertEqual(ReviewEvent.query.count(), 1)
 
     def test_note_authority_mcp_note_create_and_delete_use_canonical_lifecycle(self):
@@ -472,15 +394,9 @@ class StudySessionApiTests(unittest.TestCase):
             new_subject = StudyProgressSubject.query.filter_by(
                 live_note_id=new_note_id
             ).one()
-            new_contributor = StudyProgressContributor.query.filter_by(
-                subject_id=int(new_subject.id),
-                contributor_status="ACTIVE",
-            ).one()
+            self.assertEqual(new_subject.current_provenance_code, "NATIVE_MCP")
             self.assertEqual(
-                new_contributor.current_provenance_code, "NATIVE_MCP"
-            )
-            self.assertEqual(
-                new_contributor.history_completeness_code,
+                new_subject.history_completeness_code,
                 "HISTORY_NATIVE_COMPLETE",
             )
             self.assertEqual(int(new_subject.subject_generation), 1)
@@ -496,16 +412,13 @@ class StudySessionApiTests(unittest.TestCase):
             tombstone = db.session.get(
                 StudyProgressSubject, int(new_subject.id)
             )
-            token = db.session.get(
-                StudyAuthoritySubjectToken, int(new_subject.id)
-            )
             self.assertIsNone(db.session.get(Note, new_note_id))
             self.assertEqual(
                 tombstone.status_code, "TOMBSTONED_SUBJECT_DELETED"
             )
             self.assertEqual(int(tombstone.subject_generation), 2)
-            self.assertEqual(int(token.subject_generation), 2)
-            self.assertEqual(int(token.authority_revision), 1)
+            self.assertEqual(int(tombstone.authority_revision), 1)
+            self.assertIsNone(tombstone.semantic_state_hash)
 
     def test_note_authority_mcp_template_bulk_expands_and_note_batch_deletes(self):
         self._enable_existing_state_note_authority(epoch=10)
@@ -544,7 +457,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertTrue(
                 all(
                     subject.status_code == "TOMBSTONED_SUBJECT_DELETED"
-                    and int(subject.subject_generation) == (3 if bytes(subject.logical_note_key).decode() == first_note_id else 2)
+                    and int(subject.subject_generation) == 2
                     for subject in subjects
                 )
             )
@@ -583,66 +496,19 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(len(cards), 2)
             new_card = Card.query.filter_by(template_id=template_id).one()
             new_card_id = str(new_card.id)
-            progress_rows = CardProgress.query.order_by(
-                CardProgress.card_id.asc()
-            ).all()
-            self.assertEqual(len(progress_rows), 2)
-            mapped = {
-                str(row.card_id): map_card_progress(
-                    row,
-                    card_created_at=db.session.get(Card, row.card_id).created_at,
-                )
-                for row in progress_rows
-            }
-            self.assertTrue(
-                all(isinstance(value, MappedCardProgress) for value in mapped.values())
-            )
-            self.assertEqual(
-                len({value.semantic_state_hash for value in mapped.values()}),
-                1,
-            )
+            # The new Card shares its Note's row; nothing is copied (ADR P10).
+            self.assertEqual(CardProgress.query.count(), 0)
             subject = StudyProgressSubject.query.one()
-            token = StudyAuthoritySubjectToken.query.one()
-            state = StudyProgressState.query.one()
             old_session = db.session.get(
                 StudySession, old_snapshot["session_id"]
             )
-            self.assertEqual(int(subject.subject_generation), 2)
-            self.assertEqual(int(subject.mirror_revision), 3)
-            self.assertEqual(int(subject.contributor_count), 2)
-            self.assertEqual(subject.status_code, "MIRRORED_EQUIVALENT_FANIN_DISTINCT_LINEAGE")
-            self.assertEqual(int(token.subject_generation), 2)
-            self.assertEqual(int(token.authority_revision), 1)
-            self.assertEqual(
-                bytes(token.semantic_state_hash),
-                bytes(state.semantic_state_hash),
-            )
-            self.assertEqual(StudyProgressContributor.query.count(), 3)
-            self.assertEqual(
-                StudyProgressContributor.query.filter_by(
-                    contributor_status="ACTIVE"
-                ).count(),
-                2,
-            )
-            self.assertEqual(
-                StudyProgressContributor.query.filter_by(
-                    contributor_status="DETACHED"
-                ).count(),
-                1,
-            )
-            new_contributor = StudyProgressContributor.query.filter_by(
-                live_card_id=new_card_id,
-                contributor_status="ACTIVE",
-            ).one()
-            self.assertEqual(
-                new_contributor.current_provenance_code, "NATIVE_DIRECT"
-            )
-            self.assertEqual(
-                new_contributor.history_completeness_code,
-                "HISTORY_NATIVE_COMPLETE",
-            )
-            self.assertEqual(StudyProgressAvailability.query.count(), 2)
-            self.assertEqual(old_session.status, "cancelled")
+            self.assertEqual(int(subject.subject_generation), 1)
+            self.assertEqual(int(subject.mirror_revision), 2)
+            self.assertEqual(int(subject.authority_revision), 1)
+            self.assertEqual(subject.current_provenance_code, "NATIVE_DIRECT")
+            self.assertEqual(subject.history_completeness_code, "HISTORY_NATIVE_COMPLETE")
+            # Its pins stay valid: the open session keeps its own Cards.
+            self.assertEqual(old_session.status, "open")
 
         previous_v4 = self.app.config["STUDY_WIRE_V4_ENABLED"]
         self.app.config["STUDY_WIRE_V4_ENABLED"] = True
@@ -666,7 +532,7 @@ class StudySessionApiTests(unittest.TestCase):
         fresh = fresh_response.get_json()
         self.assertEqual(fresh["cards"][0]["card_id"], new_card_id)
         self.assertEqual(
-            fresh["cards"][0]["authority_pin"]["subject_generation"], "2"
+            fresh["cards"][0]["authority_pin"]["subject_generation"], "1"
         )
         self.assertEqual(
             fresh["cards"][0]["authority_pin"]["base_authority_revision"], "1"
@@ -676,33 +542,6 @@ class StudySessionApiTests(unittest.TestCase):
             json=self._commit_payload(fresh),
         )
         self.assertEqual(committed.status_code, 200, committed.get_json())
-
-    def test_note_authority_new_template_rolls_back_stale_projection(self):
-        self._enable_existing_state_note_authority(epoch=12)
-        with self.app.app_context():
-            template_count = Template.query.count()
-            card_count = Card.query.count()
-            StudyProgressAvailability.query.one().normalized_queue = "review"
-            db.session.commit()
-
-        response = self.client.post(
-            f"/api/note-types/{self.note_type_id}/templates",
-            json={
-                "name": "Rejected Card",
-                "front_html": "{{Word}}",
-                "back_html": "{{Word}}",
-            },
-        )
-        self.assertEqual(response.status_code, 409, response.get_json())
-        self.assertEqual(response.get_json()["error"], "STALE_AUTHORITY_AVAILABILITY")
-
-        with self.app.app_context():
-            self.assertEqual(Template.query.count(), template_count)
-            self.assertEqual(Card.query.count(), card_count)
-            self.assertEqual(CardProgress.query.count(), 1)
-            subject = StudyProgressSubject.query.one()
-            self.assertEqual(int(subject.subject_generation), 1)
-            self.assertEqual(int(subject.mirror_revision), 1)
 
     def test_note_authority_template_delete_detaches_sibling_and_fences_pin(self):
         self._enable_existing_state_note_authority(epoch=13)
@@ -751,37 +590,16 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertIsNone(db.session.get(Card, removed_card_id))
             self.assertEqual(Template.query.count(), 1)
             self.assertEqual(Card.query.count(), 1)
-            self.assertEqual(CardProgress.query.count(), 1)
+            self.assertEqual(CardProgress.query.count(), 0)
             subject = StudyProgressSubject.query.one()
-            token = StudyAuthoritySubjectToken.query.one()
-            state = StudyProgressState.query.one()
-            lifecycle = StudyProgressLifecycleEvent.query.one()
             old_session = db.session.get(StudySession, snapshot["session_id"])
+            # Losing a Template's Card changes neither the Note's state nor its row.
             self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
-            self.assertEqual(int(subject.subject_generation), 3)
-            self.assertEqual(int(subject.mirror_revision), 3)
-            self.assertEqual(int(subject.contributor_count), 1)
-            self.assertEqual(int(token.subject_generation), 3)
-            self.assertEqual(int(token.authority_revision), 0)
-            self.assertEqual(
-                bytes(token.semantic_state_hash),
-                bytes(state.semantic_state_hash),
-            )
-            self.assertEqual(
-                StudyProgressContributor.query.filter_by(
-                    contributor_status="ACTIVE"
-                ).count(),
-                1,
-            )
-            self.assertEqual(StudyProgressAvailability.query.count(), 1)
-            self.assertEqual(
-                lifecycle.transition_code,
-                "DETACHED_CONTRIBUTOR_DELETED",
-            )
-            self.assertEqual(
-                (int(lifecycle.old_generation), int(lifecycle.new_generation)),
-                (2, 3),
-            )
+            self.assertEqual(int(subject.subject_generation), 1)
+            self.assertEqual(int(subject.mirror_revision), 1)
+            self.assertEqual(int(subject.authority_revision), 0)
+            self.assertIsNotNone(subject.semantic_state_hash)
+            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
             self.assertEqual(old_session.status, "cancelled")
             remaining_card_id = str(Card.query.one().id)
 
@@ -796,38 +614,6 @@ class StudySessionApiTests(unittest.TestCase):
         )
         self.assertEqual(reviewed.status_code, 200, reviewed.get_json())
         self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 1)
-
-    def test_note_authority_template_delete_rolls_back_stale_projection(self):
-        self._enable_existing_state_note_authority(epoch=14, include_token=True)
-        created = self.client.post(
-            f"/api/note-types/{self.note_type_id}/templates",
-            json={
-                "name": "Retained Card",
-                "front_html": "{{Word}}",
-                "back_html": "{{Word}}",
-            },
-        )
-        self.assertEqual(created.status_code, 201, created.get_json())
-        template_id = created.get_json()["id"]
-        with self.app.app_context():
-            StudyProgressAvailability.query.first().normalized_queue = "review"
-            db.session.commit()
-
-        response = self.client.delete(
-            f"/api/note-types/{self.note_type_id}/templates/{template_id}"
-        )
-        self.assertEqual(response.status_code, 409, response.get_json())
-        self.assertEqual(response.get_json()["error"], "STALE_AUTHORITY_AVAILABILITY")
-
-        with self.app.app_context():
-            self.assertIsNotNone(db.session.get(Template, template_id))
-            self.assertEqual(Template.query.count(), 2)
-            self.assertEqual(Card.query.count(), 2)
-            self.assertEqual(CardProgress.query.count(), 2)
-            subject = StudyProgressSubject.query.one()
-            self.assertEqual(int(subject.subject_generation), 2)
-            self.assertEqual(int(subject.mirror_revision), 2)
-            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_note_authority_new_template_expands_every_owned_note(self):
         self._enable_existing_state_note_authority(epoch=15, include_token=True)
@@ -855,35 +641,22 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(Note.query.count(), 2)
             self.assertEqual(Template.query.count(), 2)
             self.assertEqual(Card.query.count(), 4)
-            self.assertEqual(CardProgress.query.count(), 4)
+            self.assertEqual(CardProgress.query.count(), 0)
             subjects = StudyProgressSubject.query.order_by(
                 StudyProgressSubject.logical_note_key.asc()
             ).all()
             self.assertEqual(len(subjects), 2)
+            # A new Template neither copies nor re-keys a Note's row (ADR P10).
             self.assertTrue(
-                all(int(subject.subject_generation) == 2 for subject in subjects)
-            )
-            self.assertTrue(
-                all(int(subject.mirror_revision) == 2 for subject in subjects)
+                all(int(subject.subject_generation) == 1 for subject in subjects)
             )
             self.assertTrue(
-                all(int(subject.contributor_count) == 2 for subject in subjects)
-            )
-            tokens = StudyAuthoritySubjectToken.query.all()
-            self.assertEqual(len(tokens), 2)
-            self.assertTrue(
-                all(int(token.subject_generation) == 2 for token in tokens)
+                all(int(subject.mirror_revision) == 1 for subject in subjects)
             )
             self.assertTrue(
-                all(int(token.authority_revision) == 0 for token in tokens)
+                all(int(subject.authority_revision) == 0 for subject in subjects)
             )
-            self.assertEqual(
-                StudyProgressContributor.query.filter_by(
-                    contributor_status="ACTIVE"
-                ).count(),
-                4,
-            )
-            self.assertEqual(StudyProgressAvailability.query.count(), 4)
+            self.assertEqual(self._live_rows().count(), 2)
 
     def test_note_authority_owned_note_delete_tombstones_subject(self):
         note_id, _state_hash = self._enable_existing_state_note_authority(epoch=16)
@@ -897,24 +670,16 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Card.query.count(), 0)
             self.assertEqual(CardProgress.query.count(), 0)
-            self.assertEqual(StudyProgressState.query.count(), 0)
-            self.assertEqual(StudyProgressAvailability.query.count(), 0)
+            self.assertEqual(self._live_rows().count(), 0)
             subject = StudyProgressSubject.query.one()
-            token = StudyAuthoritySubjectToken.query.one()
-            contributor = StudyProgressContributor.query.one()
             lifecycle = StudyProgressLifecycleEvent.query.one()
             study_session = db.session.get(StudySession, snapshot["session_id"])
             self.assertEqual(subject.status_code, "TOMBSTONED_SUBJECT_DELETED")
             self.assertIsNone(subject.live_note_id)
             self.assertEqual(int(subject.subject_generation), 2)
             self.assertEqual(int(subject.mirror_revision), 2)
-            self.assertEqual(int(subject.contributor_count), 0)
-            self.assertEqual(int(token.subject_generation), 2)
-            self.assertEqual(int(token.authority_revision), 1)
-            self.assertIsNone(token.semantic_state_hash)
-            self.assertEqual(contributor.contributor_status, "TOMBSTONED")
-            self.assertIsNone(contributor.live_card_progress_id)
-            self.assertIsNone(contributor.live_card_id)
+            self.assertEqual(int(subject.authority_revision), 1)
+            self.assertIsNone(subject.semantic_state_hash)
             self.assertEqual(
                 lifecycle.transition_code,
                 "TOMBSTONED_SUBJECT_DELETED",
@@ -937,59 +702,22 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Card.query.count(), 0)
             self.assertEqual(CardProgress.query.count(), 0)
-            self.assertEqual(StudyProgressState.query.count(), 0)
-            self.assertEqual(StudyProgressAvailability.query.count(), 0)
+            self.assertEqual(self._live_rows().count(), 0)
             subject = StudyProgressSubject.query.one()
-            token = StudyAuthoritySubjectToken.query.one()
-            contributor = StudyProgressContributor.query.one()
             lifecycle = StudyProgressLifecycleEvent.query.one()
             study_session = db.session.get(StudySession, snapshot["session_id"])
             self.assertEqual(subject.status_code, "TOMBSTONED_SUBJECT_DELETED")
             self.assertIsNone(subject.live_note_id)
             self.assertEqual(int(subject.subject_generation), 2)
             self.assertEqual(int(subject.mirror_revision), 2)
-            self.assertEqual(int(subject.contributor_count), 0)
-            self.assertEqual(int(token.subject_generation), 2)
-            self.assertEqual(int(token.authority_revision), 1)
-            self.assertIsNone(token.semantic_state_hash)
-            self.assertEqual(contributor.contributor_status, "TOMBSTONED")
-            self.assertIsNone(contributor.live_card_progress_id)
-            self.assertIsNone(contributor.live_card_id)
+            self.assertEqual(int(subject.authority_revision), 1)
+            self.assertIsNone(subject.semantic_state_hash)
             self.assertEqual(
                 lifecycle.transition_code,
                 "TOMBSTONED_SUBJECT_DELETED",
             )
             self.assertEqual(lifecycle.source_path, "deck.delete")
             self.assertEqual(study_session.status, "cancelled")
-
-    def test_note_authority_owned_deck_delete_rolls_back_stale_projection(self):
-        self._enable_existing_state_note_authority(epoch=18)
-        snapshot = self._open_session_v4()
-        with self.app.app_context():
-            StudyProgressAvailability.query.one().normalized_queue = "review"
-            db.session.commit()
-
-        deleted = self.client.delete(f"/api/decks/{self.deck_id}")
-        self.assertEqual(deleted.status_code, 409, deleted.get_json())
-        self.assertEqual(
-            deleted.get_json()["error"],
-            "STALE_AUTHORITY_AVAILABILITY",
-        )
-
-        with self.app.app_context():
-            self.assertIsNotNone(db.session.get(Deck, self.deck_id))
-            self.assertEqual(Note.query.count(), 1)
-            self.assertEqual(Card.query.count(), 1)
-            self.assertEqual(CardProgress.query.count(), 1)
-            self.assertEqual(StudyProgressState.query.count(), 1)
-            self.assertEqual(StudyProgressAvailability.query.count(), 1)
-            subject = StudyProgressSubject.query.one()
-            study_session = db.session.get(StudySession, snapshot["session_id"])
-            self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
-            self.assertEqual(int(subject.subject_generation), 1)
-            self.assertEqual(int(subject.mirror_revision), 1)
-            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
-            self.assertEqual(study_session.status, "open")
 
     @staticmethod
     def _commit_payload(snapshot, *, commit_id=None):
@@ -1215,7 +943,7 @@ class StudySessionApiTests(unittest.TestCase):
                 db.session.get(StudySession, legacy["session_id"]).status,
                 "cancelled",
             )
-            self.assertEqual(StudyAuthoritySubjectToken.query.count(), 1)
+            self.assertEqual(self._live_rows().count(), 1)
 
     def test_note_enrollment_switch_materializes_pristine_owned_note(self):
         with self.app.app_context():
@@ -1232,22 +960,18 @@ class StudySessionApiTests(unittest.TestCase):
 
             enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
             subject = StudyProgressSubject.query.one()
-            token = StudyAuthoritySubjectToken.query.one()
-            contributor = StudyProgressContributor.query.one()
             self.assertEqual(enrollment.mode_code, "NOTE")
             self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
             self.assertEqual(int(subject.subject_generation), 1)
             self.assertEqual(int(subject.mirror_revision), 1)
-            self.assertEqual(int(token.authority_revision), 0)
+            self.assertEqual(int(subject.authority_revision), 0)
+            self.assertIsNotNone(subject.semantic_state_hash)
+            self.assertEqual(subject.current_provenance_code, "UNKNOWN_LEGACY")
             self.assertEqual(
-                bytes(token.semantic_state_hash),
-                bytes(StudyProgressState.query.one().semantic_state_hash),
-            )
-            self.assertEqual(contributor.current_provenance_code, "UNKNOWN_LEGACY")
-            self.assertEqual(
-                contributor.history_completeness_code,
+                subject.history_completeness_code,
                 "HISTORY_NATIVE_COMPLETE",
             )
+            self.assertEqual(CardProgress.query.count(), 0)
 
         snapshot = self._open_session_v4()
         self.assertEqual(snapshot["authority_mode"], "NOTE")
@@ -1289,25 +1013,13 @@ class StudySessionApiTests(unittest.TestCase):
             materialized = StudyProgressSubject.query.one()
             self.assertEqual(int(materialized.id), subject_id)
             self.assertEqual(materialized.status_code, "MIRRORED_SINGLE")
-            self.assertEqual(CardProgress.query.count(), 1)
-            self.assertEqual(StudyProgressState.query.count(), 1)
-            self.assertEqual(StudyProgressContributor.query.count(), 1)
-            self.assertEqual(StudyProgressAvailability.query.count(), 1)
+            self.assertEqual(CardProgress.query.count(), 0)
+            self.assertEqual(self._live_rows().count(), 1)
 
-    def test_note_enrollment_switch_rejects_partially_covered_siblings(self):
-        self._enable_existing_state_note_authority(enroll=False)
+    def test_note_enrollment_refuses_legacy_progress_it_cannot_migrate(self):
         with self.app.app_context():
-            note = Note.query.filter_by(user_id=self.user_id).one()
-            template = Template(
-                note_type_id=self.note_type_id,
-                name="Card 2",
-                front_html="{{Word}}",
-                back_html="{{Word}}",
-                position=1,
-            )
-            db.session.add(template)
-            db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=template.id))
+            card = Card.query.one()
+            db.session.add(CardProgress(user_id=self.user_id, card_id=str(card.id)))
             db.session.commit()
 
             with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
@@ -1316,16 +1028,13 @@ class StudySessionApiTests(unittest.TestCase):
                     learner_user_id=self.user_id,
                     now_utc=datetime(2026, 9, 21, 9, 0, 0),
                 )
-            self.assertEqual(
-                failure.exception.code,
-                "INCOMPLETE_AUTHORITY_COVERAGE",
-            )
+            self.assertEqual(failure.exception.code, "LEGACY_PROGRESS_NOT_MIGRATABLE")
             db.session.rollback()
             self.assertIsNone(
                 db.session.get(StudyAuthorityEnrollment, self.user_id)
             )
             self.assertEqual(CardProgress.query.count(), 1)
-            self.assertEqual(StudyProgressSubject.query.count(), 1)
+            self.assertEqual(StudyProgressSubject.query.count(), 0)
 
     def test_note_enrollment_pristine_materialization_rolls_back_atomically(self):
         created = self.client.post(
@@ -1380,10 +1089,6 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(Card.query.count(), 2)
             self.assertEqual(CardProgress.query.count(), 0)
             self.assertEqual(StudyProgressSubject.query.count(), 0)
-            self.assertEqual(StudyAuthoritySubjectToken.query.count(), 0)
-            self.assertEqual(StudyProgressState.query.count(), 0)
-            self.assertEqual(StudyProgressContributor.query.count(), 0)
-            self.assertEqual(StudyProgressAvailability.query.count(), 0)
 
     def test_note_enrollment_switch_rejects_in_flight_async_batch(self):
         self._enable_existing_state_note_authority(enroll=False)
@@ -1444,7 +1149,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertIsNone(
                 db.session.get(StudyAuthorityEnrollment, self.user_id)
             )
-            self.assertEqual(StudyAuthoritySubjectToken.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.count(), 0)
 
         skipped_audit = runner.invoke(
             args=[
@@ -1460,6 +1165,8 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(skipped_payload["timezone"], "UTC+09:00")
         self.assertEqual(skipped_payload["observed_at_utc"], "2026-09-21T09:30:00.000000Z")
 
+        previous_v4 = self.app.config.get("STUDY_WIRE_V4_ENABLED", False)
+        self.app.config["STUDY_WIRE_V4_ENABLED"] = False
         blocked = runner.invoke(
             args=[
                 "study-authority-enrollment",
@@ -1473,7 +1180,6 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertNotEqual(blocked.exit_code, 0, blocked.output)
         self.assertIn("NOTE_ENROLLMENT_DISABLED", blocked.output)
 
-        previous_v4 = self.app.config["STUDY_WIRE_V4_ENABLED"]
         self.app.config["STUDY_WIRE_V4_ENABLED"] = True
         try:
             applied = runner.invoke(
@@ -1633,22 +1339,6 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(payload["canonical"]["learn"], 1)
         self.assertIsNotNone(payload["canonical"]["selected_card_id"])
 
-        with patch(
-            "app.repositories.study_repository.query_study_card_order",
-            return_value=((), ()),
-        ):
-            incomplete_order_audit = self.app.test_cli_runner().invoke(
-                args=[
-                    "study-authority-read-audit",
-                    "--user-id", str(self.user_id),
-                    "--observed-at-utc", "2026-09-23T10:00:00Z",
-                    "--timezone-name", "UTC",
-                ]
-            )
-        self.assertNotEqual(incomplete_order_audit.exit_code, 0)
-        incomplete_payload = json.loads(incomplete_order_audit.output.splitlines()[0])
-        self.assertEqual(incomplete_payload["mismatches"], ["learn_ahead_order"])
-
     def test_note_read_audit_orders_mixed_review_due_day_like_legacy_sql(self):
         with self.app.app_context():
             first_note_id = str(Note.query.filter_by(user_id=self.user_id).one().id)
@@ -1667,7 +1357,6 @@ class StudySessionApiTests(unittest.TestCase):
             second_note_id = str(second_note.id)
 
         self._enable_existing_state_note_authority(
-            enroll=False,
             note_id=first_note_id,
             initial_progress={
                 "queue": "review",
@@ -1680,6 +1369,7 @@ class StudySessionApiTests(unittest.TestCase):
         )
         self._enable_existing_state_note_authority(
             enroll=False,
+            include_token=True,
             note_id=second_note_id,
             initial_progress={
                 "queue": "review",
@@ -1691,12 +1381,6 @@ class StudySessionApiTests(unittest.TestCase):
             },
         )
         with self.app.app_context():
-            stage_note_authority_enrollment(
-                db.session,
-                learner_user_id=self.user_id,
-                now_utc=datetime(2026, 9, 23, 10, 0, 0),
-            )
-            db.session.commit()
             first_card_id = str(Card.query.filter_by(note_id=first_note_id).one().id)
 
         audit = self.app.test_cli_runner().invoke(
@@ -1712,22 +1396,6 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(payload["status"], "PASS")
         self.assertEqual(payload["canonical"]["due"], 2)
         self.assertEqual(payload["canonical"]["selected_card_id"], first_card_id)
-
-        with patch(
-            "app.repositories.study_repository.query_study_card_order",
-            return_value=((first_card_id,), ()),
-        ):
-            incomplete_order_audit = self.app.test_cli_runner().invoke(
-                args=[
-                    "study-authority-read-audit",
-                    "--user-id", str(self.user_id),
-                    "--observed-at-utc", "2026-09-23T10:00:00Z",
-                    "--timezone-name", "UTC",
-                ]
-            )
-        self.assertNotEqual(incomplete_order_audit.exit_code, 0)
-        incomplete_payload = json.loads(incomplete_order_audit.output.splitlines()[0])
-        self.assertEqual(incomplete_payload["mismatches"], ["due_order"])
 
     def test_note_single_card_read_rejects_divergent_unrequested_sibling(self):
         with self.app.app_context():
@@ -1764,10 +1432,8 @@ class StudySessionApiTests(unittest.TestCase):
             )
             self.assertEqual(healthy_read.state.type, "new")
             db.session.rollback()
-            sibling_progress = CardProgress.query.filter_by(
-                user_id=self.user_id, card_id=str(cards[1].id)
-            ).one()
-            sibling_progress.queue = "review"
+            # Availability that disagrees with the row's state fails closed.
+            StudyProgressSubject.query.one().normalized_queue = "review"
             db.session.commit()
 
             with self.assertRaises(StudyAuthorityReadError) as failure:
@@ -1782,56 +1448,24 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(failure.exception.code, "AUTHORITY_READ_PARITY_DIVERGED")
             db.session.rollback()
 
-    def test_note_enrollment_rollback_proves_projection_and_fences_epoch(self):
+    def test_note_enrollment_rollback_is_retired_and_keeps_the_note_lease(self):
         self._enable_existing_state_note_authority(epoch=4)
         snapshot = self._open_session_v4()
         with self.app.app_context():
-            result = stage_legacy_authority_enrollment(
-                db.session,
-                learner_user_id=self.user_id,
-                now_utc=datetime(2026, 9, 21, 9, 30, 0),
-            )
-            self.assertEqual(result.previous_mode, "NOTE")
-            self.assertEqual(result.previous_epoch, 4)
-            self.assertEqual(result.mode_code, "LEGACY")
-            self.assertEqual(result.epoch, 5)
-            self.assertEqual(result.subject_count, 1)
-            self.assertEqual(result.card_count, 1)
-            self.assertEqual(result.cancelled_session_count, 1)
-            db.session.commit()
-
-            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
-            self.assertEqual(enrollment.mode_code, "LEGACY")
-            self.assertEqual(enrollment.epoch, 5)
-            self.assertEqual(
-                db.session.get(StudySession, snapshot["session_id"]).status,
-                "cancelled",
-            )
-
-        legacy = self._open_session()
-        self.assertEqual(legacy["schema_version"], "study-session.v2")
-
-    def test_note_enrollment_rollback_rejects_stale_availability(self):
-        self._enable_existing_state_note_authority(epoch=7)
-        with self.app.app_context():
-            availability = StudyProgressAvailability.query.one()
-            availability.semantic_state_hash = b"\x99" * 32
-            db.session.commit()
-
             with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
                 stage_legacy_authority_enrollment(
                     db.session,
                     learner_user_id=self.user_id,
                     now_utc=datetime(2026, 9, 21, 9, 30, 0),
                 )
-            self.assertEqual(
-                failure.exception.code,
-                "STALE_AUTHORITY_AVAILABILITY",
-            )
+            self.assertEqual(failure.exception.code, "LEGACY_ROLLBACK_RETIRED")
             db.session.rollback()
             enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
-            self.assertEqual(enrollment.mode_code, "NOTE")
-            self.assertEqual(enrollment.epoch, 7)
+            self.assertEqual((enrollment.mode_code, enrollment.epoch), ("NOTE", 4))
+            self.assertEqual(
+                db.session.get(StudySession, snapshot["session_id"]).status,
+                "open",
+            )
 
     def test_wire_v4_commit_uses_note_authority_receipt_and_replays(self):
         _note_id, base_hash = self._enable_existing_state_note_authority(epoch=5)
@@ -1858,11 +1492,10 @@ class StudySessionApiTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 1)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 1)
-            token = StudyAuthoritySubjectToken.query.one()
-            self.assertEqual(int(token.authority_revision), 1)
-            self.assertNotEqual(bytes(token.semantic_state_hash).hex(), base_hash)
-            progress = CardProgress.query.one()
-            self.assertEqual(int(progress.revision), 1)
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(int(subject.authority_revision), 1)
+            self.assertNotEqual(bytes(subject.semantic_state_hash).hex(), base_hash)
+            self.assertEqual(CardProgress.query.count(), 0)
             session = db.session.get(StudySession, snapshot["session_id"])
             self.assertEqual(session.status, "committed")
 
@@ -1905,11 +1538,10 @@ class StudySessionApiTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 1)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 1)
-            token = StudyAuthoritySubjectToken.query.one()
-            self.assertEqual(int(token.authority_revision), 1)
-            progress = CardProgress.query.one()
-            self.assertEqual(int(progress.revision), 1)
-            self.assertEqual(int(progress.reps), 1)
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(int(subject.authority_revision), 1)
+            self.assertEqual(subject.state_payload["reps"], "1")
+            self.assertEqual(CardProgress.query.count(), 0)
 
     def test_mcp_review_routes_through_note_authority(self):
         self._enable_existing_state_note_authority(epoch=9)
@@ -2039,9 +1671,10 @@ class StudySessionApiTests(unittest.TestCase):
     def test_dashboard_note_counts_are_rebuilt_from_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=14)
         with self.app.app_context():
-            # Projection content drift (no revision bump) must not change NOTE counts.
-            progress = CardProgress.query.filter_by(user_id=self.user_id).one()
-            progress.queue, progress.due_day = "review", 0
+            # A frozen card_progress row (kept from before NOTE) never serves NOTE counts.
+            card = Card.query.one()
+            db.session.add(CardProgress(
+                user_id=self.user_id, card_id=str(card.id), queue="review", due_day=0, revision=3))
             db.session.commit()
         response = self.client.get("/api/dashboard")
         self.assertEqual(response.status_code, 200, response.get_json())
@@ -2149,14 +1782,14 @@ class StudySessionApiTests(unittest.TestCase):
             {"total": 1, "new": 1, "learn": 0, "due": 0},
         )
 
-    def test_legacy_study_deck_page_uses_note_authority_queue(self):
+    def test_study_deck_page_serves_the_spa_without_reading_progress(self):
         self._enable_existing_state_note_authority(epoch=19)
-        with patch(
-            "app.routes.vocabulary._load_card_progress_map",
-            side_effect=AssertionError("legacy Study page must not serve NOTE"),
-        ):
+        refuse = AssertionError("the Study page shell must not read progress")
+        with patch("app.services.study_authority_read_service.load_study_authority_card_reads",
+                   side_effect=refuse),                 patch("app.repositories.study_repository.load_card_progress_map", side_effect=refuse):
             response = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(response.status_code, 200)
+        self.assertIn('<div id="root"></div>', response.get_data(as_text=True))
 
     def test_reused_commit_id_with_another_payload_settles_on_the_stored_receipt(self):
         # Production 2026-10-01: a browser lost the receipt of a commit and
@@ -2224,8 +1857,9 @@ class StudySessionApiTests(unittest.TestCase):
     def test_direct_note_read_fails_closed_on_stale_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=13)
         with self.app.app_context():
-            availability = StudyProgressAvailability.query.one()
-            availability.is_suspended = True
+            # The row's availability says due; its state says new.
+            subject = StudyProgressSubject.query.one()
+            subject.normalized_queue, subject.due_day = "review", 0
             db.session.commit()
 
         response = self.client.get(
@@ -2238,22 +1872,30 @@ class StudySessionApiTests(unittest.TestCase):
             "AUTHORITY_READ_PARITY_DIVERGED",
         )
 
-    def test_direct_note_read_fails_closed_on_projection_divergence(self):
+    def test_direct_note_read_ignores_frozen_card_progress_and_fails_closed_on_a_corrupt_row(self):
         self._enable_existing_state_note_authority(epoch=11)
         with self.app.app_context():
-            progress = CardProgress.query.one()
-            progress.reps = 99
+            card = Card.query.one()
+            db.session.add(CardProgress(user_id=self.user_id, card_id=str(card.id), reps=99, revision=9))
             db.session.commit()
 
         response = self.client.get(
             "/api/study/session/next",
             query_string={"scope": "deck", "scope_id": self.deck_id},
         )
-        self.assertEqual(response.status_code, 409, response.get_json())
-        self.assertEqual(
-            response.get_json()["error"],
-            "AUTHORITY_READ_PARITY_DIVERGED",
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["new_count"], 1)
+
+        with self.app.app_context():
+            subject = StudyProgressSubject.query.one()
+            subject.state_payload = {**subject.state_payload, "reps": "99"}
+            db.session.commit()
+        response = self.client.get(
+            "/api/study/session/next",
+            query_string={"scope": "deck", "scope_id": self.deck_id},
         )
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "STATE_HASH_MISMATCH")
 
     def test_wire_v4_commit_chains_multiple_events_from_one_frozen_pin(self):
         self._enable_existing_state_note_authority(epoch=6)
@@ -2281,17 +1923,17 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(ReviewEvent.query.count(), 2)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 2)
             self.assertEqual(
-                int(StudyAuthoritySubjectToken.query.one().authority_revision),
+                int(StudyProgressSubject.query.one().authority_revision),
                 2,
             )
-            self.assertEqual(int(CardProgress.query.one().revision), 2)
+            self.assertEqual(CardProgress.query.count(), 0)
 
     def test_wire_v4_commit_rejects_stale_pin_without_partial_writes(self):
         self._enable_existing_state_note_authority(epoch=7)
         snapshot = self._open_session_v4()
         with self.app.app_context():
-            token = StudyAuthoritySubjectToken.query.one()
-            token.authority_revision = int(token.authority_revision) + 1
+            subject = StudyProgressSubject.query.one()
+            subject.authority_revision = int(subject.authority_revision) + 1
             db.session.commit()
 
         status = self.client.get(
@@ -2309,7 +1951,7 @@ class StudySessionApiTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 0)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 0)
-            self.assertEqual(int(CardProgress.query.one().revision), 0)
+            self.assertEqual(CardProgress.query.count(), 0)
             self.assertEqual(
                 db.session.get(StudySession, snapshot["session_id"]).status,
                 "open",

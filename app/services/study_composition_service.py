@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from sqlalchemy.orm import joinedload
+
 from models import db
 from models.card import Card
 from models.note import Note
@@ -206,18 +208,20 @@ def resolve_compatibility_compositions_for_note_type(
 ) -> list[AppliedComposition]:
     templates = (
         Template.query.filter(Template.note_type_id == str(note_type_id))
+        .options(joinedload(Template.note_type))
         .order_by(Template.position.asc(), Template.id.asc())
         .all()
     )
     return [build_compatibility_composition(item) for item in templates]
 
 
-def _composition_sort_key(item: AppliedComposition) -> tuple[Any, ...]:
-    template = db.session.get(Template, item.template_id)
+def _composition_sort_key(
+    item: AppliedComposition, positions: dict[str, int]
+) -> tuple[Any, ...]:
     return (
         item.note_type_name.casefold(),
         item.note_type_id,
-        int(getattr(template, "position", 0) or 0),
+        positions.get(item.template_id, 0),
         item.template_id,
         item.context_kind,
         item.composition_id,
@@ -270,22 +274,53 @@ def list_available_compositions_for_query(
             )
         samples.setdefault((str(template_id), context_kind), str(card_id))
 
-    compositions: list[AppliedComposition] = []
-    for (_template_id, _context_kind), card_id in samples.items():
-        card = db.session.get(Card, card_id)
-        if card is None:
-            continue
-        compositions.append(
-            resolve_compatibility_composition_for_card(card, clone_scope)
+    # The grouped scope already supplies the effective presentation context.
+    # Loading sample Card/Note entities here repeats content reads for each
+    # composition; only Template and NoteType metadata are needed.
+    template_ids = sorted({template_id for template_id, _kind in samples})
+    templates: dict[str, Template] = {}
+    for offset in range(0, len(template_ids), 500):
+        batch = (
+            Template.query.options(joinedload(Template.note_type))
+            .filter(Template.id.in_(template_ids[offset:offset + 500]))
+            .all()
         )
-    return sorted(compositions, key=_composition_sort_key)
+        templates.update((str(template.id), template) for template in batch)
+    positions = {
+        template_id: int(template.position or 0)
+        for template_id, template in templates.items()
+    }
+    compositions: list[AppliedComposition] = []
+    for (template_id, context_kind), card_id in samples.items():
+        template = templates.get(template_id)
+        if template is None:
+            raise ValueError(f"Card {card_id} references missing template {template_id}")
+        compositions.append(
+            build_compatibility_composition(
+                template,
+                context_kind=context_kind,
+                install_id=(str(clone_scope.install.id) if clone_scope is not None else None),
+            )
+        )
+    return sorted(compositions, key=lambda item: _composition_sort_key(item, positions))
 
 
 def group_available_compositions(
     compositions: list[AppliedComposition],
 ) -> list[CompositionGroup]:
     grouped: dict[tuple[str, str], list[AppliedComposition]] = {}
-    for item in sorted(compositions, key=_composition_sort_key):
+    # Sorting may run after the ORM identity map releases discovery entities.
+    # Fetch positions in batches instead of issuing one lazy get per item.
+    template_ids = sorted({item.template_id for item in compositions})
+    positions: dict[str, int] = {}
+    for offset in range(0, len(template_ids), 500):
+        positions.update(
+            (str(template_id), int(position or 0))
+            for template_id, position in db.session.query(Template.id, Template.position)
+            .filter(Template.id.in_(template_ids[offset:offset + 500]))
+            .all()
+        )
+    for item in sorted(compositions, key=lambda item: _composition_sort_key(item, positions)):
         grouped.setdefault(
             (item.note_type_id, item.note_type_name),
             [],

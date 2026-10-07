@@ -121,8 +121,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
 
     def test_note_authority_template_add_and_remove_through_jsonrpc(self):
         from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
-        from models.study_progress_state import StudyProgressState
-        from models.study_authority_subject_token import StudyAuthoritySubjectToken
+        from models.study_progress_subject import StudyProgressSubject
 
         with self.app.app_context():
             deck = Deck(owner_user_id=self.user_id, name="NOTE topology")
@@ -137,7 +136,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
             stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
                 now_utc=datetime.now(timezone.utc).replace(tzinfo=None))
             db.session.commit()
-            original_hash = bytes(StudyProgressState.query.one().semantic_state_hash)
+            original_hash = bytes(StudyProgressSubject.query.one().semantic_state_hash)
 
         added = self._call_tool("update_note_type", {"note_type_id": self.note_type_id,
             "templates": {"added": [{"name": "Reverse"}, {"name": "Listening"}]}})
@@ -150,10 +149,12 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
         self.assertEqual({row["name"] for row in removed["templates"]}, {"Reverse", "Listening"})
         with self.app.app_context():
             self.assertEqual(Card.query.count(), 2)
-            self.assertEqual(CardProgress.query.count(), 2)
+            # The Note's one row is untouched by the topology change (ADR P10).
+            self.assertEqual(CardProgress.query.count(), 0)
             self.assertEqual(Template.query.filter_by(is_default=True).count(), 1)
-            self.assertEqual(bytes(StudyProgressState.query.one().semantic_state_hash), original_hash)
-            self.assertEqual(StudyAuthoritySubjectToken.query.one().authority_revision, 0)
+            subject = StudyProgressSubject.query.one()
+            self.assertEqual(bytes(subject.semantic_state_hash), original_hash)
+            self.assertEqual(subject.authority_revision, 0)
 
     def test_list_note_types(self):
         with self.app.app_context():

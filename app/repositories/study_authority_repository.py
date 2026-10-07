@@ -1,8 +1,10 @@
-"""Transaction-neutral learner authority fence primitives for Phase 5.
+"""Learner authority fence and NOTE progress-row locking (ADR P10).
 
-Callers remain LEGACY-only by default. Explicit NOTE-capable paths must opt in,
-hold the same learner fence, and retain transaction ownership. This repository
-does not commit or switch enrollment.
+LEGACY learners keep ``card_progress``. A NOTE learner's progress for a Note
+is one ``study_progress_subjects`` row under the ``CONSOLIDATED_V1`` storage
+profile; the token and state of a locked subject are views of that row.
+Callers hold the learner fence and own the transaction; nothing here commits
+or switches enrollment.
 """
 
 from __future__ import annotations
@@ -12,29 +14,18 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Mapping
 
-from sqlalchemy import select
+from sqlalchemy import literal, select, union_all
 from sqlalchemy.orm import Session
 
-from app.repositories.study_inserted_rows import SUBJECT, inserted_in_transaction
 from app.services.study_progress_contract import (
+    CONSOLIDATED_STORAGE_PROFILE,
     DEFAULT_STORAGE_PROFILE,
-    RAW_SCHEMA_VERSION,
-    STORAGE_CODEC,
     STORAGE_PROFILES,
 )
-from app.services.study_progress_shadow_codec import (
-    StudyProgressCodecError,
-    serialize_raw_card_progress,
-)
 from models.card import Card
-from models.card_progress import CardProgress
 from models.note import Note
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_authority_storage_profile import StudyAuthorityStorageProfile
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
-from models.study_progress_availability import StudyProgressAvailability
-from models.study_progress_contributor import StudyProgressContributor
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
 
@@ -54,11 +45,11 @@ class StudyAuthorityRoute:
     storage_profile: str = DEFAULT_STORAGE_PROFILE
 
 
-# Storage profiles this release can read and write NOTE authority under. A
-# release that meets any other profile refuses the NOTE route (ADR P9-03 §2.1).
-# CANONICAL_V1 is supported since P9-05d; only the one-way switch
-# (flask study-storage-profile-switch --apply, P9-06) selects it.
-SUPPORTED_STORAGE_PROFILES = frozenset({"PROJECTION_V1", "CANONICAL_V1"})
+# Storage profiles this release can serve NOTE authority under. PROJECTION_V1
+# and CANONICAL_V1 were retired after the P10-08 switch (P10-09); a database
+# still on either is refused (fail closed). A database without a profile row
+# is a fresh CONSOLIDATED_V1 install.
+SUPPORTED_STORAGE_PROFILES = frozenset({CONSOLIDATED_STORAGE_PROFILE})
 
 
 def read_study_storage_profile(session: Session, *, lock: str | None = None) -> str:
@@ -82,14 +73,13 @@ def read_study_storage_profile(session: Session, *, lock: str | None = None) -> 
 
 
 def projection_is_live(session: Session) -> bool:
-    """Whether card_progress is still written, so it can still reveal learners.
+    """Whether ``card_progress`` can still name a learner of some Content.
 
-    Under CANONICAL_V1 no LEGACY learner exists (P9-05c of the readiness
-    gate) and the frozen projection names no learner that subjects,
-    contributors or sessions do not.
+    LEGACY learners keep writing it, and frozen rows of NOTE learners stay
+    until it is retired, so content-wide learner discovery still reads it.
     """
 
-    return read_study_storage_profile(session) == DEFAULT_STORAGE_PROFILE
+    return True
 
 
 def bind_storage_profile(session: Session, route: "StudyAuthorityRoute") -> "StudyAuthorityRoute":
@@ -113,26 +103,115 @@ def _with_supported_profile(route: "StudyAuthorityRoute", profile_code: str) -> 
     return replace(route, storage_profile=profile_code)
 
 
+def is_consolidated(route: "StudyAuthorityRoute") -> bool:
+    """Whether NOTE progress lives on the subject row (ADR P10); LEGACY routes never."""
+
+    return route.mode_code == "NOTE" and route.storage_profile == CONSOLIDATED_STORAGE_PROFILE
+
+
+class _SubjectRowView:
+    """Read and write one attribute group of a consolidated subject row."""
+
+    __slots__ = ("subject",)
+    _FIELDS: tuple[str, ...] = ()
+
+    def __init__(self, subject: StudyProgressSubject) -> None:
+        object.__setattr__(self, "subject", subject)
+
+    def __getattr__(self, name: str):
+        if name == "subject_id":
+            return self.subject.id
+        if name in self._FIELDS:
+            return getattr(self.subject, name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        if name not in self._FIELDS:
+            raise AttributeError(f"{type(self).__name__} has no writable {name!r}.")
+        if getattr(self.subject, name) != value:
+            setattr(self.subject, name, value)
+
+
+class ConsolidatedSubjectToken(_SubjectRowView):
+    """CAS token of a CONSOLIDATED_V1 subject: its own row (ADR P10 §2.4)."""
+
+    __slots__ = ()
+    _FIELDS = (
+        "subject_generation",
+        "authority_revision",
+        "semantic_state_hash",
+        "created_at",
+        "updated_at",
+    )
+
+
+class ConsolidatedSubjectState(_SubjectRowView):
+    """Current Algorithm State of a CONSOLIDATED_V1 subject: its own row."""
+
+    __slots__ = ()
+    _FIELDS = (
+        "subject_generation",
+        "mirror_revision",
+        "algorithm_key",
+        "algorithm_version",
+        "state_schema_version",
+        "storage_codec",
+        "state_payload",
+        "state_payload_size",
+        "algorithm_state_hash",
+        "semantic_state_hash",
+        "created_at",
+        "updated_at",
+    )
+
+
 @dataclass(frozen=True)
 class LockedStudyAuthoritySubject:
-    """Locked subject/token/state triple; the caller owns the transaction."""
+    """A locked progress row and its token/state views; the caller owns the transaction."""
 
     subject: StudyProgressSubject
-    token: StudyAuthoritySubjectToken
-    state: StudyProgressState | None
+    token: "ConsolidatedSubjectToken"
+    state: "ConsolidatedSubjectState | None"
     token_created: bool
+
+
+def consolidated_locked_subject(subject: StudyProgressSubject) -> LockedStudyAuthoritySubject:
+    """The locked triple of a subject row already selected ``FOR UPDATE``."""
+
+    revision = int(subject.authority_revision or 0)
+    if revision < 0:
+        raise StudyAuthorityFenceError(
+            "INVALID_AUTHORITY_TOKEN", "Authority revision must be non-negative."
+        )
+    has_state = subject.state_payload is not None
+    semantic_hash = _validate_hash(
+        bytes(subject.semantic_state_hash) if subject.semantic_state_hash is not None else None,
+        nullable=not has_state,
+        field_name="subject.semantic_state_hash",
+    )
+    if not has_state and semantic_hash is not None:
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_STATE_DIVERGED",
+            "Authority revision references a missing current state.",
+        )
+    return LockedStudyAuthoritySubject(
+        subject=subject,
+        token=ConsolidatedSubjectToken(subject),
+        state=ConsolidatedSubjectState(subject) if has_state else None,
+        token_created=False,
+    )
 
 
 @dataclass(frozen=True)
 class LockedStudyAuthoritySiblings:
-    """Complete current Card/progress vector locked after subject token/state."""
+    """The live Card siblings of a locked Note (read-locked); Cards carry no progress."""
 
     learner_user_id: int
     subject_id: int
     subject_generation: int
     live_note_id: str
     cards: tuple[Card, ...]
-    progress_by_card_id: Mapping[str, CardProgress]
+    progress_by_card_id: Mapping[str, object] = MappingProxyType({})
 
     @property
     def card_ids(self) -> tuple[str, ...]:
@@ -141,16 +220,16 @@ class LockedStudyAuthoritySiblings:
 
 @dataclass(frozen=True)
 class LockedStudyAuthorityCompatibility:
-    """Locked current contributor/availability vector for NOTE compatibility."""
+    """Identity of a locked subject generation; ADR P10 keeps no per-Card vector."""
 
     learner_user_id: int
     subject_id: int
     subject_generation: int
     expected_mirror_revision: int
-    contributor_by_card_id: Mapping[str, StudyProgressContributor]
-    availability_by_contributor_id: Mapping[int, StudyProgressAvailability]
-    contributor_revision_by_card_id: Mapping[str, int]
-    contributor_raw_hash_by_card_id: Mapping[str, bytes]
+    contributor_by_card_id: Mapping[str, object] = MappingProxyType({})
+    availability_by_contributor_id: Mapping[int, object] = MappingProxyType({})
+    contributor_revision_by_card_id: Mapping[str, int] = MappingProxyType({})
+    contributor_raw_hash_by_card_id: Mapping[str, bytes] = MappingProxyType({})
 
 
 def _positive_learner_id(value: object) -> int:
@@ -246,6 +325,9 @@ def lock_study_authority_route(
             raise StudyAuthorityFenceError(
                 "LEARNER_NOT_FOUND", "Learner authority fence row does not exist."
             )
+        from app.services.review_analytics_projection_service import record_review_analytics_fence
+
+        record_review_analytics_fence(session, learner_id)
         enrollment = session.execute(
             select(StudyAuthorityEnrollment)
             .where(StudyAuthorityEnrollment.learner_user_id == learner_id)
@@ -287,73 +369,6 @@ def _validate_hash(value: object, *, nullable: bool, field_name: str) -> bytes |
     return value
 
 
-_BULK_LOCK_CHUNK = 1000
-
-
-def lock_study_authority_subject_rows(
-    session: Session,
-    *,
-    subjects,
-) -> dict[int, tuple[StudyAuthoritySubjectToken, StudyProgressState]]:
-    """Lock the existing token and state rows of many locked subjects at once.
-
-    Issuing one pair of ``FOR UPDATE`` reads per subject costs two round trips
-    per Note on every session open and locking read. Rows visible in the
-    snapshot are locked here by primary key in bulk (record locks only; the
-    subject locks already serialize their writers) and returned current. A
-    subject whose token or state is missing from the result is left to
-    ``lock_study_authority_subject``'s per-row path, which creates or rejects
-    it exactly as before.
-    """
-
-    subject_ids = sorted({int(subject.id) for subject in subjects})
-    if not subject_ids:
-        return {}
-    tokens: dict[int, StudyAuthoritySubjectToken] = {}
-    states: dict[int, StudyProgressState] = {}
-    for start in range(0, len(subject_ids), _BULK_LOCK_CHUNK):
-        chunk = subject_ids[start:start + _BULK_LOCK_CHUNK]
-        visible_tokens = sorted(
-            int(value)
-            for value in session.execute(
-                select(StudyAuthoritySubjectToken.subject_id).where(
-                    StudyAuthoritySubjectToken.subject_id.in_(chunk)
-                )
-            ).scalars()
-        )
-        visible_states = sorted(
-            int(value)
-            for value in session.execute(
-                select(StudyProgressState.subject_id).where(
-                    StudyProgressState.subject_id.in_(chunk)
-                )
-            ).scalars()
-        )
-        if visible_tokens:
-            for token in session.execute(
-                select(StudyAuthoritySubjectToken)
-                .where(StudyAuthoritySubjectToken.subject_id.in_(visible_tokens))
-                .order_by(StudyAuthoritySubjectToken.subject_id.asc())
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            ).scalars():
-                tokens[int(token.subject_id)] = token
-        if visible_states:
-            for state in session.execute(
-                select(StudyProgressState)
-                .where(StudyProgressState.subject_id.in_(visible_states))
-                .order_by(StudyProgressState.subject_id.asc())
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            ).scalars():
-                states[int(state.subject_id)] = state
-    return {
-        subject_id: (tokens[subject_id], states[subject_id])
-        for subject_id in subject_ids
-        if subject_id in tokens and subject_id in states
-    }
-
-
 def lock_study_authority_subject(
     session: Session,
     *,
@@ -361,26 +376,21 @@ def lock_study_authority_subject(
     subject: StudyProgressSubject,
     now_utc: datetime,
     create_token_if_missing: bool = True,
-    locked_rows: tuple[StudyAuthoritySubjectToken, StudyProgressState] | None = None,
     subject_created_in_transaction: bool = False,
 ) -> LockedStudyAuthoritySubject:
-    """Lock/create the independent token, then lock and verify current state.
+    """Verify a subject row the caller already selected ``FOR UPDATE``.
 
-    ``subject`` must already be selected ``FOR UPDATE`` after the learner
-    prefix.  New tokens are initialized at revision zero from the existing
-    exact state, or with a null hash when the subject has no current state.
-    ``locked_rows`` are this subject's token and state already locked and
-    refreshed by ``lock_study_authority_subject_rows``; the same checks apply.
-    ``subject_created_in_transaction``: the caller inserted ``subject`` in
-    this transaction, so only this transaction can have created its token or
-    state (both have a foreign key to the uncommitted subject). They are read
-    without ``FOR UPDATE``: that read would only take a gap lock at the end of
-    the index, where concurrent inserts of other new subjects deadlock.
+    The row is the whole authority (ADR P10 §2.4): its revision is the CAS
+    token and its state columns the current state.
     """
 
     if not isinstance(route, StudyAuthorityRoute):
         raise StudyAuthorityFenceError(
             "INVALID_AUTHORITY_ROUTE", "Authority route is missing."
+        )
+    if not is_consolidated(route):
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_MODE_CONFLICT", "Subject locking requires a CONSOLIDATED_V1 NOTE route."
         )
     if (
         subject.id is None
@@ -395,8 +405,7 @@ def lock_study_authority_subject(
         raise StudyAuthorityFenceError(
             "WRONG_LEARNER", "Authority subject belongs to another learner."
         )
-    generation = int(subject.subject_generation)
-    if generation < 1:
+    if int(subject.subject_generation) < 1:
         raise StudyAuthorityFenceError(
             "INVALID_AUTHORITY_GENERATION", "Subject generation must be positive."
         )
@@ -404,128 +413,7 @@ def lock_study_authority_subject(
         raise StudyAuthorityFenceError(
             "INVALID_AUTHORITY_TIME", "Authority time must be naive UTC."
         )
-
-    if locked_rows is not None:
-        token, state = locked_rows
-        if (
-            int(token.subject_id) != int(subject.id)
-            or int(state.subject_id) != int(subject.id)
-        ):
-            raise StudyAuthorityFenceError(
-                "AUTHORITY_CONTEXT_DIVERGED",
-                "Preloaded authority rows belong to another subject.",
-            )
-        return _verified_locked_subject(
-            subject=subject, token=token, state=state, token_created=False,
-            generation=generation,
-        )
-
-    # Rows of a subject this transaction inserted can only be this
-    # transaction's own: read them, but without a gap-locking FOR UPDATE.
-    lock_children = not (
-        subject_created_in_transaction
-        or inserted_in_transaction(session, SUBJECT, subject.id)
-    )
-    token_query = select(StudyAuthoritySubjectToken).where(
-        StudyAuthoritySubjectToken.subject_id == int(subject.id)
-    )
-    if lock_children:
-        token_query = token_query.with_for_update()
-    token = session.execute(
-        token_query.execution_options(populate_existing=True)
-    ).scalar_one_or_none()
-    token_created = token is None
-    if token is None:
-        if not create_token_if_missing:
-            raise StudyAuthorityFenceError(
-                "AUTHORITY_TOKEN_REQUIRED", "Authority subject has no existing token."
-            )
-        token = StudyAuthoritySubjectToken(
-            subject_id=int(subject.id),
-            subject_generation=generation,
-            authority_revision=0,
-            semantic_state_hash=None,
-            created_at=now_utc,
-            updated_at=now_utc,
-        )
-        session.add(token)
-        session.flush()
-
-    state_query = select(StudyProgressState).where(
-        StudyProgressState.subject_id == int(subject.id)
-    )
-    if lock_children:
-        state_query = state_query.with_for_update()
-    state = session.execute(
-        state_query.execution_options(populate_existing=True)
-    ).scalar_one_or_none()
-    return _verified_locked_subject(
-        subject=subject, token=token, state=state, token_created=token_created,
-        generation=generation,
-    )
-
-
-def _verified_locked_subject(
-    *,
-    subject: StudyProgressSubject,
-    token: StudyAuthoritySubjectToken,
-    state: StudyProgressState | None,
-    token_created: bool,
-    generation: int,
-) -> LockedStudyAuthoritySubject:
-    state_hash = (
-        _validate_hash(
-            state.semantic_state_hash,
-            nullable=False,
-            field_name="state.semantic_state_hash",
-        )
-        if state is not None
-        else None
-    )
-    if token_created:
-        token.semantic_state_hash = state_hash
-
-    if int(token.subject_generation) != generation:
-        raise StudyAuthorityFenceError(
-            "AUTHORITY_GENERATION_DIVERGED",
-            "Authority token generation differs from the locked subject.",
-        )
-    if int(token.authority_revision) < 0:
-        raise StudyAuthorityFenceError(
-            "INVALID_AUTHORITY_TOKEN", "Authority revision must be non-negative."
-        )
-    token_hash = _validate_hash(
-        token.semantic_state_hash,
-        nullable=True,
-        field_name="token.semantic_state_hash",
-    )
-    if state is None and token_hash is not None:
-        raise StudyAuthorityFenceError(
-            "AUTHORITY_STATE_DIVERGED",
-            "Authority token references a missing current state.",
-        )
-    if state is not None:
-        if int(state.subject_generation) != generation:
-            raise StudyAuthorityFenceError(
-                "AUTHORITY_GENERATION_DIVERGED",
-                "Current state generation differs from the locked subject.",
-            )
-        if int(state.mirror_revision) != int(subject.mirror_revision):
-            raise StudyAuthorityFenceError(
-                "AUTHORITY_STATE_DIVERGED",
-                "Current state mirror revision differs from the locked subject.",
-            )
-        if token_hash != state_hash:
-            raise StudyAuthorityFenceError(
-                "AUTHORITY_STATE_DIVERGED",
-                "Authority token hash differs from current state.",
-            )
-    return LockedStudyAuthoritySubject(
-        subject=subject,
-        token=token,
-        state=state,
-        token_created=token_created,
-    )
+    return consolidated_locked_subject(subject)
 
 
 def lock_study_authority_siblings(
@@ -598,143 +486,12 @@ def lock_study_authority_siblings(
             "CARD_OUTSIDE_AUTHORITY_SUBJECT",
             "Requested Card is outside the locked authority subject.",
         )
-    if route.storage_profile != "PROJECTION_V1":
-        # CANONICAL_V1: the projection is frozen and never a CAS baseline.
-        return LockedStudyAuthoritySiblings(
-            learner_user_id=route.learner_user_id,
-            subject_id=int(subject.id),
-            subject_generation=int(subject.subject_generation),
-            live_note_id=live_note_id,
-            cards=cards,
-            progress_by_card_id=MappingProxyType({}),
-        )
-    progress_rows = tuple(
-        session.execute(
-            select(CardProgress)
-            .where(
-                CardProgress.user_id == route.learner_user_id,
-                CardProgress.card_id.in_(card_ids),
-            )
-            .order_by(CardProgress.card_id.asc(), CardProgress.id.asc())
-            .with_for_update()
-        ).scalars()
-    )
-    progress_by_card_id = {
-        str(row.card_id): row for row in progress_rows if row.card_id is not None
-    }
-    missing = tuple(card_id for card_id in card_ids if card_id not in progress_by_card_id)
-    if missing:
-        raise StudyAuthorityFenceError(
-            "MISSING_LEGACY_PROGRESS",
-            f"Authority Note has {len(missing)} Card sibling(s) without compatibility progress.",
-        )
-    if len(progress_rows) != len(cards) or len(progress_by_card_id) != len(cards):
-        raise StudyAuthorityFenceError(
-            "INVALID_LEGACY_PROGRESS",
-            "Authority Note compatibility progress is not one row per Card.",
-        )
     return LockedStudyAuthoritySiblings(
         learner_user_id=route.learner_user_id,
         subject_id=int(subject.id),
         subject_generation=int(subject.subject_generation),
         live_note_id=live_note_id,
         cards=cards,
-        progress_by_card_id=MappingProxyType(progress_by_card_id),
-    )
-
-
-def _lock_availability_vector(
-    session: Session, *, subject_id: int, generation: int, contributor_ids: tuple[int, ...]
-) -> dict[int, StudyProgressAvailability]:
-    availability_rows = tuple(
-        session.execute(
-            select(StudyProgressAvailability)
-            .where(StudyProgressAvailability.contributor_id.in_(contributor_ids))
-            .order_by(StudyProgressAvailability.contributor_id.asc())
-            .with_for_update()
-        ).scalars()
-    )
-    availability_by_contributor_id = {
-        int(row.contributor_id): row for row in availability_rows
-    }
-    if (
-        len(availability_rows) != len(contributor_ids)
-        or set(availability_by_contributor_id) != set(contributor_ids)
-    ):
-        raise StudyAuthorityFenceError(
-            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            "Authority subject has no complete current availability vector.",
-        )
-    for availability in availability_rows:
-        if (
-            int(availability.subject_id) != subject_id
-            or int(availability.subject_generation) != generation
-        ):
-            raise StudyAuthorityFenceError(
-                "INVALID_AUTHORITY_COMPATIBILITY",
-                "Authority availability evidence has stale subject identity.",
-            )
-    return availability_by_contributor_id
-
-
-def _lock_canonical_compatibility(
-    session: Session,
-    *,
-    route: StudyAuthorityRoute,
-    locked: LockedStudyAuthoritySubject,
-    siblings: LockedStudyAuthoritySiblings,
-) -> LockedStudyAuthorityCompatibility:
-    """CANONICAL_V1: one ACTIVE contributor per live Card, found by Card identity.
-
-    Raw CardProgress evidence on older contributors is history (ADR P9-03
-    §2.9) and is neither compared nor returned.
-    """
-
-    subject = locked.subject
-    subject_id = int(subject.id)
-    generation = int(subject.subject_generation)
-    card_ids = tuple(sorted(siblings.card_ids))
-    contributors = tuple(
-        session.execute(
-            select(StudyProgressContributor)
-            .where(
-                StudyProgressContributor.subject_id == subject_id,
-                StudyProgressContributor.subject_generation == generation,
-                StudyProgressContributor.contributor_status == "ACTIVE",
-            )
-            .order_by(StudyProgressContributor.id.asc())
-            .with_for_update()
-        ).scalars()
-    )
-    contributor_by_card_id = {
-        str(row.live_card_id): row for row in contributors if row.live_card_id is not None
-    }
-    if len(contributors) != len(card_ids) or set(contributor_by_card_id) != set(card_ids):
-        raise StudyAuthorityFenceError(
-            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            "Authority subject has no complete current contributor vector.",
-        )
-    for card_id, contributor in contributor_by_card_id.items():
-        if bytes(contributor.logical_card_key) != card_id.encode("utf-8"):
-            raise StudyAuthorityFenceError(
-                "INVALID_AUTHORITY_COMPATIBILITY",
-                f"Card {card_id} has stale or detached contributor evidence.",
-            )
-    availability_by_contributor_id = _lock_availability_vector(
-        session,
-        subject_id=subject_id,
-        generation=generation,
-        contributor_ids=tuple(sorted(int(row.id) for row in contributors)),
-    )
-    return LockedStudyAuthorityCompatibility(
-        learner_user_id=route.learner_user_id,
-        subject_id=subject_id,
-        subject_generation=generation,
-        expected_mirror_revision=int(subject.mirror_revision),
-        contributor_by_card_id=MappingProxyType(contributor_by_card_id),
-        availability_by_contributor_id=MappingProxyType(availability_by_contributor_id),
-        contributor_revision_by_card_id=MappingProxyType({}),
-        contributor_raw_hash_by_card_id=MappingProxyType({}),
     )
 
 
@@ -745,13 +502,7 @@ def lock_study_authority_compatibility(
     locked: LockedStudyAuthoritySubject,
     siblings: LockedStudyAuthoritySiblings,
 ) -> LockedStudyAuthorityCompatibility:
-    """Lock the complete current contributor/availability compatibility vector.
-
-    This follows the sibling CardProgress locks. Existing-state NOTE Actions
-    fail closed unless every active compatibility row already exists and is
-    attached to the same subject generation. First-state and new-sibling
-    materialization remain a separate lifecycle command.
-    """
+    """Check that ``locked`` and ``siblings`` describe one fenced subject generation."""
 
     if not isinstance(route, StudyAuthorityRoute) or route.mode_code != "NOTE":
         raise StudyAuthorityFenceError(
@@ -778,133 +529,95 @@ def lock_study_authority_compatibility(
             "AUTHORITY_CONTEXT_DIVERGED",
             "Authority compatibility inputs do not describe one fenced subject.",
         )
-    if route.storage_profile != "PROJECTION_V1":
-        return _lock_canonical_compatibility(session, route=route, locked=locked, siblings=siblings)
-
-    progress_by_id = {
-        int(row.id): row
-        for row in siblings.progress_by_card_id.values()
-        if row.id is not None
-    }
-    if len(progress_by_id) != len(siblings.cards):
-        raise StudyAuthorityFenceError(
-            "INVALID_LEGACY_PROGRESS",
-            "Compatibility locking requires one persisted progress row per Card.",
-        )
-    progress_ids = tuple(sorted(progress_by_id))
-    contributors = tuple(
-        session.execute(
-            select(StudyProgressContributor)
-            .where(
-                StudyProgressContributor.subject_id == subject_id,
-                StudyProgressContributor.subject_generation == generation,
-                StudyProgressContributor.live_card_progress_id.in_(progress_ids),
-            )
-            .order_by(StudyProgressContributor.id.asc())
-            .with_for_update()
-        ).scalars()
-    )
-    contributor_by_progress_id = {
-        int(row.live_card_progress_id): row
-        for row in contributors
-        if row.live_card_progress_id is not None
-    }
-    if (
-        len(contributors) != len(progress_ids)
-        or set(contributor_by_progress_id) != set(progress_ids)
-    ):
-        raise StudyAuthorityFenceError(
-            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            "Authority subject has no complete current contributor vector.",
-        )
-
-    contributor_by_card_id: dict[str, StudyProgressContributor] = {}
-    contributor_revision_by_card_id: dict[str, int] = {}
-    contributor_raw_hash_by_card_id: dict[str, bytes] = {}
-    for progress_id in progress_ids:
-        progress = progress_by_id[progress_id]
-        contributor = contributor_by_progress_id[progress_id]
-        card_id = str(progress.card_id or "")
-        if (
-            str(contributor.contributor_status) != "ACTIVE"
-            or int(contributor.source_progress_id) != progress_id
-            or str(contributor.live_card_id or "") != card_id
-            or bytes(contributor.logical_card_key) != card_id.encode("utf-8")
-        ):
-            raise StudyAuthorityFenceError(
-                "INVALID_AUTHORITY_COMPATIBILITY",
-                f"Card {card_id} has stale or detached contributor evidence.",
-            )
-        try:
-            raw = serialize_raw_card_progress(progress)
-        except StudyProgressCodecError as exc:
-            raise StudyAuthorityFenceError(
-                "INVALID_AUTHORITY_COMPATIBILITY",
-                f"Card {card_id} raw compatibility evidence is invalid.",
-            ) from exc
-        contributor_raw_hash = bytes(contributor.raw_progress_hash)
-        if (
-            int(contributor.card_progress_revision) != int(progress.revision)
-            or contributor.raw_schema_version != RAW_SCHEMA_VERSION
-            or contributor.storage_codec != STORAGE_CODEC
-            or contributor.raw_payload != raw.payload
-            or int(contributor.raw_payload_size) != raw.size
-            or contributor_raw_hash != raw.digest
-        ):
-            raise StudyAuthorityFenceError(
-                "STALE_AUTHORITY_COMPATIBILITY",
-                f"Card {card_id} contributor evidence differs from CardProgress.",
-            )
-        contributor_by_card_id[card_id] = contributor
-        contributor_revision_by_card_id[card_id] = int(
-            contributor.card_progress_revision
-        )
-        contributor_raw_hash_by_card_id[card_id] = contributor_raw_hash
-
-    contributor_ids = tuple(sorted(int(row.id) for row in contributors))
-    availability_rows = tuple(
-        session.execute(
-            select(StudyProgressAvailability)
-            .where(StudyProgressAvailability.contributor_id.in_(contributor_ids))
-            .order_by(StudyProgressAvailability.contributor_id.asc())
-            .with_for_update()
-        ).scalars()
-    )
-    availability_by_contributor_id = {
-        int(row.contributor_id): row for row in availability_rows
-    }
-    if (
-        len(availability_rows) != len(contributor_ids)
-        or set(availability_by_contributor_id) != set(contributor_ids)
-    ):
-        raise StudyAuthorityFenceError(
-            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            "Authority subject has no complete current availability vector.",
-        )
-    for contributor_id in contributor_ids:
-        availability = availability_by_contributor_id[contributor_id]
-        if (
-            int(availability.subject_id) != subject_id
-            or int(availability.subject_generation) != generation
-        ):
-            raise StudyAuthorityFenceError(
-                "INVALID_AUTHORITY_COMPATIBILITY",
-                "Authority availability evidence has stale subject identity.",
-            )
-
     return LockedStudyAuthorityCompatibility(
         learner_user_id=route.learner_user_id,
         subject_id=subject_id,
         subject_generation=generation,
         expected_mirror_revision=int(subject.mirror_revision),
-        contributor_by_card_id=MappingProxyType(contributor_by_card_id),
-        availability_by_contributor_id=MappingProxyType(
-            availability_by_contributor_id
-        ),
-        contributor_revision_by_card_id=MappingProxyType(
-            contributor_revision_by_card_id
-        ),
-        contributor_raw_hash_by_card_id=MappingProxyType(
-            contributor_raw_hash_by_card_id
-        ),
     )
+
+
+def lock_study_authority_siblings_many(
+    session: Session,
+    *,
+    route: StudyAuthorityRoute,
+    locked_by_logical_note_key: Mapping[str, LockedStudyAuthoritySubject],
+) -> Mapping[str, LockedStudyAuthoritySiblings]:
+    """Read-lock complete sibling vectors after all session Subjects are locked.
+
+    Session callers already hold learner -> session -> every Subject lock in
+    logical-key order. Acquire shared Note/Card locks in bounded, deterministic
+    groups; direct review continues using its single-Subject helper. No learner
+    ownership predicate is applied to Notes: overlay source Notes belong to the
+    publisher, while progress ownership remains on the locked Subject.
+    """
+    if not isinstance(route, StudyAuthorityRoute) or route.mode_code != "NOTE":
+        raise StudyAuthorityFenceError(
+            "AUTHORITY_MODE_CONFLICT", "Complete sibling locking requires NOTE authority.",
+        )
+    keys = sorted(locked_by_logical_note_key, key=lambda value: value.encode("utf-8"))
+    for key in keys:
+        locked = locked_by_logical_note_key[key]
+        if not isinstance(locked, LockedStudyAuthoritySubject):
+            raise StudyAuthorityFenceError(
+                "INVALID_AUTHORITY_SUBJECT", "Locked authority subject is missing.",
+            )
+        subject = locked.subject
+        if int(subject.learner_user_id) != route.learner_user_id:
+            raise StudyAuthorityFenceError("WRONG_LEARNER", "Authority subject belongs to another learner.")
+        live_note_id = str(subject.live_note_id or "").strip()
+        if not live_note_id:
+            raise StudyAuthorityFenceError(
+                "DETACHED_AUTHORITY_SUBJECT", "Detached authority subject has no resolvable live Note.",
+            )
+        if key != live_note_id or bytes(subject.logical_note_key) != live_note_id.encode("utf-8"):
+            raise StudyAuthorityFenceError(
+                "UNSUPPORTED_AUTHORITY_IDENTITY", "Authority subject logical identity does not match its live Note.",
+            )
+
+    result: dict[str, LockedStudyAuthoritySiblings] = {}
+    for offset in range(0, len(keys), 500):
+        chunk = keys[offset:offset + 500]
+        # Only existence is needed, but this is a current locking read just as
+        # in the per-Note helper. Keep the full Card vector, including siblings
+        # outside the selected session composition.
+        note_read = select(Note.id).where(Note.id.in_(chunk))
+        if session.get_bind().dialect.name == "mysql":
+            # A covering PRIMARY scan for IN(...) can lock unrelated Notes
+            # under REPEATABLE READ, even with FORCE INDEX. Drive point reads
+            # from the bounded key relation instead. UNION prevents merging
+            # it into a Note scan; STRAIGHT_JOIN keeps the keys on the left.
+            key_rows = union_all(*(
+                select(literal(key).label("note_id")) for key in chunk
+            )).subquery("session_note_keys")
+            note_read = (
+                select(Note.id).select_from(key_rows)
+                .join(Note, Note.id == key_rows.c.note_id)
+                .prefix_with("STRAIGHT_JOIN", dialect="mysql")
+                .with_hint(Note, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+            )
+        existing = set(session.execute(
+            note_read.order_by(Note.id.asc()).with_for_update(read=True)
+        ).scalars())
+        if existing != set(chunk):
+            raise StudyAuthorityFenceError("AUTHORITY_NOTE_NOT_FOUND", "Authority Note no longer exists.")
+        cards_by_note: dict[str, list[Card]] = {key: [] for key in chunk}
+        for card in session.execute(
+            select(Card).where(Card.note_id.in_(chunk))
+            .with_hint(Card, "FORCE INDEX (ix_cards_note_id)", dialect_name="mysql")
+            .order_by(Card.note_id.asc(), Card.id.asc()).with_for_update(read=True)
+        ).scalars():
+            cards_by_note[str(card.note_id)].append(card)
+        for key in chunk:
+            cards = tuple(cards_by_note[key])
+            if not cards:
+                raise StudyAuthorityFenceError("AUTHORITY_SIBLINGS_EMPTY", "Authority Note has no active Card sibling.")
+            subject = locked_by_logical_note_key[key].subject
+            result[key] = LockedStudyAuthoritySiblings(
+                learner_user_id=route.learner_user_id,
+                subject_id=int(subject.id),
+                subject_generation=int(subject.subject_generation),
+                live_note_id=key,
+                cards=cards,
+            )
+    return MappingProxyType(result)

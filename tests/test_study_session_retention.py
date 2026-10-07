@@ -9,7 +9,6 @@ from uuid import uuid4
 from sqlalchemy import event, func, select, text
 
 from app import create_app
-from app.services.study_architecture_audit_service import build_study_architecture_audit
 from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
 from app.services.study_composition_service import make_compatibility_composition_id
 from app.services.study_session_retention_service import run_session_retention
@@ -20,7 +19,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.review_event import ReviewEvent
-from models.study_progress_state import StudyProgressState
+from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_authority_pin import StudySessionAuthorityPin
 from models.study_session_card import StudySessionCard
@@ -138,8 +137,8 @@ class StudySessionRetentionTests(unittest.TestCase):
                 for row in ReviewEvent.query.all()
             )
             states = sorted(
-                (row.subject_id, bytes(row.semantic_state_hash).hex())
-                for row in StudyProgressState.query.all()
+                (row.id, int(row.authority_revision), bytes(row.semantic_state_hash or b"").hex())
+                for row in StudyProgressSubject.query.all()
             )
             sessions = db.session.execute(select(func.count()).select_from(StudySession)).scalar_one()
             commits = db.session.execute(select(func.count()).select_from(StudySessionCommit)).scalar_one()
@@ -206,12 +205,12 @@ class StudySessionRetentionTests(unittest.TestCase):
             self.client.get(f"/api/study/sessions/{stale_open['session_id']}").get_json()["status"], "expired"
         )
 
-        # The architecture audit knows the status; it is not an unknown lifecycle.
-        # (On MySQL the audit only runs under a SELECT-only principal.)
+        # Retention writes a known lifecycle status, never an unknown one.
         with self.app.app_context():
-            if db.engine.dialect.name == "sqlite":
-                gates = build_study_architecture_audit()["session_gates"]
-                self.assertEqual((gates["expired_sessions"], gates["unknown_status_sessions"]), (1, 0))
+            statuses = dict(db.session.execute(
+                select(StudySession.status, func.count()).group_by(StudySession.status)).all())
+            self.assertEqual(statuses.get("expired"), 1)
+            self.assertLessEqual(set(statuses), {"open", "committed", "cancelled", "abandoned", "expired"})
 
         # The still-open session keeps working.
         self._commit(live_open, self._commit_payload(live_open, answers=1))

@@ -311,6 +311,35 @@ jobs:
           DB_NAME: ci
         run: python scripts/probe_p5_analytics_mysql.py
 
+      - name: Verify historical and deck count transactions on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from sqlalchemy.engine import URL
+          from app import create_audit_app
+          from models import db
+          from models.user import User
+          url = URL.create('mysql+pymysql', username=os.environ['DB_USER'], password=os.environ['DB_PASSWORD'], host=os.environ['DB_HOST'], port=int(os.environ['DB_PORT']), database=os.environ['DB_NAME'], query={'charset':'utf8mb4'})
+          assert url.database == 'ci' and url.host == '127.0.0.1'
+          app = create_audit_app({'SQLALCHEMY_DATABASE_URI':url.render_as_string(hide_password=False)})
+          with app.app_context():
+              if db.session.get(User, 1) is None:
+                  db.session.add(User(id=1, username='ci-analytics-anchor', email='ci-analytics-anchor@example.invalid', timezone='UTC'))
+                  db.session.commit()
+          path = Path('output/analytics-counts-ci.env')
+          path.parent.mkdir(exist_ok=True)
+          path.write_text('SQLALCHEMY_DATABASE_URI=' + url.render_as_string(hide_password=False) + '\n', encoding='utf-8')
+          PY
+          python scripts/probe_review_analytics_mysql.py --env-file output/analytics-counts-ci.env
+          python scripts/probe_deck_counts_mysql.py --env-file output/analytics-counts-ci.env
+
       - name: Run cross-learner NOTE write concurrency contract on MySQL
         env:
           DB_HOST: 127.0.0.1
@@ -373,6 +402,24 @@ jobs:
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
         run: python scripts/probe_p9_connect_fence_mysql.py --refs 2000
+
+      - name: Run migration 49 consolidated progress row probe on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_p10_schema_mysql.py --subjects 3000
+
+      - name: Run migration 50 retired-table drop probe on MySQL
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci-root-password
+          DB_NAME: ci
+        run: python scripts/probe_p10_drop_mysql.py --subjects 3000
 
   deploy:
     needs: [changes, frontend, backend, spa-contract, redis-contract, mysql-contract]

@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import and_, case, func, or_, select, text
+
 from models import db
 from models.flashcard import Card, Note, ReviewEvent
 from models.card_progress import CardProgress
@@ -126,6 +128,65 @@ def _progress_due_local_day(
     )
 
 
+def query_canonical_future_due_day_counts_mysql(
+    *,
+    user_id: int,
+    timezone_name: str,
+    day_boundary_hour_local: int,
+    start_local_day: date,
+    end_local_day: date,
+    storage_profile: str,
+) -> dict[date, int]:
+    """Group the existing NOTE Card availability scope for fixed-offset zones.
+
+    Keep the canonical scope and availability joins: ``live_note_id`` and
+    ``logical_note_key`` agree on valid rows, but the database does not enforce
+    that identity relationship. Collapsing the joins would change reads of
+    detached or drifted evidence. Sibling Cards each contribute one count.
+    """
+    from app.repositories import note_analytics_read_repository as note_reads
+
+    offset = MYSQL_FIXED_OFFSET_MINUTES[str(timezone_name or "").strip().upper()]
+    shift = int(offset) - int(day_boundary_hour_local) * 60
+    scope = note_reads.learner_note_scope(
+        learner_user_id=user_id, storage_profile=storage_profile
+    )
+    rows = note_reads.note_card_rows(
+        scope, learner_user_id=user_id, storage_profile=storage_profile
+    ).subquery("availability")
+    # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
+    # Review due_day overrides due_at; every other queue uses its UTC timestamp.
+    day = case(
+        (
+            and_(
+                func.lower(func.trim(rows.c.queue)) == REVIEW_QUEUE,
+                rows.c.due_day.isnot(None),
+            ),
+            rows.c.due_day,
+        ),
+        else_=func.to_days(
+            func.date_add(rows.c.due_at, text(f"INTERVAL {shift} MINUTE"))
+        ) - 365,
+    )
+    folded = func.greatest(day, start_local_day.toordinal())
+    statement = (
+        select(folded.label("day_index"), func.count().label("cards"))
+        .select_from(rows)
+        .where(
+            or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
+            or_(rows.c.due_at.isnot(None), rows.c.due_day.isnot(None)),
+            # Match date.fromordinal's invalid-date rejection in the Python path.
+            day.between(1, date.max.toordinal()),
+            day < end_local_day.toordinal(),
+        )
+        .group_by(folded)
+    )
+    return {
+        date.fromordinal(int(day_index)): int(count)
+        for day_index, count in db.session.execute(statement).all()
+    }
+
+
 def _query_daily_review_aggregates_mysql(
     *,
     user_id: int,
@@ -218,7 +279,7 @@ def _query_daily_review_aggregates_python(
     return by_day
 
 
-def query_daily_review_aggregates(
+def _query_daily_review_aggregates_raw(
     *,
     user_id: int,
     timezone_name: str,
@@ -305,7 +366,7 @@ def _query_active_review_days_python(
     return result
 
 
-def query_active_review_days(
+def _query_active_review_days_raw(
     *,
     user_id: int,
     timezone_name: str,
@@ -328,7 +389,7 @@ def query_active_review_days(
     )
 
 
-def query_today_review_summary(
+def _query_today_review_summary_raw(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
@@ -801,7 +862,7 @@ def _query_user_daily_study_time_python(
     return by_day
 
 
-def query_user_daily_study_time(
+def _query_user_daily_study_time_raw(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
@@ -826,4 +887,125 @@ def query_user_daily_study_time(
         start_utc=start_utc,
         end_utc=end_utc,
         day_boundary_hour_local=day_boundary_hour_local,
+    )
+
+
+def query_daily_review_aggregates(
+    *, user_id: int, timezone_name: str, timezone_obj,
+    start_utc: datetime, end_utc: datetime, day_boundary_hour_local: int,
+) -> dict[date, dict[str, int]]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    def summary(generation, policy):
+        rows = projection.daily_measures(
+            user_id=user_id, generation=generation, policy=policy,
+            start_utc=start_utc, end_utc=end_utc,
+        )
+        if rows is None:
+            return None
+        return {day: {"cards": row["count"], "duration_ms": row["duration_ms"]}
+                for day, row in rows.items()}
+
+    return projection.read_or_raw(
+        metric="daily_reviews", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local, summary=summary,
+        raw=lambda: _query_daily_review_aggregates_raw(
+            user_id=user_id, timezone_name=timezone_name, timezone_obj=timezone_obj,
+            start_utc=start_utc, end_utc=end_utc,
+            day_boundary_hour_local=day_boundary_hour_local,
+        ),
+    )
+
+
+def query_active_review_days(
+    *, user_id: int, timezone_name: str, timezone_obj,
+    end_utc: datetime, day_boundary_hour_local: int,
+) -> set[date]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    return projection.read_or_raw(
+        metric="active_days", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+        summary=lambda generation, policy: projection.active_days(
+            user_id=user_id, generation=generation, policy=policy, end_utc=end_utc,
+        ),
+        raw=lambda: _query_active_review_days_raw(
+            user_id=user_id, timezone_name=timezone_name, timezone_obj=timezone_obj,
+            end_utc=end_utc, day_boundary_hour_local=day_boundary_hour_local,
+        ),
+    )
+
+
+def query_today_review_summary(
+    *, user_id: int, scope_deck_ids: list[int] | None,
+    today_start_utc: datetime, tomorrow_start_utc: datetime,
+    timezone_name: str | None = None, day_boundary_hour_local: int | None = None,
+) -> tuple[int, int]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    if scope_deck_ids is not None and not scope_deck_ids:
+        return 0, 0
+
+    def summary(generation, policy):
+        rows = projection.daily_measures(
+            user_id=user_id, generation=generation, policy=policy,
+            start_utc=today_start_utc, end_utc=tomorrow_start_utc,
+            scope_deck_ids=scope_deck_ids,
+        )
+        if rows is None:
+            return None
+        return sum(row["count"] for row in rows.values()), sum(
+            row["duration_ms"] for row in rows.values()
+        )
+
+    return projection.read_or_raw(
+        metric="today_reviews", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local, summary=summary,
+        raw=lambda: _query_today_review_summary_raw(
+            user_id=user_id, scope_deck_ids=scope_deck_ids,
+            today_start_utc=today_start_utc, tomorrow_start_utc=tomorrow_start_utc,
+        ),
+    )
+
+
+def query_user_daily_study_time(
+    *, user_id: int, scope_deck_ids: list[int] | None, timezone_name: str,
+    start_utc: datetime, end_utc: datetime, day_boundary_hour_local: int,
+) -> dict[date, dict[str, Any]]:
+    from app.repositories import review_analytics_read_repository as projection
+
+    if scope_deck_ids is not None and not scope_deck_ids:
+        return {}
+
+    def summary(generation, policy):
+        rows = projection.daily_measures(
+            user_id=user_id, generation=generation, policy=policy,
+            start_utc=start_utc, end_utc=end_utc, scope_deck_ids=scope_deck_ids,
+        )
+        if rows is None:
+            return None
+        result = {}
+        for day, row in rows.items():
+            total, duration, passed = row["count"], row["duration_ms"], row["passed"]
+            minutes = round(duration / 60000.0, 1)
+            result[day] = {
+                "total_reviews": total,
+                "total_duration_ms": duration,
+                "total_duration_minutes": minutes,
+                "total_duration_hours": round(duration / 3600000.0, 2),
+                "avg_study_minutes": minutes,
+                "passed_reviews": passed,
+                "retention_pass_rate": round(passed / float(total) * 100.0, 1)
+                if total > 0 else 0.0,
+            }
+        return result
+
+    return projection.read_or_raw(
+        metric="study_time", user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local, summary=summary,
+        raw=lambda: _query_user_daily_study_time_raw(
+            user_id=user_id, scope_deck_ids=scope_deck_ids, timezone_name=timezone_name,
+            start_utc=start_utc, end_utc=end_utc,
+            day_boundary_hour_local=day_boundary_hour_local,
+        ),
     )

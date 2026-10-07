@@ -489,7 +489,8 @@ def migrate_legacy_clone_install_to_overlay(
                 )
             )
 
-    rekey_plan = study_progress_lifecycle_mirror_service.prepare_clone_rekey_mirror(
+    # Only LEGACY card_progress can be rekeyed between Notes (ADR P10).
+    study_progress_lifecycle_mirror_service.refuse_clone_rekey_of_note_progress(
         db.session,
         learner_user_id=install.user_id,
         rekeys=progress_rekeys,
@@ -501,11 +502,6 @@ def migrate_legacy_clone_install_to_overlay(
                 local_card_id=local_card_id,
                 source_card_id=source_card_id,
             )
-    study_progress_lifecycle_mirror_service.finalize_clone_rekey_mirror(
-        rekey_plan,
-        source_path="share.clone_cutover",
-        operation_key=f"clone-cutover:{install.id}",
-    )
 
     if note_override_payload:
         _counters, validation_error = upsert_clone_overlay(

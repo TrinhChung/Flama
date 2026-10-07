@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import patch
 
 from app import create_app
 from app.services.stats_overview import build_stats_overview
 from models import db
-from models.flashcard import ReviewEvent
+from models.flashcard import Card, Note, NoteType, ReviewEvent, Template
 from models.user import User
 from models.deck import Deck
 from models.card_progress import CardProgress
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_subject import StudyProgressSubject
-from models.study_authority_subject_token import StudyAuthoritySubjectToken
 
 
 class StatsOverviewTests(unittest.TestCase):
@@ -86,6 +85,60 @@ class StatsOverviewTests(unittest.TestCase):
                 interval_days=1,
                 is_suspended=is_suspended,
             )
+        )
+
+    def _add_canonical_due(
+        self, *, due_at=None, due_day=None, queue="review", siblings=1,
+        suspended=False, buried=False, learner_id=None, owner_id=None,
+        detached=False, logical_key=None,
+    ):
+        from app.services.study_consolidated_progress_service import materialize_consolidated_pristine
+
+        now = datetime(2026, 1, 1)
+        self._card_seq += 1
+        note_type = NoteType(name=f"Canonical Stats {self._card_seq}", user_id=owner_id or self.user_id)
+        db.session.add(note_type)
+        db.session.flush()
+        templates = [Template(name=f"Stats Card {index}", note_type_id=note_type.id, position=index) for index in range(siblings)]
+        db.session.add_all(templates)
+        db.session.flush()
+        note = Note(note_type_id=note_type.id, user_id=owner_id or self.user_id, deck_id=self.deck_id)
+        db.session.add(note)
+        db.session.flush()
+        cards = [Card(note_id=note.id, template_id=template.id) for template in templates]
+        db.session.add_all(cards)
+        db.session.flush()
+        subject = StudyProgressSubject(
+            learner_user_id=learner_id or self.user_id,
+            logical_note_key=logical_key or note.id.encode(),
+            live_note_id=note.id, created_at=now, updated_at=now,
+        )
+        db.session.add(subject)
+        materialize_consolidated_pristine(
+            items=[(note.id, subject, tuple(cards), 2.5)],
+            provenance_code="NATIVE_DIRECT", now_utc=now,
+        )
+        subject.normalized_queue = queue
+        subject.due_at = due_at
+        subject.due_day = due_day
+        subject.is_suspended = suspended
+        subject.is_buried = buried
+        subject.buried_until_day = date(2026, 1, 20).toordinal() if buried else None
+        if detached:
+            subject.live_note_id = None
+        db.session.flush()
+        return subject
+
+    def _canonical_day_counts(self, *, timezone_name="Asia/Tokyo", boundary=4,
+                              start=date(2026, 1, 10), end=date(2026, 1, 13)):
+        from app.services.anki_scheduler import _day_index_to_datetime
+        from app.services.stats_overview import _canonical_future_due_day_counts
+
+        return _canonical_future_due_day_counts(
+            user_id=self.user_id, timezone_name=timezone_name, timezone_obj=None,
+            start_utc=_day_index_to_datetime(start.toordinal(), boundary, timezone_name=timezone_name),
+            end_utc=_day_index_to_datetime(end.toordinal(), boundary, timezone_name=timezone_name),
+            day_boundary_hour_local=boundary, storage_profile="CONSOLIDATED_V1",
         )
 
     @staticmethod
@@ -387,16 +440,6 @@ class StatsOverviewTests(unittest.TestCase):
                 updated_at=now_utc,
             )
             db.session.add_all([enrollment, subject])
-            db.session.flush()
-
-            token = StudyAuthoritySubjectToken(
-                subject_id=subject.id,
-                subject_generation=1,
-                authority_revision=0,
-                created_at=now_utc,
-                updated_at=now_utc,
-            )
-            db.session.add(token)
             db.session.commit()
 
             executed_clauses = []
@@ -417,6 +460,73 @@ class StatsOverviewTests(unittest.TestCase):
                 event.remove(db.engine, "before_execute", before_execute)
 
             self.assertEqual(executed_clauses, [], "Found unexpected locking queries in overview!")
+
+    def test_canonical_future_due_mysql_routing(self):
+        """Verify _canonical_future_due_day_counts routes to MySQL query when supported."""
+        from app.services.stats_overview import _canonical_future_due_day_counts
+
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            with patch("app.services.stats_overview.can_use_mysql_local_day_sql", return_value=True) as mock_can, \
+                 patch("app.services.stats_overview.query_canonical_future_due_day_counts_mysql", return_value={date(2026, 1, 10): 5}) as mock_query:
+                result = _canonical_future_due_day_counts(
+                    user_id=self.user_id,
+                    timezone_name="Asia/Tokyo",
+                    timezone_obj=None,
+                    start_utc=now_utc,
+                    end_utc=datetime(2026, 1, 11, 12),
+                    day_boundary_hour_local=4,
+                    storage_profile="CONSOLIDATED_V1",
+                )
+                self.assertEqual(result, {date(2026, 1, 10): 5})
+                mock_can.assert_called_once_with(timezone_name="Asia/Tokyo")
+                mock_query.assert_called_once_with(
+                    user_id=self.user_id, timezone_name="Asia/Tokyo",
+                    day_boundary_hour_local=4, start_local_day=date(2026, 1, 10),
+                    end_local_day=date(2026, 1, 11), storage_profile="CONSOLIDATED_V1",
+                )
+
+    def test_canonical_due_counts_keep_precedence_day_boundary_and_card_units(self):
+        with self.app.app_context():
+            self._add_canonical_due(due_at=datetime(2026, 1, 9), due_day=date(2026, 1, 12).toordinal(), siblings=2)
+            self._add_canonical_due(due_day=date(2026, 1, 8).toordinal(), buried=True)
+            # Tokyo 04:00 is UTC 19:00 on the preceding calendar date.
+            self._add_canonical_due(due_at=datetime(2026, 1, 10, 18, 59), due_day=date(2026, 1, 12).toordinal(), queue="learning")
+            self._add_canonical_due(due_at=datetime(2026, 1, 10, 19), queue="relearning")
+            self._add_canonical_due(due_day=date(2026, 1, 13).toordinal())
+            self._add_canonical_due(due_day=0, due_at=datetime(2026, 1, 11))
+            self._add_canonical_due(due_day=date(2026, 1, 11).toordinal(), suspended=True)
+            self._add_canonical_due()
+            db.session.commit()
+            self.assertEqual(self._canonical_day_counts(), {
+                date(2026, 1, 10): 2, date(2026, 1, 11): 1, date(2026, 1, 12): 2,
+            })
+
+    def test_canonical_due_scope_preserves_learner_source_notes_detach_and_identity_drift(self):
+        with self.app.app_context():
+            publisher = User(username="publisher", email="publisher@example.test")
+            db.session.add(publisher)
+            db.session.flush()
+            due = date(2026, 1, 11).toordinal()
+            # A learner's progress over publisher-owned source Notes remains visible.
+            self._add_canonical_due(due_day=due, siblings=2, owner_id=publisher.id)
+            self._add_canonical_due(due_day=due, learner_id=publisher.id)
+            self._add_canonical_due(due_day=due, detached=True)
+            # The scope's live association does not substitute for logical-key availability.
+            self._add_canonical_due(due_day=due, logical_key=b"mismatched-logical-key")
+            db.session.commit()
+            self.assertEqual(self._canonical_day_counts(), {date(2026, 1, 11): 2})
+
+    def test_canonical_due_dst_timezone_uses_python_business_day_mapping(self):
+        with self.app.app_context():
+            # After US spring-forward: local 03:59 and 04:00 straddle the study day.
+            self._add_canonical_due(due_at=datetime(2026, 3, 9, 7, 59), queue="learning")
+            self._add_canonical_due(due_at=datetime(2026, 3, 9, 8), queue="learning")
+            db.session.commit()
+            with patch("app.services.stats_overview.query_canonical_future_due_day_counts_mysql", side_effect=AssertionError("DST must use Python")):
+                self.assertEqual(self._canonical_day_counts(
+                    timezone_name="America/New_York", start=date(2026, 3, 8), end=date(2026, 3, 10),
+                ), {date(2026, 3, 8): 1, date(2026, 3, 9): 1})
 
 
 if __name__ == "__main__":

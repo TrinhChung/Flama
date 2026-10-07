@@ -1,11 +1,10 @@
 """Never-studied Notes under NOTE authority.
 
-A pristine Note has no canonical state, no compatibility progress on any
-sibling Card and no contributor for the learner. Readers serve it as NEW,
-exactly as LEGACY serves Cards without ``CardProgress``; the first write
-materializes revision-zero state plus the full sibling projection in the same
-transaction. This covers overlay source Notes a publisher adds after an
-installer enrolled, without fanning writes out to every installer.
+A pristine Note has no state on the learner's progress row (or no row).
+Readers serve it as NEW, exactly as LEGACY serves Cards without
+``CardProgress``; the first write materializes revision-zero state on the row
+in the same transaction. This covers overlay source Notes a publisher adds
+after an installer enrolled, without fanning writes out to every installer.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable, Mapping
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.repositories.study_authority_repository import (
@@ -22,9 +21,6 @@ from app.repositories.study_authority_repository import (
 )
 from app.services import study_progress_lifecycle_mirror_service as lifecycle
 from models.card import Card
-from models.card_progress import CardProgress
-from models.study_progress_contributor import StudyProgressContributor
-from models.study_progress_state import StudyProgressState
 from models.study_progress_subject import StudyProgressSubject
 
 _CHUNK = 500
@@ -42,14 +38,13 @@ def classify_note_authority_keys(
     learner_user_id: int,
     note_ids: Iterable[str],
     for_update: bool = True,
-    storage_profile: str = "PROJECTION_V1",
+    storage_profile: str | None = None,
 ) -> tuple[frozenset[str], frozenset[str]]:
     """Split Notes into (stateful, pristine) or fail on partial evidence.
 
-    Locking reads by default: a first-state insert for these keys waits until
-    the caller's transaction ends, so a read never mixes the two answers.
-    Under ``CANONICAL_V1`` the frozen ``card_progress`` projection is not
-    evidence: pristine means no state and no ACTIVE contributor.
+    Locking reads by default: a first-state write for these keys waits until
+    the caller's transaction ends, so a read never mixes the two answers. A
+    Note is stateful iff its row holds state (ADR P10 §2.5).
     """
 
     note_ids = sorted({str(value) for value in note_ids if str(value)})
@@ -57,67 +52,38 @@ def classify_note_authority_keys(
     def read(statement):
         return statement.with_for_update() if for_update else statement
 
-    subjects = []
+    stateful: set[str] = set()
     for chunk in _chunks(note_ids):
-        subjects.extend(session.execute(read(
-            select(StudyProgressSubject).where(
+        # Classification needs only presence and identity, not the Algorithm
+        # JSON document. Preserve JSON null's Python-None semantics as well as
+        # SQL NULL; the full state is loaded later under the same row locks.
+        has_state = and_(
+            StudyProgressSubject.state_payload.isnot(None),
+            func.lower(func.json_type(StudyProgressSubject.state_payload)) != "null",
+        )
+        for logical_key, status, live_note_id, state_present in session.execute(read(
+            select(
+                StudyProgressSubject.logical_note_key,
+                StudyProgressSubject.status_code,
+                StudyProgressSubject.live_note_id,
+                has_state.label("has_state"),
+            ).where(
                 StudyProgressSubject.learner_user_id == int(learner_user_id),
                 StudyProgressSubject.logical_note_key.in_([value.encode("utf-8") for value in chunk]),
             ).order_by(StudyProgressSubject.logical_note_key.asc())
-        )).scalars())
-    subject_ids = [int(subject.id) for subject in subjects]
-    stateful_ids = set()
-    for chunk in _chunks(subject_ids):
-        stateful_ids.update(int(value) for value in session.execute(read(
-            select(StudyProgressState.subject_id).where(StudyProgressState.subject_id.in_(chunk))
-        )).scalars())
-    stateful = {
-        bytes(subject.logical_note_key).decode("utf-8")
-        for subject in subjects
-        if int(subject.id) in stateful_ids
-    }
-    candidates = set(note_ids) - stateful
-    for subject in subjects:
-        key = bytes(subject.logical_note_key).decode("utf-8")
-        if key in candidates and not (
-            str(subject.status_code) == "NO_CURRENT_PROGRESS"
-            and int(subject.contributor_count) == 0
-            and subject.authority_vector_hash is None
-            and subject.lineage_vector_hash is None
-            and str(subject.live_note_id or "") == key
-        ):
-            raise StudyAuthorityFenceError(
-                "INCOMPLETE_AUTHORITY_COVERAGE",
-                "A Note has non-pristine authority evidence without current NOTE state.",
-            )
-    candidate_subject_ids = [
-        int(subject.id)
-        for subject in subjects
-        if bytes(subject.logical_note_key).decode("utf-8") in candidates
-    ]
-    for chunk in _chunks(candidate_subject_ids):
-        if session.execute(read(
-            select(StudyProgressContributor.id).where(
-                StudyProgressContributor.subject_id.in_(chunk),
-                StudyProgressContributor.contributor_status == "ACTIVE",
-            ).limit(1)
-        )).first() is not None:
-            raise StudyAuthorityFenceError(
-                "INCOMPLETE_AUTHORITY_COVERAGE",
-                "A Note has contributor evidence without current NOTE state.",
-            )
-    for chunk in _chunks(sorted(candidates) if storage_profile == "PROJECTION_V1" else []):
-        if session.execute(read(
-            select(CardProgress.id).join(Card, Card.id == CardProgress.card_id).where(
-                CardProgress.user_id == int(learner_user_id),
-                Card.note_id.in_(chunk),
-            ).limit(1)
-        )).first() is not None:
-            raise StudyAuthorityFenceError(
-                "INCOMPLETE_AUTHORITY_COVERAGE",
-                "Compatibility progress exists without current NOTE state.",
-            )
-    return frozenset(stateful), frozenset(candidates)
+        )):
+            key = bytes(logical_key).decode("utf-8")
+            if state_present:
+                stateful.add(key)
+            elif not (
+                str(status) == "NO_CURRENT_PROGRESS"
+                and str(live_note_id or "") == key
+            ):
+                raise StudyAuthorityFenceError(
+                    "INCOMPLETE_AUTHORITY_COVERAGE",
+                    "A Note has non-pristine authority evidence without current NOTE state.",
+                )
+    return frozenset(stateful), frozenset(set(note_ids) - stateful)
 
 
 def materialize_pristine_notes(

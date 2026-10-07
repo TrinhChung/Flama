@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 
 from app.api.common import error_response
 from app.services import anki_import_service
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 
 
@@ -69,6 +70,7 @@ def create_session():
             user_id=current_user.id,
             payload=payload,
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except anki_import_service.AnkiImportError as exc:
         db.session.rollback()
@@ -126,6 +128,7 @@ def upload_media_package(session_id: str, sequence: int):
             expected_sha256=request.headers.get("X-Package-SHA256", ""),
             content=_read_package(),
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except (
         anki_import_service.AnkiImportError,
@@ -153,6 +156,7 @@ def upload_card_package(session_id: str, sequence: int):
             content=_read_package(),
             content_encoding=request.headers.get("Content-Encoding", "identity"),
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except (
         anki_import_service.AnkiImportError,
@@ -177,6 +181,7 @@ def _upload_sync_package(session_id: str, sequence: int, kind: str):
             content=_read_package(),
             content_encoding=request.headers.get("Content-Encoding", "identity"),
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except (
         anki_import_service.AnkiImportError,
@@ -218,6 +223,7 @@ def complete_session(session_id: str):
             session_id=session_id,
             expected_notes=payload.get("expectedNotes"),
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except anki_import_service.AnkiImportError as exc:
         db.session.rollback()
@@ -236,6 +242,7 @@ def cancel_session(session_id: str):
             user_id=current_user.id,
             session_id=session_id,
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except anki_import_service.AnkiImportError as exc:
         db.session.rollback()

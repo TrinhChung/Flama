@@ -42,6 +42,10 @@ class CorsTests(unittest.TestCase):
             response.headers.get("Access-Control-Allow-Credentials"),
             "true",
         )
+        self.assertEqual(
+            response.headers.get("Access-Control-Max-Age"),
+            None,
+        )
         self.assertIn("Origin", response.headers.get("Vary", ""))
 
     def test_allowed_preflight_exposes_api_methods_and_csrf_headers(self):
@@ -55,6 +59,10 @@ class CorsTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers.get("Access-Control-Max-Age"),
+            "86400",
+        )
         self.assertIn(
             "POST",
             response.headers.get("Access-Control-Allow-Methods", ""),
@@ -71,6 +79,28 @@ class CorsTests(unittest.TestCase):
             "Idempotency-Key",
             response.headers.get("Access-Control-Allow-Headers", ""),
         )
+
+    def test_custom_cors_max_age_configuration(self):
+        app = create_app(
+            {
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                "STARTUP_RUN_MAINTENANCE": False,
+                "WTF_CSRF_ENABLED": False,
+                "CORS_ALLOWED_ORIGINS": (self.allowed_origin,),
+                "CORS_MAX_AGE": 7200,
+            }
+        )
+        client = app.test_client()
+        response = client.options(
+            "/api/auth/login",
+            headers={
+                "Origin": self.allowed_origin,
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("Access-Control-Max-Age"), "7200")
 
     def test_unconfigured_origin_receives_no_cors_permission(self):
         response = self.client.get(

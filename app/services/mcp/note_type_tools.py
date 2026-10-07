@@ -9,10 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
-from app.services import (
-    flashcard_content_service,
-    study_progress_lifecycle_mirror_service,
-)
+from app.services import flashcard_content_service
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.mcp.base import (
     _compact_description,
@@ -966,10 +963,6 @@ def update_note_type(
             .all()
             if row and row[0]
         ] if removed_template_ids else []
-        lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
-            db.session,
-            removed_card_ids=removed_card_ids,
-        )
         if removed_card_ids:
             CardProgress.query.filter(
                 CardProgress.card_id.in_(removed_card_ids)
@@ -1063,12 +1056,6 @@ def update_note_type(
                 status=400,
                 code="NOTE_TYPE_MUST_HAVE_TEMPLATES",
             )
-        study_progress_lifecycle_mirror_service.finalize_lifecycle_mirror(
-            lifecycle_plan,
-            transition_code="DETACHED_CONTRIBUTOR_DELETED",
-            source_path="mcp.note_type_template_update",
-            operation_key=f"mcp-note-type-template-update:{nt.id}:{preview_id or 'direct'}",
-        )
 
     if preview_id:
         consume_preview_token(preview_id)

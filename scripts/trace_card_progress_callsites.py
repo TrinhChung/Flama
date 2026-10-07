@@ -17,6 +17,10 @@ been switched (P9-06) and this release supported it: what still touches
 ``card_progress`` is the remaining P9-05 work, and failing tests show NOTE
 flows that do not work without the projection yet.
 
+``--profile CONSOLIDATED_V1`` (ADR P10) runs NOTE routes on the consolidated
+subject row and traces the five tables it replaces as well as ``card_progress``:
+any statement listed is P10 work left, except declared cleanup DELETEs.
+
 ``--guard-note-writes`` adds a SQLite trigger that aborts any INSERT/UPDATE of
 ``card_progress`` for a learner enrolled in NOTE and lists, per issuing app
 frame, the tests that hit it. Under ``CANONICAL_V1`` the list must only hold
@@ -44,7 +48,13 @@ from sqlalchemy import event  # noqa: E402
 from sqlalchemy.engine import Engine  # noqa: E402
 
 _TABLE = re.compile(r"\bcard_progress\b", re.IGNORECASE)
-_OP = re.compile(r"^\s*(SELECT|INSERT|UPDATE|DELETE)", re.IGNORECASE)
+# The tables CONSOLIDATED_V1 must not touch (ADR P10 §2.1).
+_CONSOLIDATED_TABLES = re.compile(
+    r"\b(card_progress|study_progress_states|study_authority_subject_tokens|"
+    r"study_progress_contributors|study_progress_availability|study_progress_lineage_refs)\b",
+    re.IGNORECASE,
+)
+_OP =re.compile(r"^\s*(SELECT|INSERT|UPDATE|DELETE)", re.IGNORECASE)
 _APP = str(ROOT_DIR / "app") + os.sep
 _MODELS = str(ROOT_DIR / "models") + os.sep
 
@@ -65,7 +75,8 @@ def _frames():
 
 @event.listens_for(Engine, "before_cursor_execute")
 def _trace(conn, cursor, statement, parameters, context, executemany):
-    if not _TABLE.search(statement):
+    table = _TABLE.search(statement)
+    if table is None:
         return
     match = _OP.match(statement)
     operation = match.group(1).upper() if match else "OTHER"
@@ -73,6 +84,8 @@ def _trace(conn, cursor, statement, parameters, context, executemany):
     if operation == "SELECT" and for_update:
         operation = "SELECT FOR UPDATE"
     inner, outer = _frames()
+    if _TABLE is _CONSOLIDATED_TABLES:
+        operation = f"{operation} {table.group(1).lower()}"
     key = (operation, inner or "<no app frame>", outer or "<no app frame>")
     records[key]["count"] += 1
     records[key]["tests"].add(current_test["id"])
@@ -119,9 +132,13 @@ def main() -> int:
     parser.add_argument("--tests", nargs="*", default=[])
     parser.add_argument("--module", action="append", default=[])
     parser.add_argument("--json", dest="json_path")
-    parser.add_argument("--profile", choices=("PROJECTION_V1", "CANONICAL_V1"), default="PROJECTION_V1")
+    parser.add_argument("--profile", choices=("PROJECTION_V1", "CANONICAL_V1", "CONSOLIDATED_V1"),
+                        default="PROJECTION_V1")
     parser.add_argument("--guard-note-writes", action="store_true")
     args = parser.parse_args()
+    global _TABLE
+    if args.profile == "CONSOLIDATED_V1":
+        _TABLE = _CONSOLIDATED_TABLES
     if args.guard_note_writes:
         _guard_note_writes()
     if args.profile != "PROJECTION_V1":

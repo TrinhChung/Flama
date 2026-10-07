@@ -37,6 +37,8 @@ def _deck_note_types(
 ) -> Dict[int, str]:
     """Owned Notes first (oldest Note type per deck), then install note types."""
 
+    if not visible_deck_ids:
+        return {}
     rows = session.execute(
         select(Note.deck_id, Note.note_type_id, func.min(Note.created_at))
         .where(
@@ -52,8 +54,10 @@ def _deck_note_types(
         rows, key=lambda row: (int(row[0]), str(row[2] or ""), str(row[1]))
     ):
         note_types.setdefault(int(deck_id), str(note_type_id))
+    requested_decks = set(visible_deck_ids)
     for deck_id, note_type_id in overlay_types:
-        note_types.setdefault(deck_id, note_type_id)
+        if deck_id in requested_decks:
+            note_types.setdefault(deck_id, note_type_id)
     return note_types
 
 
@@ -128,6 +132,17 @@ def _overlay_scope(
     return overlay, overlay_types
 
 
+def deck_note_type_metadata(session, *, learner_user_id, deck_ids, admin_mode=False):
+    """Read fallback presentation metadata independently of cached counters."""
+    if not deck_ids:
+        return {}
+    overlay_types = [] if admin_mode else _overlay_scope(
+        session, learner_user_id=learner_user_id, visible_deck_ids=deck_ids,
+    )[1]
+    return _deck_note_types(session, learner_user_id=learner_user_id,
+                            visible_deck_ids=deck_ids, overlay_types=overlay_types)
+
+
 def aggregate_deck_study_counts(
     session: Session,
     *,
@@ -139,6 +154,8 @@ def aggregate_deck_study_counts(
     admin_mode: bool = False,
     count_by_note: bool = False,
     owned_by_any_user: bool = False,
+    include_note_types: bool = True,
+    note_type_deck_ids: list[int] | None = None,
 ) -> Tuple[Dict[int, Dict[str, int]], Dict[int, str]]:
     """Count total/new/learn/due per visible deck (subtrees are summed by the caller).
 
@@ -148,6 +165,9 @@ def aggregate_deck_study_counts(
     all its Cards share one state, so a Note with two Templates is one due item.
     ``owned_by_any_user`` (admin-wide Browse) counts every Note in the visible
     decks with the learner's own state, not only the learner's Notes.
+    Metadata is optional: counts-only callers set ``include_note_types=False``.
+    ``note_type_deck_ids`` restricts fallback metadata to visible decks that
+    need it, without changing the counted scope or oldest-Note precedence.
     Raises ``StudyAuthorityReadError`` when a NOTE learner's evidence diverges.
     """
 
@@ -178,13 +198,15 @@ def aggregate_deck_study_counts(
     )
     scope = (union_all(owned, overlay) if overlay is not None else owned).subquery("counted_cards")
 
+    storage_profile = None
     if is_note_mode:
         from app.repositories.study_authority_repository import read_study_storage_profile
 
+        storage_profile = read_study_storage_profile(session)
         rows = note_reads.note_card_rows(
             scope,
             learner_user_id=learner_user_id,
-            storage_profile=read_study_storage_profile(session),
+            storage_profile=storage_profile,
         ).subquery("rows")
     else:
         rows = (
@@ -247,7 +269,8 @@ def aggregate_deck_study_counts(
         worst = max((int(row[5] or 0) for row in aggregated), default=0)
         if not worst:
             worst = note_reads.subject_vector_violation(
-                session, scope=scope, learner_user_id=learner_user_id
+                session, scope=scope, learner_user_id=learner_user_id,
+                storage_profile=storage_profile,
             )
         error = note_reads.violation_error(worst)
         if error is not None:
@@ -265,10 +288,13 @@ def aggregate_deck_study_counts(
                 "learn": int(learn or 0),
                 "due": int(due or 0),
             }
+    metadata_deck_ids = visible_deck_ids if note_type_deck_ids is None else [
+        deck_id for deck_id in note_type_deck_ids if deck_id in counts
+    ]
     note_types = _deck_note_types(
         session,
         learner_user_id=learner_user_id,
-        visible_deck_ids=visible_deck_ids,
+        visible_deck_ids=metadata_deck_ids,
         overlay_types=overlay_types,
-    )
+    ) if include_note_types else {}
     return counts, note_types

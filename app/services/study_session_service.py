@@ -20,7 +20,7 @@ from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_compatibility,
     lock_study_authority_route,
-    lock_study_authority_siblings,
+    lock_study_authority_siblings_many,
 )
 from app.repositories.study_repository import (
     card_state_from_progress,
@@ -30,7 +30,6 @@ from app.repositories.study_repository import (
 from app.services import (
     flashcards_share_service,
     study_artifact_service,
-    study_progress_shadow_mirror_service,
     study_service,
 )
 from app.services.anki_scheduler import (
@@ -91,7 +90,7 @@ from app.services.scheduler_config_service import (
     resolve_deck_options,
     resolve_scheduler_runtime_settings,
 )
-from app.services.study_policy_service import build_scheduler_policy
+from app.services.study_policy_service import build_scheduler_policy, serialize_deck_options
 from app.services.study_worker_readiness_service import has_ready_study_worker
 from app.validators.review_event import (
     ReviewEventPayloadError,
@@ -108,6 +107,7 @@ from app.validators.study_session_wire import (
     select_session_schema,
     validate_review_event_wire_contract,
 )
+from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -602,6 +602,35 @@ def open_study_session(
     # request, so resolve each once instead of once per Card.
     deck_by_id: dict[int, Any] = {}
     options_by_deck_id: dict[int | None, Any] = {}
+    runtime = resolve_scheduler_runtime_settings(user_id=int(user.id))
+    policies_by_deck_id: dict[int | None, dict[str, Any]] = {}
+    policies_by_material: dict[str, dict[str, Any]] = {}
+    template_artifacts: dict[str, dict[str, Any]] = {}
+
+    # Both first-state policy selection and artifact construction use this
+    # membership. An empty loaded set must not fall back to per-Card queries.
+    clone_added_note_ids: frozenset[str] | None = None
+    note_override_rows_by_note_id: dict[str, list] | None = None
+    if clone_scope is not None:
+        from app.repositories.flashcards_share_repository import (
+            get_clone_note_field_overrides_batch,
+        )
+
+        install_id = str(clone_scope.install.id)
+        clone_added_note_ids = frozenset(
+            str(value)
+            for value in db.session.execute(
+                select(DeckCloneAddedNote.note_id).where(
+                    DeckCloneAddedNote.deck_install_id == install_id
+                )
+            ).scalars()
+        )
+        note_override_rows_by_note_id = {
+            str(note_id): rows
+            for (_install, note_id), rows in get_clone_note_field_overrides_batch(
+                [install_id], sorted({str(card.note_id) for card in cards})
+            ).items()
+        }
 
     def local_deck_for(deck_id: int | None):
         if deck_id is None:
@@ -616,8 +645,28 @@ def open_study_session(
                 user_id=int(user.id),
                 deck_id=deck_id,
                 deck_obj=local_deck_for(deck_id),
+                runtime_settings=runtime,
             )
         return options_by_deck_id[deck_id]
+
+    def policy_for(deck_id: int | None):
+        if deck_id not in policies_by_deck_id:
+            options = options_for(deck_id)
+            # The options were resolved once per deck and remain immutable
+            # during issuance. Reuse only policies with identical executable
+            # inputs, including timezone; different deck presets may coincide.
+            material_key = study_artifact_service.canonical_digest({
+                "config": serialize_deck_options(options),
+                "timezone": timezone_name,
+                "algorithm_key": DEFAULT_ALGORITHM_IDENTITY.key,
+                "algorithm_version": DEFAULT_ALGORITHM_IDENTITY.version,
+            })
+            if material_key not in policies_by_material:
+                policies_by_material[material_key] = build_scheduler_policy(
+                    options=options, timezone_name=timezone_name,
+                )
+            policies_by_deck_id[deck_id] = policies_by_material[material_key]
+        return policies_by_deck_id[deck_id]
 
     authority_subjects = None
     if authority_route.mode_code == "NOTE":
@@ -634,6 +683,7 @@ def open_study_session(
                 effective_deck_id = study_service.resolve_effective_study_deck_id(
                     card=card,
                     clone_scope=clone_scope,
+                    clone_added_note_ids=clone_added_note_ids,
                 )
                 starting_ease_by_note_id[str(card.note_id)] = float(
                     options_for(effective_deck_id).startingEase
@@ -665,7 +715,6 @@ def open_study_session(
             card_ids=[str(card.id) for card in cards],
         )
     )
-    runtime = resolve_scheduler_runtime_settings(user_id=int(user.id))
     session_id = str(uuid4())
     token = secrets.token_urlsafe(32)
     policies: dict[str, Any] = {}
@@ -676,42 +725,16 @@ def open_study_session(
     session_card_values: list[dict[str, Any]] = []
     frozen_binding: dict[str, Any] | None = None
 
-    # Overlay content: load the install's added Notes and field overrides once.
-    clone_added_note_ids: frozenset[str] | None = None
-    note_override_rows_by_note_id: dict[str, list] | None = None
-    if clone_scope is not None:
-        from app.repositories.flashcards_share_repository import (
-            get_clone_note_field_overrides_batch,
-        )
-
-        install_id = str(clone_scope.install.id)
-        clone_added_note_ids = frozenset(
-            str(value)
-            for value in db.session.execute(
-                select(DeckCloneAddedNote.note_id).where(
-                    DeckCloneAddedNote.deck_install_id == install_id
-                )
-            ).scalars()
-        )
-        note_override_rows_by_note_id = {
-            str(note_id): rows
-            for (_install, note_id), rows in get_clone_note_field_overrides_batch(
-                [install_id], sorted({str(card.note_id) for card in cards})
-            ).items()
-        }
-
     for ordinal, card in enumerate(cards):
         note = card.note
         local_deck_id = study_service.resolve_effective_study_deck_id(
             card=card,
             clone_scope=clone_scope,
+            clone_added_note_ids=clone_added_note_ids,
         )
         local_deck = local_deck_for(local_deck_id)
         options = options_for(local_deck_id)
-        policy = build_scheduler_policy(
-            options=options,
-            timezone_name=timezone_name,
-        )
+        policy = policy_for(local_deck_id)
         policy_key = policy["config_hash"]
         if policy_key not in policies:
             policies[policy_key] = {
@@ -743,7 +766,13 @@ def open_study_session(
             clone_added_note_ids=clone_added_note_ids,
             note_override_rows_by_note_id=note_override_rows_by_note_id,
         )
-        template = study_artifact_service.build_template_artifact(context)
+        # template_version covers raw sources, CSS, renderer ABI and effective
+        # field definitions, so an overlay rename/schema change cannot reuse
+        # the wrong sanitized artifact. The cache lives only in this issuance.
+        artifact_version = study_artifact_service.template_version(context)
+        if artifact_version not in template_artifacts:
+            template_artifacts[artifact_version] = study_artifact_service.build_template_artifact(context)
+        template = template_artifacts[artifact_version]
         content = study_artifact_service.build_content_artifact(context)
         template_key = f"{template['id']}:{template['version']}"
         content_key = f"{content['id']}:{content['version']}"
@@ -983,6 +1012,7 @@ def open_study_session(
         except StudySessionAuthorityPinError as exc:
             db.session.rollback()
             raise StudySessionError(exc.code, str(exc), status=409) from exc
+    flush_review_analytics_deltas(db.session)
     db.session.commit()
     return {
         **snapshot_material,
@@ -1474,6 +1504,7 @@ def enqueue_study_session_batch(
         )
         db.session.add(batch_row)
         try:
+            flush_review_analytics_deltas(db.session)
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
@@ -1560,6 +1591,11 @@ def _replay_session_events(
     last_offset = -1
     touched_ids: set[str] = set()
     event_ids: set[str] = set()
+    siblings_by_note: dict[str, list[StudySessionCard]] = {}
+    if note_authority_pins is not None:
+        for member in session_cards:
+            identity = note_authority_pins.identity_by_session_card_id[int(member.id)]
+            siblings_by_note.setdefault(identity.logical_note_key, []).append(member)
 
     for index, raw_event in enumerate(raw_events, start=1):
         if not isinstance(raw_event, dict):
@@ -1760,13 +1796,9 @@ def _replay_session_events(
             note_identity = note_authority_pins.identity_by_session_card_id[
                 int(session_card.id)
             ]
-            for sibling in session_cards:
-                sibling_identity = note_authority_pins.identity_by_session_card_id[
-                    int(sibling.id)
-                ]
-                if sibling_identity.logical_note_key == note_identity.logical_note_key:
-                    states[sibling.card_id] = after
-                    touched_ids.add(sibling.card_id)
+            for sibling in siblings_by_note[note_identity.logical_note_key]:
+                states[sibling.card_id] = after
+                touched_ids.add(sibling.card_id)
 
     return states, replayed_events, touched_ids, event_ids
 
@@ -1820,9 +1852,11 @@ def _lock_note_session_context(
     *, user, session, session_cards, route, pins, event_card_ids, committed_at,
     create_token_if_missing=True,
 ):
+    # The scope checks below read every Card's Note: load them in one query.
     card_rows = {
         str(card.id): card
         for card in Card.query.filter(Card.id.in_(event_card_ids))
+        .options(selectinload(Card.note))
         .order_by(Card.id.asc())
         .populate_existing()
         .with_for_update(read=True)
@@ -1866,14 +1900,15 @@ def _lock_note_session_context(
                 deck_install_id=install.id
             ).all()
         }
+        local_added_note_ids = frozenset(db.session.execute(
+            select(DeckCloneAddedNote.note_id).where(
+                DeckCloneAddedNote.deck_install_id == install.id,
+                DeckCloneAddedNote.note_id.in_(sorted({card.note_id for card in card_rows.values()})),
+            )
+        ).scalars()) if card_rows else frozenset()
         for card_id, card in card_rows.items():
             membership = membership_by_card_id[card_id]
-            is_local_added = bool(
-                DeckCloneAddedNote.query.filter_by(
-                    deck_install_id=install.id,
-                    note_id=card.note_id,
-                ).first()
-            )
+            is_local_added = str(card.note_id) in local_added_note_ids
             if is_local_added:
                 valid = (
                     int(card.note.user_id) == int(user.id)
@@ -1917,13 +1952,13 @@ def _lock_note_session_context(
                 now_utc=committed_at,
                 create_token_if_missing=create_token_if_missing,
             )
+            siblings_by_note = lock_study_authority_siblings_many(
+                db.session, route=route,
+                locked_by_logical_note_key=locked_subjects.locked_by_logical_note_key,
+            )
             for note_key in sorted(note_keys, key=lambda value: value.encode("utf-8")):
                 locked = locked_subjects.locked_by_logical_note_key[note_key]
-                siblings = lock_study_authority_siblings(
-                    db.session,
-                    route=route,
-                    locked=locked,
-                )
+                siblings = siblings_by_note[note_key]
                 compatibility = lock_study_authority_compatibility(
                     db.session,
                     route=route,
@@ -1979,6 +2014,11 @@ def _commit_note_authority_session(
     rating_counts = {rating: 0 for rating in sorted(VALID_RATINGS)}
     projected_revisions: dict[str, int] = {}
     seen_note_events: dict[str, int] = {}
+    usage = study_service.ReviewUsageTouches()
+    membership_identity_by_note = {
+        identity.logical_note_key: identity
+        for identity in pins.identity_by_session_card_id.values()
+    }
     try:
         if note_batch is not None:
             note_batch = verify_note_batch_continuation(
@@ -1988,10 +2028,8 @@ def _commit_note_authority_session(
         for note_key in sorted(note_keys):
             locked = locked_subjects.locked_by_logical_note_key[note_key]
             membership_identity = (
-                note_batch.expected_by_note[note_key] if note_batch is not None else next(
-                    identity for identity in pins.identity_by_session_card_id.values()
-                    if identity.logical_note_key == note_key
-                )
+                note_batch.expected_by_note[note_key]
+                if note_batch is not None else membership_identity_by_note[note_key]
             )
             current_identity = build_note_authority_wire_identity(
                 enrollment_epoch=route.epoch,
@@ -2064,7 +2102,7 @@ def _commit_note_authority_session(
                     "A NOTE authority event was already committed.",
                     status=409,
                 )
-            study_service.stage_native_review_side_effects(mutation)
+            study_service.stage_native_review_side_effects(mutation, usage=usage)
             for card_id, revision in dict(
                 result.response_payload["projected_card_revisions"]
             ).items():
@@ -2072,6 +2110,8 @@ def _commit_note_authority_session(
             rating = str(raw_event["rating"]).lower()
             rating_counts[rating] += 1
             seen_note_events[note_key] = seen_note_events.get(note_key, 0) + 1
+        # Install locks follow every subject lock, as on the per-answer path.
+        usage.apply()
 
         updated_cards = [
             {
@@ -2137,6 +2177,7 @@ def _commit_note_authority_session(
                 },
             )
         )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
         return response
     except IntegrityError:
@@ -2446,32 +2487,8 @@ def commit_study_session(
         )
 
     card_rows: dict[str, Card] = {}
-    mirror_plan = None
     progress_rows = []
-    if touched_ids and study_progress_shadow_mirror_service.shadow_writes_enabled():
-        card_rows = {
-            str(card.id): card
-            for card in Card.query.filter(Card.id.in_(sorted(touched_ids))).all()
-        }
-        try:
-            mirror_plan = study_progress_shadow_mirror_service.prepare_native_mirror(
-                db.session,
-                learner_user_id=int(user.id),
-                cards=card_rows.values(),
-                now_utc=committed_at,
-            )
-        except Exception:
-            db.session.rollback()
-            raise
-        locked_progress = study_progress_shadow_mirror_service.locked_progress_map(
-            mirror_plan
-        )
-        progress_rows = [
-            locked_progress[card_id]
-            for card_id in sorted(touched_ids)
-            if card_id in locked_progress
-        ]
-    elif touched_ids:
+    if touched_ids:
         progress_rows = (
             CardProgress.query.filter(
                 CardProgress.user_id == int(user.id),
@@ -2502,8 +2519,6 @@ def commit_study_session(
                 }
             )
     if conflicts:
-        if mirror_plan is not None:
-            db.session.rollback()
         raise StudySessionError(
             "CARD_PROGRESS_CONFLICT",
             "One or more cards changed in another study session.",
@@ -2523,8 +2538,6 @@ def commit_study_session(
             or int(install.user_id) != int(user.id)
             or str(install.clone_mode or "") != "logical_overlay"
         ):
-            if mirror_plan is not None:
-                db.session.rollback()
             raise StudySessionError(
                 "SESSION_SCOPE_CHANGED",
                 "The installed deck scope changed during this session.",
@@ -2553,8 +2566,6 @@ def commit_study_session(
                     or card.note.deck_id != session_card.source_deck_id
                     or card.note.deck_id != session_card.local_deck_id
                 ):
-                    if mirror_plan is not None:
-                        db.session.rollback()
                     raise StudySessionError(
                         "SESSION_SCOPE_CHANGED",
                         "A locally-added clone card moved outside the session scope.",
@@ -2567,8 +2578,6 @@ def commit_study_session(
                 or current_map.get(int(session_card.source_deck_id))
                 != int(session_card.local_deck_id)
             ):
-                if mirror_plan is not None:
-                    db.session.rollback()
                 raise StudySessionError(
                     "SESSION_SCOPE_CHANGED",
                     "The installed deck mapping changed during this session.",
@@ -2581,8 +2590,6 @@ def commit_study_session(
                 int(card.note.user_id) != int(user.id)
                 or card.note.deck_id != session_card.source_deck_id
             ):
-                if mirror_plan is not None:
-                    db.session.rollback()
                 raise StudySessionError(
                     "SESSION_SCOPE_CHANGED",
                     "A card moved outside the session scope.",
@@ -2629,9 +2636,6 @@ def commit_study_session(
                 ) from exc
 
         last_review_event_by_card: dict[str, Any] = {}
-        mirror_history_events: list[
-            study_progress_shadow_mirror_service.NativeMirrorHistoryEvent
-        ] = []
         last_replay_index_by_card = {
             session_card.card_id: index
             for index, (_, session_card, *_rest) in enumerate(replayed_events)
@@ -2698,17 +2702,6 @@ def commit_study_session(
                 ) from exc
             review_event = mutation_result.review_event
             last_review_event_by_card[session_card.card_id] = review_event
-            mirror_history_events.append(
-                study_progress_shadow_mirror_service.NativeMirrorHistoryEvent(
-                    review_event=review_event,
-                    before_state_hash=study_artifact_service.canonical_digest(
-                        serialize_card_state(before)
-                    ),
-                    after_state_hash=study_artifact_service.canonical_digest(
-                        serialize_card_state(transition.state)
-                    ),
-                )
-            )
 
         db.session.flush()
         updated_cards = []
@@ -2760,11 +2753,7 @@ def commit_study_session(
                 },
             )
         )
-        study_progress_shadow_mirror_service.finalize_native_mirror(
-            mirror_plan,
-            review_events=tuple(mirror_history_events),
-            now_utc=committed_at,
-        )
+        flush_review_analytics_deltas(db.session)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
