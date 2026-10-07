@@ -24,11 +24,11 @@ PHASE = "http_request_cache_settings"
 RULE_DESCRIPTION = "Cache media proxy assets at edge (bounded audio/image TTL)"
 LEGACY_RULE_DESCRIPTION = "Cache media proxy assets at edge (immutable audio/image)"
 MATCH_EXPRESSION = (
-    '(http.host eq "be-flama.stmtp.com"'
+    '(http.host in {"api.flama.vn", "be-flama.stmtp.com"}'
     ' and (http.request.uri.path eq "/media/proxy"'
     ' or starts_with(http.request.uri.path, "/media/proxy/")))'
 )
-MEDIA_CACHE_PREFIX = "be-flama.stmtp.com/media/proxy/"
+MEDIA_CACHE_PREFIX = "api.flama.vn/media/proxy/"
 
 
 def _load_optional_setting(keys: tuple[str, ...]) -> str:
