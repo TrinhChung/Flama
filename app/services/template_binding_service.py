@@ -132,6 +132,23 @@ def binding_warnings(template, field_defs, *, input_bindings=None):
     return warnings
 
 
+def projection_metadata(context):
+    """Freeze source IDs and names needed to patch projected inputs locally."""
+    if not isinstance(context.field_defs, _ProjectedFields):
+        return None
+    raw = getattr(context.template, "input_bindings", None)
+    bindings = dict(raw) if isinstance(raw, Mapping) else {}
+    source_ids = {str(field.id) for field in context.field_defs.source_fields}
+    return {
+        "schema_version": "template-input-bindings.v1",
+        "input_bindings": {
+            item["key"]: str(bindings[item["key"]]) if str(bindings.get(item["key"]) or "") in source_ids else None
+            for item in _inputs(context.template, bindings)
+        },
+        "field_defs": context.field_defs.source_fields,
+    }
+
+
 def apply_binding_projection(context):
     """Return an effective Card context with an idempotent field projection."""
     fields, values = prepare_bound_fields(context.template, context.field_defs, context.field_values)

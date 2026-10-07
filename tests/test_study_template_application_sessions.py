@@ -24,6 +24,8 @@ from models.study_application import StudyApplication
 from models.template import Template
 from models.template_release import TemplateRelease
 from models.template_subscription import TemplateSubscription
+from models.study_session import StudySession
+from app.validators.template_library import TemplateLibraryError
 
 
 class StudyTemplateApplicationTests(unittest.TestCase):
@@ -110,6 +112,9 @@ class StudyTemplateApplicationTests(unittest.TestCase):
         snapshot = self._open(composition_id, {"term": fields[1].id})
         content = next(iter(snapshot["contents"].values()))
         self.assertEqual(content["render_context"]["term"], "test back")
+        projection = next(iter(snapshot["templates"].values()))["binding_projection"]
+        self.assertEqual(projection["input_bindings"], {"term": fields[1].id})
+        self.assertEqual([row["name"] for row in projection["field_defs"]], ["Front", "Back"])
         self.assertEqual(self.card_1.application.input_bindings, {"term": fields[0].id})
         self.assertEqual(template.front_html, "{{term}}")
         stored = db.session.get(study_session_service.StudySession, snapshot["session_id"]).config_snapshot_json
@@ -118,6 +123,40 @@ class StudyTemplateApplicationTests(unittest.TestCase):
         db.session.commit()
         self.assertEqual(db.session.get(study_session_service.StudySession, snapshot["session_id"]).config_snapshot_json, stored)
         self.assertEqual(content["render_context"]["term"], "test back")
+
+    def test_transient_bindings_reject_malformed_unknown_cross_type_and_wrong_kind(self):
+        other = NoteType(name="Other", user_id=self.user.id)
+        fields = [FieldDef(note_type_id=self.note_type.id, name="Front", field_type="text"),
+                  FieldDef(note_type_id=self.note_type.id, name="Voice", field_type="audio")]
+        db.session.add_all([other, *fields])
+        db.session.flush()
+        foreign = FieldDef(note_type_id=other.id, name="Foreign", field_type="text")
+        db.session.add(foreign)
+        self.template_1.input_schema = [{"key": "term", "type": "text"}]
+        self.template_1.front_html = "{{term}}"
+        db.session.commit()
+        composition_id = resolve_compatibility_composition_for_card(self.card_1).composition_id
+        cases = [([], "VALIDATION_ERROR"), ("bad", "VALIDATION_ERROR"),
+                 ({"unknown": fields[0].id}, "INPUT_NOT_FOUND"),
+                 ({"term": foreign.id}, "FIELD_OUT_OF_SCOPE"),
+                 ({"term": fields[1].id}, "INPUT_TYPE_MISMATCH"),
+                 ({"term": []}, "FIELD_OUT_OF_SCOPE")]
+        for mapping, code in cases:
+            with self.subTest(mapping=mapping), self.assertRaises(TemplateLibraryError) as raised:
+                self._open(composition_id, mapping)
+            self.assertEqual(raised.exception.code, code)
+            db.session.rollback()
+            self.assertEqual(StudySession.query.count(), 0)
+
+    def test_empty_override_shadows_legacy_inputs_without_saving(self):
+        field = FieldDef(note_type_id=self.note_type.id, name="Front", field_type="text")
+        db.session.add(field)
+        db.session.commit()
+        composition_id = resolve_compatibility_composition_for_card(self.card_1).composition_id
+        snapshot = self._open(composition_id, {})
+        content = next(iter(snapshot["contents"].values()))
+        self.assertEqual(content["render_context"]["Front"], "")
+        self.assertIsNone(self.card_1.application.input_bindings)
 
 
 class StudyTemplateReleaseSessionTests(unittest.TestCase):
@@ -152,13 +191,23 @@ class StudyTemplateReleaseSessionTests(unittest.TestCase):
             source.front_html = "new source {{term}}"
             application.input_bindings = {}
             db.session.commit()
-            source_id, release_id = source.id, release.id
+            source_id, release_id, field_id = source.id, release.id, field.id
         with patch.object(template_release_repository, "load_effective_template_overrides",
                           wraps=template_release_repository.load_effective_template_overrides) as load:
             pinned = self._open()
         self.assertEqual(load.call_count, 1)
         self.assertEqual(next(iter(pinned["templates"].values()))["front_source"], "pinned {{term}}")
         self.assertEqual({row["render_context"]["term"] for row in pinned["contents"].values()}, {"w0", "w1", "w2"})
+        with patch.object(template_release_repository, "load_effective_template_overrides",
+                          wraps=template_release_repository.load_effective_template_overrides) as load:
+            prepared = self.client.get(
+                f"/api/study/scopes/deck/{self.local_deck_id}/compositions?include_template_inputs=1"
+            )
+        self.assertEqual(prepared.status_code, 200, prepared.get_json())
+        self.assertEqual(load.call_count, 1)
+        entry = next(iter(prepared.get_json()["template_inputs"].values()))
+        self.assertEqual(entry["input_schema"][0]["key"], "term")
+        self.assertEqual(entry["input_bindings"], {"term": field_id})
         with self.app.app_context():
             local = Template(owner_user_id=self.user_id, origin="market_copy", name="Local",
                              front_html="local {{term}}", back_html="", input_schema=[{"key": "term"}])

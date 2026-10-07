@@ -166,6 +166,19 @@ class TemplateBindingServiceTests(unittest.TestCase):
         self.assertIs(apply_binding_projection(context), context)
         self.assertEqual(template.input_bindings, {"term": "one"})
 
+    def test_projection_metadata_detaches_source_fields_and_hashes_mapping(self):
+        fields = [self._field("one", "Word"), self._field("two", "Reading", position=1)]
+        template = self._template([{"key": "term", "type": "text"}], {"term": "one"}, back="")
+        context = apply_binding_projection(self._context(template, fields, {"Word": "dog"}))
+        artifact = study_artifact_service.build_template_artifact(context)
+        projection = artifact["binding_projection"]
+        material = {key: value for key, value in projection.items() if key != "fingerprint"}
+        self.assertEqual(projection["fingerprint"], study_artifact_service.canonical_digest(material))
+        self.assertEqual(projection["input_bindings"], {"term": "one"})
+        self.assertEqual(projection["field_defs"][0]["name"], "Word")
+        fields[0].name = "Renamed"
+        self.assertEqual(study_artifact_service.build_template_artifact(context), artifact)
+
     def test_resolver_uses_owned_application_or_pinned_application_bindings_without_mutation(self):
         fields = [self._field("one", "Word"), self._field("two", "Meaning", position=1)]
         template = self._template([{"key": "term", "type": "text"}], front="{{term}}", back="")

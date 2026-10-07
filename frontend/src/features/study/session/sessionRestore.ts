@@ -86,6 +86,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function validBindingProjection(template: Record<string, unknown>): boolean {
+  if (template.binding_projection === undefined) return true
+  const projection = template.binding_projection
+  if (
+    !isRecord(projection)
+    || projection.schema_version !== 'template-input-bindings.v1'
+    || !isRecord(projection.input_bindings)
+    || !Array.isArray(projection.field_defs)
+    || typeof projection.fingerprint !== 'string'
+    || !SHA256_DIGEST_PATTERN.test(projection.fingerprint)
+  ) return false
+  const ids = new Set<string>()
+  for (const field of projection.field_defs) {
+    if (
+      !isRecord(field) || typeof field.id !== 'string' || !field.id
+      || ids.has(field.id) || typeof field.name !== 'string'
+      || typeof field.field_type !== 'string'
+    ) return false
+    ids.add(field.id)
+  }
+  if (Object.entries(projection.input_bindings).some(([key, id]) => (
+    !key || (id !== null && (typeof id !== 'string' || !ids.has(id)))
+    || !Array.isArray(template.field_defs)
+    || !template.field_defs.some((field) => isRecord(field) && field.name === key)
+  ))) return false
+  const material = { ...projection }
+  delete material.fingerprint
+  try {
+    return canonicalDigest(material) === projection.fingerprint
+  } catch {
+    return false
+  }
+}
+
 function isFiniteTimestamp(value: unknown) {
   return typeof value === 'string' && Number.isFinite(Date.parse(value))
 }
@@ -487,6 +521,11 @@ export function normalizePersistedStudySession(
     )
   })) {
     return quarantine('MALFORMED_SESSION', 'Stored study cards are malformed.')
+  }
+  if (Object.values(templates).some((template) => (
+    !isRecord(template) || !validBindingProjection(template)
+  ))) {
+    return quarantine('COMPOSITION_CONTRACT_MISMATCH', 'Stored input bindings failed frozen projection validation.')
   }
 
   const isV4 = snapshotValue.schema_version === STUDY_SESSION_SCHEMA_V4

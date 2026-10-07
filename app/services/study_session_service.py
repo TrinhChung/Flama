@@ -622,6 +622,11 @@ def open_study_session(
         source_template_ids=[str(card.template_id) for card in cards],
         release_pins=release_pins,
     )
+    if input_bindings is not None:
+        input_bindings = study_template_preset_service.validate_session_bindings(
+            composition_selection.composition, input_bindings,
+            clone_scope=clone_scope, template_overrides=template_overrides,
+        )
 
     # Deck rows and options depend only on (learner, local deck) within this
     # request, so resolve each once instead of once per Card.
@@ -799,6 +804,9 @@ def open_study_session(
                              if not key.startswith("_")}
             for name in ("id", "name", "front_html", "back_html", "shared_css", "input_schema", "updated_at"):
                 source_values[name] = getattr(context.template, name, None)
+            source_values["input_schema"] = study_template_preset_service.effective_input_schema(
+                context.template, getattr(context.field_defs, "source_fields", context.field_defs),
+            )
             source_values["input_bindings"] = deepcopy(input_bindings)
             context = apply_binding_projection(replace(context, template=SimpleNamespace(**source_values)))
         # template_version covers raw sources, CSS, renderer ABI and effective

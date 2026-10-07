@@ -11,7 +11,7 @@ from typing import Any, Mapping
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.services import flashcards_share_service
 from app.services.effective_template_service import resolve_effective_template
-from app.services.template_binding_service import apply_binding_projection
+from app.services.template_binding_service import apply_binding_projection, projection_metadata
 from app.services.flashcard_renderer import (
     build_render_context,
     prepare_client_template_source,
@@ -132,8 +132,7 @@ def build_effective_study_card(
                 install=clone_scope.install,
                 source_note_type_id=source_note_type_id,
             )
-            if schema_view.field_defs:
-                field_defs = list(schema_view.field_defs)
+            field_defs = list(schema_view.field_defs)
             field_values = flashcards_share_service.apply_clone_note_field_overrides(
                 install=clone_scope.install,
                 source_note=note,
@@ -157,17 +156,27 @@ def build_effective_study_card(
 def template_version(context: EffectiveStudyCard) -> str:
     context = apply_binding_projection(context)
     template = context.template
-    return canonical_digest(
-        {
-            "schema_version": TEMPLATE_SCHEMA,
-            "renderer_abi": RENDERER_ABI,
-            "template_id": template.id,
-            "front_source": template.front_html or "",
-            "back_source": template.back_html or "",
-            "shared_css": template.shared_css or "",
-            "field_defs": serialize_field_defs(context.field_defs),
-        }
-    )
+    material = {
+        "schema_version": TEMPLATE_SCHEMA,
+        "renderer_abi": RENDERER_ABI,
+        "template_id": template.id,
+        "front_source": template.front_html or "",
+        "back_source": template.back_html or "",
+        "shared_css": template.shared_css or "",
+        "field_defs": serialize_field_defs(context.field_defs),
+    }
+    projection = _binding_projection_payload(context)
+    if projection is not None:
+        material["binding_projection"] = projection
+    return canonical_digest(material)
+
+
+def _binding_projection_payload(context):
+    projection = projection_metadata(context)
+    if projection is not None:
+        projection["field_defs"] = serialize_field_defs(projection["field_defs"])
+        projection["fingerprint"] = canonical_digest(projection)
+    return projection
 
 
 def _media_payload(context: EffectiveStudyCard) -> list[dict[str, Any]]:
@@ -211,7 +220,7 @@ def build_template_artifact(context: EffectiveStudyCard) -> dict[str, Any]:
         context.template.back_html or "",
         context.field_defs,
     )
-    return {
+    artifact = {
         "schema_version": TEMPLATE_SCHEMA,
         "renderer_abi": RENDERER_ABI,
         "id": str(context.template.id),
@@ -223,6 +232,10 @@ def build_template_artifact(context: EffectiveStudyCard) -> dict[str, Any]:
         "shared_css": sanitize_css(context.template.shared_css or ""),
         "field_defs": serialize_field_defs(context.field_defs),
     }
+    projection = _binding_projection_payload(context)
+    if projection is not None:
+        artifact["binding_projection"] = projection
+    return artifact
 
 
 def build_content_artifact(context: EffectiveStudyCard) -> dict[str, Any]:

@@ -4,7 +4,7 @@
  * Deduplicates logic between useStudySession (updateCardContent) and sessionStore (updateCardFieldValuesInSessions).
  */
 import type { PersistedStudySession } from './sessionStore'
-import type { StudyMediaArtifact } from '../types'
+import type { StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import { patchRenderContext } from '../renderer/clientRenderer'
 import { canonicalDigest } from './canonicalDigest'
 
@@ -17,6 +17,27 @@ export interface ContentPatchResult {
   updated: boolean
   nextSession: PersistedStudySession
   affectedCardIds: string[]
+}
+
+function projectedFieldUpdates(
+  values: Record<string, string>,
+  template: StudyTemplateArtifact | undefined,
+): Record<string, string> {
+  const projection = template?.binding_projection
+  if (!projection) return values
+  const updates = { ...values }
+  const fieldsById = new Map(projection.field_defs.map((field) => [field.id, field]))
+  for (const key of Object.keys(projection.input_bindings)) {
+    delete updates[key]
+    delete updates[`${key}_url`]
+    delete updates[`${key}_urls`]
+  }
+  for (const [key, fieldId] of Object.entries(projection.input_bindings)) {
+    const source = fieldId === null ? undefined : fieldsById.get(fieldId)
+    if (!source) updates[key] = ''
+    else if (Object.hasOwn(values, source.name)) updates[key] = values[source.name]
+  }
+  return updates
 }
 
 /**
@@ -46,6 +67,7 @@ export function applyCardContentPatch(
     const template = current.snapshot.templates[card.template_key]
     const existingContent = updatedContents[contentKey]
     if (!existingContent) continue
+    const projectedUpdates = projectedFieldUpdates(newFieldValues, template)
 
     // 1. Merge media assets
     const combinedMedia: StudyMediaArtifact[] =
@@ -82,13 +104,13 @@ export function applyCardContentPatch(
     // 3. Merge field values
     const mergedFieldValues = {
       ...existingContent.field_values,
-      ...newFieldValues,
+      ...projectedUpdates,
     }
 
     // 4. Patch render context
     const nextRenderContext = patchRenderContext(
       existingContent.render_context || {},
-      newFieldValues,
+      projectedUpdates,
       template?.field_defs,
       combinedMedia,
     )
@@ -98,6 +120,7 @@ export function applyCardContentPatch(
       schema_version: 'study-content.v1',
       renderer_abi: existingContent.renderer_abi,
       note_id: existingContent.note_id,
+      ...(template?.binding_projection ? { field_defs: template.field_defs } : {}),
       field_values: mergedFieldValues,
       media: combinedMedia,
     })

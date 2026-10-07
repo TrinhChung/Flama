@@ -126,7 +126,14 @@ export function StudyQuickEditDialog({
   // Initialize immediately from available study session content (0ms latency)
   useEffect(() => {
     if (open && content && !isFormInitializedRef.current) {
-      const baseValues = { ...(content.field_values || {}) }
+      const projection = template?.binding_projection
+      const baseValues = projection
+        ? Object.fromEntries(projection.field_defs
+          .filter((field) => Object.hasOwn(content.field_values, field.name)
+            && (!Object.hasOwn(projection.input_bindings, field.name)
+              || projection.input_bindings[field.name] === field.id))
+          .map((field) => [field.name, content.field_values[field.name]]))
+        : { ...(content.field_values || {}) }
       setFieldValues(baseValues)
       setInitialFieldValues(baseValues)
       isFormInitializedRef.current = true
@@ -135,7 +142,7 @@ export function StudyQuickEditDialog({
       setNewTagInput('')
       setIsStrokeModalOpen(false)
     }
-  }, [open, content])
+  }, [open, content, template?.binding_projection])
 
   const handleApplyStrokes = useCallback((targetFieldName: string, urls: string) => {
     setFieldValues((prev) => ({
@@ -297,12 +304,14 @@ export function StudyQuickEditDialog({
 
   // Resolve fields definition:
   // 1. Prefer cardDetailQuery.data.fields (authoritative backend definition with clone overlay & note type types)
-  // 2. Fallback to template?.field_defs (immediate 0ms study session cache)
+  // 2. Fallback to frozen source fields, then legacy template fields.
   // 3. Fallback to keys in fieldValues
   const fieldDefs = useMemo(() => {
     const rawDefs =
       cardDetailQuery.data?.fields && cardDetailQuery.data.fields.length > 0
         ? cardDetailQuery.data.fields
+        : template?.binding_projection
+        ? template.binding_projection.field_defs
         : template?.field_defs && template.field_defs.length > 0
         ? template.field_defs
         : Object.keys(fieldValues).map((name, index) => ({
@@ -322,7 +331,7 @@ export function StudyQuickEditDialog({
         field_type: detectedType,
       }
     })
-  }, [cardDetailQuery.data?.fields, template?.field_defs, fieldValues, initialFieldValues])
+  }, [cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
 
   const deckList = cardDetailQuery.data?.decks || []
 

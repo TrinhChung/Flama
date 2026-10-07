@@ -64,6 +64,12 @@ export type StudyTemplateArtifact = {
   back_inline_scripts: string[]
   shared_css: string
   field_defs: FieldDef[]
+  binding_projection?: {
+    schema_version: 'template-input-bindings.v1'
+    input_bindings: Record<string, string | null>
+    field_defs: FieldDef[]
+    fingerprint: string
+  }
 }
 
 export type StudyMediaArtifact = {
@@ -144,6 +150,12 @@ export type StudyScopeCompositionsResponse = {
   default_composition_id: string | null
   groups: StudyCompositionGroup[]
   compositions: AppliedComposition[]
+  template_inputs?: Record<string, {
+    input_schema: Array<{ key: string; label?: string; type: string; required?: boolean }>
+    field_defs: FieldDef[]
+    input_bindings: Record<string, string | null>
+    warnings: Array<{ input_key: string; code: string; required: boolean }>
+  }>
 }
 
 export type StudyCompositionBinding = {

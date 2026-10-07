@@ -848,6 +848,12 @@ def study_scope_compositions(scope_type: str, scope_id: str):
             clone_scope=clone_scope,
             compositions=compositions,
         )
+    if str(request.args.get("include_template_inputs") or "").strip().lower() in {"1", "true", "yes"}:
+        from app.services.study_template_preset_service import template_inputs_for_compositions
+
+        payload["template_inputs"] = template_inputs_for_compositions(
+            compositions, user_id=current_user.id, clone_scope=clone_scope,
+        )
     return jsonify(payload)
 
 
