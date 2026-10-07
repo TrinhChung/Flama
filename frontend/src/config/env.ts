@@ -24,7 +24,7 @@ export const BACKEND_ORIGIN = apiBaseOrigin(API_BASE_URL)
 
 const DEFAULT_FLAMA_CONNECT_URL = import.meta.env.DEV
   ? 'http://127.0.0.1:4790/v1/flama-connect'
-  : 'https://flama-connect.stmtp.com/v1/flama-connect'
+  : 'https://connect.flama.vn/v1/flama-connect'
 
 export const FLAMA_CONNECT_URL = String(
   import.meta.env.VITE_FLAMA_CONNECT_URL || DEFAULT_FLAMA_CONNECT_URL,
@@ -32,7 +32,7 @@ export const FLAMA_CONNECT_URL = String(
 
 const DEFAULT_FLAMA_MCP_URL = import.meta.env.DEV
   ? 'http://127.0.0.1:4790/v1/mcp'
-  : 'https://flama-connect.stmtp.com/v1/mcp'
+  : 'https://connect.flama.vn/v1/mcp'
 
 export const FLAMA_MCP_URL = String(
   import.meta.env.VITE_FLAMA_MCP_URL || DEFAULT_FLAMA_MCP_URL,

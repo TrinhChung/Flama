@@ -137,10 +137,10 @@ MANAGED_VARIABLE_DEFAULTS = {
     "EMAIL_SMTP_USE_TLS": "true",
     "EMAIL_SMTP_USE_SSL": "false",
     "TRUST_PROXY": "1",
-    "FRONTEND_URL": "https://flama.stmtp.com",
-    "PUBLIC_APP_URL": "https://flama.stmtp.com",
-    "CORS_ALLOWED_ORIGINS": "https://flama.stmtp.com",
-    "GOOGLE_OAUTH_REDIRECT_URI": "https://be-flama.stmtp.com/auth/google/callback",
+    "FRONTEND_URL": "https://flama.vn",
+    "PUBLIC_APP_URL": "https://flama.vn",
+    "CORS_ALLOWED_ORIGINS": "https://flama.vn,https://flama.stmtp.com",
+    "GOOGLE_OAUTH_REDIRECT_URI": "https://api.flama.vn/auth/google/callback",
 }
 _ENV_ASSIGNMENT_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
