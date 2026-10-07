@@ -177,19 +177,27 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                 url_token=url_token,
                 session_user=session_user,
             )
+            req_params = rpc_request.params if isinstance(rpc_request.params, dict) else {}
+            explicit_public = bool(
+                request.headers.get("X-Flama-Public-Tools")
+                or request.args.get("include_public")
+                or req_params.get("include_public")
+                or not request.path.startswith("/v1/mcp")
+            )
             return _jsonrpc_result(
                 request_id,
                 {
-                    "tools": mcp_tool_registry.list_mcp_tools(),
+                    "tools": mcp_tool_registry.list_mcp_tools(include_public=explicit_public),
                 },
             )
 
         # Method: resources/list
         if rpc_request.method == "resources/list":
+            from app.services.mcp import public_search_tools
             return _jsonrpc_result(
                 request_id,
                 {
-                    "resources": [],
+                    "resources": public_search_tools.list_documentation_resources(),
                 },
             )
 
@@ -204,12 +212,24 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
 
         # Method: resources/read
         if rpc_request.method == "resources/read":
-            return _jsonrpc_error(
+            from app.services.mcp import public_search_tools
+            uri = ""
+            if isinstance(rpc_request.params, dict):
+                uri = str(rpc_request.params.get("uri") or "").strip()
+            res_content = public_search_tools.read_documentation_resource(uri)
+            if res_content is None:
+                return _jsonrpc_error(
+                    request_id,
+                    code=-32602,
+                    message=f"Resource not found: {uri}",
+                    status=400,
+                    data={"code": "RESOURCE_NOT_FOUND", "uri": uri},
+                )
+            return _jsonrpc_result(
                 request_id,
-                code=-32602,
-                message="Resource not found.",
-                status=400,
-                data={"code": "RESOURCE_NOT_FOUND"},
+                {
+                    "contents": [res_content],
+                },
             )
 
         # Method: prompts/list
@@ -256,24 +276,35 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                     data={"field": "name", "code": "UNKNOWN_TOOL"},
                 )
 
-            auth_context = mcp_auth_service.authenticate_mcp_request(
-                request=request,
-                url_token=url_token,
-                session_user=session_user,
-                required_scope=tool_definition.required_scope,
-            )
+            if getattr(tool_definition, "is_public", False):
+                auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
+                    request=request,
+                    url_token=url_token,
+                    session_user=session_user,
+                )
+                user_id = auth_context.user.id if auth_context and auth_context.user else None
+                auth_type = auth_context.auth_type if auth_context else "guest"
+            else:
+                auth_context = mcp_auth_service.authenticate_mcp_request(
+                    request=request,
+                    url_token=url_token,
+                    session_user=session_user,
+                    required_scope=tool_definition.required_scope,
+                )
+                user_id = auth_context.user.id
+                auth_type = auth_context.auth_type
 
             result = mcp_tool_registry.call_mcp_tool(
                 tool_name=tool_name,
-                user_id=auth_context.user.id,
+                user_id=user_id,
                 arguments=params.get("arguments"),
             )
             db.session.commit()
             logger.info(
                 "MCP Connect tool=%s user_id=%s auth_type=%s success=True",
                 tool_name,
-                auth_context.user.id,
-                auth_context.auth_type,
+                user_id,
+                auth_type,
             )
             return _jsonrpc_result(request_id, result)
 

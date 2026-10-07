@@ -12,6 +12,7 @@ from .mcp import mcp_bp
 from .media_asset_routes import media_asset_bp
 from .oauth import oauth_bp
 from .payments import payments_bp
+from .seo import seo_bp
 from .spa_routes import spa_routes_bp
 from .user_orders import user_orders_bp
 from .vocabulary import vocabulary_bp
@@ -24,6 +25,7 @@ def register_blueprints(app: Flask) -> None:
     # The canonical /api namespace must be registered before legacy adapters
     # that still expose overlapping compatibility rules.
     register_api_blueprints(app)
+    app.register_blueprint(seo_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(mcp_bp)
     app.register_blueprint(oauth_bp)
@@ -37,3 +39,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(flashcards_bp)
     app.register_blueprint(image_library_bp)
     app.register_blueprint(media_asset_bp)
+

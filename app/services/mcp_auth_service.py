@@ -190,3 +190,21 @@ def authenticate_mcp_request_if_present(
             required_scope=required_scope,
         )
     return None
+
+
+def authenticate_mcp_request_optional(
+    *,
+    request: Request,
+    session_user: Any = None,
+    url_token: str | None = None,
+    body_key: str | None = None,
+    required_scope: str | None = None,
+) -> McpRequestAuthContext | None:
+    """Optional authentication for public MCP tools: returns auth context if credentials are valid, None otherwise."""
+    return authenticate_mcp_request_if_present(
+        request=request,
+        session_user=session_user,
+        url_token=url_token,
+        body_key=body_key,
+        required_scope=required_scope,
+    )

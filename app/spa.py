@@ -29,6 +29,7 @@ def init_spa_delivery(app) -> None:
             or path.startswith("/.well-known/")
             or path.startswith("/auth/")
             or (path.startswith("/oauth/") and path != "/oauth/consent")
+            or path in ("/robots.txt", "/sitemap.xml", "/llms.txt")
         ):
             return None
 
