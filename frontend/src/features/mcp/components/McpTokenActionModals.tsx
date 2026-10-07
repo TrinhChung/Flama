@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { Check, Shield } from 'lucide-react'
 import { ConfirmDialog } from '@/shared/ui'
 import { Button } from '@/components/ui/button'
@@ -59,6 +61,7 @@ export function McpTokenActionModals({
   viewingScopeToken,
   onScopeDetailsClose,
 }: McpTokenActionModalsProps) {
+  const { t } = useTranslation('mcp')
   const [rotateExpiry, setRotateExpiry] = useState('180')
 
   useEffect(() => {
@@ -74,13 +77,13 @@ export function McpTokenActionModals({
         open={Boolean(rotatingToken)}
         onOpenChange={(open) => !open && onRotateClose()}
         variant="primary"
-        title={mode === 'admin' ? 'Xoay Vòng Secret Cho Token' : 'Đổi Secret Token (Rotate)'}
+        title={mode === 'admin' ? t('actions.rotate.title_admin') : t('actions.rotate.title_user')}
         description={
           mode === 'admin'
-            ? 'Xoay vòng secret sẽ sinh một Secret Key mới cho token. Secret cũ sẽ ngay lập tức bị vô hiệu hóa mà không làm mất phân quyền Scopes đã cấu hình.'
-            : 'Xoay vòng secret sẽ tạo mới chuỗi bí mật (Secret Key) cho token. Token cũ sẽ bị vô hiệu hóa ngay lập tức.'
+            ? t('actions.rotate.desc_admin')
+            : t('actions.rotate.desc_user')
         }
-        confirmText={mode === 'admin' ? 'Xác Nhận Xoay Vòng Secret' : 'Xác nhận Đổi Secret'}
+        confirmText={mode === 'admin' ? t('actions.rotate.confirm_admin') : t('actions.rotate.confirm_user')}
         isLoading={isRotating}
         onConfirm={async () => {
           if (rotatingToken) {
@@ -93,7 +96,7 @@ export function McpTokenActionModals({
       >
         <div className="mt-3 space-y-1.5">
           <label htmlFor="rotate-token-expiry" className="text-xs font-semibold text-foreground">
-            Thời hạn hiệu lực của Secret mới
+            {t('actions.rotate.expiry_label')}
           </label>
           <NativeSelect
             id="rotate-token-expiry"
@@ -101,11 +104,11 @@ export function McpTokenActionModals({
             onChange={(e) => setRotateExpiry(e.target.value)}
             className="w-full text-xs"
           >
-            <NativeSelectOption value="30">30 ngày</NativeSelectOption>
-            <NativeSelectOption value="90">90 ngày</NativeSelectOption>
-            <NativeSelectOption value="180">180 ngày (Khuyên dùng)</NativeSelectOption>
-            <NativeSelectOption value="365">1 năm</NativeSelectOption>
-            <NativeSelectOption value="none">Vĩnh viễn (Không hết hạn)</NativeSelectOption>
+            <NativeSelectOption value="30">{t('actions.rotate.days_30')}</NativeSelectOption>
+            <NativeSelectOption value="90">{t('actions.rotate.days_90')}</NativeSelectOption>
+            <NativeSelectOption value="180">{t('actions.rotate.days_180')}</NativeSelectOption>
+            <NativeSelectOption value="365">{t('actions.rotate.days_365')}</NativeSelectOption>
+            <NativeSelectOption value="none">{t('actions.rotate.none')}</NativeSelectOption>
           </NativeSelect>
         </div>
       </ConfirmDialog>
@@ -115,13 +118,13 @@ export function McpTokenActionModals({
         open={revokingTokenId !== null}
         onOpenChange={(open) => !open && onRevokeClose()}
         variant="destructive"
-        title={mode === 'admin' ? 'Thu Hồi Token Này?' : 'Xác nhận thu hồi MCP Token'}
+        title={mode === 'admin' ? t('actions.revoke.title_admin') : t('actions.revoke.title_user')}
         description={
           mode === 'admin'
-            ? 'Token sẽ chuyển sang trạng thái Đã thu hồi (Revoked). Các ứng dụng AI đang sử dụng token này sẽ không thể gọi API được nữa.'
-            : 'Token này sẽ bị hủy kích hoạt ngay lập tức và các ứng dụng AI sẽ không thể truy cập dữ liệu được nữa.'
+            ? t('actions.revoke.desc_admin')
+            : t('actions.revoke.desc_user')
         }
-        confirmText={mode === 'admin' ? 'Xác Nhận Thu Hồi' : 'Xác nhận thu hồi'}
+        confirmText={mode === 'admin' ? t('actions.revoke.confirm_admin') : t('actions.revoke.confirm_user')}
         isLoading={isRevoking}
         onConfirm={async () => {
           if (revokingTokenId !== null) {
@@ -135,9 +138,9 @@ export function McpTokenActionModals({
         open={Boolean(purgingToken)}
         onOpenChange={(open) => !open && onPurgeClose()}
         variant="destructive"
-        title={mode === 'admin' ? 'Xóa Vĩnh Viễn Token?' : 'Xác nhận xóa vĩnh viễn Token'}
-        description={`Hành động này không thể hoàn tác. Bản ghi token "${purgingToken?.name || ''}" sẽ bị xóa vĩnh viễn khỏi hệ thống.`}
-        confirmText={mode === 'admin' ? 'Xóa Vĩnh Viễn' : 'Xóa vĩnh viễn'}
+        title={mode === 'admin' ? t('actions.purge.title_admin') : t('actions.purge.title_user')}
+        description={t('actions.purge.desc', { name: purgingToken?.name || '' })}
+        confirmText={mode === 'admin' ? t('actions.purge.confirm_admin') : t('actions.purge.confirm_user')}
         isLoading={isPurging}
         onConfirm={async () => {
           if (purgingToken) {
@@ -151,13 +154,13 @@ export function McpTokenActionModals({
         open={isCleanupOpen}
         onOpenChange={(open) => !open && onCleanupClose()}
         variant="primary"
-        title={mode === 'admin' ? 'Dọn Dẹp Token Hết Hạn & Đã Thu Hồi' : 'Dọn dẹp Token cũ & Hết hạn'}
+        title={mode === 'admin' ? t('actions.cleanup.title_admin') : t('actions.cleanup.title_user')}
         description={
           mode === 'admin'
-            ? `Hệ thống sẽ xóa vĩnh viễn tất cả ${inactiveCount} token đã hết hạn hoặc đã thu hồi trên toàn hệ thống để tối ưu cơ sở dữ liệu.`
-            : `Xóa sạch tất cả ${inactiveCount} token đã thu hồi hoặc đã hết hạn của bạn khỏi cơ sở dữ liệu?`
+            ? t('actions.cleanup.desc_admin', { count: inactiveCount })
+            : t('actions.cleanup.desc_user', { count: inactiveCount })
         }
-        confirmText={mode === 'admin' ? 'Xác Nhận Dọn Dẹp' : `Dọn dẹp ${inactiveCount} token`}
+        confirmText={mode === 'admin' ? t('actions.cleanup.confirm_admin') : t('actions.cleanup.confirm_user', { count: inactiveCount })}
         isLoading={isCleaningUp}
         onConfirm={onCleanupConfirm}
       />
@@ -171,12 +174,12 @@ export function McpTokenActionModals({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="size-5 text-primary" />
-              Chi Tiết Quyền Hạn ({viewingScopeToken?.name})
+              {t('actions.scope_details.title', { name: viewingScopeToken?.name || '' })}
             </DialogTitle>
             <DialogDescription>
               {viewingScopeToken?.username
-                ? `Chủ sở hữu: ${viewingScopeToken.username} (${viewingScopeToken.email || ''})`
-                : 'Danh sách các quyền hạn được gán cho token này'}
+                ? t('actions.scope_details.admin_desc', { username: viewingScopeToken.username, email: viewingScopeToken.email || '' })
+                : t('actions.scope_details.user_desc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -193,10 +196,10 @@ export function McpTokenActionModals({
                       <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
                       <div>
                         <div className="font-semibold text-foreground">
-                          {scopeMeta?.label || scopeKey}
+                          {t(`scopes.items.${scopeKey.replace(/[-:]/g, '_')}.label`, scopeMeta?.label || scopeKey)}
                         </div>
                         <div className="text-[11px] text-muted-foreground">
-                          {scopeMeta?.desc || scopeKey}
+                          {t(`scopes.items.${scopeKey.replace(/[-:]/g, '_')}.desc`, scopeMeta?.desc || scopeKey)}
                         </div>
                         <div className="text-[10px] font-mono text-muted-foreground/80 mt-0.5">
                           {scopeKey}
@@ -208,13 +211,13 @@ export function McpTokenActionModals({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground text-center py-4">
-                Token này không có quyền hạn nào được gán.
+                {t('actions.scope_details.empty')}
               </p>
             )}
           </div>
 
           <DialogFooter>
-            <Button onClick={onScopeDetailsClose}>Đóng</Button>
+            <Button onClick={onScopeDetailsClose}>{t('actions.scope_details.close')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

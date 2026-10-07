@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { Shield, ShieldCheck, BookOpen, FolderTree, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +43,7 @@ export function McpCreateEditTokenModal({
   isSubmitting = false,
   isPermissionsOnly = false,
 }: McpCreateEditTokenModalProps) {
+  const { t } = useTranslation('mcp')
   const isEditing = Boolean(editingToken)
   const [name, setName] = useState('')
   const [expiry, setExpiry] = useState('180')
@@ -109,17 +112,17 @@ export function McpCreateEditTokenModal({
         <DialogHeader>
           <DialogTitle>
             {isPermissionsOnly
-              ? 'Cấp & Chỉnh sửa Quyền hạn MCP Token'
+              ? t('modal.title_permissions_only')
               : isEditing
-              ? mode === 'admin' ? 'Chỉnh Sửa Token & Scopes' : 'Chỉnh sửa MCP Token'
-              : mode === 'admin' ? 'Cấp MCP Access Token Mới' : 'Tạo MCP Access Token mới'}
+              ? mode === 'admin' ? t('modal.title_edit_admin') : t('modal.title_edit_user')
+              : mode === 'admin' ? t('modal.title_create_admin') : t('modal.title_create_user')}
           </DialogTitle>
           <DialogDescription>
             {isPermissionsOnly
-              ? 'Cập nhật trực tiếp các quyền hạn (Scopes) cho Token.'
+              ? t('modal.desc_permissions_only')
               : isEditing
-              ? 'Cập nhật tên gợi nhớ, thời hạn hoặc thay đổi trực tiếp quyền hạn (scopes).'
-              : 'Tạo token ủy quyền kết nối API cho một thiết bị hoặc tài khoản người dùng.'}
+              ? t('modal.desc_edit')
+              : t('modal.desc_create')}
           </DialogDescription>
         </DialogHeader>
 
@@ -127,7 +130,7 @@ export function McpCreateEditTokenModal({
           {mode === 'admin' && !isEditing && (
             <div className="space-y-1.5">
               <Label htmlFor="admin-token-user" className="text-xs font-semibold">
-                Chọn người dùng nhận token *
+                {t('modal.select_user_label')}
               </Label>
               <NativeSelect
                 id="admin-token-user"
@@ -135,7 +138,7 @@ export function McpCreateEditTokenModal({
                 onChange={(e) => setUserId(e.target.value)}
                 className="w-full text-xs"
               >
-                {!userId && <NativeSelectOption value="">-- Chọn người dùng --</NativeSelectOption>}
+                {!userId && <NativeSelectOption value="">{t('modal.select_user_placeholder')}</NativeSelectOption>}
                 {users?.map((u) => (
                   <NativeSelectOption key={u.id} value={String(u.id)}>
                     {u.display_name || u.username} ({u.username} - {u.email})
@@ -148,13 +151,13 @@ export function McpCreateEditTokenModal({
           {!isPermissionsOnly && (
             <div className="space-y-1.5">
               <Label htmlFor={isEditing ? 'edit-token-name' : 'mcp-token-name'} className="text-xs font-semibold">
-                Tên gợi nhớ (Client / Thiết bị) *
+                {t('modal.name_label')}
               </Label>
               <Input
                 id={isEditing ? 'edit-token-name' : 'mcp-token-name'}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={mode === 'admin' ? 'VD: Claude Desktop PC, ChatGPT Connector...' : 'Ví dụ: Claude Desktop - MacBook Pro'}
+                placeholder={mode === 'admin' ? t('modal.name_placeholder_admin') : t('modal.name_placeholder_user')}
                 className="text-xs"
                 maxLength={120}
                 required
@@ -164,11 +167,11 @@ export function McpCreateEditTokenModal({
 
           {mode === 'admin' && !isEditing && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Chuỗi Secret Token (Tùy chọn)</Label>
+              <Label className="text-xs font-semibold">{t('modal.custom_token_label')}</Label>
               <Input
                 value={customToken}
                 onChange={(e) => setCustomToken(e.target.value)}
-                placeholder="Dán chuỗi token hoặc để trống để sinh tự động"
+                placeholder={t('modal.custom_token_placeholder')}
                 className="text-xs font-mono"
               />
             </div>
@@ -177,7 +180,7 @@ export function McpCreateEditTokenModal({
           {!isPermissionsOnly && (
             <div className="space-y-1.5">
               <Label htmlFor={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'} className="text-xs font-semibold">
-                Thời hạn hiệu lực
+                {t('modal.expiry_label')}
               </Label>
               <NativeSelect
                 id={isEditing ? 'edit-token-expiry' : 'mcp-token-expiry'}
@@ -185,13 +188,13 @@ export function McpCreateEditTokenModal({
                 onChange={(e) => setExpiry(e.target.value)}
                 className="w-full text-xs"
               >
-                {isEditing && <NativeSelectOption value="keep">Giữ nguyên thời hạn hiện tại</NativeSelectOption>}
-                <NativeSelectOption value="180">6 tháng (180 ngày) - Mặc định</NativeSelectOption>
-                <NativeSelectOption value="365">1 năm (365 ngày)</NativeSelectOption>
-                <NativeSelectOption value="none">Vĩnh viễn (Không hết hạn)</NativeSelectOption>
-                <NativeSelectOption value="90">3 tháng (90 ngày)</NativeSelectOption>
-                <NativeSelectOption value="30">1 tháng (30 ngày)</NativeSelectOption>
-                <NativeSelectOption value="7">7 ngày (Ngắn hạn / Test)</NativeSelectOption>
+                {isEditing && <NativeSelectOption value="keep">{t('modal.expiry_options.keep')}</NativeSelectOption>}
+                <NativeSelectOption value="180">{t('modal.expiry_options.days_180')}</NativeSelectOption>
+                <NativeSelectOption value="365">{t('modal.expiry_options.days_365')}</NativeSelectOption>
+                <NativeSelectOption value="none">{t('modal.expiry_options.none')}</NativeSelectOption>
+                <NativeSelectOption value="90">{t('modal.expiry_options.days_90')}</NativeSelectOption>
+                <NativeSelectOption value="30">{t('modal.expiry_options.days_30')}</NativeSelectOption>
+                <NativeSelectOption value="7">{t('modal.expiry_options.days_7')}</NativeSelectOption>
               </NativeSelect>
             </div>
           )}
@@ -200,14 +203,14 @@ export function McpCreateEditTokenModal({
             <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-semibold">
               <div className="flex items-center gap-1.5">
                 <Shield className="size-4 text-primary shrink-0" />
-                <span>Quyền hạn cấp cho Token ({scopes.length}/{ALL_MCP_SCOPES.length} Scopes)</span>
+                <span>{t('modal.scopes_count', { count: scopes.length, total: ALL_MCP_SCOPES.length })}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Button type="button" variant="ghost" size="xs" onClick={() => setScopes(ALL_MCP_SCOPES.map((s) => s.key))} className="h-6 px-1.5 text-[11px]">
-                  Chọn tất cả
+                  {t('modal.select_all')}
                 </Button>
                 <Button type="button" variant="ghost" size="xs" onClick={() => setScopes([])} className="h-6 px-1.5 text-[11px]">
-                  Bỏ chọn
+                  {t('modal.deselect_all')}
                 </Button>
               </div>
             </div>
@@ -226,7 +229,7 @@ export function McpCreateEditTokenModal({
                   {preset.key === 'readonly' && <BookOpen className="size-3" />}
                   {preset.key === 'manager' && <FolderTree className="size-3" />}
                   {preset.key === 'study' && <Brain className="size-3" />}
-                  <span>{preset.label}</span>
+                  <span>{t(`scopes.presets.${preset.key}.label`, preset.label)}</span>
                 </Button>
               ))}
             </div>
@@ -235,18 +238,18 @@ export function McpCreateEditTokenModal({
               {SCOPE_CATEGORIES.map((cat) => (
                 <div key={cat.key} className="space-y-1 pb-2 border-b last:border-b-0">
                   <div className="flex items-center justify-between text-xs font-semibold text-primary">
-                    <span>{cat.name}</span>
+                    <span>{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
                     <div className="flex gap-1 text-[10px]">
-                      <button type="button" onClick={() => handleToggleCategory(cat.scopes, true)} className="hover:underline text-muted-foreground">Chọn hết</button>
+                      <button type="button" onClick={() => handleToggleCategory(cat.scopes, true)} className="hover:underline text-muted-foreground">{t('modal.category_select_all')}</button>
                       <span>|</span>
-                      <button type="button" onClick={() => handleToggleCategory(cat.scopes, false)} className="hover:underline text-muted-foreground">Bỏ chọn</button>
+                      <button type="button" onClick={() => handleToggleCategory(cat.scopes, false)} className="hover:underline text-muted-foreground">{t('modal.category_deselect_all')}</button>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {ALL_MCP_SCOPES.filter((s) => s.category === cat.key).map((sc) => (
                       <label key={sc.key} className="flex items-center gap-2 p-1 rounded-md hover:bg-muted/50 cursor-pointer text-xs">
                         <Checkbox checked={scopes.includes(sc.key)} onCheckedChange={() => handleToggleScope(sc.key)} />
-                        <span className="truncate" title={sc.desc}>{sc.label}</span>
+                        <span className="truncate" title={t(`scopes.items.${sc.key.replace(/[-:]/g, '_')}.desc`, sc.desc)}>{t(`scopes.items.${sc.key.replace(/[-:]/g, '_')}.label`, sc.label)}</span>
                       </label>
                     ))}
                   </div>
@@ -257,17 +260,17 @@ export function McpCreateEditTokenModal({
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Hủy
+              {t('modal.cancel')}
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting || (!isPermissionsOnly && !name.trim()) || scopes.length === 0 || (mode === 'admin' && !isEditing && !userId)}
             >
               {isSubmitting
-                ? 'Đang lưu…'
+                ? t('modal.saving')
                 : isEditing
-                ? mode === 'admin' ? 'Lưu thay đổi' : 'Lưu quyền hạn'
-                : mode === 'admin' ? 'Cấp Token Mới' : 'Tạo Token mới'}
+                ? mode === 'admin' ? t('modal.save_edit_admin') : t('modal.save_edit_user')
+                : mode === 'admin' ? t('modal.save_create_admin') : t('modal.save_create_user')}
             </Button>
           </DialogFooter>
         </form>

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import {
   ArrowRight,
   BookOpen,
@@ -19,11 +21,12 @@ import { McpTokensTab } from '../components/McpTokensTab'
 import { McpOAuthTab } from '../components/McpOAuthTab'
 
 export function McpTokensPage() {
+  const { t } = useTranslation('mcp')
   const [activeTab, setActiveTab] = useState('chatgpt')
   const hookResult = useMcpTokenCRUD()
   const { query } = hookResult
 
-  if (query.isPending) return <PageLoading label="Đang tải MCP tokens…" />
+  if (query.isPending) return <PageLoading label={t('page.loading')} />
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
   return (
@@ -31,42 +34,42 @@ export function McpTokensPage() {
       {/* Header & Feature Navigation */}
       <div className="space-y-4">
         <PageHeader
-          title="Kết nối AI qua Model Context Protocol (MCP)"
-          description="Tích hợp ChatGPT, Cursor và các trợ lý AI với kho Flashcard Flama để tự động tra cứu từ vựng, tạo thẻ và ôn tập thông minh."
+          title={t('page.title')}
+          description={t('page.description')}
           actions={
             <ContextHelpButton
               guidePath="/guide/integrations/mcp-ai"
-              guideTitle="Hướng dẫn kết nối trợ lý AI qua MCP"
+              guideTitle={t('page.connect_guide_title')}
               troubleshootPath="/guide/troubleshooting/mcp"
-              troubleshootTitle="Khắc phục sự cố MCP"
-              label="Hướng dẫn kết nối"
+              troubleshootTitle={t('page.troubleshoot_title')}
+              label={t('page.connect_guide_btn')}
             />
           }
         />
 
         {/* Top Quick Explanatory Links - Swipeable on mobile */}
         <div className="flex items-center gap-2 pt-0.5 text-xs overflow-x-auto no-scrollbar pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 sm:flex-wrap">
-          <span className="text-muted-foreground font-medium text-[11px] shrink-0">Tra cứu nhanh:</span>
+          <span className="text-muted-foreground font-medium text-[11px] shrink-0">{t('page.quick_links_label')}</span>
           <Link
             to="/guide/integrations/mcp-ai"
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-purple-500/10 hover:border-purple-500/40 hover:text-purple-600 dark:hover:text-purple-400 transition-all font-medium text-[11px] shrink-0 whitespace-nowrap"
           >
             <Bot className="size-3 text-purple-500" />
-            <span>Cẩm nang kết nối ChatGPT & Trợ lý AI</span>
+            <span>{t('page.quick_guide_ai')}</span>
           </Link>
           <Link
             to="/guide/integrations/mcp-tools"
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400 transition-all font-medium text-[11px] shrink-0 whitespace-nowrap"
           >
             <Wrench className="size-3 text-amber-500" />
-            <span>Danh mục 20 Công cụ & Prompts AI</span>
+            <span>{t('page.quick_tools_prompts')}</span>
           </Link>
           <Link
             to="/guide/troubleshooting/mcp"
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-sky-500/10 hover:border-sky-500/40 hover:text-sky-600 dark:hover:text-sky-400 transition-all font-medium text-[11px] shrink-0 whitespace-nowrap"
           >
             <HelpCircle className="size-3 text-sky-500" />
-            <span>Khắc phục sự cố MCP</span>
+            <span>{t('page.quick_troubleshooting')}</span>
           </Link>
         </div>
       </div>
@@ -89,13 +92,13 @@ export function McpTokensPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-foreground truncate">1. Kết nối ChatGPT</span>
+                  <span className="text-sm font-bold text-foreground truncate">{t('page.tabs.chatgpt.title')}</span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 shrink-0">
-                    Khuyên dùng
+                    {t('page.tabs.chatgpt.badge')}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
-                  Tự động tra từ và tạo flashcard trực tiếp ngay khi chat cùng ChatGPT
+                  {t('page.tabs.chatgpt.desc')}
                 </p>
               </div>
             </div>
@@ -113,13 +116,13 @@ export function McpTokensPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-foreground truncate">2. Quản lý Quyền & Token API</span>
+                  <span className="text-sm font-bold text-foreground truncate">{t('page.tabs.tokens.title')}</span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border shrink-0">
-                    Lập trình viên
+                    {t('page.tabs.tokens.badge')}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
-                  Personal Access Token cho Cursor, Cline • Claude (Đang thử nghiệm)
+                  {t('page.tabs.tokens.desc')}
                 </p>
               </div>
             </div>
@@ -138,13 +141,13 @@ export function McpTokensPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             <BookOpen className="size-3.5 text-primary" />
-            <span>Tài liệu & Hướng dẫn tham chiếu MCP</span>
+            <span>{t('page.docs_strip.title')}</span>
           </div>
           <Link
             to="/guide/integrations/mcp-ai"
             className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
           >
-            <span>Xem tất cả</span>
+            <span>{t('page.docs_strip.view_all')}</span>
             <ArrowRight className="size-3" />
           </Link>
         </div>
@@ -159,11 +162,11 @@ export function McpTokensPage() {
             </div>
             <div className="min-w-0 space-y-0.5">
               <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex items-center gap-1">
-                <span>Cẩm nang kết nối MCP</span>
+                <span>{t('page.docs_strip.card_ai.title')}</span>
                 <ArrowRight className="size-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-purple-500" />
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Cấu hình Claude Desktop, Cursor IDE, Antigravity và kiểm tra lệnh cURL.
+                {t('page.docs_strip.card_ai.desc')}
               </p>
             </div>
           </Link>
@@ -177,11 +180,11 @@ export function McpTokensPage() {
             </div>
             <div className="min-w-0 space-y-0.5">
               <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors flex items-center gap-1">
-                <span>Danh mục Công cụ & Prompts</span>
+                <span>{t('page.docs_strip.card_tools.title')}</span>
                 <ArrowRight className="size-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-amber-500" />
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Tra cứu 20 công cụ Flashcard và các câu lệnh mẫu ra lệnh cho AI.
+                {t('page.docs_strip.card_tools.desc')}
               </p>
             </div>
           </Link>
@@ -195,11 +198,11 @@ export function McpTokensPage() {
             </div>
             <div className="min-w-0 space-y-0.5">
               <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1">
-                <span>Tiện ích Yomitan 1-Click</span>
+                <span>{t('page.docs_strip.card_yomitan.title')}</span>
                 <ArrowRight className="size-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-primary" />
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Tự động khai thác từ vựng khi đọc báo, manga trực tiếp trên trình duyệt.
+                {t('page.docs_strip.card_yomitan.desc')}
               </p>
             </div>
           </Link>

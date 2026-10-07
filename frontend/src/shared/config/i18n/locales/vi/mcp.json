@@ -1,0 +1,379 @@
+{
+  "page": {
+    "title": "Kết nối AI qua Model Context Protocol (MCP)",
+    "description": "Tích hợp ChatGPT, Cursor và các trợ lý AI với kho Flashcard Flama để tự động tra cứu từ vựng, tạo thẻ và ôn tập thông minh.",
+    "quick_links_label": "Tra cứu nhanh:",
+    "quick_guide_ai": "Cẩm nang kết nối ChatGPT & Trợ lý AI",
+    "quick_tools_prompts": "Danh mục 20 Công cụ & Prompts AI",
+    "quick_troubleshooting": "Khắc phục sự cố MCP",
+    "connect_guide_btn": "Hướng dẫn kết nối",
+    "connect_guide_title": "Hướng dẫn kết nối trợ lý AI qua MCP",
+    "troubleshoot_title": "Khắc phục sự cố MCP",
+    "loading": "Đang tải MCP tokens…",
+    "tabs": {
+      "chatgpt": {
+        "title": "1. Kết nối ChatGPT",
+        "badge": "Khuyên dùng",
+        "desc": "Tự động tra từ và tạo flashcard trực tiếp ngay khi chat cùng ChatGPT"
+      },
+      "tokens": {
+        "title": "2. Quản lý Quyền & Token API",
+        "badge": "Lập trình viên",
+        "desc": "Personal Access Token cho Cursor, Cline • Claude (Đang thử nghiệm)"
+      }
+    },
+    "docs_strip": {
+      "title": "Tài liệu & Hướng dẫn tham chiếu MCP",
+      "view_all": "Xem tất cả",
+      "card_ai": {
+        "title": "Cẩm nang kết nối MCP",
+        "desc": "Cấu hình Claude Desktop, Cursor IDE, Antigravity và kiểm tra lệnh cURL."
+      },
+      "card_tools": {
+        "title": "Danh mục Công cụ & Prompts",
+        "desc": "Tra cứu 20 công cụ Flashcard và các câu lệnh mẫu ra lệnh cho AI."
+      },
+      "card_yomitan": {
+        "title": "Tiện ích Yomitan 1-Click",
+        "desc": "Tự động khai thác từ vựng khi đọc báo, manga trực tiếp trên trình duyệt."
+      }
+    }
+  },
+  "tokens_tab": {
+    "chatgpt_banner": {
+      "question": "Bạn đang tìm cách kết nối Flashcard Flama với ChatGPT?",
+      "instruction": "Hãy mở tab 1. Kết nối ChatGPT để được hướng dẫn 5 bước kết nối tự động bằng OAuth, không cần tạo mã token thủ công.",
+      "button": "Mở Hướng Dẫn ChatGPT"
+    },
+    "endpoint_card": {
+      "title": "Thông số Máy chủ MCP (Flama Remote Endpoint)",
+      "badge": "Stream HTTP POST / SSE",
+      "desc": "Đường dẫn kết nối MCP dùng cho Cursor IDE, Antigravity, Cline và các script tự động hóa qua Personal Access Token. Đối với ChatGPT, hãy mở tab 1. Kết nối ChatGPT để sử dụng quy trình đăng nhập OAuth tự động.",
+      "guide_link": "Hướng dẫn cài đặt →",
+      "url_label": "Endpoint URL:",
+      "copy_button": "Sao chép URL",
+      "copied_button": "Đã chép",
+      "copied_toast": "Đã sao chép {{label}} vào bộ nhớ tạm.",
+      "copy_failed_toast": "Không thể sao chép vào bộ nhớ tạm.",
+      "claude_notice": {
+        "label": "Claude Desktop:",
+        "text": "Tính năng kết nối trợ lý Claude Desktop hiện đang trong giai đoạn thử nghiệm nội bộ (chưa ra mắt chính thức). Màn hình này hiện chủ yếu phục vụ Cursor IDE, Antigravity, Cline và quản lý Personal Access Token."
+      }
+    },
+    "managed_card": {
+      "title": "Thông số Kết nối AI do Quản trị viên Quản lý",
+      "desc": "Tài khoản của bạn đang sử dụng cơ chế bảo mật kết nối AI tiêu chuẩn. Bạn có thể sao chép URL kết nối từ danh sách Token bên dưới để tích hợp với Cursor hoặc công cụ lập trình. Đối với ChatGPT, hãy chuyển sang tab 1. Kết nối ChatGPT để làm theo hướng dẫn kết nối 5 bước dễ dàng."
+    },
+    "all_scopes_card": {
+      "title": "Bảng Phân Quyền Tính Năng AI ({{count}} Scopes)",
+      "granted_badge": "Cấp cho tất cả token",
+      "desc": "Tất cả các quyền hạn tính năng AI dưới đây được hệ thống kích hoạt đầy đủ cho toàn bộ token kết nối của bạn. Token của bạn có thể sử dụng tất cả công cụ tương ứng để tra cứu, tạo thẻ và ôn tập mà không cần cấu hình thủ công.",
+      "tools_link": "Xem 20 công cụ tương ứng →",
+      "permissions_count": "{{count}}/{{total}} quyền"
+    }
+  },
+  "manager": {
+    "title": "Quản lý MCP Access Tokens",
+    "admin_title": "Danh sách MCP Tokens & Secrets",
+    "inline_title": "Danh sách Token & Secrets ({{count}})",
+    "desc": "Cấp quyền và quản lý các khóa token kết nối trực tiếp với ứng dụng lập trình (Cursor IDE, Antigravity, Claude Desktop).",
+    "admin_desc": "Quản lý và cấp phát Access Token kết nối Flama MCP cho tất cả người dùng trong hệ thống.",
+    "create_btn": "Tạo Token mới",
+    "admin_create_btn": "Cấp Token mới cho User",
+    "cleanup_btn": "Dọn dẹp {{count}} token cũ",
+    "stats": {
+      "total": "Tổng số Token",
+      "active": "Token đang hoạt động",
+      "inactive": "Đã hết hạn / Thu hồi"
+    },
+    "search_placeholder": "Tìm kiếm token theo tên, scopes...",
+    "filter": {
+      "all": "Tất cả trạng thái",
+      "active": "Đang hoạt động",
+      "revoked": "Đã thu hồi",
+      "expired": "Đã hết hạn"
+    }
+  },
+  "table": {
+    "cols": {
+      "owner": "Chủ sở hữu",
+      "name": "Tên gợi nhớ",
+      "status": "Trạng thái",
+      "expiry": "Thời hạn",
+      "scopes": "Quyền hạn (Scopes)",
+      "last_used": "Lần dùng cuối",
+      "actions": "Thao tác"
+    },
+    "status": {
+      "active": "Hoạt động",
+      "revoked": "Đã thu hồi",
+      "expired": "Hết hạn",
+      "exhausted": "Hết lượt"
+    },
+    "empty": {
+      "user_title": "Chưa có MCP token nào",
+      "admin_title": "Chưa có token nào",
+      "user_desc": "Điền tên và bấm 'Tạo Token mới' ở trên. Bạn chưa tạo token nào hoặc không tìm thấy kết quả phù hợp. Không tìm thấy MCP token nào.",
+      "admin_desc": "Bấm 'Cấp Token mới cho User' ở trên để tạo token cho người dùng. Chưa có token nào được cấp hoặc không khớp với bộ lọc tìm kiếm. Không tìm thấy MCP token nào."
+    },
+    "never_expires": "Vĩnh viễn / Không hết hạn",
+    "never_used": "Chưa sử dụng",
+    "admin_never_used": "Chưa dùng",
+    "unknown_user": "Chưa rõ",
+    "view_scopes": "Xem quyền",
+    "scopes_count": "{{count}} Scopes",
+    "full_access": "Full Access",
+    "read_only": "Read-only",
+    "actions_tooltip": {
+      "permissions": "Phân quyền & Cấp quyền hạn (Scopes)",
+      "edit_user": "Chỉnh sửa tên & thời hạn",
+      "edit_admin": "Chỉnh sửa quyền hạn & thông tin",
+      "rotate_user": "Xoay vòng / Đổi Secret Key",
+      "rotate_admin": "Xoay vòng Secret (Tạo key mới mà giữ nguyên scopes)",
+      "revoke": "Thu hồi Token",
+      "purge_user": "Xóa vĩnh viễn khỏi database",
+      "purge_admin": "Xóa vĩnh viễn",
+      "view_scopes_details": "Xem chi tiết quyền hạn (Scopes)"
+    },
+    "pagination": {
+      "page_info": "Trang {{page}} / {{totalPages}}",
+      "prev": "Trước",
+      "next": "Sau"
+    }
+  },
+  "inline_create": {
+    "title": "Tạo MCP Access Token mới",
+    "desc": "Mỗi công cụ lập trình (Cursor IDE, Antigravity, Cline) nên tạo 1 token riêng để phân quyền an toàn.",
+    "json_guide_link": "Xem hướng dẫn cấu hình file JSON →",
+    "name_label": "Tên gợi nhớ (Client / Thiết bị)",
+    "name_placeholder": "Ví dụ: Claude Desktop - MacBook Pro",
+    "expiry_label": "Thời hạn hiệu lực",
+    "submit_btn": "Tạo Token mới",
+    "submitting_btn": "Đang tạo…",
+    "duplicate_warning": "Bạn đã có một token đang hoạt động mang tên này. Bạn có thể dùng nút Sửa quyền hoặc Đổi Secret (Rotate) ở danh sách bên dưới thay vì tạo trùng lặp.",
+    "scopes_header": "Quyền hạn cấp cho Token ({{count}}/{{total}} Scopes):",
+    "presets_label": "Mẫu nhanh:"
+  },
+  "modal": {
+    "title_permissions_only": "Cấp & Chỉnh sửa Quyền hạn MCP Token",
+    "title_edit_user": "Chỉnh sửa MCP Token",
+    "title_edit_admin": "Chỉnh Sửa Token & Scopes",
+    "title_create_user": "Tạo MCP Access Token mới",
+    "title_create_admin": "Cấp MCP Access Token Mới",
+    "desc_permissions_only": "Cập nhật trực tiếp các quyền hạn (Scopes) cho Token.",
+    "desc_edit": "Cập nhật tên gợi nhớ, thời hạn hoặc thay đổi trực tiếp quyền hạn (scopes).",
+    "desc_create": "Tạo token ủy quyền kết nối API cho một thiết bị hoặc tài khoản người dùng.",
+    "select_user_label": "Chọn người dùng nhận token *",
+    "select_user_placeholder": "-- Chọn người dùng --",
+    "name_label": "Tên gợi nhớ (Client / Thiết bị) *",
+    "name_placeholder_user": "Ví dụ: Claude Desktop - MacBook Pro",
+    "name_placeholder_admin": "VD: Claude Desktop PC, ChatGPT Connector...",
+    "custom_token_label": "Chuỗi Secret Token (Tùy chọn)",
+    "custom_token_placeholder": "Dán chuỗi token hoặc để trống để sinh tự động",
+    "expiry_label": "Thời hạn hiệu lực",
+    "expiry_options": {
+      "keep": "Giữ nguyên thời hạn hiện tại",
+      "days_180": "6 tháng (180 ngày) - Mặc định",
+      "days_365": "1 năm (365 ngày)",
+      "none": "Vĩnh viễn (Không hết hạn)",
+      "days_90": "3 tháng (90 ngày)",
+      "days_30": "1 tháng (30 ngày)",
+      "days_7": "7 ngày (Ngắn hạn / Test)"
+    },
+    "scopes_count": "Quyền hạn cấp cho Token ({{count}}/{{total}} Scopes)",
+    "select_all": "Chọn tất cả",
+    "deselect_all": "Bỏ chọn",
+    "category_select_all": "Chọn hết",
+    "category_deselect_all": "Bỏ chọn",
+    "cancel": "Hủy",
+    "saving": "Đang lưu…",
+    "save_edit_user": "Lưu quyền hạn",
+    "save_edit_admin": "Lưu thay đổi",
+    "save_create_user": "Tạo Token mới",
+    "save_create_admin": "Cấp Token Mới"
+  },
+  "secret_modal": {
+    "title": "Token & Secret Đã Được Tạo Thành Công",
+    "desc": "Secret Token của bạn đã sẵn sàng! Hãy sao chép ngay chuỗi Secret token bên dưới. Vì lý do an toàn, chuỗi secret đầy đủ sẽ không được hiển thị lại sau khi bạn đóng hộp thoại này.",
+    "token_name_label": "Tên gợi nhớ:",
+    "owner_label": "Chủ sở hữu:",
+    "expiry_label": "Hạn dùng:",
+    "one_time_warning": "Chỉ hiển thị 1 lần duy nhất. Nếu đánh mất, bạn cần dùng chức năng Xoay vòng Secret (Rotate) để sinh key mới.",
+    "bearer_header": "Secret Access Token (Bearer Key)",
+    "endpoint_header": "Endpoint URL dành cho AI Assistant (Cursor / Claude)",
+    "copy": "Sao chép",
+    "copied": "Đã chép",
+    "copy_url": "Sao chép URL",
+    "copied_token_toast_user": "Đã sao chép Token vào bộ nhớ tạm.",
+    "copied_token_toast_admin": "Đã sao chép Secret Token",
+    "copied_url_toast_user": "Đã sao chép URL Endpoint vào bộ nhớ tạm.",
+    "copied_url_toast_admin": "Đã sao chép URL",
+    "copy_failed_toast_user": "Không thể sao chép vào bộ nhớ tạm.",
+    "copy_failed_toast_admin": "Không thể sao chép vào bộ nhớ tạm",
+    "json_snippet_title": "Cấu hình nhanh Cursor / Claude Desktop (mcpServers)",
+    "close_btn": "Đóng",
+    "saved_and_close_btn": "Đã lưu Secret & Đóng"
+  },
+  "actions": {
+    "rotate": {
+      "title_user": "Đổi Secret Token (Rotate)",
+      "title_admin": "Xoay Vòng Secret Cho Token",
+      "desc_user": "Xoay vòng secret sẽ tạo mới chuỗi bí mật (Secret Key) cho token. Token cũ sẽ bị vô hiệu hóa ngay lập tức.",
+      "desc_admin": "Xoay vòng secret sẽ sinh một Secret Key mới cho token. Secret cũ sẽ ngay lập tức bị vô hiệu hóa mà không làm mất phân quyền Scopes đã cấu hình.",
+      "confirm_user": "Xác nhận Đổi Secret",
+      "confirm_admin": "Xác Nhận Xoay Vòng Secret",
+      "expiry_label": "Thời hạn hiệu lực của Secret mới",
+      "days_30": "30 ngày",
+      "days_90": "90 ngày",
+      "days_180": "180 ngày (Khuyên dùng)",
+      "days_365": "1 năm",
+      "none": "Vĩnh viễn (Không hết hạn)"
+    },
+    "revoke": {
+      "title_user": "Xác nhận thu hồi MCP Token",
+      "title_admin": "Thu Hồi Token Này?",
+      "desc_user": "Token này sẽ bị hủy kích hoạt ngay lập tức và các ứng dụng AI sẽ không thể truy cập dữ liệu được nữa.",
+      "desc_admin": "Token sẽ chuyển sang trạng thái Đã thu hồi (Revoked). Các ứng dụng AI đang sử dụng token này sẽ không thể gọi API được nữa.",
+      "confirm_user": "Xác nhận thu hồi",
+      "confirm_admin": "Xác Nhận Thu Hồi"
+    },
+    "purge": {
+      "title_user": "Xác nhận xóa vĩnh viễn Token",
+      "title_admin": "Xóa Vĩnh Viễn Token?",
+      "desc": "Hành động này không thể hoàn tác. Bản ghi token \"{{name}}\" sẽ bị xóa vĩnh viễn khỏi hệ thống.",
+      "confirm_user": "Xóa vĩnh viễn",
+      "confirm_admin": "Xóa Vĩnh Viễn"
+    },
+    "cleanup": {
+      "title_user": "Dọn dẹp Token cũ & Hết hạn",
+      "title_admin": "Dọn Dẹp Token Hết Hạn & Đã Thu Hồi",
+      "desc_user": "Xóa sạch tất cả {{count}} token đã thu hồi hoặc đã hết hạn của bạn khỏi cơ sở dữ liệu?",
+      "desc_admin": "Hệ thống sẽ xóa vĩnh viễn tất cả {{count}} token đã hết hạn hoặc đã thu hồi trên toàn hệ thống để tối ưu cơ sở dữ liệu.",
+      "confirm_user": "Dọn dẹp {{count}} token",
+      "confirm_admin": "Xác Nhận Dọn Dẹp"
+    },
+    "scope_details": {
+      "title": "Chi Tiết Quyền Hạn ({{name}})",
+      "user_desc": "Danh sách các quyền hạn được gán cho token này",
+      "admin_desc": "Chủ sở hữu: {{username}} ({{email}})",
+      "empty": "Token này không có quyền hạn nào được gán.",
+      "close": "Đóng"
+    }
+  },
+  "scopes": {
+    "categories": {
+      "decks": {
+        "name": "Bộ thẻ & Chia sẻ",
+        "description": "Xem, tạo mới cây thư mục deck và đăng tải chia sẻ Marketplace"
+      },
+      "notes": {
+        "name": "Thẻ ghi nhớ & Đồng bộ",
+        "description": "Tìm kiếm, tạo mới, chỉnh sửa, xóa và đồng bộ từ vựng"
+      },
+      "note_types": {
+        "name": "Mẫu thẻ (Note Types)",
+        "description": "Xem và quản lý schema trường dữ liệu cùng template hiển thị card"
+      },
+      "study_stats": {
+        "name": "Học tập SRS & Thống kê",
+        "description": "Lấy thẻ đến hạn ôn tập, ghi nhận kết quả Spaced Repetition và biểu đồ"
+      },
+      "media": {
+        "name": "Thư viện hình ảnh",
+        "description": "Tìm kiếm, tải lên và quản lý ảnh minh họa cho thẻ"
+      }
+    },
+    "presets": {
+      "all": {
+        "label": "Toàn quyền (Full Access)",
+        "badge": "17 Scopes",
+        "desc": "Cấp tất cả 17 quyền (khuyên dùng cho Cursor / Claude Desktop / Antigravity)"
+      },
+      "readonly": {
+        "label": "Chỉ đọc (Read-Only)",
+        "badge": "8 Scopes",
+        "desc": "Chỉ xem và tra cứu dữ liệu, không sửa đổi cơ sở dữ liệu"
+      },
+      "manager": {
+        "label": "Quản lý Thẻ & Chia sẻ",
+        "badge": "12 Scopes",
+        "desc": "Tạo/sửa thẻ, quản lý deck và phát hành release bộ thẻ"
+      },
+      "study": {
+        "label": "Đồng hành Học tập",
+        "badge": "5 Scopes",
+        "desc": "Tương tác học tập, ôn bài Spaced Repetition và xem streak"
+      }
+    },
+    "items": {
+      "deck_read": {
+        "label": "Xem danh sách Bộ thẻ",
+        "desc": "Đọc thông tin các bộ thẻ và cây thư mục phân cấp"
+      },
+      "deck_write": {
+        "label": "Quản lý & Tạo Bộ thẻ",
+        "desc": "Tạo deck mới, đổi tên, cập nhật và tổ chức cây thư mục"
+      },
+      "deck_share_read": {
+        "label": "Xem Bộ thẻ chia sẻ & Chợ",
+        "desc": "Duyệt tìm shared decks trên Marketplace và xem chi tiết thẻ đã chia sẻ"
+      },
+      "deck_share_write": {
+        "label": "Đăng tải & Xuất bản Release",
+        "desc": "Chia sẻ deck lên Marketplace, cập nhật thông tin và phát hành release mới"
+      },
+      "note_read": {
+        "label": "Xem chi tiết Thẻ ghi nhớ",
+        "desc": "Đọc chi tiết các trường nội dung (từ vựng, kanji, nghĩa, ví dụ)"
+      },
+      "note_check": {
+        "label": "Tìm kiếm & Kiểm tra trùng",
+        "desc": "Tìm và kiểm tra xem từ vựng/thẻ đã tồn tại trong deck chưa"
+      },
+      "note_create": {
+        "label": "Tạo Thẻ Flashcard mới",
+        "desc": "Tự động tạo thẻ mới đơn lẻ hoặc tạo hàng loạt vào bộ thẻ"
+      },
+      "note_update": {
+        "label": "Cập nhật Thẻ ghi nhớ & Tags",
+        "desc": "Chỉnh sửa nội dung trường thẻ, gắn thẻ phân loại hoặc đổi deck"
+      },
+      "note_delete": {
+        "label": "Xóa Thẻ ghi nhớ",
+        "desc": "Xóa thẻ ghi nhớ và các flashcard liên quan khỏi bộ bài"
+      },
+      "note_sync": {
+        "label": "Đồng bộ Thẻ từ bên ngoài",
+        "desc": "Tự động đồng bộ tạo, sửa, xóa thẻ từ các nguồn kết nối"
+      },
+      "note_type_read": {
+        "label": "Xem Mẫu thẻ (Note Types)",
+        "desc": "Đọc schema trường dữ liệu và mẫu định dạng thẻ flashcard"
+      },
+      "note_type_write": {
+        "label": "Quản lý Mẫu thẻ",
+        "desc": "Tạo mới và chỉnh sửa cấu trúc trường hoặc mẫu card"
+      },
+      "study_read": {
+        "label": "Xem Hàng đợi Học tập SRS",
+        "desc": "Xem danh sách các thẻ đến hạn học hôm nay và khoảng cách ôn tập"
+      },
+      "study_write": {
+        "label": "Ghi nhận Kết quả Ôn tập",
+        "desc": "Gửi đánh giá kết quả học tập (Again, Hard, Good, Easy) vào thuật toán SRS"
+      },
+      "stats_read": {
+        "label": "Xem Thống kê & Streak",
+        "desc": "Theo dõi chuỗi ngày học liên tục, số thẻ đã học và tiến độ tổng quan"
+      },
+      "media_read": {
+        "label": "Xem & Tìm kiếm Hình ảnh",
+        "desc": "Tìm kiếm hình ảnh trong thư viện ảnh dùng chung"
+      },
+      "media_write": {
+        "label": "Tải lên & Gắn thẻ Hình ảnh",
+        "desc": "Upload, import ảnh từ URL và gắn thẻ hình ảnh minh họa"
+      }
+    }
+  }
+}
