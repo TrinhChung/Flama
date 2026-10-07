@@ -1,14 +1,15 @@
 # GT-10 — UI lịch sử phiên bản template (xem, so sánh, khôi phục)
 
 - Owner: Gemini. Reviewer: Codex (tiếp nhận Claude). Milestone: M2.
-- Trạng thái: **Ready — GT-10A**, sau đó **GT-10B** khi GT-10A được review. Contract A2 đã có code/test CT-03; dùng v2 dưới đây.
+- Trạng thái: **GT-10A Completed / verified; GT-10B Ready**. Contract A2 đã có code/test CT-03; dùng v2 dưới đây.
 - Loại: entity API + feature UI tái sử dụng + nối vào trang loại thẻ.
 
 ## 0. Nền backend đã sẵn sàng
 
 - Contract A2 chạy ở `app/api/v1/flashcards/card_templates.py`; schema `template-versions.v2`. Xem [ADR-T1](../../architecture/template-version-foundation-adr-2026-10-07.md).
 - Entity có `cardTemplateQueryKeys.noteTypeTemplates(noteTypeId)`; page có `invalidateTemplates()` và detail key `['note-type-detail', noteTypeId]`. GT-06 draft fix đã có test.
-- Không gọi API definitions/forks của v1. GT-11/12 chưa có contract mới.
+- Không gọi API definitions/forks của v1. GT-11/12 đã có contract v2 theo code; library/market editor dùng cùng history adapter.
+- History thực có thêm origin `market_copy` và `update`. GT-12A mở rộng entity union; GT-10B dùng bảng nhãn `Record<string,string>` và fallback origin gốc cho giá trị chưa biết, không sửa thêm entity ngoài whitelist.
 - Chia hai lượt, mỗi lượt tối đa 6 file; không chạy GT-10A và GT-10B cùng lúc.
 
 ## 1. Bối cảnh
@@ -120,6 +121,8 @@ export type TemplateVersionHistorySheetProps = {
 | restore | Khôi phục |
 | apply | Áp dụng từ thư viện |
 | fork | Tạo bản riêng |
+| market_copy | Bản nhận marketplace |
+| update | Cập nhật từ tác giả |
 
 - Chọn version → `useQuery({ queryKey: source.detailKey(id), queryFn: ({ signal }) => source.get(id, signal) })`; hiện `TemplateDiffView` (entity, GT-09) với `before` = version, `after` = `current`, `beforeLabel` = `Phiên bản {n}`, `afterLabel` = `Trình soạn hiện tại`.
 - Nút `Khôi phục phiên bản này` (ẩn khi `is_current`) → `ConfirmDialog` (`@/shared/ui`) `title="Khôi phục phiên bản {n}?"`, `description="Nội dung chưa lưu trong trình soạn sẽ được thay bằng phiên bản này. Lịch sử cũ vẫn được giữ."`, `confirmText="Khôi phục"`. Xác nhận → `source.restore(id)` → `toast.success('Đã khôi phục phiên bản {n}.')`, `onRestored(restoredTemplate)`, invalidate `source.listKey`; lỗi → `toast.error('Không thể khôi phục', { description: error instanceof Error ? error.message : 'Đã có lỗi xảy ra. Vui lòng thử lại.' })`. Không import `templateErrorMessage` từ `features/note-types` (feature không import feature khác).

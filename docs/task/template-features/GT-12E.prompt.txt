@@ -1,0 +1,31 @@
+QUY TẮC BẮT BUỘC (Flama, template v2)
+1. Repo/worktree Codex chỉ định; đọc AGENTS.md và skills/flama-frontend-architecture/SKILL.md, skills/impeccable/SKILL.md.
+2. Chỉ sửa/tạo file whitelist của phase này; giữ toàn bộ diff của người khác. Không backend/models/migrations, study runtime/renderer, shared primitives, package/config/lockfiles.
+3. Không commit/push/stash/reset/checkout nhánh khác, không ghi DB thật, không mở Chrome profile cá nhân.
+4. Giữ DOM/class/gradient/padding/font/icon/layout UI cũ và nguyên văn tiếng Việt mới trong spec.
+5. Entities không import features/app; feature component/hook không import feature khác. Chỉ pages/*.tsx được ghép component khác đã ghi trong spec.
+6. Không bịa DTO/route/prop. Symbol ghi là output của phase được tạo; dependency phase trước phải có thật và được Codex review. Thiếu dependency thì báo phần chờ, tiếp tục phần độc lập trong whitelist.
+7. Không xóa/skip/nới test, không update snapshot hàng loạt. Không thêm dependency.
+8. Đọc docs/architecture/template-library-attachments-contract-2026-10-07.md làm contract HTTP/DTO. U1 shared template ID; binding FieldDef ID; exact type; required chỉ warning; nhiều inputs dùng một field.
+9. Chạy validation dưới đây, báo whitelist diff + 20 dòng cuối output thật mỗi lệnh + sai lệch/dependency/browser chưa kiểm, theo README §3 rồi dừng. Không tự làm phase sau.
+
+Task GT-12E. Đọc docs/task/template-features/GT-12_TEMPLATE_LIBRARY_PAGES.md §§1–2 và chỉ phần phase tương ứng.
+Sau GT-12B/D Accepted. Làm §7 shell only: lazy named pages/2 routes, item Mẫu thẻ và pageTitles. Không sửa UI/layout cũ hay export private router để tiện test. Kiểm API/paths dependency thực tế trước nối.
+
+WHITELIST (4 file):
+- frontend/src/App.tsx
+- frontend/src/components/app-sidebar.tsx
+- frontend/src/layouts/AppLayout.tsx
+- frontend/src/features/template-library/pages/TemplateLibraryShell.test.tsx
+
+VALIDATION (PowerShell, repo root):
+npm --prefix frontend run test -- src/entities/card-template src/features/template-library
+npm --prefix frontend run typecheck
+npm --prefix frontend run lint
+npm --prefix frontend run build:ci
+git diff --check
+git status --short
+npm --prefix frontend run test -- src/features/template-versions src/features/note-types
+
+Dừng sau báo cáo để Codex review; không triển khai phase khác.
+

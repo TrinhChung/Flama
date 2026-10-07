@@ -37,6 +37,8 @@ from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_
 
 
 migration = importlib.import_module("migrations.versions.20261007_000053_add_template_versions")
+attachment = importlib.import_module("migrations.versions.20261007_000054_expand_template_attachments")
+distribution = importlib.import_module("migrations.versions.20261007_000055_add_template_distribution")
 PROBE_NAME = re.compile(r"^flama_template_probe_[0-9a-f]{32}_(?:legacy|orm)$")
 NOW = datetime(2026, 10, 7, 4, 5, 6)
 FRONT = "\r\n  {{単語}}\n<div>café &amp; 漢字</div>  "
@@ -57,7 +59,7 @@ def _reflect(connection, name):
     return sa.Table(name, sa.MetaData(), autoload_with=connection)
 
 
-def _assert_initial(connection, template_id, card_id, *, schema=None):
+def _assert_initial(connection, template_id, card_id, *, schema=None, legacy=True):
     templates = _reflect(connection, "templates")
     versions = _reflect(connection, "template_versions")
     template = connection.execute(sa.select(templates).where(templates.c.id == template_id)).mappings().one()
@@ -65,7 +67,9 @@ def _assert_initial(connection, template_id, card_id, *, schema=None):
     _require(template["id"] == template_id, "Template ID changed")
     _require(template["owner_user_id"] == 1, "Owner backfill differs")
     _require(template["note_type_id"] == "note-type-probe", "NoteType attachment changed")
-    _require(template["current_version_id"] == version["id"] == migration._initial_version_id(template_id), "Initial pointer differs")
+    _require(template["current_version_id"] == version["id"], "Initial pointer differs")
+    if legacy:
+        _require(version["id"] == migration._initial_version_id(template_id), "Migration initial identity differs")
     _require(template["updated_at"] == template["created_at"] == NOW, "Source timestamp changed")
     _require(version["version_no"] == 1 and version["origin"] == "backfill", "Initial version differs")
     _require(version["input_schema"] == (schema or []), "Initial input schema differs")
@@ -73,7 +77,8 @@ def _assert_initial(connection, template_id, card_id, *, schema=None):
         _require(template[key] == version[key] == value, "Source bytes differ")
     _require(version["content_hash"] == migration._content_hash(FRONT, BACK, CSS), "Content hash differs")
     _require(connection.execute(sa.text("SELECT id FROM cards WHERE template_id = :template"), {"template": template_id}).scalar_one() == card_id, "Card identity changed")
-    _require(not next(column for column in sa.inspect(connection).get_columns("templates") if column["name"] == "note_type_id")["nullable"], "Legacy attachment became nullable")
+    nullable = next(column for column in sa.inspect(connection).get_columns("templates") if column["name"] == "note_type_id")["nullable"]
+    _require(bool(nullable) == (not legacy), "Origin NoteType nullability differs from the rehearsed schema")
     _require(not any(fk["constrained_columns"] == ["current_version_id"] for fk in sa.inspect(connection).get_foreign_keys("templates")), "Version pointer acquired FK")
 
 
@@ -145,6 +150,7 @@ def _orm_probe(uri, *, runtime):
     from models.template import Template
     from models.template_version import TemplateVersion
     from models.user import User
+    from app.services.template_version_service import backfill_versions
 
     # Explicit generated URI, audit boot: no maintenance, cutover or seed writes.
     app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": uri}, audit_mode=True)
@@ -170,10 +176,20 @@ def _orm_probe(uri, *, runtime):
                 ))
                 connection.execute(card_table.insert().values(id="card-probe", note_id="note-probe", template_id="template-probe"))
                 _bind(connection)
-                migration.upgrade()
-                migration.upgrade()
-                _assert_initial(connection, "template-probe", "card-probe", schema=schema)
-            result = {"actual_create_all_parity": True}
+                # The historical 52->53 contract is rehearsed separately in
+                # _legacy_probe. Current models already contain 54/55, so
+                # validate the current schema instead of applying revision 53
+                # backwards to its now-nullable origin NoteType column.
+                attachment.upgrade()
+                attachment.upgrade()
+                distribution.upgrade()
+                distribution.upgrade()
+            _require(backfill_versions() == 1, "Current ORM initial backfill differs")
+            _require(backfill_versions() == 0, "Current ORM backfill is not idempotent")
+            db.session.commit()
+            with db.engine.connect() as connection:
+                _assert_initial(connection, "template-probe", "card-probe", schema=schema, legacy=False)
+            result = {"actual_create_all_parity": True, "actual_create_all_54_55_parity": True, "current_orm_backfill_idempotent": True}
             if runtime:
                 with Session(db.engine) as first, Session(db.engine) as second:
                     # First nonlocking read establishes an old RR snapshot.

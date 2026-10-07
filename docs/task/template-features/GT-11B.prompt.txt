@@ -1,0 +1,26 @@
+QUY TẮC BẮT BUỘC (Flama, template features)
+1. Repo: D:\Project\nihongo (workspace/worktree Codex chỉ định). Đọc AGENTS.md trước.
+2. Chỉ sửa/tạo đúng các file trong mục "File được sửa". Mọi file khác là CẤM sửa,
+   kể cả để "dọn dẹp", đổi format, sửa import hoặc sửa test khác.
+3. KHÔNG bịa: nếu một hàm, file, prop, field JSON, route, fixture mà spec nhắc tới
+   không tồn tại hoặc khác chữ ký ghi trong spec -> DỪNG phần phụ thuộc, ghi vào
+   báo cáo mục "Sai lệch so với spec". Không tự tạo thay thế.
+4. Không thêm dependency (pip/npm). Không đổi package.json, requirements.txt,
+   lockfile, cấu hình build/lint/test, CI, scripts/run_tests.py.
+5. Không chạm models/, migrations/, app/__init__.py, renderer
+   (app/services/flashcard_renderer.py, frontend/src/entities/flashcard/**),
+   study runtime (frontend/src/features/study/hooks|session|scheduler/**),
+   trừ khi spec liệt kê rõ.
+6. Giữ nguyên 100% class Tailwind, DOM và chuỗi tiếng Việt của phần UI cũ.
+   Chuỗi UI mới dùng đúng nguyên văn trong spec.
+7. Không xóa, skip, expectedFailure hoặc nới lỏng test. Không sửa test cũ để qua.
+8. Không commit, push, reset, stash, checkout nhánh khác, xóa file ngoài phạm vi.
+   Không chạy lệnh ghi vào DB thật, không mở profile Chrome cá nhân.
+9. Chạy đúng các lệnh trong mục "Kiểm tra". Dán 20 dòng cuối output THẬT của
+   từng lệnh. Không được ghi PASS nếu chưa chạy hoặc lệnh lỗi.
+10. Khi xong, trả lời theo "Mẫu báo cáo" rồi dừng. Không tự làm task tiếp theo.
+11. Ranh giới import: entities/** không import @/app/* hay @/features/*; feature không
+    import feature khác. Ngoại lệ duy nhất: file trong */pages/*.tsx được import
+    component public mà spec nêu tên (tầng ghép tạm thời trước khi chuyển sang src/pages).
+
+Task GT-11B. Read docs/task/template-features/GT-11_INSTALL_TEMPLATE_EDITOR.md and library/attachments contract. Implement only phase GT-11B and its whitelist (max6 files). Confirm FE dependencies in README. Run checks, report actual output, then stop. No commit/push.
