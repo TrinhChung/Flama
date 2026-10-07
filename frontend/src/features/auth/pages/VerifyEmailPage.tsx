@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +25,7 @@ import { AuthCard } from '../components/AuthCard'
 import { requestEmailVerification, verifyEmail } from '../api'
 
 export function VerifyEmailPage() {
+  const { t } = useTranslation('auth')
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const initialCode = searchParams.get('code') || searchParams.get('token') || ''
@@ -71,12 +73,12 @@ export function VerifyEmailPage() {
       setCooldownSeconds(data.expires_in_minutes ? 60 : 60)
       if (data.already_verified) {
         setIsVerifiedSuccess(true)
-        toast.info(data.message || 'Email của bạn đã được xác thực trước đó.')
+        toast.info(data.message || t('verify.already_verified_toast'))
         void queryClient.invalidateQueries({ queryKey: ['profile'] })
         void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       } else {
         toast.success(
-          data.message || 'Mã xác thực 6 chữ số đã được gửi tới email của bạn.'
+          data.message || t('verify.sent_toast')
         )
       }
     },
@@ -84,7 +86,7 @@ export function VerifyEmailPage() {
       const msg =
         err instanceof Error
           ? err.message
-          : 'Không thể gửi mã xác thực. Vui lòng thử lại sau.'
+          : t('verify.send_error_toast')
       setErrorMessage(msg)
       toast.error(msg)
     },
@@ -96,11 +98,11 @@ export function VerifyEmailPage() {
       setErrorMessage(null)
       setIsVerifiedSuccess(true)
       setIsStudentVerified(Boolean(data.is_verified_student))
-      setSuccessMessage(data.message || 'Xác thực email thành công!')
+      setSuccessMessage(data.message || t('verify.success_title'))
       toast.success(
         data.is_verified_student
-          ? 'Chúc mừng! Bạn đã được kích hoạt ưu đãi Sinh viên thành công!'
-          : 'Xác thực địa chỉ email thành công!'
+          ? t('verify.student_success')
+          : t('verify.success_title')
       )
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
@@ -110,7 +112,7 @@ export function VerifyEmailPage() {
       const msg =
         err instanceof Error
           ? err.message
-          : 'Mã xác thực không chính xác hoặc đã hết hạn.'
+          : t('verify.invalid_code_toast')
       setErrorMessage(msg)
       toast.error(msg)
     },
@@ -124,7 +126,7 @@ export function VerifyEmailPage() {
   const handleVerifyCode = (codeToVerify: string) => {
     const clean = codeToVerify.trim()
     if (!clean) {
-      setErrorMessage('Vui lòng nhập mã xác thực gồm 6 chữ số.')
+      setErrorMessage(t('verify.empty_code_msg'))
       return
     }
     setErrorMessage(null)
@@ -148,10 +150,10 @@ export function VerifyEmailPage() {
   if (!currentUser && !initialCode) {
     return (
       <AuthCard
-        title="Xác thực Email"
-        description="Đăng nhập tài khoản để xác thực email hoặc mở liên kết được gửi tới hòm thư của bạn."
-        alternateText="Chưa có tài khoản?"
-        alternateLabel="Đăng ký ngay"
+        title={t('verify.unauth_title')}
+        description={t('verify.unauth_description')}
+        alternateText={t('verify.unauth_alt_text')}
+        alternateLabel={t('verify.unauth_alt_label')}
         alternateTo="/register"
       >
         <div className="space-y-4 text-center">
@@ -160,7 +162,7 @@ export function VerifyEmailPage() {
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Bạn cần đăng nhập vào hệ thống Flama để yêu cầu gửi mã và hoàn tất quá trình xác thực email.
+            {t('verify.unauth_desc')}
           </p>
 
           <Button
@@ -169,7 +171,7 @@ export function VerifyEmailPage() {
             size="lg"
           >
             <Link to="/login?next=/verify-email">
-              Đăng nhập để xác thực
+              {t('verify.login_to_verify')}
               <ArrowRight className="size-4 ml-1.5" />
             </Link>
           </Button>
@@ -180,24 +182,23 @@ export function VerifyEmailPage() {
 
   return (
     <AuthCard
-      title={isEdu ? 'Xác thực Email Sinh viên' : 'Xác thực Địa chỉ Email'}
+      title={isEdu ? t('verify.title_student') : t('verify.title_general')}
       description={
         targetEmail
-          ? `Mã xác thực gồm 6 chữ số gửi tới: ${targetEmail}`
-          : 'Nhập mã xác thực 6 chữ số được gửi tới hòm thư của bạn.'
+          ? t('verify.desc_with_email', { email: targetEmail })
+          : t('verify.desc_general')
       }
-      alternateText="Cần kiểm tra lại thông tin?"
-      alternateLabel="Xem Trang cá nhân"
+      alternateText={t('verify.alt_check_info')}
+      alternateLabel={t('verify.alt_view_profile')}
       alternateTo="/profile"
     >
       {isVerifiedSuccess ? (
         <div className="space-y-5 animate-in fade-in-50 duration-200">
           <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 py-3">
             <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" />
-            <AlertTitle className="text-sm font-bold">Xác thực thành công!</AlertTitle>
+            <AlertTitle className="text-sm font-bold">{t('verify.success_title')}</AlertTitle>
             <AlertDescription className="text-xs mt-1 leading-relaxed">
-              {successMessage ||
-                'Địa chỉ email của bạn đã được xác thực hoàn tất trên hệ thống Flama.'}
+              {successMessage || t('verify.success_desc_default')}
             </AlertDescription>
           </Alert>
 
@@ -205,13 +206,13 @@ export function VerifyEmailPage() {
             <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3.5 text-xs text-foreground space-y-2">
               <div className="flex items-center gap-2 font-bold text-blue-700 dark:text-blue-400">
                 <GraduationCap className="size-4 text-blue-600 dark:text-blue-400" />
-                <span>Kích hoạt quyền lợi Sinh viên thành công</span>
+                <span>{t('verify.student_perks_title')}</span>
                 <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0 h-4">
-                  Đã xác thực
+                  {t('verify.student_badge')}
                 </Badge>
               </div>
               <p className="text-muted-foreground text-[11px] leading-relaxed">
-                Tài khoản của bạn giờ đây đã được cấp quyền tải miễn phí hoặc nhận ưu đãi giảm giá đặc quyền dành cho học sinh, sinh viên trên Marketplace.
+                {t('verify.student_perks_desc')}
               </p>
             </div>
           ) : null}
@@ -220,7 +221,7 @@ export function VerifyEmailPage() {
             <Button asChild variant="outline" className="w-full text-xs font-semibold">
               <Link to="/profile">
                 <UserIcon className="mr-1.5 size-3.5" />
-                Về Hồ sơ cá nhân
+                {t('verify.btn_profile')}
               </Link>
             </Button>
             <Button
@@ -229,7 +230,7 @@ export function VerifyEmailPage() {
             >
               <Link to="/dashboard">
                 <ArrowRight className="mr-1.5 size-3.5" />
-                Đến Bảng điều khiển
+                {t('verify.btn_dashboard')}
               </Link>
             </Button>
           </div>
@@ -242,10 +243,9 @@ export function VerifyEmailPage() {
               <div className="flex items-start gap-2">
                 <GraduationCap className="size-4 shrink-0 text-primary mt-0.5" />
                 <span>
-                  Hệ thống nhận diện email trường học kết thúc bằng{' '}
-                  <strong className="text-primary font-semibold">.edu.vn</strong>.
-                  Sau khi xác thực, tài khoản của bạn sẽ nhận ngay huy hiệu Sinh viên và
-                  tự động áp dụng các ưu đãi giảm giá hoặc tải miễn phí trên Marketplace!
+                  {t('verify.edu_banner_desc_prefix')}
+                  <strong className="text-primary font-semibold">.edu.vn</strong>
+                  {t('verify.edu_banner_desc_suffix')}
                 </span>
               </div>
             </div>
@@ -255,7 +255,7 @@ export function VerifyEmailPage() {
           {errorMessage && (
             <Alert variant="destructive" className="animate-in fade-in-50 duration-200 py-2.5">
               <AlertCircle className="size-4" />
-              <AlertTitle className="text-xs font-bold">Xác thực không thành công</AlertTitle>
+              <AlertTitle className="text-xs font-bold">{t('verify.error_title')}</AlertTitle>
               <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
             </Alert>
           )}
@@ -264,10 +264,10 @@ export function VerifyEmailPage() {
             <div className="space-y-4 pt-1">
               <div className="rounded-xl border border-border/70 bg-muted/30 p-3.5 text-center space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  Hòm thư nhận mã xác thực:
+                  {t('verify.recipient_box_label')}
                 </p>
                 <p className="font-bold text-foreground text-sm tracking-wide">
-                  {targetEmail || 'Email tài khoản của bạn'}
+                  {targetEmail || t('verify.recipient_default')}
                 </p>
               </div>
 
@@ -281,12 +281,12 @@ export function VerifyEmailPage() {
                 {sendCodeMutation.isPending ? (
                   <>
                     <LoaderCircle className="mr-2 size-4 animate-spin" />
-                    Đang gửi mã...
+                    {t('verify.sending_code')}
                   </>
                 ) : (
                   <>
                     <Send className="mr-2 size-4" />
-                    Gửi mã xác thực qua Email
+                    {t('verify.send_code_btn')}
                   </>
                 )}
               </Button>
@@ -295,7 +295,7 @@ export function VerifyEmailPage() {
             <form onSubmit={handleSubmit} className="space-y-4 pt-1">
               <div className="space-y-2">
                 <Label htmlFor="otp-input" className="text-xs font-semibold">
-                  Nhập mã xác thực (6 chữ số)
+                  {t('verify.code_label')}
                 </Label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -314,7 +314,7 @@ export function VerifyEmailPage() {
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground text-center">
-                  Mã xác thực có hiệu lực trong vòng 15 phút.
+                  {t('verify.code_helper')}
                 </p>
               </div>
 
@@ -327,18 +327,18 @@ export function VerifyEmailPage() {
                 {verifyMutation.isPending ? (
                   <>
                     <LoaderCircle className="mr-2 size-4 animate-spin" />
-                    Đang kiểm tra mã…
+                    {t('verify.verifying_code')}
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="mr-2 size-4" />
-                    Xác nhận mã
+                    {t('verify.submit_code')}
                   </>
                 )}
               </Button>
 
               <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground border-t border-border/50">
-                <span>Chưa nhận được mã?</span>
+                <span>{t('verify.resend_prompt')}</span>
                 <Button
                   type="button"
                   variant="ghost"
@@ -353,8 +353,8 @@ export function VerifyEmailPage() {
                     }`}
                   />
                   {cooldownSeconds > 0
-                    ? `Gửi lại sau (${cooldownSeconds}s)`
-                    : 'Gửi lại mã'}
+                    ? t('verify.resend_countdown', { seconds: cooldownSeconds })
+                    : t('verify.resend_code')}
                 </Button>
               </div>
             </form>

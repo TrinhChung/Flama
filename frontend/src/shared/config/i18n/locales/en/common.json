@@ -1,0 +1,22 @@
+{
+  "save": "Save",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "close": "Close",
+  "search": "Search",
+  "loading": "Loading...",
+  "back": "Back",
+  "error": "Error",
+  "success": "Success",
+  "or": "or",
+  "copy": "Copy",
+  "copied": "Copied",
+  "language": {
+    "vi": "Tiếng Việt",
+    "en": "English",
+    "switch_aria": "Switch language / Chuyển đổi ngôn ngữ",
+    "label": "Language",
+    "switch_to_en": "Switch to English",
+    "switch_to_vi": "Switch to Vietnamese"
+  }
+}

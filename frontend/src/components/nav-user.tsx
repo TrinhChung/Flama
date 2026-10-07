@@ -1,15 +1,18 @@
 import {
+  Check,
   ChevronsUpDown,
   CreditCard,
   Goal,
   HelpCircle,
   Key,
+  Languages,
   LogOut,
   NotebookTabs,
   User as UserIcon,
   Wallet,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -18,6 +21,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -39,9 +45,12 @@ export function NavUser({
   onLogout: () => void
   logoutPending: boolean
 }) {
+  const { t, i18n } = useTranslation('shell')
   const { isMobile } = useSidebar()
+  const currentLang = (i18n.resolvedLanguage || i18n.language || 'vi').startsWith('en') ? 'en' : 'vi'
   const displayName = user.display_name || user.username
   const initials = displayName.slice(0, 2).toUpperCase()
+  const roleLabel = user.is_admin ? t('user_menu.role_admin') : user.role?.name || t('user_menu.role_user')
 
   return (
     <SidebarMenu>
@@ -82,7 +91,7 @@ export function NavUser({
                 <div className="truncate">
                   <p className="font-medium truncate">{displayName}</p>
                   <p className="text-xs font-normal text-muted-foreground truncate">
-                    {user.is_admin ? 'Quản trị viên' : user.role?.name || 'Người dùng'}
+                    {roleLabel}
                   </p>
                 </div>
                 {user.balance_amount_display ? (
@@ -97,45 +106,76 @@ export function NavUser({
               <DropdownMenuItem asChild>
                 <Link to="/profile">
                   <UserIcon />
-                  Trang cá nhân
+                  {t('user_menu.profile')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/settings/goals">
                   <Goal />
-                  Mục tiêu học tập
+                  {t('user_menu.study_goals')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/wallet">
                   <Wallet />
-                  Ví & Doanh thu
+                  {t('user_menu.wallet')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to={links.orders}>
                   <CreditCard />
-                  Lịch sử đơn hàng
+                  {t('user_menu.orders')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to={links.note_types}>
                   <NotebookTabs />
-                  Quản lý loại thẻ
+                  {t('user_menu.manage_note_types')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/settings/mcp-tokens">
                   <Key />
-                  Kết nối AI (MCP)
+                  {t('user_menu.mcp_ai')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/guide">
                   <HelpCircle />
-                  Trợ giúp
+                  {t('user_menu.help')}
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="cursor-pointer">
+                  <Languages className="size-4" />
+                  <span>{t('user_menu.language', 'Ngôn ngữ')}</span>
+                  <span className="ml-auto text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+                    {currentLang}
+                  </span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-40 p-1">
+                  <DropdownMenuItem
+                    onSelect={() => void i18n.changeLanguage('vi')}
+                    className="flex items-center justify-between text-xs cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-base leading-none">🇻🇳</span>
+                      <span>Tiếng Việt</span>
+                    </span>
+                    {currentLang === 'vi' && <Check className="size-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => void i18n.changeLanguage('en')}
+                    className="flex items-center justify-between text-xs cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-base leading-none">🇬🇧</span>
+                      <span>English</span>
+                    </span>
+                    {currentLang === 'en' && <Check className="size-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -144,7 +184,7 @@ export function NavUser({
               onSelect={onLogout}
             >
               <LogOut />
-              {logoutPending ? 'Đang đăng xuất…' : 'Đăng xuất'}
+              {logoutPending ? t('user_menu.logging_out') : t('user_menu.logout')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

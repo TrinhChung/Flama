@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertCircle, ArrowLeft, CheckCircle2, LoaderCircle, Mail } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +10,7 @@ import { AuthCard } from '../components/AuthCard'
 import { forgotPassword } from '../api'
 
 export function ForgotPasswordPage() {
+  const { t } = useTranslation('auth')
   const [email, setEmail] = useState('')
   const [isPending, setIsPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,13 +26,10 @@ export function ForgotPasswordPage() {
 
     try {
       const res = await forgotPassword({ email: email.trim() })
-      setSuccessMessage(
-        res.message ||
-          'Nếu địa chỉ email tồn tại trong hệ thống, chúng tôi đã gửi liên kết đặt lại mật khẩu đến hộp thư của bạn.',
-      )
+      setSuccessMessage(res.message || t('forgot.default_success_desc'))
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : 'Có lỗi xảy ra khi gửi yêu cầu. Vui lòng thử lại.'
+        err instanceof Error ? err.message : t('forgot.default_error')
       setError(message)
     } finally {
       setIsPending(false)
@@ -39,22 +38,22 @@ export function ForgotPasswordPage() {
 
   return (
     <AuthCard
-      title="Khôi phục mật khẩu"
-      description="Nhập địa chỉ email đăng ký để nhận liên kết đặt lại mật khẩu."
-      alternateText="Nhớ mật khẩu?"
-      alternateLabel="Quay lại Đăng nhập"
+      title={t('forgot.title')}
+      description={t('forgot.description')}
+      alternateText={t('forgot.alternate_text')}
+      alternateLabel={t('forgot.alternate_label')}
       alternateTo="/login"
     >
       {successMessage ? (
         <div className="space-y-4 animate-in fade-in-50 duration-200">
           <Alert className="border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="size-4" />
-            <AlertTitle>Đã gửi yêu cầu</AlertTitle>
+            <AlertTitle>{t('forgot.success_title')}</AlertTitle>
             <AlertDescription className="text-sm mt-1">{successMessage}</AlertDescription>
           </Alert>
 
           <p className="text-xs text-muted-foreground text-center">
-            Vui lòng kiểm tra kỹ hộp thư (bao gồm cả thư mục Spam/Quảng cáo).
+            {t('forgot.check_spam_hint')}
           </p>
 
           <Button
@@ -64,7 +63,7 @@ export function ForgotPasswordPage() {
           >
             <Link to="/login">
               <ArrowLeft className="size-4 mr-1.5" />
-              Quay lại trang Đăng nhập
+              {t('forgot.back_to_login_btn')}
             </Link>
           </Button>
         </div>
@@ -73,13 +72,13 @@ export function ForgotPasswordPage() {
           {error ? (
             <Alert variant="destructive" className="animate-in fade-in-50 duration-200">
               <AlertCircle className="size-4" />
-              <AlertTitle>Không thể gửi yêu cầu</AlertTitle>
+              <AlertTitle>{t('forgot.error_title')}</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
 
           <div className="space-y-2">
-            <Label htmlFor="email">Địa chỉ Email đăng ký</Label>
+            <Label htmlFor="email">{t('forgot.email_label')}</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
@@ -104,7 +103,7 @@ export function ForgotPasswordPage() {
             {isPending ? (
               <LoaderCircle className="size-4 animate-spin" />
             ) : (
-              'Gửi liên kết khôi phục'
+              t('forgot.submit_btn')
             )}
           </Button>
         </form>

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { Brain, Flame, Layers, ShieldCheck, Zap } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Card } from '@/components/ui/card'
 import { Brand } from '@/shared/components/Brand'
-
 import { AmbientBackground } from '@/components/ambient-background'
 
 type AuthCardProps = {
@@ -23,6 +23,7 @@ export function AuthCard({
   alternateTo,
   children,
 }: AuthCardProps) {
+  const { t } = useTranslation('auth')
   const location = useLocation()
   const searchParams = new URLSearchParams(location.search)
   const token = searchParams.get('token') || ''
@@ -44,16 +45,20 @@ export function AuthCard({
         <div className="space-y-6 text-center lg:col-span-6 lg:space-y-8 lg:text-left">
           <div className="inline-flex items-center gap-2 rounded-2xl bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary">
             <Flame className="size-4 fill-primary" />
-            Flama Study Platform
+            {t('card.badge')}
           </div>
 
           <div className="space-y-4">
             <Brand size="lg" className="justify-center lg:justify-start" />
             <h1 className="text-3xl font-extrabold tracking-tight text-balance leading-tight sm:text-4xl lg:text-5xl">
-              Giữ <span className="bg-gradient-to-r from-primary via-orange-500 to-amber-500 bg-clip-text text-transparent">ngọn lửa</span> học tập cho mọi kiến thức.
+              {t('card.heading_before')}
+              <span className="bg-gradient-to-r from-primary via-orange-500 to-amber-500 bg-clip-text text-transparent">
+                {t('card.heading_gradient')}
+              </span>
+              {t('card.heading_after')}
             </h1>
             <p className="mx-auto max-w-lg text-base leading-relaxed text-muted-foreground lg:mx-0 lg:text-lg">
-              Tự do sáng tạo bộ thẻ theo cách riêng và dùng Spaced Repetition để ghi nhớ từ vựng, IT, Y khoa, Luật hay bất kỳ môn học nào.
+              {t('card.subtitle')}
             </p>
           </div>
 
@@ -64,8 +69,8 @@ export function AuthCard({
                 <Zap className="size-4" />
               </span>
               <div>
-                <h2 className="text-xs font-bold">Ôn tập ngắt quãng</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Scheduler tính toán nhịp ôn tối ưu</p>
+                <h2 className="text-xs font-bold">{t('features.srs_title')}</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{t('features.srs_desc')}</p>
               </div>
             </div>
 
@@ -74,8 +79,8 @@ export function AuthCard({
                 <Brain className="size-4" />
               </span>
               <div>
-                <h2 className="text-xs font-bold">Ghi nhớ dài hạn</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Tập trung vào các thẻ sắp quên</p>
+                <h2 className="text-xs font-bold">{t('features.retention_title')}</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{t('features.retention_desc')}</p>
               </div>
             </div>
 
@@ -84,8 +89,8 @@ export function AuthCard({
                 <Layers className="size-4" />
               </span>
               <div>
-                <h2 className="text-xs font-bold">Tạo thẻ linh hoạt</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">NoteType tùy chỉnh & audio TTS</p>
+                <h2 className="text-xs font-bold">{t('features.flexible_title')}</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{t('features.flexible_desc')}</p>
               </div>
             </div>
 
@@ -94,8 +99,8 @@ export function AuthCard({
                 <ShieldCheck className="size-4" />
               </span>
               <div>
-                <h2 className="text-xs font-bold">Bảo mật dữ liệu</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Tiến độ cá nhân luôn được giữ kín</p>
+                <h2 className="text-xs font-bold">{t('features.privacy_title')}</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{t('features.privacy_desc')}</p>
               </div>
             </div>
           </div>
@@ -128,7 +133,7 @@ export function AuthCard({
                       {isForgotPassword && (
                         <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
                       )}
-                      Quên mật khẩu
+                      {t('tabs.forgot_password')}
                     </Link>
 
                     {hasToken ? (
@@ -143,20 +148,20 @@ export function AuthCard({
                         {isResetPassword && (
                           <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
                         )}
-                        Đặt lại mật khẩu
+                        {t('tabs.reset_password')}
                       </Link>
                     ) : isResetPassword ? (
                       <div className="relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center text-primary-foreground shadow-md shadow-primary/25 select-none">
                         <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
-                        Đặt lại mật khẩu
+                        {t('tabs.reset_password')}
                       </div>
                     ) : (
                       <span
                         className="relative z-10 flex-1 rounded-full py-2 text-xs font-medium text-center text-muted-foreground/40 cursor-not-allowed select-none transition-colors"
-                        title="Chỉ khả dụng khi mở liên kết xác thực từ email"
+                        title={t('tabs.reset_disabled_tip')}
                         aria-disabled="true"
                       >
-                        Đặt lại mật khẩu
+                        {t('tabs.reset_password')}
                       </span>
                     )}
                   </>
@@ -173,7 +178,7 @@ export function AuthCard({
                       {isLogin && (
                         <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
                       )}
-                      Đăng nhập
+                      {t('tabs.login')}
                     </Link>
 
                     <Link
@@ -187,7 +192,7 @@ export function AuthCard({
                       {isRegister && (
                         <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
                       )}
-                      Đăng ký
+                      {t('tabs.register')}
                     </Link>
                   </>
                 )}

@@ -75,6 +75,9 @@ describe('SiteFooter Component (Editorial Fashion Style)', () => {
     })
 
     expect(container?.textContent).toContain('Flama')
+    expect(container?.textContent).toContain('Spaced Repetition')
+    expect(container?.textContent).toContain('Yomitan')
+    expect(container?.textContent).toContain('Anki')
     expect(container?.textContent).toContain('Học tập & Quản lý')
     expect(container?.textContent).toContain('Chợ bộ thẻ & Đóng góp')
     expect(container?.textContent).toContain('Công cụ & Tích hợp')

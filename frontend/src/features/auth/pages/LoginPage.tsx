@@ -1,5 +1,6 @@
 import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, LoaderCircle } from 'lucide-react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,7 @@ import { AuthCard } from '../components/AuthCard'
 import { useLoginForm } from '../hooks/useLoginForm'
 
 export function LoginPage() {
+  const { t } = useTranslation('auth')
   const [searchParams] = useSearchParams()
   const bootstrapQuery = useBootstrap()
   const bootstrap = bootstrapQuery.data
@@ -47,30 +49,30 @@ export function LoginPage() {
 
   return (
     <AuthCard
-      title="Chào mừng trở lại"
-      description="Đăng nhập để tiếp tục phiên học và theo dõi tiến độ của bạn."
-      alternateText="Chưa có tài khoản?"
-      alternateLabel="Tạo tài khoản ngay"
+      title={t('login.title')}
+      description={t('login.description')}
+      alternateText={t('login.alternate_text')}
+      alternateLabel={t('login.alternate_label')}
       alternateTo="/register"
     >
       <form className="space-y-4" onSubmit={onSubmit}>
         {error ? (
           <Alert variant="destructive" className="animate-in fade-in-50 duration-200">
             <AlertCircle className="size-4" />
-            <AlertTitle>Đăng nhập không thành công</AlertTitle>
+            <AlertTitle>{t('login.error_title')}</AlertTitle>
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         ) : null}
 
         {/* Email field */}
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t('login.email_label')}</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               id="email"
               type="email"
-              placeholder="you@example.com"
+              placeholder={t('login.email_placeholder')}
               autoComplete="email"
               autoFocus
               className="pl-9"
@@ -85,13 +87,13 @@ export function LoginPage() {
 
         {/* Password field with Show/Hide toggle */}
         <div className="space-y-2">
-          <Label htmlFor="password">Mật khẩu</Label>
+          <Label htmlFor="password">{t('login.password_label')}</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               id="password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Nhập mật khẩu"
+              placeholder={t('login.password_placeholder')}
               autoComplete="current-password"
               className="pl-9 pr-10"
               aria-invalid={Boolean(form.formState.errors.password)}
@@ -102,7 +104,7 @@ export function LoginPage() {
               tabIndex={-1}
               onClick={toggleShowPassword}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              aria-label={showPassword ? t('login.hide_password_aria') : t('login.show_password_aria')}
             >
               {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
@@ -113,11 +115,10 @@ export function LoginPage() {
 
           <div className="flex justify-end pt-1">
             <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline transition-colors">
-              Quên mật khẩu?
+              {t('login.forgot_password_link')}
             </Link>
           </div>
         </div>
-
 
         <Button
           className="w-full font-bold bg-gradient-to-r from-primary via-orange-500 to-amber-500 hover:opacity-95 text-primary-foreground shadow-md shadow-primary/20 transition-all hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98]"
@@ -129,7 +130,7 @@ export function LoginPage() {
             <LoaderCircle className="size-4 animate-spin" />
           ) : (
             <>
-              Đăng nhập
+              {t('login.submit_btn')}
               <ArrowRight className="size-4 ml-1.5" />
             </>
           )}
@@ -140,7 +141,7 @@ export function LoginPage() {
             <span className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground font-medium">hoặc</span>
+            <span className="bg-card px-2 text-muted-foreground font-medium">{t('login.or_divider')}</span>
           </div>
         </div>
 
@@ -169,7 +170,7 @@ export function LoginPage() {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
             />
           </svg>
-          Tiếp tục với Google
+          {t('login.google_btn')}
         </Button>
       </form>
     </AuthCard>

@@ -3,14 +3,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { BACKEND_ORIGIN } from '@/config/env'
 import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 import type { FrontendBootstrap } from '@/shared/types/api'
 import { login } from '../api'
-import { loginSchema, type LoginFormValues } from '../schemas'
+import { getLoginSchema, type LoginFormValues } from '../schemas'
 
 export function useLoginForm() {
+  const { t } = useTranslation('auth')
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -18,7 +20,7 @@ export function useLoginForm() {
   const [showPassword, setShowPassword] = useState(false)
 
   const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(getLoginSchema((k) => t(k as any))),
     defaultValues: { email: '', password: '' },
   })
 
@@ -30,7 +32,7 @@ export function useLoginForm() {
         (current) => (current ? { ...current, user: result.user, messages: [] } : current),
       )
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
-      toast.success('Đăng nhập thành công.')
+      toast.success(t('login.success_toast'))
       const isValidTarget = (target: string) =>
         target.startsWith('/') &&
         !target.startsWith('//') &&
