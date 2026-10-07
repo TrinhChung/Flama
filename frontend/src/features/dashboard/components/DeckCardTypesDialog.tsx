@@ -1,6 +1,8 @@
 import { AlertCircle, Layers, LoaderCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,13 +28,13 @@ export type DeckCardTypesDialogProps = {
   deckName: string
 }
 
-function contextLabel(kind?: CardTypeContextKind): string {
-  if (kind === 'installed_source') return 'Thẻ gốc từ bộ đã cài'
-  if (kind === 'installed_local') return 'Thẻ riêng trong bộ đã cài'
-  return 'Thẻ trong bộ của bạn'
+function getContextLabel(kind: CardTypeContextKind | undefined, t: (key: any) => string): string {
+  if (kind === 'installed_source') return t('modals.card_types.context.installed_source')
+  if (kind === 'installed_local') return t('modals.card_types.context.installed_local')
+  return t('modals.card_types.context.user_deck')
 }
 
-function editAction(item: DeckCardType) {
+function renderEditAction(item: DeckCardType, t: (key: any) => string) {
   if (item.context_kind === 'installed_source') {
     return (
       <Button
@@ -40,16 +42,18 @@ function editAction(item: DeckCardType) {
         variant="outline"
         className="h-7 px-2.5 text-xs rounded-lg"
         disabled
-        title="Sắp có: tạo bản riêng cho thẻ gốc của bộ đã cài."
+        title={t('modals.card_types.btn_edit_disabled_title')}
       >
-        Sửa giao diện
+        {t('modals.card_types.btn_edit')}
       </Button>
     )
   }
 
   return (
     <Button asChild size="sm" variant="outline" className="h-7 px-2.5 text-xs rounded-lg">
-      <Link to={`/note-types/${encodeURIComponent(item.note_type_id)}`}>Sửa giao diện</Link>
+      <Link to={`/note-types/${encodeURIComponent(item.note_type_id)}`}>
+        {t('modals.card_types.btn_edit')}
+      </Link>
     </Button>
   )
 }
@@ -60,6 +64,8 @@ export function DeckCardTypesDialog({
   deckId,
   deckName,
 }: DeckCardTypesDialogProps) {
+  const { t, i18n } = useTranslation('dashboard')
+  const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
   const { data, isLoading, error } = useQuery({
     queryKey: cardTemplateQueryKeys.deckCardTypes(deckId),
     queryFn: ({ signal }) => fetchDeckCardTypes(deckId, signal),
@@ -70,26 +76,26 @@ export function DeckCardTypesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{`Kiểu thẻ của “${deckName}”`}</DialogTitle>
+          <DialogTitle>{t('modals.card_types.title', { name: deckName })}</DialogTitle>
           <DialogDescription>
-            Mỗi kiểu thẻ là một template hiển thị cùng dữ liệu note. Khi học, bạn chọn một kiểu cho cả phiên.
+            {t('modals.card_types.description')}
           </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            Đang tải kiểu thẻ…
+            {t('modals.card_types.loading')}
           </div>
         ) : error ? (
           <Alert variant="destructive">
             <AlertCircle aria-hidden="true" />
             <AlertDescription>
-              {error.message || 'Có lỗi xảy ra khi tải kiểu thẻ.'}
+              {error.message || t('modals.card_types.error_fallback')}
             </AlertDescription>
           </Alert>
         ) : data && (data.compositions?.length ?? 0) === 0 ? (
-          <p className="py-6 text-sm text-muted-foreground">Deck này chưa có thẻ để học.</p>
+          <p className="py-6 text-sm text-muted-foreground">{t('modals.card_types.empty')}</p>
         ) : data ? (
           <div className="space-y-5">
             {(data.groups ?? []).map((group) => (
@@ -101,20 +107,28 @@ export function DeckCardTypesDialog({
                   <span>{group.note_type_name}</span>
                 </div>
                 <ul className="space-y-2">
-                  {(group.compositions ?? []).map((item) => (
-                    <li
-                      key={item.composition_id}
-                      className="flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-background px-3 py-2.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{item.template_name}</p>
-                        <p className="text-xs text-muted-foreground">{contextLabel(item.context_kind)}</p>
-                      </div>
-                      {item.is_default ? <Badge variant="secondary">Mặc định</Badge> : null}
-                      <Badge variant="outline">{`${data.note_counts?.[item.composition_id] ?? 0} note`}</Badge>
-                      {editAction(item)}
-                    </li>
-                  ))}
+                  {(group.compositions ?? []).map((item) => {
+                    const count = data.note_counts?.[item.composition_id] ?? 0
+                    return (
+                      <li
+                        key={item.composition_id}
+                        className="flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-background px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{item.template_name}</p>
+                          <p className="text-xs text-muted-foreground">{getContextLabel(item.context_kind, t)}</p>
+                        </div>
+                        {item.is_default ? <Badge variant="secondary">{t('modals.card_types.badge_default')}</Badge> : null}
+                        <Badge variant="outline">
+                          {t('modals.card_types.badge_note_count', {
+                            count,
+                            formattedCount: count.toLocaleString(numberLocale),
+                          })}
+                        </Badge>
+                        {renderEditAction(item, t)}
+                      </li>
+                    )
+                  })}
                 </ul>
               </section>
             ))}
@@ -123,11 +137,11 @@ export function DeckCardTypesDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Đóng
+            {t('modals.card_types.btn_close')}
           </Button>
           {(data?.compositions?.length ?? 0) > 0 ? (
             <Button asChild>
-              <Link to={`/study?deck_id=${deckId}`}>Học deck này</Link>
+              <Link to={`/study?deck_id=${deckId}`}>{t('modals.card_types.btn_study')}</Link>
             </Button>
           ) : null}
         </DialogFooter>

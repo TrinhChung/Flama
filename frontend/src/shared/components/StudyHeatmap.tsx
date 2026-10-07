@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { ChevronLeft, ChevronRight } from '@/shared/components/Icons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -65,17 +67,39 @@ function getTodayStr(): string {
   return `${year}-${month}-${day}`
 }
 
-function getDayTitle(day: HeatmapDay, isToday: boolean, isPeak: boolean): string {
-  const todayLabel = isToday ? ' (Hôm nay)' : ''
+function getDayTitle(
+  day: HeatmapDay,
+  isToday: boolean,
+  isPeak: boolean,
+  t: (key: any, options?: any) => string,
+  locale: string,
+): string {
+  const todayLabel = isToday ? t('heatmap.tooltips.today_suffix') : ''
+  const cardsFormatted = day.cards.toLocaleString(locale)
+  const minutesFormatted = day.minutes.toLocaleString(locale)
   if (day.is_future) {
-    if (!day.cards) return `${day.date}${todayLabel}: Chưa học`
-    return `${day.date}${todayLabel}: ${day.cards.toLocaleString('vi-VN')} thẻ đến hạn`
+    if (!day.cards) return t('heatmap.tooltips.not_studied', { date: day.date, today: todayLabel })
+    return t('heatmap.tooltips.future_due', {
+      date: day.date,
+      today: todayLabel,
+      cards: cardsFormatted,
+    })
   }
-  if (!day.cards) return `${day.date}${todayLabel}: Chưa học`
+  if (!day.cards) return t('heatmap.tooltips.not_studied', { date: day.date, today: todayLabel })
   if (isPeak) {
-    return `🔥 ${day.date}${todayLabel} [KỶ LỤC NĂM]: ${day.cards.toLocaleString('vi-VN')} thẻ · ${day.minutes.toLocaleString('vi-VN')} phút`
+    return t('heatmap.tooltips.peak_day', {
+      date: day.date,
+      today: todayLabel,
+      cards: cardsFormatted,
+      minutes: minutesFormatted,
+    })
   }
-  return `${day.date}${todayLabel}: ${day.cards.toLocaleString('vi-VN')} thẻ · ${day.minutes.toLocaleString('vi-VN')} phút`
+  return t('heatmap.tooltips.studied_day', {
+    date: day.date,
+    today: todayLabel,
+    cards: cardsFormatted,
+    minutes: minutesFormatted,
+  })
 }
 
 export type StudyHeatmapProps = {
@@ -123,9 +147,18 @@ export function StudyHeatmap({
   showYearNav = true,
   className,
 }: StudyHeatmapProps) {
-  const [tooltipText, setTooltipText] = useState<string>('Rê chuột hoặc chạm vào các ô để xem chi tiết học tập.')
+  const { t, i18n } = useTranslation('dashboard')
+  const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
+  const defaultHint = t('heatmap.tooltips.default_hint')
+  const [tooltipText, setTooltipText] = useState<string>(defaultHint)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const todayStr = overview?.today?.date || getTodayStr()
+
+  useEffect(() => {
+    if (!selectedDate) {
+      setTooltipText(defaultHint)
+    }
+  }, [defaultHint, selectedDate])
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const todayRef = useRef<HTMLButtonElement>(null)
@@ -158,10 +191,12 @@ export function StudyHeatmap({
 
   const todayData = overview?.today
   const summaryText = todayData
-    ? `Hôm nay đã học ${todayData.cards.toLocaleString('vi-VN')} thẻ trong ${todayData.minutes.toFixed(
-        2,
-      )} phút (${todayData.cards > 0 ? (todayData.minutes * 60 / todayData.cards).toFixed(2) : '0.00'}s/thẻ)`
-    : `Hôm nay đã học 0 thẻ trong 0.00 phút (0.00s/thẻ)`
+    ? t('heatmap.summary_with_data', {
+        cards: todayData.cards.toLocaleString(numberLocale),
+        minutes: todayData.minutes.toFixed(2),
+        seconds: todayData.cards > 0 ? ((todayData.minutes * 60) / todayData.cards).toFixed(2) : '0.00',
+      })
+    : t('heatmap.summary_zero')
 
   // Group heatmap into 53 weeks x 7 days
   const heatmap = overview?.heatmap
@@ -205,7 +240,7 @@ export function StudyHeatmap({
               <button
                 type="button"
                 className="stats-year-btn size-7 sm:size-9 inline-flex items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-xs hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Previous year"
+                aria-label={t('heatmap.nav.prev_year_aria')}
                 disabled={year <= 1970}
                 onClick={() => onYearChange(year - 1)}
               >
@@ -219,7 +254,7 @@ export function StudyHeatmap({
               <button
                 type="button"
                 className="stats-year-btn size-7 sm:size-9 inline-flex items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-xs hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Next year"
+                aria-label={t('heatmap.nav.next_year_aria')}
                 disabled={year >= 2100}
                 onClick={() => onYearChange(year + 1)}
               >
@@ -230,13 +265,13 @@ export function StudyHeatmap({
 
           {/* Mobile swipe hint & today jump */}
           <div className="flex items-center justify-between text-[11px] text-muted-foreground sm:hidden mb-1.5 px-0.5 select-none">
-            <span>← Vuốt ngang xem cả năm →</span>
+            <span>{t('heatmap.nav.mobile_swipe_hint')}</span>
             <button
               type="button"
               onClick={scrollToToday}
               className="font-medium text-primary active:opacity-70 transition-opacity underline underline-offset-2"
             >
-              Về hôm nay
+              {t('heatmap.nav.jump_today')}
             </button>
           </div>
 
@@ -268,7 +303,7 @@ export function StudyHeatmap({
                     const isPeak = !isFuture && day.cards > 0 && day.cards === pastStats.peakCards && pastStats.peakCards >= 10
                     // Unified intensity baseline: compare future cards against past historical study scale
                     const level = getDayLevelPower(day.cards, pastStats.effectiveMax)
-                    const title = getDayTitle(day, isToday, isPeak)
+                    const title = getDayTitle(day, isToday, isPeak, t, numberLocale)
                     const bgClass = isFuture ? futureLevelClasses[level] : pastLevelClasses[level]
 
                     return (
@@ -291,7 +326,7 @@ export function StudyHeatmap({
                         onMouseEnter={() => setTooltipText(title)}
                         onMouseLeave={() => {
                           if (!selectedDate) {
-                            setTooltipText('Rê chuột hoặc chạm vào các ô để xem chi tiết học tập.')
+                            setTooltipText(defaultHint)
                           }
                         }}
                       />
@@ -310,30 +345,30 @@ export function StudyHeatmap({
 
             <div className="stats-legend flex flex-wrap items-center justify-center sm:justify-end gap-2 text-[11px] text-muted-foreground select-none shrink-0" aria-hidden="true">
               <div className="flex items-center gap-1">
-                <span className="text-[10px] font-medium text-foreground/80">Đã học:</span>
-                <span className="text-[10px] mr-0.5">Ít</span>
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EAE0D8] dark:bg-[#272320]" title="0 thẻ" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFE8D9] dark:bg-[#3D2517]" title="Mức 1" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFD2B8] dark:bg-[#5C2E17]" title="Mức 2" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFB488] dark:bg-[#7D3A16]" title="Mức 3" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF9354] dark:bg-[#A34714]" title="Mức 4" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF7020] dark:bg-[#CC5510]" title="Mức 5" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EE4D00] dark:bg-[#EE4D00]" title="Mức 6" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#C93200] dark:bg-[#FF5D17] ring-1 ring-[#EE4D00] shadow-[0_0_4px_rgba(238,77,0,0.5)]" title="Mức 7 (Đạt đỉnh)" />
-                <span className="text-[10px] ml-0.5">Nhiều 🔥</span>
+                <span className="text-[10px] font-medium text-foreground/80">{t('heatmap.legend.studied_label')}</span>
+                <span className="text-[10px] mr-0.5">{t('heatmap.legend.less')}</span>
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EAE0D8] dark:bg-[#272320]" title={t('heatmap.legend.levels.level_0')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFE8D9] dark:bg-[#3D2517]" title={t('heatmap.legend.levels.level_1')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFD2B8] dark:bg-[#5C2E17]" title={t('heatmap.legend.levels.level_2')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFB488] dark:bg-[#7D3A16]" title={t('heatmap.legend.levels.level_3')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF9354] dark:bg-[#A34714]" title={t('heatmap.legend.levels.level_4')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF7020] dark:bg-[#CC5510]" title={t('heatmap.legend.levels.level_5')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EE4D00] dark:bg-[#EE4D00]" title={t('heatmap.legend.levels.level_6')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#C93200] dark:bg-[#FF5D17] ring-1 ring-[#EE4D00] shadow-[0_0_4px_rgba(238,77,0,0.5)]" title={t('heatmap.legend.levels.level_7_peak')} />
+                <span className="text-[10px] ml-0.5">{t('heatmap.legend.more_fire')}</span>
               </div>
 
               <span className="text-border mx-0.5 hidden sm:inline">•</span>
 
               <div className="flex items-center gap-1">
-                <span className="text-[10px] font-medium text-foreground/80">Tới hạn:</span>
-                <span className="text-[10px] mr-0.5">Ít</span>
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#F5EFEA] dark:bg-[#272320]" title="0 thẻ" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#E5E9EC] dark:bg-[#2F343B]" title="Tới hạn mức 1" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#C4CCD0] dark:bg-[#4C5562]" title="Tới hạn mức 3" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#9CA8AF] dark:bg-[#6D7888]" title="Tới hạn mức 5" />
-                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#74838D] dark:bg-[#929EAE]" title="Tới hạn mức 7" />
-                <span className="text-[10px] ml-0.5">Nhiều ⏳</span>
+                <span className="text-[10px] font-medium text-foreground/80">{t('heatmap.legend.due_label')}</span>
+                <span className="text-[10px] mr-0.5">{t('heatmap.legend.less')}</span>
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#F5EFEA] dark:bg-[#272320]" title={t('heatmap.legend.due_levels.due_level_0')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#E5E9EC] dark:bg-[#2F343B]" title={t('heatmap.legend.due_levels.due_level_1')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#C4CCD0] dark:bg-[#4C5562]" title={t('heatmap.legend.due_levels.due_level_3')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#9CA8AF] dark:bg-[#6D7888]" title={t('heatmap.legend.due_levels.due_level_5')} />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#74838D] dark:bg-[#929EAE]" title={t('heatmap.legend.due_levels.due_level_7')} />
+                <span className="text-[10px] ml-0.5">{t('heatmap.legend.more_hourglass')}</span>
               </div>
             </div>
           </div>
@@ -342,30 +377,41 @@ export function StudyHeatmap({
           {showMetrics && (
             <div className="stats-metrics mt-3 pt-3 border-t border-border/80 grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm">
               <div className="stats-metric rounded-lg border border-border/50 bg-muted/20 p-2 sm:border-0 sm:bg-transparent sm:p-0 flex flex-col sm:flex-row sm:items-baseline">
-                <span className="text-muted-foreground">TB hàng ngày:</span>
+                <span className="text-muted-foreground">{t('heatmap.metrics.daily_avg_label')}</span>
                 <strong className="text-primary font-bold sm:ml-1 text-sm sm:text-base tabular-nums">
-                  {(overview?.metrics?.daily_average_cards ?? 0).toLocaleString('vi-VN')} thẻ
+                  {t('heatmap.metrics.daily_avg_value', {
+                    count: overview?.metrics?.daily_average_cards ?? 0,
+                    countFormatted: (overview?.metrics?.daily_average_cards ?? 0).toLocaleString(numberLocale),
+                  })}
                 </strong>
               </div>
 
               <div className="stats-metric rounded-lg border border-border/50 bg-muted/20 p-2 sm:border-0 sm:bg-transparent sm:p-0 flex flex-col sm:flex-row sm:items-baseline">
-                <span className="text-muted-foreground">Tỷ lệ ngày học:</span>
+                <span className="text-muted-foreground">{t('heatmap.metrics.days_learned_label')}</span>
                 <strong className="text-primary font-bold sm:ml-1 text-sm sm:text-base tabular-nums">
-                  {(overview?.metrics?.days_learned_percent ?? 0).toLocaleString('vi-VN')}%
+                  {t('heatmap.metrics.days_learned_value', {
+                    percent: (overview?.metrics?.days_learned_percent ?? 0).toLocaleString(numberLocale),
+                  })}
                 </strong>
               </div>
 
               <div className="stats-metric rounded-lg border border-border/50 bg-muted/20 p-2 sm:border-0 sm:bg-transparent sm:p-0 flex flex-col sm:flex-row sm:items-baseline">
-                <span className="text-muted-foreground">Kỷ lục chuỗi:</span>
+                <span className="text-muted-foreground">{t('heatmap.metrics.longest_streak_label')}</span>
                 <strong className="text-primary font-bold sm:ml-1 text-sm sm:text-base tabular-nums">
-                  {(overview?.metrics?.longest_streak_days ?? 0).toLocaleString('vi-VN')} ngày
+                  {t('heatmap.metrics.longest_streak_value', {
+                    count: overview?.metrics?.longest_streak_days ?? 0,
+                    days: (overview?.metrics?.longest_streak_days ?? 0).toLocaleString(numberLocale),
+                  })}
                 </strong>
               </div>
 
               <div className="stats-metric rounded-lg border border-border/50 bg-muted/20 p-2 sm:border-0 sm:bg-transparent sm:p-0 flex flex-col sm:flex-row sm:items-baseline">
-                <span className="text-muted-foreground">Chuỗi hiện tại:</span>
+                <span className="text-muted-foreground">{t('heatmap.metrics.current_streak_label')}</span>
                 <strong className="text-primary font-bold sm:ml-1 text-sm sm:text-base tabular-nums">
-                  {(overview?.metrics?.current_streak_days ?? 0).toLocaleString('vi-VN')} ngày
+                  {t('heatmap.metrics.current_streak_value', {
+                    count: overview?.metrics?.current_streak_days ?? 0,
+                    days: (overview?.metrics?.current_streak_days ?? 0).toLocaleString(numberLocale),
+                  })}
                 </strong>
               </div>
             </div>

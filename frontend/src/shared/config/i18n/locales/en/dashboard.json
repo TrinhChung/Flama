@@ -1,0 +1,215 @@
+{
+  "page": {
+    "loading": "Loading dashboard…",
+    "auth_error": "Unable to load session."
+  },
+  "toolbar": {
+    "tabs": {
+      "decks": "Decks",
+      "study": "Study",
+      "study_disabled_tooltip": "Please select a deck to study",
+      "stats": "Stats",
+      "import": "Import",
+      "browse": "Browse"
+    },
+    "actions": {
+      "create_deck": "Create Deck",
+      "browse": "Browse"
+    }
+  },
+  "deck_board": {
+    "title": "Deck",
+    "create_deck": "Create Deck",
+    "columns": {
+      "new": "New",
+      "learn": "Learn",
+      "due": "Due"
+    },
+    "empty_state": {
+      "title": "Welcome to Flama!",
+      "desc_line1": "You don't have any decks in your account yet.",
+      "desc_line2_prefix": "Visit the ",
+      "desc_line2_bold": "Marketplace",
+      "desc_line2_suffix": " to find and install decks that fit your goals.",
+      "btn_marketplace_decks": "Deck Marketplace",
+      "btn_marketplace_templates": "Template Library"
+    }
+  },
+  "tree": {
+    "drag": {
+      "invalid_move": "Cannot move \"{{name}}\" into itself or a sub-deck",
+      "moving": "Moving \"{{name}}\"",
+      "drop_to_root": "→ Drop at Root",
+      "drop_to_deck": "→ Drop into deck",
+      "root_drop_prompt": "📍 Drop here to move “{{name}}” to the Root level (no parent deck)"
+    },
+    "row": {
+      "cannot_move_badge": "🚫 Cannot move here",
+      "drop_into_badge": "➕ Drop into \"{{name}}\"",
+      "settings_aria": "Deck Settings",
+      "menu": {
+        "rename": "Rename Deck",
+        "move": "Move Deck",
+        "copy_move_id": "Copy Move ID",
+        "share": "Share Deck",
+        "import_cards": "Import Cards",
+        "card_types": "Card Templates",
+        "worksheet": "Export Worksheets",
+        "reset_progress": "Reset Progress",
+        "delete_deck": "Delete Deck"
+      }
+    },
+    "toasts": {
+      "move_error": "Unable to move deck.",
+      "moved_title": "Moved “{{name}}”",
+      "moved_target_prefix": "Into ",
+      "target_root": "Root level",
+      "target_deck": "deck \"{{name}}\"",
+      "btn_undo": "Undo",
+      "restored_toast": "Restored initial position of “{{name}}”."
+    }
+  },
+  "modals": {
+    "create_deck": {
+      "title": "Create new deck",
+      "desc_nested": "Hierarchical path (use \"::\" to re-parent or create nested structures).",
+      "desc_root": "Create a new deck (use \"::\" to create hierarchy, e.g. SAA::deck10).",
+      "name_label": "Deck name or path",
+      "name_placeholder": "E.g.: SAA::deck10",
+      "name_description": "Use :: for folder hierarchy (e.g. SAA::deck10)",
+      "notetype_label": "Card Template (Note Type)",
+      "notetype_loading": "Loading templates...",
+      "notetype_default": "Default",
+      "notetype_help_inherited": "Defaults to inheriting from the selected parent deck.",
+      "notetype_help_default": "Template will apply to cards created in this deck.",
+      "btn_cancel": "Cancel",
+      "btn_submit": "Create deck",
+      "toast_success": "Deck created successfully."
+    },
+    "actions": {
+      "titles": {
+        "rename": "Rename “{{name}}”",
+        "move": "Move “{{name}}”",
+        "delete": "Confirm Deck Deletion",
+        "reset": "Reset Progress"
+      },
+      "descriptions": {
+        "delete": "Delete “{{name}}” and all cards inside it? This action cannot be undone.",
+        "reset": "Reset all study progress in “{{name}}” for your current account?"
+      },
+      "rename_form": {
+        "name_label": "New name",
+        "btn_save": "Save"
+      },
+      "move_form": {
+        "parent_label": "New parent deck",
+        "root_option": "Root",
+        "btn_move": "Move"
+      },
+      "purge": {
+        "checkbox_label": "Permanently Purge All Data (Admin Purge)",
+        "alert_warning": "Warning: This function is strictly reserved for deleting corrupt decks during development. This action permanently deletes all installations, clones, ratings, study history, and change requests across all users and cannot be undone."
+      },
+      "buttons": {
+        "cancel": "Cancel",
+        "delete_purge": "Purge all data",
+        "delete_deck": "Delete deck",
+        "reset": "Reset"
+      },
+      "toast_success": "Deck action completed."
+    },
+    "card_types": {
+      "title": "Card Templates for “{{name}}”",
+      "description": "Each card template renders your note data differently. You choose one template for your entire study session.",
+      "loading": "Loading card templates…",
+      "error_fallback": "An error occurred while loading card templates.",
+      "empty": "This deck has no cards to study yet.",
+      "context": {
+        "installed_source": "Original card from installed deck",
+        "installed_local": "Custom card in installed deck",
+        "user_deck": "Card in your own deck"
+      },
+      "badge_default": "Default",
+      "badge_note_count": "{{count}} note",
+      "badge_note_count_one": "{{count}} note",
+      "badge_note_count_other": "{{count}} notes",
+      "badge_note_count_plural": "{{count}} notes",
+      "btn_edit": "Edit layout",
+      "btn_edit_disabled_title": "Coming soon: create personal override for source cards of installed decks.",
+      "btn_close": "Close",
+      "btn_study": "Study this deck"
+    },
+    "worksheet_loader": {
+      "title": "Handwriting Worksheet & Print Studio (A4)",
+      "loading": "Loading worksheet studio…",
+      "failed": "Unable to load worksheet studio. Please refresh the page.",
+      "sr_loading": "Loading…"
+    }
+  },
+  "heatmap": {
+    "summary_with_data": "Studied {{cards}} cards today in {{minutes}} minutes ({{seconds}}s/card)",
+    "summary_zero": "Studied 0 cards today in 0.00 minutes (0.00s/card)",
+    "nav": {
+      "prev_year_aria": "Previous year",
+      "next_year_aria": "Next year",
+      "mobile_swipe_hint": "← Swipe to view whole year →",
+      "jump_today": "Jump to today"
+    },
+    "tooltips": {
+      "default_hint": "Hover or tap on cells to view daily study activity.",
+      "today_suffix": " (Today)",
+      "not_studied": "{{date}}{{today}}: Unstudied",
+      "future_due": "{{date}}{{today}}: {{cards}} cards due",
+      "peak_day": "🔥 {{date}}{{today}} [YEAR RECORD]: {{cards}} cards · {{minutes}} mins",
+      "studied_day": "{{date}}{{today}}: {{cards}} cards · {{minutes}} mins"
+    },
+    "legend": {
+      "studied_label": "Studied:",
+      "due_label": "Due:",
+      "less": "Less",
+      "more_fire": "More 🔥",
+      "more_hourglass": "More ⏳",
+      "levels": {
+        "level_0": "0 cards",
+        "level_1": "Level 1",
+        "level_2": "Level 2",
+        "level_3": "Level 3",
+        "level_4": "Level 4",
+        "level_5": "Level 5",
+        "level_6": "Level 6",
+        "level_7_peak": "Level 7 (Peak)"
+      },
+      "due_levels": {
+        "due_level_0": "0 cards",
+        "due_level_1": "Due Level 1",
+        "due_level_3": "Due Level 3",
+        "due_level_5": "Due Level 5",
+        "due_level_7": "Due Level 7"
+      }
+    },
+    "metrics": {
+      "daily_avg_label": "Daily average:",
+      "daily_avg_value": "{{count}} card",
+      "daily_avg_value_one": "{{count}} card",
+      "daily_avg_value_other": "{{count}} cards",
+      "daily_avg_value_plural": "{{count}} cards",
+      "days_learned_label": "Days active:",
+      "days_learned_value": "{{percent}}%",
+      "longest_streak_label": "Best streak:",
+      "longest_streak_value": "{{days}} day",
+      "longest_streak_value_one": "{{days}} day",
+      "longest_streak_value_other": "{{days}} days",
+      "longest_streak_value_plural": "{{days}} days",
+      "current_streak_label": "Current streak:",
+      "current_streak_value": "{{days}} day",
+      "current_streak_value_one": "{{days}} day",
+      "current_streak_value_other": "{{days}} days",
+      "current_streak_value_plural": "{{days}} days"
+    }
+  },
+  "validation": {
+    "name_required": "Please enter a deck name.",
+    "name_max": "Deck name is too long.",
+    "path_max": "Deck path is too long."
+  }
+}
