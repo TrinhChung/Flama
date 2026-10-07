@@ -10,6 +10,8 @@
  * 5. cookies: Chính sách Cookie & Lưu trữ Cục bộ (Cookie Policy)
  */
 
+import { legalDocumentsEn } from './legalDocumentsData.en'
+
 export interface LegalSubClause {
   id: string
   clauseNumber: string
@@ -987,14 +989,21 @@ export const legalDocuments: Record<string, LegalDocument> = {
   },
 }
 
+export { legalDocumentsEn }
+
 /**
  * Helper array of all legal documents for navigation and indexing.
  */
 export const legalDocumentsList: LegalDocument[] = Object.values(legalDocuments)
 
 /**
- * Retrieve a specific legal document by ID with fallback.
+ * Retrieve a specific legal document by ID with fallback and locale support.
  */
-export function getLegalDocument(documentId: string): LegalDocument | undefined {
-  return legalDocuments[documentId]
+export function getLegalDocument(
+  documentId: string,
+  locale: 'vi' | 'en' = 'vi',
+): LegalDocument | undefined {
+  const docs = locale === 'en' ? legalDocumentsEn : legalDocuments
+  return docs[documentId]
 }
+

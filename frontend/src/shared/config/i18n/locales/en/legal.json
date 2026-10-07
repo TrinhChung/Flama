@@ -1,0 +1,56 @@
+{
+  "nav": {
+    "aria_label": "Switch legal documents",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy",
+    "marketplace": "Marketplace Guidelines",
+    "community": "Community Guidelines",
+    "cookies": "Cookie Policy"
+  },
+  "metadata": {
+    "version": "Version {{version}}",
+    "effective_date": "Effective Date",
+    "last_updated": "Last Updated",
+    "read_time": "~{{minutes}} min standard read",
+    "official_standard": "Official Standard",
+    "executive_summary": "Executive Summary"
+  },
+  "actions": {
+    "copy_document": "Copy Link",
+    "copy_document_title": "Copy document link",
+    "copied_toast": "Document link copied to clipboard!",
+    "print_pdf": "Print PDF",
+    "print_pdf_title": "Print document or export to PDF",
+    "copy_anchor": "Copy clause link",
+    "copy_subclause": "Copy subclause link",
+    "copy_anchor_aria": "Copy link for {{number}}",
+    "copied_clause_toast": "Link copied: {{title}}",
+    "selected_clause_toast": "Selected: {{title}}"
+  },
+  "toc": {
+    "title": "Table of Contents",
+    "aria_label": "Clause table of contents",
+    "clause_count": "{{count}} clauses",
+    "mobile_button": "Contents ({{count}} clauses)",
+    "related_policies": "Related Policies"
+  },
+  "support": {
+    "title": "Have questions or need dispute resolution?",
+    "body": "If you require clarification on any clause, need to report copyright infringement under our Notice & Takedown procedure, or have inquiries regarding data privacy under Decree 13/2023/ND-CP, the Flama Legal Team is available to respond within 24–48 business hours.",
+    "button": "Submit Support Request"
+  },
+  "effective_date": "Effective Date",
+  "last_updated": "Last Updated",
+  "read_time": "~{{minutes}} min standard read",
+  "official_standard": "Official Standard",
+  "copy_anchor": "Copy clause link",
+  "copied_toast": "Document link copied to clipboard!",
+  "print_pdf": "Print PDF",
+  "toc_title": "Table of Contents",
+  "clause_count": "{{count}} clauses",
+  "related_policies": "Related Policies",
+  "mobile_toc_button": "Contents ({{count}} clauses)",
+  "support_title": "Have questions or need dispute resolution?",
+  "support_body": "If you require clarification on any clause, need to report copyright infringement under our Notice & Takedown procedure, or have inquiries regarding data privacy under Decree 13/2023/ND-CP, the Flama Legal Team is available to respond within 24–48 business hours.",
+  "support_button": "Submit Support Request"
+}
