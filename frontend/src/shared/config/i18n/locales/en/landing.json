@@ -1,0 +1,321 @@
+{
+  "hero": {
+    "badge": "Learn consistently, remember longer",
+    "title_start": "Keep the ",
+    "title_highlight": "fire",
+    "title_end": " of learning alive across all subjects.",
+    "description": "A cross-disciplinary learning platform designed to help you master languages, IT, Medicine, Law, or any complex field. Build and explore community-contributed specialized flashcard decks for any topic.",
+    "cta_start_free": "Start learning for free",
+    "cta_open_dashboard": "Open Dashboard",
+    "cta_login": "Log in",
+    "cta_view_progress": "View progress",
+    "proof_points": {
+      "all_fields": "Master any discipline",
+      "community_data": "Community-curated decks",
+      "smart_srs": "Intelligent Spaced Repetition"
+    },
+    "cards": {
+      "english": {
+        "category": "English",
+        "front": "affect vs effect",
+        "back": "affect (v) = to influence · effect (n) = a result"
+      },
+      "it_aws": {
+        "category": "IT · AWS",
+        "front": "What is Amazon S3 used for?",
+        "back": "High-durability and scalable cloud object storage."
+      },
+      "physics": {
+        "category": "Basic Physics",
+        "front": "Newton's Second Law",
+        "back": "F = ma"
+      }
+    },
+    "review_buttons": {
+      "again": "Again",
+      "hard": "Hard",
+      "good": "Good",
+      "easy": "Easy"
+    }
+  },
+  "how_it_works": {
+    "eyebrow": "How it works",
+    "title": "From new knowledge to long-term memory",
+    "description": "A streamlined loop designed to get you started fast and sustain your daily study rhythm.",
+    "steps": {
+      "step_1": {
+        "title": "Create cards in 30 seconds",
+        "description": "Quickly add formulas, terminology, or definitions. A minimalist design keeps your focus on what matters."
+      },
+      "step_2": {
+        "title": "Study on an intelligent schedule",
+        "description": "Flama automatically schedules your reviews right at the moment you are about to forget."
+      },
+      "step_3": {
+        "title": "Maintain momentum",
+        "description": "Track your daily study load and clearly visualize progress across New, Learn, and Due cards."
+      }
+    }
+  },
+  "product_preview": {
+    "eyebrow": "Product preview",
+    "title": "One workspace for the entire flashcard lifecycle",
+    "description": "Create content, review with the scheduler, and manage your collection without juggling multiple tools.",
+    "frame_create": {
+      "title": "Flexible note creation",
+      "description": "Pick a NoteType, fill in fields, and assign to a deck in a single flow."
+    },
+    "frame_study": {
+      "title": "Review what you need to remember",
+      "description": "The scheduler gathers due cards into a focused, distraction-free study session.",
+      "badge_new": "New 16",
+      "badge_learn": "Learn 7",
+      "badge_due": "Due 24",
+      "mock_front": "What is least privilege?",
+      "mock_back": "Design principle for limiting permissions."
+    },
+    "frame_browse": {
+      "title": "Find and edit quickly",
+      "description": "Browse deck trees, filter cards, and edit content right where it lives."
+    }
+  },
+  "use_cases": {
+    "eyebrow": "Versatile",
+    "title": "One method, limitless domains",
+    "description": "Any knowledge that requires retention can become a structured deck.",
+    "items": [
+      "IT · AWS & Security",
+      "Software · System Design",
+      "JLPT · Kanji & Vocabulary",
+      "Medicine · Clinical Terms",
+      "Law · Core Statutes",
+      "Languages · Common Phrases"
+    ]
+  },
+  "benefits": {
+    "eyebrow": "Benefits",
+    "title": "Why choose Flama?",
+    "items": {
+      "srs": {
+        "title": "Spaced repetition",
+        "description": "Retain more in less time compared to traditional cramming."
+      },
+      "due_focus": {
+        "title": "Focus on fading memories",
+        "description": "The algorithm prioritizes cards due for review and minimizes time spent on already-mastered content."
+      },
+      "clear_progress": {
+        "title": "Crystal-clear progress",
+        "description": "Dashboards and analytics display your study load, review history, and forecasted reviews."
+      },
+      "focused_experience": {
+        "title": "Distraction-free experience",
+        "description": "Streamlined flow with fast keyboard shortcuts, running smoothly on desktop and mobile."
+      }
+    }
+  },
+  "mini_demo": {
+    "badge": "Mini demo",
+    "title": "Review a card in seconds",
+    "description": "Flip the card, rate your recall confidence, and let Flama suggest your next review interval.",
+    "bullets": [
+      "Clean Front/Back layout highlighting key concepts.",
+      "Again/Hard/Good/Easy dynamically adjusts intervals.",
+      "Perfect for quick daily micro-study sessions."
+    ],
+    "card": {
+      "front_label": "Front",
+      "question": "How does an IAM Role differ from an IAM User?",
+      "front_hint": "Tap to flip card",
+      "back_label": "Back",
+      "answer": "Roles use temporary credentials; Users typically hold permanent credentials.",
+      "back_hint": "Tap to view question"
+    },
+    "rating_intervals": {
+      "again": "Repeat in 1 minute",
+      "hard": "Repeat in 10 minutes",
+      "good": "Repeat in 1 day",
+      "easy": "Repeat in 5 days"
+    },
+    "schedule_label": "Suggested schedule: {{schedule}}"
+  },
+  "roadmap": {
+    "eyebrow": "Roadmap",
+    "title": "Where is Flama headed?",
+    "description": "What's already live, what's in progress, and what lies in our long-term vision.",
+    "tiers": {
+      "now": {
+        "label": "Now",
+        "description": "Live in production",
+        "items": [
+          {
+            "title": "NoteType + Note Editor",
+            "desc": "Custom card templates tailored to your needs."
+          },
+          {
+            "title": "Study with 4 rating buttons",
+            "desc": "Pace reviews using Again, Hard, Good, and Easy."
+          },
+          {
+            "title": "Browse deck tree + card editor",
+            "desc": "Filter, search, and update cards directly in your collection."
+          },
+          {
+            "title": "Dashboard New/Learn/Due",
+            "desc": "Clear daily visibility into learning load."
+          },
+          {
+            "title": "Import/Export CSV",
+            "desc": "Seamlessly bring your study materials in and out of Flama."
+          }
+        ]
+      },
+      "next": {
+        "label": "Next",
+        "description": "Coming soon",
+        "items": [
+          {
+            "title": "Weekly study reports",
+            "desc": "Track weekly retention and volume trends."
+          },
+          {
+            "title": "Goal-oriented presets",
+            "desc": "Quickly initialize templates for specific study tracks."
+          },
+          {
+            "title": "Enhanced Marketplace",
+            "desc": "Discover the exact decks you need faster."
+          }
+        ]
+      },
+      "later": {
+        "label": "Later",
+        "description": "Long-term vision",
+        "items": [
+          {
+            "title": "Deeper multi-device sync",
+            "desc": "Study seamlessly across all your devices."
+          },
+          {
+            "title": "Collaborative study groups",
+            "desc": "Share decks and maintain synchronized team study rhythms."
+          },
+          {
+            "title": "Dedicated mobile apps",
+            "desc": "Optimized for lightning-fast on-the-go review sessions."
+          }
+        ]
+      }
+    }
+  },
+  "updates": {
+    "eyebrow": "Product updates",
+    "title": "What's new for learners",
+    "description": "Recent improvements making study sessions faster, safer, and more natural.",
+    "items": [
+      {
+        "tag": "Interface",
+        "date": "04/03/2026",
+        "title": "Refined Study Interface",
+        "description": "Clean, focused layout makes high-volume card review effortless."
+      },
+      {
+        "tag": "Focus",
+        "date": "04/03/2026",
+        "title": "Uninterrupted Fullscreen Study",
+        "description": "Stable session state maintains flow across card transitions."
+      },
+      {
+        "tag": "Editing",
+        "date": "04/03/2026",
+        "title": "Safer Card Editing",
+        "description": "Eliminates accidental overwrites when modifying card contents in collection."
+      },
+      {
+        "tag": "Audio",
+        "date": "04/03/2026",
+        "title": "Japanese Audio with VoiceVox",
+        "description": "Generate audio from vocabulary and example sentences directly on cards."
+      }
+    ]
+  },
+  "faq": {
+    "eyebrow": "FAQ",
+    "title": "Frequently Asked Questions",
+    "items": [
+      {
+        "question": "What makes Flama unique?",
+        "answer": "Flama is not confined to a single subject; it empowers learning across all disciplines (Languages, IT, Medicine, Law, Certifications). Moreover, Flama provides an open ecosystem where the community contributes and curates specialized decks for any topic."
+      },
+      {
+        "question": "What is the mission of Flama?",
+        "answer": "Flama empowers you to craft decks your way while sustaining a daily study habit. Beyond personal learning, it serves as a platform where learners co-create structured, accessible learning repositories."
+      },
+      {
+        "question": "Who is Flama for?",
+        "answer": "It is built for anyone who believes in steady daily progress: language learners, certification candidates, professionals memorizing IT architectures, medical terminologies, legal statutes, or any knowledge requiring long-term recall."
+      },
+      {
+        "question": "Can I create my own flashcards?",
+        "answer": "Yes. You can define custom NoteTypes, input fields, organize them into deck trees, and customize visual card templates to fit your learning style."
+      },
+      {
+        "question": "What is audio used for in Flama?",
+        "answer": "Audio helps develop correct pronunciation, pitch accent, and listening reflexes directly during review rather than relying solely on text."
+      },
+      {
+        "question": "Does Flama work well on mobile?",
+        "answer": "Yes. The fully responsive interface is optimized for rapid mobile review sessions as well as in-depth deck management on desktop."
+      },
+      {
+        "question": "Will large decks overwhelm me?",
+        "answer": "Flama organizes cards into New, Learn, and Due queues, prioritizing items on the verge of being forgotten so you only study what truly matters today."
+      },
+      {
+        "question": "Can I share my decks with others?",
+        "answer": "Yes. The Marketplace supports sharing decks and NoteTypes. Installed decks use logical overlays, keeping source content and your personal study progress completely decoupled."
+      },
+      {
+        "question": "Can I export my data to other platforms?",
+        "answer": "Yes. Flama supports standard CSV/TSV import and export, ensuring you always maintain complete ownership of your data."
+      },
+      {
+        "question": "Is Flama free to use?",
+        "answer": "Yes. You can register and access all core learning features for free. The Marketplace includes both free and creator-priced decks."
+      }
+    ]
+  },
+  "sponsors": {
+    "eyebrow": "Community",
+    "title": "Angel Sponsors",
+    "description": "Heartfelt thanks to everyone who helps maintain our infrastructure and advance Flama.",
+    "tiers": {
+      "diamond": "Diamond",
+      "gold": "Gold",
+      "platinum": "Platinum"
+    }
+  },
+  "privacy_callout": {
+    "title": "Your data belongs to you.",
+    "description_prefix": "Flama respects your privacy and keeps your study data strictly isolated per account. Learn more in our ",
+    "terms_link": "Terms of Service",
+    "and": " and ",
+    "privacy_link": "Privacy Policy",
+    "dot": "."
+  },
+  "final_cta": {
+    "title": "Ready to ignite your daily learning habit?",
+    "description": "Start with a single small deck and maintain a steady daily pace.",
+    "btn_start_free": "Start learning for free",
+    "btn_continue_study": "Continue studying",
+    "btn_login": "Log in",
+    "btn_view_stats": "View statistics"
+  },
+  "feature_badges": {
+    "flexible_notetype": "Flexible NoteTypes",
+    "import_export": "Import/Export",
+    "spaced_repetition": "Spaced repetition",
+    "responsive": "Responsive",
+    "logical_overlay": "Logical overlay"
+  }
+}
