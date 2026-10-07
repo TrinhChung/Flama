@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import type { TFunction } from 'i18next'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ChevronDown,
@@ -8,6 +10,7 @@ import {
   LockKeyhole,
   Search,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import type { PublishDeckOption } from '../publishApi'
@@ -61,13 +64,30 @@ function filteredDeckIds(decks: PublishDeckOption[], search: string): Set<number
   return allowed
 }
 
-function blockLabel(code: PublishDeckOption['block_code']): string | null {
-  if (code === 'marketplace_clone') return 'Từ Marketplace'
-  if (code === 'marketplace_note_type') return 'Dùng Note Type Marketplace'
-  if (code === 'already_shared') return 'Đã chia sẻ'
-  if (code === 'ancestor_shared') return 'Bộ cha đã chia sẻ'
-  if (code === 'descendant_shared') return 'Bộ con đã chia sẻ'
-  if (code === 'not_owned') return 'Không thuộc sở hữu'
+function blockLabel(
+  code: PublishDeckOption['block_code'],
+  t?: TFunction<'marketplace'>,
+): string | null {
+  if (code === 'marketplace_clone') {
+    return t ? t('publish_deck.tree.block_badge_marketplace') : 'Từ Marketplace'
+  }
+  if (code === 'marketplace_note_type') {
+    return t
+      ? t('publish_deck.tree.block_badge_marketplace_notetype')
+      : 'Dùng Note Type Marketplace'
+  }
+  if (code === 'already_shared') {
+    return t ? t('publish_deck.tree.block_badge_shared') : 'Đã chia sẻ'
+  }
+  if (code === 'ancestor_shared') {
+    return t ? t('publish_deck.tree.block_badge_ancestor_shared') : 'Bộ cha đã chia sẻ'
+  }
+  if (code === 'descendant_shared') {
+    return t ? t('publish_deck.tree.block_badge_descendant_shared') : 'Bộ con đã chia sẻ'
+  }
+  if (code === 'not_owned') {
+    return t ? t('publish_deck.tree.block_badge_not_owned') : 'Không thuộc sở hữu'
+  }
   return null
 }
 
@@ -90,11 +110,12 @@ function TreeItem({
   onToggle,
   onSelect,
 }: TreeItemProps) {
+  const { t } = useTranslation('marketplace')
   const deck = node.deck
   const hasChildren = node.children.length > 0
   const expanded = searchActive || expandedIds.has(deck.id)
   const selected = String(deck.id) === selectedDeckId
-  const statusLabel = blockLabel(deck.block_code)
+  const statusLabel = blockLabel(deck.block_code, t)
 
   const selectDeck = () => {
     if (deck.is_selectable) onSelect(deck)
@@ -129,7 +150,11 @@ function TreeItem({
           {hasChildren ? (
             <button
               type="button"
-              aria-label={`${expanded ? 'Thu gọn' : 'Mở rộng'} bộ ${deck.name}`}
+              aria-label={
+                expanded
+                  ? t('publish_deck.tree.collapse_deck_aria', { name: deck.name })
+                  : t('publish_deck.tree.expand_deck_aria', { name: deck.name })
+              }
               className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation min-w-[26px] min-h-[26px] flex items-center justify-center cursor-pointer"
               onClick={(event) => {
                 event.stopPropagation()
@@ -153,7 +178,7 @@ function TreeItem({
         <div className="flex shrink-0 items-center gap-1.5 ml-1">
           {deck.card_count > 0 && (
             <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium shrink-0">
-              {deck.card_count} thẻ
+              {deck.card_count} {t('card.card_unit')}
             </Badge>
           )}
           {statusLabel && (
@@ -192,6 +217,7 @@ type PublishDeckTreeProps = {
 }
 
 export function PublishDeckTree({ decks, selectedDeckId, onSelectDeck }: PublishDeckTreeProps) {
+  const { t } = useTranslation('marketplace')
   const [search, setSearch] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set())
   const searchActive = search.trim().length > 0
@@ -235,7 +261,7 @@ export function PublishDeckTree({ decks, selectedDeckId, onSelectDeck }: Publish
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Tìm bộ thẻ..."
+            placeholder={t('publish_deck.tree.search_placeholder')}
             className="h-9 rounded-xl pl-9 text-xs"
           />
         </div>
@@ -245,14 +271,14 @@ export function PublishDeckTree({ decks, selectedDeckId, onSelectDeck }: Publish
             className="rounded-lg border border-border/80 px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors cursor-pointer"
             onClick={() => setExpandedIds(new Set(decks.map((deck) => deck.id)))}
           >
-            Mở rộng
+            {t('publish_deck.tree.expand_all')}
           </button>
           <button
             type="button"
             className="rounded-lg border border-border/80 px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors cursor-pointer"
             onClick={() => setExpandedIds(new Set())}
           >
-            Thu gọn
+            {t('publish_deck.tree.collapse_all')}
           </button>
         </div>
       </div>
@@ -273,7 +299,7 @@ export function PublishDeckTree({ decks, selectedDeckId, onSelectDeck }: Publish
           ))
         ) : (
           <div className="py-6 text-center text-xs text-muted-foreground">
-            Không tìm thấy bộ thẻ phù hợp.
+            {t('publish_deck.tree.empty_no_decks')}
           </div>
         )}
       </div>

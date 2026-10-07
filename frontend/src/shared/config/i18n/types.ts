@@ -8,6 +8,9 @@ import type mcp from './locales/vi/mcp.json'
 import type study from './locales/vi/study.json'
 import type browse from './locales/vi/browse.json'
 import type statistics from './locales/vi/statistics.json'
+import type marketplace from './locales/vi/marketplace.json'
+import type library from './locales/vi/library.json'
+import type imports from './locales/vi/import.json'
 
 export interface I18nResources {
   common: typeof common
@@ -20,6 +23,9 @@ export interface I18nResources {
   study: typeof study
   browse: typeof browse
   statistics: typeof statistics
+  marketplace: typeof marketplace
+  library: typeof library
+  import: typeof imports
 }
 
 declare module 'i18next' {

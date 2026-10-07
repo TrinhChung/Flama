@@ -1,4 +1,6 @@
+import '@/shared/config/i18n'
 import { Check } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
 import { WIZARD_STEPS } from './PublishWizardTypes'
 
@@ -11,6 +13,8 @@ export function PublishStepWizardNav({
   currentStep,
   goToStep,
 }: PublishStepWizardNavProps) {
+  const { t } = useTranslation('marketplace')
+
   return (
     <Card className="rounded-2xl border-border/80 bg-card shadow-xs">
       <CardContent className="p-3 sm:p-4">
@@ -18,6 +22,8 @@ export function PublishStepWizardNav({
           {WIZARD_STEPS.map((s) => {
             const isActive = currentStep === s.id
             const isCompleted = currentStep > s.id
+            const stepTitle = t(`publish_deck.steps.step${s.id}` as any, s.title)
+            const stepSub = t(`publish_deck.steps.step${s.id}_sub` as any, s.sub)
 
             return (
               <button
@@ -45,10 +51,10 @@ export function PublishStepWizardNav({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold leading-tight truncate">
-                    {s.title}
+                    {stepTitle}
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate hidden sm:block">
-                    {s.sub}
+                    {stepSub}
                   </div>
                 </div>
               </button>

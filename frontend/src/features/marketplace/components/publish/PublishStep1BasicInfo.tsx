@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import { useTranslation } from 'react-i18next'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -50,11 +52,16 @@ export function PublishStep1BasicInfo({
   setChangelog,
   clearFieldError,
 }: PublishStep1BasicInfoProps) {
+  const { t } = useTranslation('marketplace')
+
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
       <div className="space-y-2">
         <Label className="text-xs font-semibold flex items-center justify-between">
-          <span>Bộ thẻ nguồn chia sẻ <span className="text-destructive">*</span></span>
+          <span>
+            {t('publish_deck.step1.deck_select_label')}{' '}
+            <span className="text-destructive">*</span>
+          </span>
         </Label>
         {isEditMode ? (
           <div className="p-3.5 rounded-xl border border-border/80 bg-muted/30 text-xs font-semibold text-foreground flex items-center justify-between">
@@ -62,7 +69,7 @@ export function PublishStep1BasicInfo({
               {decks.find((d) => String(d.id) === String(sourceDeckId || deckItem?.source_deck_id))?.name ||
                 deckItem?.title ||
                 title ||
-                'Bộ thẻ nguồn'}
+                t('card.no_title')}
             </span>
             <span className="text-[10px] text-muted-foreground font-mono">
               ID: {sourceDeckId || deckItem?.source_deck_id}
@@ -87,7 +94,10 @@ export function PublishStep1BasicInfo({
       {/* Title */}
       <div className="space-y-2">
         <Label htmlFor="title" className="text-xs font-semibold flex items-center justify-between">
-          <span>Tiêu đề hiển thị trên Marketplace <span className="text-destructive">*</span></span>
+          <span>
+            {t('publish_deck.step1.title_label')}{' '}
+            <span className="text-destructive">*</span>
+          </span>
         </Label>
         <Input
           id="title"
@@ -108,7 +118,10 @@ export function PublishStep1BasicInfo({
       {/* Preview Text */}
       <div className="space-y-2">
         <Label htmlFor="preview_text" className="text-xs font-semibold flex items-center justify-between">
-          <span>Tóm tắt xem trước ngắn (Preview Text) <span className="text-destructive">*</span></span>
+          <span>
+            {t('publish_deck.step1.preview_label')}{' '}
+            <span className="text-destructive">*</span>
+          </span>
         </Label>
         <Input
           id="preview_text"
@@ -132,7 +145,10 @@ export function PublishStep1BasicInfo({
       {/* Description */}
       <div className="space-y-2">
         <Label htmlFor="description" className="text-xs font-semibold flex items-center justify-between">
-          <span>Mô tả chi tiết bộ thẻ <span className="text-destructive">*</span></span>
+          <span>
+            {t('publish_deck.step1.desc_label')}{' '}
+            <span className="text-destructive">*</span>
+          </span>
         </Label>
         <Textarea
           id="description"
@@ -153,7 +169,9 @@ export function PublishStep1BasicInfo({
       {/* Tags & Changelog in 2 columns */}
       <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border/40">
         <div className="space-y-1.5">
-          <Label htmlFor="tags" className="text-xs font-semibold">Thẻ Tags (cách nhau dấu phẩy)</Label>
+          <Label htmlFor="tags" className="text-xs font-semibold">
+            {t('publish_deck.step1.tags_label')}
+          </Label>
           <Input
             id="tags"
             placeholder="n3, tu-vung, y-khoa, audio"
@@ -171,7 +189,9 @@ export function PublishStep1BasicInfo({
           </div>
         ) : (
           <div className="space-y-1.5">
-            <Label htmlFor="changelog" className="text-xs font-semibold">Ghi chú phát hành (Changelog)</Label>
+            <Label htmlFor="changelog" className="text-xs font-semibold">
+              {t('publish_deck.step1.changelog_label')}
+            </Label>
             <Input
               id="changelog"
               placeholder="Ví dụ: Bổ sung 50 ví dụ thực tế và audio tự nhiên..."

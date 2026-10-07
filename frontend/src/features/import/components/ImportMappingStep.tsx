@@ -7,6 +7,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ArrowRightLeft, Sliders, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import type { useFileImportWizard } from '../hooks/useFileImportWizard'
 
 interface ImportMappingStepProps {
@@ -14,6 +15,7 @@ interface ImportMappingStepProps {
 }
 
 export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
+  const { t } = useTranslation('import')
   const {
     fields,
     mapping,
@@ -42,10 +44,13 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
             <div>
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <ArrowRightLeft className="size-4 text-primary" />
-                Ánh xạ Cột -&gt; Trường Note
+                {t('file_import.step3.title', 'Ánh xạ Cột -> Trường Note')}
               </CardTitle>
               <CardDescription className="text-xs">
-                Ghép các cột trong tệp vào từng trường tương ứng của loại thẻ.
+                {t(
+                  'file_import.step3.desc',
+                  'Ghép các cột trong tệp vào từng trường tương ứng của loại thẻ.'
+                )}
               </CardDescription>
             </div>
             <Button
@@ -54,13 +59,13 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
               size="sm"
               onClick={() => {
                 applyAutoMapping()
-                toast.info('Đã tự động ánh xạ lại các trường theo cột.')
+                toast.info(t('file_import.step3.toast_auto_remap', 'Đã tự động ánh xạ lại các trường theo cột.'))
               }}
               className="text-xs gap-1.5 h-8 font-medium shrink-0 self-start sm:self-auto"
               title="Tự động khớp cột theo tên hoặc xếp lần lượt theo thứ tự"
             >
               <Wand2 className="size-3.5 text-primary" />
-              Tự động khớp lại
+              {t('file_import.step3.btn_auto_remap', 'Tự động khớp lại')}
             </Button>
           </div>
         </CardHeader>
@@ -68,9 +73,15 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30">
-                <TableHead className="font-semibold">Trường Note</TableHead>
-                <TableHead className="font-semibold">Nguồn dữ liệu</TableHead>
-                <TableHead className="font-semibold">Giá trị mẫu / Cố định</TableHead>
+                <TableHead className="font-semibold">
+                  {t('file_import.step3.col_note_field', 'Trường Note')}
+                </TableHead>
+                <TableHead className="font-semibold">
+                  {t('file_import.step3.col_source', 'Nguồn dữ liệu')}
+                </TableHead>
+                <TableHead className="font-semibold">
+                  {t('file_import.step3.col_preview', 'Giá trị mẫu / Cố định')}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -102,11 +113,19 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
                           }
                         }}
                       >
-                        <option value="ignore">Bỏ qua</option>
-                        <option value="constant">Giá trị cố định</option>
+                        <option value="ignore">
+                          {t('file_import.step3.source_ignore', 'Bỏ qua (Không nhập)')}
+                        </option>
+                        <option value="constant">
+                          {t('file_import.step3.source_constant', 'Giá trị cố định…')}
+                        </option>
                         {columns.map((c) => (
                           <option key={c.index} value={`col:${c.index}`}>
-                            Cột {c.index + 1} - {c.display}
+                            {t('file_import.step3.col_option_prefix', {
+                              index: c.index + 1,
+                              name: c.display,
+                              defaultValue: `Cột ${c.index + 1}: ${c.display}`,
+                            })}
                           </option>
                         ))}
                       </NativeSelect>
@@ -144,7 +163,7 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
         <CardHeader className="pb-3 border-b bg-card/50">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Sliders className="size-4 text-primary" />
-            Chế độ Import &amp; Khóa đối chiếu
+            {t('file_import.step3.mode_title', 'Chế độ Import & Khóa đối chiếu')}
           </CardTitle>
           <CardDescription className="text-xs">
             Thiết lập quy tắc ghi đè dữ liệu và nhận diện bản ghi đã có.
@@ -153,7 +172,9 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
         <CardContent className="pt-4 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-3">
-              <Label className="font-semibold text-xs">Chế độ ghi đè</Label>
+              <Label className="font-semibold text-xs">
+                {t('file_import.step3.mode_title', 'Chế độ ghi đè')}
+              </Label>
               <div className="space-y-2 text-xs">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -163,7 +184,7 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
                     checked={importMode === 'insert_only'}
                     onChange={() => setImportMode('insert_only')}
                   />
-                  <span>Chỉ thêm mới (Insert Only)</span>
+                  <span>{t('file_import.step3.mode_insert', 'Insert Only (Chỉ thêm mới)')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -173,7 +194,7 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
                     checked={importMode === 'update_only'}
                     onChange={() => setImportMode('update_only')}
                   />
-                  <span>Chỉ cập nhật (Update Only)</span>
+                  <span>{t('file_import.step3.mode_update', 'Update Only (Chỉ cập nhật)')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -183,7 +204,7 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
                     checked={importMode === 'upsert'}
                     onChange={() => setImportMode('upsert')}
                   />
-                  <span>Thêm mới + Cập nhật (Upsert)</span>
+                  <span>{t('file_import.step3.mode_upsert', 'Upsert (Thêm mới hoặc Cập nhật)')}</span>
                 </label>
               </div>
 
@@ -194,13 +215,15 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
                   onCheckedChange={(checked) => setDontOverwriteEmpty(Boolean(checked))}
                 />
                 <Label htmlFor={dontOverwriteEmptyId} className="text-xs font-medium cursor-pointer">
-                  Không ghi đè giá trị rỗng (An toàn dữ liệu)
+                  {t('file_import.step3.dont_overwrite_empty', 'Không ghi đè trường rỗng lên dữ liệu đã có')}
                 </Label>
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label className="font-semibold text-xs">Khóa đối chiếu (Trường so khớp trùng lặp)</Label>
+              <Label className="font-semibold text-xs">
+                {t('file_import.step3.uniqueness_title', 'Các trường xác định tính duy nhất (Uniqueness Key)')}
+              </Label>
               <p className="text-xs text-muted-foreground">Chọn trường để hệ thống nhận diện bản ghi đã tồn tại.</p>
               <div className="border border-border/80 rounded-xl p-3 max-h-44 overflow-y-auto space-y-2 bg-muted/20">
                 {fields.map((f) => {
@@ -236,7 +259,7 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
                 onCheckedChange={(checked) => setConfirmColumnMismatch(Boolean(checked))}
               />
               <Label htmlFor={columnMismatchConfirmId} className="text-xs font-semibold cursor-pointer text-destructive">
-                Tôi xác nhận tiếp tục dù số cột không khớp với số trường của NoteType
+                {t('file_import.step3.column_mismatch_warning', 'Xác nhận số lượng cột không khớp giữa các dòng')}
               </Label>
             </div>
           )}

@@ -1,4 +1,6 @@
+import '@/shared/config/i18n'
 import { BookOpen, CheckCircle2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { FieldErrorMessage } from './PublishWizardTypes'
@@ -32,6 +34,7 @@ export function PublishStep3Goals({
   setTaxonomyTopics,
   clearFieldError,
 }: PublishStep3GoalsProps) {
+  const { t } = useTranslation('marketplace')
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Contextual Subject Banner */}
@@ -55,7 +58,7 @@ export function PublishStep3Goals({
         <div className="flex items-center justify-between">
           <div>
             <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-              <span>Mục tiêu học tập (Learning Goals)</span>
+              <span>{t('publish_deck.step3.goals_label')}</span>
               <span className="text-destructive">*</span>
             </Label>
             <p className="text-[11px] text-muted-foreground">
@@ -109,7 +112,7 @@ export function PublishStep3Goals({
         <div className="flex items-center justify-between">
           <div>
             <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-              <span>Chủ đề chính liên kết (Primary Topics)</span>
+              <span>{t('publish_deck.step3.topics_label')}</span>
               <span className="text-destructive">*</span>
             </Label>
             <p className="text-[11px] text-muted-foreground">

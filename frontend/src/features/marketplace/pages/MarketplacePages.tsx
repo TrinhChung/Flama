@@ -1,40 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRight,
   BookOpen,
-  Download,
-  Eye,
-  Flame,
   HelpCircle,
   Layers,
-  Loader2,
   Plus,
   RotateCcw,
-  Search,
-  SlidersHorizontal,
-  Star,
   X,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { DeckCard } from '../components/DeckCard'
+import { SharedNoteTypeCard } from '../components/card/SharedNoteTypeCard'
+import { MarketplaceFilterBar } from '../components/MarketplaceFilterBar'
+import { MarketplaceCuratedSection } from '../components/MarketplaceCuratedSection'
 
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError } from '@/shared/components/PageState'
 import { SpotlightTour, type TourStep } from '@/shared/components/SpotlightTour'
@@ -42,43 +27,56 @@ import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
 
 const MARKET_STORAGE_KEY = 'flama_marketplace_spotlight_tour_v1'
 
-const getMarketTourSteps = (mode: 'decks' | 'note-types', hasItems: boolean): TourStep[] => {
+const getMarketTourSteps = (
+  mode: 'decks' | 'note-types',
+  hasItems: boolean,
+  t: (key: any, opts?: any) => string,
+): TourStep[] => {
   const steps: TourStep[] = [
     {
       target: '[data-tour="market-mode-switcher"]',
-      title: '🔄 1. Chuyển Đổi Kho Học Liệu',
-      content:
-        'Chuyển đổi linh hoạt giữa "Kho Bộ Thẻ" (các bộ flashcard hoàn chỉnh) và "Kho Loại Thẻ" (các mẫu giao diện NoteType).',
+      title: t('tour.step1_title', { defaultValue: '🔄 1. Chuyển Đổi Kho Học Liệu' }),
+      content: t('tour.step1_content', {
+        defaultValue: 'Chuyển đổi linh hoạt giữa "Kho Bộ Thẻ" (các bộ flashcard hoàn chỉnh) và "Kho Loại Thẻ" (các mẫu giao diện NoteType).',
+      }),
       placement: 'bottom',
     },
     {
       target: '[data-tour="market-publish-btn"]',
-      title: mode === 'decks' ? '🚀 2. Đăng Tải Bộ Thẻ Của Bạn' : '🚀 2. Tạo Mẫu Thẻ Mới',
-      content:
-        mode === 'decks'
-          ? 'Chia sẻ bộ thẻ bạn đã biên soạn lên Marketplace để cộng đồng cùng học hoặc nhận đóng góp.'
-          : 'Tự tạo loại thẻ mới hoặc xuất bản NoteType của bạn lên Marketplace.',
+      title: mode === 'decks'
+        ? t('tour.step2_title_decks', { defaultValue: '🚀 2. Đăng Tải Bộ Thẻ Của Bạn' })
+        : t('tour.step2_title_notetypes', { defaultValue: '🚀 2. Tạo Mẫu Thẻ Mới' }),
+      content: mode === 'decks'
+        ? t('tour.step2_content_decks', {
+            defaultValue: 'Chia sẻ bộ thẻ bạn đã biên soạn lên Marketplace để cộng đồng cùng học hoặc nhận đóng góp.',
+          })
+        : t('tour.step2_content_notetypes', {
+            defaultValue: 'Tự tạo loại thẻ mới hoặc xuất bản NoteType của bạn lên Marketplace.',
+          }),
       placement: 'bottom',
     },
     {
       target: '[data-tour="market-search-box"]',
-      title: '🔍 3. Tìm Kiếm Thông Minh',
-      content:
-        'Tìm kiếm nhanh theo tên bộ thẻ, trình độ JLPT (N5 - N1), từ vựng theo chủ đề, hoặc tên tác giả.',
+      title: t('tour.step3_title', { defaultValue: '🔍 3. Tìm Kiếm Thông Minh' }),
+      content: t('tour.step3_content', {
+        defaultValue: 'Tìm kiếm nhanh theo tên bộ thẻ, trình độ JLPT (N5 - N1), từ vựng theo chủ đề, hoặc tên tác giả.',
+      }),
       placement: 'bottom',
     },
     {
       target: '[data-tour="market-categories"]',
-      title: '🏷️ 4. Bộ Lọc Theo Chủ Đề',
-      content:
-        'Lọc nhanh theo các danh mục trọng tâm: JLPT N5, N4, N3, N2, N1, Từ vựng, Kanji, Giao tiếp, IT / Công nghệ...',
+      title: t('tour.step4_title', { defaultValue: '🏷️ 4. Bộ Lọc Theo Chủ Đề' }),
+      content: t('tour.step4_content', {
+        defaultValue: 'Lọc nhanh theo các danh mục trọng tâm: JLPT N5, N4, N3, N2, N1, Từ vựng, Kanji, Giao tiếp, IT / Công nghệ...',
+      }),
       placement: 'bottom',
     },
     {
       target: '[data-tour="market-sort-tabs"]',
-      title: '⚡ 5. Sắp Xếp Theo Nhu Cầu',
-      content:
-        'Xem các bộ thẻ được "Đề xuất" bởi thuật toán, "Phổ biến" nhiều lượt tải nhất, hoặc "Mới nhất" vừa đăng tải.',
+      title: t('tour.step5_title', { defaultValue: '⚡ 5. Sắp Xếp Theo Nhu Cầu' }),
+      content: t('tour.step5_content', {
+        defaultValue: 'Xem các bộ thẻ được "Đề xuất" bởi thuật toán, "Phổ biến" nhiều lượt tải nhất, hoặc "Mới nhất" vừa đăng tải.',
+      }),
       placement: 'bottom',
     },
   ]
@@ -87,16 +85,18 @@ const getMarketTourSteps = (mode: 'decks' | 'note-types', hasItems: boolean): To
     steps.push(
       {
         target: '[data-tour="market-card-first"]',
-        title: '🎴 6. Thông Tin Thẻ Học Liệu',
-        content:
-          'Mỗi thẻ hiển thị chủ đề, giá bán (Miễn phí/Trả phí), tên tác giả, điểm đánh giá sao ⭐ và số lượng thẻ.',
+        title: t('tour.step6_title', { defaultValue: '🎴 6. Thông Tin Thẻ Học Liệu' }),
+        content: t('tour.step6_content', {
+          defaultValue: 'Mỗi thẻ hiển thị chủ đề, giá bán (Miễn phí/Trả phí), tên tác giả, điểm đánh giá sao ⭐ và số lượng thẻ.',
+        }),
         placement: 'top',
       },
       {
         target: '[data-tour="market-action-btn"]',
-        title: '📥 7. Xem Chi Tiết & Cài Đặt',
-        content:
-          'Bấm để xem trước danh sách thẻ, xem giao diện thực tế và cài đặt (Overlay Sync) trực tiếp vào tài khoản của bạn để học ngay!',
+        title: t('tour.step7_title', { defaultValue: '📥 7. Xem Chi Tiết & Cài Đặt' }),
+        content: t('tour.step7_content', {
+          defaultValue: 'Bấm để xem trước danh sách thẻ, xem giao diện thực tế và cài đặt (Overlay Sync) trực tiếp vào tài khoản của bạn để học ngay!',
+        }),
         placement: 'top',
       },
     )
@@ -227,6 +227,7 @@ function MarketplaceSkeletonGrid() {
 }
 
 function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
+  const { t } = useTranslation('marketplace')
   const [view, setView] = useState<SortView>('recommended')
   const [queryText, setQueryText] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -239,7 +240,6 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   const [isFilterExpanded, setIsFilterExpanded] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
-
 
   const {
     domains,
@@ -348,8 +348,8 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   }
 
   const tourSteps = useMemo(
-    () => getMarketTourSteps(mode, (marketQuery.data?.items.length ?? 0) > 0),
-    [mode, marketQuery.data?.items.length],
+    () => getMarketTourSteps(mode, (marketQuery.data?.items.length ?? 0) > 0, t),
+    [mode, marketQuery.data?.items.length, t],
   )
 
   // Curated section grouping when browsing all items without active filters
@@ -410,11 +410,15 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
 
       {/* Flama Header with Mode Switcher & Publish CTA */}
       <PageHeader
-        title={mode === 'decks' ? 'Kho Bộ Thẻ Cộng Đồng' : 'Kho Mẫu Thẻ (Note Types)'}
+        title={
+          mode === 'decks'
+            ? t('header.title_decks', { defaultValue: 'Kho Bộ Thẻ Cộng Đồng' })
+            : t('header.title_notetypes', { defaultValue: 'Kho Mẫu Thẻ (Note Types)' })
+        }
         description={
           mode === 'decks'
-            ? 'Khám phá, chia sẻ và tải về các bộ flashcard tiếng Nhật chất lượng từ cộng đồng.'
-            : 'Các mẫu hiển thị Flashcard chuẩn đẹp, tối ưu hóa giao diện học Kanji, Từ vựng và Ngữ pháp.'
+            ? t('header.desc_decks', { defaultValue: 'Khám phá, chia sẻ và tải về các bộ flashcard tiếng Nhật chất lượng từ cộng đồng.' })
+            : t('header.desc_notetypes', { defaultValue: 'Các mẫu hiển thị Flashcard chuẩn đẹp, tối ưu hóa giao diện học Kanji, Từ vựng và Ngữ pháp.' })
         }
         actions={
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
@@ -425,7 +429,8 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0"
             >
               <HelpCircle className="size-3.5 mr-1.5 text-primary shrink-0" />
-              <span className="hidden xs:inline">Tour </span>Hướng Dẫn
+              <span className="hidden xs:inline">{t('header.tour_btn_prefix', { defaultValue: 'Tour ' })}</span>
+              {t('header.tour_btn', { defaultValue: 'Hướng Dẫn' })}
             </Button>
 
             <div data-tour="market-mode-switcher" className="inline-flex rounded-xl border border-border/80 bg-muted/40 p-0.5 sm:p-1 shadow-2xs shrink-0">
@@ -437,7 +442,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               >
                 <Link to="/marketplace/decks">
                   <BookOpen className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
-                  Bộ Thẻ
+                  {t('header.tab_decks', { defaultValue: 'Bộ Thẻ' })}
                 </Link>
               </Button>
               <Button
@@ -448,7 +453,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               >
                 <Link to="/marketplace/note-types">
                   <Layers className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
-                  Loại Thẻ
+                  {t('header.tab_notetypes', { defaultValue: 'Loại Thẻ' })}
                 </Link>
               </Button>
             </div>
@@ -460,7 +465,9 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-lg shrink-0"
             >
               <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
-                {mode === 'decks' ? 'Deck đã cài' : 'Loại thẻ của tôi'}
+                {mode === 'decks'
+                  ? t('card.installed', { defaultValue: 'Deck đã cài' })
+                  : t('header.tab_notetypes', { defaultValue: 'Loại thẻ của tôi' })}
               </Link>
             </Button>
 
@@ -479,370 +486,47 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                 }
               >
                 <Plus className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
-                {mode === 'decks' ? 'Đăng tải bộ thẻ' : 'Tạo loại thẻ'}
+                {mode === 'decks'
+                  ? t('header.btn_publish_deck', { defaultValue: 'Đăng tải bộ thẻ' })
+                  : t('header.btn_create_notetype', { defaultValue: 'Tạo loại thẻ' })}
               </Link>
             </Button>
-
           </div>
         }
       />
 
       {/* Streamlined Search & Filter Bar */}
-      <Card className="border-border/80 bg-card/95 backdrop-blur-xs shadow-xs rounded-xl overflow-hidden">
-        <CardContent className="p-3.5 sm:p-5 space-y-3.5">
-          {/* Top Row: Search Input + Filter Toggle + Sorting Tabs */}
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-            {/* Search Box with Kbd shortcut & Loader */}
-            <div data-tour="market-search-box" className="relative flex-1">
-              <Label htmlFor="marketplace-search" className="sr-only">
-                Tìm kiếm học liệu
-              </Label>
-              <Input
-                ref={searchInputRef}
-                id="marketplace-search"
-                className="pl-9 pr-14 text-xs sm:text-sm h-10 rounded-lg bg-background border-border/80 focus-visible:ring-2 focus-visible:ring-primary/30"
-                placeholder="Tìm bộ thẻ, từ vựng, JLPT, tác giả…"
-                value={queryText}
-                onChange={(event) => setQueryText(event.currentTarget.value)}
-              />
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-
-              {/* Right Indicator: Loader or Clear Button or Kbd hint */}
-              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                {marketQuery.isFetching && !marketQuery.isPending ? (
-                  <Loader2 className="size-4 animate-spin text-primary mr-1" />
-                ) : null}
-
-                {queryText ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQueryText('')
-                      searchInputRef.current?.focus()
-                    }}
-                    className="flex min-w-[36px] min-h-[36px] items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    aria-label="Xóa từ khóa tìm kiếm"
-                  >
-                    <X className="size-4" />
-                  </button>
-                ) : (
-                  <kbd className="hidden sm:inline-flex h-5 items-center justify-center rounded-md border border-border/80 bg-muted px-1.5 text-[10px] font-medium text-muted-foreground shadow-2xs select-none mr-1">
-                    /
-                  </kbd>
-                )}
-              </div>
-            </div>
-
-            {/* Filter Toggle, Sort Tabs & Reset Button */}
-            <div data-tour="market-sort-tabs" className="flex items-center gap-2 shrink-0">
-              <Button
-                variant={isFilterExpanded || activeFilterCount > 0 ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setIsFilterExpanded((prev) => !prev)}
-                className="h-10 px-3 text-xs font-semibold rounded-lg gap-1.5 shrink-0"
-              >
-                <SlidersHorizontal className="size-3.5" />
-                <span>Bộ lọc</span>
-                {activeFilterCount > 0 && (
-                  <span className="ml-0.5 inline-flex items-center justify-center size-4 text-[10px] font-bold rounded-full bg-primary-foreground text-primary">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </Button>
-
-              <Tabs
-                value={view}
-                onValueChange={(value) => setView(value as SortView)}
-                className="w-full sm:w-auto"
-              >
-                <TabsList className="grid grid-cols-3 w-full sm:w-auto h-10 p-1 rounded-lg bg-muted/60">
-                  <TabsTrigger
-                    value="recommended"
-                    className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md gap-1"
-                  >
-                    <Star className="size-3 text-amber-500 fill-amber-400 shrink-0" />
-                    <span className="truncate">Đề xuất</span>
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="popular"
-                    className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md gap-1"
-                  >
-                    <Flame className="size-3 text-primary shrink-0" />
-                    <span className="truncate">Phổ biến</span>
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="newest"
-                    className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md"
-                  >
-                    <span className="truncate">Mới nhất</span>
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-
-              {isFiltered ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-10 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg shrink-0"
-                  onClick={handleResetFilters}
-                  title="Xóa toàn bộ bộ lọc"
-                  aria-label="Xóa toàn bộ bộ lọc"
-                >
-                  <X className="size-4" />
-                  <span className="sr-only">Xóa bộ lọc</span>
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Expandable Advanced Taxonomy Filters Panel */}
-          {isFilterExpanded && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 p-3 rounded-xl bg-muted/30 border border-border/60 transition-all">
-              {/* Domain Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Lĩnh vực (Domain)</label>
-                <Select
-                  value={selectedDomain || 'all'}
-                  onValueChange={(val) => {
-                    setSelectedDomain(val === 'all' ? '' : val)
-                    setSelectedSubject('')
-                    setSelectedFrameworkLevel('')
-                  }}
-                >
-                  <SelectTrigger className="h-8.5 text-xs bg-background">
-                    <SelectValue placeholder="Tất cả lĩnh vực" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả lĩnh vực</SelectItem>
-                    {domains.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Subject Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Môn học (Subject)</label>
-                <Select
-                  value={selectedSubject || 'all'}
-                  onValueChange={(val) => {
-                    setSelectedSubject(val === 'all' ? '' : val)
-                    setSelectedFrameworkLevel('')
-                  }}
-                >
-                  <SelectTrigger className="h-8.5 text-xs bg-background">
-                    <SelectValue placeholder="Tất cả môn học" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả môn học</SelectItem>
-                    {availableSubjects.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Framework Level Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Trình độ / Khung</label>
-                <Select
-                  value={selectedFrameworkLevel || 'all'}
-                  onValueChange={(val) => setSelectedFrameworkLevel(val === 'all' ? '' : val)}
-                >
-                  <SelectTrigger className="h-8.5 text-xs bg-background">
-                    <SelectValue placeholder="Tất cả trình độ" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả trình độ</SelectItem>
-                    {availableFrameworkLevels.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Difficulty Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Độ khó</label>
-                <Select
-                  value={selectedDifficulty || 'all'}
-                  onValueChange={(val) => setSelectedDifficulty(val === 'all' ? '' : val)}
-                >
-                  <SelectTrigger className="h-8.5 text-xs bg-background">
-                    <SelectValue placeholder="Tất cả độ khó" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả độ khó</SelectItem>
-                    {difficulties.map((diff) => (
-                      <SelectItem key={diff.id} value={diff.id}>
-                        {diff.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Pricing Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground">Giá bán</label>
-                <Select
-                  value={pricingFilter}
-                  onValueChange={(val) => setPricingFilter(val as 'all' | 'free' | 'paid')}
-                >
-                  <SelectTrigger className="h-8.5 text-xs bg-background">
-                    <SelectValue placeholder="Tất cả giá" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả</SelectItem>
-                    <SelectItem value="free">Miễn phí</SelectItem>
-                    <SelectItem value="paid">Trả phí</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
-          {/* Active Filter Badges */}
-          {isFiltered && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-[11px] font-medium text-muted-foreground mr-1">Bộ lọc đang áp dụng:</span>
-              {queryText && (
-                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
-                  <span>Từ khóa: "{queryText}"</span>
-                  <button type="button" onClick={() => setQueryText('')} className="hover:text-destructive cursor-pointer">
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {category && (
-                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
-                  <span>Chủ đề: {category}</span>
-                  <button type="button" onClick={() => setCategory('')} className="hover:text-destructive cursor-pointer">
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedDomain && (
-                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
-                  <span>Lĩnh vực: {domains.find((d) => d.id === selectedDomain)?.label || selectedDomain}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedDomain('')
-                      setSelectedSubject('')
-                      setSelectedFrameworkLevel('')
-                    }}
-                    className="hover:text-destructive cursor-pointer"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedSubject && (
-                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
-                  <span>Môn: {availableSubjects.find((s) => s.id === selectedSubject)?.label || selectedSubject}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSubject('')
-                      setSelectedFrameworkLevel('')
-                    }}
-                    className="hover:text-destructive cursor-pointer"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedFrameworkLevel && (
-                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
-                  <span>Trình độ: {availableFrameworkLevels.find((l) => l.id === selectedFrameworkLevel)?.label || selectedFrameworkLevel}</span>
-                  <button type="button" onClick={() => setSelectedFrameworkLevel('')} className="hover:text-destructive cursor-pointer">
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedDifficulty && (
-                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
-                  <span>Độ khó: {difficulties.find((d) => d.id === selectedDifficulty)?.label || selectedDifficulty}</span>
-                  <button type="button" onClick={() => setSelectedDifficulty('')} className="hover:text-destructive cursor-pointer">
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {pricingFilter !== 'all' && (
-                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
-                  <span>Giá: {pricingFilter === 'free' ? 'Miễn phí' : 'Trả phí'}</span>
-                  <button type="button" onClick={() => setPricingFilter('all')} className="hover:text-destructive cursor-pointer">
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleResetFilters}
-                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive font-medium cursor-pointer"
-              >
-                Xóa tất cả
-              </Button>
-            </div>
-          )}
-
-          {/* Bottom Row: Quick Category Pills with Horizontal Scroll & ARIA */}
-          <div data-tour="market-categories" className="relative pt-2 border-t border-border/40">
-            <div
-              role="group"
-              aria-label="Lọc theo danh mục chủ đề"
-              className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 pr-8 touch-pan-x overscroll-x-contain"
-              style={{ WebkitOverflowScrolling: 'touch' }}
-            >
-              <span className="text-[11px] font-semibold text-muted-foreground mr-1 shrink-0 uppercase tracking-wider">
-                Chủ đề:
-              </span>
-              <button
-                type="button"
-                aria-pressed={category === ''}
-                onClick={() => setCategory('')}
-                className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
-                  category === ''
-                    ? 'bg-primary text-primary-foreground shadow-2xs font-semibold ring-1 ring-primary/30'
-                    : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Tất cả
-              </button>
-              {allCategories.map((cat) => {
-                const isSelected = category === cat
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => setCategory(isSelected ? '' : cat)}
-                    className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-primary text-primary-foreground shadow-2xs font-semibold ring-1 ring-primary/30'
-                        : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Subtle Gradient Fade on Right for Scroll Indication */}
-            <div className="pointer-events-none absolute right-0 top-2 bottom-0 w-8 bg-gradient-to-l from-card to-transparent" />
-          </div>
-        </CardContent>
-      </Card>
+      <MarketplaceFilterBar
+        queryText={queryText}
+        setQueryText={setQueryText}
+        searchInputRef={searchInputRef}
+        isFetching={marketQuery.isFetching}
+        isPending={marketQuery.isPending}
+        isFilterExpanded={isFilterExpanded}
+        setIsFilterExpanded={setIsFilterExpanded}
+        activeFilterCount={activeFilterCount}
+        view={view}
+        setView={setView}
+        isFiltered={isFiltered}
+        onResetFilters={handleResetFilters}
+        selectedDomain={selectedDomain}
+        setSelectedDomain={setSelectedDomain}
+        selectedSubject={selectedSubject}
+        setSelectedSubject={setSelectedSubject}
+        selectedFrameworkLevel={selectedFrameworkLevel}
+        setSelectedFrameworkLevel={setSelectedFrameworkLevel}
+        selectedDifficulty={selectedDifficulty}
+        setSelectedDifficulty={setSelectedDifficulty}
+        pricingFilter={pricingFilter}
+        setPricingFilter={setPricingFilter}
+        domains={domains}
+        availableSubjects={availableSubjects}
+        availableFrameworkLevels={availableFrameworkLevels}
+        difficulties={difficulties}
+        category={category}
+        setCategory={setCategory}
+        allCategories={allCategories}
+      />
 
       {/* Results Header / Summary */}
       {!marketQuery.isPending && marketQuery.data?.items.length ? (
@@ -880,12 +564,12 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           <EmptyState
             title={
               isFiltered
-                ? 'Không tìm thấy học liệu phù hợp'
+                ? t('search_filter.empty_search.title', { defaultValue: 'Không tìm thấy học liệu phù hợp' })
                 : 'Kho học liệu cộng đồng hiện đang trống'
             }
             description={
               isFiltered
-                ? 'Thử thay đổi từ khóa tìm kiếm, chọn chủ đề khác hoặc sắp xếp lại danh sách.'
+                ? t('search_filter.empty_search.desc', { defaultValue: 'Thử thay đổi từ khóa tìm kiếm, chọn chủ đề khác hoặc sắp xếp lại danh sách.' })
                 : 'Hãy là người đầu tiên đóng góp và chia sẻ bộ thẻ tiếng Nhật cho cộng đồng Flama!'
             }
           />
@@ -900,7 +584,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                 }}
                 className="rounded-lg text-xs font-semibold"
               >
-                <X className="mr-1.5 size-3.5" /> Xóa bộ lọc hiện tại
+                <X className="mr-1.5 size-3.5" /> {t('search_filter.empty_search.btn_reset', { defaultValue: 'Xóa bộ lọc hiện tại' })}
               </Button>
             ) : (
               <Button
@@ -916,7 +600,9 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                   }
                 >
                   <Plus className="mr-1.5 size-3.5" />
-                  {mode === 'decks' ? 'Đăng tải bộ thẻ ngay' : 'Tạo loại thẻ ngay'}
+                  {mode === 'decks'
+                    ? t('header.btn_publish_deck', { defaultValue: 'Đăng tải bộ thẻ ngay' })
+                    : t('header.btn_create_notetype', { defaultValue: 'Tạo loại thẻ ngay' })}
                 </Link>
               </Button>
             )}
@@ -928,69 +614,11 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       {marketQuery.data?.items.length ? (
         mode === 'decks' ? (
           curatedSections ? (
-            <div className="space-y-8">
-              {curatedSections.majorSections.map((section) => (
-                <div key={section.category} className="space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={`px-2.5 py-0.5 text-xs font-bold rounded-md ${getCategoryBadgeStyle(
-                          section.category,
-                        )}`}
-                      >
-                        {section.category}
-                      </Badge>
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        ({section.items.length} bộ thẻ)
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setCategory(section.category)}
-                      className="h-8 text-xs font-semibold text-primary hover:text-primary hover:bg-primary/10 gap-1 rounded-lg cursor-pointer"
-                    >
-                      <span>Xem tất cả {section.category}</span>
-                      <ArrowRight className="size-3.5" />
-                    </Button>
-                  </div>
-                  <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {section.items.slice(0, 4).map((item, index) => (
-                      <DeckCard
-                        key={item.id}
-                        item={item}
-                        variant="marketplace"
-                        dataTour={index === 0 ? 'market-card-first' : undefined}
-                        actionDataTour={index === 0 ? 'market-action-btn' : undefined}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              {curatedSections.otherItems.length > 0 && (
-                <div className="space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-foreground">Học liệu & Chủ đề khác</h3>
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        ({curatedSections.otherItems.length} bộ thẻ)
-                      </span>
-                    </div>
-                  </div>
-                  <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {curatedSections.otherItems.map((item) => (
-                      <DeckCard
-                        key={item.id}
-                        item={item}
-                        variant="marketplace"
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <MarketplaceCuratedSection
+              curatedSections={curatedSections}
+              getCategoryBadgeStyle={getCategoryBadgeStyle}
+              onSelectCategory={(cat) => setCategory(cat)}
+            />
           ) : (
             <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {marketQuery.data.items.map((item, index) => (
@@ -1006,116 +634,14 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           )
         ) : (
           <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {marketQuery.data.items.map((item, index) => {
-              const itemTitle = item.name || item.title || 'Mẫu thẻ không tên'
-              const detailUrl = `/marketplace/note-types/${item.id}`
-              const authorName =
-                item.author?.account_name || item.author?.username || 'Cộng đồng Flama'
-              const authorInitial = authorName.charAt(0).toUpperCase()
-
-              return (
-                <Card
-                  key={item.id}
-                  data-tour={index === 0 ? 'market-card-first' : undefined}
-                  className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md rounded-2xl"
-                >
-                  <div className="flex flex-col flex-1 space-y-3">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <Badge
-                        variant="outline"
-                        className={`px-2.5 py-0.5 text-xs font-semibold rounded-md truncate max-w-[65%] border ${getCategoryBadgeStyle(
-                          item.primary_category,
-                        )}`}
-                      >
-                        {item.primary_category || 'Chung'}
-                      </Badge>
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold ${
-                          item.pricing_mode === 'free'
-                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                            : 'bg-primary/10 text-primary border border-primary/20'
-                        }`}
-                      >
-                        {item.price_display}
-                      </span>
-                    </div>
-
-                    <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground line-clamp-2 leading-snug">
-                      <Link
-                        to={detailUrl}
-                        className="hover:text-primary hover:underline transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary rounded-xs"
-                      >
-                        {itemTitle}
-                      </Link>
-                    </h3>
-
-                    {item.author?.username ? (
-                      <Link
-                        to={`/profile/${item.author.username}`}
-                        className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors group/author"
-                      >
-                        <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20 group-hover/author:ring-primary">
-                          {authorInitial}
-                        </div>
-                        <span className="font-medium text-foreground/80 group-hover/author:text-primary truncate">
-                          {authorName}
-                        </span>
-                      </Link>
-                    ) : (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20">
-                          {authorInitial}
-                        </div>
-                        <span className="font-medium text-foreground/80 truncate">
-                          {authorName}
-                        </span>
-                      </div>
-                    )}
-
-                    <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">
-                      {item.description || 'Chưa có mô tả chi tiết cho loại thẻ này.'}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 pt-3.5 border-t border-border/60 space-y-3">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1 font-semibold text-foreground">
-                        <Star className="size-3.5 fill-amber-400 text-amber-500" />
-                        <span className="tabular-nums">
-                          {(item.rating_avg || 0).toFixed(1)}
-                          {item.rating_count ? (
-                            <span className="text-[11px] font-normal text-muted-foreground ml-0.5">
-                              ({item.rating_count})
-                            </span>
-                          ) : null}
-                        </span>
-                      </span>
-
-                      <span className="inline-flex items-center gap-1">
-                        <Download className="size-3.5 text-primary" />
-                        <span className="tabular-nums">
-                          {(item.install_count || 0).toLocaleString('vi-VN')} lượt
-                        </span>
-                      </span>
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      data-tour={index === 0 ? 'market-action-btn' : undefined}
-                      className="w-full h-9 text-xs font-semibold rounded-xl hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
-                    >
-                      <Link to={detailUrl}>
-                        <Eye className="mr-1.5 size-3.5" />
-                        Xem chi tiết
-                        <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-0.5" />
-                      </Link>
-                    </Button>
-                  </div>
-                </Card>
-              )
-            })}
+            {marketQuery.data.items.map((item, index) => (
+              <SharedNoteTypeCard
+                key={item.id}
+                item={item}
+                index={index}
+                getCategoryBadgeStyle={getCategoryBadgeStyle}
+              />
+            ))}
           </div>
         )
       ) : null}
@@ -1134,7 +660,6 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
         }}
       />
     </Page>
-
   )
 }
 

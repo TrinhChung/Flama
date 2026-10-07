@@ -1,56 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import {
-  NotebookTabs,
-  CheckCircle2,
-  AlertTriangle,
-  Loader2,
-  Zap,
-  Search,
-  Code2,
-  Copy,
-  Check,
-} from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import type { AnkiConnectStatus } from '@/lib/ankiConnectClient'
 import { ankiConnectClient } from '@/lib/ankiConnectClient'
 import { appApi } from '@/app/api'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
-import { NativeSelect } from '@/components/ui/native-select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { NoteTypeLivePreview } from '@/features/note-types/components/NoteTypeLivePreview'
-
-interface FlamaFieldDef {
-  id: string
-  name: string
-  field_type: string
-}
-
-interface FlamaNoteTypeOption {
-  id: string
-  name: string
-  fields: FlamaFieldDef[]
-}
-
-interface AnkiTemplateInfo {
-  name: string
-  front: string
-  back: string
-}
-
-interface AnkiModelDetail {
-  name: string // Original Anki Model Name
-  fields: string[]
-  css: string
-  templates: AnkiTemplateInfo[]
-  existingFlamaId?: string
-}
+import { AnkiModelSelectTable } from './anki-notetype/AnkiModelSelectTable'
+import { AnkiModelCodeViewer } from './anki-notetype/AnkiModelCodeViewer'
+import { AnkiNoteTypeSyncModal } from './anki-notetype/AnkiNoteTypeSyncModal'
+import type { AnkiModelDetail, FlamaNoteTypeOption, PreviewResponse } from './anki-notetype/types'
 
 interface AnkiNoteTypeSyncTabProps {
   noteTypeOptions: FlamaNoteTypeOption[]
@@ -73,18 +33,12 @@ function inferFieldType(fieldName: string): 'text' | 'image' | 'audio' | 'richte
   return 'text'
 }
 
-type PreviewResponse = {
-  front_html?: string
-  back_html?: string
-  front_renderer_payload?: unknown
-  back_renderer_payload?: unknown
-}
-
 export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
   noteTypeOptions,
   endpoint,
   connectionStatus,
 }) => {
+  const { t } = useTranslation('import')
   const queryClient = useQueryClient()
 
   // Models State
@@ -224,7 +178,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
 
   const handleSyncSelectedModels = async (modelsToSync: string[]) => {
     if (modelsToSync.length === 0) {
-      alert('Vui lòng chọn ít nhất 1 NoteType để đồng bộ.')
+      alert(t('anki_sync.notetypes_tab.alert_select_at_least_one', 'Vui lòng chọn ít nhất 1 NoteType để đồng bộ.'))
       return
     }
 
@@ -395,356 +349,77 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
     setIsSyncing(false)
   }
 
-  const filteredModels = ankiModels.filter((m) =>
-    m.name.toLowerCase().includes(modelSearch.toLowerCase())
-  )
+  const filteredModels = useMemo(() => {
+    return ankiModels.filter((m) =>
+      m.name.toLowerCase().includes(modelSearch.toLowerCase())
+    )
+  }, [ankiModels, modelSearch])
 
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* 1. Anki NoteTypes List & Renaming Table */}
-      <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
-        <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-card/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <NotebookTabs className="size-4 text-primary shrink-0" /> Danh sách NoteTypes Anki ({ankiModels.length})
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Đổi tên NoteType hiển thị trên Flama và xem Live Preview + Mã nguồn ở khung phía dưới.
-            </CardDescription>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
-            <div className="relative w-full sm:w-44">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-              <Input
-                value={modelSearch}
-                onChange={(e) => setModelSearch(e.target.value)}
-                placeholder="Tìm kiếm..."
-                className="pl-8 text-xs h-8"
-              />
-            </div>
-
-            <Button
-              size="sm"
-              disabled={isSyncing || selectedModelNames.length === 0 || connectionStatus !== 'Connected'}
-              onClick={() => handleSyncSelectedModels(selectedModelNames)}
-              className="font-semibold text-xs shadow-sm shrink-0 h-8"
-            >
-              {isSyncing ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Zap className="size-3.5 mr-1.5" />}
-              Đồng bộ {selectedModelNames.length} NoteType chọn
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-3 sm:p-5 pt-3 space-y-3">
-          {isLoadingModels ? (
-            <div className="text-center text-xs text-muted-foreground py-8 flex items-center justify-center gap-2">
-              <Loader2 className="size-4 animate-spin text-primary" /> Đang tải NoteTypes từ Anki...
-            </div>
-          ) : filteredModels.length === 0 ? (
-            <div className="text-center text-xs text-muted-foreground py-8">
-              {connectionStatus === 'Connected' ? 'Không tìm thấy NoteType phù hợp.' : 'Chưa kết nối AnkiConnect local.'}
-            </div>
-          ) : (
-            <div className="border rounded-xl overflow-x-auto max-h-64 overflow-y-auto">
-              <Table className="min-w-[650px]">
-                <TableHeader>
-                  <TableRow className="bg-muted/30">
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={selectedModelNames.length === ankiModels.length && ankiModels.length > 0}
-                        onCheckedChange={(chk) => {
-                          if (chk) {
-                            setSelectedModelNames(ankiModels.map((m) => m.name))
-                          } else {
-                            setSelectedModelNames([])
-                          }
-                        }}
-                      />
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold">Tên Anki gốc</TableHead>
-                    <TableHead className="text-xs font-semibold">Tên NoteType trên Flama (Rename)</TableHead>
-                    <TableHead className="text-xs font-semibold">Cấu trúc</TableHead>
-                    <TableHead className="text-xs font-semibold">Trạng thái</TableHead>
-                    <TableHead className="text-xs font-semibold">Hành động đồng bộ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredModels.map((model) => {
-                    const isSelected = selectedModelNames.includes(model.name)
-                    const isActive = activeModelName === model.name
-                    const action = targetActions[model.name] || 'create_new'
-
-                    return (
-                      <TableRow
-                        key={model.name}
-                        onClick={() => {
-                          if (!isActive) {
-                            setActiveModelName(model.name)
-                            setSelectedTemplateIndex(0)
-                          }
-                        }}
-                        className={`cursor-pointer transition-colors hover:bg-muted/60 ${
-                          isActive ? 'bg-primary/10 font-medium border-l-4 border-l-primary' : ''
-                        }`}
-                      >
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={() => {
-                              if (isSelected) {
-                                setSelectedModelNames(selectedModelNames.filter((n) => n !== model.name))
-                              } else {
-                                setSelectedModelNames([...selectedModelNames, model.name])
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell className="font-bold text-xs text-foreground font-mono">
-                          {model.name}
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="w-48 sm:w-56">
-                            <Input
-                              value={customNames[model.name] ?? model.name}
-                              onChange={(e) =>
-                                setCustomNames({ ...customNames, [model.name]: e.target.value })
-                              }
-                              placeholder="Tên trên Flama..."
-                              className="h-7 text-xs font-semibold"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {model.fields.length} trường • {model.templates.length} card
-                        </TableCell>
-                        <TableCell>
-                          {model.existingFlamaId ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px]">
-                              Đã có
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px]">
-                              Mới
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="w-44 sm:w-48">
-                            <NativeSelect
-                              value={action}
-                              onChange={(e) =>
-                                setTargetActions({ ...targetActions, [model.name]: e.target.value })
-                              }
-                              className="h-7 text-xs"
-                            >
-                              <option value="create_new">+ Tạo mới NoteType</option>
-                              <option value="ignore">-- Bỏ qua --</option>
-                              {noteTypeOptions.map((opt) => (
-                                <option key={opt.id} value={opt.id}>
-                                  Hợp nhất &amp; cập nhật: {opt.name}
-                                </option>
-                              ))}
-                            </NativeSelect>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <AnkiModelSelectTable
+        ankiModels={ankiModels}
+        filteredModels={filteredModels}
+        selectedModelNames={selectedModelNames}
+        onToggleSelectAll={(chk) => {
+          if (chk) {
+            setSelectedModelNames(ankiModels.map((m) => m.name))
+          } else {
+            setSelectedModelNames([])
+          }
+        }}
+        onToggleSelectModel={(modelName) => {
+          if (selectedModelNames.includes(modelName)) {
+            setSelectedModelNames(selectedModelNames.filter((n) => n !== modelName))
+          } else {
+            setSelectedModelNames([...selectedModelNames, modelName])
+          }
+        }}
+        activeModelName={activeModelName}
+        onSelectActiveModel={(modelName) => {
+          setActiveModelName(modelName)
+          setSelectedTemplateIndex(0)
+        }}
+        modelSearch={modelSearch}
+        onSearchChange={setModelSearch}
+        customNames={customNames}
+        onChangeCustomName={(modelName, val) => {
+          setCustomNames((prev) => ({ ...prev, [modelName]: val }))
+        }}
+        targetActions={targetActions}
+        onChangeTargetAction={(modelName, val) => {
+          setTargetActions((prev) => ({ ...prev, [modelName]: val }))
+        }}
+        noteTypeOptions={noteTypeOptions}
+        isLoadingModels={isLoadingModels}
+        connectionStatus={connectionStatus}
+        isSyncing={isSyncing}
+        onSyncSelected={() => handleSyncSelectedModels(selectedModelNames)}
+      />
 
       {/* 2. Live Preview & Code Display Frame */}
-      {activeModelDetail ? (
-        <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
-          <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-card/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <CardTitle className="text-sm sm:text-base font-bold text-foreground">
-                  Xem Trực Tiếp &amp; Mã Nguồn (Live View &amp; Code Viewer)
-                </CardTitle>
-                <Badge variant="outline" className="text-[10px] font-mono">
-                  "{activeModelDetail.name}"
-                </Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Hiển thị kết quả thẻ Live Card và mã nguồn Front HTML, Back HTML, CSS gốc từ Anki.
-              </CardDescription>
-            </div>
-
-            <Button
-              size="sm"
-              disabled={isSyncing || connectionStatus !== 'Connected'}
-              onClick={() => handleSyncSelectedModels([activeModelDetail.name])}
-              className="font-semibold text-xs shrink-0 shadow-sm h-8"
-            >
-              {isSyncing ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Zap className="size-3.5 mr-1.5" />}
-              Đồng bộ NoteType "{customNames[activeModelDetail.name] || activeModelDetail.name}"
-            </Button>
-          </CardHeader>
-
-          <CardContent className="p-3 sm:p-5 pt-4 space-y-4">
-            <div className="grid gap-4 lg:grid-cols-12 items-stretch">
-              {/* Left Column: Live Card Previewer */}
-              <div className="lg:col-span-6 flex flex-col">
-                <NoteTypeLivePreview
-                  cardId={`anki-live-preview-${activeModelDetail.name}`}
-                  side={previewSide}
-                  onSideChange={setPreviewSide}
-                  templates={activeModelDetail.templates.map((tmpl, idx) => ({
-                    id: String(idx),
-                    name: tmpl.name || `Card ${idx + 1}`,
-                  }))}
-                  selectedTemplateId={String(selectedTemplateIndex)}
-                  onSelectTemplate={(idStr) => setSelectedTemplateIndex(Number(idStr))}
-                  frontPayload={previewResult?.front_renderer_payload}
-                  backPayload={previewResult?.back_renderer_payload}
-                  frontHtml={previewResult?.front_html || activeTemplate?.front}
-                  backHtml={previewResult?.back_html || activeTemplate?.back}
-                  scope="anki_note_type_preview"
-                  scopeId={activeModelDetail.name}
-                  fieldDefs={activeModelDetail.fields.map((f, i) => ({
-                    id: f,
-                    name: f,
-                    field_type: inferFieldType(f),
-                    position: i,
-                  }))}
-                  isLoading={isPreviewLoading}
-                  error={previewError}
-                  title="Live Card Preview"
-                  subtitle="(Hiển thị mẫu thẻ với dữ liệu xem trước)"
-                />
-              </div>
-
-              {/* Right Column: Read-only Code Display */}
-              <div className="lg:col-span-6 flex flex-col">
-                <Card className="p-3.5 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl">
-                  <div className="flex items-center justify-between mb-3 min-h-[32px]">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/10 text-amber-600">
-                        <Code2 className="size-4" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-bold text-foreground">Mã Nguồn Template &amp; CSS</h4>
-                        <span className="text-[10px] text-muted-foreground block">(Đọc từ AnkiConnect)</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Tabs
-                    value={codeTab}
-                    onValueChange={(val) => setCodeTab(val as any)}
-                    className="flex-1 flex flex-col"
-                  >
-                    <TabsList className="grid grid-cols-4 w-full h-8 p-1 mb-2 rounded-lg">
-                      <TabsTrigger value="front" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
-                        Front
-                      </TabsTrigger>
-                      <TabsTrigger value="back" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
-                        Back
-                      </TabsTrigger>
-                      <TabsTrigger value="css" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
-                        CSS
-                      </TabsTrigger>
-                      <TabsTrigger value="fields" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
-                        Trường ({activeModelDetail.fields.length})
-                      </TabsTrigger>
-                    </TabsList>
-
-                    {/* Code Container: Front HTML */}
-                    <TabsContent value="front" className="flex-1 mt-0 relative">
-                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => handleCopyCode(activeTemplate?.front || '', 'front')}
-                          className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
-                        >
-                          {copiedTab === 'front' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
-                          {copiedTab === 'front' ? 'Đã chép' : 'Sao chép'}
-                        </Button>
-                        <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
-                          {activeTemplate?.front || '/* Không có mã Front HTML */'}
-                        </pre>
-                      </div>
-                    </TabsContent>
-
-                    {/* Code Container: Back HTML */}
-                    <TabsContent value="back" className="flex-1 mt-0 relative">
-                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => handleCopyCode(activeTemplate?.back || '', 'back')}
-                          className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
-                        >
-                          {copiedTab === 'back' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
-                          {copiedTab === 'back' ? 'Đã chép' : 'Sao chép'}
-                        </Button>
-                        <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
-                          {activeTemplate?.back || '/* Không có mã Back HTML */'}
-                        </pre>
-                      </div>
-                    </TabsContent>
-
-                    {/* Code Container: Shared CSS */}
-                    <TabsContent value="css" className="flex-1 mt-0 relative">
-                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => handleCopyCode(activeModelDetail.css || '', 'css')}
-                          className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
-                        >
-                          {copiedTab === 'css' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
-                          {copiedTab === 'css' ? 'Đã chép' : 'Sao chép'}
-                        </Button>
-                        <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
-                          {activeModelDetail.css || '/* Không có quy tắc CSS tùy chỉnh */'}
-                        </pre>
-                      </div>
-                    </TabsContent>
-
-                    {/* Fields List Tab */}
-                    <TabsContent value="fields" className="flex-1 mt-0">
-                      <div className="border rounded-xl overflow-hidden bg-card/40 min-h-[12rem] max-h-64 sm:max-h-96 overflow-y-auto">
-                        <div className="grid grid-cols-12 text-xs font-semibold p-2 bg-muted/40 border-b text-muted-foreground">
-                          <span className="col-span-1">#</span>
-                          <span className="col-span-6">Tên trường Anki</span>
-                          <span className="col-span-5 text-right">Kiểu suy luận</span>
-                        </div>
-                        <div className="divide-y divide-border/40">
-                          {activeModelDetail.fields.map((f, idx) => (
-                            <div key={f} className="grid grid-cols-12 items-center p-2 text-xs hover:bg-muted/30">
-                              <span className="col-span-1 font-mono text-muted-foreground">{idx + 1}</span>
-                              <span className="col-span-6 font-bold text-foreground flex items-center gap-1.5 truncate">
-                                {f}
-                                {idx === 0 && (
-                                  <Badge variant="secondary" className="text-[9px] py-0 px-1 font-normal">
-                                    Primary
-                                  </Badge>
-                                )}
-                              </span>
-                              <span className="col-span-5 text-right">
-                                <Badge variant="outline" className="text-[10px] font-mono">
-                                  {inferFieldType(f)}
-                                </Badge>
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </Card>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+      {activeModelDetail && (
+        <AnkiModelCodeViewer
+          activeModelDetail={activeModelDetail}
+          customName={customNames[activeModelDetail.name] || activeModelDetail.name}
+          previewSide={previewSide}
+          onPreviewSideChange={setPreviewSide}
+          selectedTemplateIndex={selectedTemplateIndex}
+          onSelectTemplateIndex={setSelectedTemplateIndex}
+          previewResult={previewResult}
+          isPreviewLoading={isPreviewLoading}
+          previewError={previewError}
+          codeTab={codeTab}
+          setCodeTab={setCodeTab}
+          copiedTab={copiedTab}
+          onCopyCode={handleCopyCode}
+          isSyncing={isSyncing}
+          connectionStatus={connectionStatus}
+          onSyncSingle={() => handleSyncSelectedModels([activeModelDetail.name])}
+          inferFieldType={inferFieldType}
+        />
+      )}
 
       {/* 3. Sync Log & Summary Report */}
       {syncLog.length > 0 && (
@@ -752,7 +427,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
           <CardHeader className="pb-2 bg-card/40 border-b">
             <CardTitle className="text-xs font-semibold flex items-center gap-2">
               {isSyncing && <Loader2 className="size-3.5 animate-spin text-primary" />}
-              Nhật ký đồng bộ NoteType
+              {t('anki_sync.notetypes_tab.sync_log.title', 'Nhật ký đồng bộ NoteType')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-3 sm:p-4 pt-3 space-y-3">
@@ -788,11 +463,16 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
                 )}
                 <AlertTitle className="font-bold text-xs">
                   {syncReport.errors.length === 0
-                    ? 'Hoàn tất đồng bộ NoteTypes!'
-                    : 'Đồng bộ NoteTypes có lỗi xảy ra'}
+                    ? t('anki_sync.notetypes_tab.sync_log.alert_success_title', 'Hoàn tất đồng bộ NoteTypes!')
+                    : t('anki_sync.notetypes_tab.sync_log.alert_error_title', 'Đồng bộ NoteTypes có lỗi xảy ra')}
                 </AlertTitle>
                 <AlertDescription className="mt-1 text-xs space-y-1">
-                  <div>Đã nạp/cập nhật thành công {syncReport.successCount} NoteType lên Flama.</div>
+                  <div>
+                    {t('anki_sync.notetypes_tab.sync_log.success_desc', {
+                      count: syncReport.successCount,
+                      defaultValue: `Đã nạp/cập nhật thành công ${syncReport.successCount} NoteType lên Flama.`,
+                    })}
+                  </div>
                   {syncReport.errors.map((err, idx) => (
                     <div key={idx} className="text-destructive font-mono text-[11px]">
                       • {err}
@@ -806,72 +486,13 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
       )}
 
       {/* Sync Progress Loading Modal Overlay */}
-      <Dialog
+      <AnkiNoteTypeSyncModal
         open={showSyncModal}
-        onOpenChange={(open) => {
-          if (!isSyncing) setShowSyncModal(open)
-        }}
-      >
-        <DialogContent className="sm:max-w-md border-border/80 shadow-2xl rounded-2xl p-6">
-          <DialogHeader className="items-center text-center space-y-3">
-            <div className={`size-14 rounded-full flex items-center justify-center ${isSyncing ? 'bg-primary/10 text-primary animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
-              {isSyncing ? <Loader2 className="size-7 animate-spin text-primary" /> : <CheckCircle2 className="size-7 text-emerald-500" />}
-            </div>
-            <DialogTitle className="text-base font-bold text-foreground">
-              {isSyncing ? 'Đang tiến hành đồng bộ NoteType...' : 'Hoàn tất đồng bộ!'}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              {isSyncing
-                ? 'Vui lòng giữ trình duyệt mở trong khi cấu trúc NoteType và các trường dữ liệu đang được nạp lên Flama.'
-                : 'Đã hoàn thành nạp và ánh xạ cấu trúc NoteType.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="font-mono text-[11px] bg-muted/40 p-3 rounded-xl max-h-40 overflow-y-auto space-y-1 border">
-              {syncLog.map((logLine, idx) => (
-                <div
-                  key={idx}
-                  className={
-                    logLine.startsWith('✓')
-                      ? 'text-emerald-600 font-semibold'
-                      : logLine.startsWith('✗')
-                      ? 'text-destructive font-semibold'
-                      : 'text-muted-foreground'
-                  }
-                >
-                  {logLine}
-                </div>
-              ))}
-            </div>
-
-            {syncReport && (
-              <Alert className={syncReport.errors.length === 0 ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-destructive/40 bg-destructive/10'}>
-                {syncReport.errors.length === 0 ? <CheckCircle2 className="size-5 text-emerald-600" /> : <AlertTriangle className="size-5 text-destructive" />}
-                <AlertTitle className="font-bold text-xs">
-                  {syncReport.errors.length === 0 ? 'Thành công!' : 'Có lỗi phát sinh'}
-                </AlertTitle>
-                <AlertDescription className="mt-1 text-xs space-y-1">
-                  <div>Đã nạp thành công {syncReport.successCount} NoteType lên Flama.</div>
-                  {syncReport.errors.map((err, idx) => (
-                    <div key={idx} className="text-destructive font-mono text-[11px]">• {err}</div>
-                  ))}
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <Button
-              disabled={isSyncing}
-              onClick={() => setShowSyncModal(false)}
-              className="w-full sm:w-auto font-semibold text-xs rounded-xl"
-            >
-              {isSyncing ? 'Đang đồng bộ...' : 'Đóng cửa sổ'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setShowSyncModal}
+        isSyncing={isSyncing}
+        syncLog={syncLog}
+        syncReport={syncReport}
+      />
     </div>
   )
 }

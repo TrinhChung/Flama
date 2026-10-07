@@ -1,0 +1,112 @@
+{
+  "header": {
+    "title": "Deck đã cài",
+    "description": "Quản lý và tiếp tục học các bộ deck bạn đã cài từ Marketplace hoặc sở hữu.",
+    "btn_tour": "Tour Hướng Dẫn",
+    "btn_help": "Trợ giúp",
+    "btn_explore": "Khám phá Marketplace"
+  },
+  "search_filter": {
+    "placeholder": "Tìm kiếm deck đã cài theo tên, tác giả... (Nhấn '/' để tìm nhanh)",
+    "filter_btn": "Bộ lọc",
+    "clear_search": "Xóa từ khóa tìm kiếm",
+    "clear_all": "Xóa tất cả",
+    "tabs": {
+      "all": "Tất cả",
+      "using_now": "Đang dùng",
+      "update_available": "Có bản mới"
+    },
+    "advanced": {
+      "status_label": "Trạng thái deck",
+      "status_all": "Tất cả trạng thái",
+      "status_using_now": "Đang sử dụng",
+      "status_installed": "Đã cài đặt",
+      "status_owned": "Deck của bạn",
+      "status_update_available": "Có bản cập nhật",
+      "status_conflict": "Có xung đột",
+      "domain_label": "Lĩnh vực (Domain)",
+      "domain_all": "Tất cả lĩnh vực",
+      "subject_label": "Môn học (Subject)",
+      "subject_all": "Tất cả môn học",
+      "level_label": "Trình độ / Khung",
+      "level_all": "Tất cả trình độ",
+      "difficulty_label": "Độ khó",
+      "difficulty_all": "Tất cả độ khó"
+    },
+    "active": {
+      "prefix": "Bộ lọc đang áp dụng:",
+      "query": "Từ khóa: \"{{query}}\"",
+      "category": "Chủ đề: {{category}}",
+      "status": "Trạng thái: {{status}}",
+      "domain": "Lĩnh vực: {{label}}",
+      "subject": "Môn: {{label}}",
+      "level": "Trình độ: {{label}}",
+      "difficulty": "Độ khó: {{label}}"
+    }
+  },
+  "categories": {
+    "title": "Chủ đề:",
+    "all": "Tất cả"
+  },
+  "summary": {
+    "results_count": "Hiển thị {{filtered}} / {{total}} bộ deck {{suffix}}",
+    "suffix_filtered": "phù hợp với bộ lọc",
+    "suffix_installed": "đã cài",
+    "empty_title": "Chưa cài deck nào",
+    "empty_desc": "Khám phá marketplace và cài một deck để bắt đầu học.",
+    "no_match_title": "Không tìm thấy bộ deck phù hợp",
+    "no_match_desc": "Thử thay đổi từ khóa tìm kiếm hoặc xóa các tiêu chí lọc hiện tại.",
+    "btn_reset_filters": "Xóa bộ lọc hiện tại"
+  },
+  "curated": {
+    "deck_count": "({{count}} bộ deck)",
+    "view_all": "Xem tất cả {{category}}",
+    "other_heading": "Bộ thẻ & Chủ đề khác"
+  },
+  "card_actions": {
+    "study_now": "Học ngay",
+    "details": "Chi tiết",
+    "has_update": "Xem cập nhật",
+    "has_update_new": "Xem cập nhật mới",
+    "handle_conflict": "Xử lý xung đột ({{count}})",
+    "change_request": "Đóng góp chỉnh sửa"
+  },
+  "sync_status": {
+    "needs_sync": "Đóng góp cần đồng bộ",
+    "draft": "Đóng góp bản nháp",
+    "has_conflict": "Có xung đột",
+    "conflict": "Có xung đột cần xử lý",
+    "synced": "Đã cập nhật",
+    "detached": "Đã tách độc lập",
+    "error": "Lỗi đồng bộ",
+    "pending_review": "Đang chờ duyệt",
+    "rejected": "Đóng góp bị từ chối",
+    "merged": "Đóng góp đã merge"
+  },
+  "tour": {
+    "step1_title": "📚 1. Quản Lý Bộ Thẻ Đã Cài",
+    "step1_content": "Nơi quản lý toàn bộ các bộ thẻ (Decks) bạn đã cài đặt từ Marketplace hoặc do chính bạn sở hữu để bắt đầu ôn luyện.",
+    "step2_title": "🛍️ 2. Khám Phá Kho Bộ Thẻ Marketplace",
+    "step2_content": "Bấm vào đây để duyệt qua hàng trăm bộ thẻ từ vựng, ngữ pháp, Kanji... chất lượng cao do cộng đồng Flama chia sẻ.",
+    "step3_title": "🔍 3. Tìm Kiếm & Lọc Bộ Thẻ",
+    "step3_content": "Tìm kiếm nhanh theo tên deck, lọc theo danh mục, trình độ JLPT hoặc lọc theo trạng thái đang học/có bản cập nhật.",
+    "step4_title_installed": "🎴 4. Thông Tin Bộ Thẻ (Deck Card)",
+    "step4_content_installed": "Hiển thị tiêu đề bộ thẻ, tên tác giả đóng góp, trạng thái học tập (Đang sử dụng / Đã cài) và mô tả vắn tắt.",
+    "step4_title_empty": "📦 4. Khu Vực Bộ Thẻ Cá Nhân",
+    "step4_content_empty": "Sau khi cài đặt bộ thẻ từ Marketplace, các bộ thẻ sẽ xuất hiện tại đây để bạn bắt đầu học và theo dõi tiến độ.",
+    "step5_title": "🚀 5. Nút \"Học Ngay\" (Spaced Repetition)",
+    "step5_content": "Bấm nút này để bắt đầu phiên ôn tập với thuật toán Lặp lại ngắt quãng thông minh (Anki SM-2 / FSRS) giúp ghi nhớ sâu và lâu bền."
+  },
+  "note_types_page": {
+    "title": "Loại thẻ",
+    "description": "Quản lý field, template và quy cách hiển thị flashcard.",
+    "empty_title": "Chưa có loại thẻ",
+    "empty_desc": "Tạo note type đầu tiên hoặc cài một mẫu từ marketplace.",
+    "templates_count": "{{count}} template",
+    "fields_count": "{{count}} field",
+    "no_desc": "Chưa có mô tả cho loại thẻ này.",
+    "updated_at": "Cập nhật {{date}}",
+    "no_updated_at": "Chưa có thời gian cập nhật",
+    "loading": "Đang tải loại thẻ…"
+  }
+}

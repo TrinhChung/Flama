@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import {
   Check,
   Copy,
@@ -10,23 +11,14 @@ import {
   Users,
   Clock,
   LoaderCircle,
-  Info,
 } from 'lucide-react'
 
 import { appApi } from '@/app/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { CreateAccessKeysModal } from './CreateAccessKeysModal'
+import { KeyRedemptionsModal } from './KeyRedemptionsModal'
 
 export interface AccessKeyItem {
   id: string
@@ -57,6 +49,8 @@ interface DeckAccessKeysManagerProps {
 }
 
 export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysManagerProps) {
+  const { t, i18n } = useTranslation('marketplace')
+  const dateLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
   const queryClient = useQueryClient()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedKeyForRedemptions, setSelectedKeyForRedemptions] = useState<AccessKeyItem | null>(null)
@@ -101,54 +95,63 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
         access_duration_days: accessDurationDays ? Number(accessDurationDays) : undefined,
         expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       }
-      return appApi.mutate(`/api/creator/decks/${deckItemId}/keys`, 'POST', payload)
+      return appApi.mutate<{ created_keys: AccessKeyItem[] }>(
+        `/api/creator/decks/${deckItemId}/keys`,
+        'POST',
+        payload,
+      )
     },
-    onSuccess: () => {
-      toast.success('Tạo mã truy cập thành công!')
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['deck-access-keys', deckItemId] })
       setIsCreateModalOpen(false)
-      // Reset form
+      // reset form
       setCreateCount(1)
       setKeyLabel('')
       setMaxUses('')
       setAccessDurationDays('')
       setExpiresAt('')
-      queryClient.invalidateQueries({ queryKey: ['deck-access-keys', deckItemId] })
+      toast.success(
+        t('keys_manager.toast_created_count', {
+          count: data?.created_keys?.length || 1,
+          defaultValue: `Đã tạo thành công ${data?.created_keys?.length || 1} mã truy cập mới!`,
+        })
+      )
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Không thể tạo mã truy cập. Vui lòng thử lại.')
+      toast.error(err?.message || t('common.error', 'Có lỗi xảy ra khi tạo mã.'))
     },
   })
 
-  // Mutation toggle status (active / revoked)
+  // Mutation revoke/restore key
   const toggleStatusMutation = useMutation({
-    mutationFn: ({ keyId, newStatus }: { keyId: string; newStatus: 'active' | 'revoked' }) =>
-      appApi.mutate(`/api/creator/keys/${keyId}`, 'PATCH', { status: newStatus }),
-    onSuccess: (_, variables) => {
-      toast.success(
-        variables.newStatus === 'active'
-          ? 'Đã kích hoạt lại mã truy cập.'
-          : 'Đã vô hiệu hóa mã truy cập.',
+    mutationFn: ({ keyId, newStatus }: { keyId: string; newStatus: 'active' | 'revoked' }) => {
+      return appApi.mutate(
+        `/api/creator/keys/${keyId}/status`,
+        'PATCH',
+        { status: newStatus },
       )
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deck-access-keys', deckItemId] })
+      toast.success(t('keys_manager.toast_status_updated', 'Đã cập nhật trạng thái mã!'))
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Thao tác thất bại.')
+      toast.error(err?.message || t('common.error', 'Không thể thay đổi trạng thái mã.'))
     },
   })
 
   const copyKey = (code: string, id: string) => {
     navigator.clipboard.writeText(code)
     setCopiedKeyId(id)
-    toast.success(`Đã copy mã: ${code}`)
+    toast.success(t('keys_manager.toast_copied_key', 'Đã copy mã key!'))
     setTimeout(() => setCopiedKeyId(null), 2000)
   }
 
   const copyShareLink = (code: string, id: string) => {
-    const origin = window.location.origin
-    const url = `${origin}/shared/decks/${deckItemId}?code=${encodeURIComponent(code)}`
-    navigator.clipboard.writeText(url)
+    const inviteUrl = `${window.location.origin}/marketplace/decks/${deckItemId}?key=${code}`
+    navigator.clipboard.writeText(inviteUrl)
     setCopiedLinkId(id)
-    toast.success('Đã copy link mời kèm mã kích hoạt!')
+    toast.success(t('keys_manager.toast_copied_link', 'Đã copy link mời kèm mã kích hoạt!'))
     setTimeout(() => setCopiedLinkId(null), 2000)
   }
 
@@ -158,23 +161,30 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="border-border/60 bg-card/60 backdrop-blur-sm shadow-sm">
           <CardHeader className="p-4 pb-2">
-            <CardDescription className="text-xs font-medium">Tổng số mã đã tạo</CardDescription>
+            <CardDescription className="text-xs font-medium">
+              {t('keys_manager.stat_total_created', 'Tổng số mã đã tạo')}
+            </CardDescription>
             <CardTitle className="text-2xl font-bold font-mono">{keys.length}</CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-emerald-500">{activeKeysCount}</span> mã đang mở nhận học viên
+              <span className="font-semibold text-emerald-500">{activeKeysCount}</span>{' '}
+              {t('keys_manager.stat_active_suffix', 'mã đang mở nhận học viên')}
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-border/60 bg-card/60 backdrop-blur-sm shadow-sm">
           <CardHeader className="p-4 pb-2">
-            <CardDescription className="text-xs font-medium">Lượt học viên đã kích hoạt</CardDescription>
+            <CardDescription className="text-xs font-medium">
+              {t('keys_manager.stat_used', 'Lượt học viên đã kích hoạt')}
+            </CardDescription>
             <CardTitle className="text-2xl font-bold font-mono text-primary">{totalUsedCount}</CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <p className="text-xs text-muted-foreground">Tổng số lượt tải về qua mã lớp học</p>
+            <p className="text-xs text-muted-foreground">
+              {t('keys_manager.stat_used_desc', 'Tổng số lượt tải về qua mã lớp học')}
+            </p>
           </CardContent>
         </Card>
 
@@ -182,10 +192,10 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
           <div>
             <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
               <KeyRound className="size-4 text-primary" />
-              Phát hành mã lớp học
+              {t('keys_manager.card_issue_title', 'Phát hành mã lớp học')}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Tạo mã kích hoạt để gửi riêng cho học viên lớp mình tải deck.
+              {t('keys_manager.card_issue_desc', 'Tạo mã kích hoạt để gửi riêng cho học viên lớp mình tải deck.')}
             </p>
           </div>
           <Button
@@ -194,7 +204,7 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
             className="w-full mt-3 rounded-xl font-semibold gap-1.5 shadow-sm"
           >
             <Plus className="size-4" />
-            Tạo mã truy cập mới
+            {t('keys_manager.btn_create', 'Tạo mã truy cập mới')}
           </Button>
         </Card>
       </div>
@@ -205,10 +215,13 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
           <div>
             <h3 className="font-bold text-sm sm:text-base text-foreground flex items-center gap-2">
               <KeyRound className="size-4 text-primary" />
-              Danh sách Mã truy cập ({keys.length})
+              {t('keys_manager.list_title', {
+                count: keys.length,
+                defaultValue: `Danh sách Mã truy cập (${keys.length})`,
+              })}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Quản lý, sao chép link mời và bật/tắt quyền kích hoạt cho từng mã
+              {t('keys_manager.list_desc', 'Quản lý, sao chép link mời và bật/tắt quyền kích hoạt cho từng mã')}
             </p>
           </div>
           <Button
@@ -218,14 +231,14 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
             className="rounded-xl gap-1.5 text-xs font-semibold"
           >
             <Plus className="size-3.5" />
-            Tạo thêm mã
+            {t('keys_manager.btn_create_more', 'Tạo thêm mã')}
           </Button>
         </div>
 
         {keysQuery.isLoading ? (
           <div className="flex items-center justify-center p-12 text-muted-foreground">
             <LoaderCircle className="size-6 animate-spin mr-2 text-primary" />
-            <span className="text-sm">Đang tải danh sách mã...</span>
+            <span className="text-sm">{t('keys_manager.loading', 'Đang tải danh sách mã...')}</span>
           </div>
         ) : keys.length === 0 ? (
           <div className="p-12 text-center space-y-3">
@@ -233,9 +246,14 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
               <KeyRound className="size-6" />
             </div>
             <div className="space-y-1">
-              <h4 className="font-semibold text-sm text-foreground">Chưa có mã truy cập nào</h4>
+              <h4 className="font-semibold text-sm text-foreground">
+                {t('keys_manager.empty_title', 'Chưa có mã truy cập nào')}
+              </h4>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                Tạo mã truy cập đầu tiên để gửi cho học viên trong lớp của bạn tải về và bắt đầu học bài.
+                {t(
+                  'keys_manager.empty_desc',
+                  'Tạo mã truy cập đầu tiên để gửi cho học viên trong lớp của bạn tải về và bắt đầu học bài.'
+                )}
               </p>
             </div>
             <Button
@@ -244,7 +262,7 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
               className="rounded-xl font-semibold gap-1.5 mt-2"
             >
               <Plus className="size-4" />
-              Tạo mã ngay
+              {t('keys_manager.btn_create_first', 'Tạo mã ngay')}
             </Button>
           </div>
         ) : (
@@ -252,12 +270,12 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border/60 bg-muted/40 text-muted-foreground font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4">Mã kích hoạt (Key Code)</th>
-                  <th className="py-3 px-4">Nhãn / Tên lớp</th>
-                  <th className="py-3 px-4">Tiến độ sử dụng</th>
-                  <th className="py-3 px-4">Hạn học / Hạn mã</th>
-                  <th className="py-3 px-4 text-center">Trạng thái</th>
-                  <th className="py-3 px-4 text-right">Thao tác</th>
+                  <th className="py-3 px-4">{t('keys_manager.table.code_col', 'Mã kích hoạt (Key Code)')}</th>
+                  <th className="py-3 px-4">{t('keys_manager.table.label_col', 'Nhãn / Tên lớp')}</th>
+                  <th className="py-3 px-4">{t('keys_manager.table.uses_col', 'Tiến độ sử dụng')}</th>
+                  <th className="py-3 px-4">{t('keys_manager.table.expires_col', 'Hạn học / Hạn mã')}</th>
+                  <th className="py-3 px-4 text-center">{t('keys_manager.table.status_col', 'Trạng thái')}</th>
+                  <th className="py-3 px-4 text-right">{t('keys_manager.table.actions_col', 'Thao tác')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
@@ -309,10 +327,17 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
                       {/* Label / Class note */}
                       <td className="py-3 px-4">
                         <div className="font-medium text-foreground">
-                          {k.label || <span className="text-muted-foreground italic">Không có nhãn</span>}
+                          {k.label || (
+                            <span className="text-muted-foreground italic">
+                              {t('keys_manager.no_label', 'Không có nhãn')}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">
-                          Tạo ngày {new Date(k.created_at).toLocaleDateString('vi-VN')}
+                          {t('keys_manager.created_at', {
+                            date: new Date(k.created_at).toLocaleDateString(dateLocale),
+                            defaultValue: `Tạo ngày ${new Date(k.created_at).toLocaleDateString(dateLocale)}`,
+                          })}
                         </div>
                       </td>
 
@@ -323,17 +348,20 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
                             type="button"
                             onClick={() => setSelectedKeyForRedemptions(k)}
                             className="font-mono font-bold text-primary hover:underline flex items-center gap-1"
-                            title="Xem danh sách học viên đã nhập mã"
+                            title={t('keys_manager.view_students_title', 'Xem danh sách học viên đã nhập mã')}
                           >
                             <Users className="size-3" />
                             {k.used_count}
                             <span className="text-muted-foreground font-normal">
-                              / {k.max_uses ? k.max_uses : '∞'} lượt
+                              {t('keys_manager.per_uses', {
+                                max: k.max_uses ? k.max_uses : '∞',
+                                defaultValue: `/ ${k.max_uses ? k.max_uses : '∞'} lượt`,
+                              })}
                             </span>
                           </button>
                           {isFull && (
                             <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20 px-1.5 py-0">
-                              Đã hết lượt
+                              {t('keys_manager.status_full', 'Hết lượt')}
                             </Badge>
                           )}
                         </div>
@@ -344,18 +372,30 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
                         <div className="space-y-0.5">
                           <div className="text-foreground">
                             {k.access_duration_days ? (
-                              <span className="font-medium">Học trong {k.access_duration_days} ngày</span>
+                              <span className="font-medium">
+                                {t('keys_manager.duration_days', {
+                                  days: k.access_duration_days,
+                                  defaultValue: `Học trong ${k.access_duration_days} ngày`,
+                                })}
+                              </span>
                             ) : (
-                              <span className="text-muted-foreground">Học vĩnh viễn</span>
+                              <span className="text-muted-foreground">
+                                {t('keys_manager.duration_forever', 'Học vĩnh viễn')}
+                              </span>
                             )}
                           </div>
                           {k.expires_at ? (
                             <div className="text-[10px] text-muted-foreground flex items-center gap-1">
                               <Clock className="size-3" />
-                              Hạn kích hoạt: {new Date(k.expires_at).toLocaleDateString('vi-VN')}
+                              {t('keys_manager.expires_at', {
+                                date: new Date(k.expires_at).toLocaleDateString(dateLocale),
+                                defaultValue: `Hạn kích hoạt: ${new Date(k.expires_at).toLocaleDateString(dateLocale)}`,
+                              })}
                             </div>
                           ) : (
-                            <div className="text-[10px] text-muted-foreground">Mã không hết hạn</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {t('keys_manager.no_expiration', 'Mã không hết hạn')}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -364,22 +404,22 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
                       <td className="py-3 px-4 text-center">
                         {k.status === 'active' && !isFull && (
                           <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[11px]">
-                            Đang mở
+                            {t('keys_manager.status_active', 'Đang mở')}
                           </Badge>
                         )}
                         {k.status === 'active' && isFull && (
                           <Badge variant="outline" className="text-[11px] text-amber-600 border-amber-500/30 bg-amber-500/10">
-                            Hết lượt
+                            {t('keys_manager.status_full', 'Hết lượt')}
                           </Badge>
                         )}
                         {k.status === 'revoked' && (
                           <Badge variant="destructive" className="text-[11px] bg-destructive/15 text-destructive border-destructive/30">
-                            Đã tắt
+                            {t('keys_manager.status_revoked', 'Đã tắt')}
                           </Badge>
                         )}
                         {k.status === 'expired' && (
                           <Badge variant="secondary" className="text-[11px]">
-                            Hết hạn
+                            {t('keys_manager.status_expired', 'Hết hạn')}
                           </Badge>
                         )}
                       </td>
@@ -392,10 +432,10 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
                             variant="ghost"
                             onClick={() => setSelectedKeyForRedemptions(k)}
                             className="h-8 px-2 text-xs rounded-lg"
-                            title="Xem học viên"
+                            title={t('keys_manager.btn_students', 'Học viên')}
                           >
                             <Users className="size-3.5 mr-1" />
-                            Học viên
+                            {t('keys_manager.btn_students', 'Học viên')}
                           </Button>
 
                           {k.status === 'active' ? (
@@ -407,7 +447,7 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
                               className="h-8 px-2.5 text-xs rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20"
                               title="Tắt mã này để không cho học viên mới nhập"
                             >
-                              Tắt mã
+                              {t('keys_manager.btn_revoke', 'Tắt mã')}
                             </Button>
                           ) : (
                             <Button
@@ -418,7 +458,7 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
                               className="h-8 px-2.5 text-xs rounded-lg text-emerald-600 hover:text-emerald-600 hover:bg-emerald-500/10 border-emerald-500/20"
                               title="Mở lại mã này"
                             >
-                              Bật lại
+                              {t('keys_manager.btn_reactivate', 'Bật lại')}
                             </Button>
                           )}
                         </div>
@@ -433,194 +473,32 @@ export function DeckAccessKeysManager({ deckItemId, deckTitle }: DeckAccessKeysM
       </div>
 
       {/* Modal 1: Create Keys */}
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <KeyRound className="size-5 text-primary" />
-              Tạo mã truy cập lớp học
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Mã này sẽ cấp quyền tải và học bộ thẻ &quot;{deckTitle}&quot; cho học viên của bạn.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2 text-xs sm:text-sm">
-            {/* Count */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="create-count" className="text-xs font-semibold">
-                  Số lượng mã cần tạo
-                </Label>
-                <Input
-                  id="create-count"
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={createCount}
-                  onChange={(e) => setCreateCount(Math.max(1, Math.min(50, Number(e.target.value))))}
-                  className="rounded-xl h-10 font-mono text-sm"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="max-uses" className="text-xs font-semibold">
-                  Giới hạn lượt dùng / mã
-                </Label>
-                <Input
-                  id="max-uses"
-                  type="number"
-                  min="1"
-                  placeholder="Để trống = Không giới hạn"
-                  value={maxUses}
-                  onChange={(e) => setMaxUses(e.target.value)}
-                  className="rounded-xl h-10 font-mono text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Label / Class name */}
-            <div className="space-y-1.5">
-              <Label htmlFor="key-label" className="text-xs font-semibold">
-                Ghi chú / Tên lớp học
-              </Label>
-              <Input
-                id="key-label"
-                placeholder="VD: Lớp N3 K14, Học viên Nguyễn Văn A..."
-                value={keyLabel}
-                onChange={(e) => setKeyLabel(e.target.value)}
-                className="rounded-xl h-10"
-              />
-            </div>
-
-            {/* Access duration & Expiration */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="duration-days" className="text-xs font-semibold">
-                  Thời lượng học (ngày)
-                </Label>
-                <Input
-                  id="duration-days"
-                  type="number"
-                  min="1"
-                  placeholder="Để trống = Vĩnh viễn"
-                  value={accessDurationDays}
-                  onChange={(e) => setAccessDurationDays(e.target.value)}
-                  className="rounded-xl h-10 font-mono text-sm"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="key-expires" className="text-xs font-semibold">
-                  Hạn chót nhập mã
-                </Label>
-                <Input
-                  id="key-expires"
-                  type="date"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  className="rounded-xl h-10 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 text-xs text-muted-foreground flex items-start gap-2">
-              <Info className="size-4 text-primary shrink-0 mt-0.5" />
-              <div>
-                Học viên chỉ cần nhập mã này hoặc truy cập link mời để tự động cài đặt deck vào thư viện mà không cần tìm kiếm trên Marketplace.
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsCreateModalOpen(false)}
-              className="rounded-xl"
-            >
-              Hủy
-            </Button>
-            <Button
-              type="button"
-              onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending}
-              className="rounded-xl font-semibold gap-1.5"
-            >
-              {createMutation.isPending ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <Plus className="size-4" />
-              )}
-              Xác nhận tạo mã
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateAccessKeysModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        deckTitle={deckTitle}
+        createCount={createCount}
+        setCreateCount={setCreateCount}
+        maxUses={maxUses}
+        setMaxUses={setMaxUses}
+        keyLabel={keyLabel}
+        setKeyLabel={setKeyLabel}
+        accessDurationDays={accessDurationDays}
+        setAccessDurationDays={setAccessDurationDays}
+        expiresAt={expiresAt}
+        setExpiresAt={setExpiresAt}
+        onSubmit={() => createMutation.mutate()}
+        isPending={createMutation.isPending}
+      />
 
       {/* Modal 2: View Redemptions (Học viên đã nhập mã) */}
-      <Dialog
-        open={Boolean(selectedKeyForRedemptions)}
-        onOpenChange={(open) => !open && setSelectedKeyForRedemptions(null)}
-      >
-        <DialogContent className="sm:max-w-lg rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Users className="size-5 text-primary" />
-              Danh sách Học viên đã kích hoạt mã
-            </DialogTitle>
-            <DialogDescription className="text-xs font-mono text-foreground font-semibold">
-              Mã: {selectedKeyForRedemptions?.key_code} ({selectedKeyForRedemptions?.label || 'Chưa đặt tên'})
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-80 overflow-y-auto divide-y divide-border/40 py-2">
-            {redemptionsQuery.isLoading ? (
-              <div className="flex items-center justify-center p-8 text-muted-foreground">
-                <LoaderCircle className="size-5 animate-spin mr-2 text-primary" />
-                <span className="text-xs">Đang tải danh sách học viên...</span>
-              </div>
-            ) : (redemptionsQuery.data?.items || []).length === 0 ? (
-              <div className="p-8 text-center text-xs text-muted-foreground">
-                Chưa có học viên nào kích hoạt mã này.
-              </div>
-            ) : (
-              (redemptionsQuery.data?.items || []).map((r) => (
-                <div key={r.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-semibold text-foreground">{r.username}</div>
-                    <div className="text-[10px] text-muted-foreground">
-                      Kích hoạt lúc: {new Date(r.redeemed_at).toLocaleString('vi-VN')}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    {r.access_expires_at ? (
-                      <Badge variant="outline" className="text-[10px]">
-                        Hạn học: {new Date(r.access_expires_at).toLocaleDateString('vi-VN')}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] text-emerald-600 bg-emerald-500/10">
-                        Vĩnh viễn
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setSelectedKeyForRedemptions(null)}
-              className="rounded-xl w-full"
-            >
-              Đóng
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <KeyRedemptionsModal
+        isOpen={Boolean(selectedKeyForRedemptions)}
+        onClose={() => setSelectedKeyForRedemptions(null)}
+        selectedKey={selectedKeyForRedemptions}
+        isLoading={redemptionsQuery.isLoading}
+        redemptions={redemptionsQuery.data?.items || []}
+      />
     </div>
   )
 }

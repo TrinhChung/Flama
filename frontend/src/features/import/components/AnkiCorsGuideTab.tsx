@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Check,
   CheckCircle2,
@@ -14,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export function AnkiCorsGuideTab() {
+  const { t } = useTranslation('import')
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [copiedConfig, setCopiedConfig] = useState(false)
 
@@ -27,14 +29,19 @@ export function AnkiCorsGuideTab() {
     await navigator.clipboard.writeText(`"${currentOrigin}"`)
     setCopiedUrl(true)
     setTimeout(() => setCopiedUrl(false), 2000)
-    toast.success(`Đã sao chép địa chỉ: "${currentOrigin}" (kèm dấu ngoặc kép)!`)
+    toast.success(t('anki_sync.cors_guide.toast_copied_origin', {
+      origin: currentOrigin,
+      defaultValue: `Đã sao chép địa chỉ: "${currentOrigin}" (kèm dấu ngoặc kép)!`,
+    }))
   }
 
   const handleCopyConfig = async () => {
     await navigator.clipboard.writeText(recommendedCorsSetting)
     setCopiedConfig(true)
     setTimeout(() => setCopiedConfig(false), 2000)
-    toast.success('Đã sao chép đoạn cấu hình mẫu vào bộ nhớ tạm!')
+    toast.success(t('anki_sync.cors_guide.toast_copied_config', {
+      defaultValue: 'Đã sao chép đoạn cấu hình mẫu vào bộ nhớ tạm!',
+    }))
   }
 
   return (

@@ -4,10 +4,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
-  ArrowRight,
   Check,
-  CheckCircle2,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Button } from '@/components/ui/button'
@@ -18,15 +17,16 @@ import { loadDeckOptionsForPublish } from '../publishApi'
 import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
 import {
   CATEGORY_PRESETS,
-  TAXONOMY_DIFFICULTIES,
 } from '../utils/publishTaxonomyConstants'
 import { WIZARD_STEPS } from '../components/publish/PublishWizardTypes'
 import { PublishStep1BasicInfo } from '../components/publish/PublishStep1BasicInfo'
 import { PublishStep2Taxonomy } from '../components/publish/PublishStep2Taxonomy'
 import { PublishStep3Goals } from '../components/publish/PublishStep3Goals'
 import { PublishStep4Pricing } from '../components/publish/PublishStep4Pricing'
+import { PublishDeckSummaryFooter } from '../components/publish/PublishDeckSummaryFooter'
 
 export function MarketplacePublishDeckPage() {
+  const { t } = useTranslation('marketplace')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const queryParamDeckId = searchParams.get('deck_id') || searchParams.get('id') || searchParams.get('source_deck_id') || ''
@@ -197,8 +197,8 @@ export function MarketplacePublishDeckPage() {
       const publishedId = data?.deck_marketplace_item?.id || data?.shared_deck?.id || deckItemId
       toast.success(
         isEditMode
-          ? 'Đã cập nhật thông tin bộ thẻ trên Marketplace!'
-          : 'Xuất bản bộ thẻ thành công! Bạn có thể quản lý release và phiên bản tại đây.',
+          ? t('publish_deck.toast_update_success', { defaultValue: 'Đã cập nhật thông tin bộ thẻ trên Marketplace!' })
+          : t('publish_deck.toast_create_success', { defaultValue: 'Xuất bản bộ thẻ thành công! Bạn có thể quản lý release và phiên bản tại đây.' }),
       )
       if (publishedId) {
         navigate(`/marketplace/decks/${publishedId}`)
@@ -207,7 +207,7 @@ export function MarketplacePublishDeckPage() {
       }
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Không thể đăng tải bộ thẻ. Vui lòng kiểm tra lại thông tin.')
+      toast.error(err?.message || t('publish_deck.toast_error', { defaultValue: 'Không thể đăng tải bộ thẻ. Vui lòng kiểm tra lại thông tin.' }))
     },
   })
 
@@ -311,7 +311,7 @@ export function MarketplacePublishDeckPage() {
     for (let step = 1; step <= 4; step++) {
       if (!validateStep(step)) {
         setCurrentStep(step)
-        toast.error(`Vui lòng hoàn thành các thông tin bắt buộc tại Bước ${step}`)
+        toast.error(t('publish_deck.toast_step_error', { defaultValue: `Vui lòng hoàn thành các thông tin bắt buộc tại Bước ${step}`, step }))
         return
       }
     }
@@ -323,7 +323,7 @@ export function MarketplacePublishDeckPage() {
       setCurrentStep((prev) => Math.min(prev + 1, 4))
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
-      toast.error('Vui lòng kiểm tra và điền đủ thông tin trước khi chuyển bước')
+      toast.error(t('publish_deck.toast_check_info', { defaultValue: 'Vui lòng kiểm tra và điền đủ thông tin trước khi chuyển bước' }))
     }
   }
 
@@ -342,7 +342,7 @@ export function MarketplacePublishDeckPage() {
         if (!validateStep(s)) {
           canProceed = false
           setCurrentStep(s)
-          toast.error(`Vui lòng hoàn thiện Bước ${s} trước`)
+          toast.error(t('publish_deck.toast_finish_step_first', { defaultValue: `Vui lòng hoàn thiện Bước ${s} trước`, step: s }))
           break
         }
       }
@@ -354,7 +354,7 @@ export function MarketplacePublishDeckPage() {
   }
 
   if (decksQuery.isPending || (isEditMode && deckItemQuery.isPending)) {
-    return <PageLoading label="Đang tải dữ liệu..." />
+    return <PageLoading label={t('common.loading', { defaultValue: 'Đang tải dữ liệu...' })} />
   }
 
   if (decksQuery.error) {
@@ -380,12 +380,16 @@ export function MarketplacePublishDeckPage() {
       {/* Compact Header */}
       <div className="flex items-center justify-between gap-4 pt-1">
         <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
-          {isEditMode ? 'Chỉnh sửa thông tin Bộ thẻ' : 'Chia sẻ Bộ thẻ vào Marketplace'}
+          {isEditMode
+            ? t('publish_deck.title_edit', { defaultValue: 'Chỉnh sửa thông tin Bộ thẻ' })
+            : t('publish_deck.title_create', { defaultValue: 'Chia sẻ Bộ thẻ vào Marketplace' })}
         </h1>
         <Button variant="outline" size="sm" asChild className="h-8 px-3 text-xs font-semibold rounded-xl shrink-0">
           <Link to={isEditMode ? `/marketplace/decks/${deckItemId}` : "/marketplace/decks"}>
             <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-            {isEditMode ? 'Quay lại chi tiết' : 'Quay lại Marketplace'}
+            {isEditMode
+              ? t('publish_deck.btn_back_detail', { defaultValue: 'Quay lại chi tiết' })
+              : t('publish_deck.back_btn', { defaultValue: 'Quay lại Marketplace' })}
           </Link>
         </Button>
       </div>
@@ -446,181 +450,132 @@ export function MarketplacePublishDeckPage() {
         className="space-y-6"
       >
         <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden min-h-[480px] flex flex-col justify-between">
-            {/* Step Body */}
-            <CardContent className="p-4 sm:p-6 space-y-5 flex-1">
-              {currentStep === 1 && (
-                <PublishStep1BasicInfo
-                  isEditMode={isEditMode}
-                  decks={decks}
-                  sourceDeckId={sourceDeckId}
-                  deckItem={deckItem}
-                  title={title}
-                  isTitleManuallyEdited={isTitleManuallyEdited}
-                  previewText={previewText}
-                  description={description}
-                  tags={tags}
-                  changelog={changelog}
+          {/* Step Body */}
+          <CardContent className="p-4 sm:p-6 space-y-5 flex-1">
+            {currentStep === 1 && (
+              <PublishStep1BasicInfo
+                isEditMode={isEditMode}
+                decks={decks}
+                sourceDeckId={sourceDeckId}
+                deckItem={deckItem}
+                title={title}
+                isTitleManuallyEdited={isTitleManuallyEdited}
+                previewText={previewText}
+                description={description}
+                tags={tags}
+                changelog={changelog}
+                isReleaseVersioned={isReleaseVersioned}
+                fieldErrors={fieldErrors}
+                setSourceDeckId={setSourceDeckId}
+                setTitle={setTitle}
+                setIsTitleManuallyEdited={setIsTitleManuallyEdited}
+                setPreviewText={setPreviewText}
+                setDescription={setDescription}
+                setTags={setTags}
+                setChangelog={setChangelog}
+                clearFieldError={clearFieldError}
+              />
+            )}
+
+            {currentStep === 2 && (
+              <PublishStep2Taxonomy
+                taxonomyDomain={taxonomyDomain}
+                taxonomySubject={taxonomySubject}
+                taxonomyFramework={taxonomyFramework}
+                taxonomyFrameworkLevel={taxonomyFrameworkLevel}
+                taxonomyDifficulty={taxonomyDifficulty}
+                subcategory={subcategory}
+                primaryCategory={primaryCategory}
+                customCategory={customCategory}
+                targetAudience={targetAudience}
+                fieldErrors={fieldErrors}
+                availableDomains={availableDomains}
+                availableSubjects={availableSubjects}
+                availableFrameworks={availableFrameworks}
+                activeFramework={activeFramework}
+                taxonomySchema={taxonomySchema}
+                setTaxonomyDomain={setTaxonomyDomain}
+                setTaxonomySubject={setTaxonomySubject}
+                setTaxonomyFramework={setTaxonomyFramework}
+                setTaxonomyFrameworkLevel={setTaxonomyFrameworkLevel}
+                setTaxonomyDifficulty={setTaxonomyDifficulty}
+                setSubcategory={setSubcategory}
+                setPrimaryCategory={setPrimaryCategory}
+                setCustomCategory={setCustomCategory}
+                setTargetAudience={setTargetAudience}
+                setTaxonomyGoals={setTaxonomyGoals}
+                setTaxonomyTopics={setTaxonomyTopics}
+                setTags={setTags}
+                clearFieldError={clearFieldError}
+              />
+            )}
+
+            {currentStep === 3 && (
+              <PublishStep3Goals
+                taxonomyDomain={taxonomyDomain}
+                taxonomySubject={taxonomySubject}
+                taxonomyGoals={taxonomyGoals}
+                taxonomyTopics={taxonomyTopics}
+                availableDomains={availableDomains}
+                availableSubjects={availableSubjects}
+                availableGoals={availableGoals}
+                availableTopics={availableTopics}
+                fieldErrors={fieldErrors}
+                setTaxonomyGoals={setTaxonomyGoals}
+                setTaxonomyTopics={setTaxonomyTopics}
+                clearFieldError={clearFieldError}
+              />
+            )}
+
+            {currentStep === 4 && (
+              <div className="space-y-5 animate-in fade-in duration-200">
+                <PublishStep4Pricing
+                  distributionMode={distributionMode}
+                  pricingMode={pricingMode}
+                  priceAmountMinor={priceAmountMinor}
+                  studentOfferMode={studentOfferMode}
+                  studentDiscountPercent={studentDiscountPercent}
+                  courseTitle={courseTitle}
+                  courseDescription={courseDescription}
+                  courseUrl={courseUrl}
+                  courseInstructions={courseInstructions}
+                  version={version}
                   isReleaseVersioned={isReleaseVersioned}
+                  deckItemId={deckItemId}
                   fieldErrors={fieldErrors}
-                  setSourceDeckId={setSourceDeckId}
-                  setTitle={setTitle}
-                  setIsTitleManuallyEdited={setIsTitleManuallyEdited}
-                  setPreviewText={setPreviewText}
-                  setDescription={setDescription}
-                  setTags={setTags}
-                  setChangelog={setChangelog}
+                  setDistributionMode={setDistributionMode}
+                  setPricingMode={setPricingMode}
+                  setPriceAmountMinor={setPriceAmountMinor}
+                  setStudentOfferMode={setStudentOfferMode}
+                  setStudentDiscountPercent={setStudentDiscountPercent}
+                  setCourseTitle={setCourseTitle}
+                  setCourseDescription={setCourseDescription}
+                  setCourseUrl={setCourseUrl}
+                  setCourseInstructions={setCourseInstructions}
+                  setVersion={setVersion}
                   clearFieldError={clearFieldError}
                 />
-              )}
-
-              {currentStep === 2 && (
-                <PublishStep2Taxonomy
-                  taxonomyDomain={taxonomyDomain}
-                  taxonomySubject={taxonomySubject}
-                  taxonomyFramework={taxonomyFramework}
-                  taxonomyFrameworkLevel={taxonomyFrameworkLevel}
-                  taxonomyDifficulty={taxonomyDifficulty}
-                  subcategory={subcategory}
-                  primaryCategory={primaryCategory}
-                  customCategory={customCategory}
-                  targetAudience={targetAudience}
-                  fieldErrors={fieldErrors}
-                  availableDomains={availableDomains}
-                  availableSubjects={availableSubjects}
-                  availableFrameworks={availableFrameworks}
-                  activeFramework={activeFramework}
-                  taxonomySchema={taxonomySchema}
-                  setTaxonomyDomain={setTaxonomyDomain}
-                  setTaxonomySubject={setTaxonomySubject}
-                  setTaxonomyFramework={setTaxonomyFramework}
-                  setTaxonomyFrameworkLevel={setTaxonomyFrameworkLevel}
-                  setTaxonomyDifficulty={setTaxonomyDifficulty}
-                  setSubcategory={setSubcategory}
-                  setPrimaryCategory={setPrimaryCategory}
-                  setCustomCategory={setCustomCategory}
-                  setTargetAudience={setTargetAudience}
-                  setTaxonomyGoals={setTaxonomyGoals}
-                  setTaxonomyTopics={setTaxonomyTopics}
-                  setTags={setTags}
-                  clearFieldError={clearFieldError}
-                />
-              )}
-
-              {currentStep === 3 && (
-                <PublishStep3Goals
-                  taxonomyDomain={taxonomyDomain}
-                  taxonomySubject={taxonomySubject}
-                  taxonomyGoals={taxonomyGoals}
-                  taxonomyTopics={taxonomyTopics}
-                  availableDomains={availableDomains}
-                  availableSubjects={availableSubjects}
-                  availableGoals={availableGoals}
-                  availableTopics={availableTopics}
-                  fieldErrors={fieldErrors}
-                  setTaxonomyGoals={setTaxonomyGoals}
-                  setTaxonomyTopics={setTaxonomyTopics}
-                  clearFieldError={clearFieldError}
-                />
-              )}
-
-              {currentStep === 4 && (
-                <div className="space-y-5 animate-in fade-in duration-200">
-                  <PublishStep4Pricing
-                    distributionMode={distributionMode}
-                    pricingMode={pricingMode}
-                    priceAmountMinor={priceAmountMinor}
-                    studentOfferMode={studentOfferMode}
-                    studentDiscountPercent={studentDiscountPercent}
-                    courseTitle={courseTitle}
-                    courseDescription={courseDescription}
-                    courseUrl={courseUrl}
-                    courseInstructions={courseInstructions}
-                    version={version}
-                    isReleaseVersioned={isReleaseVersioned}
-                    deckItemId={deckItemId}
-                    fieldErrors={fieldErrors}
-                    setDistributionMode={setDistributionMode}
-                    setPricingMode={setPricingMode}
-                    setPriceAmountMinor={setPriceAmountMinor}
-                    setStudentOfferMode={setStudentOfferMode}
-                    setStudentDiscountPercent={setStudentDiscountPercent}
-                    setCourseTitle={setCourseTitle}
-                    setCourseDescription={setCourseDescription}
-                    setCourseUrl={setCourseUrl}
-                    setCourseInstructions={setCourseInstructions}
-                    setVersion={setVersion}
-                    clearFieldError={clearFieldError}
-                  />
-
-                  {/* Summary Checklist before Submit */}
-                  <div className="p-4 rounded-xl border border-border/80 bg-muted/30 space-y-2.5 text-xs">
-                    <div className="font-bold text-foreground flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                      <span>Tóm tắt thông tin xuất bản:</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
-                      <div>Tiêu đề: <strong className="text-foreground">{title || 'Chưa đặt'}</strong></div>
-                      <div>Môn học: <strong className="text-foreground">{availableSubjects.find(s => s.id === taxonomySubject)?.label || taxonomySubject}</strong></div>
-                      <div>Độ khó: <strong className="text-foreground">{TAXONOMY_DIFFICULTIES.find(d => d.id === taxonomyDifficulty)?.label || taxonomyDifficulty}</strong></div>
-                      <div>
-                        Mô hình:{' '}
-                        <strong className="text-foreground">
-                          {distributionMode === 'course_key'
-                            ? 'Mã lớp học (Keys)'
-                            : distributionMode === 'paid'
-                              ? `${priceAmountMinor.toLocaleString('vi-VN')} đ`
-                              : 'Miễn phí'}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-
-            {/* Step Navigation Actions Footer */}
-            <div className="p-4 sm:p-6 border-t border-border/40 bg-muted/10 flex items-center justify-between gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="default"
-                onClick={handlePrevStep}
-                disabled={currentStep === 1}
-                className="h-11 sm:h-10 px-4 text-xs font-semibold rounded-xl shrink-0"
-              >
-                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-                Quay lại
-              </Button>
-
-              <div className="text-xs text-muted-foreground font-medium hidden sm:block">
-                Bước <strong className="text-foreground">{currentStep}</strong> / 4: {WIZARD_STEPS[currentStep - 1].title}
               </div>
+            )}
+          </CardContent>
 
-              {currentStep < 4 ? (
-                <Button
-                  type="button"
-                  size="default"
-                  onClick={handleNextStep}
-                  className="h-11 sm:h-10 px-5 text-xs font-bold rounded-xl bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-all cursor-pointer flex-1 sm:flex-initial justify-center"
-                >
-                  <span>Tiếp tục (Bước {currentStep + 1})</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="default"
-                  onClick={handlePublish}
-                  disabled={publishMutation.isPending}
-                  className="h-11 sm:h-10 px-6 text-xs font-bold rounded-xl bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-all cursor-pointer flex-1 sm:flex-initial justify-center"
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                  <span>{publishMutation.isPending ? 'Đang lưu…' : isEditMode ? 'Cập nhật cấu hình chia sẻ' : 'Xuất bản Bộ thẻ ngay'}</span>
-                </Button>
-              )}
-            </div>
-          </Card>
+          <PublishDeckSummaryFooter
+            currentStep={currentStep}
+            title={title}
+            taxonomySubject={taxonomySubject}
+            taxonomyDifficulty={taxonomyDifficulty}
+            distributionMode={distributionMode}
+            priceAmountMinor={priceAmountMinor}
+            availableSubjects={availableSubjects}
+            isEditMode={isEditMode}
+            isPending={publishMutation.isPending}
+            onPrevStep={handlePrevStep}
+            onNextStep={handleNextStep}
+            onPublish={handlePublish}
+          />
+        </Card>
       </form>
     </Page>
   )
 }
+
