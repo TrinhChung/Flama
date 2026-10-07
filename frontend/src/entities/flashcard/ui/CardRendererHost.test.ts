@@ -270,7 +270,7 @@ describe('card renderer host viewport modes', () => {
     document.body.appendChild(iframe)
     const controller = window.FlamaCardRendererHost!.createRendererFrameController(
       iframe,
-      { mediaBaseUrl: 'https://be-flama.stmtp.com/' },
+      { mediaBaseUrl: 'https://api.flama.vn/' },
     )
     controller.render({
       html: '<img src="/media/proxy/image-1"><audio src="/media/proxy/audio-1"></audio>',
@@ -278,9 +278,9 @@ describe('card renderer host viewport modes', () => {
       allowed_audio_urls: ['/media/proxy/audio-1'],
     })
 
-    expect(iframe.srcdoc).toContain('<base href="https://be-flama.stmtp.com/">')
-    expect(iframe.srcdoc).toContain('base-uri https://be-flama.stmtp.com')
-    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/image-1')
+    expect(iframe.srcdoc).toContain('<base href="https://api.flama.vn/">')
+    expect(iframe.srcdoc).toContain('base-uri https://api.flama.vn')
+    expect(iframe.srcdoc).toContain('https://api.flama.vn/media/proxy/image-1')
 
     const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
     const frameWindow = iframe.contentWindow!
@@ -302,7 +302,7 @@ describe('card renderer host viewport modes', () => {
 
     const sharedAudio = document.querySelector('body > audio[aria-hidden="true"]')
     expect(sharedAudio?.getAttribute('src')).toBe(
-      'https://be-flama.stmtp.com/media/proxy/audio-1',
+      'https://api.flama.vn/media/proxy/audio-1',
     )
     controller.destroy()
   })
@@ -349,14 +349,14 @@ describe('card renderer host viewport modes', () => {
     document.body.appendChild(iframe)
     const controller = window.FlamaCardRendererHost!.createRendererFrameController(
       iframe,
-      { mediaBaseUrl: 'https://be-flama.stmtp.com/' },
+      { mediaBaseUrl: 'https://api.flama.vn/' },
     )
     controller.render({
       html: '<img src="/media/proxy/derived-img-1"><audio src="/media/proxy/derived-audio-1"></audio>',
     })
 
-    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/derived-img-1')
-    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/derived-audio-1')
+    expect(iframe.srcdoc).toContain('https://api.flama.vn/media/proxy/derived-img-1')
+    expect(iframe.srcdoc).toContain('https://api.flama.vn/media/proxy/derived-audio-1')
 
     const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
     const frameWindow = iframe.contentWindow!
@@ -378,7 +378,7 @@ describe('card renderer host viewport modes', () => {
 
     const sharedAudio = document.querySelector('body > audio[aria-hidden="true"]')
     expect(sharedAudio?.getAttribute('src')).toBe(
-      'https://be-flama.stmtp.com/media/proxy/derived-audio-1',
+      'https://api.flama.vn/media/proxy/derived-audio-1',
     )
     controller.destroy()
   })
@@ -394,13 +394,13 @@ describe('card renderer host viewport modes', () => {
     document.body.appendChild(iframe)
     const controller = window.FlamaCardRendererHost!.createRendererFrameController(
       iframe,
-      { mediaBaseUrl: 'https://be-flama.stmtp.com/' },
+      { mediaBaseUrl: 'https://api.flama.vn/' },
     )
     controller.render({
-      html: '<audio src="https://be-flama.stmtp.com/media/proxy/audio-remote-1"></audio>',
+      html: '<audio src="https://api.flama.vn/media/proxy/audio-remote-1"></audio>',
     })
 
-    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/audio-remote-1')
+    expect(iframe.srcdoc).toContain('https://api.flama.vn/media/proxy/audio-remote-1')
     controller.destroy()
   })
 

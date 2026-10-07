@@ -13,7 +13,7 @@ Phát hành trực tiếp `FlamaAudio-Portable.exe` ngoài Microsoft Store với
 - Binary publish gốc là `flama-audio/publish/singlefile/Flama.Audio.App.exe`; bước prepare copy/đổi tên thành final binary `flama-audio/publish/release/FlamaAudio-Portable.exe`.
 - Pipeline cũ chạy trên mỗi push `master`, upload EXE chưa ký thẳng lên VPS và không tạo checksum.
 - Binary local được kiểm tra tại `flama-audio/publish/singlefile/Flama.Audio.App.exe`: `Status=NotSigned`; signer, subject, issuer và thumbprint đều trống.
-- Binary production tải từ `https://be-flama.stmtp.com/api/download/flama-audio` cũng `Status=NotSigned`; SHA-256 tại thời điểm audit là `91B0B30BE1933640918FCAD7F2847D9E6366823172399102CB24B9359FF2F6B2`.
+- Binary production tải từ endpoint `/api/download/flama-audio` trên domain cũ cũng `Status=NotSigned`; SHA-256 tại thời điểm audit là `91B0B30BE1933640918FCAD7F2847D9E6366823172399102CB24B9359FF2F6B2`. URL hiện tại là `https://api.flama.vn/api/download/flama-audio`; kết quả audit này chưa được kiểm tra lại trên domain mới.
 - Endpoint production dùng HTTPS, không redirect, trả `Content-Type: application/x-msdownload`, `Content-Disposition: attachment; filename=FlamaAudio-Portable.exe`, và backend `send_file` không regenerate EXE.
 
 Root cause trực tiếp của warning hiện tại là EXE không có Authenticode publisher identity. Vì vậy SmartScreen chỉ có file-hash reputation và mỗi binary mới lại bắt đầu với hash mới. Metadata Windows cũ cũng dùng tên mặc định `Flama.Audio.App`; project nay cố định Product/Description `FlamaAudio`, Company `Flama` và Copyright `Copyright © Flama`.
@@ -58,7 +58,7 @@ Tạo environment variable bắt buộc:
 Các environment variables tùy chọn:
 
 - `WINDOWS_SIGNING_TIMESTAMP_URL`: mặc định `http://timestamp.digicert.com`, phải là RFC 3161 timestamp endpoint.
-- `FLAMA_AUDIO_PRODUCTION_DOWNLOAD_URL`: mặc định `https://be-flama.stmtp.com/api/download/flama-audio`.
+- `FLAMA_AUDIO_PRODUCTION_DOWNLOAD_URL`: mặc định `https://api.flama.vn/api/download/flama-audio`.
 
 Giới hạn environment chỉ cho protected tag `flama-audio-v*`, bật required reviewers và không cho self-approval nếu GitHub plan hỗ trợ. Workflow không có trigger PR; production signing secrets không được dùng cho build development/PR.
 

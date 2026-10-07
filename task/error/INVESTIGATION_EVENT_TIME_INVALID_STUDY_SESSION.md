@@ -1,7 +1,7 @@
 # BÁO CÁO ĐIỀU TRA SỰ CỐ: MẤT THÔNG TIN PHIÊN HỌC & LỖI `EVENT_TIME_INVALID` SAU KHI HỌC 50 TỪ
 
 > **Ngày thực hiện điều tra:** 24/09/2026 (08:35 GMT+7)  
-> **Môi trường:** Production VPS (`chung_hostinger_vps` / `flama.stmtp.com`) & Frontend React (`D:\Project\nihongo\frontend`)  
+> **Môi trường:** Production VPS (`chung_hostinger_vps`; URL hiện tại: `flama.vn`) & Frontend React (`D:\Project\nihongo\frontend`)
 > **Trạng thái:** Đã điều tra tường tận nguyên nhân gốc rễ (Root Cause Identified) — **Tuân thủ chỉ thị: CHỈ ĐIỀU TRA VÀ BÁO CÁO, CHƯA CHỈNH SỬA CODE.**
 
 ---

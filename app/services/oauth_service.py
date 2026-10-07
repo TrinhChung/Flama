@@ -127,7 +127,7 @@ def get_base_url(req: Request | None = None) -> str:
 
 
 def get_frontend_base_url(req: Request | None = None) -> str:
-    """Return the base URL of the frontend application (e.g. https://flama.stmtp.com)."""
+    """Return the base URL of the frontend application (e.g. https://flama.vn)."""
     # 1. Explicit FRONTEND_URL
     try:
         frontend_url = str(current_app.config.get("FRONTEND_URL") or "").strip().rstrip("/")

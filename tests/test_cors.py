@@ -10,7 +10,7 @@ from models import db
 
 class CorsTests(unittest.TestCase):
     def setUp(self):
-        self.allowed_origin = "https://flama.stmtp.com"
+        self.allowed_origin = "https://flama.vn"
         self.app = create_app(
             {
                 "TESTING": True,

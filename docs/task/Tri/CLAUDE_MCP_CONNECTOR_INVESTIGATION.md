@@ -34,7 +34,7 @@ Các phần liên quan nên đọc trước:
 Production MCP URL đang được hướng tới:
 
 ```text
-https://be-flama.stmtp.com/api/mcp
+https://api.flama.vn/api/mcp
 ```
 
 OAuth discovery/endpoints hiện có:
@@ -285,7 +285,7 @@ Sau đó cấu hình Claude:
 
 ```text
 Remote MCP URL:
-https://be-flama.stmtp.com/api/mcp
+https://api.flama.vn/api/mcp
 
 Authentication:
 Always required

@@ -41,7 +41,9 @@ Study Tettei N1 có thêm chi phí mở phiên NOTE, dựng artifact và nhiều
 | ReviewEvent toàn DB | 61.842 | 129.469 |
 | MySQL buffer pool | 128 MiB | 128 MiB |
 | CPU / RAM máy | 16 logical CPU / khoảng 15,4 GiB | 2 vCPU / khoảng 7,8 GiB |
-| API transport | Vite proxy cùng origin tới `127.0.0.1:4789` | `flama.stmtp.com` → HTTPS `be-flama.stmtp.com` → nginx → Gunicorn |
+| API transport | Vite proxy cùng origin tới `127.0.0.1:4789` | Frontend production → HTTPS API production → nginx → Gunicorn |
+
+URL hiện tại sau chuyển domain: `https://flama.vn` → `https://api.flama.vn`. Các số đo trong báo cáo được thu thập trước khi chuyển domain, chưa được đo lại trên URL mới.
 
 Hash nội dung `app/settings.py` và `app/services/dashboard_service.py` trùng giữa hai môi trường. Reader NOTE, aggregation, stats và session service có khác biệt code. Diff local so với release production chủ yếu bỏ hỗ trợ `CANONICAL_V1` và đổi xử lý commit replay; profile production vẫn là `PROJECTION_V1`, nên không thể quy toàn bộ độ chậm cho chênh lệch code này. Khác biệt đường thực thi LEGACY/NOTE là bằng chứng mạnh hơn.
 

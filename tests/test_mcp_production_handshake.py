@@ -21,14 +21,14 @@ class McpProductionHandshakeTests(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "WTF_CSRF_ENABLED": False,
-                "SERVER_NAME": "be-flama.stmtp.com",
+                "SERVER_NAME": "api.flama.vn",
             }
         )
         self.connect_app = create_connect_app(
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-                "SERVER_NAME": "flama-connect.stmtp.com",
+                "SERVER_NAME": "connect.flama.vn",
             }
         )
         self.client = self.app.test_client()

@@ -429,6 +429,8 @@ Luu y:
 
 - Mac dinh media (bao gom audio VoiceVox) duoc luu ngoai repo tai `../flama_media_storage` de tranh lam nang git workspace.
 - Co the doi bang bien moi truong `FLASHCARD_MEDIA_UPLOAD_ROOT`.
+- Production media URL dung `https://api.flama.vn/media/proxy/`.
+- De cap nhat Cloudflare cache rule, dat `CLOUDFLARE_API_TOKEN` va `CLOUDFLARE_ZONE_ID` cua zone `flama.vn` trong env hoac `.env`, roi chay `python scripts/deploy_cloudflare_cache_rule.py`. Script khong co Zone ID mac dinh; thieu ID se dung truoc khi goi API. Them `--purge-existing` neu can xoa media cache hien tai.
 
 ## CSV Import (UI)
 
