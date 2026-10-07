@@ -1,4 +1,6 @@
+import '@/shared/config/i18n'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   BarChartLine,
   Collection,
@@ -46,6 +48,7 @@ export function StudyHeaderToolbar({
   learnCount = 0,
   dueCount = 0,
 }: StudyHeaderToolbarProps) {
+  const { t } = useTranslation('study')
 
   const statsUrl = deckId ? `/statistics?deck_id=${deckId}` : '/statistics'
   const browseUrl = deckId
@@ -69,28 +72,28 @@ export function StudyHeaderToolbar({
             to="/dashboard"
             className="dash-tab inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
           >
-            <Collection className="size-3.5 sm:size-4" /> Decks
+            <Collection className="size-3.5 sm:size-4" /> {t('header.decks')}
           </Link>
 
           <Link
             to={studyUrl}
             className="dash-tab inline-flex items-center gap-1.5 rounded-lg bg-orange-500/10 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold text-orange-700 dark:text-orange-400 shrink-0"
           >
-            <PlayCircle className="size-3.5 sm:size-4" /> Study
+            <PlayCircle className="size-3.5 sm:size-4" /> {t('header.study')}
           </Link>
 
           <Link
             to={statsUrl}
             className="dash-tab inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
           >
-            <BarChartLine className="size-3.5 sm:size-4" /> Stats
+            <BarChartLine className="size-3.5 sm:size-4" /> {t('header.stats')}
           </Link>
 
           <Link
             to={importUrl}
             className="dash-tab hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
           >
-            <Upload className="size-3.5 sm:size-4" /> Import
+            <Upload className="size-3.5 sm:size-4" /> {t('header.import')}
           </Link>
         </div>
 
@@ -102,11 +105,11 @@ export function StudyHeaderToolbar({
               size="sm"
               onClick={onEdit}
               className="dash-btn inline-flex items-center gap-1.5 rounded-md border border-border/80 px-2 sm:px-2.5 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold hover:bg-muted transition text-foreground"
-              title="Sửa nhanh thẻ hiện tại (phím E)"
-              aria-label="Sửa nhanh thẻ hiện tại"
+              title={t('header.edit_card_shortcut')}
+              aria-label={t('header.edit_card_shortcut')}
             >
               <Pencil className="size-3.5 text-orange-500 shrink-0" />
-              <span className="hidden sm:inline">Sửa thẻ</span>
+              <span className="hidden sm:inline">{t('header.edit_card')}</span>
               <kbd className="hidden md:inline-block ml-0.5 rounded bg-muted-foreground/15 px-1 py-0.2 text-[9px] font-mono font-medium text-muted-foreground">
                 E
               </kbd>
@@ -117,7 +120,7 @@ export function StudyHeaderToolbar({
             to={browseUrl}
             className="dash-btn hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border/80 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold hover:bg-muted transition"
           >
-            <Search className="size-3.5 sm:size-4" /> Browse
+            <Search className="size-3.5 sm:size-4" /> {t('header.browse')}
           </Link>
 
           {/* Three-dot dropdown menu for shortcuts, troubleshooting, and mobile access */}
@@ -128,28 +131,28 @@ export function StudyHeaderToolbar({
                 variant="outline"
                 size="sm"
                 className="size-7 sm:size-8 p-0 rounded-md border-border/80 hover:bg-muted text-muted-foreground hover:text-foreground transition shrink-0"
-                aria-label="Thêm tùy chọn và trợ giúp"
-                title="Thêm tùy chọn và trợ giúp"
+                aria-label={t('header.more_options_tooltip')}
+                title={t('header.more_options_tooltip')}
               >
                 <MoreVertical className="size-3.5 sm:size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-xl shadow-lg border-border/80">
               <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">
-                Tùy chọn & Trợ giúp
+                {t('header.more_options')}
               </DropdownMenuLabel>
 
               <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary">
                 <Link to={browseUrl} className="flex items-center gap-2.5 w-full">
                   <Search className="size-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-medium">Duyệt thẻ (Browse)</span>
+                  <span className="text-xs font-medium">{t('header.browse_menu')}</span>
                 </Link>
               </DropdownMenuItem>
 
               <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary">
                 <Link to={importUrl} className="flex items-center gap-2.5 w-full">
                   <Upload className="size-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-medium">Nhập dữ liệu (Import)</span>
+                  <span className="text-xs font-medium">{t('header.import_menu')}</span>
                 </Link>
               </DropdownMenuItem>
 
@@ -160,7 +163,7 @@ export function StudyHeaderToolbar({
                 >
                   <div className="flex items-center gap-2.5 w-full">
                     <RotateCcw className="size-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs font-medium">Tải lại phiên học</span>
+                    <span className="text-xs font-medium">{t('header.reload_session')}</span>
                   </div>
                 </DropdownMenuItem>
               ) : null}
@@ -171,8 +174,8 @@ export function StudyHeaderToolbar({
                 <Link to="/guide/study/shortcuts" className="flex items-start gap-2.5 w-full">
                   <BookOpen className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <div className="text-xs font-medium text-foreground">Phím tắt & Hướng dẫn</div>
-                    <div className="text-[11px] text-muted-foreground line-clamp-1">Bảng phím tắt & cách chấm điểm</div>
+                    <div className="text-xs font-medium text-foreground">{t('header.shortcuts_guide')}</div>
+                    <div className="text-[11px] text-muted-foreground line-clamp-1">{t('header.shortcuts_guide_desc')}</div>
                   </div>
                 </Link>
               </DropdownMenuItem>
@@ -181,8 +184,8 @@ export function StudyHeaderToolbar({
                 <Link to="/guide/troubleshooting/dashboard-study" className="flex items-start gap-2.5 w-full">
                   <AlertTriangle className="size-3.5 text-amber-500 shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <div className="text-xs font-medium text-foreground">Khắc phục sự cố</div>
-                    <div className="text-[11px] text-muted-foreground line-clamp-1">Sự cố trong phòng học</div>
+                    <div className="text-xs font-medium text-foreground">{t('header.troubleshooting')}</div>
+                    <div className="text-[11px] text-muted-foreground line-clamp-1">{t('header.troubleshooting_desc')}</div>
                   </div>
                 </Link>
               </DropdownMenuItem>
@@ -215,28 +218,28 @@ export function StudyHeaderToolbar({
               <div
                 className="study-counters-line flex items-center gap-1 sm:gap-1.5 text-xs whitespace-nowrap shrink-0"
                 role="status"
-                aria-label={`Bộ đếm: Mới ${newCount}, Đang học ${learnCount}, Đến hạn ${dueCount}`}
+                aria-label={t('header.counters_label', { new: newCount, learn: learnCount, due: dueCount })}
               >
                 <span
                   className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-emerald-500/10 px-1.5 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-emerald-600 dark:text-emerald-400"
-                  title={`Thẻ mới: ${newCount}`}
+                  title={t('header.tooltip_new', { count: newCount })}
                 >
                   <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
-                  <span>Mới {newCount}</span>
+                  <span>{t('header.counter_new', { count: newCount })}</span>
                 </span>
                 <span
                   className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-amber-500/10 px-1.5 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-amber-600 dark:text-amber-400"
-                  title={`Thẻ đang học: ${learnCount}`}
+                  title={t('header.tooltip_learn', { count: learnCount })}
                 >
                   <span className="size-1.5 rounded-full bg-amber-500 shrink-0" />
-                  <span>Học {learnCount}</span>
+                  <span>{t('header.counter_learn', { count: learnCount })}</span>
                 </span>
                 <span
                   className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-rose-500/10 px-1.5 sm:px-2.5 py-0.5 sm:py-1 font-bold text-[11px] sm:text-xs text-rose-600 dark:text-rose-400"
-                  title={`Thẻ đến hạn cần ôn: ${dueCount}`}
+                  title={t('header.tooltip_due', { count: dueCount })}
                 >
                   <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
-                  <span>Hạn {dueCount}</span>
+                  <span>{t('header.counter_due', { count: dueCount })}</span>
                 </span>
               </div>
             ) : null}

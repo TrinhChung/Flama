@@ -1,10 +1,11 @@
+import '@/shared/config/i18n'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
   BookOpen,
   ChevronDown,
   HelpCircle,
-  Layers,
   MoreHorizontal,
   PenTool,
   Printer,
@@ -20,151 +21,10 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { Brand } from '@/shared/components/Brand'
-
-interface AudioDropdownMenuItemsProps {
-  setIsTtsModalOpen: (val: boolean) => void
-  setLocalAudioEngineId: (engine: 'voicevox' | 'kokoro') => void
-  setLocalAudioDefaultVoiceId: (voice: string | undefined) => void
-  setLocalAudioTargetCardIds: (cards: string[]) => void
-  setIsLocalAudioModalOpen: (val: boolean) => void
-  selectedCards: string[]
-  selectedDeckId?: number | null
-  selectedDeck?: ReturnType<typeof useBrowseState>['selectedDeck']
-}
-
-function AudioDropdownMenuItems({
-  setIsTtsModalOpen,
-  setLocalAudioEngineId,
-  setLocalAudioDefaultVoiceId,
-  setLocalAudioTargetCardIds,
-  setIsLocalAudioModalOpen,
-  selectedCards,
-  selectedDeckId,
-  selectedDeck,
-}: AudioDropdownMenuItemsProps) {
-  const handleSelectWebVoiceVox = () => {
-    if (selectedCards.length === 0) {
-      if (!selectedDeckId) {
-        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
-        return
-      }
-      if (selectedDeck?.has_mixed_note_types) {
-        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
-        return
-      }
-    }
-    setIsTtsModalOpen(true)
-  }
-
-  const handleSelectLocalVoice = (engine: 'voicevox' | 'kokoro', voice: string | undefined) => {
-    if (selectedCards.length === 0) {
-      if (!selectedDeckId) {
-        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
-        return
-      }
-      if (selectedDeck?.has_mixed_note_types) {
-        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
-        return
-      }
-    }
-    setLocalAudioEngineId(engine)
-    setLocalAudioDefaultVoiceId(voice)
-    setLocalAudioTargetCardIds(selectedCards)
-    setIsLocalAudioModalOpen(true)
-  }
-
-  return (
-    <>
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger>
-          <span className="font-medium">🇯🇵 Tiếng Nhật</span>
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="w-48">
-          <DropdownMenuItem onClick={handleSelectWebVoiceVox}>
-            <span className="font-medium text-foreground">Web VoiceVox</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => handleSelectLocalVoice('voicevox', '3')}
-            className="flex items-center justify-between font-medium cursor-pointer"
-          >
-            <span>VoiceVox Local</span>
-            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-              Local
-            </Badge>
-          </DropdownMenuItem>
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
-
-      <DropdownMenuItem
-        onClick={() => handleSelectLocalVoice('kokoro', 'af_bella')}
-        className="flex items-center justify-between font-medium cursor-pointer"
-      >
-        <span>🇺🇸/🇬🇧 Tiếng Anh Local</span>
-        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-          Local
-        </Badge>
-      </DropdownMenuItem>
-
-      <DropdownMenuItem
-        onClick={() => handleSelectLocalVoice('kokoro', 'zf_xiaobei')}
-        className="flex items-center justify-between font-medium cursor-pointer"
-      >
-        <span>🇨🇳 Tiếng Trung Local</span>
-        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-          Local
-        </Badge>
-      </DropdownMenuItem>
-
-      <DropdownMenuItem
-        onClick={() => handleSelectLocalVoice('kokoro', 'ef_dora')}
-        className="flex items-center justify-between font-medium cursor-pointer"
-      >
-        <span>🇪🇸 Tiếng Tây Ban Nha</span>
-        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-          Local
-        </Badge>
-      </DropdownMenuItem>
-
-      <DropdownMenuItem
-        onClick={() => handleSelectLocalVoice('kokoro', 'ff_siwis')}
-        className="flex items-center justify-between font-medium cursor-pointer"
-      >
-        <span>🇫🇷 Tiếng Pháp Local</span>
-        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-          Local
-        </Badge>
-      </DropdownMenuItem>
-
-      <DropdownMenuItem
-        onClick={() => handleSelectLocalVoice('kokoro', 'if_sara')}
-        className="flex items-center justify-between font-medium cursor-pointer"
-      >
-        <span>🇮🇹 Tiếng Ý Local</span>
-        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-          Local
-        </Badge>
-      </DropdownMenuItem>
-
-      <DropdownMenuItem
-        onClick={() => handleSelectLocalVoice('kokoro', 'pf_dora')}
-        className="flex items-center justify-between font-medium cursor-pointer"
-      >
-        <span>🇧🇷 Tiếng Bồ Đào Nha</span>
-        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-          Local
-        </Badge>
-      </DropdownMenuItem>
-    </>
-  )
-}
-
 import { useBrowseState } from '../hooks/useBrowseState'
 import { BrowseDeckSidebar } from '../components/BrowseDeckSidebar'
 import { BrowseToolbar } from '../components/BrowseToolbar'
@@ -173,10 +33,13 @@ import { BrowseCardEditor } from '../components/BrowseCardEditor'
 import { BrowseTtsModal } from '../components/BrowseTtsModal'
 import { BrowseStrokeModal } from '../components/BrowseStrokeModal'
 import { BrowseAudioSelectorModal } from '../components/BrowseAudioSelectorModal'
+import { BrowseAudioDropdownMenu } from '../components/BrowseAudioDropdownMenu'
+import { BrowseMobileTabBar } from '../components/BrowseMobileTabBar'
 import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
 import { ContextHelpButton } from '@/features/guide/components/ContextHelpButton'
 
 export function BrowsePage() {
+  const { t } = useTranslation('browse')
   const navigate = useNavigate()
   const browse = useBrowseState()
   const [isAudioSelectorOpen, setIsAudioSelectorOpen] = useState(false)
@@ -204,11 +67,11 @@ export function BrowsePage() {
   const openWorksheetModal = () => {
     if (selectedCards.length === 0) {
       if (!browse.selectedDeckId && !browse.cardsQuery.data?.items[0]?.deck_id) {
-        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+        toast.info(t('toasts.deck_or_cards_required'))
         return
       }
       if (browse.selectedDeck?.has_mixed_note_types) {
-        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+        toast.error(t('toasts.mixed_note_types_error'))
         return
       }
     }
@@ -222,17 +85,33 @@ export function BrowsePage() {
   const openBatchStrokeModal = () => {
     if (selectedCards.length === 0) {
       if (!browse.selectedDeckId) {
-        toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+        toast.info(t('toasts.deck_or_cards_required'))
         return
       }
       if (browse.selectedDeck?.has_mixed_note_types) {
-        toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+        toast.error(t('toasts.mixed_note_types_error'))
         return
       }
     }
     browse.setStrokeModalMode('batch')
     browse.setIsStrokeModalOpen(true)
   }
+
+  const worksheetTitle = selectedCards.length === 0
+    ? browse.selectedDeck
+      ? t('header.worksheet_deck_tooltip', {
+          name: browse.selectedDeck.name,
+          count: browse.selectedDeck.counts?.total ?? 0,
+        })
+      : t('header.worksheet_generic_tooltip')
+    : t('header.worksheet_selected_tooltip', { count: selectedCards.length })
+
+  const strokeTitle = selectedCards.length === 0 && browse.selectedDeck
+    ? t('header.svg_stroke_deck_tooltip', {
+        name: browse.selectedDeck.name,
+        count: browse.selectedDeck.counts?.total ?? 0,
+      })
+    : undefined
 
   return (
     <div className="flex flex-col h-screen h-[100dvh] w-full overflow-hidden bg-background text-foreground">
@@ -251,16 +130,16 @@ export function BrowsePage() {
               size="sm"
               className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold text-primary border-primary/30 hover:bg-primary/10 bg-background rounded-full gap-1.5 px-2 sm:px-3 shrink-0"
               onClick={() => navigate(`/study?deck_id=${urlDeckId}`)}
-              title="Quay lại bài học"
+              title={t('header.back_to_study')}
             >
               <ArrowLeft className="size-3.5" />
-              <span className="hidden sm:inline">Quay lại bài học</span>
-              <span className="sm:hidden">Bài học</span>
+              <span className="hidden sm:inline">{t('header.back_to_study')}</span>
+              <span className="sm:hidden">{t('header.study_short')}</span>
             </Button>
           ) : null}
 
           <span className="hidden md:inline text-xs sm:text-sm font-semibold text-foreground truncate">
-            Duyệt thẻ
+            {t('header.browse_cards')}
           </span>
         </div>
 
@@ -271,16 +150,10 @@ export function BrowsePage() {
             size="sm"
             className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1.5 bg-background hover:bg-muted border-border"
             onClick={openWorksheetModal}
-            title={
-              selectedCards.length === 0
-                ? browse.selectedDeck
-                  ? `In bài tập cho cả bộ deck "${browse.selectedDeck.name}" (${browse.selectedDeck.counts?.total ?? 0} thẻ)`
-                  : 'In bài tập hoặc tạo trang trắng luyện viết cho bộ thẻ này'
-                : `In bài tập cho ${selectedCards.length} thẻ đã chọn`
-            }
+            title={worksheetTitle}
           >
             <Printer className="size-3.5 text-primary" />
-            <span>In bài tập</span>
+            <span>{t('header.worksheet')}</span>
             {selectedCards.length > 0 ? (
               <Badge
                 variant="secondary"
@@ -303,14 +176,10 @@ export function BrowsePage() {
             size="sm"
             className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1 bg-background hover:bg-muted border-border"
             onClick={openBatchStrokeModal}
-            title={
-              selectedCards.length === 0 && browse.selectedDeck
-                ? `Tạo nét SVG cho cả bộ deck "${browse.selectedDeck.name}" (${browse.selectedDeck.counts?.total ?? 0} thẻ)`
-                : undefined
-            }
+            title={strokeTitle}
           >
             <PenTool className="size-3.5 text-primary" />
-            <span>Tạo nét SVG</span>
+            <span>{t('header.svg_stroke')}</span>
             {selectedCards.length === 0 && browse.selectedDeck ? (
               <Badge
                 variant="secondary"
@@ -329,12 +198,12 @@ export function BrowsePage() {
                 className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1 bg-background hover:bg-muted border-border"
               >
                 <Volume2 className="size-3.5 text-primary" />
-                <span>Tạo âm thanh</span>
+                <span>{t('header.audio')}</span>
                 <ChevronDown className="size-3 opacity-60 ml-0.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <AudioDropdownMenuItems
+              <BrowseAudioDropdownMenu
                 setIsTtsModalOpen={setIsTtsModalOpen}
                 setLocalAudioEngineId={setLocalAudioEngineId}
                 setLocalAudioDefaultVoiceId={setLocalAudioDefaultVoiceId}
@@ -349,10 +218,10 @@ export function BrowsePage() {
 
           <ContextHelpButton
             guidePath="/guide/browse/search-syntax"
-            guideTitle="Mẹo tìm kiếm & Lọc thẻ"
+            guideTitle={t('header.help_search_tips')}
             troubleshootPath="/guide/troubleshooting/dashboard-study"
-            troubleshootTitle="Thẻ không hiển thị đúng?"
-            label="Trợ giúp"
+            troubleshootTitle={t('header.help_troubleshoot')}
+            label={t('header.help')}
             variant="outline"
             size="xs"
           />
@@ -366,10 +235,10 @@ export function BrowsePage() {
                 variant="outline"
                 size="sm"
                 className="h-7 rounded-full text-xs px-2.5 gap-1.5 bg-background hover:bg-muted border-border font-medium shrink-0"
-                aria-label="Menu tác vụ"
+                aria-label={t('header.actions_menu')}
               >
                 <MoreHorizontal className="size-4 text-foreground" />
-                <span>Tác vụ</span>
+                <span>{t('header.actions')}</span>
                 {selectedCards.length > 0 ? (
                   <Badge
                     variant="secondary"
@@ -389,7 +258,7 @@ export function BrowsePage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-xl shadow-lg border-border/80">
               <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">
-                Công cụ & Tiện ích
+                {t('header.tools_section')}
               </DropdownMenuLabel>
 
               <DropdownMenuItem
@@ -398,7 +267,7 @@ export function BrowsePage() {
               >
                 <div className="flex items-center gap-2">
                   <Printer className="size-4 text-primary" />
-                  <span className="text-xs font-medium">In bài tập</span>
+                  <span className="text-xs font-medium">{t('header.worksheet')}</span>
                 </div>
                 {selectedCards.length > 0 ? (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-bold bg-primary/15 text-primary rounded-full">
@@ -416,18 +285,18 @@ export function BrowsePage() {
                 className="flex items-center gap-2 cursor-pointer py-2"
               >
                 <PenTool className="size-4 text-primary" />
-                <span className="text-xs font-medium">Tạo nét SVG</span>
+                <span className="text-xs font-medium">{t('header.svg_stroke')}</span>
               </DropdownMenuItem>
 
               <DropdownMenuItem
                 onClick={() => {
                   if (selectedCards.length === 0) {
                     if (!browse.selectedDeckId) {
-                      toast.info('Vui lòng chọn 1 bộ deck hoặc tick chọn các thẻ.')
+                      toast.info(t('toasts.deck_or_cards_required'))
                       return
                     }
                     if (browse.selectedDeck?.has_mixed_note_types) {
-                      toast.error('Bộ deck đang chọn chứa nhiều note type nên không thể thực hiện thao tác.')
+                      toast.error(t('toasts.mixed_note_types_error'))
                       return
                     }
                   }
@@ -436,24 +305,24 @@ export function BrowsePage() {
                 className="flex items-center gap-2 cursor-pointer py-2"
               >
                 <Volume2 className="size-4 text-primary" />
-                <span className="text-xs font-medium">Tạo âm thanh</span>
+                <span className="text-xs font-medium">{t('header.audio')}</span>
               </DropdownMenuItem>
 
               <DropdownMenuSeparator className="my-1" />
 
               <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">
-                Trợ giúp & Mẹo
+                {t('header.help_section')}
               </DropdownMenuLabel>
               <DropdownMenuItem asChild className="cursor-pointer py-1.5">
                 <Link to="/guide/browse/search-syntax" className="flex items-center gap-2 text-xs">
                   <BookOpen className="size-3.5 text-primary" />
-                  <span>Mẹo tìm kiếm & Lọc thẻ</span>
+                  <span>{t('header.help_search_tips')}</span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild className="cursor-pointer py-1.5">
                 <Link to="/guide/troubleshooting/dashboard-study" className="flex items-center gap-2 text-xs">
                   <HelpCircle className="size-3.5 text-amber-500" />
-                  <span>Thẻ không hiển thị đúng?</span>
+                  <span>{t('header.help_troubleshoot')}</span>
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -479,67 +348,11 @@ export function BrowsePage() {
       </div>
 
       {/* Mobile Tab Swapping Bar (< lg screens) */}
-      <div className="lg:hidden shrink-0 h-12 border-t border-border/60 bg-background/95 flex items-center justify-around z-20 sticky bottom-0">
-        <button
-          type="button"
-          onClick={() => setMobileTab('decks')}
-          className={`flex flex-col items-center justify-center flex-1 h-full text-[10px] font-bold gap-1 ${
-            mobileTab === 'decks' ? 'text-primary' : 'text-muted-foreground'
-          }`}
-        >
-          <Layers className="size-4" />
-          <span>Thư mục Decks</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileTab('cards')}
-          className={`flex flex-col items-center justify-center flex-1 h-full text-[10px] font-bold gap-1 ${
-            mobileTab === 'cards' ? 'text-primary' : 'text-muted-foreground'
-          }`}
-        >
-          <svg
-            className="size-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect width="18" height="18" x="3" y="3" rx="2" />
-            <path d="M3 9h18" />
-            <path d="M9 21V9" />
-          </svg>
-          <span>Danh sách thẻ</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (activeCardId) {
-              setMobileTab('editor')
-            } else {
-              toast.info('Vui lòng chọn 1 thẻ trước để sửa.')
-            }
-          }}
-          className={`flex flex-col items-center justify-center flex-1 h-full text-[10px] font-bold gap-1 ${
-            mobileTab === 'editor' ? 'text-primary' : 'text-muted-foreground'
-          } ${!activeCardId ? 'opacity-40' : ''}`}
-        >
-          <svg
-            className="size-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-          </svg>
-          <span>Soạn thảo note</span>
-        </button>
-      </div>
+      <BrowseMobileTabBar
+        mobileTab={mobileTab}
+        setMobileTab={setMobileTab}
+        activeCardId={activeCardId}
+      />
 
       {/* Mobile Audio Voice/Engine Selection Modal Dialog */}
       <BrowseAudioSelectorModal
@@ -563,7 +376,7 @@ export function BrowsePage() {
       <BrowseTtsModal browse={browse} />
 
       {/* Kanji/Hanzi Stroke Diagram Generation Modal */}
-        <BrowseStrokeModal
+      <BrowseStrokeModal
         browse={browse}
         isOpen={browse.isStrokeModalOpen}
         onClose={() => browse.setIsStrokeModalOpen(false)}

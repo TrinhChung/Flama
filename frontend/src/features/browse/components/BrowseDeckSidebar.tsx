@@ -1,11 +1,13 @@
+import '@/shared/config/i18n'
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Folder, FolderOpen, RotateCcw, Search, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react'
 import type { useBrowseState, BrowseDeck } from '../hooks/useBrowseState'
 
-interface BrowseDeckSidebarProps {
+export interface BrowseDeckSidebarProps {
   browse: ReturnType<typeof useBrowseState>
 }
 
@@ -45,6 +47,7 @@ function buildBrowseDeckTree(decks: BrowseDeck[], allowedIds: Set<number>): Brow
 }
 
 export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
+  const { t } = useTranslation('browse')
   const {
     decksQuery,
     selectedDeckId,
@@ -181,7 +184,7 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
               <span className="truncate text-xs">{node.deck.name}</span>
               {node.deck.has_mixed_note_types && (
                 <span
-                  title={`Bộ deck chứa nhiều loại Note Type khác nhau: ${node.deck.note_type_names?.join(', ')}`}
+                  title={t('deck_sidebar.mixed_note_types_tooltip', { types: node.deck.note_type_names?.join(', ') || '' })}
                   className="shrink-0 inline-flex items-center"
                 >
                   <AlertTriangle className={`size-3 ${isSelected ? 'text-primary-foreground/90' : 'text-amber-500'}`} />
@@ -220,7 +223,7 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
-            placeholder="Lọc danh sách deck…"
+            placeholder={t('deck_sidebar.filter_placeholder')}
             value={deckSearch}
             onChange={(e) => setDeckSearch(e.target.value)}
             className="pl-8 h-8 rounded-lg text-xs bg-muted/50"
@@ -233,7 +236,7 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
             onClick={handleResetDeckFilter}
             className="w-full h-7 text-[11px] font-bold text-primary hover:bg-primary/5 hover:text-primary border-primary/20 hover:border-primary/40 bg-background rounded-lg"
           >
-            <RotateCcw className="size-3 mr-1" /> Bỏ chọn lọc deck
+            <RotateCcw className="size-3 mr-1" /> {t('deck_sidebar.reset_filter')}
           </Button>
         )}
       </div>
@@ -241,7 +244,7 @@ export function BrowseDeckSidebar({ browse }: BrowseDeckSidebarProps) {
       {/* Decks List scrollable */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {treeRoots.length === 0 ? (
-          <div className="text-center py-6 text-xs text-muted-foreground italic">Không thấy deck phù hợp</div>
+          <div className="text-center py-6 text-xs text-muted-foreground italic">{t('deck_sidebar.no_decks_found')}</div>
         ) : (
           treeRoots.map((root) => renderTreeNode(root, 0))
         )}

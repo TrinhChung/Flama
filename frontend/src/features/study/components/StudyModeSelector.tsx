@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import { useTranslation } from 'react-i18next'
 import { Layers } from 'lucide-react'
 import type { StudyCompositionGroup } from '../types'
 
@@ -16,12 +18,14 @@ export function StudyModeSelector({
   disabled = false,
   className = '',
 }: StudyModeSelectorProps) {
+  const { t } = useTranslation('study')
+
   if (groups.length === 0) return null
 
   return (
     <div
       className={`study-mode-selector space-y-4 ${className}`}
-      aria-label="Chọn kiểu thẻ để học"
+      aria-label={t('mode_selector.aria_label')}
     >
       {groups.map((group) => (
         <section key={group.note_type_id} className="space-y-2" aria-labelledby={`note-type-${group.note_type_id}-label`}>
@@ -50,10 +54,10 @@ export function StudyModeSelector({
                   <span className="block text-sm font-semibold">{composition.template_name}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
                     {composition.context_kind === 'installed_source'
-                      ? 'Thẻ gốc từ bộ đã cài'
+                      ? t('mode_selector.source_installed')
                       : composition.context_kind === 'installed_local'
-                        ? 'Thẻ riêng trong bộ đã cài'
-                        : 'Thẻ trong bộ của bạn'}
+                        ? t('mode_selector.custom_installed')
+                        : t('mode_selector.user_deck')}
                   </span>
                 </button>
               )

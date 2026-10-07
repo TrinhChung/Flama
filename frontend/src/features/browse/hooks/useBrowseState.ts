@@ -1,4 +1,6 @@
+import '@/shared/config/i18n'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -97,6 +99,7 @@ export type CardDetailResponse = {
 }
 
 export function useBrowseState() {
+  const { t } = useTranslation('browse')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const urlDeckId = searchParams.get('deck_id')
@@ -599,7 +602,7 @@ export function useBrowseState() {
         payload,
       ),
     onSuccess: async (data, variables) => {
-      toast.success('Đã tạo thẻ mới thành công.')
+      toast.success(t('toasts.create_success'))
       setIsCreatingCard(false)
 
       const targetDeckId = variables.deck_id
@@ -629,7 +632,7 @@ export function useBrowseState() {
       setMobileTab('editor')
     },
     onError: (error: Error) => {
-      toast.error('Không thể tạo thẻ', { description: error.message })
+      toast.error(t('toasts.create_error'), { description: error.message })
     },
   })
 
@@ -639,15 +642,15 @@ export function useBrowseState() {
       appApi.mutate(`/browse/cards/${activeCardId}`, 'PATCH', payload),
     onSuccess: async () => {
       if (urlDeckId) {
-        toast.success('Đã lưu thay đổi thẻ.', {
+        toast.success(t('toasts.save_success'), {
           duration: 2000,
           action: {
-            label: 'Quay lại bài học',
+            label: t('toasts.back_to_study'),
             onClick: () => navigate(`/study?deck_id=${urlDeckId}`),
           },
         })
       } else {
-        toast.success('Đã lưu thay đổi thẻ.', { duration: 1200 })
+        toast.success(t('toasts.save_success'), { duration: 1200 })
       }
       setInitialFieldValues(editFieldValues)
       setInitialDeckId(editDeckId)
@@ -660,7 +663,7 @@ export function useBrowseState() {
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })
     },
     onError: (error: Error) => {
-      toast.error('Không thể lưu thay đổi', { description: error.message })
+      toast.error(t('toasts.save_error'), { description: error.message })
     },
   })
 
@@ -668,12 +671,12 @@ export function useBrowseState() {
   const deleteMutation = useMutation({
     mutationFn: (cardId: string) => appApi.mutate(`/browse/cards/${cardId}`, 'DELETE'),
     onSuccess: () => {
-      toast.success('Đã xóa thẻ.')
+      toast.success(t('toasts.delete_success'))
       setActiveCardId(null)
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
     },
     onError: (error: Error) => {
-      toast.error('Không thể xóa thẻ', { description: error.message })
+      toast.error(t('toasts.delete_error'), { description: error.message })
     },
   })
 
@@ -688,13 +691,13 @@ export function useBrowseState() {
       return res.deleted_count ?? cardIds.length
     },
     onMutate: () => {
-      toast?.loading?.('Đang xóa các thẻ đã chọn…', {
+      toast?.loading?.(t('toasts.bulk_deleting'), {
         id: 'bulk-delete-cards',
-        description: 'Vui lòng chờ trong khi hệ thống cập nhật cơ sở dữ liệu.',
+        description: t('toasts.bulk_deleting_desc'),
       })
     },
     onSuccess: (count) => {
-      toast.success(`Đã xóa thành công ${count} thẻ đã chọn.`, { id: 'bulk-delete-cards' })
+      toast.success(t('toasts.bulk_delete_success', { count }), { id: 'bulk-delete-cards' })
       if (activeCardId && selectedCards.some((id) => String(id) === String(activeCardId))) {
         setActiveCardId(null)
       }
@@ -704,7 +707,7 @@ export function useBrowseState() {
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
     },
     onError: (error: Error) => {
-      toast.error('Lỗi khi xóa hàng loạt', { id: 'bulk-delete-cards', description: error.message })
+      toast.error(t('toasts.bulk_delete_error'), { id: 'bulk-delete-cards', description: error.message })
     },
   })
 
@@ -724,16 +727,16 @@ export function useBrowseState() {
       settings?: Record<string, number>
     }) => appApi.mutate('/browse/voicevox/generate', 'POST', payload),
     onMutate: () => {
-      toast?.loading?.('Đang tạo âm thanh VoiceVox…', {
+      toast?.loading?.(t('toasts.generating_tts'), {
         id: 'generate-tts',
-        description: 'Hệ thống đang gọi bộ tổng hợp giọng nói và đính kèm âm thanh vào thẻ.',
+        description: t('toasts.generating_tts_desc'),
       })
     },
     onSuccess: () => {
       if (ttsApiKey.trim()) {
         void saveApiKeyIfValid(ttsApiKey, false)
       }
-      toast.success('Đã tạo âm thanh VoiceVox thành công!', { id: 'generate-tts' })
+      toast.success(t('toasts.tts_success'), { id: 'generate-tts' })
       setIsTtsModalOpen(false)
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       if (activeCardId) {
@@ -741,7 +744,7 @@ export function useBrowseState() {
       }
     },
     onError: (error: Error) => {
-      toast.error('Không thể tạo âm thanh VoiceVox', { id: 'generate-tts', description: error.message })
+      toast.error(t('toasts.tts_error'), { id: 'generate-tts', description: error.message })
     },
   })
 
@@ -778,7 +781,7 @@ export function useBrowseState() {
       setIsKeySaved(true)
       void queryClient.invalidateQueries({ queryKey: ['voicevox-profile'] })
       if (showToast) {
-        toast.success('Đã tự động lưu VoiceVox API Key cho các lần dùng sau!')
+        toast.success(t('toasts.api_key_saved'))
       }
     } catch {
       // ignore
@@ -837,10 +840,10 @@ export function useBrowseState() {
       if (ttsApiKey.trim()) {
         void saveApiKeyIfValid(ttsApiKey, false)
       }
-      toast.success('Đang phát nghe thử audio...')
+      toast.success(t('toasts.playing_preview'))
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi nghe thử audio'
-      toast.error('Lỗi xem trước audio', { description: message })
+      const message = err instanceof Error ? err.message : t('toasts.preview_error')
+      toast.error(t('toasts.preview_error'), { description: message })
     } finally {
       setIsPreviewing(false)
     }
@@ -861,7 +864,7 @@ export function useBrowseState() {
     setTtsIntonationScaleState(1.0)
     setTtsInitialSilenceState(0.1)
     setTtsFinalSilenceState(0.1)
-    toast.info('Đã khôi phục thiết lập VoiceVox về mặc định.')
+    toast.info(t('toasts.reset_defaults'))
   }
 
   const allSelected =

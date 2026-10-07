@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import { useTranslation } from 'react-i18next'
 import { CheckCircle2, LoaderCircle, LogOut, Play } from 'lucide-react'
 import {
   Dialog,
@@ -26,6 +28,8 @@ export function StudyExitConfirmDialog({
   onContinueStudy,
   onDiscardAndExit,
 }: StudyExitConfirmDialogProps) {
+  const { t } = useTranslation('study')
+
   return (
     <Dialog
       open={open}
@@ -44,20 +48,12 @@ export function StudyExitConfirmDialog({
             <LogOut className="size-6" aria-hidden="true" />
           </div>
           <DialogTitle className="text-center text-xl font-bold text-foreground">
-            Kết thúc phiên học?
+            {t('exit_dialog.title')}
           </DialogTitle>
           <DialogDescription className="text-center text-sm leading-relaxed text-muted-foreground">
-            {eventsCount > 0 ? (
-              <>
-                Bạn đã trả lời{' '}
-                <strong className="font-semibold text-foreground">
-                  {eventsCount} thẻ
-                </strong>{' '}
-                trong phiên này chưa đồng bộ lên máy chủ. Bạn có muốn lưu lại tiến độ trước khi rời đi không?
-              </>
-            ) : (
-              'Bạn có chắc chắn muốn rời khỏi phiên học hiện tại không?'
-            )}
+            {eventsCount > 0
+              ? t('exit_dialog.uncommitted_description', { eventsCount })
+              : t('exit_dialog.generic_description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -76,7 +72,9 @@ export function StudyExitConfirmDialog({
                   ) : (
                     <CheckCircle2 className="mr-2 size-4" aria-hidden="true" />
                   )}
-                  {isCommitting ? 'Đang lưu tiến độ…' : 'Lưu & Thoát'}
+                  {isCommitting
+                    ? t('exit_dialog.saving_progress')
+                    : t('exit_dialog.save_and_exit')}
                 </Button>
                 <Button
                   type="button"
@@ -86,7 +84,7 @@ export function StudyExitConfirmDialog({
                   className="w-full sm:w-auto h-11 sm:h-10 rounded-xl border-border/80 font-medium text-sm order-2 sm:order-1 hover:bg-muted"
                 >
                   <Play className="mr-2 size-4" aria-hidden="true" />
-                  Tiếp tục học
+                  {t('exit_dialog.continue_study')}
                 </Button>
               </div>
 
@@ -97,7 +95,7 @@ export function StudyExitConfirmDialog({
                   onClick={onDiscardAndExit}
                   className="min-h-[36px] inline-flex items-center justify-center text-xs text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50 px-1"
                 >
-                  Thoát không lưu tiến độ này
+                  {t('exit_dialog.discard_and_exit')}
                 </button>
               </div>
             </div>
@@ -111,7 +109,7 @@ export function StudyExitConfirmDialog({
                 className="w-full sm:w-auto h-11 sm:h-10 rounded-xl border-border/80 font-medium text-sm order-2 sm:order-1"
               >
                 <Play className="mr-2 size-4" aria-hidden="true" />
-                Tiếp tục học
+                {t('exit_dialog.continue_study')}
               </Button>
               <Button
                 type="button"
@@ -120,7 +118,7 @@ export function StudyExitConfirmDialog({
                 variant="destructive"
                 className="w-full sm:w-auto h-11 sm:h-10 rounded-xl font-semibold text-sm order-1 sm:order-2"
               >
-                Thoát phiên
+                {t('exit_dialog.exit_session')}
               </Button>
             </div>
           )}

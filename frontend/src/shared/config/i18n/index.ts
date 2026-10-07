@@ -10,6 +10,9 @@ import viLanding from './locales/vi/landing.json'
 import viDashboard from './locales/vi/dashboard.json'
 import viLegal from './locales/vi/legal.json'
 import viMcp from './locales/vi/mcp.json'
+import viStudy from './locales/vi/study.json'
+import viBrowse from './locales/vi/browse.json'
+import viStatistics from './locales/vi/statistics.json'
 
 import enCommon from './locales/en/common.json'
 import enShell from './locales/en/shell.json'
@@ -18,6 +21,9 @@ import enLanding from './locales/en/landing.json'
 import enDashboard from './locales/en/dashboard.json'
 import enLegal from './locales/en/legal.json'
 import enMcp from './locales/en/mcp.json'
+import enStudy from './locales/en/study.json'
+import enBrowse from './locales/en/browse.json'
+import enStatistics from './locales/en/statistics.json'
 
 export const resources = {
   vi: {
@@ -28,6 +34,9 @@ export const resources = {
     dashboard: viDashboard,
     legal: viLegal,
     mcp: viMcp,
+    study: viStudy,
+    browse: viBrowse,
+    statistics: viStatistics,
   },
   en: {
     common: enCommon,
@@ -37,6 +46,9 @@ export const resources = {
     dashboard: enDashboard,
     legal: enLegal,
     mcp: enMcp,
+    study: enStudy,
+    browse: enBrowse,
+    statistics: enStatistics,
   },
 } as const
 
@@ -62,7 +74,7 @@ void i18n
     resources,
     lng: initialLang,
     fallbackLng: DEFAULT_LOCALE,
-    ns: ['common', 'shell', 'auth', 'landing', 'dashboard', 'legal', 'mcp'],
+    ns: ['common', 'shell', 'auth', 'landing', 'dashboard', 'legal', 'mcp', 'study', 'browse', 'statistics'],
     defaultNS: 'common',
     interpolation: {
       escapeValue: false,

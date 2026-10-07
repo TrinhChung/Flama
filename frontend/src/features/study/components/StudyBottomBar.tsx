@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import { useTranslation } from 'react-i18next'
 import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,6 +39,8 @@ export function StudyBottomBar({
   onUndo,
   onToggleFullscreen,
 }: StudyBottomBarProps) {
+  const { t } = useTranslation('study')
+
   if (!cardId) return null
 
   return (
@@ -51,10 +55,10 @@ export function StudyBottomBar({
               onClick={onUndo}
               disabled={submitting || !canUndo}
               className="h-10 sm:h-11 px-2.5 sm:px-3.5 rounded-xl border-border/80 bg-card hover:bg-accent text-foreground text-xs sm:text-sm font-semibold gap-1.5 sm:gap-2 shadow-xs transition-all hover:border-blue-400/60 disabled:opacity-40"
-              title="Hoàn tác đánh giá trước (phím Ctrl+Z hoặc Z)"
+              title={t('bottom_bar.undo_tooltip')}
             >
               <RotateCcw className="size-4 text-blue-500 shrink-0" />
-              <span className="hidden sm:inline">Hoàn tác</span>
+              <span className="hidden sm:inline">{t('bottom_bar.undo')}</span>
               <kbd className="hidden md:inline-block ml-1 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
                 Ctrl+Z
               </kbd>
@@ -73,11 +77,11 @@ export function StudyBottomBar({
                 onClick={onUndo}
                 disabled={submitting}
                 className="sm:hidden h-11 px-3 rounded-xl border-border/80 bg-card hover:bg-accent text-foreground text-xs font-semibold gap-1.5 shadow-xs shrink-0"
-                title="Hoàn tác đánh giá trước (phím Ctrl+Z hoặc Z)"
-                aria-label="Hoàn tác đánh giá trước"
+                title={t('bottom_bar.undo_tooltip')}
+                aria-label={t('bottom_bar.undo')}
               >
                 <RotateCcw className="size-4 text-blue-500 shrink-0" />
-                <span className="hidden xs:inline">Hoàn tác</span>
+                <span className="hidden xs:inline">{t('bottom_bar.undo')}</span>
               </Button>
               <div className="flex-1 min-w-0">
                 <ReviewInteractionControls
@@ -113,14 +117,16 @@ export function StudyBottomBar({
             variant="outline"
             onClick={onToggleFullscreen}
             className="h-10 sm:h-11 px-2.5 sm:px-4 rounded-xl border-border/80 bg-card hover:bg-accent text-foreground text-xs sm:text-sm font-semibold gap-1.5 sm:gap-2 shadow-xs transition-all hover:border-orange-400/60"
-            title="Bật/tắt toàn màn hình (phím F)"
+            title={t('bottom_bar.fullscreen_tooltip')}
           >
             {isFullscreen ? (
               <Minimize2 className="size-4 text-orange-500 shrink-0" />
             ) : (
               <Maximize2 className="size-4 text-orange-500 shrink-0" />
             )}
-            <span className="hidden sm:inline">{isFullscreen ? 'Thoát' : 'Toàn màn hình'}</span>
+            <span className="hidden sm:inline">
+              {isFullscreen ? t('bottom_bar.exit_fullscreen') : t('bottom_bar.fullscreen')}
+            </span>
             <kbd className="hidden md:inline-block ml-1 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
               F
             </kbd>

@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import { useTranslation } from 'react-i18next'
 import {
   Area,
   Bar,
@@ -38,6 +40,7 @@ export function UserStudyTimeChart({
   onRangeChange,
   isLoading,
 }: UserStudyTimeChartProps) {
+  const { t } = useTranslation('statistics')
   const { summary, daily_time_series } = data
 
   const chartData = daily_time_series.map((d) => ({
@@ -50,11 +53,31 @@ export function UserStudyTimeChart({
   }))
 
   const rangeOptions: Array<{ label: string; shortLabel: string; value: UserStudyTimePreset }> = [
-    { label: '7 ngày', shortLabel: '7N', value: '7d' },
-    { label: '30 ngày', shortLabel: '30N', value: '30d' },
-    { label: '90 ngày', shortLabel: '90N', value: '90d' },
-    { label: '1 năm', shortLabel: '1N', value: '12m' },
-    { label: 'Tất cả', shortLabel: 'Tất cả', value: 'all' },
+    {
+      label: t('study_time_chart.ranges.7d'),
+      shortLabel: t('study_time_chart.ranges.7d_short'),
+      value: '7d',
+    },
+    {
+      label: t('study_time_chart.ranges.30d'),
+      shortLabel: t('study_time_chart.ranges.30d_short'),
+      value: '30d',
+    },
+    {
+      label: t('study_time_chart.ranges.90d'),
+      shortLabel: t('study_time_chart.ranges.90d_short'),
+      value: '90d',
+    },
+    {
+      label: t('study_time_chart.ranges.12m'),
+      shortLabel: t('study_time_chart.ranges.12m_short'),
+      value: '12m',
+    },
+    {
+      label: t('study_time_chart.ranges.all'),
+      shortLabel: t('study_time_chart.ranges.all_short'),
+      value: 'all',
+    },
   ]
 
   return (
@@ -62,22 +85,22 @@ export function UserStudyTimeChart({
       <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle className="text-base font-semibold">
-            Thời gian học & Tổng giờ học
+            {t('study_time_chart.title')}
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Theo dõi số phút học trung bình mỗi ngày và tổng thời gian ôn tập flashcard.
+            {t('study_time_chart.description')}
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap sm:items-center sm:gap-2">
           <div className="flex items-center rounded-lg bg-amber-500/10 px-2.5 py-1.5 font-medium text-amber-700 dark:text-amber-300">
             <span className="truncate">
-              TB: <strong>{summary.avg_daily_minutes}p/ngày</strong>
+              <strong>{t('study_time_chart.avg_badge', { minutes: summary.avg_daily_minutes })}</strong>
             </span>
           </div>
           <div className="flex items-center rounded-lg bg-blue-500/10 px-2.5 py-1.5 font-medium text-blue-700 dark:text-blue-300">
             <span className="truncate">
-              Tổng: <strong>{summary.total_study_hours}h</strong>
+              <strong>{t('study_time_chart.total_badge', { hours: summary.total_study_hours })}</strong>
             </span>
           </div>
         </div>
@@ -114,9 +137,11 @@ export function UserStudyTimeChart({
         {/* Chart View */}
         {chartData.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center rounded-lg border border-dashed border-border/80 p-6 text-center text-xs text-muted-foreground">
-            <p className="font-semibold text-foreground text-sm">Chưa có dữ liệu thời gian học</p>
+            <p className="font-semibold text-foreground text-sm">
+              {t('study_time_chart.empty_title')}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Hãy hoàn thành một phiên ôn tập để xem thống kê thời gian học.
+              {t('study_time_chart.empty_description')}
             </p>
           </div>
         ) : (
@@ -166,23 +191,29 @@ export function UserStudyTimeChart({
                             <div className="flex items-center justify-between gap-3">
                               <span className="flex items-center gap-1.5">
                                 <span className="size-2 rounded-full bg-amber-500" />
-                                Thời gian:
+                                {t('study_time_chart.tooltip_time')}
                               </span>
-                              <span className="font-semibold text-foreground">{item.minutes} phút</span>
+                              <span className="font-semibold text-foreground">
+                                {t('study_time_chart.tooltip_minutes', { minutes: item.minutes })}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="flex items-center gap-1.5">
                                 <span className="size-2 rounded-full bg-blue-500" />
-                                Tổng giờ:
+                                {t('study_time_chart.tooltip_total_hours')}
                               </span>
-                              <span className="font-semibold text-foreground">{item.hours} giờ</span>
+                              <span className="font-semibold text-foreground">
+                                {t('study_time_chart.tooltip_hours', { hours: item.hours })}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <span>Lượt lật thẻ:</span>
-                              <span className="font-semibold text-foreground">{item.reviewsCount} thẻ</span>
+                              <span>{t('study_time_chart.tooltip_reviews')}</span>
+                              <span className="font-semibold text-foreground">
+                                {t('study_time_chart.tooltip_cards', { count: item.reviewsCount })}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
-                              <span>Tỷ lệ nhớ:</span>
+                              <span>{t('study_time_chart.tooltip_retention')}</span>
                               <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                                 {item.passRate}%
                               </span>
@@ -204,7 +235,7 @@ export function UserStudyTimeChart({
                   yAxisId="left"
                   type="monotone"
                   dataKey="minutes"
-                  name="Thời gian học (phút)"
+                  name={t('study_time_chart.series_time')}
                   stroke="#f59e0b"
                   strokeWidth={2}
                   fillOpacity={1}
@@ -213,7 +244,7 @@ export function UserStudyTimeChart({
                 <Bar
                   yAxisId="right"
                   dataKey="hours"
-                  name="Tổng giờ học (h)"
+                  name={t('study_time_chart.series_hours')}
                   fill="#3b82f6"
                   opacity={0.65}
                   radius={[4, 4, 0, 0]}

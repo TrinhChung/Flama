@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import { useTranslation } from 'react-i18next'
 import { Eye, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { resolveReviewAction, type ReviewAction, type ReviewRating } from './reviewInteraction'
@@ -25,6 +27,8 @@ export function ReviewInteractionControls({
   onReveal,
   onReviewAction,
 }: ReviewInteractionControlsProps) {
+  const { t } = useTranslation('study')
+
   const handleRatingClick = (rating: ReviewRating) => {
     if (submitting) return
     onReviewAction(resolveReviewAction(rating))
@@ -41,9 +45,9 @@ export function ReviewInteractionControls({
           className="h-11 sm:h-12 w-full max-w-md bg-primary hover:bg-primary/95 text-primary-foreground font-bold text-sm sm:text-base rounded-xl shadow-sm hover:shadow-primary/20 transition-all duration-150 gap-1.5 sm:gap-2"
         >
           <Eye className="size-4 sm:size-4.5 shrink-0" />
-          <span>Hiện đáp án</span>
+          <span>{t('interaction.show_answer')}</span>
           <kbd className="hidden sm:inline-block ml-1.5 rounded bg-white/20 px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary-foreground">
-            Space
+            {t('interaction.space_key')}
           </kbd>
         </Button>
       </div>
@@ -62,7 +66,7 @@ export function ReviewInteractionControls({
       >
         <div className="flex items-center justify-center gap-0.5 sm:gap-1 text-[12px] sm:text-sm font-bold leading-tight">
           <RotateCcw className="size-3 hidden xs:inline-block" />
-          <span className="truncate">Học lại</span>
+          <span className="truncate">{t('interaction.ratings.again')}</span>
           <span className="hidden sm:inline text-[10px] opacity-60 ml-0.5">1</span>
         </div>
         {intervalsPreview?.again?.label ? (
@@ -81,7 +85,7 @@ export function ReviewInteractionControls({
         className="h-11 sm:h-12 rounded-lg sm:rounded-xl border-amber-200 dark:border-amber-900/60 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 hover:border-amber-300 transition-all duration-150 shadow-xs flex flex-col items-center justify-center px-1 py-0.5"
       >
         <div className="flex items-center justify-center gap-0.5 sm:gap-1 text-[12px] sm:text-sm font-bold leading-tight">
-          <span className="truncate">Khó</span>
+          <span className="truncate">{t('interaction.ratings.hard')}</span>
           <span className="hidden sm:inline text-[10px] opacity-60 ml-0.5">2</span>
         </div>
         {intervalsPreview?.hard?.label ? (
@@ -100,7 +104,7 @@ export function ReviewInteractionControls({
         className="h-11 sm:h-12 rounded-lg sm:rounded-xl border-blue-200 dark:border-blue-900/60 bg-blue-500/10 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 hover:border-blue-300 transition-all duration-150 shadow-xs flex flex-col items-center justify-center px-1 py-0.5"
       >
         <div className="flex items-center justify-center gap-0.5 sm:gap-1 text-[12px] sm:text-sm font-bold leading-tight">
-          <span className="truncate">Tốt</span>
+          <span className="truncate">{t('interaction.ratings.good')}</span>
           <span className="hidden sm:inline text-[10px] opacity-60 ml-0.5">3</span>
         </div>
         {intervalsPreview?.good?.label ? (
@@ -119,7 +123,7 @@ export function ReviewInteractionControls({
         className="h-11 sm:h-12 rounded-lg sm:rounded-xl border-emerald-200 dark:border-emerald-900/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-300 transition-all duration-150 shadow-xs flex flex-col items-center justify-center px-1 py-0.5"
       >
         <div className="flex items-center justify-center gap-0.5 sm:gap-1 text-[12px] sm:text-sm font-bold leading-tight">
-          <span className="truncate">Dễ</span>
+          <span className="truncate">{t('interaction.ratings.easy')}</span>
           <span className="hidden sm:inline text-[10px] opacity-60 ml-0.5">4</span>
         </div>
         {intervalsPreview?.easy?.label ? (

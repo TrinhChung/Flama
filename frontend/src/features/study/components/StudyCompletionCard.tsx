@@ -1,16 +1,19 @@
+import '@/shared/config/i18n'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   CheckCircle2,
   LayoutDashboard,
   ArrowRight,
   Trophy,
-  BarChart2,
-  Layers,
   Printer,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { StudyCompletionBreakdown } from './StudyCompletionBreakdown'
+import { StudyCompletionDeckStatus } from './StudyCompletionDeckStatus'
+import { StudyCompletionStatsGrid } from './StudyCompletionStatsGrid'
 import type {
   StudySessionCommitReceipt,
   StudySessionEvent,
@@ -41,6 +44,7 @@ export function StudyCompletionCard({
   isBusy,
   onCommit,
 }: StudyCompletionCardProps) {
+  const { t } = useTranslation('study')
   const [isWorksheetOpen, setIsWorksheetOpen] = useState(false)
   const isCommitted = Boolean(receipt)
   const events = useMemo(() => session?.events ?? [], [session?.events])
@@ -71,8 +75,10 @@ export function StudyCompletionCard({
       const seconds = totalSeconds % 60
       const timeFormatted =
         minutes > 0
-          ? `${minutes} phút ${seconds > 0 ? `${seconds}s` : ''}`
-          : `${seconds}s`
+          ? (seconds > 0
+              ? t('completion.time_format_minutes', { minutes, seconds })
+              : t('completion.time_format_only_minutes', { minutes }))
+          : t('completion.time_format_seconds', { seconds })
 
       return {
         againCount,
@@ -94,7 +100,6 @@ export function StudyCompletionCard({
     let totalRatings = acc?.total_reviews ?? 0
 
     // When not yet committed, events in session.events have NOT been rolled into accumulated_stats yet.
-    // Add them to get the in-progress total:
     if (!isCommitted && events.length > 0) {
       events.forEach((ev: StudySessionEvent) => {
         totalDurationMs += ev.duration_ms || 0
@@ -136,8 +141,10 @@ export function StudyCompletionCard({
     const seconds = totalSeconds % 60
     const timeFormatted =
       minutes > 0
-        ? `${minutes} phút ${seconds > 0 ? `${seconds}s` : ''}`
-        : `${seconds}s`
+        ? (seconds > 0
+            ? t('completion.time_format_minutes', { minutes, seconds })
+            : t('completion.time_format_only_minutes', { minutes }))
+        : t('completion.time_format_seconds', { seconds })
 
     return {
       againCount,
@@ -148,7 +155,7 @@ export function StudyCompletionCard({
       retentionRate: totalRatings > 0 ? retentionRate : 100,
       timeFormatted: totalRatings > 0 ? timeFormatted : '0s',
     }
-  }, [events, isCommitted, receipt, session?.accumulated_stats, totalSessionStats])
+  }, [events, isCommitted, receipt, session?.accumulated_stats, t, totalSessionStats])
 
   const appliedCount = stats.totalRatings || (receipt?.applied_event_count ?? events.length)
 
@@ -167,113 +174,39 @@ export function StudyCompletionCard({
 
           <div className="space-y-1">
             <div className="inline-flex items-center justify-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/60 max-w-full truncate">
-              <span>{deckName || (deckId ? `Deck #${deckId}` : 'Phiên học')}</span>
+              <span>{deckName || (deckId ? `Deck #${deckId}` : t('page.session_title'))}</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
               {isCommitted
-                ? 'Đã đồng bộ phiên học'
-                : 'Hoàn thành lượt học hôm nay'}
+                ? t('completion.session_synced')
+                : t('completion.completed_today')}
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
               {isCommitted
-                ? `Hệ thống đã lưu thành công tất cả ${appliedCount} lượt trả lời thẻ trong phiên này.`
-                : 'Tất cả các thẻ cần học hôm nay đã được ôn tập xong.'}
+                ? t('completion.synced_description', { appliedCount })
+                : t('completion.completed_description')}
             </p>
           </div>
         </div>
 
         {/* 3 Equal-Width Metrics Cards (Symmetrical Row) */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5 sm:p-3.5 space-y-0.5">
-            <span className="block text-[11px] sm:text-xs font-medium text-muted-foreground">
-              Đã ôn
-            </span>
-            <span className="text-base sm:text-lg font-bold text-foreground">
-              {stats.totalRatings} thẻ
-            </span>
-          </div>
-
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5 sm:p-3.5 space-y-0.5">
-            <span className="block text-[11px] sm:text-xs font-medium text-muted-foreground">
-              Thời gian
-            </span>
-            <span className="text-base sm:text-lg font-bold text-foreground whitespace-nowrap block" title={stats.timeFormatted}>
-              {stats.timeFormatted}
-            </span>
-          </div>
-
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-2.5 sm:p-3.5 space-y-0.5">
-            <span className="block text-[11px] sm:text-xs font-medium text-muted-foreground">
-              Tỉ lệ đúng
-            </span>
-            <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
-              {stats.retentionRate}%
-            </span>
-          </div>
-        </div>
+        <StudyCompletionStatsGrid
+          totalRatings={stats.totalRatings}
+          timeFormatted={stats.timeFormatted}
+          retentionRate={stats.retentionRate}
+        />
 
         {/* 4 Equal-Width Rating Breakdown Cards (Symmetrical Grid) */}
-        {stats.totalRatings > 0 ? (
-          <div className="space-y-1.5 sm:space-y-2 text-left">
-            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground px-0.5">
-              <span className="flex items-center gap-1.5">
-                <BarChart2 className="size-3.5 text-muted-foreground" />
-                Chi tiết đánh giá
-              </span>
-              <span>{stats.totalRatings} lượt</span>
-            </div>
-
-            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs">
-              <div className="p-1.5 sm:p-2 rounded-xl bg-rose-500/10 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300">
-                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Quên</span>
-                <span className="text-xs sm:text-sm font-bold">{stats.againCount}</span>
-              </div>
-              <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/10 border border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300">
-                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Khó</span>
-                <span className="text-xs sm:text-sm font-bold">{stats.hardCount}</span>
-              </div>
-              <div className="p-1.5 sm:p-2 rounded-xl bg-blue-500/10 border border-blue-200 dark:border-blue-900/40 text-blue-700 dark:text-blue-300">
-                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Tốt</span>
-                <span className="text-xs sm:text-sm font-bold">{stats.goodCount}</span>
-              </div>
-              <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-500/10 border border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-                <span className="block text-[10px] sm:text-[11px] font-medium opacity-80">Dễ</span>
-                <span className="text-xs sm:text-sm font-bold">{stats.easyCount}</span>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <StudyCompletionBreakdown
+          totalRatings={stats.totalRatings}
+          againCount={stats.againCount}
+          hardCount={stats.hardCount}
+          goodCount={stats.goodCount}
+          easyCount={stats.easyCount}
+        />
 
         {/* 3 Equal-Width Deck Status Cards (Symmetrical Grid) */}
-        <div className="space-y-1.5 sm:space-y-2 text-left">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground px-0.5">
-            <Layers className="size-3.5 text-muted-foreground" />
-            <span>Trạng thái thẻ trong Deck</span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-center text-xs">
-            <div className="p-2 sm:p-2.5 rounded-xl border border-border/60 bg-muted/20">
-              <span className="block text-[10px] sm:text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                Mới
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-foreground">{counts.new}</span>
-            </div>
-
-            <div className="p-2 sm:p-2.5 rounded-xl border border-border/60 bg-muted/20">
-              <span className="block text-[10px] sm:text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                Đang học
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-foreground">{counts.learning}</span>
-            </div>
-
-            <div className="p-2 sm:p-2.5 rounded-xl border border-border/60 bg-muted/20">
-              <span className="block text-[10px] sm:text-[11px] font-medium text-rose-600 dark:text-rose-400">
-                Đến hạn
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-foreground">{counts.due}</span>
-            </div>
-          </div>
-        </div>
+        <StudyCompletionDeckStatus counts={counts} />
 
         {/* Action Controls */}
         <div className="pt-2">
@@ -289,12 +222,12 @@ export function StudyCompletionCard({
                 {isBusy ? (
                   <>
                     <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-                    <span>Đang đồng bộ…</span>
+                    <span>{t('completion.syncing')}</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="size-4 mr-2" />
-                    <span>Kết thúc & Đồng bộ phiên</span>
+                    <span>{t('completion.end_and_sync')}</span>
                   </>
                 )}
               </Button>
@@ -306,10 +239,10 @@ export function StudyCompletionCard({
                   size="lg"
                   onClick={() => setIsWorksheetOpen(true)}
                   className="w-full sm:w-auto h-10 sm:h-11 px-3 sm:px-5 rounded-xl font-semibold text-xs sm:text-sm gap-2 border-primary/25 text-primary hover:bg-primary/5 hover:border-primary/40"
-                  title="Tạo bài tập / mẫu giấy in cho deck này"
+                  title={t('completion.create_worksheet_tooltip')}
                 >
                   <Printer className="size-4 shrink-0 text-primary" />
-                  <span className="truncate">Tạo Worksheet</span>
+                  <span className="truncate">{t('completion.create_worksheet')}</span>
                 </Button>
 
                 <Button
@@ -320,27 +253,25 @@ export function StudyCompletionCard({
                 >
                   <Link to="/dashboard">
                     <LayoutDashboard className="size-4 shrink-0" />
-                    <span className="truncate">Về Dashboard</span>
+                    <span className="truncate">{t('completion.back_to_dashboard')}</span>
                   </Link>
                 </Button>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
-              {/* Primary highlight CTA: Tạo Worksheet cho deck vừa học xong */}
               <Button
                 type="button"
                 variant="outline"
                 size="lg"
                 onClick={() => setIsWorksheetOpen(true)}
                 className="w-full sm:w-auto h-11 px-5 rounded-xl font-semibold text-xs sm:text-sm gap-2 border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary shadow-xs"
-                title="Tạo bài tập in A4, luyện viết Kanji, từ vựng cho deck này"
+                title={t('completion.create_worksheet_cta_tooltip')}
               >
                 <Printer className="size-4 text-primary shrink-0" />
-                <span>Tạo Worksheet cho deck</span>
+                <span>{t('completion.create_worksheet_cta')}</span>
               </Button>
 
-              {/* Navigation group: On mobile side-by-side in 2-cols, on desktop inline */}
               <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                 <Button
                   asChild
@@ -350,7 +281,7 @@ export function StudyCompletionCard({
                 >
                   <Link to="/dashboard">
                     <LayoutDashboard className="size-4 shrink-0" />
-                    <span className="truncate">Về Dashboard</span>
+                    <span className="truncate">{t('completion.back_to_dashboard')}</span>
                   </Link>
                 </Button>
 
@@ -361,7 +292,7 @@ export function StudyCompletionCard({
                   className="w-full sm:w-auto h-10 sm:h-11 px-3 sm:px-6 rounded-xl font-semibold text-xs sm:text-sm gap-2 shadow-xs"
                 >
                   <Link to="/vocabulary">
-                    <span className="truncate">Học deck khác</span>
+                    <span className="truncate">{t('completion.study_another_deck')}</span>
                     <ArrowRight className="size-4 shrink-0" />
                   </Link>
                 </Button>

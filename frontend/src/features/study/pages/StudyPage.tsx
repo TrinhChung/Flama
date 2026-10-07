@@ -1,28 +1,31 @@
+import '@/shared/config/i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
+import { StudyCompositionPickerView } from '../components/StudyCompositionPickerView'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
 import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { StudyExitConfirmDialog } from '../components/StudyExitConfirmDialog'
-import { StudyModeSelector } from '../components/StudyModeSelector'
 import { useStudySession } from '../hooks/useStudySession'
+import { useStudyKeyboardShortcuts } from '../hooks/useStudyKeyboardShortcuts'
+import { useStudyNavigationBlocker } from '../hooks/useStudyNavigationBlocker'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
 import type { SchedulerDecision } from '../scheduler/types'
 import {
-  resolveReviewAction,
   reviewActionToLegacyRating,
   type ReviewAction,
-  type ReviewRating,
 } from '../interactions/reviewInteraction'
 
 export function StudyPage() {
+  const { t } = useTranslation('study')
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const deckIdRaw = searchParams.get('deck_id')
@@ -37,52 +40,17 @@ export function StudyPage() {
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const startedAtRef = useRef(performance.now())
 
-  const uncommittedCount = study.session?.events?.length ?? 0
-  const isSessionActive = study.session?.status === 'active'
-  const hasUncommittedWork = Boolean(isSessionActive && uncommittedCount > 0)
-  const [isExiting, setIsExiting] = useState(false)
-
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      hasUncommittedWork && currentLocation.pathname !== nextLocation.pathname
-  )
-
-  useEffect(() => {
-    if (!hasUncommittedWork) return
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [hasUncommittedWork])
-
-  const handleSaveAndExit = useCallback(async () => {
-    if (!study.session) {
-      blocker.proceed?.()
-      return
-    }
-    setIsExiting(true)
-    try {
-      await study.commit({ reason: 'manual_exit' })
-      blocker.proceed?.()
-    } catch (err) {
-      console.error('Failed to commit study session before exit:', err)
-      blocker.proceed?.()
-    } finally {
-      setIsExiting(false)
-    }
-  }, [blocker, study])
-
-  const handleDiscardAndExit = useCallback(() => {
-    blocker.proceed?.()
-  }, [blocker])
-
-  const handleContinueStudy = useCallback(() => {
-    blocker.reset?.()
-  }, [blocker])
+  const {
+    blocker,
+    uncommittedCount,
+    isExiting,
+    handleSaveAndExit,
+    handleDiscardAndExit,
+    handleContinueStudy,
+  } = useStudyNavigationBlocker({
+    session: study.session,
+    commit: study.commit,
+  })
 
   const card = study.view?.card ?? null
   const template = study.view?.template ?? null
@@ -201,122 +169,28 @@ export function StudyPage() {
     }
   }, [])
 
-  useEffect(() => {
-    if (study.leaseConflict || study.receipt || isQuickEditOpen) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const activeEl = document.activeElement
-      const activeTag = (activeEl?.tagName || '').toLowerCase()
-      if (
-        event.defaultPrevented
-        || event.isComposing
-        || event.repeat
-        || activeTag === 'input'
-        || activeTag === 'textarea'
-        || activeTag === 'select'
-        || (activeEl as HTMLElement)?.isContentEditable
-      ) return
-
-      const code = event.code
-      const key = event.key
-
-      const isUndo = (
-        (event.ctrlKey || event.metaKey) && (key === 'z' || key === 'Z' || code === 'KeyZ')
-      ) || (
-        !event.ctrlKey && !event.metaKey && !event.altKey && (key === 'z' || key === 'Z' || code === 'KeyZ')
-      )
-
-      if (isUndo) {
-        event.preventDefault()
-        void handleUndo()
-        return
-      }
-
-      if (
-        event.altKey
-        || event.ctrlKey
-        || event.metaKey
-        || activeTag === 'button'
-        || activeTag === 'a'
-      ) return
-
-      const isEditKey = key === 'e' || key === 'E' || code === 'KeyE'
-      if (isEditKey) {
-        event.preventDefault()
-        handleOpenEdit()
-        return
-      }
-
-      const isSpaceOrEnter = code === 'Space' || key === ' ' || key === 'Spacebar' || code === 'Enter' || key === 'Enter'
-      const isFullscreenKey = key === 'f' || key === 'F' || code === 'KeyF'
-
-      if (isSpaceOrEnter) {
-        event.preventDefault()
-        if (!card?.card_id) return
-        if (!revealed) handleReveal()
-        else void handleReviewAction(resolveReviewAction('good'))
-      } else if (revealed) {
-        const ratingByKey: Record<string, ReviewRating> = {
-          '1': 'again', '2': 'hard', '3': 'good', '4': 'easy',
-        }
-        const codeMap: Record<string, string> = {
-          Digit1: '1', Numpad1: '1',
-          Digit2: '2', Numpad2: '2',
-          Digit3: '3', Numpad3: '3',
-          Digit4: '4', Numpad4: '4',
-        }
-        const mappedKey = codeMap[code] ?? key
-        const rating = ratingByKey[mappedKey]
-        if (rating) {
-          event.preventDefault()
-          void handleReviewAction(resolveReviewAction(rating))
-        } else if (isFullscreenKey) {
-          event.preventDefault()
-          handleToggleFullscreen()
-        }
-      } else if (isFullscreenKey) {
-        event.preventDefault()
-        handleToggleFullscreen()
-      }
-    }
-
-    const handleFocusBack = () => {
-      // Blur buttons or input elements if returning to screen
-      const activeEl = document.activeElement as HTMLElement | null
-      const activeTag = (activeEl?.tagName || '').toLowerCase()
-      if (activeTag === 'button' || activeTag === 'a') {
-        activeEl?.blur()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('focus', handleFocusBack)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('focus', handleFocusBack)
-    }
-  }, [
-    card?.card_id,
-    handleReviewAction,
-    handleOpenEdit,
-    handleReveal,
-    handleToggleFullscreen,
-    handleUndo,
-    isQuickEditOpen,
+  useStudyKeyboardShortcuts({
+    cardId: card?.card_id,
     revealed,
-    study.leaseConflict,
-    study.receipt,
-  ])
+    isQuickEditOpen,
+    leaseConflict: Boolean(study.leaseConflict),
+    hasReceipt: Boolean(study.receipt),
+    onReveal: handleReveal,
+    onReviewAction: handleReviewAction,
+    onUndo: handleUndo,
+    onOpenEdit: handleOpenEdit,
+    onToggleFullscreen: handleToggleFullscreen,
+  })
 
   if (!deckIdRaw) {
     return (
       <div className="h-screen h-[100dvh] w-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-        <h2 className="text-2xl font-bold text-foreground">Phiên học</h2>
+        <h2 className="text-2xl font-bold text-foreground">{t('page.session_title')}</h2>
         <p className="text-muted-foreground max-w-sm">
-          Phiên học cần một deck cụ thể. Chọn deck từ dashboard để bắt đầu.
+          {t('page.deck_required')}
         </p>
         <Button asChild>
-          <Link to="/dashboard">Về dashboard</Link>
+          <Link to="/dashboard">{t('page.back_to_dashboard')}</Link>
         </Button>
       </div>
     )
@@ -325,7 +199,7 @@ export function StudyPage() {
   if (study.isLoading) {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center">
-        <PageLoading label="Đang tạo phiên học…" />
+        <PageLoading label={t('page.creating_session')} />
       </div>
     )
   }
@@ -346,40 +220,14 @@ export function StudyPage() {
 
   if (study.awaitingCompositionSelection) {
     return (
-      <div className="flex h-screen h-[100dvh] w-full items-center justify-center overflow-y-auto bg-background p-4 text-foreground sm:p-6">
-        <main className="w-full max-w-2xl rounded-2xl border border-border/80 bg-card p-5 shadow-sm sm:p-7">
-          <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">
-              Chuẩn bị phiên học
-            </p>
-            <h1 className="text-2xl font-bold tracking-tight">Chọn kiểu thẻ</h1>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {deckName ? `${deckName} có nhiều kiểu thẻ.` : 'Phạm vi này có nhiều kiểu thẻ.'}{' '}
-              Chọn đúng một kiểu; lựa chọn sẽ được khóa cho toàn bộ phiên học.
-            </p>
-          </div>
-
-          {study.error ? (
-            <div className="mt-4">
-              <PageError error={study.error} />
-            </div>
-          ) : null}
-
-          <StudyModeSelector
-            groups={study.compositionGroups}
-            selectedCompositionId={study.selectedCompositionId}
-            onSelectComposition={(compositionId) => { void study.selectComposition(compositionId) }}
-            disabled={study.isBusy}
-            className="mt-6"
-          />
-
-          <div className="mt-6 border-t border-border/70 pt-4">
-            <Button asChild variant="outline">
-              <Link to="/dashboard">Về dashboard</Link>
-            </Button>
-          </div>
-        </main>
-      </div>
+      <StudyCompositionPickerView
+        deckName={deckName}
+        error={study.error}
+        compositionGroups={study.compositionGroups}
+        selectedCompositionId={study.selectedCompositionId}
+        onSelectComposition={(compositionId) => { void study.selectComposition(compositionId) }}
+        disabled={study.isBusy}
+      />
     )
   }
 
@@ -442,7 +290,7 @@ export function StudyPage() {
           />
           {uncommittedCount > 0 ? (
             <div className="px-1 py-0.5 text-[11px] text-muted-foreground">
-              {uncommittedCount} trả lời chưa đồng bộ
+              {t('page.uncommitted_events', { count: uncommittedCount })}
             </div>
           ) : null}
         </div>
@@ -467,7 +315,7 @@ export function StudyPage() {
         </div>
       ) : blockingCommit ? (
         <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
-          <PageLoading label="Đang đồng bộ phiên học…" />
+          <PageLoading label={t('page.syncing_session')} />
         </div>
       ) : study.view?.session_state === 'waiting' ? (
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto min-h-0">
@@ -485,12 +333,12 @@ export function StudyPage() {
       ) : study.view?.session_state === 'active' ? (
         <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
           <PageError
-            error={new Error('Dữ liệu hiển thị thẻ không đầy đủ. Hãy tải lại phiên học.')}
+            error={new Error(t('page.incomplete_card_data'))}
           />
         </div>
       ) : isLeaving ? (
         <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
-          <PageLoading label="Đang lưu tiến độ và chuyển trang…" />
+          <PageLoading label={t('page.saving_progress_redirecting')} />
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 overflow-y-auto min-h-0 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">

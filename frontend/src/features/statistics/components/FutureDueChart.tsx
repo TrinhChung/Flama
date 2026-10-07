@@ -1,8 +1,11 @@
+import '@/shared/config/i18n'
+import { useTranslation } from 'react-i18next'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { EmptyState } from '@/shared/components/PageState'
 import type { FutureDuePoint } from '../types'
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
+  const { t } = useTranslation('statistics')
   if (!active || !payload || !payload.length) return null
 
   const data: FutureDuePoint = payload[0].payload
@@ -17,31 +20,31 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: any[] 
       <div className="space-y-1 sm:space-y-1.5">
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-blue-400 font-medium">
-            <span className="size-2 rounded-full bg-blue-500" /> Thẻ mới:
+            <span className="size-2 rounded-full bg-blue-500" /> {t('future_due.card_types.new')}:
           </span>
-          <span className="font-bold font-mono">{breakdown.new.toLocaleString('vi-VN')}</span>
+          <span className="font-bold font-mono">{breakdown.new.toLocaleString()}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-orange-400 font-medium">
-            <span className="size-2 rounded-full bg-orange-500" /> Đang học:
+            <span className="size-2 rounded-full bg-orange-500" /> {t('future_due.card_types.learn')}:
           </span>
-          <span className="font-bold font-mono">{breakdown.learn.toLocaleString('vi-VN')}</span>
+          <span className="font-bold font-mono">{breakdown.learn.toLocaleString()}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
-            <span className="size-2 rounded-full bg-emerald-500" /> Ôn tập:
+            <span className="size-2 rounded-full bg-emerald-500" /> {t('future_due.card_types.review')}:
           </span>
-          <span className="font-bold font-mono">{breakdown.review.toLocaleString('vi-VN')}</span>
+          <span className="font-bold font-mono">{breakdown.review.toLocaleString()}</span>
         </div>
         <div className="pt-1 mt-1 border-t border-gray-800 flex items-center justify-between gap-3 text-gray-200">
-          <span className="font-semibold">Tổng đến hạn:</span>
-          <span className="font-bold font-mono text-orange-400">{data.due_count.toLocaleString('vi-VN')}</span>
+          <span className="font-semibold">{t('future_due.total_due')}</span>
+          <span className="font-bold font-mono text-orange-400">{data.due_count.toLocaleString()}</span>
         </div>
         <div className="flex items-center justify-between gap-3 text-amber-300">
           <span className="font-semibold flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-amber-500" /> Tích lũy:
+            <span className="size-2 rounded-full bg-amber-500" /> {t('future_due.card_types.cumulative')}:
           </span>
-          <span className="font-bold font-mono">{data.cumulative.toLocaleString('vi-VN')}</span>
+          <span className="font-bold font-mono">{data.cumulative.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -57,8 +60,15 @@ function formatAxisNumber(val: number): string {
 }
 
 export function FutureDueChart({ series }: { series: FutureDuePoint[] }) {
+  const { t } = useTranslation('statistics')
+
   if (!series || !series.length) {
-    return <EmptyState title="Không có dữ liệu" description="Không có thẻ đến hạn trong khoảng đã chọn." />
+    return (
+      <EmptyState
+        title={t('future_due.empty_title')}
+        description={t('future_due.empty_description')}
+      />
+    )
   }
 
   const interval = series.length > 180 ? 29 : series.length > 60 ? 13 : 6
@@ -76,7 +86,7 @@ export function FutureDueChart({ series }: { series: FutureDuePoint[] }) {
               tickMargin={6}
               interval={interval}
               tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-              tickFormatter={(val) => (val === 0 ? 'Hôm nay' : `+${val}d`)}
+              tickFormatter={(val) => (val === 0 ? t('future_due.today') : `+${val}d`)}
             />
             <YAxis
               yAxisId="due"
@@ -103,16 +113,16 @@ export function FutureDueChart({ series }: { series: FutureDuePoint[] }) {
             />
 
             {/* Stacked Bars for Card Modes */}
-            <Bar yAxisId="due" dataKey="breakdown.new" stackId="due" name="Thẻ mới" fill="#3b82f6" radius={[0, 0, 0, 0]} />
-            <Bar yAxisId="due" dataKey="breakdown.learn" stackId="due" name="Đang học" fill="#f97316" radius={[0, 0, 0, 0]} />
-            <Bar yAxisId="due" dataKey="breakdown.review" stackId="due" name="Ôn tập" fill="#10b981" radius={[3, 3, 0, 0]} />
+            <Bar yAxisId="due" dataKey="breakdown.new" stackId="due" name={t('future_due.card_types.new')} fill="#3b82f6" radius={[0, 0, 0, 0]} />
+            <Bar yAxisId="due" dataKey="breakdown.learn" stackId="due" name={t('future_due.card_types.learn')} fill="#f97316" radius={[0, 0, 0, 0]} />
+            <Bar yAxisId="due" dataKey="breakdown.review" stackId="due" name={t('future_due.card_types.review')} fill="#10b981" radius={[3, 3, 0, 0]} />
 
             {/* Cumulative Line */}
             <Line
               yAxisId="cumulative"
               type="monotone"
               dataKey="cumulative"
-              name="Tích lũy"
+              name={t('future_due.card_types.cumulative')}
               stroke="#f59e0b"
               strokeWidth={2.5}
               dot={series.length > 60 ? false : { r: 2, fill: '#f59e0b' }}
@@ -126,19 +136,19 @@ export function FutureDueChart({ series }: { series: FutureDuePoint[] }) {
       <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 sm:gap-4 text-[11px] sm:text-xs font-medium text-muted-foreground pt-1">
         <div className="flex items-center gap-1.5">
           <span className="size-2.5 sm:size-3 rounded-sm bg-blue-500" />
-          <span>Thẻ mới</span>
+          <span>{t('future_due.card_types.new')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="size-2.5 sm:size-3 rounded-sm bg-orange-500" />
-          <span>Đang học</span>
+          <span>{t('future_due.card_types.learn')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="size-2.5 sm:size-3 rounded-sm bg-emerald-500" />
-          <span>Ôn tập</span>
+          <span>{t('future_due.card_types.review')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="h-0.5 w-3.5 sm:w-4 rounded-full bg-amber-500" />
-          <span>Tích lũy</span>
+          <span>{t('future_due.card_types.cumulative')}</span>
         </div>
       </div>
     </div>

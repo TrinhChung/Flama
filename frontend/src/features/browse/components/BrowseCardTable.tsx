@@ -1,4 +1,6 @@
+import '@/shared/config/i18n'
 import { useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -7,11 +9,12 @@ import type { useBrowseState } from '../hooks/useBrowseState'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import { BrowsePagination } from './BrowsePagination'
 
-interface BrowseCardTableProps {
+export interface BrowseCardTableProps {
   browse: ReturnType<typeof useBrowseState>
 }
 
 export function BrowseCardTable({ browse }: BrowseCardTableProps) {
+  const { t } = useTranslation('browse')
   const {
     cardsQuery,
     cards,
@@ -51,7 +54,7 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-          <span className="text-xs text-muted-foreground font-semibold">Đang tìm thẻ...</span>
+          <span className="text-xs text-muted-foreground font-semibold">{t('card_table.searching')}</span>
         </div>
       </div>
     )
@@ -90,19 +93,19 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
                 <Checkbox checked={allSelected} onCheckedChange={handleToggleSelectAllCards} />
               </TableHead>
               <TableHead className="w-48 cursor-pointer select-none" onClick={() => toggleSort('word')}>
-                <div className="flex items-center gap-1">Từ vựng {renderSortIcon('word')}</div>
+                <div className="flex items-center gap-1">{t('card_table.columns.word')} {renderSortIcon('word')}</div>
               </TableHead>
               <TableHead className="w-48 cursor-pointer select-none" onClick={() => toggleSort('reading')}>
-                <div className="flex items-center gap-1">Đọc {renderSortIcon('reading')}</div>
+                <div className="flex items-center gap-1">{t('card_table.columns.reading')} {renderSortIcon('reading')}</div>
               </TableHead>
               <TableHead className="min-w-64 cursor-pointer select-none" onClick={() => toggleSort('meaning')}>
-                <div className="flex items-center gap-1">Ý nghĩa {renderSortIcon('meaning')}</div>
+                <div className="flex items-center gap-1">{t('card_table.columns.meaning')} {renderSortIcon('meaning')}</div>
               </TableHead>
               <TableHead className="w-24 text-center cursor-pointer select-none" onClick={() => toggleSort('status')}>
-                <div className="flex items-center justify-center gap-1">Trạng thái {renderSortIcon('status')}</div>
+                <div className="flex items-center justify-center gap-1">{t('card_table.columns.status')} {renderSortIcon('status')}</div>
               </TableHead>
               <TableHead className="w-32 cursor-pointer select-none" onClick={() => toggleSort('due')}>
-                <div className="flex items-center gap-1">Đến hạn {renderSortIcon('due')}</div>
+                <div className="flex items-center gap-1">{t('card_table.columns.due')} {renderSortIcon('due')}</div>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -110,7 +113,7 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
             {cards.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-10 text-xs text-muted-foreground italic">
-                  Không tìm thấy thẻ nào
+                  {t('card_table.no_cards_found')}
                 </TableCell>
               </TableRow>
             ) : (
