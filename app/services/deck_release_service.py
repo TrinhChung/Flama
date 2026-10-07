@@ -1,8 +1,8 @@
 """Immutable release orchestration for shared marketplace decks.
 
-V1 deliberately versions only source note fields and field-definition state.
-It keeps source Note/Card identities untouched, stores an initial checkpoint,
-and appends atomic property changes for later releases.
+Release atoms cover source fields and immutable template presentation pins.
+Source Note/Card identities stay untouched; templates inherit through their
+separate per-user subscriptions.
 
 The service never commits or rolls back.  HTTP/CLI adapters own transactions.
 """
@@ -28,7 +28,7 @@ from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
 
 
 VISIBLE_PUBLISH_STATUSES = {"published", "unlisted"}
-VISIBLE_ENTITY_KINDS = {"note_field", "field_def"}
+VISIBLE_ENTITY_KINDS = {"note_field", "field_def", "template"}
 FILTER_OPERATION_ALIASES = {
     "add": "add",
     "added": "add",
@@ -1225,6 +1225,30 @@ def _build_release_diff_plan(
     item: DeckMarketplaceItem,
     include_initial_checkpoint_state: bool = True,
 ) -> ReleaseDiffPlan:
+    plan = _build_content_release_diff_plan(item=item, include_initial_checkpoint_state=include_initial_checkpoint_state)
+    from models import db
+    from app.services.template_release_service import deck_template_presentations
+    before = deck_template_presentations(db.session, note_type_id=item.source_note_type_id, release_id=item.current_release_id) if item.current_release_id else {}
+    after = deck_template_presentations(db.session, note_type_id=item.source_note_type_id)
+    for template_id in sorted(set(before) | set(after)):
+        if template_id in before and template_id in after and release_core.same(before[template_id], after[template_id]):
+            continue
+        plan.changes.append(_change_descriptor(
+            change_key=f"template:{template_id}:presentation", entity_kind="template", entity_id=template_id,
+            field_def_id=None, field_name=None, property_key="presentation",
+            before_exists=template_id in before, after_exists=template_id in after,
+            before_value=before.get(template_id), after_value=after.get(template_id),
+            source_deck_id=item.source_deck_id, sort_key=f"template:{template_id}",
+        ))
+    plan.changes.sort(key=lambda row: (str(row["sort_key"]), str(row["change_key"])))
+    return plan
+
+
+def _build_content_release_diff_plan(
+    *,
+    item: DeckMarketplaceItem,
+    include_initial_checkpoint_state: bool = True,
+) -> ReleaseDiffPlan:
     base_release = item.current_release
     if base_release is not None:
         sparse_plan = _try_build_sparse_diff(
@@ -1347,7 +1371,7 @@ def preview_release(
     if normalized_kind and normalized_kind not in VISIBLE_ENTITY_KINDS:
         raise DeckReleaseError(
             "VALIDATION_ERROR",
-            "type must be note_field or field_def.",
+            "type must be note_field, field_def, or template.",
             field="type",
         )
     normalized_operation = (operation or "").strip().lower() or None
@@ -1991,7 +2015,7 @@ def list_deck_release_changes(
     if normalized_kind and normalized_kind not in VISIBLE_ENTITY_KINDS:
         raise DeckReleaseError(
             "VALIDATION_ERROR",
-            "type must be note_field or field_def.",
+            "type must be note_field, field_def, or template.",
             field="type",
         )
     normalized_operation = (operation or "").strip().lower() or None

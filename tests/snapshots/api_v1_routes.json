@@ -93,6 +93,7 @@
   ["PATCH", "/api/card-templates/<template_id>/archive"],
   ["POST", "/api/card-templates/<template_id>/duplicate"],
   ["POST", "/api/card-templates/<template_id>/prepare-update"],
+  ["POST", "/api/card-templates/<template_id>/preview"],
   ["GET", "/api/card-templates/<template_id>/publication"],
   ["PATCH", "/api/card-templates/<template_id>/publication"],
   ["GET", "/api/card-templates/<template_id>/releases"],

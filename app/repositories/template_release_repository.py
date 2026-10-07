@@ -136,6 +136,17 @@ def source_applications(session, note_type_ids):
     return [dict(row) for row in session.execute(statement).mappings()]
 
 
+def active_templates(session, note_type_id):
+    """Resolve reusable templates through active attachments, not legacy origin."""
+    statement = select(Template.__table__).join(
+        StudyApplication.__table__, StudyApplication.template_id == Template.id,
+    ).where(
+        StudyApplication.note_type_id == note_type_id,
+        StudyApplication.status_code == "ACTIVE",
+    ).distinct().order_by(Template.id)
+    return [dict(row) for row in session.execute(statement).mappings()]
+
+
 def deck_pins(session, deck_release_id):
     return {row["source_template_id"]: dict(row) for row in session.execute(
         select(DeckReleaseTemplatePin.__table__).where(DeckReleaseTemplatePin.deck_release_id == deck_release_id)

@@ -70,12 +70,50 @@ def serialize_application(application):
     return {"id": application.id, "application_id": application.id, "note_type_id": application.note_type_id, "template_id": application.template_id, "occurrence_key": application.occurrence_key, "status_code": application.status_code, "display_name": application.display_name, "position": application.position, "is_default": bool(application.is_default), "input_bindings": application.input_bindings or {}, "input_schema": schema, "warnings": binding_warnings(schema, application.input_bindings, application.note_type.field_defs), "template": serialize_template(application.template)}
 
 
-def list_templates(*, user_id, include_archived=False, category=None, search=None):
-    return {"schema_version": "template-library.v2", "items": [serialize_template(item) for item in repository.library_query(db.session, user_id, include_archived=include_archived, category=category, search=search)]}
+def _with_usage(template, usages, *, include_applications=False):
+    result = {
+        **serialize_template(template), "application_count": len(usages),
+        "note_type_count": len({item["note_type_id"] for item in usages}),
+    }
+    if include_applications:
+        result["applications"] = usages
+    return result
+
+
+def list_templates(*, user_id, include_archived=False, category=None, search=None, group="all"):
+    if group not in {"all", "mine", "market", "standalone", "in_use"}:
+        raise TemplateLibraryError("VALIDATION_ERROR", "Invalid library group.", field="group")
+    templates = repository.library_query(db.session, user_id, include_archived=include_archived, category=category, search=search, group=group)
+    usages = repository.template_usage(db.session, user_id, [item.id for item in templates])
+    return {"schema_version": "template-library.v2", "items": [_with_usage(item, usages.get(item.id, [])) for item in templates]}
 
 
 def get_template(*, user_id, template_id):
-    return serialize_template(_owned(user_id, template_id))
+    template = _owned(user_id, template_id)
+    usages = repository.template_usage(db.session, user_id, [template.id])
+    return _with_usage(template, usages.get(template.id, []), include_applications=True)
+
+
+def preview_template(*, user_id, template_id, payload):
+    """Compile an owned template draft without persisting source or history."""
+    body(payload, CONTENT_KEYS | {"sample_values"})
+    template = _owned(user_id, template_id)
+    draft = SimpleNamespace(**{
+        key: text(payload.get(key, getattr(template, key)), field=key)
+        for key in ("front_html", "back_html", "shared_css")
+    })
+    schema = validate_input_schema(payload["input_schema"]) if "input_schema" in payload else effective_input_schema(template, getattr(template.note_type, "field_defs", ()))
+    values = payload.get("sample_values", {})
+    if not isinstance(values, dict):
+        raise TemplateLibraryError("VALIDATION_ERROR", "sample_values must be an object.", field="sample_values")
+    unknown = set(values) - {item["key"] for item in schema}
+    if unknown:
+        raise TemplateLibraryError("INPUT_NOT_FOUND", "Unknown preview input.", field="sample_values")
+    from app.services.flashcard_content_service import preview_raw_template
+    return preview_raw_template(payload={
+        **vars(draft), "fields": [{"name": item["key"], "field_type": item["type"]} for item in schema],
+        "field_values": values,
+    })
 
 
 def _apply_content(template, payload):
@@ -127,7 +165,7 @@ def update_template(*, user_id, template_id, payload):
 def duplicate_template(*, user_id, template_id, payload):
     body(payload, {"name"})
     source = _owned(user_id, template_id)
-    if source.origin == "market_copy":
+    if source.origin == "market_copy" or source.source_template_id:
         raise TemplateLibraryError("MARKET_TEMPLATE_REPUBLISH_FORBIDDEN", "Received marketplace templates cannot be duplicated into authored definitions.", status=403)
     data = {key: getattr(source, key) for key in CONTENT_KEYS | {"description", "primary_category"}}
     data["description"] = source.description or ""

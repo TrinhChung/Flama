@@ -290,6 +290,10 @@ def get_note_type_publish_eligibility(
             "block_code": "marketplace_install",
             "block_reason": "Note Type được cài từ Marketplace không thể chia sẻ lại.",
         }
+    from app.services.template_release_service import note_type_publication_error
+    template_error = note_type_publication_error(db.session, note_type.id)
+    if template_error:
+        return {"is_selectable": False, "block_code": "marketplace_template", "block_reason": template_error}
     return {
         "is_selectable": True,
         "block_code": None,
@@ -299,6 +303,11 @@ def get_note_type_publish_eligibility(
 
 
 def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
+    from app.repositories.template_release_repository import active_templates
+    from app.services.template_release_service import note_type_publication_error
+    template_error = note_type_publication_error(db.session, note_type.id)
+    if template_error:
+        return template_error
     if not (note_type.name or "").strip():
         return "Title is required for publish."
     if not (note_type.description or "").strip():
@@ -315,7 +324,7 @@ def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
         return "Paid note type must have a positive price."
     if not note_type.field_defs:
         return "At least one field is required for publish."
-    if not note_type.templates:
+    if not active_templates(db.session, note_type.id):
         return "At least one card template is required for publish."
     taxonomy_error = marketplace_taxonomy_service.validate_required_taxonomy(
         note_type.taxonomy_metadata if isinstance(note_type.taxonomy_metadata, dict) else {},
@@ -424,6 +433,10 @@ def apply_note_type_marketplace_payload(
         elif candidate_status == "archived":
             note_type.archived_at = _utcnow()
         note_type.publish_status = candidate_status
+        if candidate_status in visible_statuses:
+            db.session.flush()
+            from app.services.template_release_service import stage_note_type_publications
+            stage_note_type_publications(db.session, note_type_id=note_type.id, actor_user_id=note_type.user_id)
 
     if str(note_type.publish_status or "").strip().lower() in visible_statuses:
         return validate_note_type_publish_requirements(note_type)
@@ -449,7 +462,7 @@ def get_shared_note_type_for_view(
 
 
 def install_shared_note_type(source_note_type: NoteType, user_id: int) -> tuple[NoteType | None, int | None]:
-    installed_copy = flashcards_share.clone_note_type_for_user(source_note_type, user_id)
+    installed_copy = clone_note_type_for_user(source_note_type, user_id, copy_legacy_templates=False)
     now = _utcnow()
     purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
     install_row = NoteTypeInstall(
@@ -465,6 +478,8 @@ def install_shared_note_type(source_note_type: NoteType, user_id: int) -> tuple[
     )
     db.session.add(install_row)
     db.session.flush()
+    from app.services.template_release_service import stage_note_type_template_subscriptions
+    stage_note_type_template_subscriptions(db.session, note_type_install_id=install_row.id, user_id=user_id)
     _increment_counter(NoteType, source_note_type.id, NoteType.install_count, 1)
     _audit(
         user_id,
@@ -496,7 +511,7 @@ def rate_shared_note_type(note_type: NoteType, user_id: int, rating: int, commen
 
 
 
-def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteType:
+def clone_note_type_for_user(source_note_type: NoteType, user_id: int, *, copy_legacy_templates=True) -> NoteType:
     clone = NoteType(
         user_id=user_id,
         name=make_unique_note_type_name(user_id, source_note_type.name),
@@ -531,10 +546,15 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteTy
             )
         )
 
-    for template in sorted(source_note_type.templates, key=lambda item: item.position):
-        db.session.add(
-            Template(
+    raw_copies = []
+    for template in sorted(source_note_type.templates if copy_legacy_templates else [], key=lambda item: item.position):
+        copied_template = Template(
                 note_type_id=clone.id,
+                owner_user_id=user_id,
+                origin="market_copy",
+                source_template_id=template.id,
+                source_version_id=template.current_version_id,
+                input_schema=template.input_schema,
                 name=template.name,
                 front_html=template.front_html,
                 back_html=template.back_html,
@@ -542,7 +562,9 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteTy
                 position=template.position,
                 is_default=bool(template.is_default),
             )
-        )
+        db.session.add(copied_template)
+        raw_copies.append(copied_template)
+    db.session.info.setdefault("flama.template_clone_compat", {})[clone.id] = raw_copies
 
     return clone
 
@@ -553,6 +575,7 @@ def ensure_note_type_install_for_user(
     source_note_type: NoteType,
     user_id: int,
     installed_at: datetime | None = None,
+    copy_legacy_templates: bool = True,
 ) -> NoteTypeInstall:
     install_row = NoteTypeInstall.query.filter_by(
         source_note_type_id=source_note_type.id,
@@ -563,7 +586,7 @@ def ensure_note_type_install_for_user(
         if installed_copy:
             return install_row
 
-    installed_copy = flashcards_share.clone_note_type_for_user(source_note_type, user_id)
+    installed_copy = clone_note_type_for_user(source_note_type, user_id, copy_legacy_templates=copy_legacy_templates)
     now = installed_at or _utcnow()
     purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
 

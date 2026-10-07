@@ -7,10 +7,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.presenters import vocabulary_presenter
-from app.repositories import vocabulary_repository
+from app.repositories import template_release_repository, vocabulary_repository
 from app.services import study_artifact_service
 from app.services.effective_template_service import resolve_effective_template
 from app.services.flashcard_renderer import render_template_pair
+from models import db
 
 
 class EffectiveTemplateServiceTests(unittest.TestCase):
@@ -33,7 +34,10 @@ class EffectiveTemplateServiceTests(unittest.TestCase):
         return SimpleNamespace(id=f"card-{suffix}", template_id=template.id, template=template, note=note)
 
     def _scope(self):
-        return SimpleNamespace(install=SimpleNamespace(id="install-1", source_note_type_id="type-source"))
+        return SimpleNamespace(install=SimpleNamespace(
+            id="install-1", source_note_type_id="type-source",
+            user_id=17, applied_release_id="deck-release-1",
+        ))
 
     def _assert_compatibility(self, context, card, fields, values):
         legacy = study_artifact_service.EffectiveStudyCard(
@@ -134,8 +138,18 @@ class EffectiveTemplateServiceTests(unittest.TestCase):
 
     def test_no_override_follows_original_and_wrong_identity_is_rejected(self):
         card = self._make_card("identity")
-        for overrides in (None, {}, {card.template_id: None}):
-            self.assertIs(resolve_effective_template(card, self._scope(), template_overrides=overrides), card.template)
+        scope = self._scope()
+        pins = {card.template_id: {"template_release_id": "template-release-1"}}
+        with patch.object(template_release_repository, "deck_pins", return_value=pins) as load_pins, \
+             patch.object(template_release_repository, "load_effective_template_overrides", return_value={}) as load_overrides:
+            for overrides in (None, {}, {card.template_id: None}):
+                with self.subTest(overrides=overrides):
+                    self.assertIs(resolve_effective_template(card, scope, template_overrides=overrides), card.template)
+            load_pins.assert_called_once_with(db.session, scope.install.applied_release_id)
+            load_overrides.assert_called_once_with(
+                db.session, user_id=scope.install.user_id,
+                source_template_ids=[card.template_id], release_pins=pins,
+            )
         with self.assertRaisesRegex(ValueError, "preserve the source Template ID"):
             resolve_effective_template(card, template_overrides={card.template_id: SimpleNamespace(id="fork-id")})
         self.assertIsNone(resolve_effective_template(SimpleNamespace(template=None)))

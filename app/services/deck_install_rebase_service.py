@@ -398,14 +398,14 @@ def get_update_diff(
     cursor_sequence, cursor_id = _decode_cursor(cursor)
     normalized_kind = str(entity_kind or "").strip().lower()
     normalized_operation = str(operation or "").strip().lower()
-    if not normalized_kind and normalized_operation in {"note_field", "field_def"}:
+    if not normalized_kind and normalized_operation in {"note_field", "field_def", "template"}:
         normalized_kind = normalized_operation
         normalized_operation = ""
     if normalized_kind in {"", "all"}:
         normalized_kind = ""
-    elif normalized_kind not in {"note_field", "field_def"}:
+    elif normalized_kind not in {"note_field", "field_def", "template"}:
         raise DeckInstallUpdateError(
-            "entity_kind must be note_field or field_def.",
+            "entity_kind must be note_field, field_def, or template.",
             field="entity_kind",
         )
     operation_aliases = {
@@ -1099,6 +1099,8 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
     rebase.applied_change_count = int(rebase.change_count or 0)
     rebase.applied_at = now
     db.session.flush()
+    from app.services.template_release_service import stage_install_template_subscriptions
+    stage_install_template_subscriptions(db.session, install_id=install.id, user_id=user_id)
     return rebase
 
 

@@ -25,8 +25,10 @@ from models.template_subscription import TemplateSubscription
 from models.study_application import StudyApplication
 from models.field_def import FieldDef
 from models.note_type_install import NoteTypeInstall
+from models.note_type import NoteType
 
 CONTENT_KEYS = ("front_html", "back_html", "shared_css", "input_schema")
+APPLICATION_PIN_KEYS = ("note_type_id", "occurrence_key", "input_bindings", "is_default", "display_name", "position")
 RESOLUTIONS = {"keep_mine", "keep_upstream", "manual"}
 
 
@@ -79,10 +81,10 @@ def _owned(session, *, user_id, template_id, lock=False):
     return row
 
 
-def _authored(row):
+def _authored(row, *, allow_archived=False):
     if row.get("origin") == "market_copy" or row.get("source_template_id"):
         raise TemplateReleaseError("MARKET_TEMPLATE_REPUBLISH_FORBIDDEN", "Received marketplace templates cannot be republished.", status=403)
-    if row.get("archived_at") is not None:
+    if row.get("archived_at") is not None and not allow_archived:
         raise TemplateReleaseError("TEMPLATE_ARCHIVED", "Archived templates cannot be published.", status=409)
 
 
@@ -98,7 +100,7 @@ def _snapshot(session, row, *, actor_user_id=None, origin="edit"):
 def _serialize_release(row):
     if row is None:
         return None
-    return {key: value.isoformat() if isinstance(value, datetime) else value for key, value in row.items()}
+    return {key: (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat() if isinstance(value, datetime) else value for key, value in row.items()}
 
 
 class _TemplatePublishAdapter:
@@ -155,8 +157,8 @@ class _TemplatePublishAdapter:
         return row
 
 
-def _publish_version(session, row, version, *, actor_user_id, request):
-    _authored(row)
+def _publish_version(session, row, version, *, actor_user_id, request, allow_archived=False):
+    _authored(row, allow_archived=allow_archived)
     adapter = _TemplatePublishAdapter(session, row, version, actor_user_id)
     return release_core.publish(adapter, request)
 
@@ -175,21 +177,30 @@ def get_publication(*, user_id, template_id):
 
 
 def list_releases(*, user_id, template_id, limit=100, before_sequence=None):
-    _owned(db.session, user_id=user_id, template_id=template_id)
+    source_id = _read_release_source(user_id=user_id, template_id=template_id)
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
         raise TemplateReleaseError("VALIDATION_ERROR", "limit must be between 1 and 200.", field="limit")
     if before_sequence is not None and (isinstance(before_sequence, bool) or not isinstance(before_sequence, int) or before_sequence < 1):
         raise TemplateReleaseError("VALIDATION_ERROR", "before_sequence must be a positive integer.", field="before_sequence")
-    rows = repository.releases(db.session, template_id, limit=limit + 1, before_sequence=before_sequence)
-    return {"template_id": template_id, "items": [_serialize_release(row) for row in rows[:limit]], "has_more": len(rows) > limit}
+    rows = repository.releases(db.session, source_id, limit=limit + 1, before_sequence=before_sequence)
+    return {"template_id": template_id, "source_template_id": source_id, "items": [_serialize_release(row) for row in rows[:limit]], "has_more": len(rows) > limit}
 
 
 def get_release(*, user_id, template_id, release_id):
-    _owned(db.session, user_id=user_id, template_id=template_id)
-    row = repository.release(db.session, release_id, template_id)
+    source_id = _read_release_source(user_id=user_id, template_id=template_id)
+    row = repository.release(db.session, release_id, source_id)
     if row is None:
         raise TemplateReleaseError("TEMPLATE_RELEASE_NOT_FOUND", "Template release not found.", status=404)
-    return {**_serialize_release(row), "version": _serialize_release(repository.version(db.session, row["version_id"], template_id))}
+    return {**_serialize_release(row), "version": _serialize_release(repository.version(db.session, row["version_id"], source_id))}
+
+
+def _read_release_source(*, user_id, template_id):
+    """A recipient reads immutable upstream releases via their owned copy ID."""
+    local = _owned(db.session, user_id=user_id, template_id=template_id)
+    if local.get("origin") != "market_copy":
+        return template_id
+    subscription, _ = _subscription(db.session, user_id=user_id, template_id=template_id)
+    return subscription["source_template_id"]
 
 
 def publish_release(*, user_id, template_id, payload, idempotency_key):
@@ -278,7 +289,7 @@ def ensure_subscription(session, *, user_id, source_template_id, release_id=None
     source = repository.template(session, source_template_id)
     if source is None or repository.template_owner(session, source) == user_id or not repository.source_access(session, user_id=user_id, source_template_id=source_template_id):
         raise TemplateReleaseError("TEMPLATE_ACCESS_DENIED", "An installed deck or NoteType is required to receive this template.", status=403)
-    _authored(source)
+    _authored(source, allow_archived=True)
     publication = repository.publication(session, source_template_id)
     target = repository.release(session, release_id or (publication or {}).get("current_release_id"), source_template_id)
     if target is None:
@@ -482,23 +493,131 @@ def capture_deck_release_template_pins(session, release, *, actor_user_id=None):
     grouped = {}
     for app in applications:
         grouped.setdefault(app["template_id"], {})[app["id"]] = {
-            name: deepcopy(app.get(name)) for name in ("note_type_id", "occurrence_key", "input_bindings", "is_default", "display_name")
+            name: deepcopy(app.get(name)) for name in APPLICATION_PIN_KEYS
         }
     for template_id, apps in sorted(grouped.items()):
         row = repository.template(session, template_id, lock=True)
-        _authored(row)
+        _authored(row, allow_archived=True)
         version = _snapshot(session, row, actor_user_id=actor_user_id)
         template_release = repository.one(session, TemplateRelease, TemplateRelease.template_id == template_id, TemplateRelease.version_id == version["id"])
         if template_release is None:
             publication = repository.ensure_publication(session, template_id)
             head = repository.release(session, publication["current_release_id"], template_id) if publication["current_release_id"] else None
             request = release_core.PublishRequest(release_core.next_auto_version(head["version_label"] if head else None), f"deck:{release.id}", publication["current_release_id"], version["id"], "Published with deck release.")
-            template_release, _ = _publish_version(session, row, version, actor_user_id=actor_user_id, request=request)
+            template_release, _ = _publish_version(session, row, version, actor_user_id=actor_user_id, request=request, allow_archived=True)
         session.execute(insert(DeckReleaseTemplatePin.__table__).values(
             deck_release_id=release.id, source_template_id=template_id,
             template_release_id=template_release["id"], applications_json=apps,
         ))
     repository.update_row(session, DeckRelease, [DeckRelease.id == release.id], {"template_pins_initialized": True})
+
+
+def deck_template_presentations(session, *, note_type_id, release_id=None):
+    """Compare immutable pins to a draft using hashes, without leaking code in diffs."""
+    from app.services.template_tokens import template_content_hash
+    if release_id is not None:
+        result = {}
+        for source_id, pin in repository.deck_pins(session, release_id).items():
+            release = repository.release(session, pin["template_release_id"], source_id)
+            version = repository.version(session, release["version_id"], source_id)
+            apps = {
+                app_id: {key: deepcopy(values.get(key, 0 if key == "position" else None)) for key in APPLICATION_PIN_KEYS}
+                for app_id, values in (pin["applications_json"] or {}).items()
+            }
+            result[source_id] = {"content_hash": version["content_hash"], "input_schema": version["input_schema"] or [], "applications": apps}
+        return result
+    result = {}
+    for app in repository.source_applications(session, [note_type_id] if note_type_id else []):
+        template_id = app["template_id"]
+        if template_id not in result:
+            template = repository.template(session, template_id)
+            result[template_id] = {
+                "content_hash": template_content_hash(**{key: template[key] or "" for key in CONTENT_KEYS if key != "input_schema"}),
+                "input_schema": template["input_schema"] or [], "applications": {},
+            }
+        result[template_id]["applications"][app["id"]] = {key: deepcopy(app.get(key)) for key in APPLICATION_PIN_KEYS}
+    return result
+
+
+def note_type_publication_error(session, note_type_id):
+    """Every marketplace path must inspect the active attachment definitions."""
+    templates = repository.active_templates(session, note_type_id)
+    if any(row.get("origin") == "market_copy" or row.get("source_template_id") for row in templates):
+        return "Received marketplace templates cannot be redistributed in a shared NoteType or deck."
+    return None
+
+
+def stage_note_type_publications(session, *, note_type_id, actor_user_id, initialize_only=False):
+    """Publish on an author action; initialize older published NoteTypes once."""
+    releases = {}
+    for row in repository.active_templates(session, note_type_id):
+        row = repository.template(session, row["id"], lock=True)
+        _authored(row, allow_archived=True)
+        publication = repository.publication(session, row["id"])
+        head = repository.release(session, publication["current_release_id"], row["id"]) if publication and publication["current_release_id"] else None
+        if not initialize_only or head is None:
+            version = _snapshot(session, row, actor_user_id=actor_user_id)
+            existing = repository.one(session, TemplateRelease, TemplateRelease.template_id == row["id"], TemplateRelease.version_id == version["id"])
+            if existing:
+                head = existing
+            else:
+                publication = repository.ensure_publication(session, row["id"])
+                request = release_core.PublishRequest(
+                    release_core.next_auto_version(head["version_label"] if head else None),
+                    f"note-type:{version['id']}", publication["current_release_id"], version["id"],
+                    "Published with shared NoteType.",
+                )
+                head, _ = _publish_version(session, row, version, actor_user_id=actor_user_id, request=request, allow_archived=True)
+        releases[row["id"]] = head
+    return releases
+
+
+def stage_note_type_template_subscriptions(session, *, note_type_install_id, user_id):
+    """Standalone NoteType receipt uses the same per-user/source copies as decks."""
+    install = repository.one(session, NoteTypeInstall, NoteTypeInstall.id == note_type_install_id, NoteTypeInstall.user_id == user_id)
+    if install is None:
+        raise TemplateReleaseError("INSTALL_NOT_FOUND", "Installation not found.", status=404)
+    source_nt = repository.one(session, NoteType, NoteType.id == install["source_note_type_id"])
+    releases = stage_note_type_publications(session, note_type_id=install["source_note_type_id"], actor_user_id=source_nt["user_id"], initialize_only=True)
+    received = []
+    for app in repository.source_applications(session, [install["source_note_type_id"]]):
+        release = releases[app["template_id"]]
+        subscription = ensure_subscription(session, user_id=user_id, source_template_id=app["template_id"], release_id=release["id"])
+        received.append(subscription)
+        _attach_received_template(session, subscription, app, user_id=user_id)
+    return received
+
+
+def _attach_received_template(session, subscription, source_app, *, user_id):
+    source_nt = source_app["note_type_id"]
+    nt_install = repository.one(session, NoteTypeInstall, NoteTypeInstall.user_id == user_id, NoteTypeInstall.source_note_type_id == source_nt)
+    if not nt_install or not nt_install["installed_note_type_id"]:
+        return
+    local_nt = nt_install["installed_note_type_id"]
+    occurrence = source_app["occurrence_key"]
+    existing = repository.one(session, StudyApplication, StudyApplication.note_type_id == local_nt, StudyApplication.template_id == subscription["local_template_id"], StudyApplication.occurrence_key == occurrence)
+    if existing:
+        return  # reinstall never overwrites a user's customized binding
+    source_fields = session.execute(select(FieldDef.__table__).where(FieldDef.note_type_id == source_nt)).mappings().all()
+    local_fields = session.execute(select(FieldDef.__table__).where(FieldDef.note_type_id == local_nt)).mappings().all()
+    local_by_name = {row["name"]: row["id"] for row in local_fields}
+    field_map = {row["id"]: local_by_name.get(row["name"]) for row in source_fields}
+    bindings = {key: field_map.get(value) for key, value in (source_app.get("input_bindings") or {}).items()}
+    session.execute(insert(StudyApplication.__table__).values(
+        id=uuid_str(), note_type_id=local_nt, template_id=subscription["local_template_id"],
+        occurrence_key=occurrence, input_bindings=bindings, status_code="ACTIVE",
+        display_name=source_app.get("display_name"), is_default=bool(source_app.get("is_default")), position=source_app.get("position", 0),
+    ))
+    # Retain compatibility IDs/history, but keep raw clone definitions out of
+    # discovery and preserve provenance so they cannot become authored copies.
+    raw_copies = session.info.get("flama.template_clone_compat", {}).pop(local_nt, [])
+    raw_ids = [row.id for row in raw_copies if row.id]
+    if raw_ids:
+        session.execute(update(StudyApplication.__table__).where(
+            StudyApplication.note_type_id == local_nt, StudyApplication.template_id.in_(raw_ids),
+            StudyApplication.occurrence_key == "compat",
+        ).values(status_code="RETIRED"))
+        session.execute(update(Template.__table__).where(Template.id.in_(raw_ids)).values(archived_at=_now()))
 
 
 def list_install_templates(*, user_id, install_id):
@@ -535,32 +654,5 @@ def stage_install_template_subscriptions(session, *, install_id, user_id):
         subscription = ensure_subscription(session, user_id=user_id, source_template_id=source_id, release_id=pin["template_release_id"])
         received.append(subscription)
         for source_app in (pin["applications_json"] or {}).values():
-            source_nt = source_app["note_type_id"]
-            nt_install = repository.one(session, NoteTypeInstall, NoteTypeInstall.user_id == user_id, NoteTypeInstall.source_note_type_id == source_nt)
-            if not nt_install or not nt_install["installed_note_type_id"]:
-                continue
-            local_nt = nt_install["installed_note_type_id"]
-            occurrence = source_app["occurrence_key"]
-            existing = repository.one(session, StudyApplication, StudyApplication.note_type_id == local_nt, StudyApplication.template_id == subscription["local_template_id"], StudyApplication.occurrence_key == occurrence)
-            if existing:
-                continue  # reinstall never overwrites a user's customized binding
-            source_fields = session.execute(select(FieldDef.__table__).where(FieldDef.note_type_id == source_nt)).mappings().all()
-            local_fields = session.execute(select(FieldDef.__table__).where(FieldDef.note_type_id == local_nt)).mappings().all()
-            local_by_name = {row["name"]: row["id"] for row in local_fields}
-            field_map = {row["id"]: local_by_name.get(row["name"]) for row in source_fields}
-            bindings = {key: field_map.get(value) for key, value in (source_app.get("input_bindings") or {}).items()}
-            session.execute(insert(StudyApplication.__table__).values(
-                id=uuid_str(), note_type_id=local_nt, template_id=subscription["local_template_id"],
-                occurrence_key=occurrence, input_bindings=bindings, status_code="ACTIVE",
-                display_name=source_app.get("display_name"), is_default=bool(source_app.get("is_default")), position=0,
-            ))
-            # Only rows created by clone_note_type_for_user in this transaction
-            # carry this provenance; existing authoring is never guessed/retired.
-            raw_copies = session.info.get("flama.template_clone_compat", {}).pop(local_nt, [])
-            raw_ids = [row.id for row in raw_copies if row.id]
-            if raw_ids:
-                session.execute(update(StudyApplication.__table__).where(
-                    StudyApplication.note_type_id == local_nt, StudyApplication.template_id.in_(raw_ids),
-                    StudyApplication.occurrence_key == "compat",
-                ).values(status_code="RETIRED"))
+            _attach_received_template(session, subscription, source_app, user_id=user_id)
     return received

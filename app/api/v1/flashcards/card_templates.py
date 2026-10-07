@@ -61,7 +61,7 @@ def _body():
 @card_templates_bp.get("/card-templates")
 @login_required
 def library():
-    return _respond(template_library_service.list_templates, include_archived=request.args.get("include_archived") == "true", category=request.args.get("category"), search=request.args.get("q"))
+    return _respond(template_library_service.list_templates, include_archived=request.args.get("include_archived") == "true", category=request.args.get("category"), search=request.args.get("q"), group=request.args.get("group", "all"))
 
 
 @card_templates_bp.post("/card-templates")
@@ -80,6 +80,12 @@ def definition(template_id):
 @login_required
 def edit_definition(template_id):
     return _respond(template_library_service.update_template, template_id=template_id, payload=_body())
+
+
+@card_templates_bp.post("/card-templates/<template_id>/preview")
+@login_required
+def preview_definition(template_id):
+    return _respond(template_library_service.preview_template, template_id=template_id, payload=_body())
 
 
 @card_templates_bp.post("/card-templates/<template_id>/duplicate")

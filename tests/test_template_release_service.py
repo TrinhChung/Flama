@@ -133,6 +133,90 @@ class TemplateReleaseServiceTests(unittest.TestCase):
             service.get_subscription(user_id=self.stranger_id, template_id=local_id)
         self.assertEqual(caught.exception.status, 404)
 
+    def test_recipient_reads_upstream_immutable_releases_through_owned_copy(self):
+        local_id = self.receive()
+        self.edit(self.source_id, front_html="UNPUBLISHED SECRET")
+        result = service.list_releases(user_id=self.learner_id, template_id=local_id)
+        self.assertEqual(result["source_template_id"], self.source_id)
+        self.assertEqual(result["items"][0]["id"], self.first["id"])
+        detail = service.get_release(user_id=self.learner_id, template_id=local_id, release_id=self.first["id"])
+        self.assertEqual(detail["version"]["front_html"], "FRONT")
+        for template_id, user_id in ((self.source_id, self.learner_id), (local_id, self.stranger_id)):
+            with self.assertRaises(service.TemplateReleaseError) as caught:
+                service.list_releases(user_id=user_id, template_id=template_id)
+            self.assertEqual(caught.exception.status, 404)
+
+    def test_standalone_note_type_receipt_uses_published_copy_and_one_user_identity(self):
+        from app.services.flashcards_share_service import install_shared_note_type
+        NoteTypeInstall.query.filter_by(user_id=self.learner_id, source_note_type_id=self.nt_id).delete()
+        db.session.commit()
+        self.edit(self.source_id, front_html="AUTHOR DRAFT")
+        installed, _ = install_shared_note_type(db.session.get(NoteType, self.nt_id), self.learner_id)
+        subscription = repository.subscription(db.session, user_id=self.learner_id, source_template_id=self.source_id)
+        self.assertEqual(repository.template(db.session, subscription["local_template_id"])["front_html"], "FRONT")
+        self.assertEqual(Template.query.filter_by(owner_user_id=self.learner_id, source_template_id=self.source_id).count(), 1)
+        active = StudyApplication.query.filter_by(note_type_id=installed.id, status_code="ACTIVE").all()
+        self.assertEqual([row.template_id for row in active], [subscription["local_template_id"]])
+        self.assertEqual(service.ensure_subscription(db.session, user_id=self.learner_id, source_template_id=self.source_id)["local_template_id"], subscription["local_template_id"])
+
+    def test_received_attachment_cannot_be_redistributed_as_own_note_type(self):
+        from app.services import flashcards_share_service as share
+        local_id = self.receive()
+        note_type = NoteType(user_id=self.learner_id, name="Own NoteType", description="Mine", primary_category="General", preview_text="Preview")
+        db.session.add(note_type)
+        db.session.flush()
+        app = StudyApplication(note_type_id=note_type.id, template_id=local_id, occurrence_key="custom", input_bindings={})
+        db.session.add(app)
+        db.session.commit()
+        self.assertEqual(share.get_note_type_publish_eligibility(note_type=note_type, user_id=self.learner_id)["block_code"], "marketplace_template")
+        self.assertIn("cannot be redistributed", share.validate_note_type_publish_requirements(note_type))
+        item = DeckMarketplaceItem(owner_user_id=self.learner_id, source_note_type_id=note_type.id, title="Own deck")
+        self.assertIn("cannot be redistributed", share.validate_deck_source_note_type_provenance(deck_item=item, source_note_type=note_type))
+        app.status_code = "RETIRED"
+        db.session.commit()
+        self.assertTrue(share.get_note_type_publish_eligibility(note_type=note_type, user_id=self.learner_id)["is_selectable"])
+
+    def test_independent_and_received_definitions_list_and_preview_active_bindings(self):
+        from app.services import marketplace_note_type_service, marketplace_query_service
+        from app.services.flashcards_share_service import install_shared_note_type
+        source = db.session.get(Template, self.source_id)
+        note_type = db.session.get(NoteType, self.nt_id)
+        note_type.publish_status = "published"
+        field = FieldDef(note_type_id=self.nt_id, name="Word", field_type="text", position=0)
+        db.session.add(field)
+        db.session.flush()
+        source.note_type_id = None
+        source.front_html = "{{Prompt}}"
+        source.input_schema = [{"key": "Prompt", "label": "Prompt", "type": "text", "required": False}]
+        app = StudyApplication.query.filter_by(note_type_id=self.nt_id, template_id=self.source_id).one()
+        app.input_bindings = {"Prompt": field.id}
+        db.session.commit()
+        self.publish("2.0.0")
+        source.front_html = "AUTHOR DRAFT"
+        db.session.commit()
+        owned = marketplace_query_service.serialize_note_type(note_type)
+        self.assertEqual(owned["templates"][0]["id"], self.source_id)
+        self.assertEqual(owned["templates"][0]["note_type_id"], self.nt_id)
+        self.assertEqual(owned["templates"][0]["front_html"], "AUTHOR DRAFT")
+        shared = marketplace_query_service.serialize_note_type_marketplace_card(note_type)
+        self.assertEqual(shared["templates"][0]["front_html"], "{{Prompt}}")
+        preview = marketplace_note_type_service.preview_shared_note_type_template(user_id=self.learner_id, note_type_id=self.nt_id, template_id=self.source_id)
+        self.assertEqual(preview["front_html"], "<style>.card{}</style>Word")
+        NoteTypeInstall.query.filter_by(user_id=self.learner_id, source_note_type_id=self.nt_id).delete()
+        db.session.commit()
+        installed, _ = install_shared_note_type(note_type, self.learner_id)
+        received = marketplace_query_service.serialize_note_type(installed)
+        self.assertEqual(len(received["templates"]), 1)
+        self.assertEqual(received["templates"][0]["front_html"], "{{Prompt}}")
+        local_field_id = received["templates"][0]["input_bindings"]["Prompt"]
+        self.assertEqual(db.session.get(FieldDef, local_field_id).note_type_id, installed.id)
+        app.status_code = "RETIRED"
+        db.session.commit()
+        self.assertEqual(marketplace_query_service.serialize_note_type_marketplace_card(note_type)["templates"], [])
+        with self.assertRaises(marketplace_note_type_service.MarketplaceNoteTypeError) as caught:
+            marketplace_note_type_service.preview_shared_note_type_template(user_id=self.learner_id, note_type_id=self.nt_id, template_id=self.source_id)
+        self.assertEqual(caught.exception.status, 404)
+
     def test_three_way_update_preserves_independent_local_edits(self):
         local_id = self.receive()
         self.edit(local_id, front_html="MY FRONT")

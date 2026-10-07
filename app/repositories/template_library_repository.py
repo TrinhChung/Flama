@@ -13,7 +13,7 @@ def owner_filter(user_id):
     return or_(Template.owner_user_id == int(user_id), and_(Template.owner_user_id.is_(None), Template.note_type.has(NoteType.user_id == int(user_id))))
 
 
-def library_query(session, user_id, *, include_archived=False, category=None, search=None):
+def library_query(session, user_id, *, include_archived=False, category=None, search=None, group="all"):
     statement = select(Template).where(owner_filter(user_id))
     if not include_archived:
         statement = statement.where(Template.archived_at.is_(None))
@@ -22,7 +22,39 @@ def library_query(session, user_id, *, include_archived=False, category=None, se
     if search:
         # Literal substring, including percent/underscore.
         statement = statement.where(Template.name.contains(search, autoescape=True))
+    active_usage = select(StudyApplication.id).join(NoteType).where(
+        StudyApplication.template_id == Template.id,
+        StudyApplication.status_code == "ACTIVE", NoteType.user_id == int(user_id),
+    ).exists()
+    if group == "mine":
+        statement = statement.where(Template.origin != "market_copy")
+    elif group == "market":
+        statement = statement.where(Template.origin == "market_copy")
+    elif group == "standalone":
+        statement = statement.where(~active_usage)
+    elif group == "in_use":
+        statement = statement.where(active_usage)
+    statement = statement.options(joinedload(Template.note_type).selectinload(NoteType.field_defs))
     return session.execute(statement.order_by(Template.name, Template.id)).scalars().all()
+
+
+def template_usage(session, user_id, template_ids):
+    """Load visible active usages once for an entire library page."""
+    if not template_ids:
+        return {}
+    rows = session.execute(select(StudyApplication, NoteType.name).join(NoteType).where(
+        StudyApplication.template_id.in_(template_ids),
+        StudyApplication.status_code == "ACTIVE", NoteType.user_id == int(user_id),
+    ).order_by(NoteType.name, StudyApplication.position, StudyApplication.id))
+    result = {}
+    for application, note_type_name in rows:
+        result.setdefault(application.template_id, []).append({
+            "id": application.id, "application_id": application.id,
+            "note_type_id": application.note_type_id, "note_type_name": note_type_name,
+            "occurrence_key": application.occurrence_key, "display_name": application.display_name,
+            "position": application.position, "is_default": bool(application.is_default),
+        })
+    return result
 
 
 def applications(session, note_type_id, *, include_retired=False):
