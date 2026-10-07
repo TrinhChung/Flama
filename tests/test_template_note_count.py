@@ -174,6 +174,7 @@ class TemplateNoteCountTests(unittest.TestCase):
             "is_default",
             "updated_at",
             "note_count",
+            "current_version_id",
         }
         self.assertEqual(set(item.keys()), expected_keys)
         self.assertEqual(item["id"], t1_id)
@@ -184,6 +185,7 @@ class TemplateNoteCountTests(unittest.TestCase):
         self.assertEqual(item["shared_css"], ".card { font-size: 16px; }")
         self.assertEqual(item["position"], 0)
         self.assertTrue(item["is_default"])
+        self.assertIsInstance(item["current_version_id"], str)
 
     def test_other_users_note_type_is_404(self):
         with self.app.app_context():

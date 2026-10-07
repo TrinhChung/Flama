@@ -16,7 +16,10 @@ import {
   deleteNoteTypeTemplate,
   fetchDeckCardTypes,
   fetchNoteTypeTemplates,
+  fetchTemplateVersion,
+  fetchTemplateVersions,
   renameNoteTypeTemplate,
+  restoreTemplateVersion,
 } from '../index'
 
 describe('cardTemplateApi and queryKeys', () => {
@@ -188,6 +191,168 @@ describe('cardTemplateApi and queryKeys', () => {
     })
   })
 
+  describe('fetchTemplateVersions', () => {
+    it('calls apiRequest with properly encoded templateId and returns version list', async () => {
+      const mockResponse = {
+        schema_version: 'template-versions.v2',
+        template_id: 'tpl/1',
+        current_version_id: 'ver-1',
+        items: [
+          {
+            id: 'ver-1',
+            template_id: 'tpl/1',
+            version_no: 1,
+            content_hash: 'abc123hash',
+            change_note: 'initial',
+            origin: 'create',
+            created_at: '2026-10-06T12:00:00Z',
+            created_by: { id: 1, username: 'tester' },
+            is_current: true,
+          },
+        ],
+      }
+      apiRequest.mockResolvedValueOnce(mockResponse)
+
+      const result = await fetchTemplateVersions('tpl/1')
+      expect(result).toBe(mockResponse)
+      expect(apiRequest).toHaveBeenCalledWith('/api/card-templates/tpl%2F1/versions', {
+        signal: undefined,
+      })
+    })
+
+    it('forwards AbortSignal when provided', async () => {
+      const controller = new AbortController()
+      apiRequest.mockResolvedValueOnce({
+        schema_version: 'template-versions.v2',
+        template_id: 'tpl-1',
+        current_version_id: null,
+        items: [],
+      })
+
+      await fetchTemplateVersions('tpl-1', controller.signal)
+      expect(apiRequest).toHaveBeenCalledWith('/api/card-templates/tpl-1/versions', {
+        signal: controller.signal,
+      })
+    })
+
+    it('propagates error when apiRequest rejects', async () => {
+      apiRequest.mockRejectedValueOnce(new Error('Failed to fetch versions'))
+      await expect(fetchTemplateVersions('tpl-1')).rejects.toThrow('Failed to fetch versions')
+    })
+  })
+
+  describe('fetchTemplateVersion', () => {
+    it('calls apiRequest with properly encoded templateId and versionId and returns version detail', async () => {
+      const mockResponse = {
+        id: 'ver/1',
+        template_id: 'tpl/1',
+        version_no: 1,
+        content_hash: 'abc123hash',
+        change_note: 'initial commit',
+        origin: 'create',
+        created_at: '2026-10-06T12:00:00Z',
+        created_by: { id: 1, username: 'tester' },
+        is_current: true,
+        front_html: '{{Front}}',
+        back_html: '{{Back}}',
+        shared_css: '.card { color: red; }',
+        input_schema: [],
+      }
+      apiRequest.mockResolvedValueOnce(mockResponse)
+
+      const result = await fetchTemplateVersion('tpl/1', 'ver/1')
+      expect(result).toBe(mockResponse)
+      expect(apiRequest).toHaveBeenCalledWith('/api/card-templates/tpl%2F1/versions/ver%2F1', {
+        signal: undefined,
+      })
+    })
+
+    it('forwards AbortSignal when provided', async () => {
+      const controller = new AbortController()
+      apiRequest.mockResolvedValueOnce({
+        id: 'ver-2',
+        template_id: 'tpl-2',
+        version_no: 2,
+        content_hash: 'def456hash',
+        change_note: '',
+        origin: 'edit',
+        created_at: '2026-10-06T13:00:00Z',
+        created_by: null,
+        is_current: false,
+        front_html: '',
+        back_html: '',
+        shared_css: '',
+        input_schema: [],
+      })
+
+      await fetchTemplateVersion('tpl-2', 'ver-2', controller.signal)
+      expect(apiRequest).toHaveBeenCalledWith('/api/card-templates/tpl-2/versions/ver-2', {
+        signal: controller.signal,
+      })
+    })
+
+    it('propagates error when apiRequest rejects', async () => {
+      apiRequest.mockRejectedValueOnce(new Error('Version not found'))
+      await expect(fetchTemplateVersion('tpl-1', 'ver-404')).rejects.toThrow('Version not found')
+    })
+  })
+
+  describe('restoreTemplateVersion', () => {
+    const mockRestored = {
+      id: 'tpl/1',
+      note_type_id: 'nt1',
+      name: 'Default',
+      front_html: '{{Front}}',
+      back_html: '{{Back}}',
+      shared_css: '',
+      position: 0,
+      is_default: true,
+      updated_at: '2026-10-06T14:00:00Z',
+      current_version_id: 'ver-new',
+    }
+
+    it('calls apiJson with POST and body containing change_note when provided', async () => {
+      apiJson.mockResolvedValueOnce(mockRestored)
+
+      const result = await restoreTemplateVersion('tpl/1', 'ver/1', 'Khôi phục bản cũ')
+      expect(result).toBe(mockRestored)
+      expect(apiJson).toHaveBeenCalledWith(
+        '/api/card-templates/tpl%2F1/versions/ver%2F1/restore',
+        'POST',
+        { change_note: 'Khôi phục bản cũ' },
+      )
+    })
+
+    it('calls apiJson with empty object body when changeNote is omitted', async () => {
+      apiJson.mockResolvedValueOnce(mockRestored)
+
+      const result = await restoreTemplateVersion('tpl-1', 'ver-1')
+      expect(result).toBe(mockRestored)
+      expect(apiJson).toHaveBeenCalledWith(
+        '/api/card-templates/tpl-1/versions/ver-1/restore',
+        'POST',
+        {},
+      )
+    })
+
+    it('calls apiJson with empty object body when changeNote is empty string', async () => {
+      apiJson.mockResolvedValueOnce(mockRestored)
+
+      const result = await restoreTemplateVersion('tpl-1', 'ver-1', '')
+      expect(result).toBe(mockRestored)
+      expect(apiJson).toHaveBeenCalledWith(
+        '/api/card-templates/tpl-1/versions/ver-1/restore',
+        'POST',
+        {},
+      )
+    })
+
+    it('propagates error when apiJson rejects', async () => {
+      apiJson.mockRejectedValueOnce(new Error('Restore failed'))
+      await expect(restoreTemplateVersion('tpl-1', 'ver-1')).rejects.toThrow('Restore failed')
+    })
+  })
+
   describe('cardTemplateQueryKeys', () => {
     it('generates noteTypeTemplates query key tuple', () => {
       expect(cardTemplateQueryKeys.noteTypeTemplates('nt-42')).toEqual([
@@ -207,6 +372,23 @@ describe('cardTemplateApi and queryKeys', () => {
         'card-template',
         'deck-card-types',
         '42',
+      ])
+    })
+
+    it('generates templateVersions query key tuple', () => {
+      expect(cardTemplateQueryKeys.templateVersions('tpl-123')).toEqual([
+        'card-template',
+        'versions',
+        'tpl-123',
+      ])
+    })
+
+    it('generates templateVersion query key tuple', () => {
+      expect(cardTemplateQueryKeys.templateVersion('tpl-123', 'ver-456')).toEqual([
+        'card-template',
+        'versions',
+        'tpl-123',
+        'ver-456',
       ])
     })
   })

@@ -176,6 +176,13 @@ def _register_models() -> None:
         Template,
     )
     from models.shared_image_asset import SharedImageAsset  # noqa: F401
+    from models.template_version import TemplateVersion  # noqa: F401
+    from models.template_publication import TemplatePublication  # noqa: F401
+    from models.template_release import TemplateRelease  # noqa: F401
+    from models.template_subscription import TemplateSubscription  # noqa: F401
+    from models.study_template_preset import StudyTemplatePreset  # noqa: F401
+    from models.deck_release_template_pin import DeckReleaseTemplatePin  # noqa: F401
+    from app.services import template_version_service  # noqa: F401
 
 
 def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

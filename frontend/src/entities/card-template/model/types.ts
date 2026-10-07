@@ -8,6 +8,35 @@ export type CardTemplateItem = {
   position: number
   is_default: boolean
   updated_at: string | null
+  current_version_id?: string | null
+}
+
+export type TemplateVersionOrigin = 'backfill' | 'create' | 'edit' | 'reset' | 'restore' | 'apply' | 'fork'
+
+export type TemplateVersionSummary = {
+  id: string
+  template_id: string
+  version_no: number
+  content_hash: string
+  change_note: string
+  origin: TemplateVersionOrigin
+  created_at: string
+  created_by: { id: number; username: string } | null
+  is_current: boolean
+}
+
+export type TemplateVersionDetail = TemplateVersionSummary & {
+  front_html: string
+  back_html: string
+  shared_css: string
+  input_schema: unknown[]
+}
+
+export type TemplateVersionList = {
+  schema_version: 'template-versions.v2'
+  template_id: string
+  current_version_id: string | null
+  items: TemplateVersionSummary[]
 }
 
 export type CardTemplateWithNoteCount = CardTemplateItem & { note_count: number }

@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from app.repositories import deck_install_rebase_repository
+from app.services import release_core
 from models import db
 from models.deck_clone_field_def_override import DeckCloneFieldDefOverride
 from models.deck_clone_field_order_override import DeckCloneFieldOrderOverride
@@ -70,7 +71,7 @@ def _stable(value: Any) -> str:
 
 
 def _same(left: Any, right: Any) -> bool:
-    return _stable(left) == _stable(right)
+    return release_core.same(left, right)
 
 
 def _is_missing(value: Any) -> bool:
@@ -727,12 +728,7 @@ def prepare_update(
             schema_by_id=schema_by_id,
             order_row=order_row,
         )
-        if (
-            local is None
-            or _same(local.value, upstream_value)
-            or _same(local.value, base_value)
-            or _same(upstream_value, base_value)
-        ):
+        if local is None or not release_core.has_conflict(base_value, upstream_value, local.value):
             continue
         db.session.add(
             DeckInstallRebaseConflict(
@@ -1078,22 +1074,19 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
             continue
         key = str(change.change_key or f"{change.entity_kind}:{change.entity_id}:{change.property_key}")
         conflict = conflicts_by_key.get(key)
-        if _same(local.value, upstream_value) or _same(local.value, base_value):
+        action, merged_value = release_core.merge_unit(
+            base_value, upstream_value, local.value,
+            resolution=conflict.resolution_mode if conflict else None,
+            manual_value=conflict.resolved_value if conflict else None,
+        )
+        if action == "clear":
             overlay_mutated = _clear_local_overlay(local) or overlay_mutated
-        elif _same(upstream_value, base_value):
+        elif action == "keep":
             continue
-        elif conflict is None:
+        elif action == "conflict":
             raise DeckInstallUpdateError("Upstream changes no longer match this preparation.", status=409, error="REBASE_STALE")
-        elif conflict.resolution_mode == "keep_upstream":
-            overlay_mutated = _clear_local_overlay(local) or overlay_mutated
-        elif conflict.resolution_mode == "manual":
-            if _same(conflict.resolved_value, upstream_value):
-                overlay_mutated = _clear_local_overlay(local) or overlay_mutated
-            else:
-                overlay_mutated = (
-                    _set_local_overlay(local, conflict.resolved_value)
-                    or overlay_mutated
-                )
+        elif action == "set":
+            overlay_mutated = _set_local_overlay(local, merged_value) or overlay_mutated
 
     now = _utcnow()
     if overlay_mutated:

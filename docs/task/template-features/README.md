@@ -1,38 +1,44 @@
 # Template features: task Gemini và tracker
 
-Kế hoạch tổng: [TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md](../../plans/proposals/TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md). Hợp đồng API nằm ở §5 của kế hoạch tổng; spec dưới đây chỉ trích phần cần cho từng task.
+Kế hoạch tổng: [TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md](../../plans/proposals/TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md). Contract A2 v2 đã chạy trong [ADR-T1](../../architecture/template-version-foundation-adr-2026-10-07.md); các contract library/market copy/attachment còn phác thảo. Spec GT-10/15A đã được đối chiếu với backend thật.
 
 ## 1. Tracker
 
 | ID | Tiêu đề | Owner | Trạng thái | Phụ thuộc | Spec |
 |---|---|---|---|---|---|
-| CT-00 | Chốt Q1–Q5, chạy baseline | Claude | Planned | người dùng duyệt | kế hoạch §7 |
-| CT-01 | ADR definition/version/fork, đóng băng Contract A/D/E | Claude | Planned | CT-00 | kế hoạch §7 |
-| GT-01 | Nội dung mặc định template theo field thật | Gemini | Completed | CT-00 | [GT-01](GT-01_DEFAULT_TEMPLATE_CONTENT.md) |
-| GT-02 | `note_count` trong danh sách template | Gemini | Completed | CT-00 | [GT-02](GT-02_TEMPLATE_NOTE_COUNT.md) |
-| GT-03 | `include_counts` cho compositions | Gemini | Completed | CT-00 | [GT-03](GT-03_COMPOSITION_NOTE_COUNTS.md) |
-| GT-04 | Entity `card-template` (frontend) | Gemini | Completed | CT-00 | [GT-04](GT-04_CARD_TEMPLATE_ENTITY.md) |
-| GT-05 | Tách `TemplateCodeEditor` (không đổi giao diện) | Gemini | Completed | GT-04 | [GT-05](GT-05_EXTRACT_TEMPLATE_CODE_EDITOR.md) |
-| GT-06 | Quản lý template trên trang loại thẻ | Gemini | Completed | GT-02, GT-04, GT-05 | [GT-06](GT-06_TEMPLATE_MANAGEMENT_UI.md) |
-| GT-07 | Dialog "Kiểu thẻ" trên dashboard | Gemini | Completed | GT-03, GT-04 | [GT-07](GT-07_DECK_CARD_TYPES_DIALOG.md) |
-| GT-08 | Python: token Mustache + content hash | Gemini | Completed | CT-00 | [GT-08](GT-08_TEMPLATE_TOKENS_PURE.md) |
-| GT-09 | TS: `lineDiff` + `TemplateDiffView` | Gemini | Completed | GT-05 | [GT-09](GT-09_LINE_DIFF_VIEW.md) |
-| CT-02 | Schema + migration 51 + backfill | Claude | Planned | CT-01, GT-08 | kế hoạch §7 |
-| CT-03 | Version service + Contract A | Claude | Planned | CT-02 | kế hoạch §7 |
-| GT-15A | Test hợp đồng Contract A | Gemini | Blocked | CT-03 | [GT-15](GT-15_CONTRACT_TESTS.md) |
-| GT-10 | UI lịch sử phiên bản | Gemini | Blocked | CT-03, GT-06, GT-09 | [GT-10](GT-10_VERSION_HISTORY_UI.md) |
-| CT-04 | Seam `resolve_effective_template` | Claude | Planned | CT-01 | kế hoạch §7 |
-| CT-05 | Fork của người cài + Contract D | Claude | Blocked | CT-03, CT-04, Q1 | kế hoạch §7 |
-| GT-15D | Test hợp đồng Contract D | Gemini | Blocked | CT-05 | [GT-15](GT-15_CONTRACT_TESTS.md) |
-| GT-11 | Trang sửa template deck đã cài | Gemini | Blocked | CT-05, GT-05, GT-07, GT-10 | [GT-11](GT-11_INSTALL_TEMPLATE_EDITOR.md) |
-| CT-06 | Thư viện mẫu thẻ + Contract E | Claude | Blocked | CT-03, GT-08, Q2, Q3 | kế hoạch §7 |
-| GT-15E | Test hợp đồng Contract E | Gemini | Blocked | CT-06 | [GT-15](GT-15_CONTRACT_TESTS.md) |
-| GT-12 | Trang thư viện mẫu thẻ | Gemini | Blocked | CT-06, GT-05, GT-10 | [GT-12](GT-12_TEMPLATE_LIBRARY_PAGES.md) |
-| GT-13 | Wizard áp dụng + `FieldMappingEditor` | Gemini | Blocked | GT-12 | [GT-13](GT-13_APPLY_WIZARD.md) |
-| GT-14 | Tài liệu người dùng | Gemini | Blocked | M3, M4 Accepted | [GT-14](GT-14_USER_DOCS.md) |
-| CT-07 | Pin release cho tác giả (#137) | Claude | Chờ Q4 | M3 production | kế hoạch §7 |
+| CT-00 | U1–U8 và baseline phần phiên bản | Codex | Completed | người dùng đã chốt | kế hoạch §7 |
+| CT-01 | ADR-T1 + A2; ADR attachment/release tiếp sau | Codex | A2 frozen | CT-00 | [ADR-T1](../../architecture/template-version-foundation-adr-2026-10-07.md) |
+| GT-01 | Default template theo field thật | Gemini / Codex fix | Accepted (code) | CT-00 | [GT-01](GT-01_DEFAULT_TEMPLATE_CONTENT.md) |
+| GT-02 | note_count template | Gemini | Completed / reviewed | CT-00 | [GT-02](GT-02_TEMPLATE_NOTE_COUNT.md) |
+| GT-03 | include_counts compositions | Gemini | Completed / reviewed | CT-00 | [GT-03](GT-03_COMPOSITION_NOTE_COUNTS.md) |
+| GT-04 | Entity card-template | Gemini | Completed / reviewed | CT-00 | [GT-04](GT-04_CARD_TEMPLATE_ENTITY.md) |
+| GT-05 | Tách TemplateCodeEditor | Gemini | Completed / reviewed | GT-04 | [GT-05](GT-05_EXTRACT_TEMPLATE_CODE_EDITOR.md) |
+| GT-06 | Quản lý template, giữ draft khi rename | Gemini / Codex fix | Accepted (code) | GT-02/04/05 | [GT-06](GT-06_TEMPLATE_MANAGEMENT_UI.md) |
+| GT-07 | Dialog Kiểu thẻ dashboard | Gemini | Completed / reviewed | GT-03/04 | [GT-07](GT-07_DECK_CARD_TYPES_DIALOG.md) |
+| GT-08 | Mustache tokens/hash Python | Gemini | Completed / reviewed | CT-00 | [GT-08](GT-08_TEMPLATE_TOKENS_PURE.md) |
+| GT-09 | lineDiff/TemplateDiffView | Gemini | Completed / reviewed | GT-05 | [GT-09](GT-09_LINE_DIFF_VIEW.md) |
+| CT-02 | Schema expand + migration 53 + backfill MySQL | Codex | Accepted (code) | CT-01, GT-08 | [báo cáo](reviews/CT-02_CT-03_CODEX_IMPLEMENTATION_2026-10-07.md) |
+| CT-03 | Transactional version service + A2 + CLI | Codex | Accepted (code) | CT-02 | [báo cáo](reviews/CT-02_CT-03_CODEX_IMPLEMENTATION_2026-10-07.md) |
+| GT-15A | Test A2 bổ sung A7/A12–A17 | Gemini | Completed / verified | CT-03 | [GT-15](GT-15_CONTRACT_TESTS.md) |
+| GT-10A | Entity API/types/query keys A2 (5 file) | Gemini | Completed / verified | CT-03 | [GT-10](GT-10_VERSION_HISTORY_UI.md) |
+| GT-10B | Sheet lịch sử và nối page (6 file) | Gemini | **Ready** | GT-10A, GT-06, GT-09 | [GT-10](GT-10_VERSION_HISTORY_UI.md) |
+| CT-R2 | Review UI/contract + browser gate M2 | Codex | Planned | GT-10B, GT-15A | kế hoạch §7 |
+| CT-04 | Resolver render tương thích | Codex | Planned | CT-01 | kế hoạch §7 |
+| CT-06 | Attachment/binding theo ID + template độc lập + library | Codex | Planned | CT-04 | kế hoạch §7 |
+| CT-07 | Release core + #137 theo U7 | Codex | Planned (đã được yêu cầu) | gate parity deck | kế hoạch §7 |
+| CT-05 | Market copy cấp người dùng/source | Codex | Blocked | CT-06, CT-07 | kế hoạch §7 |
+| GT-15D | Test market copy v2 | Gemini | Blocked; spec v1 chưa dùng | CT-05 | [GT-15](GT-15_CONTRACT_TESTS.md) |
+| GT-11 | Editor bản nhận | Gemini | Blocked; cần spec v2 | CT-05 | [GT-11](GT-11_INSTALL_TEMPLATE_EDITOR.md) |
+| GT-15E | Test library/attachment v2 | Gemini | Blocked; spec v1 chưa dùng | CT-06 | [GT-15](GT-15_CONTRACT_TESTS.md) |
+| GT-12 | Library UI | Gemini | Blocked; cần spec v2 | CT-06 | [GT-12](GT-12_TEMPLATE_LIBRARY_PAGES.md) |
+| GT-13 | Wizard attachment/bindings | Gemini | Blocked; cần spec v2 | GT-12 | [GT-13](GT-13_APPLY_WIZARD.md) |
+| GT-14 | Hướng dẫn tính năng đã nghiệm thu | Gemini | Blocked | milestone tương ứng | [GT-14](GT-14_USER_DOCS.md) |
+| GT-16/17 | Inventory template/release | Gemini | Candidate reports, chưa Accepted | review quote/source | [GT-16](GT-16_TEMPLATE_USAGE_INVENTORY.md), [GT-17](GT-17_RELEASE_CODE_INVENTORY.md) |
 
-Mỗi lần đổi trạng thái, Claude ghi thêm một dòng vào §5 (nhật ký).
+Codex tiếp nhận cả implementation và review của Claude theo yêu cầu người dùng ngày 2026-10-07. [Review CT-R1](reviews/CT-R1_CODEX_REVIEW_2026-10-06.md) được giữ làm bằng chứng lỗi; hai blocker đã sửa bằng code/test. Accepted (code) không đồng nghĩa đã deploy hay đã chạy browser gate toàn M1/M2.
+
+Gemini bắt đầu **GT-10A** hoặc **GT-15A**; hai task không cùng sửa file. Prompt đầy đủ: [GT-10A](GT-10A.prompt.txt), [GT-15A](GT-15A.prompt.txt). Sau review GT-10A mới giao GT-10B. Nền CT-02/03 hiện là diff trong workspace, chưa commit; không tạo worktree từ HEAD rồi mặc định nền đã có. Chạy tuần tự theo whitelist trên workspace này hoặc chuyển đúng diff nền đã review sang checkout riêng.
+
 
 ## 2. Quy tắc chung cho Gemini (dán vào đầu mọi prompt)
 
@@ -40,7 +46,7 @@ Mọi spec đã nhúng khối dưới đây trong phần "Prompt cho Gemini". Kh
 
 ```text
 QUY TẮC BẮT BUỘC (Flama, template features)
-1. Repo: D:\Project\nihongo (worktree Claude chỉ định). Đọc AGENTS.md trước.
+1. Repo: D:\Project\nihongo (workspace/worktree Codex chỉ định). Đọc AGENTS.md trước.
 2. Chỉ sửa/tạo đúng các file trong mục "File được sửa". Mọi file khác là CẤM sửa,
    kể cả để "dọn dẹp", đổi format, sửa import hoặc sửa test khác.
 3. KHÔNG bịa: nếu một hàm, file, prop, field JSON, route, fixture mà spec nhắc tới
@@ -76,7 +82,7 @@ QUY TẮC BẮT BUỘC (Flama, template features)
   <20 dòng cuối output thật>
 ### Sai lệch so với spec
 - <không có> | <mô tả: spec nói X, code thật là Y, tôi đã dừng/đã làm Z>
-### Điểm chưa chắc chắn cần Claude xem
+### Điểm chưa chắc chắn cần reviewer xem
 - ...
 ### Việc còn lại
 - ...
@@ -85,7 +91,7 @@ QUY TẮC BẮT BUỘC (Flama, template features)
 ## 4. Môi trường và cách chạy
 
 - Repo local: `D:\Project\nihongo`; Python: `.\.venv\Scripts\python.exe`; frontend: `npm --prefix frontend ...`.
-- Mỗi task Gemini chạy trong worktree riêng do Claude tạo, ví dụ `git worktree add ..\nihongo-gt01 -b feat/template-m1-gt01 <base>`; nhánh cuối cùng do người dùng chốt (Q5).
+- Nhánh người dùng đã chốt là `refactor/frontend-fsd-renderer-boundary` (U8). Khi dùng worktree, Codex đưa đúng diff nền CT-02/03 sang trước; HEAD hiện tại chưa chứa nền. Có thể làm tuần tự trên workspace với whitelist khi tránh xung đột file.
 - Lệnh giao (theo `skills/antigravity-cli/references/worker-orchestration.md`):
 
 ```powershell
@@ -105,3 +111,6 @@ agy --print $taskPrompt --model gemini-3.7-flash-high --effort high --mode accep
 | 2026-10-06 | Gemini / teamwork_preview hoàn thành GT-05 và GT-06 (tách TemplateCodeEditor không đổi DOM snapshot, TemplateManagementBar, localized errors). Pass 87 frontend tests, typecheck 0 lỗi, lint 0 lỗi, build:ci exit code 0. |
 | 2026-10-06 | Gemini / teamwork_preview hoàn thành GT-07 (Dashboard DeckCardTypesDialog và tích hợp menu deck). Victory Auditor phê duyệt VICTORY CONFIRMED. Pass 24/24 dialog tests, 58/58 dashboard tests, typecheck 0 lỗi, lint 0 lỗi, build:ci clean. |
 | 2026-10-06 | Gemini / teamwork_preview hoàn thành GT-08 và GT-09 (Python Mustache tokens & hash; TS lineDiff LCS & TemplateDiffView). Victory Auditor phê duyệt VICTORY CONFIRMED. Pass 20 Python tests, golden hash khớp, 81/81 card-template tests, typecheck 0 lỗi, lint 0 lỗi, build:ci clean. |
+| 2026-10-06 | Codex tiếp nhận review của Claude: review GT-01..GT-09 tại HEAD `965b565`; 392 test backend và 165 test frontend đang có qua, typecheck/lint/build qua. Reproducer bổ sung xác nhận 2 lỗi; GT-01 và GT-06 → Needs revision. Xem [CT-R1 review](reviews/CT-R1_CODEX_REVIEW_2026-10-06.md). |
+| 2026-10-07 | Người dùng giao Codex phần code Claude. Hoàn thành CT-02/03 expand + A2 v2; MySQL 8.0.40 rehearsal/concurrency và cleanup qua, main wsgi + standalone Connect boot qua; sửa GT-01/06. GT-10A và GT-15A Ready, GT-10B sau review entity. Xem [báo cáo](reviews/CT-02_CT-03_CODEX_IMPLEMENTATION_2026-10-07.md). |
+| 2026-10-07 | Gemini / teamwork_preview hoàn thành và kiểm thử toàn diện GT-10A (Frontend entity API/types/keys/tests) và GT-15A (Backend contract tests A7, A12–A17). Victory Auditor phê duyệt VICTORY CONFIRMED. Pass 93/93 card-template tests, 45/45 backend modular tests, typecheck 0 lỗi, lint 0 lỗi, build:ci clean. GT-10B chuyển sang Ready. |

@@ -12,7 +12,7 @@ from typing import Any, Tuple
 
 UTC = timezone.utc
 
-from sqlalchemy import and_, case, exists, or_
+from sqlalchemy import and_, case, exists, false, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
 from flask import current_app
 
@@ -171,6 +171,12 @@ def default_template_sources(field_rows: list[tuple[int, str]]) -> tuple[str, st
     if not cleaned:
         return "{{Word}}", "{{Word}}"
     names = [name for _, name in cleaned]
+    for name in names[:2]:
+        if name == "." or name[0] in "#^/!>&=" or "{" in name or "}" in name:
+            raise ValueError(
+                f"Field name '{name}' cannot be used in an automatic template. "
+                "Rename the field or provide explicit front_html and back_html."
+            )
     first = "{{" + names[0] + "}}"
     if len(names) >= 2:
         back = first + "<hr>" + "{{" + names[1] + "}}"
@@ -243,12 +249,16 @@ def create_note_type(
         )
 
     template_payload = payload.get("template") or {}
-    default_front, default_back = default_template_sources(
-        [
-            (int(row.get("position", idx)), str(row.get("name") or "").strip())
-            for idx, row in enumerate(input_fields)
-        ]
-    )
+    try:
+        default_front, default_back = default_template_sources(
+            [
+                (int(row.get("position", idx)), str(row.get("name") or "").strip())
+                for idx, row in enumerate(input_fields)
+            ]
+        ) if not template_payload.get("front_html") or not template_payload.get("back_html") else ("", "")
+    except ValueError as exc:
+        db.session.rollback()
+        return None, str(exc), "field_defs"
     front_html = (template_payload.get("front_html") or default_front).strip()
     back_html = (template_payload.get("back_html") or default_back).strip()
     shared_css = (template_payload.get("shared_css") or "").strip()
@@ -262,6 +272,8 @@ def create_note_type(
         is_default=True,
     )
     db.session.add(template)
+    from app.services.template_version_service import mark_template_version
+    mark_template_version(template, origin="create", actor_user_id=user_id)
     
     metadata_error = flashcards_share.apply_note_type_marketplace_payload(
         note_type,
@@ -290,9 +302,12 @@ def create_template(
         return None, "Note type not found."
         
     name = (payload.get("name") or "").strip() or f"Card {Template.query.filter_by(note_type_id=note_type.id).count() + 1}"
-    default_front, default_back = default_template_sources(
-        [(int(field.position or 0), str(field.name or "")) for field in note_type.field_defs]
-    )
+    try:
+        default_front, default_back = default_template_sources(
+            [(int(field.position or 0), str(field.name or "")) for field in note_type.field_defs]
+        ) if not payload.get("front_html") or not payload.get("back_html") else ("", "")
+    except ValueError as exc:
+        return None, str(exc)
     front_html = (payload.get("front_html") or default_front).strip()
     back_html = (payload.get("back_html") or default_back).strip()
     shared_css = (payload.get("shared_css") or "").strip()
@@ -310,6 +325,8 @@ def create_template(
         is_default=False,
     )
     db.session.add(template)
+    from app.services.template_version_service import mark_template_version
+    mark_template_version(template, origin="create", actor_user_id=user_id)
     db.session.flush()
     notes = Note.query.filter_by(note_type_id=note_type.id, user_id=user_id).all()
     for note in notes:
@@ -1834,33 +1851,10 @@ def is_card_visible_in_clone_scope(
 ) -> bool:
     if card_obj is None or card_obj.note is None:
         return False
-    if (
-        card_obj.note.user_id == scope.install.user_id
-        and card_obj.note.deck_id is not None
-        and int(card_obj.note.deck_id) in set(scope.local_deck_ids)
-        and DeckCloneAddedNote.query.filter_by(
-            deck_install_id=scope.install.id,
-            note_id=card_obj.note.id,
-        ).first()
-        is not None
-    ):
-        return True
-    if card_obj.note.deck_id is None or int(card_obj.note.deck_id) not in set(scope.source_deck_ids):
-        return False
-    if scope.source_owner_user_id is not None and card_obj.note.user_id != scope.source_owner_user_id:
-        return False
-    if _install_uses_release(scope.install):
-        if not _note_is_member_of_applied_release(
-            install=scope.install,
-            note_id=card_obj.note.id,
-        ):
-            return False
-    elif scope.base_snapshot_at is not None:
-        note_created = card_obj.note.created_at or datetime.min
-        card_created = card_obj.created_at or datetime.min
-        if note_created > scope.base_snapshot_at or card_created > scope.base_snapshot_at:
-            return False
-    return True
+    # Share the exact membership policy with discovery and direct artifact
+    # reads, including immutable presentation pins and retired local apps.
+    return query_clone_scope_cards(scope).filter(Card.id == card_obj.id).first() is not None
+
 
 def is_note_type_visible_for_shared(
     note_type: NoteType,
@@ -2533,10 +2527,11 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteTy
             )
         )
 
+    raw_copies = []
     for template in sorted(source_note_type.templates, key=lambda item: item.position):
-        db.session.add(
-            Template(
+        copied_template = Template(
                 note_type_id=clone.id,
+                owner_user_id=user_id,
                 name=template.name,
                 front_html=template.front_html,
                 back_html=template.back_html,
@@ -2544,7 +2539,11 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteTy
                 position=template.position,
                 is_default=bool(template.is_default),
             )
-        )
+        db.session.add(copied_template)
+        raw_copies.append(copied_template)
+    # Exact provenance for this transaction only; never guess which templates
+    # in an existing installed NoteType were authored by the learner.
+    db.session.info.setdefault("flama.template_clone_compat", {})[clone.id] = raw_copies
 
     return clone
 
@@ -2872,9 +2871,24 @@ def resolve_clone_scope_for_local_deck(
     )
 
 def query_clone_scope_cards(scope: CloneDeckScope):
+    from app.repositories.template_library_repository import active_card_condition
     source_conditions = [Note.deck_id.in_(scope.source_deck_ids)]
     if scope.source_owner_user_id is not None:
         source_conditions.append(Note.user_id == scope.source_owner_user_id)
+    release = getattr(scope.install, "applied_release", None)
+    if release is not None and release.template_pins_initialized:
+        from app.repositories.template_release_repository import deck_pins
+        pins = deck_pins(db.session, release.id)
+        application_conditions = []
+        for template_id, pin in pins.items():
+            application_ids = list((pin.get("applications_json") or {}).keys())
+            for offset in range(0, len(application_ids), 500):
+                application_conditions.append(and_(Card.template_id == template_id, Card.application_id.in_(application_ids[offset:offset + 500])))
+        # A fully initialized empty manifest intentionally exposes no source
+        # presentations. Author draft attachments cannot enter old installs.
+        source_conditions.append(or_(*application_conditions) if application_conditions else false())
+    else:
+        source_conditions.append(active_card_condition())
     release_membership = release_note_membership_filter(scope.install, Note.id)
     if release_membership is not None:
         source_conditions.append(release_membership)
@@ -2890,6 +2904,7 @@ def query_clone_scope_cards(scope: CloneDeckScope):
         Note.user_id == scope.install.user_id,
         Note.deck_id.in_(scope.local_deck_ids),
         local_added_exists,
+        active_card_condition(),
     )
     return Card.query.join(Note, Card.note_id == Note.id).filter(
         or_(and_(*source_conditions), local_condition)
@@ -2930,7 +2945,7 @@ def resolve_clone_scope_for_card(
         if local_deck_id is None:
             continue
         scope = resolve_clone_scope_for_local_deck(user_id=user_id, local_deck_id=int(local_deck_id))
-        if scope is not None:
+        if scope is not None and query_clone_scope_cards(scope).filter(Card.id == card_obj.id).first() is not None:
             return scope
     return None
 
@@ -3837,6 +3852,10 @@ def install_shared_deck_item_for_user(
         cloned_root.note_type_id = next(iter(note_type_id_map.values()))
     local_deck_id = cloned_root.id
     install.local_deck_id = local_deck_id
+
+    db.session.flush()
+    from app.services.template_release_service import stage_install_template_subscriptions
+    stage_install_template_subscriptions(db.session, install_id=install.id, user_id=user_id)
 
     counter_started = time.perf_counter()
     _increment_counter(

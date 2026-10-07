@@ -1,0 +1,636 @@
+app/__init__.py:179:        Template,
+app/api/v1/flashcards/note_types.py:178:@note_types_bp.patch("/note-types/<note_type_id>/templates/<template_id>")
+app/api/v1/flashcards/note_types.py:180:def update_template(note_type_id: str, template_id: str):
+app/api/v1/flashcards/note_types.py:185:            template_id=template_id,
+app/api/v1/flashcards/note_types.py:193:@note_types_bp.delete("/note-types/<note_type_id>/templates/<template_id>")
+app/api/v1/flashcards/note_types.py:195:def delete_template(note_type_id: str, template_id: str):
+app/api/v1/flashcards/note_types.py:200:            template_id=template_id,
+app/api/v1/flashcards/note_types.py:207:@note_types_bp.post("/note-types/<note_type_id>/templates/<template_id>/reset")
+app/api/v1/flashcards/note_types.py:209:def reset_template(note_type_id: str, template_id: str):
+app/api/v1/flashcards/note_types.py:214:            template_id=template_id,
+app/api/v1/flashcards/note_types.py:221:@note_types_bp.post("/note-types/<note_type_id>/templates/<template_id>/preview")
+app/api/v1/flashcards/note_types.py:223:def preview_template(note_type_id: str, template_id: str):
+app/api/v1/flashcards/note_types.py:228:            template_id=template_id,
+app/api/v1/marketplace/note_types.py:103:    "/shared/note-types/<note_type_id>/templates/<template_id>/preview"
+app/api/v1/marketplace/note_types.py:106:    "/marketplace/note-types/<note_type_id>/templates/<template_id>/preview"
+app/api/v1/marketplace/note_types.py:109:def preview_shared_note_type_template(note_type_id: str, template_id: str):
+app/api/v1/marketplace/note_types.py:114:            template_id=template_id,
+app/cli.py:48:    Template,
+app/cli.py:794:    @click.option("--no-templates", is_flag=True, default=False, help="Skip Template URL-helper migration.")
+app/connect/__init__.py:176:        Template,
+app/email/renderer.py:112:        # 1. Finite Template Key validation
+app/email/renderer.py:144:        # 3. Check Category-Template compatibility
+app/presenters/vocabulary_presenter.py:264:    template_name = card_obj.template.name if card_obj.template else "Card"
+app/presenters/vocabulary_presenter.py:403:    if not card_obj or not card_obj.note or not card_obj.template:
+app/presenters/vocabulary_presenter.py:413:            template=card_obj.template,
+app/presenters/vocabulary_presenter.py:419:        ret["front"] = rendered.get("front_html", "")
+app/presenters/vocabulary_presenter.py:420:        ret["back"] = rendered.get("back_html", "")
+app/repositories/browse_card_repository.py:342:            selectinload(Card.template),
+app/repositories/flashcards_share_repository.py:33:    Template,
+app/repositories/flashcards_share_repository.py:396:def get_templates_by_note_type(note_type_id: str) -> List[Template]:
+app/repositories/flashcards_share_repository.py:399:        Template.query.filter_by(note_type_id=note_type_id)
+app/repositories/flashcards_share_repository.py:400:        .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
+app/repositories/study_card_editor_repository.py:16:            selectinload(Card.template),
+app/repositories/vocabulary_repository.py:466:    template_name = card_obj.template.name if card_obj.template else "Card"
+app/repositories/vocabulary_repository.py:1101:    if not card_obj or not card_obj.note or not card_obj.template:
+app/repositories/vocabulary_repository.py:1111:            template=card_obj.template,
+app/repositories/vocabulary_repository.py:1117:        ret["front"] = rendered.get("front_html", "")
+app/repositories/vocabulary_repository.py:1118:        ret["back"] = rendered.get("back_html", "")
+app/repositories/vocabulary_repository.py:1135:            selectinload(Card.template),
+app/repositories/vocabulary_repository.py:1167:                selectinload(Card.template),
+app/routes/flashcards/__init__.py:63:    Template,
+app/routes/flashcards/import_export.py:276:        flash("Template listing updated in study catalog.", "success")
+app/routes/flashcards/media.py:45:@flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>", methods=["DELETE"])
+app/routes/flashcards/media.py:47:def delete_template(note_type_id: str, template_id: str):
+app/routes/flashcards/media.py:55:                template_id=template_id,
+app/routes/flashcards/note_type.py:365:    return jsonify({"note_type_id": note_type.id, "template_id": template.id})
+app/routes/flashcards/share.py:183:@flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>", methods=["PATCH"])
+app/routes/flashcards/share.py:185:def patch_template(note_type_id: str, template_id: str):
+app/routes/flashcards/share.py:192:            template_id=template_id,
+app/routes/flashcards/share.py:204:@flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>/reset", methods=["POST"])
+app/routes/flashcards/share.py:206:def reset_template(note_type_id: str, template_id: str):
+app/routes/flashcards/share.py:213:            template_id=template_id,
+app/routes/flashcards/share.py:224:@flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>/preview", methods=["POST"])
+app/routes/flashcards/share.py:226:def preview_template(note_type_id: str, template_id: str):
+app/routes/flashcards/share.py:233:            template_id=template_id,
+app/routes/flashcards/share.py:287:@flashcards_bp.route("/api/shared/note-types/<note_type_id>/templates/<template_id>/preview", methods=["POST"])
+app/routes/flashcards/share.py:289:def preview_shared_note_type_template(note_type_id: str, template_id: str):
+app/routes/flashcards/share.py:295:            template_id=template_id,
+app/routes/flashcards/share.py:491:@flashcards_bp.route("/api/shared/decks/<deck_item_id>/templates/<template_id>/preview", methods=["POST"])
+app/routes/flashcards/share.py:493:def preview_shared_deck_template(deck_item_id: str, template_id: str):
+app/routes/flashcards/share.py:506:    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
+app/routes/flashcards/share.py:508:        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
+app/routes/flashcards/share.py:536:        return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
+app/routes/flashcards/study.py:429:            "template_id": selected_card.template.id,
+app/routes/flashcards/study.py:431:                "id": str(selected_card.template.id),
+app/routes/flashcards/study.py:482:        template=effective_context.template,
+app/routes/flashcards/study.py:490:        "template_id": effective_context.template.id,
+app/routes/flashcards/study.py:491:        "rendered_front_html": rendered["front_html"],
+app/routes/flashcards/study.py:492:        "rendered_back_html": rendered["back_html"],
+app/routes/flashcards/study.py:1144:            payload.get("message") or "Template compile error.",
+app/services/anki_sync_service.py:114:    later Template reorder cannot retarget it, and a removed Template's
+app/services/anki_sync_service.py:122:        key=lambda card: (int(card.template.position), str(card.template_id)),
+app/services/anki_sync_service.py:138:    by_position = {int(card.template.position): card for card in cards}
+app/services/browse_card_service.py:475:        selectinload(Card.template),
+app/services/connect/actions.py:71:from models.template import Template
+app/services/connect/actions.py:153:    if not note_type.templates:
+app/services/connect/actions.py:389:        templates = Template.query.filter_by(note_type_id=prepared.note_type.id).order_by(Template.position.asc()).all()
+app/services/connect/actions.py:391:            tmpl = Template(
+app/services/connect/actions.py:402:            db.session.add(Card(note_id=note.id, template_id=template.id))
+app/services/connect/base.py:68:from models.template import Template
+app/services/connect/dispatcher.py:68:from models.template import Template
+app/services/connect/import_cards.py:80:from models.template import Template
+app/services/connect/import_cards.py:137:    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+app/services/connect/import_cards.py:141:    existing_by_template = {card.template_id: card for card in note.cards}
+app/services/connect/import_cards.py:157:        if card.template_id not in expected_ids:
+app/services/connect/import_cards.py:161:            db.session.add(Card(note_id=note.id, template_id=template.id))
+app/services/connect/import_cards.py:174:    """Template reconcile under NOTE: add siblings first, then remove.
+app/services/connect/import_cards.py:181:    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+app/services/connect/import_cards.py:185:    existing_by_template = {card.template_id: card for card in note.cards}
+app/services/connect/import_cards.py:214:        new_card = Card(note_id=note.id, template_id=template.id)
+app/services/connect/import_cards.py:219:        str(card.id) for card in note.cards if card.template_id not in expected_ids
+app/services/connect/import_cards.py:260:    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+app/services/connect/import_cards.py:264:    existing_cards = {card.template_id: card for card in Card.query.filter_by(note_id=note.id).all()}
+app/services/connect/import_cards.py:684:        expected_template_ids = {template.id for template in prepared.note_type.templates}
+app/services/connect/import_cards.py:686:            card for card in note.cards if card.template_id not in expected_template_ids
+app/services/connect/import_session.py:69:from models.template import Template
+app/services/connect/import_session.py:193:        templates.append({"name": name, "front_html": front, "back_html": back, "shared_css": css})
+app/services/connect/import_session.py:200:                "front_html": f"{{{{{first_name}}}}}",
+app/services/connect/import_session.py:201:                "back_html": f"{{{{FrontSide}}}}<hr>{{{{{second_name}}}}}",
+app/services/connect/import_session.py:202:                "shared_css": "",
+app/services/connect/import_session.py:286:    if len(target.templates) < len(plan.templates):
+app/services/connect/import_session.py:320:    for index, template in enumerate(plan.templates):
+app/services/connect/import_session.py:322:            Template(
+app/services/connect/import_session.py:325:                front_html=template["front_html"],
+app/services/connect/import_session.py:326:                back_html=template["back_html"],
+app/services/connect/import_session.py:327:                shared_css=template["shared_css"],
+app/services/connect/import_session.py:352:                "front_html": template.front_html,
+app/services/connect/import_session.py:353:                "back_html": template.back_html,
+app/services/connect/import_session.py:354:                "shared_css": template.shared_css,
+app/services/connect/import_session.py:357:            for template in sorted(note_type.templates, key=lambda item: (item.position, item.id))
+app/services/connect/resolvers.py:68:from models.template import Template
+app/services/connect/resolvers.py:202:            selectinload(NoteType.templates),
+app/services/deck_count_projection_service.py:118:        or isinstance(obj, Card) and (obj in lifecycle or _changed(obj, ("note_id", "template_id", "note")))
+app/services/flashcard_content_service.py:50:from models.template import Template
+app/services/flashcard_content_service.py:56:    {"name", "front_html", "back_html", "shared_css"}
+app/services/flashcard_content_service.py:99:            selectinload(NoteType.templates),
+app/services/flashcard_content_service.py:773:        Template.query.filter_by(note_type_id=note_type.id)
+app/services/flashcard_content_service.py:774:        .order_by(Template.position.asc())
+app/services/flashcard_content_service.py:777:    template_ids = [str(row.id) for row in rows]
+app/services/flashcard_content_service.py:779:    if template_ids:
+app/services/flashcard_content_service.py:781:            str(template_id): int(count or 0)
+app/services/flashcard_content_service.py:782:            for template_id, count in db.session.query(
+app/services/flashcard_content_service.py:783:                Card.template_id,
+app/services/flashcard_content_service.py:786:            .filter(Card.template_id.in_(template_ids))
+app/services/flashcard_content_service.py:787:            .group_by(Card.template_id)
+app/services/flashcard_content_service.py:859:            Card.template_id == template.id,
+app/services/flashcard_content_service.py:883:    template_id: str,
+app/services/flashcard_content_service.py:887:    template = _template(note_type_id=note_type.id, template_id=template_id)
+app/services/flashcard_content_service.py:896:    if "front_html" in payload:
+app/services/flashcard_content_service.py:897:        template.front_html = str(payload.get("front_html") or "")
+app/services/flashcard_content_service.py:898:    if "back_html" in payload:
+app/services/flashcard_content_service.py:899:        template.back_html = str(payload.get("back_html") or "")
+app/services/flashcard_content_service.py:900:    if "shared_css" in payload:
+app/services/flashcard_content_service.py:901:        template.shared_css = str(payload.get("shared_css") or "")
+app/services/flashcard_content_service.py:915:            field="front_html",
+app/services/flashcard_content_service.py:920:        {"note_type_id": note_type.id, "template_id": template.id},
+app/services/flashcard_content_service.py:930:    template_id: str,
+app/services/flashcard_content_service.py:933:    template = _template(note_type_id=note_type.id, template_id=template_id)
+app/services/flashcard_content_service.py:938:    template.front_html = LEGACY_FRONT_TEMPLATE.strip()
+app/services/flashcard_content_service.py:939:    template.back_html = LEGACY_BACK_TEMPLATE.strip()
+app/services/flashcard_content_service.py:940:    template.shared_css = LEGACY_SHARED_CSS.strip()
+app/services/flashcard_content_service.py:949:    template_id: str,
+app/services/flashcard_content_service.py:952:    template = _template(note_type_id=note_type.id, template_id=template_id)
+app/services/flashcard_content_service.py:963:    if Template.query.filter_by(note_type_id=note_type.id).count() <= 1:
+app/services/flashcard_content_service.py:974:        .filter(Card.template_id == template.id)
+app/services/flashcard_content_service.py:978:    # Removing one Template is a partial sibling removal for every Note, and
+app/services/flashcard_content_service.py:1003:            .filter(Card.template_id == template.id)
+app/services/flashcard_content_service.py:1010:                "Template Cards changed while the deletion was admitted; retry.",
+app/services/flashcard_content_service.py:1024:    Card.query.filter_by(template_id=template.id).delete()
+app/services/flashcard_content_service.py:1029:        {"note_type_id": note_type.id, "template_id": template.id},
+app/services/flashcard_content_service.py:1039:    template_id: str,
+app/services/flashcard_content_service.py:1043:    template = _template(note_type_id=note_type.id, template_id=template_id)
+app/services/flashcard_content_service.py:1050:        front_html=str(payload.get("front_html") or "")
+app/services/flashcard_content_service.py:1051:        if "front_html" in payload
+app/services/flashcard_content_service.py:1052:        else template.front_html,
+app/services/flashcard_content_service.py:1053:        back_html=str(payload.get("back_html") or "")
+app/services/flashcard_content_service.py:1054:        if "back_html" in payload
+app/services/flashcard_content_service.py:1055:        else template.back_html,
+app/services/flashcard_content_service.py:1056:        shared_css=str(payload.get("shared_css") or "")
+app/services/flashcard_content_service.py:1057:        if "shared_css" in payload
+app/services/flashcard_content_service.py:1058:        else template.shared_css,
+app/services/flashcard_content_service.py:1098:            field="front_html",
+app/services/flashcard_content_service.py:1106:    front_html = str(payload.get("front_html") or "")
+app/services/flashcard_content_service.py:1107:    back_html = str(payload.get("back_html") or "")
+app/services/flashcard_content_service.py:1108:    shared_css = str(payload.get("shared_css") or "")
+app/services/flashcard_content_service.py:1172:        front_html=front_html,
+app/services/flashcard_content_service.py:1173:        back_html=back_html,
+app/services/flashcard_content_service.py:1174:        shared_css=shared_css,
+app/services/flashcard_content_service.py:1179:        (front_html + back_html + shared_css + json.dumps(sample_values)).encode("utf-8")
+app/services/flashcard_content_service.py:1194:            field="front_html",
+app/services/flashcard_content_service.py:1542:    (front_html, back_html, shared_css, name) in-place without deleting or
+app/services/flashcard_content_service.py:1555:        # Overwrites the live compatibility Template row in place.
+app/services/flashcard_content_service.py:1615:def _template(*, note_type_id: str, template_id: str) -> Template:
+app/services/flashcard_content_service.py:1616:    row = Template.query.filter_by(
+app/services/flashcard_content_service.py:1617:        id=template_id,
+app/services/flashcard_content_service.py:1623:            "Template not found.",
+app/services/flashcard_content_service.py:1704:        Template.query.filter_by(note_type_id=note.note_type_id)
+app/services/flashcard_content_service.py:1705:        .order_by(Template.position.asc())
+app/services/flashcard_content_service.py:1709:        db.session.add(Card(note=note, note_id=note.id, template_id=template.id))
+app/services/flashcard_import.py:22:from models.flashcard import Card, Note, Template
+app/services/flashcard_import.py:676:    templates: list[Template] = []
+app/services/flashcard_import.py:678:        templates = Template.query.filter_by(note_type_id=note_type.id).order_by(Template.position.asc()).all()
+app/services/flashcard_import.py:726:                    cards.append(Card(note_id=note.id, template_id=template.id))
+app/services/flashcard_legacy.py:5:from models.flashcard import FieldDef, NoteType, Template
+app/services/flashcard_legacy.py:304:def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Template]:
+app/services/flashcard_legacy.py:363:        db_session.query(Template)
+app/services/flashcard_legacy.py:364:        .filter(Template.note_type_id == note_type.id)
+app/services/flashcard_legacy.py:365:        .order_by(Template.position.asc(), Template.created_at.asc())
+app/services/flashcard_legacy.py:369:        template = Template(
+app/services/flashcard_legacy.py:372:            front_html=LEGACY_FRONT_TEMPLATE.strip(),
+app/services/flashcard_legacy.py:373:            back_html=LEGACY_BACK_TEMPLATE.strip(),
+app/services/flashcard_legacy.py:374:            shared_css=LEGACY_SHARED_CSS.strip(),
+app/services/flashcard_legacy.py:380:        template.front_html = LEGACY_FRONT_TEMPLATE.strip()
+app/services/flashcard_legacy.py:381:        template.back_html = LEGACY_BACK_TEMPLATE.strip()
+app/services/flashcard_legacy.py:382:        template.shared_css = LEGACY_SHARED_CSS.strip()
+app/services/flashcard_legacy.py:389:def ensure_quiz_note_type(db_session, user_id: int) -> tuple[NoteType, Template]:
+app/services/flashcard_legacy.py:439:        db_session.query(Template)
+app/services/flashcard_legacy.py:440:        .filter(Template.note_type_id == note_type.id)
+app/services/flashcard_legacy.py:441:        .order_by(Template.position.asc(), Template.created_at.asc())
+app/services/flashcard_legacy.py:445:        template = Template(
+app/services/flashcard_legacy.py:448:            front_html=QUIZ_FRONT_TEMPLATE.strip(),
+app/services/flashcard_legacy.py:449:            back_html=QUIZ_BACK_TEMPLATE.strip(),
+app/services/flashcard_legacy.py:450:            shared_css=QUIZ_SHARED_CSS.strip(),
+app/services/flashcard_legacy.py:456:        if not template.front_html:
+app/services/flashcard_legacy.py:457:            template.front_html = QUIZ_FRONT_TEMPLATE.strip()
+app/services/flashcard_legacy.py:458:        if not template.back_html:
+app/services/flashcard_legacy.py:459:            template.back_html = QUIZ_BACK_TEMPLATE.strip()
+app/services/flashcard_legacy.py:460:        if not template.shared_css:
+app/services/flashcard_legacy.py:461:            template.shared_css = QUIZ_SHARED_CSS.strip()
+app/services/flashcard_legacy.py:474:) -> Template | None:
+app/services/flashcard_legacy.py:478:    Template rows on every call.  Once a deck release references this note
+app/services/flashcard_legacy.py:497:        db_session.query(Template)
+app/services/flashcard_legacy.py:498:        .filter(Template.note_type_id == note_type.id)
+app/services/flashcard_legacy.py:499:        .order_by(Template.position.asc(), Template.created_at.asc())
+app/services/flashcard_media_normalizer.py:34:from models.template import Template
+app/services/flashcard_media_normalizer.py:442:        template_query = Template.query.options(joinedload(Template.note_type).selectinload(NoteType.field_defs))
+app/services/flashcard_media_normalizer.py:444:            template_query = template_query.join(NoteType, Template.note_type_id == NoteType.id).filter(NoteType.user_id == user_id)
+app/services/flashcard_media_normalizer.py:447:            template_query = template_query.filter(Template.note_type_id.in_(note_type_ids))
+app/services/flashcard_media_normalizer.py:450:            for attr_name in ("front_html", "back_html"):
+app/services/flashcard_media_normalizer.py:552:            template = db.session.get(Template, item.entity_id)
+app/services/flashcard_media_normalizer.py:553:            if template is None or item.field_name not in {"front_html", "back_html"}:
+app/services/flashcard_renderer.py:1:"""Template rendering and security helpers for flashcard v2."""
+app/services/flashcard_renderer.py:529:    Template-authored inline scripts are returned separately so untrusted field
+app/services/flashcard_renderer.py:1011:    css = sanitize_css(getattr(template, "shared_css", ""))
+app/services/flashcard_renderer.py:1016:                getattr(template, "front_html", "")
+app/services/flashcard_renderer.py:1017:                + getattr(template, "back_html", "")
+app/services/flashcard_renderer.py:1032:    front_source_raw = getattr(template, "front_html", "")
+app/services/flashcard_renderer.py:1033:    back_source_raw = getattr(template, "back_html", "")
+app/services/flashcard_renderer.py:1082:        "front_html": scoped_front,
+app/services/flashcard_renderer.py:1083:        "back_html": scoped_back,
+app/services/flashcards_share_service.py:41:    Template,
+app/services/flashcards_share_service.py:161:    """Return (front_html, back_html) for a new template.
+app/services/flashcards_share_service.py:252:    front_html = (template_payload.get("front_html") or default_front).strip()
+app/services/flashcards_share_service.py:253:    back_html = (template_payload.get("back_html") or default_back).strip()
+app/services/flashcards_share_service.py:254:    shared_css = (template_payload.get("shared_css") or "").strip()
+app/services/flashcards_share_service.py:255:    template = Template(
+app/services/flashcards_share_service.py:258:        front_html=front_html,
+app/services/flashcards_share_service.py:259:        back_html=back_html,
+app/services/flashcards_share_service.py:260:        shared_css=shared_css,
+app/services/flashcards_share_service.py:287:) -> tuple[Template | None, str | None]:
+app/services/flashcards_share_service.py:292:    name = (payload.get("name") or "").strip() or f"Card {Template.query.filter_by(note_type_id=note_type.id).count() + 1}"
+app/services/flashcards_share_service.py:296:    front_html = (payload.get("front_html") or default_front).strip()
+app/services/flashcards_share_service.py:297:    back_html = (payload.get("back_html") or default_back).strip()
+app/services/flashcards_share_service.py:298:    shared_css = (payload.get("shared_css") or "").strip()
+app/services/flashcards_share_service.py:300:    max_pos = db.session.query(db.func.max(Template.position)).filter_by(
+app/services/flashcards_share_service.py:303:    template = Template(
+app/services/flashcards_share_service.py:306:        front_html=front_html,
+app/services/flashcards_share_service.py:307:        back_html=back_html,
+app/services/flashcards_share_service.py:308:        shared_css=shared_css,
+app/services/flashcards_share_service.py:316:        db.session.add(Card(note_id=note.id, template_id=template.id))
+app/services/flashcards_share_service.py:318:    _audit(user_id, "template.create", {"note_type_id": note_type.id, "template_id": template.id})
+app/services/flashcards_share_service.py:326:def update_template(template: Template, user_id: int) -> None:
+app/services/flashcards_share_service.py:327:    _audit(user_id, "template.update", {"note_type_id": template.note_type_id, "template_id": template.id})
+app/services/flashcards_share_service.py:331:def reset_template(template: Template, default_front: str, default_back: str, default_css: str) -> None:
+app/services/flashcards_share_service.py:332:    template.front_html = default_front
+app/services/flashcards_share_service.py:333:    template.back_html = default_back
+app/services/flashcards_share_service.py:334:    template.shared_css = default_css
+app/services/flashcards_share_service.py:1083:    if not resolved_note_type.templates:
+app/services/flashcards_share_service.py:1122:    if not source_note_type.templates:
+app/services/flashcards_share_service.py:1340:                source_note_type.templates,
+app/services/flashcards_share_service.py:1516:    if not note_type.templates:
+app/services/flashcards_share_service.py:1656:    if not source_note_type.templates:
+app/services/flashcards_share_service.py:2393:                Template.query.filter_by(note_type_id=local_note_type_key)
+app/services/flashcards_share_service.py:2394:                .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
+app/services/flashcards_share_service.py:2398:                Template.query.filter_by(note_type_id=source_note_type_key)
+app/services/flashcards_share_service.py:2399:                .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
+app/services/flashcards_share_service.py:2417:            str(card.template_id): card
+app/services/flashcards_share_service.py:2422:            source_template_id = template_map.get(str(local_card.template_id))
+app/services/flashcards_share_service.py:2423:            if not source_template_id:
+app/services/flashcards_share_service.py:2426:                        f"Install {install.id}: cannot map local template_id={local_card.template_id} "
+app/services/flashcards_share_service.py:2431:            source_card = source_cards_by_template.get(str(source_template_id))
+app/services/flashcards_share_service.py:2435:                        f"Install {install.id}: source card not found for template_id={source_template_id} "
+app/services/flashcards_share_service.py:2536:    for template in sorted(source_note_type.templates, key=lambda item: item.position):
+app/services/flashcards_share_service.py:2538:            Template(
+app/services/flashcards_share_service.py:2541:                front_html=template.front_html,
+app/services/flashcards_share_service.py:2542:                back_html=template.back_html,
+app/services/flashcards_share_service.py:2543:                shared_css=template.shared_css,
+app/services/marketplace/hub/serializers.py:575:            "title": row.note_type.name if row.note_type else "Template",
+app/services/marketplace_note_type_service.py:15:from models.template import Template
+app/services/marketplace_note_type_service.py:374:    template_id: str,
+app/services/marketplace_note_type_service.py:383:    template = Template.query.filter_by(
+app/services/marketplace_note_type_service.py:384:        id=template_id, note_type_id=note_type.id
+app/services/marketplace_note_type_service.py:388:            "FIELD_NOT_FOUND", "Template not found.", status=404
+app/services/marketplace_note_type_service.py:403:            "TEMPLATE_COMPILE_ERROR", str(exc), field="front_html"
+app/services/marketplace_query_service.py:20:from models.flashcard import Card, Deck, DeckInstall, DeckMarketplaceItem, FieldDef, Note, NoteType, Template
+app/services/marketplace_query_service.py:50:def serialize_template(template: Template) -> dict[str, Any]:
+app/services/marketplace_query_service.py:55:        "front_html": template.front_html,
+app/services/marketplace_query_service.py:56:        "back_html": template.back_html,
+app/services/marketplace_query_service.py:57:        "shared_css": template.shared_css,
+app/services/marketplace_query_service.py:112:            for template in sorted(note_type.templates, key=lambda item: item.position)
+app/services/mcp/note_tools.py:202:                "template_id": str(card.template_id),
+app/services/mcp/note_tools.py:203:                "template_name": card.template.name if card.template else None,
+app/services/mcp/note_tools.py:480:    templates = list(note_type.templates)
+app/services/mcp/note_tools.py:483:            f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
+app/services/mcp/note_tools.py:492:        card = Card(note_id=note.id, template_id=template.id)
+app/services/mcp/note_tools.py:499:                "template_id": str(template.id),
+app/services/mcp/note_type_tools.py:34:from models.template import Template
+app/services/mcp/note_type_tools.py:63:                "template_count": len(nt.templates),
+app/services/mcp/note_type_tools.py:97:    sorted_templates = sorted(nt.templates, key=lambda item: item.position)
+app/services/mcp/note_type_tools.py:125:            "front_html": t.front_html,
+app/services/mcp/note_type_tools.py:126:            "back_html": t.back_html,
+app/services/mcp/note_type_tools.py:127:            "shared_css": t.shared_css or "",
+app/services/mcp/note_type_tools.py:268:            "NoteType phải có ít nhất một Template.",
+app/services/mcp/note_type_tools.py:280:                "front_html": f"{{{{{first_name}}}}}",
+app/services/mcp/note_type_tools.py:281:                "back_html": f"{{{{FrontSide}}}}\n<hr id=\"answer\">\n{{{{{second_name}}}}}",
+app/services/mcp/note_type_tools.py:282:                "shared_css": "",
+app/services/mcp/note_type_tools.py:289:        front_html = str(t.get("front_html") or f"{{{{{field_defs_objs[0].name}}}}}").strip()
+app/services/mcp/note_type_tools.py:290:        back_html = str(t.get("back_html") or f"{{{{FrontSide}}}}\n<hr id=\"answer\">\n{{{{{field_defs_objs[0].name}}}}}").strip()
+app/services/mcp/note_type_tools.py:291:        shared_css = str(t.get("shared_css") or "").strip()
+app/services/mcp/note_type_tools.py:293:        t_obj = Template(
+app/services/mcp/note_type_tools.py:296:            front_html=front_html,
+app/services/mcp/note_type_tools.py:297:            back_html=back_html,
+app/services/mcp/note_type_tools.py:298:            shared_css=shared_css,
+app/services/mcp/note_type_tools.py:332:            "id", "name", "front_html", "back_html", "shared_css", "position", "is_default",
+app/services/mcp/note_type_tools.py:333:        )} for row in sorted(nt.templates, key=lambda row: row.id)],
+app/services/mcp/note_type_tools.py:359:    current_template_map = {t.name: t for t in nt.templates}
+app/services/mcp/note_type_tools.py:360:    current_template_ids = {t.id: t for t in nt.templates}
+app/services/mcp/note_type_tools.py:439:                if t_name not in current_template_map and not (t_id and t_id in current_template_ids):
+app/services/mcp/note_type_tools.py:450:            cards_affected = Card.query.filter_by(template_id=tmpl_obj.id).count()
+app/services/mcp/note_type_tools.py:530:    current_template_map = {t.name: t for t in nt.templates}
+app/services/mcp/note_type_tools.py:531:    current_template_ids = {t.id: t for t in nt.templates}
+app/services/mcp/note_type_tools.py:577:            t_cards = Card.query.filter_by(template_id=tmpl_obj.id).count()
+app/services/mcp/note_type_tools.py:627:            # Template changes add/remove Cards on every Note of this type, so
+app/services/mcp/note_type_tools.py:648:            for relationship, model in (("templates", Template), ("field_defs", FieldDef)):
+app/services/mcp/note_type_tools.py:941:        current_templates = {t.name: t for t in nt.templates}
+app/services/mcp/note_type_tools.py:942:        current_template_ids = {t.id: t for t in nt.templates}
+app/services/mcp/note_type_tools.py:944:        removed_template_ids: set[str] = set()
+app/services/mcp/note_type_tools.py:946:            removed_template_ids = {
+app/services/mcp/note_type_tools.py:954:            removed_template_ids = {
+app/services/mcp/note_type_tools.py:962:            .filter(Card.template_id.in_(sorted(removed_template_ids)))
+app/services/mcp/note_type_tools.py:965:        ] if removed_template_ids else []
+app/services/mcp/note_type_tools.py:975:                    Card.query.filter_by(template_id=t_obj.id).delete(synchronize_session=False)
+app/services/mcp/note_type_tools.py:981:                t_obj = current_template_ids.get(t_id) if t_id else current_templates.get(t_name)
+app/services/mcp/note_type_tools.py:985:                    if "front_html" in upd:
+app/services/mcp/note_type_tools.py:986:                        t_obj.front_html = upd["front_html"]
+app/services/mcp/note_type_tools.py:987:                    if "back_html" in upd:
+app/services/mcp/note_type_tools.py:988:                        t_obj.back_html = upd["back_html"]
+app/services/mcp/note_type_tools.py:989:                    if "shared_css" in upd:
+app/services/mcp/note_type_tools.py:990:                        t_obj.shared_css = upd["shared_css"]
+app/services/mcp/note_type_tools.py:996:                new_t = Template(
+app/services/mcp/note_type_tools.py:999:                    front_html=str(add_t.get("front_html") or ""),
+app/services/mcp/note_type_tools.py:1000:                    back_html=str(add_t.get("back_html") or ""),
+app/services/mcp/note_type_tools.py:1001:                    shared_css=str(add_t.get("shared_css") or ""),
+app/services/mcp/note_type_tools.py:1002:                    position=int(add_t.get("position", len(nt.templates))),
+app/services/mcp/note_type_tools.py:1008:                    db.session.add(Card(note_id=note.id, template_id=new_t.id))
+app/services/mcp/note_type_tools.py:1015:                    Card.query.filter_by(template_id=curr_t.id).delete(synchronize_session=False)
+app/services/mcp/note_type_tools.py:1021:                t_obj = current_template_ids.get(t_id) if t_id else current_templates.get(t_name)
+app/services/mcp/note_type_tools.py:1026:                    if "front_html" in t:
+app/services/mcp/note_type_tools.py:1027:                        t_obj.front_html = t["front_html"]
+app/services/mcp/note_type_tools.py:1028:                    if "back_html" in t:
+app/services/mcp/note_type_tools.py:1029:                        t_obj.back_html = t["back_html"]
+app/services/mcp/note_type_tools.py:1030:                    if "shared_css" in t:
+app/services/mcp/note_type_tools.py:1031:                        t_obj.shared_css = t["shared_css"]
+app/services/mcp/note_type_tools.py:1036:                    new_t = Template(
+app/services/mcp/note_type_tools.py:1039:                        front_html=str(t.get("front_html") or ""),
+app/services/mcp/note_type_tools.py:1040:                        back_html=str(t.get("back_html") or ""),
+app/services/mcp/note_type_tools.py:1041:                        shared_css=str(t.get("shared_css") or ""),
+app/services/mcp/note_type_tools.py:1048:                        db.session.add(Card(note_id=note.id, template_id=new_t.id))
+app/services/mcp/note_type_tools.py:1051:        if not nt.templates:
+app/services/mcp/note_type_tools.py:1054:                "NoteType phải có ít nhất một Template.",
+app/services/mcp/study_tools.py:282:            template=card.template,
+app/services/mcp/study_tools.py:293:                "template_name": card.template.name if card.template else None,
+app/services/mcp/study_tools.py:298:                "front_html": rendered.get("front_html"),
+app/services/mcp/study_tools.py:299:                "back_html": rendered.get("back_html"),
+app/services/mcp/study_tools.py:358:        template=card.template,
+app/services/mcp/study_tools.py:368:        "template_id": str(card.template_id),
+app/services/mcp/study_tools.py:369:        "template_name": card.template.name if card.template else None,
+app/services/mcp/study_tools.py:379:        "front_html": rendered.get("front_html"),
+app/services/mcp/study_tools.py:380:        "back_html": rendered.get("back_html"),
+app/services/mcp_tool_registry.py:1145:                        "name": {"type": "string", "description": "Template card name (e.g. 'Card 1')"},
+app/services/mcp_tool_registry.py:1146:                        "front_html": {"type": "string", "description": "Front card HTML markup with {{Field}} placeholders"},
+app/services/mcp_tool_registry.py:1147:                        "back_html": {"type": "string", "description": "Back card HTML markup with {{Field}} and {{FrontSide}} placeholders"},
+app/services/mcp_tool_registry.py:1148:                        "shared_css": {"type": "string", "description": "Optional shared CSS styling"},
+app/services/note_sync_service.py:23:from models.template import Template
+app/services/note_sync_service.py:256:    if not note_type.templates:
+app/services/note_sync_service.py:258:            f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
+app/services/note_sync_service.py:500:    templates = list(note_type.templates)
+app/services/note_sync_service.py:503:            f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
+app/services/note_sync_service.py:672:                card = Card(note_id=new_note.id, template_id=tmpl.id)
+app/services/note_type_service.py:6:from models.flashcard import NoteType, Template
+app/services/note_type_service.py:15:def ensure_legacy_note_type_and_commit(user_id: int) -> tuple[NoteType, Template]:
+app/services/note_type_service.py:20:    _audit("note_type.seed_default", {"note_type_id": note_type.id, "template_id": template.id})
+app/services/note_type_service.py:23:        {"note_type_id": quiz_note_type.id, "template_id": quiz_template.id},
+app/services/payment/checkout.py:75:            "Template này hiện không mở bán hoặc không còn khả dụng để thanh toán.",
+app/services/payment/checkout.py:87:            "Template này hiện không yêu cầu thanh toán.",
+app/services/payment/fulfillment.py:57:            raise PaymentServiceError("FIELD_NOT_FOUND", "Template da thanh toan khong con ton tai de cap quyen.", status=404)
+app/services/payment/presenters.py:43:    "note_type": "Template",
+app/services/payment_service.py:978:            "Template này hiện không mở bán hoặc không còn khả dụng để thanh toán.",
+app/services/payment_service.py:990:            "Template này hiện không yêu cầu thanh toán.",
+app/services/payment_service.py:1603:            raise PaymentServiceError("FIELD_NOT_FOUND", "Template đã thanh toán không còn tồn tại để cấp quyền.", status=404)
+app/services/payment_service.py:1700:            raise PaymentServiceError("FIELD_NOT_FOUND", "Template da thanh toan khong con ton tai de cap quyen.", status=404)
+app/services/seeding_service.py:56:from models.template import Template
+app/services/seeding_service.py:238:            template_id=template.id,
+app/services/seeding_service.py:257:        template_id=quiz_template.id,
+app/services/seeding_service.py:315:        Template.query.filter_by(note_type_id=legacy_note_type.id)
+app/services/seeding_service.py:316:        .order_by(Template.position.asc(), Template.created_at.asc())
+app/services/seeding_service.py:409:            Template.query.filter_by(note_type_id=quiz_note_type.id)
+app/services/seeding_service.py:410:            .order_by(Template.position.asc(), Template.created_at.asc())
+app/services/seeding_service.py:553:    template_id: str,
+app/services/seeding_service.py:588:            template_id=template_id,
+app/services/seeding_service.py:601:            template_id=template_id,
+app/services/seeding_service.py:614:    template_id: str,
+app/services/seeding_service.py:639:            template_id=template_id,
+app/services/seeding_service.py:669:            template_id=template_id,
+app/services/seeding_service.py:701:    template_id: str,
+app/services/seeding_service.py:769:                template_id=template_id,
+app/services/seeding_service.py:1244:    template_id: str,
+app/services/seeding_service.py:1334:    cards = [Card(note_id=note.id, template_id=template_id) for note in notes]
+app/services/share/cutover.py:84:from models.template import Template
+app/services/share/cutover.py:434:                Template.query.filter_by(note_type_id=local_note_type_key)
+app/services/share/cutover.py:435:                .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
+app/services/share/cutover.py:439:                Template.query.filter_by(note_type_id=source_note_type_key)
+app/services/share/cutover.py:440:                .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
+app/services/share/cutover.py:458:            str(card.template_id): card
+app/services/share/cutover.py:464:            source_template_id = template_map.get(str(local_card.template_id))
+app/services/share/cutover.py:465:            if not source_template_id:
+app/services/share/cutover.py:468:                        f"Install {install.id}: cannot map local template_id={local_card.template_id} "
+app/services/share/cutover.py:473:            source_card = source_cards_by_template.get(str(source_template_id))
+app/services/share/cutover.py:477:                        f"Install {install.id}: source card not found for template_id={source_template_id} "
+app/services/share/helpers.py:297:    if not resolved_note_type.templates:
+app/services/share/helpers.py:337:    if not source_note_type.templates:
+app/services/share/install.py:79:from models.template import Template
+app/services/share/note_types.py:79:from models.template import Template
+app/services/share/note_types.py:163:    front_html = (template_payload.get("front_html") or "{{Word}}").strip()
+app/services/share/note_types.py:164:    back_html = (template_payload.get("back_html") or "{{Word}}").strip()
+app/services/share/note_types.py:165:    shared_css = (template_payload.get("shared_css") or "").strip()
+app/services/share/note_types.py:166:    template = Template(
+app/services/share/note_types.py:169:        front_html=front_html,
+app/services/share/note_types.py:170:        back_html=back_html,
+app/services/share/note_types.py:171:        shared_css=shared_css,
+app/services/share/note_types.py:193:def create_template(note_type_id: str, user_id: int, payload: dict) -> tuple[Template | None, str | None]:
+app/services/share/note_types.py:198:    name = (payload.get("name") or "").strip() or f"Card {Template.query.filter_by(note_type_id=note_type.id).count() + 1}"
+app/services/share/note_types.py:199:    front_html = (payload.get("front_html") or "{{Word}}").strip()
+app/services/share/note_types.py:200:    back_html = (payload.get("back_html") or "{{Word}}").strip()
+app/services/share/note_types.py:201:    shared_css = (payload.get("shared_css") or "").strip()
+app/services/share/note_types.py:203:    max_pos = db.session.query(db.func.max(Template.position)).filter_by(note_type_id=note_type.id).scalar() or -1
+app/services/share/note_types.py:204:    template = Template(
+app/services/share/note_types.py:207:        front_html=front_html,
+app/services/share/note_types.py:208:        back_html=back_html,
+app/services/share/note_types.py:209:        shared_css=shared_css,
+app/services/share/note_types.py:217:        db.session.add(Card(note_id=note.id, template_id=template.id))
+app/services/share/note_types.py:219:    _audit(user_id, "template.create", {"note_type_id": note_type.id, "template_id": template.id})
+app/services/share/note_types.py:225:def update_template(template: Template, user_id: int) -> None:
+app/services/share/note_types.py:226:    _audit(user_id, "template.update", {"note_type_id": template.note_type_id, "template_id": template.id})
+app/services/share/note_types.py:231:def reset_template(template: Template, default_front: str, default_back: str, default_css: str) -> None:
+app/services/share/note_types.py:232:    template.front_html = default_front
+app/services/share/note_types.py:233:    template.back_html = default_back
+app/services/share/note_types.py:234:    template.shared_css = default_css
+app/services/share/note_types.py:318:    if not note_type.templates:
+app/services/share/note_types.py:534:    for template in sorted(source_note_type.templates, key=lambda item: item.position):
+app/services/share/note_types.py:536:            Template(
+app/services/share/note_types.py:539:                front_html=template.front_html,
+app/services/share/note_types.py:540:                back_html=template.back_html,
+app/services/share/note_types.py:541:                shared_css=template.shared_css,
+app/services/share/overlay.py:79:from models.template import Template
+app/services/share/publish.py:79:from models.template import Template
+app/services/share/publish.py:474:    if not source_note_type.templates:
+app/services/share/publish.py:700:                source_note_type.templates,
+app/services/study_application_service.py:1:"""Stage a repeated application of a Template to its NoteType (Phase 6, D6-09).
+app/services/study_application_service.py:3:A repeated application is a new occurrence of an existing Template with its
+app/services/study_application_service.py:5:sibling vector through the same NOTE expansion that adds a Template, so every
+app/services/study_application_service.py:22:from models.template import Template
+app/services/study_application_service.py:25:def stage_repeated_application(session, *, routes, template: Template, occurrence_key: str,
+app/services/study_application_service.py:43:            StudyApplication.template_id == template.id,
+app/services/study_application_service.py:48:            "APPLICATION_OCCURRENCE_EXISTS", "This Template already has that occurrence."
+app/services/study_application_service.py:66:        template_id=template.id,
+app/services/study_application_service.py:76:        Card(note_id=note_id, template_id=template.id, application=application,
+app/services/study_artifact_service.py:118:            template=card.template,
+app/services/study_artifact_service.py:147:        template=card.template,
+app/services/study_artifact_service.py:155:    template = context.template
+app/services/study_artifact_service.py:160:            "template_id": template.id,
+app/services/study_artifact_service.py:161:            "front_source": template.front_html or "",
+app/services/study_artifact_service.py:162:            "back_source": template.back_html or "",
+app/services/study_artifact_service.py:163:            "shared_css": template.shared_css or "",
+app/services/study_artifact_service.py:201:        context.template.front_html or "",
+app/services/study_artifact_service.py:205:        context.template.back_html or "",
+app/services/study_artifact_service.py:211:        "id": str(context.template.id),
+app/services/study_artifact_service.py:217:        "shared_css": sanitize_css(context.template.shared_css or ""),
+app/services/study_artifact_service.py:224:        str(context.template.front_html or ""),
+app/services/study_artifact_service.py:225:        str(context.template.back_html or ""),
+app/services/study_card_editor_service.py:146:    rendered_front_html = ""
+app/services/study_card_editor_service.py:147:    rendered_back_html = ""
+app/services/study_card_editor_service.py:150:    if render_result and card.template:
+app/services/study_card_editor_service.py:153:                template=card.template,
+app/services/study_card_editor_service.py:158:            rendered_front_html = rendered.get("front_html", "")
+app/services/study_card_editor_service.py:159:            rendered_back_html = rendered.get("back_html", "")
+app/services/study_card_editor_service.py:163:            rendered_front_html = f"<div class='text-danger'>Error rendering front: {exc}</div>"
+app/services/study_card_editor_service.py:164:            rendered_back_html = f"<div class='text-danger'>Error rendering back: {exc}</div>"
+app/services/study_card_editor_service.py:182:                "rendered_front_html": rendered_front_html,
+app/services/study_card_editor_service.py:183:                "rendered_back_html": rendered_back_html,
+app/services/study_composition_service.py:3:Phase 3 keeps the current Template/Card rows as compatibility authority while
+app/services/study_composition_service.py:20:from models.template import Template
+app/services/study_composition_service.py:59:    template_id: str
+app/services/study_composition_service.py:98:    template_id: str | int,
+app/services/study_composition_service.py:100:    return f"comp:notetype:{note_type_id}:template:{template_id}"
+app/services/study_composition_service.py:108:    template_id: str | int,
+app/services/study_composition_service.py:115:        f"notetype:{note_type_id}:template:{template_id}"
+app/services/study_composition_service.py:120:    template: Template,
+app/services/study_composition_service.py:132:    template_id = str(template.id)
+app/services/study_composition_service.py:139:            template_id,
+app/services/study_composition_service.py:148:            template_id=template_id,
+app/services/study_composition_service.py:150:    definition_id = f"legacy-template:{template_id}"
+app/services/study_composition_service.py:156:        template_id=template_id,
+app/services/study_composition_service.py:193:        Template,
+app/services/study_composition_service.py:194:        card.template_id,
+app/services/study_composition_service.py:197:        raise ValueError(f"Card {card.id} references missing template {card.template_id}")
+app/services/study_composition_service.py:210:        Template.query.filter(Template.note_type_id == str(note_type_id))
+app/services/study_composition_service.py:211:        .options(joinedload(Template.note_type))
+app/services/study_composition_service.py:212:        .order_by(Template.position.asc(), Template.id.asc())
+app/services/study_composition_service.py:224:        positions.get(item.template_id, 0),
+app/services/study_composition_service.py:225:        item.template_id,
+app/services/study_composition_service.py:246:            Card.template_id,
+app/services/study_composition_service.py:257:        .group_by(Card.template_id, Note.deck_id, Note.user_id)
+app/services/study_composition_service.py:264:    for card_id, template_id, deck_id, note_user_id in rows:
+app/services/study_composition_service.py:275:        samples.setdefault((str(template_id), context_kind), str(card_id))
+app/services/study_composition_service.py:279:    # composition; only Template and NoteType metadata are needed.
+app/services/study_composition_service.py:280:    template_ids = sorted({template_id for template_id, _kind in samples})
+app/services/study_composition_service.py:281:    templates: dict[str, Template] = {}
+app/services/study_composition_service.py:282:    for offset in range(0, len(template_ids), 500):
+app/services/study_composition_service.py:284:            Template.query.options(joinedload(Template.note_type))
+app/services/study_composition_service.py:285:            .filter(Template.id.in_(template_ids[offset:offset + 500]))
+app/services/study_composition_service.py:290:        template_id: int(template.position or 0)
+app/services/study_composition_service.py:291:        for template_id, template in templates.items()
+app/services/study_composition_service.py:294:    for (template_id, context_kind), card_id in samples.items():
+app/services/study_composition_service.py:295:        template = templates.get(template_id)
+app/services/study_composition_service.py:297:            raise ValueError(f"Card {card_id} references missing template {template_id}")
+app/services/study_composition_service.py:314:    template_ids = sorted({item.template_id for item in compositions})
+app/services/study_composition_service.py:316:    for offset in range(0, len(template_ids), 500):
+app/services/study_composition_service.py:318:            (str(template_id), int(position or 0))
+app/services/study_composition_service.py:319:            for template_id, position in db.session.query(Template.id, Template.position)
+app/services/study_composition_service.py:320:            .filter(Template.id.in_(template_ids[offset:offset + 500]))
+app/services/study_composition_service.py:354:        (str(item.template_id), item.context_kind): item.composition_id
+app/services/study_composition_service.py:364:            Card.template_id,
+app/services/study_composition_service.py:372:        .group_by(Card.template_id, Note.deck_id, Note.user_id)
+app/services/study_composition_service.py:378:    for template_id, deck_id, note_user_id, note_count in rows:
+app/services/study_composition_service.py:389:        composition_id = key_to_id.get((str(template_id), context_kind))
+app/services/study_composition_service.py:434:    template_id = _template_id_from_composition_id(requested_composition_id)
+app/services/study_composition_service.py:435:    if template_id is None:
+app/services/study_composition_service.py:441:    if db.session.get(Template, template_id) is None:
+app/services/study_composition_service.py:461:    filtered = query.filter(Card.template_id == item.template_id)
+app/services/study_composition_service.py:483:def _template_id_from_composition_id(composition_id: str) -> str | None:
+app/services/study_content_delete_service.py:13:Expansion: a new Template sibling inherits its Note's row; nothing is staged.
+app/services/study_content_delete_service.py:215:    """A new Template sibling inherits its Note's row (ADR P10 §2.3): nothing to lock."""
+app/services/study_content_delete_service.py:227:            "Content learners changed while the Template change was admitted; retry.",
+app/services/study_note_attribution_service.py:9:* a Template without a compatibility occurrence gets one;
+app/services/study_note_attribution_service.py:10:* a Card without an occurrence is bound to its Template's compatibility
+app/services/study_note_attribution_service.py:36:from models.template import Template
+app/services/study_note_attribution_service.py:66:            StudyApplication.template_id == Template.id,
+app/services/study_note_attribution_service.py:71:    return select(Template.id, Template.note_type_id, Template.position).where(~compat)
+app/services/study_note_attribution_service.py:105:                "template_id": template_id,
+app/services/study_note_attribution_service.py:112:            for template_id, note_type_id, position in rows
+app/services/study_note_attribution_service.py:122:            select(Card.id, Card.note_id, Card.template_id)
+app/services/study_note_attribution_service.py:132:            select(StudyApplication.template_id, StudyApplication.id).where(
+app/services/study_note_attribution_service.py:133:                StudyApplication.template_id.in_({row[2] for row in rows}),
+app/services/study_note_attribution_service.py:147:        for card_id, note_id, template_id in rows:
+app/services/study_note_attribution_service.py:148:            application_id = compat.get(template_id)
+app/services/study_note_attribution_service.py:150:                continue  # its Template was removed meanwhile; the Card cascades
+app/services/study_note_template_service.py:20:from models.template import Template
+app/services/study_note_template_service.py:38:            raise _invalid("Template ID must be a string.")
+app/services/study_note_template_service.py:40:            raise _invalid("Template name must be a string.")
+app/services/study_note_template_service.py:43:            raise _invalid("Template ID does not identify an existing template of this NoteType.")
+app/services/study_note_template_service.py:51:                raise _invalid("Template name must contain 1 to 255 characters.")
+app/services/study_note_template_service.py:56:                raise _invalid("Template position must be an integer.") from exc
+app/services/study_note_template_service.py:91:        raise _invalid("Template names must be unambiguous within the requested schema.")
+app/services/study_note_template_service.py:104:    current = tuple(session.execute(select(Template).where(Template.note_type_id == note_type.id)
+app/services/study_note_template_service.py:105:        .order_by(Template.position, Template.id).with_for_update()
+app/services/study_note_template_service.py:121:        template = Template(note_type_id=note_type.id, name=data["name"],
+app/services/study_note_template_service.py:122:            front_html=str(data.get("front_html") or ""), back_html=str(data.get("back_html") or ""),
+app/services/study_note_template_service.py:123:            shared_css=str(data.get("shared_css") or ""), position=data.get("position", len(current) + index),
+app/services/study_note_template_service.py:127:        cards = [Card(note_id=note_id, template_id=template.id, created_at=now, updated_at=now) for note_id in note_ids]
+app/services/study_note_template_service.py:136:            .where(Card.template_id.in_(sorted(removed))).order_by(Card.note_id, Card.id).with_for_update()).scalars())
+app/services/study_note_template_service.py:146:        session.query(Card).filter(Card.template_id.in_(sorted(removed))).delete(synchronize_session=False)
+app/services/study_note_template_service.py:152:        for key in ("name", "front_html", "back_html", "shared_css", "position"):
+app/services/study_progress_lifecycle_mirror_service.py:5:transitions). Adding or removing a Template writes no progress: Cards carry
+app/services/study_session_config.py:107:    template_id = selected.get("template_id")
+app/services/study_session_config.py:113:        not isinstance(template_id, str)
+app/services/study_session_config.py:114:        or not template_id
+app/services/study_session_config.py:115:        or definition_id != f"legacy-template:{template_id}"
+app/services/study_session_service.py:125:from models.template import Template
+app/services/study_session_service.py:576:    # Each Card's Note, media and Template are read below; load them in three
+app/services/study_session_service.py:581:            selectinload(Card.template),
+app/services/study_session_service.py:825:                "template_id": str(card.template_id),
+app/services/study_session_service.py:1097:            db.session.query(Template.id)
+app/services/study_session_service.py:1098:            .join(Card, Card.template_id == Template.id)
+app/services/study_session_service.py:1102:                Template.updated_at > threshold,
+app/services/template_tokens.py:146:    front_html: str | None,
+app/services/template_tokens.py:147:    back_html: str | None,
+app/services/template_tokens.py:148:    shared_css: str | None,
+app/services/template_tokens.py:152:        "front_html": front_html or "",
+app/services/template_tokens.py:153:        "back_html": back_html or "",
+app/services/template_tokens.py:154:        "shared_css": shared_css or "",
+app/template_formatters.py:1:"""Template helpers for comma-separated numeric display."""
+app/validators/mcp.py:248:                raise RequestValidationError(f"Template ở vị trí {idx} phải là JSON object.", field=f"templates[{idx}]", status=400, code="INVALID_PARAMS")
+app/validators/mcp.py:256:                "front_html": str(t.get("front_html") or "").strip(),
+app/validators/mcp.py:257:                "back_html": str(t.get("back_html") or "").strip(),
+app/validators/mcp.py:258:                "shared_css": str(t.get("shared_css") or "").strip(),
+models/card.py:16:    template_id = db.Column(db.String(36), db.ForeignKey("templates.id", ondelete="CASCADE"), nullable=False, index=True)
+models/card.py:29:    template = db.relationship("Template", back_populates="cards")
+models/card.py:33:    # One Card per (Note, occurrence). A Template applied twice has two
+models/card.py:34:    # occurrences, so (note_id, template_id) is no longer unique (D6-09).
+models/connect_source_card_ref.py:34:    # NULL once the Card is removed (Template deletion): the ref, its ordinal
+models/connect_source_card_ref.py:91:    The Note survives Template and Card removal, so the external mapping and
+models/flashcard.py:43:from models.template import Template
+models/flashcard.py:87:    "Template",
+models/note_type.py:56:        "Template",
+models/note_type.py:59:        order_by="Template.position",
+models/study_application.py:3:An application is where one definition (today a ``Template``) is applied to a
+models/study_application.py:6:Template twice creates a second occurrence and Cards, never a second progress.
+models/study_application.py:8:Every Template has one compatibility occurrence (``occurrence_key = 'compat'``)
+models/study_application.py:10:``comp:notetype:{note_type_id}:template:{template_id}`` for old Cards and
+models/study_application.py:12:so a later Template reorder cannot retarget it.
+models/study_application.py:36:    template_id = db.Column(
+models/study_application.py:49:    template = db.relationship("Template")
+models/study_application.py:55:            "template_id",
+models/study_application.py:72:    from models.template import Template
+models/study_application.py:78:        if isinstance(pending, Template) and pending.id == card.template_id:
+models/study_application.py:80:    if card.template_id is None:
+models/study_application.py:82:    return session.get(Template, card.template_id)
+models/study_application.py:91:    # Relationships, not IDs: a Template or NoteType added in this same flush
+models/study_application.py:93:    application.template = template
+models/study_application.py:103:    """The single Card-creation seam: every Template and Card has an occurrence.
+models/study_application.py:105:    A new Template gets its compatibility occurrence (``source_ord`` = its
+models/study_application.py:109:    bound to its Template's compatibility occurrence. A caller that applies a
+models/study_application.py:110:    Template again sets ``application`` itself.
+models/study_application.py:114:    from models.template import Template
+models/study_application.py:116:    removed_template_ids = sorted(
+models/study_application.py:119:        if isinstance(item, Template) and item.id is not None
+models/study_application.py:121:    if removed_template_ids:
+models/study_application.py:122:        # The occurrence goes with its Template (the FK cascades on MySQL;
+models/study_application.py:127:                .where(StudyApplication.template_id.in_(removed_template_ids))
+models/study_application.py:132:    new_templates = [item for item in pending if isinstance(item, Template)]
+models/study_application.py:160:                        StudyApplication.template_id == template.id,
+models/template.py:7:class Template(db.Model):
+models/template.py:13:    front_html = db.Column(db.Text, nullable=False, default="")
+models/template.py:14:    back_html = db.Column(db.Text, nullable=False, default="")
+models/template.py:15:    shared_css = db.Column(db.Text, nullable=False, default="")

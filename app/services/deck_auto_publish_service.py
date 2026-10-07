@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
 from app.services import deck_release_service
+from app.services import release_core
 from models import db
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
@@ -22,18 +22,7 @@ def _utcnow() -> datetime:
 
 def next_auto_version(current_label: str | None) -> str:
     """Generate the next patch semver version label."""
-    if not current_label or not str(current_label).strip():
-        return "1.0.0"
-    label = str(current_label).strip()
-    match = re.match(r"^(\d+)\.(\d+)\.(\d+)$", label)
-    if match:
-        major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
-        return f"{major}.{minor}.{patch + 1}"
-    v_match = re.match(r"^v?(\d+)$", label, re.IGNORECASE)
-    if v_match:
-        seq = int(v_match.group(1))
-        return f"v{seq + 1}"
-    return f"{label}.1"
+    return release_core.next_auto_version(current_label)
 
 
 def get_auto_publish_status(
@@ -145,7 +134,12 @@ def trigger_auto_publish_for_deck_item(
         else -1
     )
 
-    if current_release is not None and working_revision <= current_release_rev:
+    if not release_core.should_auto_publish(
+        enabled=item.auto_publish_enabled,
+        eligible=item.publish_status not in {"archived", "private"},
+        revision=working_revision,
+        published_revision=current_release_rev if current_release is not None else None,
+    ):
         # No working-tree changes since last release
         return None
 

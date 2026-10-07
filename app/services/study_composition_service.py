@@ -9,6 +9,7 @@ logical install so two overlays cannot silently share presentation context.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.orm import joinedload
@@ -17,7 +18,9 @@ from models import db
 from models.card import Card
 from models.note import Note
 from models.note_type import NoteType
+from models.study_application import COMPAT_OCCURRENCE_KEY, StudyApplication
 from models.template import Template
+from app.repositories.template_library_repository import active_card_condition
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.services import flashcards_share_service
 from app.services.study_action_runtime import REVIEW_TRIGGER_CONTRACT_VERSION
@@ -127,11 +130,14 @@ def build_compatibility_composition(
     trigger_contract_version: str = REVIEW_TRIGGER_CONTRACT_VERSION,
     algorithm_key: str = DEFAULT_ALGORITHM_IDENTITY.key,
     algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version,
+    note_type: Any = None,
+    application: Any = None,
 ) -> AppliedComposition:
-    note_type_id = str(template.note_type_id)
+    note_type = note_type if note_type is not None else getattr(template, "note_type", None)
+    note_type_id = str(getattr(note_type, "id", None) or template.note_type_id)
     template_id = str(template.id)
     note_type_name = str(
-        getattr(getattr(template, "note_type", None), "name", "") or ""
+        getattr(note_type, "name", "") or ""
     )
     if context_kind == CONTEXT_OWNED:
         composition_id = make_compatibility_composition_id(
@@ -148,18 +154,21 @@ def build_compatibility_composition(
             template_id=template_id,
         )
     definition_id = f"legacy-template:{template_id}"
+    repeated = application is not None and application.occurrence_key != COMPAT_OCCURRENCE_KEY
+    if repeated:
+        composition_id += f":application:{application.id}"
     return AppliedComposition(
         composition_id=composition_id,
         mode_key=mode_key,
         note_type_id=note_type_id,
         note_type_name=note_type_name,
         template_id=template_id,
-        template_name=str(template.name or ""),
-        is_default=bool(template.is_default),
+        template_name=str(getattr(application, "display_name", None) or template.name or ""),
+        is_default=bool(application.is_default if application is not None else template.is_default),
         context_kind=context_kind,
         install_id=str(install_id) if install_id else None,
         definition_id=definition_id,
-        application_id=composition_id,
+        application_id=str(application.id) if repeated else composition_id,
         interaction_key=interaction_key,
         trigger_key=trigger_key,
         trigger_contract_version=trigger_contract_version,
@@ -198,6 +207,8 @@ def resolve_compatibility_composition_for_card(
     context_kind = _card_context_kind(card, clone_scope)
     return build_compatibility_composition(
         template,
+        note_type=getattr(getattr(card, "note", None), "note_type", None),
+        application=getattr(card, "application", None),
         context_kind=context_kind,
         install_id=(str(clone_scope.install.id) if clone_scope is not None else None),
     )
@@ -206,13 +217,25 @@ def resolve_compatibility_composition_for_card(
 def resolve_compatibility_compositions_for_note_type(
     note_type_id: str | int,
 ) -> list[AppliedComposition]:
+    applications = StudyApplication.query.filter(
+        StudyApplication.note_type_id == str(note_type_id),
+        StudyApplication.status_code == "ACTIVE",
+    ).options(joinedload(StudyApplication.template), joinedload(StudyApplication.note_type)).order_by(
+        StudyApplication.position.asc(), StudyApplication.id.asc(),
+    ).all()
+    compositions = [build_compatibility_composition(
+        item.template, note_type=item.note_type, application=item,
+    ) for item in applications]
     templates = (
         Template.query.filter(Template.note_type_id == str(note_type_id))
+        .filter(~Template.id.in_(db.session.query(StudyApplication.template_id).filter(
+            StudyApplication.note_type_id == str(note_type_id),
+        )))
         .options(joinedload(Template.note_type))
         .order_by(Template.position.asc(), Template.id.asc())
         .all()
     )
-    return [build_compatibility_composition(item) for item in templates]
+    return compositions + [build_compatibility_composition(item) for item in templates]
 
 
 def _composition_sort_key(
@@ -221,7 +244,7 @@ def _composition_sort_key(
     return (
         item.note_type_name.casefold(),
         item.note_type_id,
-        positions.get(item.template_id, 0),
+        positions.get(item.composition_id, positions.get(item.application_id, positions.get(item.template_id, 0))),
         item.template_id,
         item.context_kind,
         item.composition_id,
@@ -236,7 +259,8 @@ def list_available_compositions_for_query(
     """Return deterministic compositions backed by cards in an effective scope."""
 
     eligible_card_ids = (
-        query.with_entities(Card.id.label("card_id"))
+        (query.filter(active_card_condition()) if clone_scope is None else query)
+        .with_entities(Card.id.label("card_id"))
         .order_by(None)
         .subquery()
     )
@@ -244,24 +268,37 @@ def list_available_compositions_for_query(
         db.session.query(
             db.func.min(Card.id).label("sample_card_id"),
             Card.template_id,
+            Card.application_id,
+            Note.note_type_id,
+            NoteType.name.label("note_type_name"),
+            StudyApplication.occurrence_key,
+            StudyApplication.display_name,
+            StudyApplication.position,
+            StudyApplication.is_default,
             Note.deck_id,
             Note.user_id,
         )
         .join(Note, Card.note_id == Note.id)
+        .join(NoteType, Note.note_type_id == NoteType.id)
+        .outerjoin(StudyApplication, Card.application_id == StudyApplication.id)
         .filter(
             Card.id.in_(
                 db.session.query(eligible_card_ids.c.card_id)
             )
         )
         .order_by(None)
-        .group_by(Card.template_id, Note.deck_id, Note.user_id)
+        .group_by(Card.template_id, Card.application_id, Note.note_type_id, NoteType.name,
+                  StudyApplication.occurrence_key, StudyApplication.display_name,
+                  StudyApplication.position, StudyApplication.is_default, Note.deck_id, Note.user_id)
         .all()
     )
-    samples: dict[tuple[str, str], str] = {}
+    samples = {}
     local_deck_ids = (
         set(clone_scope.local_deck_ids) if clone_scope is not None else set()
     )
-    for card_id, template_id, deck_id, note_user_id in rows:
+    for row in rows:
+        (card_id, template_id, application_id, note_type_id, note_type_name,
+         occurrence_key, display_name, position, is_default, deck_id, note_user_id) = row
         context_kind = CONTEXT_OWNED
         if clone_scope is not None:
             is_local = (
@@ -272,12 +309,12 @@ def list_available_compositions_for_query(
             context_kind = (
                 CONTEXT_INSTALLED_LOCAL if is_local else CONTEXT_INSTALLED_SOURCE
             )
-        samples.setdefault((str(template_id), context_kind), str(card_id))
+        samples.setdefault((str(note_type_id), str(template_id), str(application_id or ""), context_kind), row)
 
     # The grouped scope already supplies the effective presentation context.
     # Loading sample Card/Note entities here repeats content reads for each
     # composition; only Template and NoteType metadata are needed.
-    template_ids = sorted({template_id for template_id, _kind in samples})
+    template_ids = sorted({key[1] for key in samples})
     templates: dict[str, Template] = {}
     for offset in range(0, len(template_ids), 500):
         batch = (
@@ -291,17 +328,23 @@ def list_available_compositions_for_query(
         for template_id, template in templates.items()
     }
     compositions: list[AppliedComposition] = []
-    for (template_id, context_kind), card_id in samples.items():
+    for (note_type_id, template_id, application_id, context_kind), row in samples.items():
+        card_id = row.sample_card_id
         template = templates.get(template_id)
         if template is None:
             raise ValueError(f"Card {card_id} references missing template {template_id}")
-        compositions.append(
-            build_compatibility_composition(
+        application = (SimpleNamespace(id=application_id, occurrence_key=row.occurrence_key,
+                        display_name=row.display_name, position=row.position, is_default=row.is_default)
+                       if application_id else None)
+        composition = build_compatibility_composition(
                 template,
+                note_type=SimpleNamespace(id=note_type_id, name=row.note_type_name),
+                application=application,
                 context_kind=context_kind,
                 install_id=(str(clone_scope.install.id) if clone_scope is not None else None),
             )
-        )
+        positions[composition.composition_id] = int(row.position if row.position is not None else template.position or 0)
+        compositions.append(composition)
     return sorted(compositions, key=lambda item: _composition_sort_key(item, positions))
 
 
@@ -314,12 +357,15 @@ def group_available_compositions(
     template_ids = sorted({item.template_id for item in compositions})
     positions: dict[str, int] = {}
     for offset in range(0, len(template_ids), 500):
-        positions.update(
-            (str(template_id), int(position or 0))
-            for template_id, position in db.session.query(Template.id, Template.position)
-            .filter(Template.id.in_(template_ids[offset:offset + 500]))
-            .all()
+        rows = db.session.query(Template.id, Template.position, StudyApplication.id, StudyApplication.position).outerjoin(
+            StudyApplication, StudyApplication.template_id == Template.id,
         )
+        for template_id, position, application_id, application_position in (
+            rows.filter(Template.id.in_(template_ids[offset:offset + 500])).all()
+        ):
+            positions[str(template_id)] = int(position or 0)
+            if application_id is not None:
+                positions[str(application_id)] = int(application_position or 0)
     for item in sorted(compositions, key=lambda item: _composition_sort_key(item, positions)):
         grouped.setdefault(
             (item.note_type_id, item.note_type_name),
@@ -351,7 +397,8 @@ def count_notes_by_composition(
     if not compositions:
         return counts
     key_to_id = {
-        (str(item.template_id), item.context_kind): item.composition_id
+        (item.note_type_id, str(item.template_id), item.context_kind,
+         _application_id_from_composition_id(item.composition_id)): item.composition_id
         for item in compositions
     }
     eligible_card_ids = (
@@ -362,20 +409,25 @@ def count_notes_by_composition(
     rows = (
         db.session.query(
             Card.template_id,
+            Note.note_type_id,
+            Card.application_id,
+            StudyApplication.occurrence_key,
             Note.deck_id,
             Note.user_id,
             db.func.count(db.distinct(Card.note_id)),
         )
         .join(Note, Card.note_id == Note.id)
+        .outerjoin(StudyApplication, Card.application_id == StudyApplication.id)
         .filter(Card.id.in_(db.session.query(eligible_card_ids.c.card_id)))
         .order_by(None)
-        .group_by(Card.template_id, Note.deck_id, Note.user_id)
+        .group_by(Card.template_id, Note.note_type_id, Card.application_id,
+                  StudyApplication.occurrence_key, Note.deck_id, Note.user_id)
         .all()
     )
     local_deck_ids = (
         set(clone_scope.local_deck_ids) if clone_scope is not None else set()
     )
-    for template_id, deck_id, note_user_id, note_count in rows:
+    for template_id, note_type_id, application_id, occurrence_key, deck_id, note_user_id, note_count in rows:
         context_kind = CONTEXT_OWNED
         if clone_scope is not None:
             is_local = (
@@ -386,7 +438,8 @@ def count_notes_by_composition(
             context_kind = (
                 CONTEXT_INSTALLED_LOCAL if is_local else CONTEXT_INSTALLED_SOURCE
             )
-        composition_id = key_to_id.get((str(template_id), context_kind))
+        repeated_id = str(application_id) if application_id and occurrence_key != COMPAT_OCCURRENCE_KEY else None
+        composition_id = key_to_id.get((str(note_type_id), str(template_id), context_kind, repeated_id))
         if composition_id is None:
             continue
         counts[composition_id] += int(note_count or 0)
@@ -458,7 +511,14 @@ def apply_composition_selection_to_query(
     selection: ResolvedCompositionSelection,
 ) -> Any:
     item = selection.composition
-    filtered = query.filter(Card.template_id == item.template_id)
+    filtered = query.filter(Card.template_id == item.template_id, Note.note_type_id == item.note_type_id)
+    application_id = _application_id_from_composition_id(item.composition_id)
+    if application_id is not None:
+        filtered = filtered.filter(Card.application_id == application_id)
+    else:
+        filtered = filtered.filter(db.or_(Card.application_id.is_(None), Card.application.has(
+            StudyApplication.occurrence_key == COMPAT_OCCURRENCE_KEY,
+        )))
     if item.context_kind == CONTEXT_OWNED:
         return filtered
     if clone_scope is None or str(clone_scope.install.id) != str(item.install_id):
@@ -482,6 +542,8 @@ def apply_composition_selection_to_query(
 
 def _template_id_from_composition_id(composition_id: str) -> str | None:
     parts = str(composition_id or "").split(":")
+    if len(parts) in {7, 10} and parts[-2] == "application" and parts[-1]:
+        parts = parts[:-2]
     if (
         len(parts) == 5
         and parts[0] == "comp"
@@ -504,6 +566,11 @@ def _template_id_from_composition_id(composition_id: str) -> str | None:
     ):
         return parts[7]
     return None
+
+
+def _application_id_from_composition_id(composition_id: str) -> str | None:
+    parts = str(composition_id or "").split(":")
+    return parts[-1] if len(parts) in {7, 10} and parts[-2] == "application" and parts[-1] else None
 
 
 def list_available_compositions_for_scope(

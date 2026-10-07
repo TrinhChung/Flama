@@ -7,7 +7,10 @@ import hmac
 import json
 import math
 import secrets
+from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -27,6 +30,7 @@ from app.repositories.study_repository import (
     is_progress_suspended,
     load_card_progress_map,
 )
+from app.repositories import template_release_repository
 from app.services import (
     flashcards_share_service,
     study_artifact_service,
@@ -65,6 +69,8 @@ from app.services.study_session_config import (
     encode_study_session_config,
     validate_payload_composition,
 )
+from app.services.template_binding_service import apply_binding_projection
+from app.services import study_template_preset_service
 from app.services.study_session_authority_pin_service import (
     LockedStudySessionAuthorityPins,
     StudySessionAuthorityPinError,
@@ -117,6 +123,7 @@ from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
 from models.note import Note
+from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
@@ -496,6 +503,7 @@ def open_study_session(
     timezone_name: str,
     now: datetime | None = None,
     composition_selection: ResolvedCompositionSelection | None = None,
+    input_bindings: dict[str, str | None] | None = None,
     wire_schema_version: str = WIRE_SCHEMA_VERSION,
     legacy_wire_schema_version: str | None = None,
     accepted_batch_schema_versions: Any = None,
@@ -547,11 +555,14 @@ def open_study_session(
     opened_at = (now or datetime.utcnow()).replace(microsecond=0)
     if composition_selection is None:
         try:
+            saved_composition_id = study_template_preset_service.resolve_session_preset(
+                int(user.id), scope_type, scope_id, None,
+            )
             composition_selection = resolve_composition_selection(
                 query,
                 clone_scope=clone_scope,
-                requested_composition_id=None,
-                request_source="internal_legacy",
+                requested_composition_id=saved_composition_id,
+                request_source="saved_preset" if saved_composition_id else "internal_legacy",
             )
         except StudyCompositionError as exc:
             raise StudySessionError(
@@ -560,6 +571,10 @@ def open_study_session(
                 status=exc.status,
                 details=exc.details,
             ) from exc
+    if input_bindings is None:
+        input_bindings = study_template_preset_service.session_input_bindings(
+            int(user.id), scope_type, scope_id, composition_selection.composition.composition_id,
+        )
     try:
         selected_query = apply_composition_selection_to_query(
             query,
@@ -578,7 +593,9 @@ def open_study_session(
     cards = (
         selected_query.options(
             selectinload(Card.note).selectinload(Note.media_assets),
+            selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
             selectinload(Card.template),
+            selectinload(Card.application),
         )
         .order_by(Card.created_at.asc(), Card.id.asc())
         .limit(MAX_SESSION_CARDS + 1)
@@ -597,6 +614,14 @@ def open_study_session(
             "Bộ thẻ này chưa có thẻ học phù hợp với chế độ đã chọn.",
             status=404,
         )
+    release_pins = {}
+    if clone_scope is not None and getattr(clone_scope.install, "applied_release_id", None):
+        release_pins = template_release_repository.deck_pins(db.session, clone_scope.install.applied_release_id)
+    template_overrides = template_release_repository.load_effective_template_overrides(
+        db.session, user_id=int(user.id),
+        source_template_ids=[str(card.template_id) for card in cards],
+        release_pins=release_pins,
+    )
 
     # Deck rows and options depend only on (learner, local deck) within this
     # request, so resolve each once instead of once per Card.
@@ -765,7 +790,17 @@ def open_study_session(
             clone_scope=clone_scope,
             clone_added_note_ids=clone_added_note_ids,
             note_override_rows_by_note_id=note_override_rows_by_note_id,
+            template_overrides=template_overrides,
         )
+        if input_bindings is not None:
+            # Session bindings replace application defaults only in this
+            # detached render source; storage and existing leases stay intact.
+            source_values = {key: value for key, value in vars(context.template).items()
+                             if not key.startswith("_")}
+            for name in ("id", "name", "front_html", "back_html", "shared_css", "input_schema", "updated_at"):
+                source_values[name] = getattr(context.template, name, None)
+            source_values["input_bindings"] = deepcopy(input_bindings)
+            context = apply_binding_projection(replace(context, template=SimpleNamespace(**source_values)))
         # template_version covers raw sources, CSS, renderer ABI and effective
         # field definitions, so an overlay rename/schema change cannot reuse
         # the wrong sanitized artifact. The cache lives only in this issuance.

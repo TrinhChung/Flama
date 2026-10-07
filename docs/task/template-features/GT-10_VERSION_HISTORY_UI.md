@@ -1,39 +1,44 @@
 # GT-10 — UI lịch sử phiên bản template (xem, so sánh, khôi phục)
 
-- Owner: Gemini. Reviewer: Claude. Milestone: M2.
-- Trạng thái: **Blocked** đến khi CT-03 (Contract A chạy thật) và GT-06, GT-09 `Accepted`.
+- Owner: Gemini. Reviewer: Codex (tiếp nhận Claude). Milestone: M2.
+- Trạng thái: **Ready — GT-10A**, sau đó **GT-10B** khi GT-10A được review. Contract A2 đã có code/test CT-03; dùng v2 dưới đây.
 - Loại: entity API + feature UI tái sử dụng + nối vào trang loại thẻ.
 
-## 0. Việc Claude làm trước khi mở task
+## 0. Nền backend đã sẵn sàng
 
-- [ ] So Contract A thật (route, key JSON, mã lỗi) với kế hoạch §5.3; sửa §3 của file này nếu khác.
-- [ ] Ghi tên query key và các file đã tồn tại sau GT-06 (đường dẫn, số dòng chèn nút).
-- [ ] Đổi trạng thái README thành `Ready`.
+- Contract A2 chạy ở `app/api/v1/flashcards/card_templates.py`; schema `template-versions.v2`. Xem [ADR-T1](../../architecture/template-version-foundation-adr-2026-10-07.md).
+- Entity có `cardTemplateQueryKeys.noteTypeTemplates(noteTypeId)`; page có `invalidateTemplates()` và detail key `['note-type-detail', noteTypeId]`. GT-06 draft fix đã có test.
+- Không gọi API definitions/forks của v1. GT-11/12 chưa có contract mới.
+- Chia hai lượt, mỗi lượt tối đa 6 file; không chạy GT-10A và GT-10B cùng lúc.
 
 ## 1. Bối cảnh
 
-Contract A (kế hoạch §5.3): `GET .../templates/<tid>/versions`, `GET .../versions/<vid>`, `POST .../versions/<vid>/restore`. Mỗi lần lưu template tạo version mới; khôi phục tạo version mới bằng nội dung cũ, không xóa gì.
+Contract A2: `GET /api/card-templates/<tid>/versions`, `GET .../versions/<vid>`, `POST .../versions/<vid>/restore`. Lưu nội dung thay đổi tạo version mới; rename/no-op không tạo; khôi phục tạo version mới bằng nội dung cũ, không xóa gì.
 
 Component này sẽ được dùng lại cho bản riêng của người cài (GT-11, Contract D) và thư viện (GT-12, Contract E), nên nhận một **adapter** thay vì gọi cứng URL.
 
 Ranh giới FSD: chỉ **file page** (`*/pages/*.tsx`) được import `@/features/template-versions`, vì page là tầng ghép (các page này sẽ chuyển sang `src/pages/` trong gói FSD G09). Component/hook trong feature khác không được import nó.
 
-## 2. File được sửa/tạo
+## 2. File được sửa/tạo theo phase
 
-| File | Được làm gì |
-|---|---|
-| `frontend/src/entities/card-template/model/types.ts` | Thêm kiểu §3.1 (không sửa kiểu cũ). |
-| `frontend/src/entities/card-template/api/cardTemplateApi.ts` | Thêm 3 hàm §3.2. |
-| `frontend/src/entities/card-template/api/queryKeys.ts` | Thêm 2 key §3.2. |
-| `frontend/src/entities/card-template/index.ts` | Thêm export tương ứng. |
-| `frontend/src/entities/card-template/api/cardTemplateApi.test.ts` | Thêm test cho 3 hàm mới. |
-| `frontend/src/features/template-versions/model/types.ts` | Tạo mới: `TemplateVersionSource`. |
-| `frontend/src/features/template-versions/ui/TemplateVersionHistorySheet.tsx` | Tạo mới. |
-| `frontend/src/features/template-versions/ui/TemplateVersionHistorySheet.test.tsx` | Tạo mới. |
-| `frontend/src/features/template-versions/index.ts` | Tạo mới (export component + type). |
-| `frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx` | Thêm nút "Lịch sử" trong `headerActions` (sau nút Reset) và render sheet. |
+**GT-10A — entity contract (5 file, Ready)**:
 
-CẤM: `entities/card-template/ui/TemplateCodeEditor.tsx`, `TemplateManagementBar.tsx`, backend, file khác.
+- `frontend/src/entities/card-template/model/types.ts`: thêm kiểu §3.1; thêm `current_version_id?: string | null` vào CardTemplateItem để giữ fixture cũ.
+- `frontend/src/entities/card-template/api/cardTemplateApi.ts`: thêm 3 hàm §3.2.
+- `frontend/src/entities/card-template/api/queryKeys.ts`: thêm 2 key §3.2.
+- `frontend/src/entities/card-template/index.ts`: export API và kiểu mới.
+- `frontend/src/entities/card-template/api/cardTemplateApi.test.ts`: kiểm tra URL encode, signal, POST body và response cho 3 hàm; không đổi assertion cũ.
+
+**GT-10B — history sheet + page (6 file, sau GT-10A review)**:
+
+- `frontend/src/features/template-versions/model/types.ts`: adapter §3.3.
+- `frontend/src/features/template-versions/ui/TemplateVersionHistorySheet.tsx`: UI §3.4.
+- `frontend/src/features/template-versions/ui/TemplateVersionHistorySheet.test.tsx`: unit tests §4 và integration draft/restore tại page; có thể copy fixture từ page draft test, không sửa file fixture nguồn.
+- `frontend/src/features/template-versions/index.ts`: public export.
+- `frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx`: nối nút và sheet §3.5; giữ fix draft của CT-03.
+- `frontend/src/features/note-types/pages/__snapshots__/NoteTypeDetailPage.editor.test.tsx.snap`: chỉ cập nhật đúng nút Lịch sử được yêu cầu, báo cáo diff; không đổi editor DOM/class còn lại.
+
+Không sửa editor, management bar, backend hoặc file ngoài phase. Không dùng `-u` cả suite; chỉ snapshot test page cụ thể sau khi kiểm tra diff.
 
 ## 3. Hợp đồng chính xác
 
@@ -43,6 +48,7 @@ CẤM: `entities/card-template/ui/TemplateCodeEditor.tsx`, `TemplateManagementBa
 export type TemplateVersionOrigin = 'backfill' | 'create' | 'edit' | 'reset' | 'restore' | 'apply' | 'fork'
 export type TemplateVersionSummary = {
   id: string
+  template_id: string
   version_no: number
   content_hash: string
   change_note: string
@@ -51,12 +57,11 @@ export type TemplateVersionSummary = {
   created_by: { id: number; username: string } | null
   is_current: boolean
 }
-export type TemplateVersionDetail = TemplateVersionSummary & { front_html: string; back_html: string; shared_css: string }
+export type TemplateVersionDetail = TemplateVersionSummary & { front_html: string; back_html: string; shared_css: string; input_schema: unknown[] }
 export type TemplateVersionList = {
-  schema_version: 'template-versions.v1'
+  schema_version: 'template-versions.v2'
   template_id: string
-  definition_id: string
-  current_version_id: string
+  current_version_id: string | null
   items: TemplateVersionSummary[]
 }
 ```
@@ -64,30 +69,30 @@ export type TemplateVersionList = {
 ### 3.2 API + key (entity)
 
 ```ts
-export function fetchTemplateVersions(noteTypeId: string, templateId: string, signal?: AbortSignal)
-  // apiRequest<TemplateVersionList>(`/api/note-types/${enc(noteTypeId)}/templates/${enc(templateId)}/versions`, { signal })
-export function fetchTemplateVersion(noteTypeId: string, templateId: string, versionId: string, signal?: AbortSignal)
+export function fetchTemplateVersions(templateId: string, signal?: AbortSignal)
+  // apiRequest<TemplateVersionList>(`/api/card-templates/${enc(templateId)}/versions`, { signal })
+export function fetchTemplateVersion(templateId: string, versionId: string, signal?: AbortSignal)
   // apiRequest<TemplateVersionDetail>(`.../versions/${enc(versionId)}`, { signal })
-export function restoreTemplateVersion(noteTypeId: string, templateId: string, versionId: string, changeNote?: string)
+export function restoreTemplateVersion(templateId: string, versionId: string, changeNote?: string)
   // apiJson<CardTemplateItem>(`.../versions/${enc(versionId)}/restore`, 'POST', changeNote ? { change_note: changeNote } : {})
 
-cardTemplateQueryKeys.templateVersions = (noteTypeId: string, templateId: string) =>
-  ['card-template', 'versions', 'note-type', noteTypeId, templateId] as const
-cardTemplateQueryKeys.templateVersion = (noteTypeId: string, templateId: string, versionId: string) =>
-  ['card-template', 'versions', 'note-type', noteTypeId, templateId, versionId] as const
+cardTemplateQueryKeys.templateVersions = (templateId: string) =>
+  ['card-template', 'versions', templateId] as const
+cardTemplateQueryKeys.templateVersion = (templateId: string, versionId: string) =>
+  ['card-template', 'versions', templateId, versionId] as const
 ```
 
 ### 3.3 Adapter (`features/template-versions/model/types.ts`)
 
 ```ts
-import type { TemplateVersionDetail, TemplateVersionList } from '@/entities/card-template'
+import type { CardTemplateItem, TemplateVersionDetail, TemplateVersionList } from '@/entities/card-template'
 
 export type TemplateVersionSource = {
   listKey: readonly unknown[]
   detailKey: (versionId: string) => readonly unknown[]
   list: (signal?: AbortSignal) => Promise<TemplateVersionList>
   get: (versionId: string, signal?: AbortSignal) => Promise<TemplateVersionDetail>
-  restore: (versionId: string) => Promise<unknown>
+  restore: (versionId: string) => Promise<CardTemplateItem>
 }
 ```
 
@@ -99,11 +104,11 @@ export type TemplateVersionHistorySheetProps = {
   onOpenChange: (open: boolean) => void
   source: TemplateVersionSource
   current: { front_html: string; back_html: string; shared_css: string }  // nội dung đang ở trình soạn
-  onRestored: () => void                                                   // trang invalidate query
+  onRestored: (template: CardTemplateItem) => void  // áp dụng nguồn trả về, rồi invalidate
 }
 ```
 
-- Khung: `Sheet` → `SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto"` → `SheetHeader` (`SheetTitle` = `Lịch sử phiên bản`, `SheetDescription` = `Mỗi lần lưu tạo một phiên bản. Khôi phục sẽ tạo phiên bản mới, không xóa lịch sử.`).
+- Khung: `Sheet` → `SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto"` → `SheetHeader` (`SheetTitle` = `Lịch sử phiên bản`, `SheetDescription` = `Mỗi lần lưu thay đổi nội dung tạo một phiên bản. Khôi phục sẽ tạo phiên bản mới, không xóa lịch sử.`).
 - Danh sách (`useQuery({ queryKey: source.listKey, queryFn: ({ signal }) => source.list(signal), enabled: open })`): mỗi item là `button` chọn version, hiện `Phiên bản {version_no}`, thời gian `new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(created_at))`, nhãn origin theo bảng, `change_note` nếu khác rỗng, badge `Hiện tại` nếu `is_current`, người tạo `created_by.username` nếu có.
 
 | origin | Nhãn |
@@ -117,15 +122,15 @@ export type TemplateVersionHistorySheetProps = {
 | fork | Tạo bản riêng |
 
 - Chọn version → `useQuery({ queryKey: source.detailKey(id), queryFn: ({ signal }) => source.get(id, signal) })`; hiện `TemplateDiffView` (entity, GT-09) với `before` = version, `after` = `current`, `beforeLabel` = `Phiên bản {n}`, `afterLabel` = `Trình soạn hiện tại`.
-- Nút `Khôi phục phiên bản này` (ẩn khi `is_current`) → `ConfirmDialog` (`@/shared/ui`) `title="Khôi phục phiên bản {n}?"`, `description="Nội dung chưa lưu trong trình soạn sẽ được thay bằng phiên bản này. Lịch sử cũ vẫn được giữ."`, `confirmText="Khôi phục"`. Xác nhận → `source.restore(id)` → `toast.success('Đã khôi phục phiên bản {n}.')`, `onRestored()`, invalidate `source.listKey`; lỗi → `toast.error('Không thể khôi phục', { description: error instanceof Error ? error.message : 'Đã có lỗi xảy ra. Vui lòng thử lại.' })`. Không import `templateErrorMessage` từ `features/note-types` (feature không import feature khác).
+- Nút `Khôi phục phiên bản này` (ẩn khi `is_current`) → `ConfirmDialog` (`@/shared/ui`) `title="Khôi phục phiên bản {n}?"`, `description="Nội dung chưa lưu trong trình soạn sẽ được thay bằng phiên bản này. Lịch sử cũ vẫn được giữ."`, `confirmText="Khôi phục"`. Xác nhận → `source.restore(id)` → `toast.success('Đã khôi phục phiên bản {n}.')`, `onRestored(restoredTemplate)`, invalidate `source.listKey`; lỗi → `toast.error('Không thể khôi phục', { description: error instanceof Error ? error.message : 'Đã có lỗi xảy ra. Vui lòng thử lại.' })`. Không import `templateErrorMessage` từ `features/note-types` (feature không import feature khác).
 - Trạng thái tải/lỗi/rỗng: `Đang tải lịch sử…`, message lỗi, `Chưa có phiên bản nào.`
 
 ### 3.5 Nối vào `NoteTypeDetailPage.tsx`
 
 - State `const [historyOpen, setHistoryOpen] = useState(false)`.
 - Nút trong `headerActions`, ngay sau nút Reset: `<Button size="sm" variant="outline" className="h-8 sm:h-9 px-2.5 text-xs font-semibold rounded-xl shrink-0 gap-1.5" onClick={() => setHistoryOpen(true)} disabled={!selectedTemplateId}><FontAwesomeIcon icon={faClockRotateLeft} className="text-xs" /> Lịch sử</Button>` (thêm `faClockRotateLeft` vào import `@fortawesome/free-solid-svg-icons`).
-- Source dựng bằng `useMemo` từ `noteTypeId` + `selectedTemplateId` với các hàm entity §3.2.
-- `onRestored` = `invalidateTemplates` (từ GT-06).
+- Source dựng bằng `useMemo` từ `selectedTemplateId` với các hàm entity §3.2. Chỉ mount sheet khi có template được chọn; key component theo template ID để không giữ selection của template trước.
+- `onRestored(restoredTemplate)` phải gán trực tiếp `frontHtml/backHtml/sharedCss` từ response khi response.id vẫn là template đang chọn, cập nhật cache detail/list tương ứng rồi gọi `invalidateTemplates()`. Chỉ invalidate không đủ: GT-06 giữ draft khi nguồn server không đổi, nên restore bản có nguồn giống server cũng phải thay draft. Chặn đổi template khi restore pending hoặc bỏ qua response đã cũ; không ghi vào draft của template khác.
 - Render `<TemplateVersionHistorySheet ... current={{ front_html: frontHtml, back_html: backHtml, shared_css: sharedCss }} />` cạnh `TemplateCodeEditor` (ngoài Card).
 
 ## 4. Test bắt buộc
@@ -142,7 +147,7 @@ export type TemplateVersionHistorySheetProps = {
 | lỗi khôi phục | reject `new Error('x')` → `toast.error('Không thể khôi phục', { description: 'x' })`, `onRestored` không gọi |
 | rỗng | `items: []` → "Chưa có phiên bản nào." |
 
-Snapshot `NoteTypeDetailPage.editor.test.tsx` phải giữ nguyên **trừ** khi nút "Lịch sử" làm đổi DOM header của Card: trường hợp này báo cáo diff snapshot, **không** chạy `-u`; Claude quyết định cập nhật.
+GT-10B được cập nhật snapshot page cho đúng nút "Lịch sử" trong whitelist; báo cáo diff. Snapshot của TemplateCodeEditor và class/DOM cũ phải giữ nguyên. Thêm test restore thay draft ngay cả khi response sources giống server, restore lỗi giữ draft và đổi template không áp response cũ. Detail query chỉ enabled khi sheet mở và đã chọn version; loading/error rõ ràng, không so sánh bằng dữ liệu cũ của selection trước.
 
 ## 5. Kiểm tra
 
@@ -158,14 +163,14 @@ git status --short
 ## 6. Ghi chú review cho Claude
 
 - Kiểm tra end-to-end với backend CT-03: lưu 2 lần → 3 version; khôi phục v1 → v4 có hash bằng v1.
-- Restore khi trình soạn có thay đổi chưa lưu: sau `invalidateTemplates`, effect đồng bộ editor từ server phải ghi đè đúng như cảnh báo.
+- Restore khi có draft: response phải thay draft ngay, kể cả nguồn version khôi phục giống nguồn đang cache; lỗi giữ draft. Đổi template/đóng sheet phải không hiển thị dữ liệu cũ.
 
 ## 7. Prompt cho Gemini
 
 ```text
 <dán nguyên khối QUY TẮC BẮT BUỘC trong docs/task/template-features/README.md §2>
 
-Task GT-10. Đọc và làm đúng theo docs/task/template-features/GT-10_VERSION_HISTORY_UI.md (§1–§5; bỏ qua §0 và §6).
+Task GT-10<PHASE A hoặc B>. Chỉ làm đúng file của phase đã giao, dừng sau báo cáo. Đọc và làm đúng theo docs/task/template-features/GT-10_VERSION_HISTORY_UI.md (§1–§5; bỏ qua §0 và §6).
 Đọc thêm: frontend/src/entities/card-template/** , frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx,
 frontend/src/components/ui/sheet.tsx, frontend/src/shared/ui/ConfirmDialog.tsx.
 Chuỗi tiếng Việt NGUYÊN VĂN. Chỉ sửa/tạo file ở §2. Báo cáo theo README §3. Không commit.

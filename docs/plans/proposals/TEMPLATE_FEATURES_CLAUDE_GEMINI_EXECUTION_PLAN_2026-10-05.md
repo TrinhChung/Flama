@@ -1,207 +1,103 @@
-# Kế hoạch triển khai tính năng Template sau decoupling: Claude điều phối, Gemini triển khai phần đơn giản
+# Kế hoạch triển khai tính năng Template sau decoupling (v2): Claude điều phối, Gemini triển khai phần đơn giản
 
-- Ngày lập: **2026-10-05**.
-- Trạng thái: **Chờ người dùng duyệt.** Chưa giao việc cho Gemini và chưa sửa source. Các quyết định ở §4 cần người dùng xác nhận trước khi mở task phụ thuộc.
-- Người điều phối/review: **Claude**. Người triển khai phần đơn giản: **Gemini** (`agy`, theo [worker orchestration](../../../skills/antigravity-cli/references/worker-orchestration.md)).
-- Spec chi tiết từng task Gemini: [`docs/task/template-features/`](../../task/template-features/README.md). Mỗi file có sẵn prompt để dán cho Gemini.
-- Căn cứ đã đối chiếu với code ở commit `faa3c7d`: [study-interaction-trigger-algorithm-plan](../../architecture/study-interaction-trigger-algorithm-plan.md) (§5, §9, §16), [P3-07 applied composition contract](../../architecture/applied-composition-binding-contract-2026-09-09.md), [P6 plan](../../task/decoupling/P6_EXECUTION_PLAN_2026-09-29.md) (D6-08, D6-09), issue [TrinhChung/Flama#137](https://github.com/TrinhChung/Flama/issues/137) và #138, [proposal TPL-01](DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) (chỉ là tham khảo, chưa được duyệt).
+- Lập: **2026-10-05** (v1). Viết lại: **2026-10-06** (v2) theo câu trả lời của người dùng cho Q1–Q5. Bản v1 nằm trong lịch sử git (commit `0d4c293`).
+- Trạng thái 2026-10-07: Codex tiếp nhận phần Claude; đã sửa blocker GT-01/06 và triển khai nền phiên bản CT-02/03. GT-10A và GT-15A Ready; GT-10B tiếp nối sau review GT-10A. Template độc lập/attachment/market copy/release core còn các bước sau, không coi M3–M6 hoàn tất.
+- Người điều phối/review hiện tại: **Codex (tiếp nhận Claude)**. Người triển khai phần đơn giản: **Gemini** (`agy`, theo [worker orchestration](../../../skills/antigravity-cli/references/worker-orchestration.md)).
+- Spec và tracker: [`docs/task/template-features/`](../../task/template-features/README.md).
+- Căn cứ: [study-interaction-trigger-algorithm-plan](../../architecture/study-interaction-trigger-algorithm-plan.md) (§5, §9, §16), [P3-07 applied composition contract](../../architecture/applied-composition-binding-contract-2026-09-09.md), [P6 plan](../../task/decoupling/P6_EXECUTION_PLAN_2026-09-29.md) (D6-05, D6-08, D6-09), issue [TrinhChung/Flama#137](https://github.com/TrinhChung/Flama/issues/137) và #138.
 
 ## 1. Mục tiêu
 
-Đợt decoupling (P0–P10) đã đưa progress về learner/Note và có application occurrence (`study_applications`, `cards.application_id`). Nhưng ba nhu cầu sản phẩm vẫn chưa có trên UI hoặc chưa có trong code:
-
-| # | Tính năng người dùng cần | Kết quả mong muốn |
+| # | Tính năng | Kết quả mong muốn |
 |---|---|---|
-| F1 | **Template tách riêng** | Có thư viện "Mẫu thẻ" độc lập với loại thẻ (NoteType). Một mẫu dùng lại được cho nhiều loại thẻ qua ánh xạ input → field. |
-| F2 | **Một deck có nhiều template, thấy rõ trên UI** | Từ dashboard thấy deck có những kiểu thẻ nào, mỗi kiểu bao nhiêu note. Trang loại thẻ quản lý đủ template: đổi tên, xóa, số note dùng, nhãn mặc định. Template mới không còn mặc định `{{Word}}`. |
-| F3 | **Template có phiên bản; ai cũng sửa được template của deck mình đã clone** | Mỗi lần lưu tạo một phiên bản bất biến, xem lịch sử, so sánh, khôi phục. Người cài deck từ marketplace tạo bản riêng (copy-on-write) cho kiểu thẻ gốc mà không đổi deck của tác giả. Khi tác giả sửa, người cài thấy cảnh báo và chọn giữ bản riêng hoặc theo bản gốc. |
+| F1 | **Template độc lập, dùng chung** | Template là thực thể riêng trong thư viện "Mẫu thẻ". Một loại thẻ (NoteType) gắn nhiều template; khi gắn, người dùng ánh xạ field của loại thẻ vào input của template. Sửa template ảnh hưởng mọi loại thẻ đang gắn nó. |
+| F2 | **Một deck nhiều template, thấy rõ và chọn khi học** | Dashboard thấy các kiểu thẻ của deck (đã có ở M1). Bấm Học → màn chuẩn bị phiên: chọn template, tinh chỉnh field nào vào input nào; lựa chọn được nhớ. Input không được ánh xạ hiển thị rỗng, không làm lỗi thẻ. |
+| F3 | **Phiên bản và kế thừa template** | Mỗi lần lưu là một phiên bản (lịch sử, so sánh, khôi phục). Tác giả bật/tắt tự động đăng bản mới, khi tắt thì bấm "Đăng bản mới nhất". Người nhận template (qua deck mua/cài) bật/tắt tự động kế thừa, mặc định tắt; sửa thì thành bản riêng; cập nhật có xử lý xung đột. Template từ marketplace dùng được cho mọi deck của người nhận nhưng không được đăng lại. |
+| F4 | **Lõi phát hành và kế thừa dùng chung** | Tách logic release/subscribe/rebase/auto-publish/auto-update của deck thành lõi chung có adapter theo loại nội dung; deck chạy trên lõi đó, template là loại thứ hai. Dọn code release trùng lặp. Làm #137 trong đợt này. |
 
-Ngoài phạm vi: bán/chia sẻ mẫu thẻ độc lập trên marketplace, Interaction/Algorithm mới (Phase 8), xóa `templates.note_type_id`, đổi renderer ABI hoặc study wire.
+Ngoài phạm vi (chờ người dùng chốt ở §11): marketplace bán/chia sẻ template riêng lẻ (N5), input nhận danh sách nhiều field (N6).
 
-## 2. Hiện trạng đã đối chiếu với code
+## 2. Quyết định của người dùng (2026-10-06)
 
-| Chủ đề | Bằng chứng trong code | Khoảng trống |
+| ID | Quyết định | Hệ quả thiết kế |
 |---|---|---|
-| Template gắn cứng NoteType | `models/template.py:11` (`note_type_id` NOT NULL, CASCADE). Composition chỉ có `definition_id = legacy-template:{id}` (`app/services/study_composition_service.py:150`). | Không có bảng definition/version độc lập, không có thư viện, không có API áp dụng mẫu với ánh xạ field. |
-| Application occurrence | `models/study_application.py` (unique `template_id + occurrence_key`). `cards.application_id`, unique `(note_id, application_id)` (`models/card.py:16-34`). `stage_repeated_application` chỉ có storage/test, chưa có UI (`app/services/study_application_service.py:1-10`, D6-09). | Đủ để giữ nguyên Card/progress khi thêm định nghĩa tái sử dụng. Không cần đổi trong kế hoạch này. |
-| Chọn kiểu thẻ khi học | Endpoint `GET /api/study/scopes/<scope>/<id>/compositions` (`app/routes/flashcards/study.py:793-837`). `StudyModeSelector` chỉ hiện khi có >1 composition (`frontend/src/features/study/pages/StudyPage.tsx:347`). | Dashboard không cho biết deck có những kiểu thẻ nào, mỗi kiểu bao nhiêu note. |
-| Quản lý template của NoteType | `NoteTypeDetailPage.tsx` chỉ có chọn template, nút "Mới", "Reset", lưu nội dung. Tạo mới luôn gửi `{{Word}}` (`NoteTypeDetailPage.tsx:121-127`). Backend cũng mặc định `{{Word}}` khi tạo NoteType và khi tạo template (`app/services/flashcards_share_service.py:224-225,265-266`). | Chưa có đổi tên, xóa, số note, nhãn mặc định trên UI dù API `PATCH`/`DELETE` đã có (`app/api/v1/flashcards/note_types.py:178-205`). Template mới trên NoteType không có field `Word` hiển thị trống. |
-| Render thẻ của deck đã cài | `build_effective_study_card` luôn dùng `card.template` (`app/services/study_artifact_service.py:118,147`). Thẻ gốc trỏ Template **sống** của tác giả. | Người cài không thể đổi giao diện thẻ gốc. |
-| Bản sao NoteType khi cài | `clone_note_type_for_user` chép Template, không lưu lineage về Template nguồn (`app/services/share/note_types.py:499-547`). Bản sao chỉ áp dụng cho note người cài tự thêm. | Sửa bản sao không ảnh hưởng thẻ gốc, gây hiểu nhầm "đã sửa nhưng không thấy đổi". |
-| Phiên bản template | Release chỉ có entity `note_field`, `field_def` (`app/services/release/base.py:39`). Guard `SHARED_SCHEMA_VERSIONING_REQUIRED` (`app/services/flashcard_content_service.py:1509-1551`); #138 cho tác giả hotfix nội dung tại chỗ, người cài thấy ngay. | Không có lịch sử, so sánh, khôi phục. Người cài không được pin phiên bản. |
-| Đổi tên field | `update_field` đổi key trong Note JSON nhưng không sửa token trong template (`app/services/flashcard_content_service.py:536-640`). | Template viết theo tên field bị hỏng sau khi đổi tên. Binding theo `FieldDef.id` (F1) sẽ xử lý cho mẫu có binding. |
-| Renderer | `render_template_pair`/`build_render_context` dùng Mustache theo tên field; không hỗ trợ `{{FrontSide}}` (`app/services/flashcard_renderer.py:942-1080`). | Template mặc định mới không dùng `{{FrontSide}}`. |
-| Contract REST | `tests/test_api_v1_route_map.py` snapshot mọi route `api_v1.*` trong `tests/snapshots/api_v1_routes.json`. | Mỗi route mới phải cập nhật snapshot bằng `UPDATE_ROUTE_SNAPSHOT=1`. Route trong `app/routes/flashcards/*` không nằm trong snapshot. |
+| U1 | Template độc lập; NoteType gắn nhiều template; gắn = ánh xạ field → input, lưu theo ID nên đổi tên field/template không làm sai. Đổi cấu trúc template thì mọi NoteType đang gắn cùng chịu ảnh hưởng; người dùng tự kiểm soát. | Template không còn thuộc một NoteType. Bảng `study_applications` trở thành "attachment" có `input_bindings`. Flama chỉ cảnh báo (số NoteType đang gắn, input chưa ánh xạ), không chặn. |
+| U2 | Bản riêng của template lấy từ marketplace thuộc về **người dùng**, dùng chung cho mọi NoteType/deck của họ. | Một "bản nhận" (market copy) cho mỗi (người dùng, template nguồn). Không có fork theo từng deck cài. |
+| U3 | Màn phụ trước phiên học: chọn template cho phiên và chọn field đưa vào input; nhớ để khỏi thiết lập lại. Template không lỗi khi chỉ dùng vài field. | Bảng cấu hình học (study preset) theo người dùng + deck; ghi đè ánh xạ ở mức cá nhân; ánh xạ được freeze trong phiên. Input không ánh xạ = rỗng. |
+| U4 | Phiên bản template: tác giả bật/tắt tự động đăng lại; tắt thì có nút đăng bản mới nhất (như deck). Người dùng có thể tự động kế thừa, mặc định tắt. | Mô phỏng đúng cơ chế deck hiện có: `DeckMarketplaceItem.auto_publish_enabled` (mặc định tắt, `deck_auto_publish_service.trigger_auto_publish_for_deck_item`) và `DeckInstall.auto_update_enabled` (mặc định tắt, `deck_install_rebase_service.process_subscriber_auto_updates`). |
+| U5 | Mua deck trả phí thì được dùng template đó cho các bộ khác; không được đăng lại template clone từ marketplace. | Bản nhận gắn được vào NoteType của người nhận; mọi đường publish chặn template có nguồn marketplace (xem N4). |
+| U6 | Đổi tên field không cần sửa template: template ánh xạ input ↔ field. Tác giả ánh xạ sẵn, người dùng tùy biến. | Render theo binding tại thời điểm render (không đổi token trong HTML). Template cũ dùng tên field làm input, binding đồng nhất theo `FieldDef.id`, nên cũng hết hỏng khi đổi tên field. |
+| U7 | Làm #137 ngay; tham khảo deck để refactor logic kế thừa thành phần chung, dọn code cũ; code mới viết để mở rộng cho nhiều loại. | Thêm F4 (M5) trước khi làm phát hành template (M6). |
+| U8 | Tiếp tục trên nhánh `refactor/frontend-fsd-renderer-boundary`. | Nhánh đã merge `master` (#211, #213) ở commit `1689a0f`. Mỗi task Gemini vẫn dùng worktree riêng. |
 
-Kiểm tra môi trường lập kế hoạch: container cloud không có dependency Python/Node nên **chưa chạy test baseline**. Baseline được chạy ở bước CT-00 trên máy local trước khi mở task đầu tiên.
+## 3. Hiện trạng đã đối chiếu với code (2026-10-06)
 
-## 3. Thiết kế tổng thể
+| Chủ đề | Bằng chứng | Ghi chú |
+|---|---|---|
+| Template gắn cứng NoteType | `models/template.py:11` (`note_type_id` NOT NULL, CASCADE); composition dựng `note_type_id` từ `template.note_type_id` (`app/services/study_composition_service.py:119-167`). | Phải chuyển mọi chỗ đọc sang NoteType của attachment/note trước khi cho `note_type_id` nullable. |
+| Attachment sẵn có | `models/study_application.py`: unique `(template_id, occurrence_key)`; `cards.application_id`, unique `(note_id, application_id)`; seam `before_flush` tạo occurrence `compat`. | Đổi unique thành `(note_type_id, template_id, occurrence_key)`; thêm binding và trạng thái `RETIRED` (P6 D6-05). |
+| Render | Context theo tên field (`flashcard_renderer.build_render_context`); artifact template giữ `id = template_id` và client restore bắt buộc `template.id === card.template_id`, binding kind `legacy-fielddef-direct`, input `legacy-field:{field_def_id}` (`frontend/src/features/study/session/sessionRestore.ts:599-690`). | Binding mới cần binding kind mới, client renderer/restore hiểu được, có thương lượng phiên bản như wire v4. |
+| Thẻ của deck đã cài | `build_effective_study_card` dùng `card.template` của tác giả (`app/services/study_artifact_service.py:118,147`); bản sao NoteType khi cài chép Template không lineage (`app/services/share/note_types.py:499-547`). | Thay bằng bản nhận theo người dùng (U2) qua một resolver. |
+| Release deck | `deck_release_service.py` (2.158 dòng, 58 hàm), `deck_install_rebase_service.py` (1.195 dòng), `deck_working_tree_service.py`, `deck_auto_publish_service.py`; entity kind release chỉ `note_field`, `field_def` (`app/services/release/base.py:39`). | Package `app/services/release/` là **bản sao cũ** của `deck_release_service.py`: 55/58 hàm/lớp giống hệt theo AST, 3 hàm (`publish_release`, `preview_release`, `serialize_release`) thiếu `publish_mode` mà bản đang chạy đã có; không được import ở đâu (chỉ có trong pattern của `scripts/run_tests.py`). Là code chết cần xóa ở M5. |
+| Guard template đã chia sẻ | `_ensure_version_safe_template_mutation` + hotfix #138 (`app/services/flashcard_content_service.py:1509-1551`). | Thay bằng phiên bản template + attachment trong release deck (M6). |
+| Migration | Head hiện tại `20261006_000052_add_deck_count_snapshots.py`. | Migration của đợt này bắt đầu từ `000053`. |
+| Môi trường test | Code yêu cầu Python 3.12 (`MappingProxyType` làm default dataclass ở `app/repositories/study_authority_repository.py:214`); Dockerfile dùng `python:3.11-slim`. | Ngoài phạm vi kế hoạch; đã báo người dùng. Test của đợt này chạy bằng 3.12. |
+
+M1 đã giao (đã review, xem §7): `note_count` theo template, `include_counts` cho compositions, entity `entities/card-template`, `TemplateCodeEditor`, quản lý template trên trang loại thẻ, dialog "Kiểu thẻ", `template_tokens.py`, `lineDiff`/`TemplateDiffView`.
+
+## 4. Kiến trúc v2
 
 ```text
-              (mới) template_definitions ──< template_definition_versions (bất biến)
-                     ▲                 ▲
-     definition_id / │                 │ fork version
- definition_version_id│                 │
-                     │                 │
-NoteType ──< templates (applied, materialized) ──< study_applications ──< cards ──> notes
-                     ▲
-                     │ source_template_id (FK từ bảng fork tới Template nguồn của tác giả)
-(mới) deck_install_template_forks (install_id, source_template_id) ──> fork version
+                         ┌──────────── template_versions (bất biến) ◄──── release core (M5): publish / subscribe / rebase
+                         │
+users ──< templates (độc lập: owner, input_schema, current_version, origin, source lineage)
+               │  ▲
+               │  └── market copy của người nhận (origin=market_copy, source_template_id, pin + auto_update)
+               │
+NoteType ──< study_applications = ATTACHMENT (note_type_id, template_id, occurrence, input_bindings, position, is_default, status)
+               │
+             cards (note_id, template_id, application_id) ──> notes ──> learner/Note progress (không đổi)
+
+study_presets (user, deck): attachment đã chọn + ghi đè input_bindings + có hỏi lại hay không
 ```
 
-Nguyên tắc chốt: **giữ hàng `templates` làm "template đã áp dụng" cho một NoteType**. Renderer, Card, StudyApplication, composition id, Anki `source_ord`, session freeze và guard release giữ nguyên. Định nghĩa tái sử dụng và phiên bản nằm ở hai bảng mới. Hàng `templates` chứa nội dung đã materialize từ một phiên bản. Bản riêng của người cài nằm ở bảng fork, được một resolver duy nhất chọn khi render thẻ gốc.
+### 4.1 Thực thể (logic; tên bảng/cột chốt trong ADR-T)
 
-## 4. Quyết định thiết kế (đề xuất) và câu hỏi cần người dùng chốt
+1. **Template độc lập** — giữ bảng `templates` để **giữ nguyên mọi `template_id`** (Card, composition id, phiên học, Anki). Thêm: `owner_user_id`, `input_schema` (JSON: `key`, `label`, `type`, `required` mang nghĩa "khuyến nghị"), `current_version_id`, `origin` (`authored` | `market_copy`), `source_template_id` + `source_version_id` (chỉ cho market copy), `auto_publish_enabled` (tác giả), `auto_update_enabled` (người nhận), `archived_at`. `note_type_id` thành nullable (chỉ còn là "loại thẻ gốc" để tương thích) sau khi mọi chỗ đọc đã chuyển.
+2. **Phiên bản template** — bảng mới, chỉ insert: `version_no`, `front_html`, `back_html`, `shared_css`, `input_schema`, `content_hash` (`template_tokens.template_content_hash`), `origin`, `change_note`, `created_by`. Phiên bản được đăng là một release của lõi M5.
+3. **Attachment** — `study_applications` thêm `input_bindings` (`input_key → field_def_id | null`), `display_name`, `position`, `is_default`, `status` (`ACTIVE` | `RETIRED`). Gắn = tạo attachment + Card cho mọi note của NoteType qua NOTE expansion (như `create_template`). Gỡ = `RETIRED`: ngừng discovery, Card ẩn, progress giữ (P6 D6-05).
+4. **Cấu hình học (study preset)** — theo (người dùng, deck): composition đã chọn, ghi đè `input_bindings`, cờ hỏi lại. Phạm vi và hành vi chờ N1/N2.
+5. **Market copy** — mỗi (người nhận, template nguồn) một template `origin = market_copy`, tạo khi cài deck/loại thẻ có template đó; pin vào phiên bản đã đăng; sửa thì thành bản riêng (vẫn là market copy, không đăng được); cập nhật theo lõi M5.
 
-| ID | Đề xuất | Lý do / ràng buộc |
+### 4.2 Render theo binding
+
+- Binding hiệu lực = ghi đè của study preset → binding của attachment → mặc định đồng nhất (input trùng tên field hiện tại) cho template cũ.
+- Context render = context theo tên field như hiện nay **cộng** khóa theo input: `context[input_key]` = giá trị đã xử lý của field được bind (kể cả `_url`, `_urls` cho media); input không bind → `""`/`[]`. Template cũ không đổi một ký tự.
+- Server (`flashcard_renderer`, `study_artifact_service`) và client (`entities/flashcard/lib/clientRenderer.ts`, patch nội dung phiên, `sessionRestore.ts`) cùng áp dụng. Phiên học freeze binding với binding kind mới; phiên v2/v3/v4 cũ vẫn đọc được. Server chỉ cấp binding kind mới khi client khai báo hỗ trợ.
+- Artifact template của bản nhận/bản riêng vẫn mang `id` = `template_id` nguồn của Card; nội dung khác thì `version` khác.
+
+### 4.3 Phân phối và kế thừa template
+
+- Tác giả: mỗi lần lưu là một phiên bản. Bật "tự động đăng" → đăng ngay sau khi lưu (như `trigger_auto_publish_for_deck_item`); tắt → nút "Đăng bản mới nhất".
+- Người nhận: market copy pin ở phiên bản đã đăng lúc cài. Có bản mới → báo "Có bản mới". Bật "tự động kế thừa" (mặc định tắt) → tự cập nhật nếu chưa sửa; đã sửa → xung đột, chọn "Giữ bản của tôi" / "Lấy bản của tác giả" (như `process_subscriber_auto_updates` khi có conflict).
+- Thẻ gốc của deck đã cài render bằng market copy của người học; chưa có market copy (dữ liệu cũ) thì render template nguồn như hiện nay cho tới khi CT-14 chuyển đổi xong.
+- Không đăng lại: chặn publish template `origin = market_copy`; quy tắc cho deck/loại thẻ có gắn market copy chờ N4.
+
+### 4.4 Lõi phát hành và kế thừa (F4)
+
+Khái niệm chung rút từ deck: **Publisher** (working revision, đánh dấu thay đổi, publish thủ công/tự động, nhãn phiên bản), **Release** (snapshot/changeset bất biến, sequence), **Subscription** (pin release, seen/applied, auto-update, sync mode, detach), **Rebase** (đơn vị thay đổi, phát hiện xung đột, `keep_mine`/`keep_upstream`/`manual`), **Auto-update job**. Mỗi loại nội dung có adapter: deck (journal `note_field`/`field_def` hiện có + attachment template ở M6), template (snapshot nguyên khối: front/back/css/input_schema là các đơn vị xung đột). Cách làm an toàn: (1) test đặc tả hành vi deck hiện tại, (2) xóa code chết, (3) đưa API lõi + adapter deck **giữ nguyên bảng và hành vi**, (4) template dùng lõi. Gộp bảng vật lý (nếu cần) để sau, có ADR riêng.
+
+## 5. Hợp đồng API
+
+Đã giao ở M1 (giữ nguyên): Contract B (`include_counts` → `note_counts`), Contract C (`note_count` trong `GET /api/note-types/<nt>/templates`, nay chỉ đếm note của chính loại thẻ đó).
+
+Contract **A2 đã đóng băng và chạy thật** trong [ADR-T1](../../architecture/template-version-foundation-adr-2026-10-07.md), schema `template-versions.v2`. E2/F vẫn là phác thảo; chỉ mở UI sau backend và spec v2. Gemini không suy diễn field ngoài contract.
+
+| Contract | Endpoint (phác thảo) | Dùng cho |
 |---|---|---|
-| D-T1 | Giữ `templates` (NoteType-scoped, materialized). Không bỏ `note_type_id`, không đổi `cards`/`study_applications`. | Khớp quyết định 2026-08-24: Template độc lập + application theo NoteType. Card ID/progress không đổi. Đây là phương án D trong investigation. |
-| D-T2 | Thêm `template_definitions` và `template_definition_versions`. Version là snapshot đầy đủ (`front_html`, `back_html`, `shared_css`, `input_schema`, `content_hash`), chỉ được insert. | Lịch sử, khôi phục và pin cần nội dung bất biến. Không lưu delta để tránh lỗi tái dựng. |
-| D-T3 | Backfill: mỗi Template hiện có nhận một definition + version 1. Lưu, reset hoặc khôi phục đều thêm version mới; khôi phục là chép nội dung cũ thành version mới. | Mọi người có lịch sử ngay. Không có thao tác xóa/sửa lịch sử. |
-| D-T4 | Fork của người cài theo **(DeckInstall, Template nguồn)** trong `deck_install_template_forks`. Không có fork thì theo bản gốc như hiện nay. Lần lưu đầu tạo fork (copy-on-write). Fork không bao giờ sửa Template/Note/Card nguồn. Note người cài tự thêm vẫn dùng Template của NoteType bản sao. | Mọi đường render overlay đều có `clone_scope.install`. Field override của overlay theo install và giữ `FieldDef.id` nguồn, nên fork theo install khớp schema view. |
-| D-T5 | Phiên học đang mở không đổi khi tác giả/người cài sửa template (artifact đã freeze). Phiên mới dùng nội dung hiệu lực mới. | Hợp đồng freeze P3-04/P4-00. Có test bắt buộc. |
-| D-T6 | Mẫu trong thư viện khai báo input (tự trích từ token Mustache). Áp dụng vào NoteType lưu `input_bindings` dạng `input_key → field_def_id`, materialize bằng cách đổi token sang tên field hiện tại. Đổi tên field sẽ materialize lại các template có binding. | Không đổi renderer ABI hoặc study wire. Binding bền theo `FieldDef.id` đúng P3-07. |
-| D-T7 | Pin phiên bản theo release cho tác giả (#137 đầy đủ, bỏ đường hotfix sống #138) làm **M5**, cần duyệt riêng. Trước M5, người cài chưa fork vẫn thấy hotfix của tác giả như hiện nay. Người đã fork được cách ly. | Release/rebase là vùng rủi ro cao. Cách này giao F3 cho người cài sớm mà không động vào release engine. |
-| D-T8 | Không đổi renderer ABI (`flama-client-mustache.v2`), schema session, định dạng composition id. Artifact template của fork **giữ `id` = `template_id` nguồn**; chỉ `version` (digest gồm front/back/css) khác. | Restore phía client bắt buộc `template.id === card.template_id`, `template_key` có dạng `{id}:{version}`, `definition_id === legacy-template:{template_id}` và `binding.definition_version === template.version` (`frontend/src/features/study/session/sessionRestore.ts:599-690`). Đổi `id` sẽ làm mọi phiên dùng fork bị quarantine. |
-
-Câu hỏi cần người dùng trả lời trước khi mở task phụ thuộc:
-
-| ID | Câu hỏi | Đề xuất của Claude | Chặn task |
-|---|---|---|---|
-| Q1 | Fork theo từng deck đã cài (D-T4) hay theo người dùng + loại thẻ (dùng chung cho mọi deck cài từ cùng loại thẻ)? | Theo từng deck đã cài. | CT-05, GT-11 |
-| Q2 | Thư viện "Mẫu thẻ" hiện **tất cả** template (kể cả template đang nằm trong loại thẻ, nhờ backfill) hay chỉ mẫu người dùng chủ động lưu? | Hiện tất cả, chia nhóm "Đang dùng trong loại thẻ" và "Mẫu độc lập". | CT-06, GT-12 |
-| Q3 | Materialize lại template khi đổi tên field: bật cho mọi NoteType hay chỉ NoteType chưa có release chia sẻ? | Chỉ NoteType chưa có release chia sẻ ở M4. NoteType đã release chờ M5. | CT-06 |
-| Q4 | Có duyệt M5 (#137: pin release cho tác giả, rebase giữ bản của tôi/theo upstream) ngay trong đợt này? | Chưa. Duyệt sau khi M3 chạy ổn trên production. | CT-07 |
-| Q5 | Nhánh triển khai: mỗi milestone một nhánh `feat/template-mN-*` từ nhánh tích hợp hiện hành, hay dùng chung `refactor/frontend-fsd-renderer-boundary`? | Nhánh riêng theo milestone, worktree riêng cho từng worker. | Mọi task source |
-
-## 5. Hợp đồng API (đóng băng trước khi Gemini làm UI)
-
-Các hợp đồng dưới đây là **bản đề xuất**. Claude đóng băng chúng trong CT-01. Nếu ADR đổi hợp đồng, Claude sửa §5 và mọi spec Gemini liên quan **trước khi** giao task. Gemini không được tự suy diễn field ngoài bảng.
-
-### 5.1 Contract B — số note theo kiểu thẻ của deck (M1, không đổi schema)
-
-`GET /api/study/scopes/deck/<deck_id>/compositions?include_counts=1`
-
-- Không có `include_counts` (hoặc giá trị khác `1`/`true`/`yes`): response **giữ nguyên từng byte** như hiện tại.
-- Có `include_counts=1`: thêm đúng một key cấp cao nhất:
-
-```json
-{ "note_counts": { "<composition_id>": 12, "<composition_id_2>": 0 } }
-```
-
-Mỗi `composition_id` trong `compositions` đều có mặt trong `note_counts`. Giá trị là số `Note` khác nhau có Card thuộc composition đó trong phạm vi deck (gồm deck con và overlay). Không thêm field vào từng phần tử `compositions` vì `AppliedComposition.to_dict()` được freeze vào session.
-
-### 5.2 Contract C — danh sách template kèm số note (M1)
-
-`GET /api/note-types/<note_type_id>/templates` → mỗi item giữ mọi key hiện có của `serialize_template` và thêm:
-
-```json
-{ "note_count": 120 }
-```
-
-`note_count` = số `Note` khác nhau có Card trỏ template đó. Các endpoint khác trả template (`GET /api/note-types/<id>`, `PATCH`, …) **không** đổi.
-
-### 5.3 Contract A — phiên bản template của chủ sở hữu (M2)
-
-Base: `/api/note-types/<note_type_id>/templates/<template_id>`
-
-| Method & path | Body | Response 2xx | Lỗi |
-|---|---|---|---|
-| `GET /versions` | — | `{"schema_version":"template-versions.v1","template_id","definition_id","current_version_id","items":[VersionSummary]}`; `items` sắp `version_no` giảm dần | 404 `FIELD_NOT_FOUND` (giữ mã hiện có của `_owned_note_type`/`_template`) |
-| `GET /versions/<version_id>` | — | `VersionDetail` | 404 `TEMPLATE_VERSION_NOT_FOUND` |
-| `POST /versions/<version_id>/restore` | `{"change_note"?: string}` | `TemplateWithVersion` | 404 `TEMPLATE_VERSION_NOT_FOUND`; 409 `SHARED_SCHEMA_VERSIONING_REQUIRED`; 400 `TEMPLATE_COMPILE_ERROR` |
-| `PATCH ` (đã có) | thêm tùy chọn `change_note` | `TemplateWithVersion` | như hiện tại |
-
-```ts
-type VersionSummary = {
-  id: string
-  version_no: number            // 1, 2, 3...
-  content_hash: string          // sha256 hex, 64 ký tự
-  change_note: string           // '' nếu không có
-  origin: 'backfill' | 'create' | 'edit' | 'reset' | 'restore' | 'apply' | 'fork'
-  created_at: string            // ISO 8601 UTC
-  created_by: { id: number; username: string } | null
-  is_current: boolean
-}
-type VersionDetail = VersionSummary & { front_html: string; back_html: string; shared_css: string }
-type TemplateWithVersion = TemplateItem & {          // TemplateItem = serialize_template hiện tại
-  definition_id: string | null
-  definition_version_id: string | null
-  version_no: number | null
-}
-```
-
-`serialize_template` thêm hai key nullable `definition_id`, `definition_version_id` (additive).
-
-### 5.4 Contract D — bản riêng của người cài (M3)
-
-Base: `/api/marketplace/installations/<install_id>/templates`. Chỉ chủ của `DeckInstall` được gọi. Install đã detach trả 409 `INSTALL_DETACHED`.
-
-| Method & path | Body | Response 2xx |
-|---|---|---|
-| `GET ` | — | `{"schema_version":"install-templates.v1","install_id","local_deck_id","items":[InstallTemplateItem]}` |
-| `GET /<source_template_id>` | — | `InstallTemplateDetail` |
-| `PUT /<source_template_id>/fork` | `{"front_html","back_html","shared_css","change_note"?}` | `InstallTemplateDetail` (lần đầu tạo fork, sau đó thêm version) |
-| `DELETE /<source_template_id>/fork` | — | `InstallTemplateDetail` với `state:"following"` |
-| `POST /<source_template_id>/preview` | `{"front_html","back_html","shared_css"}` | `{"front_html","back_html","front_renderer_payload","back_renderer_payload"}` (cùng shape với preview NoteType) |
-| `GET /<source_template_id>/versions` | — | như Contract A |
-| `GET /<source_template_id>/versions/<version_id>` | — | `VersionDetail` |
-| `POST /<source_template_id>/versions/<version_id>/restore` | `{"change_note"?}` | `InstallTemplateDetail` |
-
-```ts
-type InstallTemplateItem = {
-  source_template_id: string
-  name: string
-  position: number
-  is_default: boolean
-  state: 'following' | 'forked'
-  fork_id: string | null
-  current_version_id: string | null      // null khi following
-  upstream_changed_since_fork: boolean   // false khi following
-  note_count: number
-  composition_id: string                 // comp:install:{install_id}:source:notetype:{nt}:template:{tid}
-}
-type InstallTemplateDetail = InstallTemplateItem & {
-  front_html: string; back_html: string; shared_css: string   // nội dung hiệu lực
-  upstream: { front_html: string; back_html: string; shared_css: string; content_hash: string }
-  field_defs: Array<{ id: string; name: string; field_type: string; position: number }>  // schema view của overlay
-}
-```
-
-Mã lỗi: 404 `INSTALL_NOT_FOUND`, 404 `TEMPLATE_NOT_IN_INSTALL`, 409 `INSTALL_DETACHED`, 400 `TEMPLATE_COMPILE_ERROR`, 404 `TEMPLATE_VERSION_NOT_FOUND`. Envelope lỗi theo `app/api/common/responses.error_response`: `{"error","message","field"?,"details"?}`.
-
-### 5.5 Contract E — thư viện mẫu thẻ (M4)
-
-Base: `/api/card-templates`.
-
-| Method & path | Body | Response 2xx |
-|---|---|---|
-| `GET ?q=&group=all|in_use|standalone` | — | `{"items":[LibraryItem]}` |
-| `POST ` | `{"name","description"?,"category"?,"front_html","back_html","shared_css"?}` | 201 `LibraryDetail` |
-| `GET /<definition_id>` | — | `LibraryDetail` |
-| `PATCH /<definition_id>` | `{"name"?,"description"?,"category"?}` | `LibraryDetail` |
-| `PUT /<definition_id>/content` | `{"front_html","back_html","shared_css","change_note"?}` | `LibraryDetail` (thêm version) |
-| `POST /<definition_id>/preview` | `{"front_html","back_html","shared_css","sample_values"?: Record<string,string>}` | như preview NoteType |
-| `GET /<definition_id>/versions`, `GET .../versions/<vid>`, `POST .../versions/<vid>/restore` | như Contract A | như Contract A |
-| `POST /<definition_id>/apply` | `{"note_type_id","name"?,"input_bindings":{"<input_key>":"<field_def_id>"}}` | 201 `TemplateWithVersion` |
-| `POST /<definition_id>/archive` | — | `LibraryDetail` (`archived: true`) |
-| `POST /api/note-types/<nt>/templates/<tid>/sync-definition` | — | `TemplateWithVersion` (cập nhật lên version mới nhất) |
-
-```ts
-type InputSpec = { key: string; label: string; type: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram'; required: boolean }
-type LibraryItem = {
-  id: string; name: string; description: string; category: string
-  group: 'in_use' | 'standalone'; archived: boolean
-  current_version_id: string; version_no: number
-  input_keys: string[]; applied_count: number; updated_at: string
-}
-type LibraryDetail = LibraryItem & {
-  current_version: VersionDetail & { input_schema: InputSpec[] }
-  applications: Array<{ note_type_id: string; note_type_name: string; template_id: string; template_name: string; definition_version_id: string; is_outdated: boolean }>
-}
-```
-
-Lỗi khi apply (theo bảng binding P3-07): 400 `INPUT_BINDING_INCOMPLETE` (`details.missing_keys`), 400 `INPUT_BINDING_STALE` (`details.field_def_ids`), 403 `INPUT_BINDING_OUT_OF_SCOPE`, 400 `INPUT_BINDING_AMBIGUOUS`, 400 `INPUT_BINDING_TYPE_MISMATCH`; 404 `TEMPLATE_DEFINITION_NOT_FOUND`; 409 `SHARED_SCHEMA_VERSIONING_REQUIRED` khi NoteType đích đã có release chia sẻ.
+| A2 — phiên bản | `GET /api/card-templates/<id>/versions`, `GET .../versions/<vid>`, `POST .../versions/<vid>/restore` | GT-10 |
+| E2 — thư viện | `GET /api/card-templates?q=&group=all\|mine\|market\|standalone\|in_use`, `POST`, `GET/PATCH /<id>`, `PUT /<id>/content`, `POST /<id>/preview`, `POST /<id>/archive` | GT-12 |
+| F — attachment | `GET/POST /api/note-types/<nt>/attachments`, `PATCH/DELETE /api/note-types/<nt>/attachments/<application_id>` | GT-13, GT-18 |
 
 ## 6. Nguyên tắc chia việc
 
@@ -214,112 +110,52 @@ Gemini nhận task khi **toàn bộ** điều kiện sau đúng:
 
 Claude giữ: ADR và hợp đồng, schema/migration/backfill (MySQL), service có transaction/fence, resolver hiệu lực cho mọi đường render, fork/pin, session freeze, thay đổi ở `useStudySession`, review toàn bộ diff và integration gate. Claude cũng chạy review đối kháng cho phần pure function của Gemini vì lỗi ở đó âm thầm làm hỏng template.
 
-## 7. Danh sách task
+## 7. Task v2 và trạng thái tiếp nhận (2026-10-07)
 
-Trạng thái: `Planned → Ready → In progress → Review → Accepted` hoặc `Needs revision`. Chỉ Claude đánh dấu `Accepted` sau khi đọc diff và tự chạy test.
+Codex giữ phần Claude: schema, transaction, resolver, attachment, runtime freeze và release engine. Gemini làm phần frontend/test trong whitelist. Quyết định U1–U8 ở §2 được giữ nguyên; không triển khai bảng definitions hoặc fork theo install của v1.
 
-### M0 — Chốt kế hoạch
-
-| ID | Owner | Nội dung | Phụ thuộc |
+| ID | Owner hiện tại | Nội dung v2 | Trạng thái / phụ thuộc |
 |---|---|---|---|
-| CT-00 | Claude | Nhận câu trả lời Q1–Q5, chạy baseline local (`--module flashcards,study,marketplace,decks --backend-only`, frontend `study,decks`), ghi kết quả vào README task. | Người dùng duyệt |
-| CT-01 | Claude | ADR `docs/architecture/template-definition-version-fork-adr-2026-10-XX.md`: kiểm chứng D-T1..D-T8 trên code (ràng buộc restore ở D-T8 đã xác nhận; còn lại: các đường render ở CT-04, cutover vị trí trong `share/cutover.py`, guard release/#138, kiểu cột MySQL và index), đóng băng Contract A/D/E. | CT-00 |
+| CT-00 | Codex | Đối chiếu U1–U8, baseline phần đã có, giữ nhánh U8. | Completed cho nền phiên bản; gate toàn hệ thống làm theo từng milestone |
+| CT-01 | Codex | ADR-T1 giữ ID, schema expand và Contract A2; ADR attachment/market-copy/release bổ sung ở bước tương ứng. | A2 frozen; D/E/F chưa frozen |
+| GT-01..09 | Gemini, Codex review | M1 management/counts/editor + pure tokens/diff. | Đã có code/test; Codex sửa GT-01 reserved field và GT-06 draft. Browser gate tổng vẫn chưa thực hiện |
+| CT-02 | Codex | `templates` thêm owner/schema/head; `template_versions`; migration **20261007_000053**, backfill exact bytes/idempotent, MySQL rehearsal. | Completed cho expand; `note_type_id` vẫn NOT NULL |
+| CT-03 | Codex | Repository + transactional ORM history, owner list/get/restore A2, main/Connect registration, backfill CLI và route snapshot. | Completed; mở GT-10A/GT-15A |
+| GT-10A | Gemini | Entity API/types/keys cho A2 (5 file). | **Ready** |
+| GT-10B | Gemini | History sheet + page, áp response restore vào draft (6 file). | Sau review GT-10A |
+| GT-15A | Gemini | Test A2 bổ sung, không lặp test Codex. | **Ready**, độc lập GT-10A |
+| CT-R2 | Codex | Review GT-10/GT-15A + browser smoke và freeze gate M2. | Sau hai task Gemini |
+| CT-04 | Codex | Resolver hiệu lực tương thích ở mọi render path, trước khi đổi ownership/attachment. | Planned; giữ parity owned/installed/local-added, chưa đổi nguồn |
+| CT-06 | Codex | Attachment theo NoteType + Template, input_bindings bằng FieldDef ID; discovery/card retirement/binding render/freeze tương thích; sau đó library E2/F và template độc lập. | Planned sau CT-04; nhiều bước expand/backfill/cutover, contract riêng |
+| CT-07 | Codex | Release core + adapter deck parity + adapter template, pin version #137 và auto publish/update theo U4/U7. | Planned trong đợt này; không cần hỏi lại Q4 |
+| CT-05 | Codex | Market copy **cấp user/source** (U2), quyền dùng qua nhiều deck và publish restriction; resolver đọc bản nhận/pin release. | Sau CT-06 + nền release CT-07; không có deck_install_template_forks |
+| GT-15D/E | Gemini | Test market copy/library/binding theo contract mới. | Blocked; bảng v1 chưa được dùng |
+| GT-11 | Gemini | Editor bản nhận; entry từ deck nhưng identity là template của user. | Blocked CT-05, spec v2 cần viết lại |
+| GT-12/13 | Gemini | Library và attachment wizard theo E2/F. | Blocked CT-06, spec v1 apply/rewrite chưa được dùng |
+| CT-08 | Codex | Preset/chọn template trước phiên và freeze lựa chọn/binding; không đổi scheduler. | Sau attachment và contract preset |
+| GT-14 | Gemini | Hướng dẫn theo tính năng đã nghiệm thu. | Sau milestone tương ứng |
+| GT-16/17 | Gemini | Inventory template/release. | Candidate reports đang có, chưa đánh dấu Accepted |
 
-### M1 — Hiển thị rõ "một deck nhiều template" (không đổi schema)
+### CT-02/03 thực tế
 
-| ID | Owner | Nội dung | File chính | Phụ thuộc |
-|---|---|---|---|---|
-| GT-01 | Gemini | Nội dung mặc định của template mới theo field thật của NoteType. | `app/services/flashcards_share_service.py`, test mới | CT-00 |
-| GT-02 | Gemini | Contract C: `note_count` cho `GET /api/note-types/<id>/templates`. | `app/services/flashcard_content_service.py` (`list_templates`), test mới | CT-00 |
-| GT-03 | Gemini | Contract B: `include_counts=1` → `note_counts`. | `app/services/study_composition_service.py` (hàm mới), `app/routes/flashcards/study.py` (endpoint compositions), test | CT-00 |
-| GT-04 | Gemini | Entity frontend `entities/card-template`: types + API + query keys cho Contract B/C. | `frontend/src/entities/card-template/**` | CT-00 |
-| GT-05 | Gemini | Tách UI soạn template trong `NoteTypeDetailPage` thành `TemplateCodeEditor` ở tầng entity (chuyển nguyên DOM/class, không đổi giao diện; có snapshot DOM trước/sau). | `frontend/src/entities/card-template/ui/`, `NoteTypeDetailPage.tsx` | GT-04 |
-| GT-06 | Gemini | Quản lý template: số note, nhãn mặc định, đổi tên, xóa, thông báo lỗi thân thiện; bỏ `{{Word}}` cứng khi tạo. | `NoteTypeDetailPage.tsx`, component mới | GT-02, GT-04, GT-05 |
-| GT-07 | Gemini | Dashboard: mục menu "Kiểu thẻ" và dialog liệt kê kiểu thẻ + số note + liên kết sửa. | `frontend/src/features/dashboard/**` | GT-03, GT-04 |
-| CT-08 | Claude | (Tùy chọn) `/study?deck_id=X&composition_id=Y` chọn sẵn kiểu thẻ trong `useStudySession`. | `useStudySession.ts` | GT-07 |
-| CT-R1 | Claude | Review + integration gate M1. | — | GT-01..07 |
+- Models: `models/template.py`, `models/template_version.py`. Đăng ký ở main factory và Connect `_register_models`, không giả định `models/__init__.py` import tất cả model.
+- Version persistence: `app/repositories/template_version_repository.py`; orchestration/hooks/CLI: `app/services/template_version_service.py`.
+- `before_flush` thu mọi writer ORM, `before_commit` chụp nguồn cuối một lần/template/outer transaction. Raw/bulk SQL phải backfill rõ ràng. Parent lock + current-read head cấp sequence an toàn ở MySQL RR; rollback/savepoint không giữ metadata đã hủy.
+- A2 canonical nằm ở `app/api/v1/flashcards/card_templates.py`; thêm alias NoteType và 6 route trong snapshot. Serializer thêm `current_version_id`, không thêm definition_id.
+- Rename/no-op không append; restore explicit luôn append, compile validation + ownership/released-schema guard + audit trong cùng transaction. Card ID/progress và runtime artifacts giữ nguyên.
+- Migration 52→53 giữ nguyên timestamp/source; runtime schema cũ là `input_schema=[]`, chưa tạo binding. Upgrade phải chạy trước process đọc model mới. Downgrade từ chối authored/history nhiều bản; rollback app giữ schema expand.
+- Chi tiết và bằng chứng: [báo cáo CT-02/03](../../task/template-features/reviews/CT-02_CT-03_CODEX_IMPLEMENTATION_2026-10-07.md).
 
-### M2 — Phiên bản template cho chủ sở hữu
-
-| ID | Owner | Nội dung | Phụ thuộc |
-|---|---|---|---|
-| GT-08 | Gemini | Python pure: `template_tokens.py` (trích/đổi token Mustache) + `content_hash`. Chạy song song từ M0. | CT-00 |
-| GT-09 | Gemini | TS pure: `lineDiff` + component `TemplateDiffView`. Chạy sớm ở đợt 1. | GT-05 (cùng `index.ts`) |
-| CT-02 | Claude | Models + migration `000051` (2 bảng + cột mới trên `templates`), backfill idempotent, rehearsal MySQL, thứ tự deploy (migration trước code). | CT-01, GT-08 |
-| CT-03 | Claude | `template_definition_service` + tích hợp create/update/reset/delete + Contract A + cập nhật route snapshot + test. | CT-02 |
-| GT-15A | Gemini | Bổ sung test hợp đồng Contract A theo bảng trường hợp trong spec. | CT-03 |
-| GT-10 | Gemini | UI lịch sử phiên bản trong `NoteTypeDetailPage` (xem, so sánh, khôi phục). | CT-03, GT-06, GT-09 |
-| CT-R2 | Claude | Review + gate M2 (MySQL migration, session freeze, tốc độ lưu). | toàn bộ M2 |
-
-### M3 — Người cài sửa template của deck đã clone
-
-| ID | Owner | Nội dung | Phụ thuộc |
-|---|---|---|---|
-| CT-04 | Claude | Seam `resolve_effective_template(card, clone_scope)` và chuyển mọi đường render sang seam (chưa đổi hành vi, có test parity). Danh sách callsite tối thiểu: `study_artifact_service.build_effective_study_card`, `routes/flashcards/study.py` (preview/artifact), `browse_card_service`/`vocabulary_repository`/`vocabulary_presenter`, `mcp/study_tools`, `study_card_editor_service`. | CT-01 |
-| CT-05 | Claude | Bảng `deck_install_template_forks`, service fork/save/reset/restore/preview, Contract D, cờ `upstream_changed_since_fork`, test owned + installed + local-added + phiên đang mở + không đổi nguồn. | CT-03, CT-04, Q1 |
-| GT-15D | Gemini | Bổ sung test hợp đồng Contract D. | CT-05 |
-| GT-11 | Gemini | Trang `/installed-decks/:installId/templates`: danh sách kiểu thẻ gốc, soạn bản riêng, xem trước, khôi phục bản gốc, lịch sử. Thêm liên kết từ dialog GT-07. | CT-05, GT-05, GT-07, GT-10 |
-| CT-R3 | Claude | Review + gate M3 (browser smoke bằng profile riêng, nhiều tab, restore IndexedDB). | toàn bộ M3 |
-
-### M4 — Thư viện mẫu thẻ độc lập
-
-| ID | Owner | Nội dung | Phụ thuộc |
-|---|---|---|---|
-| CT-06 | Claude | Service + Contract E: tạo mẫu độc lập, apply với binding (dùng GT-08), sync lên version mới, materialize lại khi đổi tên field (Q3), archive. | CT-03, GT-08, Q2, Q3 |
-| GT-15E | Gemini | Bổ sung test hợp đồng Contract E. | CT-06 |
-| GT-12 | Gemini | Trang `/card-templates` (danh sách, lọc nhóm) và `/card-templates/:id` (sửa, xem trước, lịch sử). Menu sidebar "Mẫu thẻ". | CT-06, GT-05, GT-10 |
-| GT-13 | Gemini | Wizard "Áp dụng vào loại thẻ" + `FieldMappingEditor`. | GT-12 |
-| GT-14 | Gemini | Tài liệu người dùng: hướng dẫn kiểu thẻ, phiên bản, bản riêng, thư viện. | M3/M4 Accepted |
-| CT-R4 | Claude | Review + gate M4. | toàn bộ M4 |
-
-### M5 — Pin phiên bản theo release cho tác giả (#137), cần duyệt riêng (Q4)
-
-| ID | Owner | Nội dung |
-|---|---|---|
-| CT-07 | Claude | Release ghi bản đồ `source_template_id → version_id`; install pin theo release; update/rebase có xung đột template `keep_mine`/`keep_upstream`; bỏ đường hotfix sống #138; tài liệu runbook. Không giao Gemini phần lõi. Sau khi có contract, Gemini có thể nhận UI xung đột template theo mẫu GT-11. |
-
-### Chi tiết task của Claude
-
-**CT-00 — Chốt và baseline.** Ghi câu trả lời Q1–Q5 vào README task. Chạy trên máy local (đã có `.venv`, `node_modules`): `scripts/run_tests.py --module flashcards,study,marketplace,decks,deck_collaboration --backend-only`, frontend `--module study,decks --frontend-only`, `npm run typecheck`, `npm run build:ci`, `tests.test_api_v1_route_map`. Lưu kết quả và HEAD vào nhật ký README. Tạo worktree cho các task `Ready`.
-
-**CT-01 — ADR.** Đầu ra `docs/architecture/template-definition-version-fork-adr-2026-10-XX.md`, trạng thái Accepted khi người dùng đồng ý. Nội dung bắt buộc:
-
-1. Bảng cột của `template_definitions` (id, owner_user_id, name, description, category, origin `note_type|standalone|fork`, archived_at, forked_from_version_id, current_version_id, created/updated), `template_definition_versions` (id, definition_id, version_no unique theo definition, front_html/back_html/shared_css cùng kiểu cột với `templates`, input_schema JSON, content_hash CHAR(64), origin, change_note, created_by_user_id, created_at) và cột mới trên `templates` (`definition_id`, `definition_version_id`, `input_bindings` JSON, tất cả nullable). FK/ON DELETE, index, kiểu MySQL.
-2. Chọn seam ghi version: khuyến nghị listener `before_flush` cho `Template` (giống seam `StudyApplication` ở `models/study_application.py`), vì Template được ghi ở 9 file: `flashcard_content_service`, `flashcards_share_service`, `share/note_types`, `flashcard_legacy`, `flashcard_media_normalizer`, `mcp/note_type_tools`, `connect/actions`, `connect/import_session`, `study_note_template_service`. Origin truyền qua `session.info`.
-3. Danh sách đường render thẻ của deck đã cài (callsite CT-04) và chứng minh bằng grep không sót.
-4. Quan hệ với guard `SHARED_SCHEMA_VERSIONING_REQUIRED` và hotfix #138: hotfix vẫn tạo version cho tác giả; người cài `following` thấy ngay; người đã fork chỉ nhận cờ `upstream_changed_since_fork`.
-5. Vòng đời: xóa Template nguồn → fork xóa theo (CASCADE), version của fork giữ; gỡ/detach install → fork xóa theo; cutover theo vị trí trong `share/cutover.py` không bị ảnh hưởng.
-6. Thứ tự deploy: migration trước code (cột mới trên `templates` không được `db.create_all()` thêm); kiểm tra boot qua `wsgi.py`.
-7. Đóng băng Contract A/D/E (sửa §5 nếu cần) và quy tắc tương thích kiểu cho GT-13.
-
-**CT-02 — Schema + backfill.** Model mới trong `models/`, đăng ký ở `models/__init__.py`; migration `migrations/versions/2026MMDD_000051_add_template_definitions.py` (sau `20261003_000050_drop_retired_note_progress_tables.py`). Backfill idempotent theo lô 500 (Alembic data step hoặc lệnh CLI `flask template-definitions-backfill --apply`, chọn trong ADR): mỗi Template chưa có `definition_id` nhận definition `origin='note_type'` + version 1 `origin='backfill'`, `input_schema` tính bằng GT-08. Test: schema/model, backfill hai lần không tăng dòng, round-trip `rewrite_variable_names` identity trên toàn bộ template local, migration 50→51→50→51 trên MySQL 8. Không động tới `cards`, `study_applications`.
-
-**CT-03 — Version service + Contract A.** `app/services/template_definition_service.py` (ensure_definition, append_version có chống trùng theo `content_hash`, list/get/restore). Nối seam đã chọn ở CT-01; route Contract A trong `app/api/v1/flashcards/note_types.py`; thêm 2 key vào `serialize_template`; cập nhật `tests/snapshots/api_v1_routes.json` bằng `UPDATE_ROUTE_SNAPSHOT=1`. Test lõi: mọi writer ở danh sách CT-01 tạo đúng một version khi đổi nội dung; Card ID và progress không đổi; restore không xóa version. Sau đó mở GT-15A, GT-10.
-
-**CT-04 — Seam render hiệu lực.** Thêm `resolve_effective_template(card, clone_scope)` (đặt trong `study_artifact_service.py`) và chuyển các callsite: `build_effective_study_card` (dòng 118, 147), `app/routes/flashcards/study.py` (khoảng dòng 378, 481, 629, 679), `app/repositories/vocabulary_repository.py:1110`, `app/presenters/vocabulary_presenter.py:412`, `app/services/mcp/study_tools.py:281,357`, `app/services/study_card_editor_service.py:152`, và mọi chỗ CT-01 tìm thêm. Bước này **không đổi hành vi**: test parity so `template_version` và HTML render trước/sau trên fixture owned + overlay + local-added.
-
-**CT-05 — Fork của người cài.** Bảng `deck_install_template_forks` (install_id FK CASCADE, source_template_id FK CASCADE, definition_id của người cài, current_version_id, base_upstream_hash, unique `(install_id, source_template_id)`), migration `000052`. Resolver: tra fork theo `clone_scope.install.id` một lần cho mỗi lần dựng phiên/trang (không N+1), trả đối tượng giống Template với `id` = template nguồn (D-T8). Route Contract D trong `app/api/v1/marketplace/installations.py`; preview dùng `build_clone_schema_view`. Test lõi: không đổi hàng của tác giả, người cài khác không ảnh hưởng, phiên đang mở giữ artifact, restore IndexedDB không quarantine, browse/MCP/preview trả cùng nội dung hiệu lực. Sau đó mở GT-15D, GT-11.
-
-**CT-06 — Thư viện + Contract E.** Service tạo mẫu độc lập, apply (kiểm tra binding theo bảng P3-07, materialize bằng `rewrite_variable_names`, tạo Template qua đường tạo Card/NOTE expansion có sẵn của `flashcard_content_service.create_template`), `sync-definition`, archive; hook đổi tên field trong `update_field` theo Q3; blueprint mới `app/api/v1/flashcards/card_templates.py` đăng ký trong `flashcards_v1_bp`; route snapshot. Sau đó mở GT-15E, GT-12, GT-13.
-
-**CT-07 — Pin release (#137), chỉ khi Q4 được duyệt.** Release ghi bản đồ `source_template_id → version_id`; install pin; update/rebase thêm đơn vị xung đột template `keep_mine`/`keep_upstream`; bỏ đường hotfix sống #138; runbook. Lập plan riêng trước khi code.
-
-**CT-08 — Liên kết học theo kiểu thẻ (tùy chọn).** `/study?deck_id=X&composition_id=Y`: trong `useStudySession`, khi có nhiều composition và `Y` thuộc danh sách thì gọi `selectComposition(Y)` thay vì chờ người dùng chọn; `Y` không hợp lệ thì vẫn hiện selector. Test trong `useStudySession.test.tsx`.
-
-**CT-R1..R4 — Review và gate milestone.** Theo §9, cộng browser smoke bằng profile riêng và cập nhật tài liệu kiến trúc liên quan (`study-interaction-trigger-algorithm-plan.md` §16, issue #137).
-
-### Thứ tự chạy thực tế
+### Thứ tự hiện tại
 
 ```text
-Đợt 0: CT-00, CT-01 (Claude)  ||  GT-01, GT-02, GT-08, GT-04 (Gemini, mỗi task một worktree)
-Đợt 1: GT-03  ||  GT-05 → GT-09 → GT-06 → GT-07  ||  CT-02, CT-04 (Claude)
-Đợt 2: CT-03 → GT-15A, GT-10
-Đợt 3: CT-05 → GT-15D, GT-11
-Đợt 4: CT-06 → GT-15E, GT-12 → GT-13 → GT-14
-Đợt 5 (nếu duyệt Q4): CT-07
+Codex CT-02/03 đã có code/test → Gemini GT-10A và GT-15A (file độc lập)
+Codex review GT-10A → Gemini GT-10B → Codex gate M2
+Codex CT-04, CT-06, CT-07 theo từng seam → contract mới → GT-12/13/15E
+Codex CT-05 cấp user → contract mới → GT-11/15D
 ```
 
-Không chạy song song hai task cùng sửa một file. Cặp phải tuần tự: GT-04 → GT-05 → GT-09 (cùng `entities/card-template/index.ts`); GT-05 → GT-06 → GT-10 (cùng `NoteTypeDetailPage.tsx`); GT-02/GT-01 trước CT-03 (cùng `flashcard_content_service.py`/`flashcards_share_service.py`); GT-03 trước CT-08.
+Không để hai worker sửa cùng file. Làm trên nhánh U8; checkout/worktree sạch từ HEAD hiện tại chưa chứa nền CT-02/03 đang uncommitted. Phải đưa **đúng diff nền đã review** sang worktree trước khi giao UI/test, hoặc chạy worker tuần tự trên workspace với whitelist. Không commit/push/stash/reset các thay đổi ngoài task.
 
 ## 8. Quy trình giao và review một task Gemini
 
@@ -366,15 +202,16 @@ Browser/DevTools chỉ dùng profile riêng (ví dụ `C:\Users\chung\.gemini\ch
 |---|---|
 | Gemini bịa hàm/field không tồn tại | Spec trích nguyên đoạn code liên quan; quy tắc "thiếu symbol thì dừng và báo cáo"; review so contract từng dòng. |
 | Đổi token Mustache sai làm hỏng template | GT-08 có bảng test bắt buộc; CT-R2 thêm fuzz/so sánh trước–sau trên toàn bộ template backfill (round-trip phải giữ nguyên byte khi mapping là identity). |
-| Fork rò rỉ sang tác giả hoặc người cài khác | Fork chỉ đọc qua resolver; test đếm hàng nguồn trước/sau; review bắt buộc của Claude. |
+| Market copy rò rỉ sang tác giả hoặc người nhận khác | Resolver theo user/source; test nguồn và quyền scope trước/sau; review của Codex. |
 | Đổi `AppliedComposition` làm vỡ session freeze | Contract B thêm key cấp cao nhất, không sửa dataclass; review chặn mọi diff ở `AppliedComposition`. |
 | Code mới boot trước migration (cột mới trên `templates`) | CT-02 ghi rõ thứ tự deploy; kiểm tra boot thật qua `wsgi.py` theo AGENTS.md. |
 | Xung đột với migration FSD đang chạy (G03 dashboard, G09 note-types) | Không chạy GT-05/06/07/10 khi G03/G09 đang `In progress`; code mới đặt trong slice mới (`entities/card-template`) và component mới, chỉ sửa tối thiểu file cũ. |
 | Hiệu năng: đếm note theo composition | Một truy vấn group-by cho mọi composition; chỉ chạy khi `include_counts=1`; không chạy trong luồng mở phiên học. |
-| Backfill tạo nhiều version rác | Mỗi lần lưu chỉ thêm version khi `content_hash` khác version hiện tại (CT-03). |
+| Backfill tạo nhiều version rác | Lưu chỉ append khi nguồn hoặc input_schema thay đổi; restore explicit luôn append (CT-03). |
 
-## 11. Bước tiếp theo sau khi người dùng duyệt
+## 11. Việc tiếp theo đã được cho phép
 
-1. Người dùng trả lời Q1–Q5 (có thể chấp nhận toàn bộ đề xuất).
-2. Claude chạy CT-00 và đánh dấu GT-01, GT-02, GT-04, GT-08 là `Ready` trong README task (GT-05 mở sau khi GT-04 `Accepted`).
-3. Người dùng hoặc Claude (nếu chạy local có `agy`) giao lần lượt prompt của các task `Ready`; Claude review theo §8.
+1. Gemini có thể bắt đầu GT-10A và GT-15A theo prompt trong tracker; không hỏi lại Q1–Q5, đã có U1–U8.
+2. Codex review entity diff rồi mở GT-10B, giữ bản sửa draft và kiểm tra restore cùng nguồn.
+3. Tiếp tục CT-04/06/07/05 theo thứ tự ở §7; API/library/release chỉ mở khi contract thực đã có. Preset scope/ghi nhớ và quyền phân phối cần được làm rõ trong ADR của bước đó, không chặn A2.
+4. N5 (marketplace template riêng lẻ) và N6 (input nhận danh sách nhiều field) vẫn ngoài phạm vi đã chốt. Không suy diễn mở rộng vào nền phiên bản.

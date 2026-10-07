@@ -1027,6 +1027,340 @@ class FlamaConnectMcpTests(unittest.TestCase):
         self.assertIn("total_decks", study_stats)
         self.assertIn("total_notes", study_stats)
 
+    def test_get_study_stats_reflects_upgraded_note_reviews_and_idempotency(self):
+        from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+
+        with self.app.app_context():
+            stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime.utcnow(),
+            )
+            db.session.commit()
+
+        # 1. Initial stats before review
+        res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 291,
+                "method": "tools/call",
+                "params": {"name": "get_study_stats", "arguments": {}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(res.status_code, 200)
+        initial_stats = res.get_json()["result"]["structuredContent"]
+        self.assertEqual(initial_stats["reviewed_today_cards"], 0)
+        self.assertEqual(initial_stats["total_reviews_in_year"], 0)
+        self.assertEqual(initial_stats["current_streak_days"], 0)
+        self.assertEqual(initial_stats["longest_streak_days"], 0)
+        self.assertEqual(initial_stats["study_time_today_minutes"], 0.0)
+        self.assertEqual(initial_stats["total_study_time_year_minutes"], 0.0)
+
+        # 2. Submit review in upgraded study flow (NOTE authority mode)
+        review_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 292,
+                "method": "tools/call",
+                "params": {
+                    "name": "submit_review",
+                    "arguments": {
+                        "card_id": str(self.card_id),
+                        "rating": "good",
+                        "duration_ms": 30000,
+                        "operation_key": "mcp-stat-test-1",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(review_res.status_code, 200)
+        review_data = review_res.get_json()["result"]["structuredContent"]
+        self.assertTrue(review_data["success"])
+        self.assertEqual(review_data["authority"]["mode"], "NOTE")
+        self.assertFalse(review_data["authority"]["replayed"])
+
+        # 3. get_study_stats immediately and accurately reflects review activity
+        res_after = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 293,
+                "method": "tools/call",
+                "params": {"name": "get_study_stats", "arguments": {}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(res_after.status_code, 200)
+        after_stats = res_after.get_json()["result"]["structuredContent"]
+        self.assertEqual(after_stats["reviewed_today_cards"], 1)
+        self.assertEqual(after_stats["total_reviews_in_year"], 1)
+        self.assertEqual(after_stats["current_streak_days"], 1)
+        self.assertEqual(after_stats["longest_streak_days"], 1)
+        self.assertEqual(after_stats["study_time_today_minutes"], 0.5)
+        self.assertEqual(after_stats["total_study_time_year_minutes"], 0.5)
+        self.assertEqual(after_stats["new_cards"], 0)
+        self.assertEqual(after_stats["learning_cards"], 1)
+        self.assertEqual(after_stats["due_counts"]["learning_cards"], 1)
+
+        # 4. Consistency across get_card and get_deck_stats
+        card_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 294,
+                "method": "tools/call",
+                "params": {"name": "get_card", "arguments": {"card_id": str(self.card_id)}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(card_res.status_code, 200)
+        card_data = card_res.get_json()["result"]["structuredContent"]
+        self.assertEqual(card_data["authority_mode"], "NOTE")
+        self.assertEqual(card_data["reps"], 1)
+
+        deck_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 295,
+                "method": "tools/call",
+                "params": {"name": "get_deck_stats", "arguments": {"deck_id": self.deck_id}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(deck_res.status_code, 200)
+        deck_data = deck_res.get_json()["result"]["structuredContent"]
+        self.assertEqual(deck_data["authority_mode"], "NOTE")
+        self.assertEqual(deck_data["new_cards"], 0)
+        self.assertEqual(deck_data["learning_cards"], 1)
+
+        # 5. Idempotency against replay: duplicate review does not produce duplicate event records
+        replay_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 296,
+                "method": "tools/call",
+                "params": {
+                    "name": "submit_review",
+                    "arguments": {
+                        "card_id": str(self.card_id),
+                        "rating": "good",
+                        "duration_ms": 30000,
+                        "operation_key": "mcp-stat-test-1",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(replay_res.status_code, 200)
+        replay_data = replay_res.get_json()["result"]["structuredContent"]
+        self.assertTrue(replay_data["authority"]["replayed"])
+
+        res_replay = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 297,
+                "method": "tools/call",
+                "params": {"name": "get_study_stats", "arguments": {}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(res_replay.status_code, 200)
+        replay_stats = res_replay.get_json()["result"]["structuredContent"]
+        self.assertEqual(replay_stats["reviewed_today_cards"], 1)
+        self.assertEqual(replay_stats["total_reviews_in_year"], 1)
+
+        with self.app.app_context():
+            self.assertEqual(
+                ReviewEvent.query.filter_by(user_id=self.user_id, card_id=str(self.card_id)).count(),
+                1,
+            )
+
+        # 6. Verify explicit year queries
+        now_year = datetime.utcnow().year
+        res_current_year = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 298,
+                "method": "tools/call",
+                "params": {"name": "get_study_stats", "arguments": {"year": now_year}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(res_current_year.status_code, 200)
+        curr_stats = res_current_year.get_json()["result"]["structuredContent"]
+        self.assertEqual(curr_stats["total_reviews_in_year"], 1)
+        self.assertEqual(curr_stats["total_study_time_year_minutes"], 0.5)
+
+        res_past_year = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 299,
+                "method": "tools/call",
+                "params": {"name": "get_study_stats", "arguments": {"year": now_year - 1}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(res_past_year.status_code, 200)
+        past_stats = res_past_year.get_json()["result"]["structuredContent"]
+        self.assertEqual(past_stats["total_reviews_in_year"], 0)
+        self.assertEqual(past_stats["total_study_time_year_minutes"], 0.0)
+        # Today metrics should still reflect today's study activity
+        self.assertEqual(past_stats["reviewed_today_cards"], 1)
+        self.assertEqual(past_stats["study_time_today_minutes"], 0.5)
+
+        # 7. Second distinct review increments counters cumulatively
+        review2_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 300,
+                "method": "tools/call",
+                "params": {
+                    "name": "submit_review",
+                    "arguments": {
+                        "card_id": str(self.card_id),
+                        "rating": "easy",
+                        "duration_ms": 60000,
+                        "operation_key": "mcp-stat-test-2",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(review2_res.status_code, 200)
+
+        res_second = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 301,
+                "method": "tools/call",
+                "params": {"name": "get_study_stats", "arguments": {}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(res_second.status_code, 200)
+        second_stats = res_second.get_json()["result"]["structuredContent"]
+        self.assertEqual(second_stats["reviewed_today_cards"], 2)
+        self.assertEqual(second_stats["total_reviews_in_year"], 2)
+        self.assertEqual(second_stats["study_time_today_minutes"], 1.5)
+        self.assertEqual(second_stats["total_study_time_year_minutes"], 1.5)
+
+        with self.app.app_context():
+            self.assertEqual(
+                ReviewEvent.query.filter_by(user_id=self.user_id, card_id=str(self.card_id)).count(),
+                2,
+            )
+
+    def test_get_study_stats_timezone_and_boundary_parity(self):
+        from models.user_scheduler_settings import UserSchedulerSettings
+        from app.services.stats_today_future import build_user_study_time_stats
+        from app.services.stats_overview import build_stats_overview
+        from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+        from datetime import timedelta
+
+        # Configure user with Tokyo timezone (+9 UTC) and day boundary at 4 AM local
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.timezone = "Asia/Tokyo"
+            settings = UserSchedulerSettings.query.filter_by(user_id=self.user_id).first()
+            if settings is None:
+                settings = UserSchedulerSettings(user_id=self.user_id, day_boundary_hour_local=4)
+                db.session.add(settings)
+            else:
+                settings.day_boundary_hour_local = 4
+            stage_note_authority_enrollment(
+                db.session,
+                learner_user_id=self.user_id,
+                now_utc=datetime.utcnow(),
+            )
+            db.session.commit()
+
+        # Submit active review today under Tokyo timezone (60s = 1.0 min)
+        rev_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 401,
+                "method": "tools/call",
+                "params": {
+                    "name": "submit_review",
+                    "arguments": {
+                        "card_id": str(self.card_id),
+                        "rating": "good",
+                        "duration_ms": 60000,
+                        "operation_key": "tokyo-parity-today",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(rev_res.status_code, 200)
+
+        # Add a review event for yesterday's study day (30s = 0.5 min)
+        with self.app.app_context():
+            ev_yesterday = ReviewEvent(
+                user_id=self.user_id,
+                card_id=str(self.card_id),
+                rating="good",
+                mode="review",
+                reviewed_at=datetime.utcnow() - timedelta(days=1),
+                duration_ms=30000,
+                deck_id=self.deck_id,
+            )
+            db.session.add(ev_yesterday)
+            db.session.commit()
+
+        # Query MCP get_study_stats
+        res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 402,
+                "method": "tools/call",
+                "params": {"name": "get_study_stats", "arguments": {}},
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()["result"]["structuredContent"]
+
+        with self.app.app_context():
+            overview = build_stats_overview(
+                user_id=self.user_id,
+                year=None,
+                timezone_name="Asia/Tokyo",
+            )
+            study_time = build_user_study_time_stats(
+                user_id=self.user_id,
+                timezone_name="Asia/Tokyo",
+                scope="collection",
+                range_preset="today",
+            )
+
+        # Non-zero active review verification
+        self.assertEqual(data["reviewed_today_cards"], 1)
+        self.assertEqual(data["study_time_today_minutes"], 1.0)
+        self.assertEqual(data["total_reviews_in_year"], 2)
+        self.assertEqual(data["total_study_time_year_minutes"], 1.5)
+        self.assertEqual(data["current_streak_days"], 2)
+        self.assertEqual(data["longest_streak_days"], 2)
+        self.assertEqual(data["new_cards"], 0)
+        self.assertEqual(data["learning_cards"], 1)
+        self.assertEqual(data["due_counts"]["learning_cards"], 1)
+
+        # Parity across MCP, stats_overview, and stats_today_future
+        self.assertEqual(data["reviewed_today_cards"], overview["today"]["cards"])
+        self.assertEqual(data["study_time_today_minutes"], overview["today"]["minutes"])
+        self.assertEqual(data["reviewed_today_cards"], study_time["summary"]["total_reviews"])
+        self.assertEqual(data["study_time_today_minutes"], study_time["summary"]["total_study_minutes"])
+        self.assertEqual(data["total_reviews_in_year"], overview["metrics"]["total_cards"])
+        self.assertEqual(data["total_study_time_year_minutes"], overview["metrics"]["total_minutes"])
+        self.assertEqual(data["current_streak_days"], overview["metrics"]["current_streak_days"])
+        self.assertEqual(data["longest_streak_days"], overview["metrics"]["longest_streak_days"])
+
+        # Reset user timezone back to UTC
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.timezone = "UTC"
+            db.session.commit()
+
     # -----------------------------------------------------------------------
     # Security & Error Handling Tests
     # -----------------------------------------------------------------------

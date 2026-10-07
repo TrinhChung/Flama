@@ -112,17 +112,18 @@ export function NoteTypeDetailPage() {
     }
   }, [templates, selectedTemplateId])
 
-  // Sync editor values when selected template changes
+  // Sync on template identity/content changes, preserving drafts on metadata-only refetches.
+  const editorTemplateId = selectedTemplate?.id
   const frontHtmlVal = selectedTemplate?.front_html
   const backHtmlVal = selectedTemplate?.back_html
   const sharedCssVal = selectedTemplate?.shared_css
   useEffect(() => {
-    if (selectedTemplate) {
+    if (editorTemplateId) {
       setFrontHtml(frontHtmlVal || '')
       setBackHtml(backHtmlVal || '')
       setSharedCss(sharedCssVal || '')
     }
-  }, [selectedTemplate, frontHtmlVal, backHtmlVal, sharedCssVal])
+  }, [editorTemplateId, frontHtmlVal, backHtmlVal, sharedCssVal])
 
   // Save Template Mutation
   const saveMutation = useMutation({

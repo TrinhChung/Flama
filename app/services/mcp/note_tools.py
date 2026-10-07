@@ -477,8 +477,11 @@ def _create_note(
 
     _auto_crawl_note_fields(user_id=user_id, note=note, field_defs=note_type.field_defs)
 
-    templates = list(note_type.templates)
-    if not templates:
+    from app.repositories.template_library_repository import create_cards_for_note
+    create_cards_for_note(db.session, note)
+    db.session.flush()
+    card_rows = list(Card.query.filter_by(note_id=note.id).all())
+    if not card_rows:
         raise RequestValidationError(
             f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
             field="note_type_id",
@@ -486,20 +489,7 @@ def _create_note(
             code="NOTE_TYPE_HAS_NO_TEMPLATE",
         )
 
-    created_cards: list[dict[str, Any]] = []
-    card_rows: list[Card] = []
-    for template in templates:
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
-        db.session.flush()
-        card_rows.append(card)
-        created_cards.append(
-            {
-                "id": str(card.id),
-                "template_id": str(template.id),
-                "template_name": template.name,
-            }
-        )
+    created_cards = [{"id": str(card.id), "template_id": str(card.template_id), "template_name": card.template.name} for card in card_rows]
 
     try:
         study_progress_lifecycle_mirror_service.materialize_new_note_authority(

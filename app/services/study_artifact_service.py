@@ -10,6 +10,8 @@ from typing import Any, Mapping
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.services import flashcards_share_service
+from app.services.effective_template_service import resolve_effective_template
+from app.services.template_binding_service import apply_binding_projection
 from app.services.flashcard_renderer import (
     build_render_context,
     prepare_client_template_source,
@@ -94,12 +96,13 @@ def build_effective_study_card(
     clone_scope: flashcards_share_service.CloneDeckScope | None,
     clone_added_note_ids: frozenset[str] | None = None,
     note_override_rows_by_note_id: Mapping[str, list] | None = None,
+    template_overrides: Mapping[str, Any] | None = None,
 ) -> EffectiveStudyCard:
     """Resolve a Card's effective content, owned or through a clone overlay.
 
     Callers building many Cards of one install may pass the install's added
-    Note IDs and field-override rows loaded once; otherwise both are queried
-    per Card.
+    Note IDs, field-override rows, and resolved template sources loaded once.
+    Without those contexts the existing clone content helpers resolve them.
     """
     note = card.note
     field_defs = list(note.note_type.field_defs)
@@ -112,14 +115,14 @@ def build_effective_study_card(
             note_id=note.id,
         )
     ):
-        return EffectiveStudyCard(
+        return apply_binding_projection(EffectiveStudyCard(
             card=card,
             note=note,
-            template=card.template,
+            template=resolve_effective_template(card, template_overrides=template_overrides),
             field_defs=field_defs,
             field_values=field_values,
             clone_scope=None,
-        )
+        ))
     if clone_scope is not None:
         source_note_type_id = (
             clone_scope.install.source_note_type_id or note.note_type_id or ""
@@ -141,17 +144,18 @@ def build_effective_study_card(
                     else None
                 ),
             )
-    return EffectiveStudyCard(
+    return apply_binding_projection(EffectiveStudyCard(
         card=card,
         note=note,
-        template=card.template,
+        template=resolve_effective_template(card, clone_scope, template_overrides=template_overrides),
         field_defs=field_defs,
         field_values=field_values,
         clone_scope=clone_scope,
-    )
+    ))
 
 
 def template_version(context: EffectiveStudyCard) -> str:
+    context = apply_binding_projection(context)
     template = context.template
     return canonical_digest(
         {
@@ -184,6 +188,7 @@ def _media_payload(context: EffectiveStudyCard) -> list[dict[str, Any]]:
 
 
 def content_version(context: EffectiveStudyCard) -> str:
+    context = apply_binding_projection(context)
     return canonical_digest(
         {
             "schema_version": CONTENT_SCHEMA,
@@ -197,6 +202,7 @@ def content_version(context: EffectiveStudyCard) -> str:
 
 
 def build_template_artifact(context: EffectiveStudyCard) -> dict[str, Any]:
+    context = apply_binding_projection(context)
     front = prepare_client_template_source(
         context.template.front_html or "",
         context.field_defs,
@@ -220,6 +226,7 @@ def build_template_artifact(context: EffectiveStudyCard) -> dict[str, Any]:
 
 
 def build_content_artifact(context: EffectiveStudyCard) -> dict[str, Any]:
+    context = apply_binding_projection(context)
     template_sources = (
         str(context.template.front_html or ""),
         str(context.template.back_html or ""),

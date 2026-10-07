@@ -57,6 +57,7 @@ def serialize_template(template: Template) -> dict[str, Any]:
         "shared_css": template.shared_css,
         "position": template.position,
         "is_default": bool(template.is_default),
+        "current_version_id": template.current_version_id,
         "updated_at": template.updated_at.isoformat() if template.updated_at else None,
     }
 

@@ -136,7 +136,7 @@ class StudySessionScalingTests(unittest.TestCase):
             )
             db.session.commit()
         self.snapshot = self._open()
-        self.assertEqual(len(self.snapshot["cards"]), 80)
+        self.assertEqual(len(self.snapshot["cards"]), 40)
         with self.app.app_context():
             lease = db.session.get(StudySession, self.snapshot["session_id"])
             members = db.session.execute(select(StudySessionCard).where(StudySessionCard.session_id == lease.id).order_by(StudySessionCard.ordinal)).scalars().all()
@@ -149,7 +149,10 @@ class StudySessionScalingTests(unittest.TestCase):
                     reads.append(key)
                     return super().__getitem__(key)
             authority_pins = replace(authority_pins, identity_by_session_card_id=CountingMap(authority_pins.identity_by_session_card_id))
-            events = [self._event(i, card=card) for i,card in enumerate(self.snapshot["cards"], 1)]
+            # Each occurrence is selected separately. Review every selected
+            # Note twice to retain the linear replay and state propagation gate.
+            self.assertEqual(Card.query.count(), 80)
+            events = [self._event(i, card=card) for i,card in enumerate(self.snapshot["cards"] * 2, 1)]
             states, replayed, touched, _ids = study_session_service._replay_session_events(
                 session=lease,
                 payload={"selected_composition_id": self.snapshot["selected_composition_id"]},

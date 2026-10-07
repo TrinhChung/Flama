@@ -53,7 +53,7 @@ from models.template import Template
 logger = logging.getLogger(__name__)
 FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
 ALLOWED_TEMPLATE_HOTFIX_FIELDS = frozenset(
-    {"name", "front_html", "back_html", "shared_css"}
+    {"name", "front_html", "back_html", "shared_css", "change_note"}
 )
 
 
@@ -612,6 +612,10 @@ def update_field(
 
     job_payload = None
     if old_name != new_name:
+        # Freeze the legacy name->ID map before changing field names. Reusable
+        # bindings survive rename; stored Mustache sources stay byte-identical.
+        from app.services.template_library_service import initialize_legacy_bindings
+        initialize_legacy_bindings(note_type)
         job = _rename_field_values(
             user_id=user_id,
             note_type=note_type,
@@ -883,6 +887,13 @@ def update_template(
     template_id: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    from app.services.template_version_service import (
+        TemplateVersionError, mark_template_version, validate_change_note,
+    )
+    try:
+        change_note = validate_change_note(payload)
+    except TemplateVersionError as exc:
+        raise ContentApiError(exc.code, str(exc), status=exc.status, field=exc.field) from exc
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     template = _template(note_type_id=note_type.id, template_id=template_id)
     is_content_only = _is_template_content_only_payload(payload)
@@ -891,6 +902,7 @@ def update_template(
         owner_user_id=user_id,
         allow_released_template_content_hotfix=is_content_only,
     )
+    mark_template_version(template, origin="edit", actor_user_id=user_id, change_note=change_note)
     if "name" in payload:
         template.name = str(payload.get("name") or "").strip() or template.name
     if "front_html" in payload:
@@ -929,12 +941,14 @@ def reset_template(
     note_type_id: str,
     template_id: str,
 ) -> dict[str, Any]:
+    from app.services.template_version_service import mark_template_version
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     template = _template(note_type_id=note_type.id, template_id=template_id)
     _ensure_version_safe_template_mutation(
         note_type=note_type,
         owner_user_id=user_id,
     )
+    mark_template_version(template, origin="reset", actor_user_id=user_id)
     template.front_html = LEGACY_FRONT_TEMPLATE.strip()
     template.back_html = LEGACY_BACK_TEMPLATE.strip()
     template.shared_css = LEGACY_SHARED_CSS.strip()
@@ -1700,13 +1714,8 @@ def _serialize_note(note: Note) -> dict[str, Any]:
 
 
 def _create_cards(note: Note) -> None:
-    templates = (
-        Template.query.filter_by(note_type_id=note.note_type_id)
-        .order_by(Template.position.asc())
-        .all()
-    )
-    for template in templates:
-        db.session.add(Card(note=note, note_id=note.id, template_id=template.id))
+    from app.repositories.template_library_repository import create_cards_for_note
+    create_cards_for_note(db.session, note)
 
 
 def _refresh_source_note_type_stats(

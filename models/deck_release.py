@@ -10,6 +10,9 @@ class DeckRelease(db.Model):
     __tablename__ = "deck_releases"
 
     id = db.Column(db.String(36), primary_key=True, default=uuid_str)
+    # Historical releases retain the explicit legacy rendering fallback.
+    # New releases set this in the transaction that freezes template pins.
+    template_pins_initialized = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
     deck_item_id = db.Column(
         db.String(36),
         db.ForeignKey(

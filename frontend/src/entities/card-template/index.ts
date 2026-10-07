@@ -6,6 +6,10 @@ export type {
   DeckCardType,
   DeckCardTypeGroup,
   DeckCardTypesResponse,
+  TemplateVersionOrigin,
+  TemplateVersionSummary,
+  TemplateVersionDetail,
+  TemplateVersionList,
 } from './model/types'
 export {
   fetchNoteTypeTemplates,
@@ -13,6 +17,9 @@ export {
   createNoteTypeTemplate,
   renameNoteTypeTemplate,
   deleteNoteTypeTemplate,
+  fetchTemplateVersions,
+  fetchTemplateVersion,
+  restoreTemplateVersion,
 } from './api/cardTemplateApi'
 export { cardTemplateQueryKeys } from './api/queryKeys'
 export { TemplateCodeEditor } from './ui/TemplateCodeEditor'
