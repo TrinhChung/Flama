@@ -301,6 +301,23 @@ class TemplateReleaseServiceTests(unittest.TestCase):
                 with self.assertRaises(service.TemplateReleaseError):
                     action()
 
+    def test_archived_auto_published_template_remains_editable_without_new_publication(self):
+        from app.services import template_library_service as library
+        service.update_publication_settings(user_id=self.owner_id, template_id=self.source_id, payload={"auto_publish_enabled": True})
+        library.archive_template(user_id=self.owner_id, template_id=self.source_id, payload={"archived": True})
+        before = repository.template(db.session, self.source_id)
+        versions = TemplateVersion.query.count()
+        releases = TemplateRelease.query.count()
+        result = library.update_template(user_id=self.owner_id, template_id=self.source_id, payload={"back_html": "ARCHIVED ACTIVE EDIT"})
+        self.assertEqual(result["back_html"], "ARCHIVED ACTIVE EDIT")
+        self.assertNotEqual(result["current_version_id"], before["current_version_id"])
+        self.assertEqual(TemplateVersion.query.count(), versions + 1)
+        self.assertEqual(TemplateRelease.query.count(), releases)
+        self.assertEqual(service.get_publication(user_id=self.owner_id, template_id=self.source_id)["current_release"]["id"], self.first["id"])
+        with self.assertRaises(service.TemplateReleaseError) as caught:
+            self.publish("archived")
+        self.assertEqual(caught.exception.code, "TEMPLATE_ARCHIVED")
+
     def test_deck_pin_freezes_content_and_bindings_without_live_backfill(self):
         deck = Deck(owner_user_id=self.owner_id, note_type_id=self.nt_id, name="Published deck")
         db.session.add(deck)
@@ -379,6 +396,41 @@ class TemplateReleaseServiceTests(unittest.TestCase):
             db.session.commit()
         self.assertEqual(caught.exception.code, "IMMUTABLE_TEMPLATE_RELEASE")
         db.session.rollback()
+
+    def test_marketplace_uses_active_attachment_binding_and_published_source_snapshot(self):
+        from app.services import template_library_service as library, marketplace_query_service as queries, marketplace_note_type_service as marketplace
+        nt = db.session.get(NoteType, self.nt_id)
+        field = FieldDef(note_type_id=nt.id, name="Word", field_type="text", position=0)
+        db.session.add(field)
+        db.session.commit()
+        independent = library.create_template(user_id=self.owner_id, payload={
+            "name": "Independent source", "front_html": "<b>PUBLISHED {{term}}</b>", "back_html": "", "shared_css": "",
+            "input_schema": [{"key": "term", "type": "text"}],
+        })
+        application = library.attach_template(user_id=self.owner_id, note_type_id=nt.id, payload={
+            "template_id": independent["id"], "input_bindings": {"term": field.id}, "position": 7, "is_default": True,
+        })
+        published = service.publish_release(user_id=self.owner_id, template_id=independent["id"], payload={
+            "version_label": "1", "expected_current_release_id": None, "expected_current_version_id": independent["current_version_id"],
+        }, idempotency_key="independent-preview")["release"]
+        library.update_template(user_id=self.owner_id, template_id=independent["id"], payload={"front_html": "SECRET DRAFT"})
+        items = queries.serialize_note_type_templates(nt, published=True)
+        row = next(row for row in items if row["id"] == independent["id"])
+        self.assertEqual(row["front_html"], "<b>PUBLISHED {{term}}</b>")
+        self.assertEqual(row["current_version_id"], published["version_id"])
+        self.assertEqual(row["position"], 7)
+        self.assertTrue(row["is_default"])
+        self.assertEqual(row["input_bindings"], {"term": field.id})
+        with patch.object(marketplace, "_get_shared_note_type_for_view", return_value=nt):
+            preview = marketplace.preview_shared_note_type_template(user_id=self.stranger_id, note_type_id=nt.id, template_id=independent["id"])
+            self.assertIn("PUBLISHED", preview["front_html"])
+            self.assertNotIn("{{term}}", preview["front_html"])
+            self.assertNotIn("SECRET", preview["front_html"])
+            library.retire_application(user_id=self.owner_id, note_type_id=nt.id, application_id=application["id"])
+            self.assertNotIn(independent["id"], {row["id"] for row in queries.serialize_note_type_templates(nt, published=True)})
+            with self.assertRaises(marketplace.MarketplaceNoteTypeError) as caught:
+                marketplace.preview_shared_note_type_template(user_id=self.stranger_id, note_type_id=nt.id, template_id=independent["id"])
+            self.assertEqual(caught.exception.status, 404)
 
 
 if __name__ == "__main__":

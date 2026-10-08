@@ -1,6 +1,7 @@
 # GT-17 — Kiểm kê code phát hành/kế thừa của deck (chỉ đọc)
 
-- Owner: Gemini. Reviewer: Claude. Milestone: M0 (kế hoạch v2). Phụ thuộc: không. Trạng thái: **Ready**.
+> Historical inventory request. Candidate raw reports were never Accepted as complete inventories. The current Codex code/contract/test audit in [backend handoff](reviews/CT-04_CT-08_BACKEND_HANDOFF_2026-10-08.md) supersedes this prerequisite; do not assign this old read-only task before Gemini FE. Counts and line numbers below describe the earlier snapshot only.
+- Owner: Gemini. Reviewer: Claude. Milestone: M0 (kế hoạch v2). Phụ thuộc: không. Trạng thái: **Superseded (2026-10-08)**.
 - Loại: **chỉ đọc**, đầu ra là một báo cáo Markdown. Không sửa code, test hay tài liệu khác.
 - Người dùng kết quả: CT-02 (ADR-R lõi phát hành và kế thừa), CT-09 (bảng kịch bản đặc tả), CT-11 (refactor deck sang lõi chung).
 

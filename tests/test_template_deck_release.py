@@ -2,6 +2,8 @@
 
 import unittest
 from datetime import datetime, timezone
+from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 from app import create_app
 from app.repositories import template_release_repository as repository
@@ -110,6 +112,56 @@ class TemplateDeckReleaseTests(unittest.TestCase):
         self.assertEqual(self.item.working_revision, revision)
         self.assertEqual(self.item.current_release_id, self.initial.id)
         self.assertEqual(releases.preview_release(deck_item_id=self.item.id, user_id=self.owner.id)["items"], [])
+
+    def test_independent_session_auto_publish_uses_and_restores_writer_transaction(self):
+        self.item.auto_publish_enabled = True
+        db.session.commit()
+        scoped = db.session()
+        template_id, item_id, initial_id = self.template.id, self.item.id, self.initial.id
+        db.session.rollback()
+        with Session(db.engine) as writer:
+            writer.get(Template, template_id).front_html = "EXTERNAL SESSION"
+            writer.commit()
+            self.assertIs(db.session(), scoped)
+        db.session.expire_all()
+        item = db.session.get(DeckMarketplaceItem, item_id)
+        self.assertNotEqual(item.current_release_id, initial_id)
+        self.assertEqual(item.current_release.source_working_revision, item.working_revision)
+        self.assertIsNone(item.last_auto_publish_error)
+        pin = repository.deck_pins(db.session, item.current_release_id)[template_id]
+        snapshot = repository.release(db.session, pin["template_release_id"])
+        self.assertEqual(repository.version(db.session, snapshot["version_id"])["front_html"], "EXTERNAL SESSION")
+
+    def test_independent_session_publication_rolls_back_with_source_edit(self):
+        from models.template_version import TemplateVersion
+        from models.template_release import TemplateRelease
+        self.item.auto_publish_enabled = True
+        db.session.commit()
+        scoped = db.session()
+        template_id, item_id, initial_id = self.template.id, self.item.id, self.initial.id
+        revision = self.item.working_revision
+        version_count = TemplateVersion.query.count()
+        template_release_count = TemplateRelease.query.count()
+        deck_release_count = DeckRelease.query.count()
+        db.session.rollback()
+        with Session(db.engine) as writer:
+            writer.get(Template, template_id).front_html = "DISCARDED SESSION"
+            def abort_commit(session):
+                self.assertNotEqual(session.get(DeckMarketplaceItem, item_id).current_release_id, initial_id)
+                raise RuntimeError("Abort outer transaction after publication")
+            event.listen(writer, "before_commit", abort_commit)
+            with self.assertRaisesRegex(RuntimeError, "Abort outer transaction"):
+                writer.commit()
+            writer.rollback()
+            self.assertIs(db.session(), scoped)
+        db.session.expire_all()
+        item = db.session.get(DeckMarketplaceItem, item_id)
+        self.assertEqual(item.current_release_id, initial_id)
+        self.assertEqual(item.working_revision, revision)
+        self.assertEqual(db.session.get(Template, template_id).front_html, "FRONT")
+        self.assertEqual(TemplateVersion.query.count(), version_count)
+        self.assertEqual(TemplateRelease.query.count(), template_release_count)
+        self.assertEqual(DeckRelease.query.count(), deck_release_count)
 
     def test_archived_definition_keeps_existing_use_and_can_publish_with_deck(self):
         from app.services import template_library_service as library

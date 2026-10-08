@@ -117,8 +117,30 @@ def trigger_auto_publish_for_deck_item(
     *,
     deck_item_id: str,
     actor_user_id: int | None = None,
+    session=None,
 ) -> DeckRelease | None:
-    """Build and publish an automated release for a deck item if enabled and eligible."""
+    """Publish inside the writer's transaction, including independent ORM sessions.
+
+    The existing deck pipeline uses the app-scoped session. Bind that scope to
+    the supplied writer only for this synchronous call so delegated release and
+    subscriber writes cannot escape the caller's transaction. Restore the
+    previous scope even on failure; neither session is closed or committed.
+    """
+    if session is not None:
+        registry = db.session.registry
+        previous = registry() if registry.has() else None
+        if previous is not session:
+            registry.set(session)
+            try:
+                return trigger_auto_publish_for_deck_item(
+                    deck_item_id=deck_item_id,
+                    actor_user_id=actor_user_id,
+                )
+            finally:
+                if previous is None:
+                    registry.clear()
+                else:
+                    registry.set(previous)
     item = DeckMarketplaceItem.query.filter_by(id=deck_item_id).first()
     if item is None or not item.auto_publish_enabled:
         return None

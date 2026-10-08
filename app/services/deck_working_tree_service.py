@@ -88,7 +88,7 @@ def _publish_presentation_mutations(session):
     session.flush()
     for item_id in sorted(session.info.get(_PRESENTATION_ITEMS, set())):
         from app.services.deck_auto_publish_service import trigger_auto_publish_for_deck_item
-        trigger_auto_publish_for_deck_item(deck_item_id=item_id)
+        trigger_auto_publish_for_deck_item(deck_item_id=item_id, session=session)
 
 
 @event.listens_for(Session, "after_transaction_create")

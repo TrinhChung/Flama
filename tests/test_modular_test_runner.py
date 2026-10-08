@@ -111,6 +111,34 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertNotEqual(backend_tests, set(run_tests.discover_all_backend_tests()))
         self.assertEqual(frontend_tests, set())
 
+    def test_template_service_selects_focused_template_contracts(self):
+        modules, backend_tests, frontend_tests = run_tests.map_files_to_modules(
+            ["app/services/template_release_service.py"]
+        )
+        self.assertEqual(modules, {"templates"})
+        self.assertIn("tests/test_template_release_service.py", backend_tests)
+        self.assertIn("tests/test_template_deck_release.py", backend_tests)
+        self.assertNotEqual(backend_tests, set(run_tests.discover_all_backend_tests()))
+        self.assertEqual(frontend_tests, set())
+
+    def test_shared_release_core_selects_deck_and_template_parity(self):
+        modules, backend_tests, frontend_tests = run_tests.map_files_to_modules(
+            ["app/services/release_core/__init__.py"]
+        )
+        self.assertEqual(modules, {"decks", "templates"})
+        self.assertIn("tests/test_deck_auto_publish_and_auto_update.py", backend_tests)
+        self.assertIn("tests/test_template_release_service.py", backend_tests)
+        self.assertEqual(frontend_tests, set())
+
+    def test_template_entity_change_selects_its_frontend_tests_only(self):
+        modules, backend_tests, frontend_tests = run_tests.map_files_to_modules(
+            ["frontend/src/entities/card-template/model/types.ts"]
+        )
+        self.assertEqual(modules, {"templates"})
+        self.assertEqual(backend_tests, set())
+        self.assertIn("src/entities/card-template/api/cardTemplateApi.test.ts", frontend_tests)
+        self.assertNotEqual(frontend_tests, set(run_tests.discover_all_frontend_tests()))
+
     def test_seed_and_migration_changes_have_explicit_modules(self):
         seed_modules, seed_tests, _ = run_tests.map_files_to_modules(
             ["scripts/seed_flama_template.py"]

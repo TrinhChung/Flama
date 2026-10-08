@@ -253,7 +253,7 @@ def on_version_appended(session, template_id, version_id, actor_user_id=None, ch
 def _on_version_appended(session, template_id, version_id, actor_user_id=None, change_note=None):
     row = repository.template(session, template_id)
     publication = repository.publication(session, template_id)
-    if row is None or not publication or not publication["auto_publish_enabled"]:
+    if row is None or row.get("archived_at") is not None or not publication or not publication["auto_publish_enabled"]:
         return None
     _authored(row)
     version = repository.version(session, version_id, template_id)
