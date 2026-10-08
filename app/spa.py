@@ -57,6 +57,14 @@ def init_spa_delivery(app) -> None:
                 )
             ):
                 return None
+
+            if path != "/" and not path.endswith("/"):
+                candidate_name = path.lstrip("/")
+                if "/" not in candidate_name and candidate_name != "index.html":
+                    candidate_file = _FRONTEND_DIST / candidate_name
+                    if candidate_file.is_file():
+                        return send_from_directory(str(_FRONTEND_DIST), candidate_name)
+
             return serve_react_spa()
 
         if legacy_adapters_enabled:
