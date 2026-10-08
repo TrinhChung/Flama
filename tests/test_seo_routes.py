@@ -13,7 +13,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import shutil
+import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 from app import create_app
@@ -303,23 +306,34 @@ class SeoRoutesTestCase(unittest.TestCase):
 
     def test_root_static_assets_served_correctly(self):
         """Root static files like favicon.svg, favicon.ico, and logo.png must be served with proper MIME types."""
+        # Backend CI does not build Vite. Reproduce its public-file copy step
+        # in an isolated directory instead of depending on local dist output.
+        public = Path(__file__).resolve().parents[1] / "frontend" / "public"
+        with tempfile.TemporaryDirectory() as directory:
+            dist = Path(directory)
+            for name in ("favicon.svg", "favicon.ico", "logo.png"):
+                shutil.copyfile(public / name, dist / name)
+            with patch("app.spa._FRONTEND_DIST", dist):
+                self._assert_root_static_assets()
+
+    def _assert_root_static_assets(self):
         # Favicon SVG
-        res_svg = self.client.get("/favicon.svg")
-        self.assertEqual(res_svg.status_code, 200)
-        self.assertTrue("image/svg+xml" in res_svg.content_type)
-        svg_body = res_svg.data.decode("utf-8")
-        self.assertIn("url(#flame)", svg_body, "Favicon must contain Flama flame mark")
-        self.assertNotIn("#863bff", svg_body, "Favicon must not contain default Vite colors")
+        with self.client.get("/favicon.svg") as res_svg:
+            self.assertEqual(res_svg.status_code, 200)
+            self.assertIn("image/svg+xml", res_svg.content_type)
+            svg_body = res_svg.data.decode("utf-8")
+            self.assertIn("url(#flame)", svg_body, "Favicon must contain Flama flame mark")
+            self.assertNotIn("#863bff", svg_body, "Favicon must not contain default Vite colors")
 
         # Favicon ICO
-        res_ico = self.client.get("/favicon.ico")
-        self.assertEqual(res_ico.status_code, 200)
-        self.assertTrue(any(mime in res_ico.content_type for mime in ("image/x-icon", "image/vnd.microsoft.icon")))
+        with self.client.get("/favicon.ico") as res_ico:
+            self.assertEqual(res_ico.status_code, 200)
+            self.assertTrue(any(mime in res_ico.content_type for mime in ("image/x-icon", "image/vnd.microsoft.icon")))
 
         # Logo PNG
-        res_logo = self.client.get("/logo.png")
-        self.assertEqual(res_logo.status_code, 200)
-        self.assertTrue("image/png" in res_logo.content_type)
+        with self.client.get("/logo.png") as res_logo:
+            self.assertEqual(res_logo.status_code, 200)
+            self.assertIn("image/png", res_logo.content_type)
 
 
 if __name__ == "__main__":

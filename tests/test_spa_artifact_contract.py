@@ -47,6 +47,25 @@ class SpaArtifactContractTests(unittest.TestCase):
         finally:
             response.close()
 
+    def test_real_vite_root_assets_are_served_with_their_original_bytes(self):
+        for name, content_types in (
+            ("favicon.svg", {"image/svg+xml"}),
+            ("favicon.ico", {"image/x-icon", "image/vnd.microsoft.icon"}),
+            ("logo.png", {"image/png"}),
+        ):
+            with self.subTest(name=name):
+                artifact = SPA_INDEX.parent / name
+                self.assertTrue(artifact.is_file(), f"Vite did not copy {name}")
+                for method in ("GET", "HEAD"):
+                    with self.subTest(method=method):
+                        with self.client.open(f"/{name}", method=method) as response:
+                            self.assertEqual(response.status_code, 200)
+                            self.assertIn(response.mimetype, content_types)
+                            self.assertEqual(
+                                response.data,
+                                artifact.read_bytes() if method == "GET" else b"",
+                            )
+
 
 if __name__ == "__main__":
     unittest.main()
