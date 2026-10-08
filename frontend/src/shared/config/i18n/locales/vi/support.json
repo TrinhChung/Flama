@@ -1,0 +1,343 @@
+{
+  "status": {
+    "open": "Chờ xử lý",
+    "in_progress": "Đang xử lý",
+    "resolved": "Đã giải quyết",
+    "rejected": "Từ chối",
+    "closed": "Đã đóng"
+  },
+  "category": {
+    "bug": {
+      "title": "Báo lỗi (Bug)",
+      "subtitle": "Nút đơ, lỗi hiển thị, âm thanh",
+      "placeholder_title": "Ví dụ: Nút Bắt đầu học trên màn hình /study bị đơ",
+      "placeholder_desc": "Mô tả cụ thể sự cố bạn gặp phải, màn hình nào, thông báo lỗi nếu có..."
+    },
+    "feature": {
+      "title": "Ý tưởng mới",
+      "subtitle": "Đề xuất tính năng & công cụ",
+      "placeholder_title": "Ví dụ: Thêm chế độ ôn tập theo bảng chữ cái Katakana",
+      "placeholder_desc": "Mô tả tính năng bạn muốn và cách tính năng này giúp ích cho việc học..."
+    },
+    "ui": {
+      "title": "Giao diện (UI/UX)",
+      "subtitle": "Bố cục, phông chữ, màu sắc",
+      "placeholder_title": "Ví dụ: Tăng kích thước phông chữ kanji trên điện thoại",
+      "placeholder_desc": "Mô tả phần giao diện cần cải thiện và gợi ý điều chỉnh của bạn..."
+    },
+    "other": {
+      "title": "Chủ đề khác",
+      "subtitle": "Tài khoản, từ vựng, hỗ trợ chung",
+      "placeholder_title": "Ví dụ: Đóng góp ý kiến về nội dung bộ thẻ từ vựng N2",
+      "placeholder_desc": "Nội dung phản hồi hoặc câu hỏi chi tiết của bạn..."
+    }
+  },
+  "relative_time": {
+    "just_now": "Vừa xong",
+    "minutes_ago": "{{count}} phút trước",
+    "hours_ago": "{{count}} giờ trước",
+    "days_ago": "{{count}} ngày trước",
+    "sent_at": "Gửi {{time}}"
+  },
+  "feedback": {
+    "badge": "Hỗ trợ & Tiếp nhận phản hồi",
+    "title": "Góp ý & Báo lỗi Hệ thống",
+    "description": "Gửi báo cáo lỗi, đề xuất tính năng mới hoặc đóng góp ý kiến giao diện để đội ngũ Flama cải thiện hệ thống.",
+    "tabs": {
+      "create": "Gửi phản hồi mới",
+      "my_tickets": "Ticket của tôi"
+    },
+    "step_category": "Chủ đề phản hồi",
+    "step_category_hint": "Chọn 1 chủ đề",
+    "step_screen": "Màn hình xảy ra vấn đề (URL)",
+    "get_current_url": "Lấy URL hiện tại",
+    "url_placeholder": "Dán URL màn hình (Ví dụ: http://localhost:5173/study)",
+    "quick_presets_label": "Gợi ý nhanh:",
+    "recognized_screen": "Tên màn hình nhận diện:",
+    "unrecognized_screen": "(Vui lòng nhập URL để tự động nhận diện)",
+    "step_title": "Tiêu đề tóm tắt",
+    "optional": "Tùy chọn",
+    "step_desc": "Nội dung chi tiết",
+    "reproduce_steps": "Các bước tái hiện lỗi",
+    "reproduce_placeholder": "1. Mở trang Duyệt từ vựng\n2. Chọn bộ thẻ N3\n3. Bấm nút Bắt đầu học và nút không phản hồi...",
+    "step_screenshots": "Ảnh chụp màn hình ({{count}}/5 ảnh)",
+    "paste_hint": "Ctrl + V để dán ảnh",
+    "upload_button": "Tải ảnh",
+    "upload_rules": "Hỗ trợ PNG, JPG, WEBP (tối đa 2MB). Bạn có thể chụp màn hình và bấm Ctrl+V để dán trực tiếp.",
+    "submit_note": "Ticket sẽ được gửi trực tiếp tới đội ngũ phát triển",
+    "submitting": "Đang gửi Ticket...",
+    "submit_button": "Gửi phản hồi ngay",
+    "search_placeholder": "Tìm mã ticket, tiêu đề, nội dung...",
+    "all_statuses": "Tất cả Trạng thái",
+    "all_categories": "Tất cả Chủ đề",
+    "clear_filters": "Xóa bộ lọc",
+    "empty_tickets_title": "Bạn chưa gửi ticket nào",
+    "empty_tickets_desc": "Hãy dùng form 'Gửi phản hồi mới' để gửi thông tin cho đội ngũ phát triển khi gặp bất kỳ sự cố hay có ý tưởng mới.",
+    "create_first_ticket": "Tạo ticket đầu tiên",
+    "empty_search_title": "Không tìm thấy ticket phù hợp",
+    "empty_search_desc": "Không có báo cáo nào trùng khớp với bộ lọc tìm kiếm hiện tại của bạn.",
+    "clear_search_filters": "Xóa bộ lọc tìm kiếm",
+    "copy_code_tooltip": "Sao chép mã ticket",
+    "replies_count": "{{count}} phản hồi",
+    "images_count": "{{count}} ảnh",
+    "view_details": "Xem chi tiết",
+    "char_count": "{{count}}/{{max}} ký tự",
+    "view_large_image": "Xem ảnh lớn",
+    "delete_image": "Xóa ảnh",
+    "screens": {
+      "dashboard": "Trang chủ / Tổng quan",
+      "statistics": "Thống kê học tập",
+      "browse": "Duyệt từ vựng & Thẻ ghi nhớ",
+      "study": "Màn hình Học Flashcard",
+      "note_types": "Quản lý Loại thẻ",
+      "installed_decks": "Bộ thẻ đã cài",
+      "import": "Import thẻ",
+      "marketplace_decks_publish": "Đăng bộ thẻ",
+      "marketplace_decks": "Kho bộ thẻ (Marketplace)",
+      "marketplace_note_types_publish": "Đăng loại thẻ",
+      "marketplace_note_types": "Kho loại thẻ",
+      "orders": "Danh sách đơn hàng",
+      "settings_yomitan": "Cài đặt Kết nối Yomitan",
+      "settings_mcp_tokens": "MCP Access Tokens",
+      "feedback": "Góp ý & Báo lỗi",
+      "tickets": "Danh sách Ticket hỗ trợ",
+      "admin_users": "Admin - Quản lý người dùng",
+      "admin_permissions": "Admin - Phân quyền",
+      "admin_payments": "Admin - Quản lý thanh toán",
+      "admin_tts": "Admin - TTS Provider",
+      "admin_image_library": "Admin - Thư viện ảnh",
+      "admin_support": "Admin - Cấu hình Ủng hộ",
+      "dashboard_default": "Trang chủ (Dashboard)"
+    },
+    "presets": {
+      "study": "Học Flashcard",
+      "browse": "Duyệt từ vựng",
+      "note_types": "Quản lý loại thẻ",
+      "marketplace": "Marketplace",
+      "dashboard": "Trang chủ"
+    }
+  },
+  "ticket_detail": {
+    "back_to_list": "Quay lại danh sách Ticket",
+    "reported_date": "Báo cáo ngày {{date}}",
+    "guest": "Khách",
+    "no_email": "Không email",
+    "reported_screen": "Màn hình báo lỗi:",
+    "description_section": "Nội dung mô tả chi tiết:",
+    "reproduce_section": "Các bước tái hiện lỗi:",
+    "screenshots_section": "Ảnh chụp màn hình đính kèm ({{count}}):",
+    "conversation_title": "Lịch sử trao đổi & Phản hồi ({{count}})",
+    "in_progress_title": "Ticket đang được xử lý",
+    "in_progress_desc": "Yêu cầu của bạn đã được tiếp nhận. Đội ngũ Quản trị viên sẽ gửi câu trả lời tại đây trong thời gian sớm nhất.",
+    "admin_label": "Quản trị viên (Admin)",
+    "you_label": "Bạn",
+    "reply_label": "Gửi thêm phản hồi cho Quản trị viên:",
+    "send_shortcut": "Ctrl + Enter để gửi",
+    "reply_placeholder": "Nhập thông tin bổ sung hoặc câu hỏi phản hồi của bạn...",
+    "sending": "Đang gửi...",
+    "send_reply": "Gửi phản hồi",
+    "not_found": "Không tìm thấy ticket."
+  },
+  "donation": {
+    "badge": "Support Flama Platform",
+    "default_title": "Ủng hộ duy trì hệ thống",
+    "default_description": "Sự đóng góp của bạn tiếp thêm động lực để duy trì và phát triển cộng đồng.",
+    "status_banner": {
+      "headline_default": "Kết quả giao dịch ủng hộ",
+      "amount_label": "Số tiền",
+      "recheck": "Kiểm tra lại"
+    },
+    "online_card": {
+      "title": "Ủng hộ trực tuyến (QR Code / Ngân hàng)",
+      "description": "Thanh toán online an toàn qua mã QR Ngân hàng / Napas247",
+      "amount_label": "Số tiền ủng hộ (VND)",
+      "limit_hint": "Từ {{min}} VND tới {{max}} VND",
+      "presets_label": "Mức gợi ý nhanh:",
+      "anonymous_label": "Ủng hộ ở chế độ ẩn danh",
+      "anonymous_desc": "Không hiển thị thông tin lần đóng góp này trong lịch sử công khai.",
+      "guest_warning_title": "Bạn đang ở chế độ ẩn danh",
+      "guest_warning_desc": "Để lưu lại lịch sử đóng góp vào tài khoản, hãy",
+      "guest_login_link": "Đăng nhập",
+      "guest_login_after": "trước khi thanh toán.",
+      "pay_button": "Thanh toán {{amount}} qua mã QR",
+      "view_history": "Xem lịch sử donate của tôi"
+    },
+    "manual_card": {
+      "title": "Chuyển khoản thủ công",
+      "description": "Quét mã QR hoặc copy thông tin tài khoản bên dưới",
+      "qr_hint": "Quét QR bằng app Ngân hàng",
+      "qr_alt": "Mã QR chuyển khoản",
+      "account_name": "Chủ tài khoản",
+      "account_number": "Số tài khoản",
+      "copy": "Sao chép",
+      "copied": "Đã sao chép",
+      "thank_you_title": "Lời cảm ơn từ Flama",
+      "default_thank_you": "Cảm ơn bạn đã luôn ủng hộ và đồng hành cùng sự phát triển của Flama!"
+    },
+    "modal": {
+      "title": "Thanh toán Ủng hộ Flama",
+      "subtitle": "Cổng thanh toán tự động VietQR / Napas247",
+      "safe_badge": "An toàn",
+      "success_badge": "GIAO DỊCH THÀNH CÔNG",
+      "success_title": "Cảm ơn bạn đã ủng hộ Flama! 🎉",
+      "success_desc": "Hệ thống đã nhận được số tiền đóng góp và tự động cập nhật vào cơ sở dữ liệu.",
+      "donated_amount": "Số tiền ủng hộ:",
+      "order_code": "Mã đơn hàng:",
+      "complete": "Hoàn tất",
+      "amount_to_transfer": "Số tiền cần chuyển",
+      "qr_scan_hint": "Quét nhanh bằng bất kỳ ứng dụng Ngân hàng nào",
+      "qr_generating": "Đang tạo mã QR...",
+      "vietqr_alt": "Mã VietQR thanh toán",
+      "bank_account": "Số tài khoản",
+      "transfer_reference": "Nội dung chuyển khoản",
+      "required_badge": "Bắt buộc",
+      "waiting_title": "Đang chờ bạn thanh toán...",
+      "waiting_desc": "Tự động nhận diện sau khi chuyển tiền",
+      "check_status": "Kiểm tra",
+      "open_payos": "Mở cổng thanh toán PayOS riêng",
+      "close": "Đóng cửa sổ"
+    }
+  },
+  "tts_guide": {
+    "title": "Hướng dẫn lấy API Key tạo âm thanh (TTS)",
+    "description": "Chi tiết các bước đăng ký và lấy API Key cho VoiceVox, OpenAI, Google TTS và ElevenLabs để tạo phát âm chuẩn cho từ vựng và flashcard trên Flama.",
+    "to_browse": "Đến trang Duyệt thẻ",
+    "alert_title": "Tại sao bạn nên dùng API Key cá nhân?",
+    "alert_desc": "Flama hỗ trợ kết nối trực tiếp các công cụ tổng hợp giọng nói (Text-to-Speech) nổi tiếng. Sử dụng API Key cá nhân giúp quá trình tạo audio diễn ra nhanh chóng, không bị giới hạn băng thông chung và đảm bảo bạn toàn quyền quản lý chất lượng giọng đọc.",
+    "step_badge": "Bước {{step}}",
+    "voicevox": {
+      "badge": "Miễn phí & Mặc định",
+      "desc": "Giọng đọc tiếng Nhật tự nhiên chuẩn như người bản xứ (Shikikoin Metan, Kasukabe Tsumugi, Namine Ritsu...)",
+      "open_page": "Mở trang lấy Key",
+      "step1_title": "Truy cập Su-Shiki API",
+      "step1_desc": "Nhấn vào liên kết bên dưới hoặc truy cập trực tiếp website cấp key miễn phí:",
+      "step2_title": "Tạo & Sao chép API Key",
+      "step2_desc": "Trên giao diện Su-Shiki, nhấn nút Generate Key (hoặc điền thông tin nếu có). Sau đó sao chép chuỗi mã API Key được cấp.",
+      "step3_title": "Dán vào Flama",
+      "step3_desc": "Mở ứng dụng Flama, vào màn hình Duyệt thẻ (Browse) > Chọn thẻ > Nhấn Tạo âm thanh VoiceVox (TTS) > Dán Key vào ô VoiceVox API Key.",
+      "points_alert_title": "Lưu ý về hạn ngạch điểm (Points) của VoiceVox:",
+      "points_alert_desc": "Mỗi lượt phát hoặc tạo file âm thanh VoiceVox sẽ tiêu tốn một số lượng điểm (Points) nhất định từ key của bạn. Nếu bạn hết điểm, bạn có thể chờ điểm tự phục hồi hoặc tạo một API key mới tại trang Su-Shiki API."
+    },
+    "other_services": "Các dịch vụ âm thanh AI khác",
+    "openai": {
+      "title": "OpenAI TTS",
+      "badge": "AI Voice",
+      "link": "Lấy key OpenAI",
+      "desc": "Giọng đọc chuẩn AI chất lượng cao (Alloy, Echo, Fable, Onyx, Nova, Shimmer).",
+      "step1": "Đăng nhập tài khoản tại <strong>platform.openai.com</strong>.",
+      "step2": "Vào mục <strong>API Keys</strong> > Chọn <strong>Create new secret key</strong>.",
+      "step3": "Sao chép chuỗi Key bắt đầu bằng <code>sk-...</code> và lưu an toàn."
+    },
+    "elevenlabs": {
+      "title": "ElevenLabs",
+      "badge": "Realistic Voice",
+      "link": "Lấy key ElevenLabs",
+      "desc": "Giọng đọc AI cảm xúc nhất thế giới với khả năng tùy chỉnh ngữ điệu sâu.",
+      "step1": "Truy cập và đăng nhập vào <strong>elevenlabs.io</strong>.",
+      "step2": "Nhấn vào ảnh hồ sơ của bạn ở góc dưới bên trái > <strong>Profile + API Key</strong>.",
+      "step3": "Nhấn biểu tượng mắt để xem và sao chép API Key cá nhân."
+    },
+    "google": {
+      "title": "Google Cloud / Gemini",
+      "badge": "Google Speech",
+      "link": "Google AI Studio",
+      "desc": "Giọng đọc đa ngôn ngữ đa dạng và công cụ AI tổng hợp tiên tiến.",
+      "step1": "Truy cập <strong>aistudio.google.com</strong> hoặc Google Cloud Console.",
+      "step2": "Nhấn <strong>Get API key</strong> > Chọn <strong>Create API key</strong>.",
+      "step3": "Sao chép mã Key và lưu lại để sử dụng."
+    },
+    "faq": {
+      "title": "Câu hỏi thường gặp & Bảo mật API Key",
+      "q1": "API Key của tôi có được bảo mật trên Flama không?",
+      "a1": "Có. Trên hệ thống Flama, mọi API Key do bạn cung cấp đều được mã hóa chuẩn quân sự (Fernet / AES-256) trước khi lưu trữ và chỉ được dùng để gửi yêu cầu phát âm theo đúng thao tác của bạn.",
+      "q2": "Tôi có bắt buộc phải nhập API Key không?",
+      "a2": "Nếu bạn chỉ nghe âm thanh có sẵn trong bài học thì không cần. Tuy nhiên khi bạn muốn sử dụng tính năng Tạo âm thanh VoiceVox hàng loạt cho từ vựng riêng trong phần Duyệt thẻ, nhập API Key cá nhân sẽ giúp quá trình tạo audio diễn ra mượt mà và không gặp gián đoạn."
+    }
+  },
+  "audio_guide": {
+    "title": "Hướng dẫn sử dụng & Tải Flama Audio Desktop",
+    "description": "Ứng dụng Windows Desktop cung cấp dịch vụ tổng hợp phát âm (VOICEVOX & Kokoro Engine) chạy cục bộ không giới hạn cho Flama.",
+    "download_btn": "Tải Flama Audio (FlamaAudio-Portable.exe)",
+    "sha256_btn": "SHA-256",
+    "docs_btn": "Tài liệu & Sửa lỗi",
+    "context_help_guide_title": "Cẩm nang Flama Audio Desktop",
+    "context_help_troubleshoot_title": "Khắc phục sự cố không nghe thấy tiếng",
+    "warning_title": "Lưu ý khi tải xuống trên Windows (Bỏ qua cảnh báo SmartScreen)",
+    "warning_desc": "Do tệp FlamaAudio-Portable.exe tự biên dịch nội bộ, trình duyệt hoặc Windows SmartScreen có thể hiển thị cảnh báo bảo mật. Để mở tệp:",
+    "warning_steps": {
+      "s1": "1. Bấm dấu ba chấm (...)",
+      "s2": "2. Chọn Giữ lại (Keep)",
+      "s3": "3. Bấm mở rộng cạnh nút Xóa",
+      "s4": "4. Chọn Vẫn giữ (Keep anyway)"
+    },
+    "service_status": {
+      "title": "Trạng thái Flama Audio Service",
+      "connected": "Đã kết nối (127.0.0.1:4791)",
+      "offline": "Chưa chạy (Offline)",
+      "port_info": "Cổng dịch vụ máy trạm: 127.0.0.1:4791",
+      "troubleshoot_hint": "Gặp sự cố?",
+      "troubleshoot_link": "Xem hướng dẫn sửa lỗi",
+      "check_btn": "Kiểm tra kết nối"
+    },
+    "features": {
+      "unlimited": {
+        "title": "Không giới hạn & Miễn phí",
+        "desc": "Tổng hợp âm thanh phát âm trực tiếp trên phần cứng PC mà không tốn chi phí API hay giới hạn băng thông."
+      },
+      "pair": {
+        "title": "Ghép nối an toàn (PNA Token)",
+        "desc": "Bảo mật Private Network Access với cơ chế phê duyệt Pair Code, bảo vệ thiết bị an toàn tuyệt đối."
+      },
+      "engines": {
+        "title": "VOICEVOX & Kokoro Offline",
+        "desc": "Tích hợp sẵn bộ giọng đọc tiếng Nhật tự nhiên cùng mô hình Kokoro đa ngôn ngữ với bộ tinh chỉnh cao độ & tốc độ."
+      }
+    },
+    "steps": {
+      "title": "Quy trình khởi chạy & Sử dụng Flama Audio",
+      "subtitle": "Chỉ mất chưa đầy 1 phút để thiết lập hệ thống phát âm local trên máy tính Windows.",
+      "s1_title": "Tải & Khởi chạy",
+      "s1_desc": "Tải FlamaAudio-Portable.exe và chạy trực tiếp, ứng dụng tự khởi tạo service ở cổng 4791.",
+      "s2_title": "Yêu cầu ghép nối",
+      "s2_desc": "Vào Studio Tạo Âm hoặc trang Duyệt thẻ, bấm yêu cầu kết nối thiết bị.",
+      "s3_title": "Phê duyệt trên App",
+      "s3_desc": "Cửa sổ Flama Audio Desktop hiển thị thông báo. Nhấn nút Đồng ý (Approve) để lưu token xác thực an toàn.",
+      "s4_title": "Tạo âm thanh hàng loạt",
+      "s4_desc": "Chọn giọng đọc nhân vật mong muốn, tùy chỉnh thông số và kích hoạt tạo phát âm tự động cho hàng nghìn thẻ."
+    },
+    "callout": {
+      "title": "Trải nghiệm tạo phát âm từ vựng ngay bây giờ",
+      "desc": "Tự động quét bộ thẻ và tạo hàng loạt âm thanh cho toàn bộ deck chỉ với 1 cú nhấp.",
+      "open_studio": "Mở Studio Tạo Âm Deck",
+      "browse_cards": "Duyệt thẻ"
+    },
+    "faq": {
+      "title": "Câu hỏi thường gặp & Xử lý sự cố",
+      "q1": "Ứng dụng báo lỗi \"Không thể kết nối Flama Audio Service (port 4791)\"?",
+      "a1": "Hãy đảm bảo bạn đã mở ứng dụng Flama Audio Desktop (FlamaAudio-Portable.exe). Nếu bị Windows Firewall chặn, hãy chọn \"Allow access\" cho mạng Private.",
+      "q2": "Cần cài đặt VOICEVOX Engine như thế nào?",
+      "a2": "Flama Audio Desktop đã tích hợp sẵn cơ chế tải và quản lý VOICEVOX Engine tự động. Bạn chỉ cần nhấn nút \"Tải & Cài Engine\" trực tiếp ngay trên giao diện ứng dụng Desktop khi được nhắc.",
+      "related_docs": "Tài liệu & Hướng dẫn liên quan:",
+      "batch_link": "Tạo âm thanh hàng loạt",
+      "cloud_link": "Cấu hình Cloud TTS",
+      "troubleshoot_link": "Khắc phục lỗi phát âm"
+    }
+  },
+  "toast": {
+    "copied": "Đã sao chép {{name}}",
+    "ticket_sent": "Đã gửi ticket [{{code}}] thành công! Đội ngũ Flama sẽ hỗ trợ bạn sớm nhất.",
+    "ticket_failed": "Gửi báo cáo lỗi thất bại.",
+    "image_only": "Chỉ chấp nhận tập tin hình ảnh (PNG, JPG, WEBP, GIF)!",
+    "image_too_large": "Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.",
+    "max_images": "Đã đạt tối đa 5 ảnh đính kèm!",
+    "image_uploaded": "Đã tải lên ảnh chụp màn hình!",
+    "upload_failed": "Không thể tải ảnh lên.",
+    "clipboard_uploading": "Đang tải lên ảnh từ Clipboard...",
+    "reply_sent": "Đã gửi phản hồi thành công!",
+    "reply_failed": "Gửi phản hồi thất bại.",
+    "checkout_created": "Đã tạo phiên thanh toán! Quét mã QR để hoàn tất.",
+    "checkout_failed": "Không thể khởi tạo thanh toán.",
+    "audio_connected": "Đã kết nối thành công với Flama Audio Desktop (127.0.0.1:4791)!",
+    "audio_offline": "Chưa tìm thấy Flama Audio Desktop đang chạy tại port 4791."
+  }
+}

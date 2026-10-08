@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   LayoutGrid,
   FileText,
@@ -49,6 +50,7 @@ export const WorksheetTemplateSelectStep: React.FC<WorksheetTemplateSelectStepPr
   isStandalone = false,
   className = '',
 }) => {
+  const { t } = useTranslation('worksheets')
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>(
     isStandalone ? 'all' : 'all',
   )
@@ -69,25 +71,25 @@ export const WorksheetTemplateSelectStep: React.FC<WorksheetTemplateSelectStepPr
           <div>
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <LayoutGrid className="size-4 text-primary" />
-              <span>Bước 3: Chọn loại bài tập muốn in</span>
+              <span>{t('template_select.header_title', 'Bước 3: Chọn loại bài tập muốn in')}</span>
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Chọn một mẫu bài tập phù hợp với mục tiêu luyện tập của bạn (Luyện nét, Viết từ vựng, Đặt câu...).
+              {t('template_select.header_desc', 'Chọn một mẫu bài tập phù hợp với mục tiêu luyện tập của bạn (Luyện nét, Viết từ vựng, Đặt câu...).')}
             </p>
           </div>
           <Badge variant="outline" className="text-[11px] font-semibold">
-            {templates.length} mẫu in A4
+            {t('template_select.templates_count', '{{count}} mẫu in A4', { count: templates.length })}
           </Badge>
         </div>
 
         {/* Category Filters */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs font-semibold">
           {[
-            { id: 'all', label: 'Tất cả mẫu' },
-            { id: 'kanji', label: 'Chữ Hán & Nét' },
-            { id: 'vocabulary', label: 'Từ vựng & Nhớ' },
-            { id: 'sentence', label: 'Mẫu câu & Ngữ pháp' },
-            { id: 'table', label: 'Bảng tuỳ biến' },
+            { id: 'all', label: t('template_select.categories.all', 'Tất cả mẫu') },
+            { id: 'kanji', label: t('template_select.categories.kanji', 'Chữ Hán & Nét') },
+            { id: 'vocabulary', label: t('template_select.categories.vocabulary', 'Từ vựng & Nhớ') },
+            { id: 'sentence', label: t('template_select.categories.sentence', 'Mẫu câu & Ngữ pháp') },
+            { id: 'table', label: t('template_select.categories.table', 'Bảng tuỳ biến') },
           ].map((cat) => (
             <button
               key={cat.id}
@@ -182,11 +184,15 @@ export const WorksheetTemplateSelectStep: React.FC<WorksheetTemplateSelectStepPr
 
                 <div className="flex items-center justify-between text-[10.5px] text-muted-foreground pt-2.5 mt-2.5 border-t border-border/50">
                   <span>
-                    Mặc định: <strong>{tpl.default_rows_per_page} mục/trang</strong>
+                    {t('template_select.default_rows', 'Mặc định: {{count}} mục/trang', { count: tpl.default_rows_per_page })}
                   </span>
                   <span>
-                    Khổ:{' '}
-                    <strong>{tpl.default_orientation === 'portrait' ? 'A4 Dọc' : 'A4 Ngang'}</strong>
+                    {t('template_select.orientation_label', 'Khổ: ')}
+                    <strong>
+                      {tpl.default_orientation === 'portrait'
+                        ? t('template_select.orientation.portrait', 'A4 Dọc')
+                        : t('template_select.orientation.landscape', 'A4 Ngang')}
+                    </strong>
                   </span>
                 </div>
               </div>
@@ -205,7 +211,7 @@ export const WorksheetTemplateSelectStep: React.FC<WorksheetTemplateSelectStepPr
           className="h-9 px-3 text-xs gap-1.5 font-semibold"
         >
           <ArrowLeft className="size-3.5" />
-          <span>Quay lại</span>
+          <span>{t('template_select.back_button', 'Quay lại')}</span>
         </Button>
 
         <Button
@@ -214,7 +220,7 @@ export const WorksheetTemplateSelectStep: React.FC<WorksheetTemplateSelectStepPr
           onClick={onConfirm}
           className="h-9 px-4 text-xs font-bold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
         >
-          <span>Tiếp tục: Cấu hình & In ấn</span>
+          <span>{t('template_select.confirm_button', 'Tiếp tục: Cấu hình & In ấn')}</span>
           <ArrowRight className="size-3.5" />
         </Button>
       </div>

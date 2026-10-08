@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
 import { Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import '@/shared/config/i18n'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,7 +21,7 @@ import { templateErrorMessage } from '../lib/templateErrors'
 
 export type TemplateManagementBarProps = {
   noteTypeId: string
-  template: { id: string; name: string; is_default: boolean } | null
+  template: { id: string; name: string; is_default?: boolean } | null
   noteCount: number | null // null = đang tải hoặc lỗi
   templateCount: number // tổng số template của NoteType
   onRenamed: () => void // trang invalidate query
@@ -34,6 +36,7 @@ export function TemplateManagementBar({
   onRenamed,
   onDeleted,
 }: TemplateManagementBarProps) {
+  const { t } = useTranslation('note_types')
   const [isRenameOpen, setIsRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
@@ -49,12 +52,12 @@ export function TemplateManagementBar({
       return renameNoteTypeTemplate(noteTypeId, template?.id ?? '', newName)
     },
     onSuccess: () => {
-      toast.success('Đã đổi tên template.')
+      toast.success(t('template_bar.messages.rename_success'))
       setIsRenameOpen(false)
       onRenamed()
     },
     onError: (error: unknown) => {
-      toast.error('Không thể đổi tên template', {
+      toast.error(t('template_bar.messages.rename_error'), {
         description: templateErrorMessage(error),
       })
     },
@@ -68,14 +71,14 @@ export function TemplateManagementBar({
       return deleteNoteTypeTemplate(noteTypeId, template?.id ?? '')
     },
     onSuccess: () => {
-      toast.success('Đã xóa template.')
+      toast.success(t('template_bar.messages.delete_success'))
       setIsDeleteOpen(false)
       if (template) {
         onDeleted(template.id)
       }
     },
     onError: (error: unknown) => {
-      toast.error('Không thể xóa template', {
+      toast.error(t('template_bar.messages.delete_error'), {
         description: templateErrorMessage(error),
       })
     },
@@ -87,9 +90,9 @@ export function TemplateManagementBar({
 
   const deleteDisabled = template.is_default || templateCount <= 1
   const deleteDisabledReason = template.is_default
-    ? 'Không thể xóa template mặc định.'
+    ? t('template_bar.cannot_delete_default')
     : templateCount <= 1
-      ? 'Loại thẻ cần ít nhất một template.'
+      ? t('template_bar.cannot_delete_single')
       : null
 
   const openRename = () => {
@@ -109,11 +112,11 @@ export function TemplateManagementBar({
     if (isInvalidNoteTypeId || renameMutation.isPending) return
     const trimmed = renameValue.trim()
     if (!trimmed) {
-      setRenameError('Tên template không được để trống.')
+      setRenameError(t('template_bar.rename_dialog.error_empty'))
       return
     }
     if (trimmed.length > 255) {
-      setRenameError('Tên template tối đa 255 ký tự.')
+      setRenameError(t('template_bar.rename_dialog.error_max_length'))
       return
     }
     if (trimmed === template.name) {
@@ -126,9 +129,11 @@ export function TemplateManagementBar({
   return (
     <>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        {template.is_default ? <Badge variant="secondary">Mặc định</Badge> : null}
+        {template.is_default ? <Badge variant="secondary">{t('template_bar.default_badge')}</Badge> : null}
         <Badge variant="outline">
-          {noteCount == null ? '… note' : `${noteCount} note`}
+          {noteCount == null
+            ? t('template_bar.note_count_loading')
+            : t('template_bar.note_count', { count: noteCount })}
         </Badge>
         <div className="ml-auto flex items-center gap-1.5">
           <Button
@@ -137,7 +142,7 @@ export function TemplateManagementBar({
             className="h-7 px-2.5 text-xs font-semibold rounded-lg gap-1.5"
             onClick={openRename}
           >
-            <Pencil className="size-3.5" aria-hidden="true" /> Đổi tên
+            <Pencil className="size-3.5" aria-hidden="true" /> {t('template_bar.rename_btn')}
           </Button>
           <Button
             size="sm"
@@ -147,7 +152,7 @@ export function TemplateManagementBar({
             disabled={deleteDisabled}
             title={deleteDisabledReason ?? undefined}
           >
-            <Trash2 className="size-3.5" aria-hidden="true" /> Xóa
+            <Trash2 className="size-3.5" aria-hidden="true" /> {t('template_bar.delete_btn')}
           </Button>
         </div>
       </div>
@@ -163,10 +168,10 @@ export function TemplateManagementBar({
           <DialogContent className="sm:max-w-md" showCloseButton={!renameMutation.isPending}>
             <form onSubmit={handleRenameSubmit}>
               <DialogHeader>
-                <DialogTitle>Đổi tên template</DialogTitle>
+                <DialogTitle>{t('template_bar.rename_dialog.title')}</DialogTitle>
               </DialogHeader>
               <div className="py-4 space-y-2">
-                <Label htmlFor="template-name-input">Tên template</Label>
+                <Label htmlFor="template-name-input">{t('template_bar.rename_dialog.label')}</Label>
                 <Input
                   id="template-name-input"
                   value={renameValue}
@@ -188,10 +193,10 @@ export function TemplateManagementBar({
                   disabled={renameMutation.isPending}
                   onClick={() => setIsRenameOpen(false)}
                 >
-                  Hủy
+                  {t('template_bar.rename_dialog.cancel')}
                 </Button>
                 <Button type="submit" disabled={renameMutation.isPending}>
-                  Lưu tên
+                  {t('template_bar.rename_dialog.submit')}
                 </Button>
               </DialogFooter>
             </form>
@@ -207,10 +212,10 @@ export function TemplateManagementBar({
             setIsDeleteOpen(open)
           }}
           variant="destructive"
-          title={`Xóa template “${template.name}”?`}
-          description="Thẻ của template này sẽ bị xóa. Tiến độ học của từng note vẫn được giữ."
-          confirmText="Xóa template"
-          cancelText="Hủy"
+          title={t('template_bar.delete_dialog.title', { name: template.name })}
+          description={t('template_bar.delete_dialog.description')}
+          confirmText={t('template_bar.delete_dialog.confirm')}
+          cancelText={t('template_bar.delete_dialog.cancel')}
           isLoading={deleteMutation.isPending}
           onConfirm={async () => {
             if (isInvalidNoteTypeId) return
@@ -222,7 +227,7 @@ export function TemplateManagementBar({
           }}
         >
           <p className="text-sm text-muted-foreground">
-            {noteCount ?? 0} note đang có thẻ dùng template này.
+            {t('template_bar.delete_dialog.note_count_warning', { count: noteCount ?? 0 })}
           </p>
         </ConfirmDialog>
       )}

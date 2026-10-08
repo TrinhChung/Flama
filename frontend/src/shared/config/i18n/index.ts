@@ -16,6 +16,12 @@ import viStatistics from './locales/vi/statistics.json'
 import viMarketplace from './locales/vi/marketplace.json'
 import viLibrary from './locales/vi/library.json'
 import viImport from './locales/vi/import.json'
+import viSettings from './locales/vi/settings.json'
+import viNoteTypes from './locales/vi/note_types.json'
+import viCollaboration from './locales/vi/collaboration.json'
+import viOrders from './locales/vi/orders.json'
+import viSupport from './locales/vi/support.json'
+import viWorksheets from './locales/vi/worksheets.json'
 
 import enCommon from './locales/en/common.json'
 import enShell from './locales/en/shell.json'
@@ -30,6 +36,12 @@ import enStatistics from './locales/en/statistics.json'
 import enMarketplace from './locales/en/marketplace.json'
 import enLibrary from './locales/en/library.json'
 import enImport from './locales/en/import.json'
+import enSettings from './locales/en/settings.json'
+import enNoteTypes from './locales/en/note_types.json'
+import enCollaboration from './locales/en/collaboration.json'
+import enOrders from './locales/en/orders.json'
+import enSupport from './locales/en/support.json'
+import enWorksheets from './locales/en/worksheets.json'
 
 export const resources = {
   vi: {
@@ -46,6 +58,12 @@ export const resources = {
     marketplace: viMarketplace,
     library: viLibrary,
     import: viImport,
+    settings: viSettings,
+    note_types: viNoteTypes,
+    collaboration: viCollaboration,
+    orders: viOrders,
+    support: viSupport,
+    worksheets: viWorksheets,
   },
   en: {
     common: enCommon,
@@ -61,6 +79,12 @@ export const resources = {
     marketplace: enMarketplace,
     library: enLibrary,
     import: enImport,
+    settings: enSettings,
+    note_types: enNoteTypes,
+    collaboration: enCollaboration,
+    orders: enOrders,
+    support: enSupport,
+    worksheets: enWorksheets,
   },
 } as const
 
@@ -100,6 +124,12 @@ void i18n
       'marketplace',
       'library',
       'import',
+      'settings',
+      'note_types',
+      'collaboration',
+      'orders',
+      'support',
+      'worksheets',
     ],
     defaultNS: 'common',
     interpolation: {

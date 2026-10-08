@@ -1,0 +1,127 @@
+{
+  "study_goals": {
+    "header": {
+      "title": "Mục tiêu học tập",
+      "description": "Tùy chỉnh ngôn ngữ, trình độ mục tiêu và số lượng thẻ mới mỗi ngày.",
+      "guide_title": "Hướng dẫn quản lý và phân nhóm bộ thẻ",
+      "help_btn": "Trợ giúp"
+    },
+    "actions": {
+      "save": "Lưu mục tiêu",
+      "saved": "Đã lưu",
+      "reset_defaults": "Khôi phục mặc định",
+      "toast_save_success": "Đã lưu thiết lập mục tiêu học tập thành công!",
+      "toast_reset_success": "Đã khôi phục thiết lập mục tiêu mặc định."
+    },
+    "summary": {
+      "current_goal": "Mục tiêu hiện tại",
+      "new_cards_per_day": "{{count}} thẻ mới / ngày",
+      "roadmap_applied": "Lộ trình học đang áp dụng: <bold>{{subject}}</bold>, mục tiêu <bold>{{count}} thẻ mới/ngày</bold> ({{time}})."
+    },
+    "sections": {
+      "subject_title": "1. Chọn Ngôn ngữ / Lĩnh vực",
+      "level_title": "2. Trình độ mục tiêu",
+      "daily_target_title": "3. Số lượng thẻ mới mỗi ngày",
+      "study_time_title": "4. Khung giờ học tập ưu tiên",
+      "library_decks_title": "5. Bộ thẻ trong thư viện"
+    },
+    "decks": {
+      "marketplace_link": "Thư viện Marketplace →",
+      "loading": "Đang kiểm tra bộ thẻ…",
+      "card_count": "{{count}} thẻ",
+      "installed_badge": "Đã cài",
+      "install_btn": "Cài đặt",
+      "empty_title": "Chưa có bộ thẻ phù hợp cho trình độ này trong Thư viện",
+      "empty_desc": "Bạn có thể tự tạo bộ thẻ học flashcard theo nhu cầu cá nhân hoặc tham khảo hướng dẫn chi tiết cách tạo và gom nhóm deck.",
+      "guide_btn": "Hướng dẫn tạo thẻ",
+      "dashboard_btn": "Tạo Deck trên Dashboard"
+    }
+  },
+  "yomitan": {
+    "loading": "Đang tải token Yomitan…",
+    "header": {
+      "title": "Quản lý Token Yomitan & Flama Connect",
+      "description": "Tích hợp tiện ích tra từ Yomitan trên trình duyệt với Flama để tự động tạo Flashcard chỉ với 1 cú nhấp chuột.",
+      "guide_title": "Hướng dẫn kết nối Yomitan",
+      "troubleshoot_title": "Khắc phục lỗi Yomitan",
+      "guide_btn": "Hướng dẫn kết nối"
+    },
+    "quick_links": {
+      "label": "Tra cứu nhanh:",
+      "install": "Cài đặt & Tải tiện ích",
+      "markers": "Bảng 55 Field Markers",
+      "mobile": "Dùng trên Di động & Sửa lỗi"
+    },
+    "highlights": {
+      "lookup_title": "Tra từ 0.1s",
+      "lookup_sub": "Popup di chuột / chạm",
+      "one_click_title": "Tạo thẻ 1-Click",
+      "one_click_sub": "Tự động điền dữ liệu",
+      "immersion_title": "Học Đắm mình",
+      "immersion_sub": "Web PC & Mobile",
+      "connect_title": "Flama Connect",
+      "connect_sub": "Kết nối đám mây"
+    },
+    "form": {
+      "title": "Tạo API Token Flama Connect",
+      "description": "Mỗi thiết bị hoặc trình duyệt nên dùng 1 token riêng để dễ dàng theo dõi và thu hồi bảo mật khi cần thiết. Xem <link>Hướng dẫn kết nối chi tiết</link> nếu bạn mới sử dụng lần đầu.",
+      "guide_link_text": "Hướng dẫn kết nối chi tiết",
+      "name_label": "Tên thiết bị / Trình duyệt",
+      "name_placeholder": "Ví dụ: Yomitan - Chrome PC / Kiwi Mobile",
+      "expiry_label": "Thời hạn hiệu lực",
+      "expiry_30": "30 ngày",
+      "expiry_90": "90 ngày",
+      "expiry_180": "180 ngày (mặc định)",
+      "expiry_365": "365 ngày",
+      "expiry_none": "Không hết hạn",
+      "submit_btn": "Tạo token mới",
+      "config_alert_title": "Cấu hình nhanh trong Yomitan",
+      "config_alert_text": "Tạo token rồi dán toàn bộ URL được cấp vào ô <bold>Server URL</bold> trong mục Cài đặt (Settings ➔ Anki/Connect) của Yomitan (không cần nhập API Key riêng).",
+      "config_alert_ref": "Tham khảo <link1>Hướng dẫn Cài đặt</link1> hoặc <link2>Bảng tra cứu 55 Field Markers</link2> để gán trường dữ liệu vào mẫu thẻ.",
+      "issued_warning_title": "Sao chép URL này ngay — Flama sẽ không hiển thị lại URL đầy đủ sau khi bạn rời trang!",
+      "copy_btn": "Sao chép URL",
+      "copied_btn": "Đã sao chép URL"
+    },
+    "tokens": {
+      "default_name": "Yomitan - PC cá nhân",
+      "title": "Danh sách Token đã tạo",
+      "description": "Các API Key đang hoạt động hoặc đã thu hồi của tài khoản",
+      "refresh": "Làm mới",
+      "refresh_tooltip": "Tải lại danh sách",
+      "empty_title": "Chưa có token Yomitan",
+      "empty_desc": "Hãy tạo token đầu tiên để kết nối tiện ích Yomitan với Flama.",
+      "status_active": "Đang hoạt động",
+      "status_revoked": "Đã thu hồi",
+      "status_expired": "Đã hết hạn",
+      "th_name": "Tên thiết bị",
+      "th_status": "Trạng thái",
+      "th_expiry": "Hết hạn",
+      "th_last_used": "Lần dùng gần nhất",
+      "th_actions": "Thao tác",
+      "never_expires": "Không hết hạn",
+      "never_used": "Chưa từng sử dụng",
+      "action_rotate": "Tạo lại",
+      "action_revoke": "Thu hồi",
+      "confirm_rotate": "Thu hồi token cũ và tạo token mới với tên này?",
+      "confirm_revoke": "Bạn có chắc chắn muốn thu hồi token này ngay lập tức?"
+    },
+    "docs": {
+      "title": "Tài liệu & Hướng dẫn tham chiếu",
+      "view_all": "Xem tất cả",
+      "card1_title": "Cài đặt & Tải Yomitan",
+      "card1_desc": "Từng bước cài đặt extension trên Chrome/Firefox và cấu hình Server URL.",
+      "card2_title": "Bảng 55 Field Markers",
+      "card2_desc": "Danh mục toàn bộ markers {expression}, {furigana}... để gán mẫu thẻ.",
+      "card3_title": "Di động & Xử lý sự cố",
+      "card3_desc": "Hướng dẫn dùng trên Kiwi Browser, Firefox Android và sửa lỗi kết nối."
+    },
+    "messages": {
+      "create_success": "Đã tạo token Flama Connect thành công.",
+      "revoke_success": "Token đã được thu hồi ngay lập tức.",
+      "rotate_success": "Đã thu hồi token cũ và tạo token mới thành công.",
+      "renew_detected": "Phát hiện token đã hết hạn. Đang tự động làm mới (renew) token cho bạn...",
+      "auto_create": "Chưa có token kết nối. Đang tự động tạo key Flama Connect mới...",
+      "copied": "Đã sao chép vào bộ nhớ tạm."
+    }
+  }
+}

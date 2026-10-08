@@ -1,0 +1,279 @@
+{
+  "page": {
+    "title": "Mẫu giấy luyện viết & In bài tập (A4)",
+    "badge_standalone": "Tự do & Không cần Deck",
+    "description": "Tạo trang trắng làm văn tiêu chuẩn (Genkō Yōshi / 作文纸 400 ô), ô chữ Hán, ô chữ thập để in ra luyện viết tay bằng bút mực.",
+    "back_button": "Quay lại",
+    "open_studio": "Mở Live Studio",
+    "cards": {
+      "genkouyoushi": {
+        "title": "Giấy làm văn 400 ô (Genkō Yōshi)",
+        "description": "Chuẩn 作文纸 20 cột × 20 dòng kèm dải đệm ngang giữa các hàng, dòng ghi họ tên và ngày tháng.",
+        "f1": "In trang trắng sạch đẹp 100%",
+        "f2": "Hỗ trợ điền bài văn mẫu & tô chữ mờ",
+        "action": "Mở mẫu 400 ô →"
+      },
+      "kanji_grid": {
+        "title": "Lưới kẻ ô chữ Hán (Kanji Grid)",
+        "description": "Lưới ô chữ thập (+), hoa thị (*), ô trơn để luyện tập cấu trúc nét viết tay chữ Hán và Kana.",
+        "f1": "Tuỳ chỉnh kích thước ô 28px - 44px",
+        "f2": "Màu mực xám than photocopy chuẩn nét",
+        "action": "Xem mẫu ô chữ Hán →"
+      },
+      "pdf_print": {
+        "title": "Xuất file PDF & In ngay A4",
+        "description": "Tích hợp cơ chế print styling tự động căn lề chuẩn 0mm, không bị vỡ hàng, không thừa trang trắng.",
+        "f1": "Khổ giấy A4 Dọc (Portrait) chuẩn",
+        "f2": "Xem trước trực tiếp theo thời gian thực",
+        "action": "In ngay →"
+      }
+    }
+  },
+  "modal": {
+    "title_step_deck": "Mẫu giấy luyện viết & In ấn (A4) - Chọn bộ thẻ",
+    "title_step_mapping": "Ánh xạ trường dữ liệu - {{name}}",
+    "title_step_template": "Chọn mẫu bài tập - {{name}}",
+    "title_step_studio_deck": "Xuất bài tập in ấn / PDF (A4)",
+    "title_step_studio_standalone": "Mẫu giấy luyện viết & In ấn (A4)",
+    "badge_studio": "Live Studio",
+    "badge_wizard": "Quy trình tạo",
+    "desc_step_deck": "Bước 1/4: Chọn bộ thẻ bạn muốn tạo mẫu giấy luyện viết & in ấn",
+    "desc_step_mapping": "Bước 2/4: Xác nhận các trường từ vựng, cách đọc, ý nghĩa",
+    "desc_step_template": "Bước 3/4: Chọn loại bài tập muốn in (Chữ Hán, Từ vựng, Đặt câu...)",
+    "standalone_label": "Mẫu giấy độc lập (Không cần deck)",
+    "total_notes": "{{count}} ghi chú",
+    "free_practice": "Tự do luyện viết",
+    "demo_updating": "Đang cập nhật demo...",
+    "demo_ready": "Bản demo sẵn sàng",
+    "pages_count": "{{count}} trang A4",
+    "mobile_config": "Cấu hình",
+    "mobile_preview": "Xem bản in ({{count}})",
+    "zoom_fit": "Vừa trang",
+    "zoom_in": "Phóng to",
+    "zoom_out": "Thu nhỏ",
+    "print_button": "In / Lưu PDF",
+    "print_preparing": "Đang chuẩn bị...",
+    "close": "Đóng"
+  },
+  "stepper": {
+    "step_deck": "Chọn bộ thẻ",
+    "step_deck_short": "Bộ thẻ",
+    "step_mapping": "Ánh xạ dữ liệu",
+    "step_mapping_short": "Ánh xạ",
+    "step_template": "Chọn mẫu bài tập",
+    "step_template_short": "Mẫu bài",
+    "step_studio": "Cấu hình & In ấn",
+    "step_studio_short": "In ấn",
+    "step_counter": "Bước {{current}}/{{total}}"
+  },
+  "deck_select": {
+    "header_title": "Bước 1: Chọn bộ thẻ để xuất bài tập",
+    "header_desc": "Chọn bộ thẻ chứa từ vựng hoặc chữ Hán bạn muốn tạo mẫu giấy luyện viết & in ấn.",
+    "deck_count": "{{count}} bộ thẻ",
+    "standalone_card_title": "Tạo mẫu giấy in tự do (Không cần thẻ học)",
+    "standalone_card_badge": "Genkō Yōshi / Ô kẻ tay",
+    "standalone_card_desc": "In trang trắng giấy làm văn 400 ô, ô chữ Hán hoa thị, chữ thập để tự do viết tay bằng bút mực.",
+    "standalone_card_action": "Chọn mẫu tự do →",
+    "divider_or": "Hoặc chọn từ bộ thẻ của bạn",
+    "loading_decks": "Đang tải danh sách bộ thẻ...",
+    "empty_deck_warning": "Bộ thẻ này hiện không có ghi chú nào.",
+    "empty_decks": "Chưa có bộ thẻ nào.",
+    "mixed_types_warning": "Bộ thẻ chứa nhiều loại thẻ khác nhau. Vui lòng chọn bộ thẻ đơn nhất.",
+    "select_deck_button": "Chọn bộ thẻ này →",
+    "checking_structure": "Đang kiểm tra cấu trúc loại thẻ của bộ thẻ...",
+    "mixed_note_types_title": "Không thể tiếp tục: Bộ thẻ chứa {{count}} loại thẻ khác nhau",
+    "mixed_note_types_desc": "Để hệ thống ánh xạ dữ liệu và trích xuất chữ Hán chính xác, bộ thẻ phải đồng nhất duy nhất 1 loại thẻ (Note Type).",
+    "detected_note_types": "Các loại thẻ phát hiện trong bộ thẻ này:",
+    "note_count_parens": "{{count}} ghi chú",
+    "mixed_note_types_hint": "👉 Vui lòng chọn một bộ thẻ con cụ thể hoặc bộ thẻ khác chỉ có 1 loại thẻ duy nhất.",
+    "empty_deck_title": "Bộ thẻ này hiện chưa có ghi chú nào",
+    "empty_deck_desc": "Vui lòng thêm thẻ vào bộ thẻ hoặc chọn bộ thẻ khác có sẵn dữ liệu để tạo bài tập.",
+    "total_notes_badge": "{{count}} ghi chú",
+    "note_type_label": "Loại thẻ:",
+    "fields_count": "{{count}} trường dữ liệu",
+    "valid_badge": "Hợp lệ",
+    "close_button": "Đóng",
+    "next_step": "Tiếp tục: Ánh xạ dữ liệu"
+  },
+  "mapping": {
+    "header_title": "Bước 2: Ánh xạ trường dữ liệu",
+    "header_title_deck": "Bước 2: Ánh xạ trường dữ liệu từ thẻ học",
+    "header_desc": "Xác nhận các trường từ vựng, cách đọc, ý nghĩa để hệ thống hiển thị chính xác vào mẫu bài tập.",
+    "header_desc_deck": "Chọn đúng các trường trong bộ thẻ {{deck}} ({{notes}} thẻ, mẫu thẻ: {{noteType}}).",
+    "deck_label": "Bộ thẻ:",
+    "total_notes": "Tổng số:",
+    "notes_count": "{{count}} ghi chú",
+    "preset_loaded": "Đã nạp thiết lập đã lưu",
+    "reset_button": "Gợi ý ban đầu",
+    "reset_button_title": "Khôi phục ánh xạ mặc định",
+    "banner_title": "Xác nhận nội dung trường nguồn",
+    "banner_desc": "Hệ thống hiển thị giá trị mẫu thực tế từ thẻ học để bạn kiểm tra. Hãy đảm bảo không chọn nhầm trường chứa file âm thanh (Audio) hay mã định danh để bài tập hiển thị chuẩn xác nhất.",
+    "required_badge": "Bắt buộc",
+    "optional_badge": "Tùy chọn",
+    "skip_field": "Bỏ qua trường này",
+    "select_required_field": "-- Bắt buộc: Hãy chọn trường chứa chữ Hán/từ vựng --",
+    "select_field_placeholder": "-- Chọn trường --",
+    "none_option": "-- Không sử dụng trường này --",
+    "sample_value_label": "Giá trị mẫu trên thẻ:",
+    "warning_media": "Cảnh báo: Trường này có vẻ là file âm thanh ({{val}})",
+    "sample_empty": "(Giá trị rỗng trong thẻ mẫu)",
+    "back_button": "Quay lại",
+    "next_button": "Tiếp tục: Chọn mẫu bài tập",
+    "toast_reset": "Đã khôi phục ánh xạ gợi ý ban đầu",
+    "toast_error_required": "Vui lòng chọn trường chứa Từ vựng / Chữ Hán chính!",
+    "slots": {
+      "kanji": {
+        "label": "Chữ Hán / Từ vựng chính (Kanji / Word)",
+        "desc": "Trường chứa từ vựng hoặc chữ Hán để in ra ô luyện viết tay."
+      },
+      "reading": {
+        "label": "Cách đọc (Furigana / Pinyin / Kana)",
+        "desc": "Trường cách đọc phiên âm trên đầu chữ hoặc trong cột hướng dẫn."
+      },
+      "meaning": {
+        "label": "Ý nghĩa / Dịch nghĩa (Meaning)",
+        "desc": "Nghĩa tiếng Việt hoặc giải thích để in vào cột gợi ý hoặc thẻ nhớ."
+      },
+      "sentence": {
+        "label": "Câu ví dụ (Example Sentence)",
+        "desc": "Dùng cho mẫu bài tập luyện viết cả câu hoặc điền ngữ pháp."
+      }
+    }
+  },
+  "template_select": {
+    "header_title": "Bước 3: Chọn loại bài tập muốn in",
+    "header_desc": "Chọn một mẫu bài tập phù hợp với mục tiêu luyện tập của bạn (Luyện nét, Viết từ vựng, Đặt câu...).",
+    "templates_count": "{{count}} mẫu in A4",
+    "categories": {
+      "all": "Tất cả mẫu",
+      "kanji": "Chữ Hán & Nét",
+      "vocabulary": "Từ vựng & Nhớ",
+      "sentence": "Mẫu câu & Ngữ pháp",
+      "table": "Bảng tuỳ biến"
+    },
+    "orientation": {
+      "portrait": "A4 Dọc",
+      "landscape": "A4 Ngang"
+    },
+    "default_rows": "Mặc định: {{count}} mục/trang",
+    "orientation_label": "Khổ: ",
+    "confirm_button": "Tiếp tục: Cấu hình & In ấn",
+    "back_button": "Quay lại"
+  },
+  "studio": {
+    "tabs": {
+      "template": "Mẫu bài tập",
+      "data": "Dữ liệu & Trường",
+      "layout": "Bố cục & Ô chữ",
+      "header": "Tiêu đề & Thông tin"
+    },
+    "template_tab": {
+      "current_template": "Mẫu bài tập hiện tại",
+      "switch_template": "Đổi mẫu khác",
+      "presets_title": "Cấu hình nhanh (Presets)",
+      "preset_standard": "Chuẩn",
+      "preset_compact": "Gọn gàng",
+      "preset_dense": "Tối đa ô",
+      "preset_test": "Đề thi",
+      "preset_tracing": "Tô chữ mờ",
+      "reset_defaults": "Khôi phục thông số tối ưu"
+    },
+    "data_tab": {
+      "note_type_label": "Loại thẻ (Note Type)",
+      "scope_label": "Phạm vi dữ liệu",
+      "scope_all": "Tất cả ghi chú trong deck",
+      "scope_first_n": "Lấy N ghi chú đầu tiên",
+      "scope_random_n": "Lấy ngẫu nhiên N ghi chú",
+      "scope_selected": "Các ghi chú đã chọn",
+      "count_limit": "Số lượng ghi chú:"
+    },
+    "layout_tab": {
+      "paper_size": "Khổ giấy",
+      "orientation": "Hướng giấy",
+      "portrait": "Dọc (Portrait)",
+      "landscape": "Ngang (Landscape)",
+      "margin": "Căn lề",
+      "margin_standard": "Chuẩn (15mm)",
+      "margin_compact": "Gọn (10mm)",
+      "margin_minimal": "Tối thiểu (6mm)",
+      "grid_style": "Kiểu ô lưới",
+      "grid_cross": "Chữ thập (+)",
+      "grid_diagonal": "Hoa thị (*)",
+      "grid_square": "Ô vuông trơn",
+      "grid_none": "Không đường kẻ phụ",
+      "trace_count": "Số ô tô chữ mờ:",
+      "practice_count": "Số ô tự viết tay:",
+      "rows_per_page": "Số hàng mỗi trang:",
+      "stroke_diagram": "Hiện sơ đồ từng nét",
+      "stroke_numbers": "Hiện số thứ tự nét 1, 2, 3...",
+      "spacer_band": "Dải đệm giữa các hàng (Genkō Yōshi)",
+      "presets_title": "Bố cục mẫu 1-chạm (Quick Presets)",
+      "reset_defaults": "Mặc định tối ưu",
+      "reset_defaults_title": "Khôi phục lại thiết lập mặc định tối ưu của mẫu này",
+      "preset_save_paper": "Tiết kiệm giấy",
+      "preset_standard": "Viết chuẩn",
+      "preset_large": "Nét to chuyên sâu",
+      "desc_step_save": "Ô 30px, 1 mờ, 8 dòng",
+      "desc_step_standard": "Ô 34px, 2 mờ, 7 dòng",
+      "desc_step_large": "Ô 38px to rõ, 6 dòng",
+      "desc_kanji_save": "Ô 28px, 1 mờ, 8 viết",
+      "desc_kanji_standard": "Ô 36px, 2 mờ, 5 viết",
+      "desc_kanji_large": "Ô 42px, +1 dòng trống",
+      "toast_save_paper_step": "Đã áp dụng mẫu: Tiết kiệm giấy (Ô 30px, 1 ô mờ, 8 dòng/trang)",
+      "toast_standard_step": "Đã áp dụng mẫu: Luyện viết chuẩn (Ô 34px, 2 ô mờ, 7 dòng/trang)",
+      "toast_large_step": "Đã áp dụng mẫu: Nét to chuyên sâu (Ô 38px to rõ, 2 ô mờ, 6 dòng/trang)",
+      "toast_save_paper_kanji": "Đã áp dụng mẫu: Tiết kiệm giấy (Ô 28px, 1 ô mờ, 8 ô tự viết)",
+      "toast_standard_kanji": "Đã áp dụng mẫu: Luyện viết chuẩn (Ô 36px, tối đa dòng, sát lề)",
+      "toast_large_kanji": "Đã áp dụng mẫu: Ô chữ to chuyên sâu (+1 dòng luyện bổ sung)"
+    },
+    "header_tab": {
+      "title_label": "Tiêu đề bài tập",
+      "title_placeholder": "Nhập tiêu đề phiếu bài tập...",
+      "subtitle_label": "Phụ đề / Hướng dẫn",
+      "student_info": "Khung thông tin học viên (Họ tên, Lớp)",
+      "date_info": "Dòng ghi ngày tháng",
+      "watermark": "Hình mờ bảo hộ (Watermark)",
+      "watermark_text": "Chữ mờ bản quyền"
+    },
+    "preview": {
+      "page_indicator": "Trang {{current}} / {{total}}",
+      "prev_page": "Trang trước",
+      "next_page": "Trang sau",
+      "no_preview": "Đang nạp dữ liệu bản in...",
+      "updating": "Đang cập nhật...",
+      "items_summary": "Tổng: {{items}} mục • {{pages}} trang A4",
+      "loading_meta": "Đang tải cấu hình thẻ học...",
+      "preparing_pages": "Đang chuẩn bị trang bài tập...",
+      "no_preview_warning": "Không có dữ liệu trang xem trước. Vui lòng kiểm tra lại ánh xạ trường dữ liệu."
+    }
+  },
+  "renderer": {
+    "student_class": "Lớp",
+    "student_name": "Họ tên",
+    "student_id": "Mã số",
+    "student_score": "Điểm",
+    "name_label": "Họ tên",
+    "date_label": "Ngày",
+    "page_label": "Trang {{current}} / {{total}}",
+    "exercise_prompt_label": "Đề bài / Yêu cầu bài tập:",
+    "table_vocab": "Từ vựng",
+    "table_reading": "Cách đọc",
+    "table_meaning": "Ý nghĩa",
+    "table_practice": "Luyện viết",
+    "cloze_hint": "Gợi ý (Ý nghĩa / Âm đọc)",
+    "cloze_target": "Từ vựng mục tiêu (Tự nhớ & Viết lại)",
+    "no_columns_selected": "Chưa chọn cột nào để hiển thị",
+    "no_columns_hint": "Vui lòng mở tab \"Dữ liệu & Trường\" ở bảng điều khiển bên trái và tích chọn các trường bạn muốn xuất bảng.",
+    "auxiliary_default_title": "Ghi chú / Luyện viết",
+    "grammar_structure_index": "Cấu trúc #{{index}}",
+    "example_label": "Ví dụ: ",
+    "qr_title": "Quét mã QR để mở trang: {{url}}",
+    "qr_aria": "Mã QR trang bài tập"
+  },
+  "toast": {
+    "meta_load_failed": "Không thể tải thông tin bộ thẻ: {{error}}",
+    "preset_restored": "Đã khôi phục thông số tối ưu cho \"{{name}}\"",
+    "preset_saved": "Đã lưu cài đặt cho loại thẻ!",
+    "print_started": "Đang mở hộp thoại in trình duyệt..."
+  }
+}

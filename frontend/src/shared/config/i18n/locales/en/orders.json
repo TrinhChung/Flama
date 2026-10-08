@@ -1,0 +1,43 @@
+{
+  "title": "Order History",
+  "description": "Track marketplace transactions and learning material access.",
+  "empty": {
+    "title": "No orders yet",
+    "description": "Your marketplace transactions will appear here."
+  },
+  "table": {
+    "order_code": "Order Code",
+    "item": "Item",
+    "date": "Date",
+    "amount": "Amount",
+    "status": "Status",
+    "actions": "Actions",
+    "total_count": "Total {{count}} orders"
+  },
+  "actions": {
+    "check": "Check",
+    "details": "Details"
+  },
+  "detail": {
+    "title": "Order Details",
+    "code_description": "Order code: #{{code}}",
+    "transaction_code": "Transaction Code",
+    "status": "Status",
+    "total_payment": "Total Payment",
+    "grant_status": "Access Grant",
+    "completed": "Completed",
+    "items_in_order": "Items in this order:",
+    "free": "Free",
+    "pending_payment_banner": "Order awaiting payment",
+    "pay_now": "Pay Now",
+    "recheck_status": "Recheck Status",
+    "close": "Close"
+  },
+  "loading": "Loading orders…",
+  "detail_loading": "Loading order details…",
+  "toast": {
+    "status_updated": "Order status updated!",
+    "update_failed": "Failed to update status",
+    "try_again": "Please try again later."
+  }
+}

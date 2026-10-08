@@ -1,0 +1,279 @@
+{
+  "page": {
+    "title": "Practice Sheets & Print Exercises (A4)",
+    "badge_standalone": "Free & Deck-Independent",
+    "description": "Generate standard Japanese essay sheets (Genkō Yōshi 400 grids), Kanji stroke boxes, and cross grids for pen practice.",
+    "back_button": "Back",
+    "open_studio": "Open Live Studio",
+    "cards": {
+      "genkouyoushi": {
+        "title": "400-Grid Essay Sheet (Genkō Yōshi)",
+        "description": "Standard 20 cols × 20 rows essay grid with horizontal center margins, student name block, and date lines.",
+        "f1": "100% clean blank print sheets",
+        "f2": "Supports sample essay pre-fill & faint trace",
+        "action": "Open 400-grid template →"
+      },
+      "kanji_grid": {
+        "title": "Kanji Practice Grids",
+        "description": "Cross (+), diagonal asterisk (*), and plain square grids to practice Kanji and Kana stroke proportions.",
+        "f1": "Customizable box size 28px - 44px",
+        "f2": "Charcoal gray print-ready grid lines",
+        "action": "View Kanji grid template →"
+      },
+      "pdf_print": {
+        "title": "Export PDF & Print A4",
+        "description": "Integrated zero-margin print styling engine with no page overflow and zero orphan blank pages.",
+        "f1": "Standard A4 Portrait layout",
+        "f2": "Real-time responsive preview",
+        "action": "Print now →"
+      }
+    }
+  },
+  "modal": {
+    "title_step_deck": "Practice Sheets & Printing (A4) - Select Deck",
+    "title_step_mapping": "Field Mapping - {{name}}",
+    "title_step_template": "Select Template - {{name}}",
+    "title_step_studio_deck": "Export Printable Worksheet / PDF (A4)",
+    "title_step_studio_standalone": "Practice Sheets & Printing (A4)",
+    "badge_studio": "Live Studio",
+    "badge_wizard": "Setup Wizard",
+    "desc_step_deck": "Step 1/4: Choose a deck to generate practice sheets and printable exercises",
+    "desc_step_mapping": "Step 2/4: Confirm vocabulary, reading, and meaning field slots",
+    "desc_step_template": "Step 3/4: Choose exercise format (Kanji strokes, Vocabulary, Sentence making...)",
+    "standalone_label": "Standalone Worksheet (No deck required)",
+    "total_notes": "{{count}} notes",
+    "free_practice": "Free practice",
+    "demo_updating": "Updating preview...",
+    "demo_ready": "Preview ready",
+    "pages_count": "{{count}} A4 pages",
+    "mobile_config": "Settings",
+    "mobile_preview": "Preview ({{count}})",
+    "zoom_fit": "Fit Page",
+    "zoom_in": "Zoom In",
+    "zoom_out": "Zoom Out",
+    "print_button": "Print / Save PDF",
+    "print_preparing": "Preparing...",
+    "close": "Close"
+  },
+  "stepper": {
+    "step_deck": "Select Deck",
+    "step_deck_short": "Deck",
+    "step_mapping": "Map Fields",
+    "step_mapping_short": "Mapping",
+    "step_template": "Select Template",
+    "step_template_short": "Template",
+    "step_studio": "Configure & Print",
+    "step_studio_short": "Print",
+    "step_counter": "Step {{current}}/{{total}}"
+  },
+  "deck_select": {
+    "header_title": "Step 1: Select Deck for Worksheet",
+    "header_desc": "Select a deck containing vocabulary or Kanji you wish to practice handwriting with.",
+    "deck_count": "{{count}} decks",
+    "standalone_card_title": "Create Blank Practice Sheet (No deck needed)",
+    "standalone_card_badge": "Genkō Yōshi / Manual Grids",
+    "standalone_card_desc": "Print clean 400-grid essay sheets or asterisk/cross grids for pen and ink writing.",
+    "standalone_card_action": "Select blank sheet →",
+    "divider_or": "Or choose from your flashcard decks",
+    "loading_decks": "Loading decks list...",
+    "empty_deck_warning": "This deck currently has no flashcard notes.",
+    "empty_decks": "No decks available yet.",
+    "mixed_types_warning": "Deck contains multiple note types. Please select a single-type deck.",
+    "select_deck_button": "Select this deck →",
+    "checking_structure": "Checking note type structure of the deck...",
+    "mixed_note_types_title": "Cannot proceed: Deck contains {{count}} different note types",
+    "mixed_note_types_desc": "To accurately map data and extract Kanji, the deck must contain exactly 1 uniform Note Type.",
+    "detected_note_types": "Note types detected in this deck:",
+    "note_count_parens": "{{count}} notes",
+    "mixed_note_types_hint": "👉 Please select a specific subdeck or another deck with a single note type.",
+    "empty_deck_title": "This deck currently has no notes",
+    "empty_deck_desc": "Please add cards to the deck or select another deck with available data to create worksheets.",
+    "total_notes_badge": "{{count}} notes",
+    "note_type_label": "Note Type:",
+    "fields_count": "{{count}} data fields",
+    "valid_badge": "Valid",
+    "close_button": "Close",
+    "next_step": "Continue: Map Fields"
+  },
+  "mapping": {
+    "header_title": "Step 2: Map Data Fields",
+    "header_title_deck": "Step 2: Map Data Fields from Flashcards",
+    "header_desc": "Confirm field slots for vocabulary, reading, and meaning to populate exercises correctly.",
+    "header_desc_deck": "Select matching fields in deck {{deck}} ({{notes}} notes, note type: {{noteType}}).",
+    "deck_label": "Deck:",
+    "total_notes": "Total notes:",
+    "notes_count": "{{count}} notes",
+    "preset_loaded": "Saved field mapping configuration auto-loaded for this note type",
+    "reset_button": "Initial Suggestions",
+    "reset_button_title": "Restore default mapping",
+    "banner_title": "Confirm source field content",
+    "banner_desc": "The system displays sample values from flashcards for inspection. Make sure not to pick audio files or IDs so the worksheet renders cleanly.",
+    "required_badge": "Required",
+    "optional_badge": "Optional",
+    "skip_field": "Skip this field",
+    "select_required_field": "-- Required: Select field containing Kanji/word --",
+    "select_field_placeholder": "-- Select field --",
+    "none_option": "-- Do not use this field --",
+    "sample_value_label": "Sample card value:",
+    "warning_media": "Warning: This field appears to be an audio file ({{val}})",
+    "sample_empty": "(Empty value in sample card)",
+    "back_button": "Back",
+    "next_button": "Continue: Select Template",
+    "toast_reset": "Restored initial suggested mappings",
+    "toast_error_required": "Please select a field for primary Kanji / Vocabulary!",
+    "slots": {
+      "kanji": {
+        "label": "Primary Kanji / Vocabulary (Kanji / Word)",
+        "desc": "Field containing words or Kanji characters for handwriting grid boxes."
+      },
+      "reading": {
+        "label": "Reading (Furigana / Pinyin / Kana)",
+        "desc": "Phonetic reading field rendered above characters or in guide column."
+      },
+      "meaning": {
+        "label": "Meaning / Translation",
+        "desc": "Definition or translation printed in hint column or recall cards."
+      },
+      "sentence": {
+        "label": "Example Sentence",
+        "desc": "Used for full-sentence writing exercises or grammar fill-in templates."
+      }
+    }
+  },
+  "template_select": {
+    "header_title": "Step 3: Choose Exercise Template",
+    "header_desc": "Select an exercise template suited to your learning goal (Stroke order, Vocab recall, Sentences...).",
+    "templates_count": "{{count}} A4 templates",
+    "categories": {
+      "all": "All Templates",
+      "kanji": "Kanji & Strokes",
+      "vocabulary": "Vocabulary & Recall",
+      "sentence": "Sentences & Grammar",
+      "table": "Custom Tables"
+    },
+    "orientation": {
+      "portrait": "A4 Portrait",
+      "landscape": "A4 Landscape"
+    },
+    "default_rows": "Default: {{count}} items/page",
+    "orientation_label": "Orientation: ",
+    "confirm_button": "Continue: Configure & Print",
+    "back_button": "Back"
+  },
+  "studio": {
+    "tabs": {
+      "template": "Templates",
+      "data": "Data & Fields",
+      "layout": "Layout & Grids",
+      "header": "Header & Info"
+    },
+    "template_tab": {
+      "current_template": "Current Template",
+      "switch_template": "Switch Template",
+      "presets_title": "Quick Presets",
+      "preset_standard": "Standard",
+      "preset_compact": "Compact",
+      "preset_dense": "Max Density",
+      "preset_test": "Test Sheet",
+      "preset_tracing": "Tracing",
+      "reset_defaults": "Reset to Defaults"
+    },
+    "data_tab": {
+      "note_type_label": "Note Type",
+      "scope_label": "Data Scope",
+      "scope_all": "All notes in deck",
+      "scope_first_n": "First N notes",
+      "scope_random_n": "Random N notes",
+      "scope_selected": "Selected notes",
+      "count_limit": "Card count limit:"
+    },
+    "layout_tab": {
+      "paper_size": "Paper Size",
+      "orientation": "Orientation",
+      "portrait": "Portrait",
+      "landscape": "Landscape",
+      "margin": "Margins",
+      "margin_standard": "Standard (15mm)",
+      "margin_compact": "Compact (10mm)",
+      "margin_minimal": "Minimal (6mm)",
+      "grid_style": "Grid Style",
+      "grid_cross": "Cross (+)",
+      "grid_diagonal": "Diagonal (*)",
+      "grid_square": "Plain Square",
+      "grid_none": "No Sublines",
+      "trace_count": "Trace boxes count:",
+      "practice_count": "Practice boxes count:",
+      "rows_per_page": "Rows per page:",
+      "stroke_diagram": "Show stroke diagram",
+      "stroke_numbers": "Show stroke numbers 1, 2, 3...",
+      "spacer_band": "Spacer band between rows (Genkō Yōshi)",
+      "presets_title": "Quick Presets",
+      "reset_defaults": "Optimized Defaults",
+      "reset_defaults_title": "Restore optimized default settings for this template",
+      "preset_save_paper": "Save Paper",
+      "preset_standard": "Standard Writing",
+      "preset_large": "Large Stroke Focus",
+      "desc_step_save": "30px box, 1 trace, 8 rows",
+      "desc_step_standard": "34px box, 2 trace, 7 rows",
+      "desc_step_large": "38px clear box, 6 rows",
+      "desc_kanji_save": "28px box, 1 trace, 8 write",
+      "desc_kanji_standard": "36px box, 2 trace, 5 write",
+      "desc_kanji_large": "42px box, +1 blank line",
+      "toast_save_paper_step": "Applied preset: Save Paper (30px box, 1 trace box, 8 rows/page)",
+      "toast_standard_step": "Applied preset: Standard Writing (34px box, 2 trace boxes, 7 rows/page)",
+      "toast_large_step": "Applied preset: Large Stroke Focus (38px clear box, 2 trace boxes, 6 rows/page)",
+      "toast_save_paper_kanji": "Applied preset: Save Paper (28px box, 1 trace box, 8 practice boxes)",
+      "toast_standard_kanji": "Applied preset: Standard Writing (36px box, max rows, compact margin)",
+      "toast_large_kanji": "Applied preset: Large Box Focus (+1 extra practice row)"
+    },
+    "header_tab": {
+      "title_label": "Page Title",
+      "title_placeholder": "Enter worksheet title...",
+      "subtitle_label": "Subtitle / Instructions",
+      "student_info": "Student info block (Name, Class)",
+      "date_info": "Date line",
+      "watermark": "Watermark Protection",
+      "watermark_text": "Copyright watermark text"
+    },
+    "preview": {
+      "page_indicator": "Page {{current}} / {{total}}",
+      "prev_page": "Previous Page",
+      "next_page": "Next Page",
+      "no_preview": "Loading worksheet preview...",
+      "updating": "Updating...",
+      "items_summary": "Total: {{items}} items • {{pages}} A4 pages",
+      "loading_meta": "Loading flashcard configuration...",
+      "preparing_pages": "Preparing worksheet pages...",
+      "no_preview_warning": "No preview page data. Please verify your field mappings."
+    }
+  },
+  "renderer": {
+    "student_class": "Class",
+    "student_name": "Full Name",
+    "student_id": "Student ID",
+    "student_score": "Score",
+    "name_label": "Name",
+    "date_label": "Date",
+    "page_label": "Page {{current}} / {{total}}",
+    "exercise_prompt_label": "Exercise Prompt / Instructions:",
+    "table_vocab": "Vocabulary",
+    "table_reading": "Reading",
+    "table_meaning": "Meaning",
+    "table_practice": "Practice",
+    "cloze_hint": "Hint (Meaning / Reading)",
+    "cloze_target": "Target Word (Recall & Write)",
+    "no_columns_selected": "No columns selected for display",
+    "no_columns_hint": "Please open the \"Data & Fields\" tab in the left panel and check the fields you want to export.",
+    "auxiliary_default_title": "Notes / Practice",
+    "grammar_structure_index": "Pattern #{{index}}",
+    "example_label": "Example: ",
+    "qr_title": "Scan QR code to open: {{url}}",
+    "qr_aria": "Worksheet QR code"
+  },
+  "toast": {
+    "meta_load_failed": "Failed to load deck information: {{error}}",
+    "preset_restored": "Restored optimal settings for \"{{name}}\"",
+    "preset_saved": "Saved note type settings!",
+    "print_started": "Opening browser print dialog..."
+  }
+}

@@ -11,6 +11,12 @@ import type statistics from './locales/vi/statistics.json'
 import type marketplace from './locales/vi/marketplace.json'
 import type library from './locales/vi/library.json'
 import type imports from './locales/vi/import.json'
+import type settings from './locales/vi/settings.json'
+import type note_types from './locales/vi/note_types.json'
+import type collaboration from './locales/vi/collaboration.json'
+import type orders from './locales/vi/orders.json'
+import type support from './locales/vi/support.json'
+import type worksheets from './locales/vi/worksheets.json'
 
 export interface I18nResources {
   common: typeof common
@@ -26,6 +32,12 @@ export interface I18nResources {
   marketplace: typeof marketplace
   library: typeof library
   import: typeof imports
+  settings: typeof settings
+  note_types: typeof note_types
+  collaboration: typeof collaboration
+  orders: typeof orders
+  support: typeof support
+  worksheets: typeof worksheets
 }
 
 declare module 'i18next' {

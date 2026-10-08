@@ -262,6 +262,28 @@ describe('i18n Empirical Stress & Adversarial Suite', () => {
       expect(viKeys.length).toBeGreaterThan(0)
     })
 
+    it('verifies 100% key parity between vi and en for M3 namespaces (settings, note_types, collaboration, orders, support, worksheets)', async () => {
+      const m3Namespaces = [
+        'settings',
+        'note_types',
+        'collaboration',
+        'orders',
+        'support',
+        'worksheets',
+      ]
+
+      for (const ns of m3Namespaces) {
+        const viModule = await import(`./locales/vi/${ns}.json`)
+        const enModule = await import(`./locales/en/${ns}.json`)
+
+        const viKeys = getLeafPaths(viModule.default)
+        const enKeys = getLeafPaths(enModule.default)
+
+        expect(viKeys, `Discrepancy found in vi vs en for namespace "${ns}"`).toEqual(enKeys)
+        expect(viKeys.length).toBeGreaterThan(0)
+      }
+    })
+
     it('ensures no translation values are empty or undefined in vi and en', async () => {
       const checkNonEmpty = (obj: Record<string, unknown>, ns: string) => {
         for (const [key, value] of Object.entries(obj)) {
@@ -274,19 +296,24 @@ describe('i18n Empirical Stress & Adversarial Suite', () => {
         }
       }
 
-      const viCommon = await import('./locales/vi/common.json')
-      const enCommon = await import('./locales/en/common.json')
-      const viShell = await import('./locales/vi/shell.json')
-      const enShell = await import('./locales/en/shell.json')
-      const viAuth = await import('./locales/vi/auth.json')
-      const enAuth = await import('./locales/en/auth.json')
+      const namespaces = [
+        'common',
+        'shell',
+        'auth',
+        'settings',
+        'note_types',
+        'collaboration',
+        'orders',
+        'support',
+        'worksheets',
+      ]
 
-      checkNonEmpty(viCommon.default, 'vi.common')
-      checkNonEmpty(enCommon.default, 'en.common')
-      checkNonEmpty(viShell.default, 'vi.shell')
-      checkNonEmpty(enShell.default, 'en.shell')
-      checkNonEmpty(viAuth.default, 'vi.auth')
-      checkNonEmpty(enAuth.default, 'en.auth')
+      for (const ns of namespaces) {
+        const viMod = await import(`./locales/vi/${ns}.json`)
+        const enMod = await import(`./locales/en/${ns}.json`)
+        checkNonEmpty(viMod.default, `vi.${ns}`)
+        checkNonEmpty(enMod.default, `en.${ns}`)
+      }
     })
   })
 })
