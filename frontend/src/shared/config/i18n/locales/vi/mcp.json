@@ -281,6 +281,10 @@
       "media": {
         "name": "Thư viện hình ảnh",
         "description": "Tìm kiếm, tải lên và quản lý ảnh minh họa cho thẻ"
+      },
+      "account": {
+        "name": "Tài khoản (Account)",
+        "description": "Xác thực danh tính và thông tin hồ sơ tài khoản cơ bản"
       }
     },
     "presets": {
@@ -373,6 +377,143 @@
       "media_write": {
         "label": "Tải lên & Gắn thẻ Hình ảnh",
         "desc": "Upload, import ảnh từ URL và gắn thẻ hình ảnh minh họa"
+      },
+      "openid": {
+        "label": "Xác thực danh tính OpenID Connect",
+        "desc": "Cung cấp mã định danh người dùng OpenID."
+      },
+      "profile": {
+        "label": "Thông tin tài khoản cơ bản",
+        "desc": "Đọc tên hiển thị và thông tin tài khoản cơ bản."
+      },
+      "email": {
+        "label": "Địa chỉ Email",
+        "desc": "Đọc địa chỉ email của tài khoản Flama."
+      }
+    }
+  },
+  "oauth": {
+    "consent": {
+      "badge": "OAuth 2.1 • Remote MCP",
+      "title": "Cấp quyền cho {{client}}",
+      "title_prefix": "Cấp quyền cho",
+      "default_client": "Ứng dụng bên ngoài",
+      "description": "Ứng dụng yêu cầu kết nối an toàn với kho thẻ Flama của bạn để hỗ trợ tra cứu từ vựng, tạo flashcard và đồng bộ tiến độ học tập.",
+      "account_badge": "Tài khoản Flama",
+      "permissions_title": "Quyền hạn được cấp phép",
+      "permissions_count": "{{count}} quyền",
+      "permissions_count_one": "{{count}} quyền",
+      "permissions_count_other": "{{count}} quyền",
+      "security_note_title": "Bảo mật & Quyền riêng tư:",
+      "security_note_desc": "Flama áp dụng cơ chế xác nhận an toàn cho các tác vụ xóa. AI không thể xóa dữ liệu mà không có sự phê duyệt trực tiếp của bạn. Bạn có thể thu hồi quyền bất kỳ lúc nào trong mục Cài đặt.",
+      "deny_button": "Từ chối",
+      "allow_button": "Cho phép kết nối",
+      "connecting_button": "Đang kết nối…",
+      "footer_standard": "Flama Study Platform • Tuân thủ chuẩn OAuth 2.1 & RFC 9728",
+      "loading": "Đang tải thông tin ứng dụng kết nối…",
+      "unknown_scope_fallback": "Quyền truy cập: {{id}}",
+      "flama_platform_title": "Nền tảng Học tập Flama",
+      "errors": {
+        "invalid_request_title": "Yêu cầu không hợp lệ",
+        "missing_client_id_desc": "Thiếu tham số client_id trong yêu cầu kết nối OAuth. Vui lòng kiểm tra lại cấu hình từ ứng dụng của bạn.",
+        "load_failed_title": "Không thể tải thông tin ủy quyền",
+        "client_not_found": "Ứng dụng client_id không tồn tại hoặc đã bị hủy.",
+        "authorization_failed": "Ủy quyền thất bại: {{error}}",
+        "processing_error": "Có lỗi xảy ra khi xử lý ủy quyền"
+      },
+      "scopes": {
+        "deck_read": {
+          "title": "Xem danh mục & cấu trúc bộ thẻ",
+          "desc": "Đọc danh sách các bộ thẻ flashcard, cấu trúc thư mục phân cấp và số lượng thẻ."
+        },
+        "deck_write": {
+          "title": "Quản lý & tạo mới bộ thẻ",
+          "desc": "Tạo bộ thẻ mới, đổi tên, cập nhật mô tả và tổ chức cây thư mục bộ bài."
+        },
+        "deck_share_read": {
+          "title": "Xem bộ thẻ chia sẻ & Marketplace",
+          "desc": "Duyệt tìm bộ thẻ chia sẻ trên chợ Flama, xem chi tiết nội dung thẻ đã chia sẻ và lịch sử phát hành."
+        },
+        "deck_share_write": {
+          "title": "Đăng tải & quản lý chia sẻ bộ thẻ",
+          "desc": "Chia sẻ bộ thẻ lên Marketplace, cập nhật mô tả/thông tin chia sẻ và phát hành phiên bản mới."
+        },
+        "note_read": {
+          "title": "Xem & tìm kiếm thẻ ghi nhớ",
+          "desc": "Đọc nội dung chi tiết các trường dữ liệu (từ vựng, kanji, nghĩa, ví dụ) và tìm kiếm thẻ."
+        },
+        "note_check": {
+          "title": "Kiểm tra trùng lặp thẻ",
+          "desc": "Kiểm tra xem từ vựng hay thẻ ghi nhớ đã tồn tại trong bộ bài của bạn chưa."
+        },
+        "note_create": {
+          "title": "Tạo thẻ ghi nhớ flashcard mới",
+          "desc": "Thêm từ vựng và thẻ mới vào bộ bài của bạn kèm các trường thông tin tự động."
+        },
+        "note_update": {
+          "title": "Cập nhật thẻ ghi nhớ & nhãn (tags)",
+          "desc": "Chỉnh sửa nội dung thẻ, gắn thẻ phân loại (tags) hoặc chuyển thẻ sang bộ bài khác."
+        },
+        "note_delete": {
+          "title": "Xóa thẻ ghi nhớ (Bảo vệ 2 bước)",
+          "desc": "Xóa thẻ ghi nhớ và các flashcard liên quan (bắt buộc phải có sự phê duyệt trực tiếp từ bạn)."
+        },
+        "note_sync": {
+          "title": "Đồng bộ hóa ghi chú từ nguồn bên ngoài",
+          "desc": "Tự động tạo, cập nhật, di chuyển thẻ ghi nhớ và tạo bộ bài khi đồng bộ từ các nguồn dữ liệu bên ngoài."
+        },
+        "study_read": {
+          "title": "Xem hàng đợi ôn tập Spaced Repetition",
+          "desc": "Xem danh sách các thẻ đến hạn học hôm nay và dự đoán khoảng cách lặp lại ngắt quãng."
+        },
+        "study_write": {
+          "title": "Ghi nhận kết quả ôn tập",
+          "desc": "Gửi đánh giá kết quả học tập (Again, Hard, Good, Easy) vào thuật toán tính lịch học Flama."
+        },
+        "stats_read": {
+          "title": "Xem thống kê học tập & Streak",
+          "desc": "Theo dõi chuỗi ngày học liên tục (streak), số thẻ đã ôn hôm nay và tổng quan tiến độ."
+        },
+        "note_type_read": {
+          "title": "Xem cấu trúc mẫu thẻ (Note Types)",
+          "desc": "Đọc danh sách mẫu thẻ (Vocabulary, Basic, Cloze) và cấu hình các trường dữ liệu tùy chỉnh."
+        },
+        "note_type_write": {
+          "title": "Quản lý mẫu thẻ (Note Types)",
+          "desc": "Tạo mới, chỉnh sửa trường dữ liệu hoặc mẫu card (bảo vệ preview cho thao tác gây mất dữ liệu)."
+        },
+        "media_read": {
+          "title": "Xem & tìm kiếm hình ảnh",
+          "desc": "Đọc và tìm kiếm hình ảnh trong thư viện ảnh dùng chung (Image Library)."
+        },
+        "media_write": {
+          "title": "Tải lên & quản lý hình ảnh",
+          "desc": "Tải lên, import từ URL và gắn thẻ hình ảnh trong thư viện ảnh dùng chung."
+        },
+        "openid": {
+          "title": "Xác thực danh tính OpenID Connect",
+          "desc": "Cung cấp mã định danh người dùng OpenID."
+        },
+        "profile": {
+          "title": "Thông tin tài khoản cơ bản",
+          "desc": "Đọc tên hiển thị và thông tin tài khoản cơ bản."
+        },
+        "email": {
+          "title": "Địa chỉ Email",
+          "desc": "Đọc địa chỉ email của tài khoản Flama."
+        },
+        "read": {
+          "title": "Quyền đọc toàn bộ (Legacy)",
+          "desc": "Xem và truy vấn tất cả dữ liệu flashcard và học tập."
+        },
+        "write": {
+          "title": "Quyền ghi toàn bộ (Legacy)",
+          "desc": "Tạo, sửa đổi và quản lý toàn bộ dữ liệu flashcard."
+        },
+        "wildcard": {
+          "title": "Toàn quyền hệ thống",
+          "desc": "Cấp toàn quyền truy cập tất cả tính năng API của Flama."
+        }
       }
     }
   }

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   AlertCircle,
   BarChart3,
@@ -28,11 +30,35 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useBootstrap } from '@/shared/api/bootstrap'
+import { LanguageSwitcher } from '@/shared/ui/LanguageSwitcher'
 import {
   fetchConsentInfo,
   submitConsentDecision,
   type OAuthDecisionPayload,
 } from '../api/oauthConsent'
+
+export function sanitizeScopeKey(scopeId: string): string {
+  if (scopeId === '*') return 'wildcard'
+  return scopeId.replace(/[-:]/g, '_')
+}
+
+export function getScopeTranslation(
+  sc: { id: string; title?: string; desc?: string },
+  t: TFunction<any, any>,
+) {
+  const sanitized = sanitizeScopeKey(sc.id)
+  const title = (t as any)(`oauth.consent.scopes.${sanitized}.title`, {
+    defaultValue: (t as any)(`scopes.items.${sanitized}.label`, {
+      defaultValue: sc.title || sc.id,
+    }),
+  })
+  const desc = (t as any)(`oauth.consent.scopes.${sanitized}.desc`, {
+    defaultValue: (t as any)(`scopes.items.${sanitized}.desc`, {
+      defaultValue: sc.desc || (t as any)('oauth.consent.unknown_scope_fallback', { id: sc.id }),
+    }),
+  })
+  return { title, desc }
+}
 
 function getScopeIcon(id: string) {
   if (id === 'deck:write') return <FolderPlus className="size-4 text-orange-500" />
@@ -50,6 +76,7 @@ function getScopeIcon(id: string) {
 }
 
 export function OAuthConsentPage() {
+  const { t } = useTranslation('mcp')
   const [searchParams] = useSearchParams()
   const { data: bootstrap, isLoading: isBootstrapLoading } = useBootstrap()
 
@@ -82,12 +109,19 @@ export function OAuthConsentPage() {
       if (data.redirect_url) {
         window.location.href = data.redirect_url
       } else if (data.error) {
-        toast.error(`Ủy quyền thất bại: ${data.error_description || data.error}`)
+        toast.error(
+          t('oauth.consent.errors.authorization_failed', {
+            error: data.error_description || data.error,
+          }),
+        )
         setDecisionPending(false)
       }
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.error_description || err?.message || 'Có lỗi xảy ra khi xử lý ủy quyền'
+      const msg =
+        err?.response?.data?.error_description ||
+        err?.message ||
+        t('oauth.consent.errors.processing_error')
       toast.error(msg)
       setDecisionPending(false)
     },
@@ -112,7 +146,7 @@ export function OAuthConsentPage() {
   }
 
   const currentUser = consentInfo?.user || bootstrap?.user
-  const clientName = consentInfo?.client?.client_name || 'Ứng dụng bên ngoài'
+  const clientName = consentInfo?.client?.client_name || t('oauth.consent.default_client')
   const clientUri = consentInfo?.client?.client_uri
   const scopesList = consentInfo?.scopes || []
 
@@ -131,14 +165,17 @@ export function OAuthConsentPage() {
   if (!clientId) {
     return (
       <div className="relative min-h-screen flex items-center justify-center p-4">
+        <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50">
+          <LanguageSwitcher variant="pill" />
+        </div>
         <AmbientBackground intensity="subtle" />
         <Card className="max-w-md w-full border-border/60 bg-card/90 backdrop-blur-xl shadow-2xl rounded-3xl p-6 text-center space-y-4">
           <div className="mx-auto size-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center">
             <AlertCircle className="size-6" />
           </div>
-          <h2 className="text-xl font-bold">Yêu cầu không hợp lệ</h2>
+          <h2 className="text-xl font-bold">{t('oauth.consent.errors.invalid_request_title')}</h2>
           <p className="text-sm text-muted-foreground">
-            Thiếu tham số <code>client_id</code> trong yêu cầu kết nối OAuth. Vui lòng kiểm tra lại cấu hình từ ứng dụng của bạn.
+            {t('oauth.consent.errors.missing_client_id_desc')}
           </p>
         </Card>
       </div>
@@ -148,10 +185,13 @@ export function OAuthConsentPage() {
   if (isInfoLoading) {
     return (
       <div className="relative min-h-screen flex items-center justify-center p-4">
+        <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50">
+          <LanguageSwitcher variant="pill" />
+        </div>
         <AmbientBackground intensity="subtle" />
         <Card className="max-w-md w-full border-border/60 bg-card/90 backdrop-blur-xl shadow-2xl rounded-3xl p-10 text-center space-y-4">
           <Loader2 className="size-10 animate-spin text-primary mx-auto" />
-          <p className="text-sm font-medium text-muted-foreground">Đang tải thông tin ứng dụng kết nối…</p>
+          <p className="text-sm font-medium text-muted-foreground">{t('oauth.consent.loading')}</p>
         </Card>
       </div>
     )
@@ -160,14 +200,19 @@ export function OAuthConsentPage() {
   if (infoError) {
     return (
       <div className="relative min-h-screen flex items-center justify-center p-4">
+        <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50">
+          <LanguageSwitcher variant="pill" />
+        </div>
         <AmbientBackground intensity="subtle" />
         <Card className="max-w-md w-full border-border/60 bg-card/90 backdrop-blur-xl shadow-2xl rounded-3xl p-6 text-center space-y-4">
           <div className="mx-auto size-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center">
             <AlertCircle className="size-6" />
           </div>
-          <h2 className="text-xl font-bold">Không thể tải thông tin ủy quyền</h2>
+          <h2 className="text-xl font-bold">{t('oauth.consent.errors.load_failed_title')}</h2>
           <p className="text-sm text-muted-foreground">
-            {(infoError as any)?.response?.data?.error_description || (infoError as any)?.message || 'Ứng dụng client_id không tồn tại hoặc đã bị hủy.'}
+            {(infoError as any)?.response?.data?.error_description ||
+              (infoError as any)?.message ||
+              t('oauth.consent.errors.client_not_found')}
           </p>
         </Card>
       </div>
@@ -178,6 +223,11 @@ export function OAuthConsentPage() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 py-8 sm:py-12">
+      {/* Language Switcher Overlay */}
+      <div className="fixed top-4 right-4 sm:top-6 sm:right-6 z-50">
+        <LanguageSwitcher variant="pill" />
+      </div>
+
       {/* Flama Ambient Background */}
       <AmbientBackground intensity="vibrant" />
 
@@ -198,14 +248,14 @@ export function OAuthConsentPage() {
               <div className="flex flex-col items-center gap-1">
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-primary text-[11px] font-bold tracking-wide">
                   <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  OAuth 2.1 • Remote MCP
+                  {t('oauth.consent.badge')}
                 </div>
               </div>
 
               {/* Flama Logo */}
               <div
                 className="size-13 sm:size-14 rounded-2xl bg-gradient-to-br from-primary via-orange-500 to-rose-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/25 shrink-0 transition-transform hover:scale-105"
-                title="Flama Study Platform"
+                title={t('oauth.consent.flama_platform_title')}
               >
                 <img
                   src="/logo.png"
@@ -223,7 +273,7 @@ export function OAuthConsentPage() {
             {/* 2. Header Text */}
             <div className="text-center space-y-2">
               <h1 className="text-2xl sm:text-[26px] font-extrabold tracking-tight text-foreground">
-                Cấp quyền cho{' '}
+                {t('oauth.consent.title_prefix')}{' '}
                 <span className="bg-gradient-to-r from-primary via-orange-500 to-amber-500 bg-clip-text text-transparent">
                   {clientName}
                 </span>
@@ -235,7 +285,7 @@ export function OAuthConsentPage() {
                 </div>
               )}
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-                Ứng dụng yêu cầu kết nối an toàn với kho thẻ Flama của bạn để hỗ trợ tra cứu từ vựng, tạo flashcard và đồng bộ tiến độ học tập.
+                {t('oauth.consent.description')}
               </p>
             </div>
 
@@ -259,43 +309,46 @@ export function OAuthConsentPage() {
 
               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[11px] font-semibold shrink-0 gap-1">
                 <Check className="size-3" />
-                Tài khoản Flama
+                {t('oauth.consent.account_badge')}
               </Badge>
             </div>
 
             {/* 4. Scopes List */}
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                <span>Quyền hạn được cấp phép</span>
+                <span>{t('oauth.consent.permissions_title')}</span>
                 <span className="font-mono lowercase text-[11px] bg-muted px-2 py-0.5 rounded-md">
-                  {scopesList.length} quyền
+                  {t('oauth.consent.permissions_count', { count: scopesList.length })}
                 </span>
               </div>
 
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1 no-scrollbar">
-                {scopesList.map((sc) => (
-                  <div
-                    key={sc.id}
-                    className="flex items-start gap-3 p-3 rounded-2xl border border-border/40 bg-muted/30 hover:bg-muted/60 transition-colors"
-                  >
-                    <div className="size-7 rounded-xl bg-card border border-border/60 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                      {getScopeIcon(sc.id)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <span className="text-xs sm:text-[13px] font-bold text-foreground truncate">
-                          {sc.title}
-                        </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0">
-                          {sc.id}
-                        </span>
+                {scopesList.map((sc) => {
+                  const { title: scopeTitle, desc: scopeDesc } = getScopeTranslation(sc, t)
+                  return (
+                    <div
+                      key={sc.id}
+                      className="flex items-start gap-3 p-3 rounded-2xl border border-border/40 bg-muted/30 hover:bg-muted/60 transition-colors"
+                    >
+                      <div className="size-7 rounded-xl bg-card border border-border/60 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                        {getScopeIcon(sc.id)}
                       </div>
-                      <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-                        {sc.desc}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="text-xs sm:text-[13px] font-bold text-foreground truncate">
+                            {scopeTitle}
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0">
+                            {sc.id}
+                          </span>
+                        </div>
+                        <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
+                          {scopeDesc}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
@@ -303,7 +356,8 @@ export function OAuthConsentPage() {
             <div className="flex items-start gap-3 p-3 sm:p-3.5 rounded-2xl border border-primary/20 bg-primary/5 text-foreground">
               <ShieldCheck className="size-5 text-primary shrink-0 mt-0.5" />
               <div className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed">
-                <strong className="text-foreground">Bảo mật & Quyền riêng tư:</strong> Flama áp dụng cơ chế xác nhận an toàn cho các tác vụ xóa. AI không thể xóa dữ liệu mà không có sự phê duyệt trực tiếp của bạn. Bạn có thể thu hồi quyền bất kỳ lúc nào trong mục Cài đặt.
+                <strong className="text-foreground">{t('oauth.consent.security_note_title')}</strong>{' '}
+                {t('oauth.consent.security_note_desc')}
               </div>
             </div>
 
@@ -316,7 +370,7 @@ export function OAuthConsentPage() {
                 onClick={() => handleDecision('deny')}
                 className="flex-1 h-12 rounded-2xl font-bold text-sm"
               >
-                Từ chối
+                {t('oauth.consent.deny_button')}
               </Button>
 
               <Button
@@ -328,12 +382,12 @@ export function OAuthConsentPage() {
                 {decisionPending ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    <span>Đang kết nối…</span>
+                    <span>{t('oauth.consent.connecting_button')}</span>
                   </>
                 ) : (
                   <>
                     <Check className="size-4 stroke-[3]" />
-                    <span>Cho phép kết nối</span>
+                    <span>{t('oauth.consent.allow_button')}</span>
                   </>
                 )}
               </Button>
@@ -341,7 +395,7 @@ export function OAuthConsentPage() {
 
             {/* Footer */}
             <div className="text-center text-[11px] text-muted-foreground/80">
-              Flama Study Platform • Tuân thủ chuẩn OAuth 2.1 & RFC 9728
+              {t('oauth.consent.footer_standard')}
             </div>
           </CardContent>
         </Card>

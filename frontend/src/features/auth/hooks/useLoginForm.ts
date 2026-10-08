@@ -5,11 +5,11 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { BACKEND_ORIGIN } from '@/config/env'
 import { bootstrapQueryKey } from '@/shared/api/bootstrap'
 import type { FrontendBootstrap } from '@/shared/types/api'
 import { login } from '../api'
 import { getLoginSchema, type LoginFormValues } from '../schemas'
+import { performRedirect, resolveRedirectTarget } from '../utils/redirect'
 
 export function useLoginForm() {
   const { t } = useTranslation('auth')
@@ -33,38 +33,9 @@ export function useLoginForm() {
       )
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       toast.success(t('login.success_toast'))
-      const isValidTarget = (target: string) =>
-        target.startsWith('/') &&
-        !target.startsWith('//') &&
-        target !== '/' &&
-        target !== '/login' &&
-        target !== '/register'
 
-      if (isValidTarget(next)) {
-        navigate(next, { replace: true })
-      } else if (next.startsWith('http://') || next.startsWith('https://')) {
-        try {
-          const parsed = new URL(next, window.location.origin)
-          if (
-            (parsed.origin === window.location.origin ||
-              (BACKEND_ORIGIN && parsed.origin === BACKEND_ORIGIN)) &&
-            isValidTarget(parsed.pathname)
-          ) {
-            window.location.href = next
-            return
-          }
-        } catch {
-          // ignore
-        }
-        navigate('/dashboard', { replace: true })
-      } else if (result.redirect_to?.startsWith('/app/')) {
-        const sliced = result.redirect_to.slice('/app'.length)
-        navigate(isValidTarget(sliced) ? sliced : '/dashboard', { replace: true })
-      } else if (result.redirect_to && isValidTarget(result.redirect_to)) {
-        navigate(result.redirect_to, { replace: true })
-      } else {
-        navigate('/dashboard', { replace: true })
-      }
+      const target = resolveRedirectTarget(next, result.redirect_to)
+      performRedirect(target, navigate)
     },
   })
 

@@ -281,6 +281,10 @@
       "media": {
         "name": "Media Assets",
         "description": "Search, upload, and organize illustration assets for flashcards"
+      },
+      "account": {
+        "name": "User Account & Profile",
+        "description": "Authenticate identity and read basic account profile details"
       }
     },
     "presets": {
@@ -373,6 +377,143 @@
       "media_write": {
         "label": "Upload & Tag Media Assets",
         "desc": "Upload assets, import images via URL, and attach illustration media"
+      },
+      "openid": {
+        "label": "OpenID Connect Identity",
+        "desc": "Authenticate user identity via OpenID Connect."
+      },
+      "profile": {
+        "label": "Basic Account Profile",
+        "desc": "Read display name and basic account profile."
+      },
+      "email": {
+        "label": "Email Address",
+        "desc": "Read email address associated with your Flama account."
+      }
+    }
+  },
+  "oauth": {
+    "consent": {
+      "badge": "OAuth 2.1 • Remote MCP",
+      "title": "Authorize {{client}}",
+      "title_prefix": "Authorize",
+      "default_client": "External Application",
+      "description": "This application requests secure access to your Flama card collection to support vocabulary lookups, flashcard creation, and study progress synchronization.",
+      "account_badge": "Flama Account",
+      "permissions_title": "Requested Permissions",
+      "permissions_count": "{{count}} permissions",
+      "permissions_count_one": "{{count}} permission",
+      "permissions_count_other": "{{count}} permissions",
+      "security_note_title": "Security & Privacy:",
+      "security_note_desc": "Flama enforces safe confirmations for destructive actions. AI cannot delete data without your explicit approval. You can revoke permissions at any time in Settings.",
+      "deny_button": "Deny",
+      "allow_button": "Allow connection",
+      "connecting_button": "Connecting…",
+      "footer_standard": "Flama Study Platform • OAuth 2.1 & RFC 9728 Compliant",
+      "loading": "Loading application authorization details…",
+      "unknown_scope_fallback": "Access permission: {{id}}",
+      "flama_platform_title": "Flama Study Platform",
+      "errors": {
+        "invalid_request_title": "Invalid Request",
+        "missing_client_id_desc": "Missing client_id parameter in OAuth connection request. Please verify your application configuration.",
+        "load_failed_title": "Unable to Load Authorization Details",
+        "client_not_found": "The requested client_id does not exist or has been revoked.",
+        "authorization_failed": "Authorization failed: {{error}}",
+        "processing_error": "An error occurred while processing authorization."
+      },
+      "scopes": {
+        "deck_read": {
+          "title": "View Decks & Folder Structure",
+          "desc": "Read flashcard deck collections, hierarchical folder trees, and card counts."
+        },
+        "deck_write": {
+          "title": "Manage & Create Decks",
+          "desc": "Create new decks, rename, update descriptions, and organize deck folder trees."
+        },
+        "deck_share_read": {
+          "title": "Browse Shared Decks & Marketplace",
+          "desc": "Browse shared decks on the Flama Marketplace, view card details, and inspect release history."
+        },
+        "deck_share_write": {
+          "title": "Publish & Manage Shared Decks",
+          "desc": "Share decks to the Marketplace, update public information, and publish new version releases."
+        },
+        "note_read": {
+          "title": "View & Search Flashcard Notes",
+          "desc": "Read note fields (vocabulary, kanji, definitions, example sentences) and perform search queries."
+        },
+        "note_check": {
+          "title": "Check Duplicate Notes",
+          "desc": "Verify whether vocabulary or flashcard notes already exist in your collection."
+        },
+        "note_create": {
+          "title": "Create New Flashcards",
+          "desc": "Add new vocabulary notes and flashcards to your decks with automated field population."
+        },
+        "note_update": {
+          "title": "Update Flashcard Notes & Tags",
+          "desc": "Edit note fields, manage tags, or organize cards across decks."
+        },
+        "note_delete": {
+          "title": "Delete Flashcard Notes (Protected)",
+          "desc": "Delete notes and associated review cards (requires explicit user confirmation)."
+        },
+        "note_sync": {
+          "title": "Sync Notes from External Sources",
+          "desc": "Automatically create, update, and organize notes and decks synced from external sources."
+        },
+        "study_read": {
+          "title": "View SRS Review Queue",
+          "desc": "Check cards due for review today and inspect spaced repetition schedules."
+        },
+        "study_write": {
+          "title": "Record Review Results",
+          "desc": "Submit study ratings (Again, Hard, Good, Easy) to Flama's SRS scheduling engine."
+        },
+        "stats_read": {
+          "title": "View Study Analytics & Streaks",
+          "desc": "Track study streaks, cards reviewed today, and overall learning progress."
+        },
+        "note_type_read": {
+          "title": "View Note Type Templates",
+          "desc": "Inspect card templates (Vocabulary, Basic, Cloze) and custom field configurations."
+        },
+        "note_type_write": {
+          "title": "Manage Note Type Templates",
+          "desc": "Create, edit field schemas, or configure card template layouts."
+        },
+        "media_read": {
+          "title": "View & Search Images",
+          "desc": "Browse and search media assets in the shared Image Library."
+        },
+        "media_write": {
+          "title": "Upload & Manage Images",
+          "desc": "Upload images, import from URLs, and manage asset tags in the media library."
+        },
+        "openid": {
+          "title": "OpenID Connect Authentication",
+          "desc": "Provides standard OpenID Connect user identifier."
+        },
+        "profile": {
+          "title": "Basic Profile Information",
+          "desc": "Read display name and basic user profile information."
+        },
+        "email": {
+          "title": "Email Address",
+          "desc": "Read the email address associated with your Flama account."
+        },
+        "read": {
+          "title": "Full Read Access (Legacy)",
+          "desc": "View and query all flashcard notes and study data."
+        },
+        "write": {
+          "title": "Full Write Access (Legacy)",
+          "desc": "Create, modify, and manage all flashcard collections."
+        },
+        "wildcard": {
+          "title": "Full System Access",
+          "desc": "Grants comprehensive access to all Flama API capabilities."
+        }
       }
     }
   }

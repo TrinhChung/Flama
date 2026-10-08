@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, LoaderCircle } from 'lucide-react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +10,7 @@ import { useBootstrap } from '@/shared/api/bootstrap'
 import { resolveBackendUrl } from '@/config/env'
 import { AuthCard } from '../components/AuthCard'
 import { useLoginForm } from '../hooks/useLoginForm'
+import { isBackendRoute, isSafeRedirectTarget } from '../utils/redirect'
 
 export function LoginPage() {
   const { t } = useTranslation('auth')
@@ -16,6 +18,14 @@ export function LoginPage() {
   const bootstrapQuery = useBootstrap()
   const bootstrap = bootstrapQuery.data
   const { form, showPassword, toggleShowPassword, isPending, error, onSubmit } = useLoginForm()
+
+  const nextParam = searchParams.get('next')
+
+  useEffect(() => {
+    if (bootstrap?.user && isSafeRedirectTarget(nextParam) && isBackendRoute(nextParam)) {
+      window.location.href = resolveBackendUrl(nextParam!)
+    }
+  }, [bootstrap?.user, nextParam])
 
   if (bootstrapQuery.isPending) {
     return (
@@ -26,15 +36,15 @@ export function LoginPage() {
   }
 
   if (bootstrap?.user) {
-    const next = searchParams.get('next') || ''
-    if (
-      next.startsWith('/') &&
-      !next.startsWith('//') &&
-      next !== '/' &&
-      next !== '/login' &&
-      next !== '/register'
-    ) {
-      return <Navigate to={next} replace />
+    if (isSafeRedirectTarget(nextParam)) {
+      if (isBackendRoute(nextParam)) {
+        return (
+          <div className="flex min-h-80 items-center justify-center">
+            <LoaderCircle className="size-7 animate-spin text-primary" />
+          </div>
+        )
+      }
+      return <Navigate to={nextParam!} replace />
     }
     return <Navigate to="/dashboard" replace />
   }
