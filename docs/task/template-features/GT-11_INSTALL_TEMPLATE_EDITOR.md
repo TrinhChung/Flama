@@ -1,6 +1,6 @@
 # GT-11 — Bản nhận marketplace và phát hành template
 
-Owner: Gemini. Reviewer: Codex. Backend available; execute phases below in order.
+Status 2026-10-08: **GT-11A/B/C Completed / verified** by Codex; see [CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md). The phases below remain implementation criteria.
 Supersedes v1 install-scoped forks. One copy per (user_id, source_template_id), shared across the user's decks/NoteTypes.
 Use install only to discover local_template_id. Save, history, preview and subscription use that local ID.
 Reset means the currently applied published release, never the author's live draft. History is retained.

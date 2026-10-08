@@ -1,7 +1,7 @@
 # GT-18 — Chọn template và ánh xạ trước phiên học
 
 - Owner: Gemini (React UI/API adapter/tests); Codex owns backend and frozen renderer contracts.
-- Status: Ready for frontend implementation after the backend focus tests pass; UI and end-to-end acceptance are not completed.
+- Status 2026-10-08: **GT-18A/B/C/D Completed / verified**; local Chrome + Flask preparation/remember/session restore passed. See [CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md).
 - Required contract: [template-study-bindings-contract-2026-10-07.md](../../architecture/template-study-bindings-contract-2026-10-07.md).
 - Run phases A -> B -> C -> D sequentially. Coordinate with GT-12/13 for shared `entities/card-template/index.ts` and `api/queryKeys.ts` ownership; each phase edits at most six listed files.
 

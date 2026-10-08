@@ -1,10 +1,10 @@
 # Template feature execution plan: Codex backend, Gemini frontend
 
-Updated 2026-10-08 after the local build and unfinished-template audit. This replaces the stale Planned/Blocked backend queue from 2026-10-07. The accepted decisions below remain verbatim. The historical v1 definitions/fork/rewrite design is not an implementation contract.
+Updated 2026-10-08 after the backend handoff and frontend completion. The accepted decisions below remain verbatim. The historical v1 definitions/fork/rewrite design is not an implementation contract. Current acceptance evidence: [CT-R2](../../task/template-features/reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md).
 
 ## 1. Current scope and ownership
 
-Codex owns backend/schema/transaction/render/runtime compatibility and review. Gemini owns the remaining React UI under each phase whitelist. CT-02/03/04/05/06/07/08 backend implementation is complete; FE acceptance and browser verification remain open. [Tracker](../../task/template-features/README.md) is the task status source; [handoff](../../task/template-features/reviews/CT-04_CT-08_BACKEND_HANDOFF_2026-10-08.md) records fixes and evidence.
+CT-02/03/04/05/06/07/08 backend implementation and GT-10B/11/12/13/18/14 frontend work are complete locally. Codex reviewed the existing GT-12A entity work and completed the missing UI, integration, browser checks and user guide. [Tracker](../../task/template-features/README.md) is the task status source; [backend handoff](../../task/template-features/reviews/CT-04_CT-08_BACKEND_HANDOFF_2026-10-08.md) and CT-R2 record evidence and limits. UI changes are not yet committed/pushed.
 
 ## 2. Quyết định của người dùng (2026-10-06)
 
@@ -40,11 +40,11 @@ Codex owns backend/schema/transaction/render/runtime compatibility and review. G
 
 A2 restore returns the compatibility template DTO; a standalone definition can have `note_type_id: null`. Refetch library detail after explicitly applying a restore response to recover full schema/usage. History origins include `market_copy` and `update` in addition to the earlier values; unknown origins require a label fallback. Do not infer a definitions table, per-install fork, sync-definition API or required-input hard failure from v1.
 
-## 5. Remaining Gemini phases
+## 5. Frontend completion
 
-Use the [tracker](../../task/template-features/README.md) and exact per-phase prompts. GT-01..09, GT-10A and GT-15A already exist. Start GT-12A (entity contract), then GT-10B (history UI). Continue GT-12B/C/D/E, GT-13A/B/C/D, GT-11A/B/C and GT-18A/B/C/D after each listed FE dependency. The common detail page is `TemplateDetailPage`; distribution and history extend it. GT-14 waits for accepted UI names/screens. Historical GT-16/17 candidate reports are not newly Accepted inventory artifacts and no longer block FE.
+GT-01..09, GT-10A and GT-15A already existed. GT-12A was reviewed against the actual API; GT-10B, GT-12B/C/D/E, GT-13A/B/C/D, GT-11A/B/C and GT-18A/B/C/D are now implemented and tested. `TemplateDetailPage` composes library editing, history, attachment and distribution. GT-14 documents the accepted screen names, including the new archive visibility control. Historical GT-16/17 inventory requests remain superseded, not unfinished features.
 
-Keep existing DOM/classes unchanged. Each prompt bounds edits to 5–6 files and names public slice imports. Sequential work avoids shared entity/index/routes/page collisions. Use current branch U8 and verify the actual committed foundation plus later local fixes before transferring to a separate checkout. Other tasks may be changing the workspace; never stash/reset or overwrite their files. Codex has not launched Gemini as part of this backend audit.
+Keep existing DOM/classes unchanged. Use current branch U8 and verify the actual committed foundation plus later local fixes before transferring to a separate checkout. Other tasks may be changing the workspace; never stash/reset or overwrite their files. The phase prompts are historical implementation criteria; use the current tracker before assigning more work.
 
 ## 6. Validation and acceptance
 

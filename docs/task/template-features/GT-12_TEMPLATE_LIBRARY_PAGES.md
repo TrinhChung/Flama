@@ -1,7 +1,7 @@
 # GT-12 — Thư viện Mẫu thẻ, editor và shell (v2)
 
 - Owner: Gemini. Reviewer: Codex. Contract: [E2/F2](../../architecture/template-library-attachments-contract-2026-10-07.md).
-- Backend library/attachment/preview/group/usage đã có code/test. **GT-12A Ready**; phase sau chờ review frontend ở bảng dưới. GT-10B history component còn pending, chỉ chặn GT-12D.
+- Trạng thái 2026-10-08: **GT-12A/B/C/D/E Completed / verified**; xem [CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md). Các dependency và whitelist dưới là tiêu chí triển khai đã hoàn tất.
 - Làm tuần tự, chỉ phase được giao, không commit/push/stash/reset. Không sửa backend/schema/session runtime hoặc file ngoài whitelist. Dùng nhánh U8 và giữ mọi diff của người khác.
 
 ## 1. Hành vi và ranh giới

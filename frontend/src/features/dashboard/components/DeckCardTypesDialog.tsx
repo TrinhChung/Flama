@@ -36,6 +36,15 @@ function getContextLabel(kind: CardTypeContextKind | undefined, t: (key: any) =>
 
 function renderEditAction(item: DeckCardType, t: (key: any) => string) {
   if (item.context_kind === 'installed_source') {
+    if (item.install_id) {
+      return (
+        <Button asChild size="sm" variant="outline" className="h-7 px-2.5 text-xs rounded-lg">
+          <Link to={`/installed-decks/${encodeURIComponent(item.install_id)}/templates?template=${encodeURIComponent(item.template_id)}`}>
+            {t('modals.card_types.btn_edit')}
+          </Link>
+        </Button>
+      )
+    }
     return (
       <Button
         size="sm"

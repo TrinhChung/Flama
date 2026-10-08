@@ -1,6 +1,6 @@
 # GT-13 — Gắn mẫu dùng chung và ánh xạ input (v2)
 
-- Owner: Gemini. Reviewer: Codex. Backend F2 đã có code/test; dependency còn lại là frontend.
+- Trạng thái 2026-10-08: **GT-13A/B/C/D Completed / verified** bởi Codex; xem [CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md). Các phase dưới giữ làm tiêu chí đối chiếu.
 - Contract: [E2/F2](../../architecture/template-library-attachments-contract-2026-10-07.md). GT-13A mở sau GT-12A Accepted; không dùng spec copy/apply-token rewrite của v1.
 - Đọc AGENTS.md và skills/flama-frontend-architecture + impeccable; giữ Zero Visual Regression. Mỗi lượt chỉ whitelist phase được giao, không commit/push/stash/reset. Không sửa backend/scheduler/session runtime/media renderer/shared primitives.
 

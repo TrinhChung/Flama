@@ -1,3 +1,5 @@
+import { useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
@@ -7,6 +9,7 @@ import {
   faArrowUpRightFromSquare,
   faCheck,
   faCircleCheck,
+  faClockRotateLeft,
   faPlus,
   faRobot,
   faRotateLeft,
@@ -16,15 +19,19 @@ import {
 import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { AmbientBackground } from '@/components/ambient-background'
-import { TemplateCodeEditor } from '@/entities/card-template'
+import { TemplateCodeEditor, cardTemplateQueryKeys, fetchTemplateVersion, fetchTemplateVersions, restoreTemplateVersion, type CardTemplateItem, type NoteTypeTemplatesResponse } from '@/entities/card-template'
+import { TemplateVersionHistorySheet } from '@/features/template-versions'
 import { NoteTypeLivePreview } from '../components/NoteTypeLivePreview'
 import { TemplateManagementBar } from '../components/TemplateManagementBar'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { useNoteTypeDetail } from '../hooks/useNoteTypeDetail'
+import { TemplateApplicationsPanel } from '@/features/template-library'
 
 export function NoteTypeDetailPage() {
   const { t } = useTranslation('note_types')
+  const queryClient = useQueryClient()
+  const [historyOpen, setHistoryOpen] = useState(false)
   const {
     noteTypeId,
     detailQuery,
@@ -50,6 +57,31 @@ export function NoteTypeDetailPage() {
     resetTemplateMutation,
     invalidateTemplates,
   } = useNoteTypeDetail()
+
+  const templateId = selectedTemplate?.id
+  const selectedIdentity = useRef<string | undefined>(templateId)
+  selectedIdentity.current = templateId
+  const historySource = useMemo(() => ({
+    listKey: cardTemplateQueryKeys.templateVersions(templateId ?? ''),
+    detailKey: (versionId: string) => cardTemplateQueryKeys.templateVersion(templateId ?? '', versionId),
+    list: (signal?: AbortSignal) => fetchTemplateVersions(templateId!, signal),
+    get: (versionId: string, signal?: AbortSignal) => fetchTemplateVersion(templateId!, versionId, signal),
+    restore: (versionId: string) => restoreTemplateVersion(templateId!, versionId),
+  }), [templateId])
+
+  const applyRestored = (restored: CardTemplateItem) => {
+    if (restored.id !== selectedIdentity.current) return
+    setFrontHtml(restored.front_html)
+    setBackHtml(restored.back_html)
+    setSharedCss(restored.shared_css)
+    queryClient.setQueryData(['note-type-detail', noteTypeId], (old: typeof noteType) => old && ({
+      ...old, templates: old.templates?.map((item) => item.id === restored.id ? { ...item, ...restored } : item),
+    }))
+    queryClient.setQueryData<NoteTypeTemplatesResponse>(cardTemplateQueryKeys.noteTypeTemplates(noteTypeId ?? ''), (old) => old && ({
+      ...old, items: old.items.map((item) => item.id === restored.id ? { ...item, ...restored } : item),
+    }))
+    invalidateTemplates()
+  }
 
   if (detailQuery.isPending) return <PageLoading label={t('detail.loading')} />
   if (detailQuery.error) return <Page><PageError error={detailQuery.error} /></Page>
@@ -173,6 +205,10 @@ export function NoteTypeDetailPage() {
                 >
                   <FontAwesomeIcon icon={faRotateLeft} className="text-xs" /> {t('detail.editor_actions.reset')}
                 </Button>
+                <Button size="sm" variant="outline" className="h-8 sm:h-9 px-2.5 text-xs font-semibold rounded-xl shrink-0 gap-1.5"
+                  onClick={() => setHistoryOpen(true)} disabled={!templateId}>
+                  <FontAwesomeIcon icon={faClockRotateLeft} className="text-xs" /> Lịch sử
+                </Button>
               </>
             }
             fields={fields}
@@ -201,6 +237,8 @@ export function NoteTypeDetailPage() {
               </Button>
             }
           />
+          {templateId && historyOpen && <TemplateVersionHistorySheet key={`${noteTypeId}:${templateId}`} open={historyOpen} onOpenChange={setHistoryOpen}
+            source={historySource} current={{ front_html: frontHtml, back_html: backHtml, shared_css: sharedCss }} onRestored={applyRestored} />}
         </div>
 
         {/* Right Column: Live Preview Frame */}
@@ -224,6 +262,7 @@ export function NoteTypeDetailPage() {
           />
         </div>
       </div>
+      {noteTypeId && <TemplateApplicationsPanel noteTypeId={noteTypeId} onChanged={invalidateTemplates} />}
     </Page>
   )
 }

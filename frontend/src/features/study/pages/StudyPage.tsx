@@ -9,6 +9,7 @@ import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { StudyCompositionPickerView } from '../components/StudyCompositionPickerView'
+import { StudyTemplatePreparation } from '../components/StudyTemplatePreparation'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
@@ -219,6 +220,10 @@ export function StudyPage() {
   }
 
   if (study.awaitingCompositionSelection) {
+    if (study.templatePreparation?.availability) {
+      return <StudyTemplatePreparation preparation={study.templatePreparation} deckName={study.scopeName} error={study.error}
+        disabled={study.isBusy} onStart={() => { void study.startPreparedSession() }} />
+    }
     return (
       <StudyCompositionPickerView
         deckName={deckName}

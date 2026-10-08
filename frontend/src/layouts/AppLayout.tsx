@@ -49,6 +49,7 @@ const pageTitleKeyMap: Record<string, string> = {
   '/browse': 'page_titles.browse',
   '/study': 'page_titles.study',
   '/note-types': 'page_titles.note_types',
+  '/card-templates': 'page_titles.card_templates',
   '/installed-decks': 'page_titles.installed_decks',
   '/audio/generate': 'page_titles.audio_generate',
   '/audio': 'page_titles.audio_generate',
@@ -420,6 +421,8 @@ export function AppLayout() {
   }
 
   const titleKey = pageTitleKeyMap[location.pathname]
+    ?? (location.pathname.startsWith('/card-templates/') ? 'page_titles.card_templates' : undefined)
+    ?? (/^\/installed-decks\/[^/]+\/templates$/.test(location.pathname) ? 'page_titles.received_templates' : undefined)
   const title = titleKey ? t(titleKey as any) : 'Flama'
 
   return (

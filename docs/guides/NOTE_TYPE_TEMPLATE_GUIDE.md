@@ -147,3 +147,37 @@ Sau khi AI đã sinh cho bạn 4 thành phần (Fields, Front HTML, Back HTML, S
 2. Bấm chuyển đổi giữa **Mặt trước** và **Mặt sau** để kiểm tra giao diện mô phỏng.
 3. Thử bấm nút loa 🔊 và kiểm tra màu sắc, bố cục đã đúng ý chưa.
 4. Xong! Bạn đã có thể bắt đầu tạo thẻ mới hoặc import file Excel/Anki theo Note Type vừa tạo.
+
+## 8. Thư viện Mẫu thẻ và ánh xạ dữ liệu
+
+Vào **Học liệu → Mẫu thẻ** (`/card-templates`), chọn **Tạo mẫu mới**, nhập tên rồi bấm **Tạo mẫu**. Trang chi tiết cho phép sửa metadata, **Input của mẫu**, **Front HTML**, **Back HTML**, **Shared CSS** và **Dữ liệu xem trước**. Bấm **Lưu thay đổi** để lưu cùng mẫu hiện tại.
+
+Input là tên đặt chỗ trong HTML, ví dụ `{{term}}`; field là trường dữ liệu của loại thẻ. Hai tên không cần giống nhau. Bấm **Áp dụng vào loại thẻ**, chọn loại thẻ, bấm **Tiếp tục**, ánh xạ từng input rồi xác nhận **Gắn mẫu**. Chỉ input và field cùng kiểu được ghép; `text`, `richtext` và `markdown` là ba kiểu khác nhau. Nhiều input có thể dùng cùng một field.
+
+Ánh xạ lưu theo ID trường: đổi tên field không yêu cầu sửa HTML. **Khuyến nghị ánh xạ** chỉ là lời nhắc; input chưa ánh xạ vẫn được lưu và hiển thị rỗng. Trường của loại thẻ khác hoặc sai kiểu không được chấp nhận.
+
+Một mẫu có thể dùng chung cho nhiều loại thẻ. Mục **Đang dùng ở** cho biết nơi đang gắn; sửa nội dung mẫu ảnh hưởng tất cả những nơi đó. Trên trang loại thẻ, mục **Mẫu đã gắn** có **Sửa ánh xạ**, **Gỡ mẫu** và **Gắn lại**. Gỡ chỉ ngừng sử dụng lần gắn đó khi học, giữ thẻ và tiến độ. Dùng **Mã lần gắn** khác để gắn cùng mẫu thêm lần nữa vào một loại thẻ.
+
+**Lưu trữ** ẩn mẫu khỏi thư viện mặc định và chặn lần gắn mới; các nơi đang dùng vẫn hoạt động. Bật **Hiện mẫu lưu trữ** trong thư viện để tìm lại, rồi **Bỏ lưu trữ** nếu muốn gắn thêm. Lưu trữ không khóa việc sửa nội dung hiện có và không tự phát hành mẫu độc lập.
+
+## 9. Lịch sử và khôi phục
+
+Bấm **Lịch sử** trên trang mẫu hoặc trình soạn loại thẻ. Chọn một phiên bản để so sánh với nội dung đang soạn; **Khôi phục phiên bản này → Khôi phục** thay bản nháp bằng nội dung cũ và tạo một phiên bản mới. Lịch sử trước đó, thẻ và tiến độ được giữ lại. Đổi nội dung hoặc schema tạo phiên bản; chỉ đổi tên hoặc lưu nội dung không đổi thì không tạo thêm phiên bản.
+
+Nếu có người hoặc tab khác vừa sửa mẫu, lưu có thể báo mẫu đã thay đổi. Giữ lại nội dung cần thiết trước khi chọn **Tải lại**; hệ thống không tự ghi đè bằng bản nháp cũ.
+
+## 10. Bản nhận marketplace và phát hành
+
+Ở menu bộ thẻ đã cài, mở **Kiểu thẻ → Sửa giao diện** để đến **Mẫu thẻ đã nhận**, rồi chọn bản nhận cần sửa. Bản nhận cũng xuất hiện dưới bộ lọc **Marketplace** trong thư viện. Mỗi tài khoản chỉ có một bản nhận cho một mẫu nguồn, dùng chung qua các bộ thẻ đã cài và loại thẻ của bạn. Sửa bản nhận không thay mẫu của tác giả hoặc của người học khác.
+
+Khi có bản mới, chọn **Xem cập nhật**. Nếu có xung đột, chọn **Giữ bản của tôi** hoặc **Lấy bản của tác giả** cho từng phần rồi **Áp dụng cập nhật**. **Dùng lại bản đã nhận** thay nội dung riêng bằng bản phát hành đang áp dụng, giữ nguyên bản nhận và lịch sử; thao tác này không lấy bản nháp chưa đăng của tác giả. Các thao tác thay nguồn sẽ thay cả nội dung chưa lưu trong trình soạn.
+
+Tác giả có **Tự động đăng bản mới** và **Đăng bản mới nhất**; bản nhận có **Tự động kế thừa**. Cả hai tùy chọn tự động mặc định tắt. Phát hành dùng nội dung đã lưu. Bạn có thể dùng mẫu đã nhận hợp lệ từ bộ thẻ trả phí trong các loại thẻ của mình, nhưng không thể phát hành lại nguồn marketplace đó thành mẫu của tác giả mới. Màn hình hiện tại không cung cấp chợ mua bán mẫu độc lập.
+
+## 11. Chuẩn bị phiên học
+
+Trước một phiên mới, **Chuẩn bị phiên học** cho phép chọn một **Template cho phiên này** và **Ánh xạ dữ liệu**. Chọn **Để trống** nếu không dùng input; kể cả input được khuyến nghị cũng không chặn **Bắt đầu học**. Trường đã lưu không còn phù hợp sẽ được bỏ trống kèm lời nhắc để bạn chọn lại.
+
+**Ghi nhớ cho bộ thẻ này** lưu riêng lựa chọn và ánh xạ cá nhân. Khi bật, bạn có thể tắt **Luôn hỏi trước khi học** để dùng lại một lựa chọn hợp lệ cho phiên sau. Nếu không ghi nhớ, lựa chọn chỉ áp dụng cho phiên này và không đổi cài đặt đã lưu. Lỗi lưu tùy chọn giữ form để **Thử lại**.
+
+Phiên đang học hoặc được khôi phục tiếp tục dùng nội dung và ánh xạ đã chốt khi mở phiên, kể cả mẫu hoặc tùy chọn cá nhân thay đổi sau đó. Ánh xạ cá nhân không sửa ánh xạ dùng chung của loại thẻ. Input dạng danh sách field chưa thuộc phiên bản này.

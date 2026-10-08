@@ -248,7 +248,7 @@ describe('DeckCardTypesDialog', () => {
     expect(items[3].textContent).toContain('Thẻ riêng trong bộ đã cài')
   })
 
-  it('sửa giao diện: link của T1 có href="/note-types/<nt_id>"; nút của T3 disabled và có title đúng chuỗi', async () => {
+  it('sửa giao diện: owned giữ link loại thẻ; nguồn đã cài mở danh sách bản nhận theo install và source', async () => {
     vi.mocked(fetchDeckCardTypes).mockResolvedValue(fixtureData)
     await renderWithClient(
       <DeckCardTypesDialog open={true} onOpenChange={vi.fn()} deckId={42} deckName="JLPT N2" />,
@@ -261,11 +261,20 @@ describe('DeckCardTypesDialog', () => {
     expect(t1Link?.getAttribute('href')).toBe('/note-types/nt-vocab')
     expect(t1Link?.textContent).toContain('Sửa giao diện')
 
-    const t3Button = items[2].querySelector('button')
-    expect(t3Button).not.toBeNull()
-    expect(t3Button?.disabled).toBe(true)
-    expect(t3Button?.getAttribute('title')).toBe('Sắp có: tạo bản riêng cho thẻ gốc của bộ đã cài.')
-    expect(t3Button?.textContent).toContain('Sửa giao diện')
+    const t3Link = items[2].querySelector('a')
+    expect(t3Link?.getAttribute('href')).toBe('/installed-decks/i1/templates?template=tpl-3')
+    expect(t3Link?.textContent).toContain('Sửa giao diện')
+  })
+
+  it('installed source thiếu install ID vẫn khóa sửa và không đoán URL', async () => {
+    const data = structuredClone(fixtureData)
+    data.groups[1].compositions[0].install_id = null
+    vi.mocked(fetchDeckCardTypes).mockResolvedValue(data)
+    await renderWithClient(<DeckCardTypesDialog open onOpenChange={vi.fn()} deckId={42} deckName="JLPT N2" />)
+    await flushAsync()
+    const row = document.body.querySelectorAll('li')[2]
+    expect(row.querySelector('a')).toBeNull()
+    expect(row.querySelector('button')?.disabled).toBe(true)
   })
 
   it('nút học: link "Học deck này" có href="/study?deck_id=42"', async () => {

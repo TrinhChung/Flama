@@ -1,7 +1,7 @@
 # GT-10 — UI lịch sử phiên bản template (xem, so sánh, khôi phục)
 
 - Owner: Gemini. Reviewer: Codex (tiếp nhận Claude). Milestone: M2.
-- Trạng thái: **GT-10A Completed / verified; GT-10B Ready**. Contract A2 đã có code/test CT-03; dùng v2 dưới đây.
+- Trạng thái 2026-10-08: **GT-10A/B Completed / verified**; xem [CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md). Nội dung dưới là tiêu chí triển khai, không phải hàng đợi còn thiếu.
 - Loại: entity API + feature UI tái sử dụng + nối vào trang loại thẻ.
 
 ## 0. Nền backend đã sẵn sàng

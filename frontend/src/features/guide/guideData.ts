@@ -208,6 +208,27 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
     iconName: 'GraduationCap',
     articles: [
       {
+        slug: 'template-library-bindings',
+        title: 'Mẫu Thẻ Dùng Chung & Ánh Xạ Trước Khi Học',
+        shortDescription: 'Tạo mẫu độc lập, gắn vào loại thẻ, xem lịch sử và chọn dữ liệu cho phiên học.',
+        categorySlug: 'study',
+        readTimeMinutes: 5,
+        updatedAt: '2026-10-08',
+        intro: 'Mở Học liệu → Mẫu thẻ để quản lý mẫu dùng chung. Một mẫu có thể được gắn vào nhiều loại thẻ; mỗi nơi gắn có ánh xạ dữ liệu riêng.',
+        steps: [
+          { title: 'Tạo và sửa mẫu', description: 'Chọn Tạo mẫu mới, nhập tên rồi Tạo mẫu. Sửa Input của mẫu, Front HTML, Back HTML, Shared CSS và dữ liệu xem trước; bấm Lưu thay đổi. Input trong {{key}} là tên đặt chỗ, không cần trùng tên field.' },
+          { title: 'Gắn và ánh xạ', description: 'Chọn Áp dụng vào loại thẻ → chọn loại thẻ → Tiếp tục. Ghép input với field cùng kiểu rồi bấm Gắn mẫu. Ánh xạ giữ nguyên khi đổi tên field; nhiều input có thể dùng cùng field.', tip: 'Input chưa ánh xạ hiển thị rỗng. Khuyến nghị ánh xạ chỉ cảnh báo, không chặn sử dụng. Sửa mẫu ảnh hưởng mọi nơi đang gắn.' },
+          { title: 'Xem lịch sử và quản lý nơi dùng', description: 'Lịch sử cho phép so sánh và Khôi phục phiên bản này. Khôi phục thay nội dung chưa lưu, tạo phiên bản mới và giữ lịch sử. Mẫu đã gắn trên trang loại thẻ có Sửa ánh xạ, Gỡ mẫu và Gắn lại; tiến độ được giữ.' },
+          { title: 'Nhận cập nhật', description: 'Bản nhận marketplace dùng chung qua các bộ của bạn. Xem cập nhật → chọn Giữ bản của tôi hoặc Lấy bản của tác giả cho từng xung đột → Áp dụng cập nhật. Dùng lại bản đã nhận lấy bản phát hành đang áp dụng, giữ lịch sử. Các thao tác này thay nội dung chưa lưu trong trình soạn.', tip: 'Tự động đăng bản mới và Tự động kế thừa mặc định tắt. Bản nhận có thể dùng ở loại thẻ khác của bạn, nhưng không thể phát hành lại nguồn marketplace.' },
+          { title: 'Chuẩn bị phiên học', description: 'Chọn Template cho phiên này và Ánh xạ dữ liệu. Để trống input không dùng, rồi Bắt đầu học. Ghi nhớ cho bộ thẻ này lưu lựa chọn cá nhân; tắt Luôn hỏi trước khi học để tự dùng lại một lựa chọn hợp lệ. Không ghi nhớ thì cài đặt cũ được giữ.', tip: 'Phiên đang học hoặc được khôi phục dùng nội dung và ánh xạ đã chốt khi mở phiên. Lỗi lưu tùy chọn giữ form để Thử lại.' },
+        ],
+        keyTakeaways: [
+          'Lưu trữ ẩn mẫu và chặn lần gắn mới; nơi đang dùng vẫn hoạt động. Bật Hiện mẫu lưu trữ để tìm lại và Bỏ lưu trữ khi cần.',
+          'Gỡ mẫu giữ thẻ và tiến độ; đổi tên field không cần viết lại HTML.',
+          'Thư viện hiện quản lý mẫu của bạn; chợ mẫu độc lập và input dạng danh sách field chưa được cung cấp.',
+        ],
+      },
+      {
         slug: 'flashcard-flow',
         title: 'Quy Trình Học Tiêu Chuẩn & Nguyên Tắc 4 Mức Đánh Giá',
         shortDescription: 'Cách lật thẻ, tự đánh giá mức độ ghi nhớ trung thực để thuật toán SRS lên lịch tối ưu nhất.',

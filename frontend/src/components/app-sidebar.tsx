@@ -61,6 +61,7 @@ export function AppSidebar({
   ]
   const library: AppNavigationItem[] = [
     { title: t('sidebar.item.note_types'), url: bootstrap.links.note_types, icon: NotebookTabs },
+    { title: t('sidebar.item.card_templates'), url: '/card-templates', icon: Layers },
     { title: t('sidebar.item.installed_decks'), url: bootstrap.links.installed_decks, icon: PackageCheck },
     { title: t('sidebar.item.shared_decks'), url: bootstrap.links.shared_decks, icon: Store },
     { title: t('sidebar.item.shared_note_types'), url: bootstrap.links.shared_note_types, icon: Shapes },

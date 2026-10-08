@@ -1,6 +1,6 @@
 # GT-14 — User guide after accepted template UI
 
-- Owner: Gemini. Reviewer: Codex. Status: **Awaiting accepted FE**, not blocked on backend.
+- Status 2026-10-08: **Completed** by Codex after UI tests and isolated Chrome smoke; guide and `study/template-library-bindings` article match actual controls. See [CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md).
 - Ready after GT-10B/11/12/13/18 UI review and isolated-browser smoke. Do not document a button or screen before it exists.
 
 ## 1. Allowed files

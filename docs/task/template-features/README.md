@@ -1,6 +1,6 @@
-# Template features: backend handoff và tracker
+# Template features: triển khai và tracker
 
-Cập nhật **2026-10-08**: Codex đã hoàn tất phần backend CT-04/05/06/07/08 còn thiếu và sửa các lỗi phát hiện khi audit. Gemini tiếp tục phần FE; chưa coi các màn hình mới hoặc browser gate là hoàn thành.
+Cập nhật **2026-10-08**: Codex đã kiểm tra và hoàn tất các task frontend còn thiếu, review chéo, sửa lỗi và kiểm tra Chrome riêng với Flask API/dữ liệu SQLite tạm. Backend và frontend trong phạm vi U1–U8 đã hoàn thành ở workspace; xem [báo cáo CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md). Chưa commit/push phần hoàn thiện UI này.
 
 Contract đang chạy: [phiên bản A2](../../architecture/template-version-foundation-adr-2026-10-07.md), [library/attachment](../../architecture/template-library-attachments-contract-2026-10-07.md), [study preset/binding](../../architecture/template-study-bindings-contract-2026-10-07.md), [distribution](GT-11_INSTALL_TEMPLATE_EDITOR.md). Bằng chứng và giới hạn: [backend handoff](reviews/CT-04_CT-08_BACKEND_HANDOFF_2026-10-08.md). Kế hoạch giữ U1–U8: [execution plan](../../plans/proposals/TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md).
 
@@ -19,18 +19,18 @@ Contract đang chạy: [phiên bản A2](../../architecture/template-version-fou
 | CT-08 | Codex | Completed | Opt-in preparation, personal deck preset, transient validation, session freeze và quick-edit projection |
 | GT-15D/E | Codex | Superseded / covered in v2 suites | D/E v1 bỏ; xem [coverage v2](GT-15_CONTRACT_TESTS.md), không giao test backend v1 cho Gemini |
 | GT-16/17 | Codex review | Superseded inventory request | Báo cáo ứng viên cũ chưa được Accepted; audit code/test hiện tại trong handoff thay gate này |
-| GT-10B | Gemini | Ready | History sheet, restore draft; [prompt](GT-10B.prompt.txt) |
-| GT-12A | Gemini | Ready | Entity library/schema/attachment; [prompt](GT-12A.prompt.txt) |
-| GT-12B/C/D/E | Gemini | Ready after listed FE dependencies | Library/create, input schema, TemplateDetailPage, route/sidebar; [spec](GT-12_TEMPLATE_LIBRARY_PAGES.md) |
-| GT-13A/B/C/D | Gemini | Ready after listed FE dependencies | Shared binding UI, attach wizard, library compose, NoteType application management; [spec](GT-13_APPLY_WIZARD.md) |
-| GT-11A/B/C | Gemini | Ready after listed FE dependencies | Distribution API, install entry, author/recipient controls; [spec](GT-11_INSTALL_TEMPLATE_EDITOR.md) |
-| GT-18A/B/C/D | Gemini | Ready after listed FE dependencies | Preparation API/UI, remember controls, study integration; [spec](GT-18_STUDY_TEMPLATE_PREPARATION.md) |
-| CT-R2 | Codex | Awaiting FE | Review new UI, mobile/dark/browser smoke after Gemini implements it |
-| GT-14 | Gemini | Awaiting accepted FE | User guide uses actual UI names; [spec](GT-14_USER_DOCS.md) |
+| GT-10B | Codex | Completed / verified | History sheet, diff, restore thay draft và bỏ phản hồi cũ |
+| GT-12A | Gemini + Codex review | Completed / verified | Entity library/schema/attachment khớp E2/F2; giữ các test A2 |
+| GT-12B/C/D/E | Codex | Completed / verified | Library/create, schema, editor/preview/archive, route/sidebar; thêm tìm lại mẫu lưu trữ |
+| GT-13A/B/C/D | Codex | Completed / verified | Stable ID mapping, attach wizard, library action, NoteType application management |
+| GT-11A/B/C | Codex | Completed / verified | Distribution API, install entry, author/recipient controls và xử lý xung đột |
+| GT-18A/B/C/D | Codex | Completed / verified | Preparation API/UI, opt-in nhớ lựa chọn, freeze/restore/rollover giữ mapping |
+| CT-R2 | Codex | Completed / local browser | Chrome profile riêng, API thật với DB tạm; desktop/mobile 375px, sáng/tối; xem báo cáo |
+| GT-14 | Codex | Completed | Hướng dẫn repo và bài `study/template-library-bindings` theo tên UI thực tế |
 
-Thứ tự giao an toàn trên một workspace: **GT-12A → GT-10B → GT-12B/C/D/E → GT-13A/B/C/D → GT-11A/B/C → GT-18A/B/C/D**. Mỗi phase có prompt riêng và tối đa 5–6 file. Tuân thủ dependency cụ thể trong spec; không chạy hai phase cùng sửa entity/index/routes/page. Không cần chờ một backend task Planned cũ.
+Các spec/prompt dưới đây giữ làm tiêu chí đối chiếu; không giao lại phase đã hoàn thành. Khi tiếp tục sửa, giữ ownership entity/index/routes/page rõ ràng và kiểm tra code hiện tại trước khi dùng prompt cũ.
 
-Archive ẩn library mặc định và chặn attachment mới, nhưng attachment đang ACTIVE tiếp tục dùng được. Retire attachment giữ Card/progress. HTML không bị rewrite theo tên field; binding dùng ID. Reset bản nhận áp dụng release đã đăng qua subscription, không xóa market copy hay lịch sử. Browser gate và tài liệu người dùng đợi FE thực tế.
+Archive ẩn library mặc định và chặn attachment mới, nhưng attachment đang ACTIVE tiếp tục dùng được. Retire attachment giữ Card/progress. HTML không bị rewrite theo tên field; binding dùng ID. Reset bản nhận áp dụng release đã đăng qua subscription, không xóa market copy hay lịch sử. Chợ template độc lập (N5) và input nhận danh sách field (N6) nằm ngoài phạm vi đã chốt.
 
 ## 2. Quy tắc chung cho Gemini (dán vào đầu mọi prompt)
 
@@ -102,3 +102,4 @@ QUY TẮC BẮT BUỘC (Flama, template features)
 | 2026-10-07 | Gemini / teamwork_preview hoàn thành và kiểm thử toàn diện GT-10A (Frontend entity API/types/keys/tests) và GT-15A (Backend contract tests A7, A12–A17). Victory Auditor phê duyệt VICTORY CONFIRMED. Pass 93/93 card-template tests, 45/45 backend modular tests, typecheck 0 lỗi, lint 0 lỗi, build:ci clean. GT-10B chuyển sang Ready. |
 
 | 2026-10-08 | Codex hoàn tất backend handoff CT-04/05/06/07/08, cập nhật contract/spec/prompt GT-10B/11/12/13/18 và modular module templates. FE mới vẫn chờ Gemini. |
+| 2026-10-08 | Theo yêu cầu làm tiếp task còn thiếu, Codex hoàn thiện GT-10B/11/12/13/18/14, review GT-12A, sửa lỗi wizard native submit, bảo toàn dirty draft và bản nhận legacy; CT-R2 local browser qua. Chi tiết kiểm tra trong báo cáo CT-R2. |
