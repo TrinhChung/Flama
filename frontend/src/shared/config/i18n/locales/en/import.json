@@ -142,7 +142,8 @@
       "copy_config_btn": "Copy config snippet",
       "toast_copied_origin": "Copied origin: \"{{origin}}\" (with quotes)!",
       "toast_copied_config": "Copied config template to clipboard!"
-    }
+    },
+    "loading_config": "Loading sync configuration..."
   },
   "file_import": {
     "page_title": "Import Notes & Flashcards",
@@ -264,6 +265,7 @@
       "execute_error": "Failed to execute import",
       "batch_execute_success": "Successfully imported {{processed_files}} lessons! Added {{inserted}} cards, created {{created_decks}} subdecks.",
       "batch_execute_error": "Batch import execution failed"
-    }
+    },
+    "loading_config": "Loading import configuration…"
   }
 }

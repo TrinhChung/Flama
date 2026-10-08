@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import hashlib
+import importlib
 import json
 import re
 from uuid import NAMESPACE_URL, uuid5
@@ -208,6 +209,20 @@ def _preflight(bind):
     users, note_types, templates, versions = _tables()
     inspector = sa.inspect(bind)
     present = set(inspector.get_table_names())
+    if "templates" in present:
+        actual = {column["name"]: column for column in inspector.get_columns("templates")}
+        if "origin" in actual:
+            # A fresh wsgi/create_all bootstrap creates the later attachment
+            # schema before Alembic runs. Adopt only its fully validated empty
+            # shape; never reinterpret populated later ownership/history as 53.
+            attachments = importlib.import_module("migrations.versions.20261007_000054_expand_template_attachments")
+            later_templates, applications, _, template_state, application_state = attachments._preflight(bind)
+            if not template_state[1] or not application_state[1]:
+                _drift("templates", "incomplete later attachment bootstrap schema")
+            for table in (later_templates, applications, versions):
+                if bind.execute(sa.select(table.c.id).limit(1)).first():
+                    _drift(table.name, "cannot adopt populated later attachment schema before revision 53")
+            return set(actual), present, templates, versions
     for parent in (users, note_types, templates):
         if parent.name not in present:
             _drift(parent.name, "required parent table is absent")
@@ -347,6 +362,8 @@ def upgrade():
 def downgrade():
     bind = op.get_bind()
     columns, present, templates, versions = _preflight(bind)
+    if "origin" in columns:
+        _drift("templates", "cannot downgrade later attachment schema through revision 53")
     if VERSION_TABLE in present:
         history_exists = bind.execute(sa.select(versions.c.template_id).group_by(versions.c.template_id).having(
             sa.or_(sa.func.count() > 1, sa.func.max(versions.c.version_no) > 1),

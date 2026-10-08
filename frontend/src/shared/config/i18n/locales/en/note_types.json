@@ -307,5 +307,8 @@
     "copied_example": "Copied example",
     "toast_title": "Prompt copied to clipboard!",
     "toast_desc": "Open ChatGPT, Claude, or Gemini and paste this prompt."
+  },
+  "editor": {
+    "badge_new": "New"
   }
 }

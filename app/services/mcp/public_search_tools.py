@@ -24,7 +24,6 @@ from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.deck import Deck
 from models.deck_marketplace_item import DeckMarketplaceItem
-from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
 from models.note import Note
 
 logger = logging.getLogger(__name__)
@@ -217,6 +216,27 @@ def _extract_preview_samples(
     clamped_limit = max(1, min(max_samples, MAX_PREVIEW_SAMPLES))
     samples: list[dict[str, Any]] = []
 
+    if deck_item.current_release_id:
+        from app.services import marketplace_query_service
+        from models.deck_release import DeckRelease
+
+        release = db.session.get(DeckRelease, deck_item.current_release_id)
+        if release is None or release.deck_item_id != deck_item.id or release.status != "published":
+            return []
+        # A cache is public only for the current immutable release. Reconstruct
+        # from release memberships/deltas on a miss, never from working Notes.
+        raw_samples = marketplace_query_service._cached_release_samples(
+            deck_item, limit=clamped_limit, schema_version=1,
+        )
+        if raw_samples is None:
+            raw_samples = marketplace_query_service.build_release_sample_cache_from_release(
+                deck_item, release, limit=clamped_limit,
+            )
+        return [
+            {key: str(sample.get(key) or "") for key in ("word", "reading", "meaning")}
+            for sample in raw_samples[:clamped_limit]
+        ]
+
     # 1. Try precomputed sample cache
     if isinstance(deck_item.preview_samples_json, list) and deck_item.preview_samples_json:
         for raw in deck_item.preview_samples_json[:clamped_limit]:
@@ -233,36 +253,8 @@ def _extract_preview_samples(
         if samples:
             return samples[:MAX_PREVIEW_SAMPLES]
 
-    # 2. Try release note checkpoints if available
-    if deck_item.current_release_id:
-        checkpoints = (
-            DeckReleaseNoteCheckpoint.query.filter_by(release_id=deck_item.current_release_id)
-            .order_by(DeckReleaseNoteCheckpoint.id.asc())
-            .limit(clamped_limit * 2)
-            .all()
-        )
-        for cp in checkpoints:
-            fvals = cp.field_values if isinstance(cp.field_values, dict) else {}
-            word = _extract_field_text(fvals, ["Word", "word", "Term", "term", "Vocabulary", "vocabulary"])
-            if not word:
-                for v in fvals.values():
-                    if v:
-                        word = str(v).strip()
-                        break
-            if word:
-                reading = _extract_field_text(fvals, ["Reading", "reading", "Kana", "kana", "Yomigana", "yomigana"])
-                meaning = _extract_field_text(fvals, ["Meaning", "meaning", "Meaning_VI", "meaning_vi", "Translation_VI"])
-                samples.append({
-                    "word": word,
-                    "reading": reading,
-                    "meaning": meaning,
-                })
-            if len(samples) >= clamped_limit:
-                break
-        if samples:
-            return samples[:MAX_PREVIEW_SAMPLES]
-
-    # 3. Fallback to source deck live notes (author-owned notes within subtree)
+    # Legacy listings without a release keep their deterministic, bounded
+    # preview. Published releases above never fall back to working Notes.
     if deck_item.source_deck_id is not None:
         try:
             subtree_ids = collect_subtree_ids(deck_item.source_deck_id)
@@ -436,8 +428,8 @@ def lookup_public_vocabulary(
 ) -> dict[str, Any]:
     """Search Japanese vocabulary words, kana readings, and definitions across published marketplace decks.
 
-    STRICT PRIVACY: Excludes all private user notes and unshared decks. Queries ONLY
-    DeckMarketplaceItem where publish_status == 'published'.
+    STRICT PRIVACY: Searches only the fixed public preview samples of published
+    marketplace items. Owner working values and non-sample content stay private.
     """
     del user_id  # Public search is unauthenticated / guest
 
@@ -474,71 +466,27 @@ def lookup_public_vocabulary(
     for item in published_items:
         jlpt = _resolve_deck_jlpt_level(item)
         canonical_url = f"https://flama.vn/marketplace/decks/{item.id}"
-
-        # Check preview samples cache first
-        if isinstance(item.preview_samples_json, list):
-            for sample in item.preview_samples_json:
-                if not isinstance(sample, dict):
-                    continue
-                w = str(sample.get("word") or sample.get("term") or sample.get("Word") or "").strip()
-                r = str(sample.get("reading") or sample.get("Reading") or sample.get("kana") or "").strip()
-                m = str(sample.get("meaning") or sample.get("Meaning") or "").strip()
-                if not w:
-                    continue
-                if clean_query in w.lower() or clean_query in r.lower() or clean_query in m.lower():
-                    dedup_key = (str(item.id), w.lower())
-                    if dedup_key not in seen_terms:
-                        seen_terms.add(dedup_key)
-                        matches.append({
-                            "term": w,
-                            "word": w,
-                            "reading": r,
-                            "meaning": m,
-                            "deck_id": str(item.id),
-                            "deck_title": str(item.title),
-                            "canonical_url": canonical_url,
-                            "jlpt_level": jlpt,
-                        })
-
-        # Check notes in source deck (STRICTLY constrained to this published deck and author)
-        if item.source_deck_id is not None:
-            try:
-                subtree_ids = collect_subtree_ids(item.source_deck_id)
-                if subtree_ids:
-                    notes = Note.query.filter(
-                        Note.deck_id.in_(subtree_ids),
-                        Note.user_id == item.owner_user_id,
-                    ).limit(500).all()
-
-                    for n in notes:
-                        fvals = n.field_values if isinstance(n.field_values, dict) else {}
-                        w = _extract_field_text(fvals, ["Word", "word", "Term", "term", "Vocabulary", "vocabulary"])
-                        if not w:
-                            for val in fvals.values():
-                                if val:
-                                    w = str(val).strip()
-                                    break
-                        if not w:
-                            continue
-                        r = _extract_field_text(fvals, ["Reading", "reading", "Kana", "kana", "Yomigana", "yomigana"])
-                        m = _extract_field_text(fvals, ["Meaning", "meaning", "Meaning_VI", "meaning_vi", "Translation_VI"])
-
-                        if clean_query in w.lower() or clean_query in r.lower() or clean_query in m.lower():
-                            dedup_key = (str(item.id), w.lower())
-                            if dedup_key not in seen_terms:
-                                seen_terms.add(dedup_key)
-                                matches.append({
-                                    "term": w,
-                                    "word": w,
-                                    "reading": r,
-                                    "meaning": m,
-                                    "deck_id": str(item.id),
-                                    "deck_title": str(item.title),
-                                    "canonical_url": canonical_url,
-                                    "jlpt_level": jlpt,
-                                })
-            except Exception:
-                logger.warning("Failed to search notes for published deck_item_id=%s", item.id, exc_info=True)
+        # The same fixed sample set serves previews and searches. Querying
+        # live Notes (or filtering before the cap) would expose owner drafts
+        # and let repeated searches/pagination reconstruct the entire deck.
+        for sample in _extract_preview_samples(item, max_samples=MAX_PREVIEW_SAMPLES):
+            word, reading, meaning = (sample[key] for key in ("word", "reading", "meaning"))
+            if not any(clean_query in value.lower() for value in (word, reading, meaning)):
+                continue
+            dedup_key = (str(item.id), word.lower())
+            if dedup_key in seen_terms:
+                continue
+            seen_terms.add(dedup_key)
+            matches.append({
+                "term": word,
+                "word": word,
+                "reading": reading,
+                "meaning": meaning,
+                "deck_id": str(item.id),
+                "deck_title": str(item.title),
+                "canonical_url": canonical_url,
+                "jlpt_level": jlpt,
+            })
 
     total = len(matches)
     paged_matches = matches[bounded_offset : bounded_offset + bounded_limit]

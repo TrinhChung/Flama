@@ -307,5 +307,8 @@
     "copied_example": "Đã chép ví dụ",
     "toast_title": "Đã sao chép prompt vào Clipboard!",
     "toast_desc": "Hãy mở ChatGPT, Claude hoặc Gemini và dán prompt này vào."
+  },
+  "editor": {
+    "badge_new": "Mới"
   }
 }

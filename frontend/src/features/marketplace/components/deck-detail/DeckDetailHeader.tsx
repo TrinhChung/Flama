@@ -385,7 +385,7 @@ export function DeckDetailHeader({
                     <span> {t('detail.student_offer.to_receive_offer', {
                       offer: deck.student_offer_mode === 'free'
                         ? t('publish_deck.step4.student_opt_free', 'miễn phí bộ thẻ này')
-                        : `giảm ${deck.student_discount_percent}%`,
+                        : t('detail.student_offer.discount', { percent: deck.student_discount_percent }),
                       defaultValue: `để nhận ưu đãi ${deck.student_offer_mode === 'free' ? 'miễn phí bộ thẻ này' : `giảm ${deck.student_discount_percent}%`}!`,
                     })}</span>
                   </div>

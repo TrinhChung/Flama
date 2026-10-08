@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from app import create_app
@@ -858,8 +860,6 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
         """Stress-test concurrent request handling across multiple threads."""
         import concurrent.futures
 
-        client = self.app.test_client()
-
         def send_probe(probe_id: int):
             req = json.dumps({
                 "jsonrpc": "2.0",
@@ -870,12 +870,35 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                     "arguments": {"query": f"単語_{probe_id % 5}"},
                 },
             })
-            resp_str = process_mcp_message(client, req)
+            resp_str = process_mcp_message(threaded_app.test_client(), req)
             return json.loads(resp_str)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = [executor.submit(send_probe, i) for i in range(40)]
-            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+        # In-memory SQLite shares one connection across threads, so request
+        # teardown can roll back another request. Copy this test's fixture to
+        # a temporary file so concurrent requests use separate connections.
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = (Path(directory) / "mcp.sqlite").as_posix()
+            threaded_app = create_app({
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": f"sqlite:///{database_path}",
+                "WTF_CSRF_ENABLED": False,
+            })
+            with self.app.app_context():
+                source = db.engine.raw_connection()
+            try:
+                with threaded_app.app_context():
+                    target = db.engine.raw_connection()
+                    try:
+                        source.driver_connection.backup(target.driver_connection)
+                    finally:
+                        target.close()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                    futures = [executor.submit(send_probe, i) for i in range(40)]
+                    results = [f.result() for f in concurrent.futures.as_completed(futures)]
+            finally:
+                source.close()
+                with threaded_app.app_context():
+                    db.engine.dispose()
 
         self.assertEqual(len(results), 40)
         for r in results:

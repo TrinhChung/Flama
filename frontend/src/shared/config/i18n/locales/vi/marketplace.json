@@ -86,7 +86,9 @@
     "view_new_update": "Xem cập nhật mới",
     "view_update": "Xem cập nhật",
     "contribute_edit": "Đóng góp chỉnh sửa",
-    "installed_badge": "Đã cài đặt"
+    "installed_badge": "Đã cài đặt",
+    "buy_deck": "Mua bộ deck",
+    "author": "Tác giả"
   },
   "sync_status": {
     "needs_sync": "Đóng góp cần đồng bộ",
@@ -127,7 +129,11 @@
       "badge": "Ưu đãi học viên",
       "title": "Ưu đãi sinh viên / học viên",
       "desc": "Bạn được giảm giá đặc biệt khi học khóa học này.",
-      "discount_apply": "Áp dụng giảm {{percent}}%"
+      "discount_apply": "Áp dụng giảm {{percent}}%",
+      "edu_detected": "Bạn đang sử dụng email trường học (.edu.vn).",
+      "verify_email_link": "Xác thực email trong trang Hồ sơ",
+      "to_receive_offer": "để nhận ưu đãi {{offer}}!",
+      "discount": "giảm {{percent}}%"
     },
     "preview": {
       "title": "Xem trước thẻ mẫu",
@@ -137,13 +143,23 @@
       "btn_flip": "Lật thẻ",
       "template_label": "Mẫu hiển thị:",
       "sample_nav": "Mẫu {{current}} / {{total}}",
-      "empty_preview": "Chưa có thẻ mẫu nào để xem trước."
+      "empty_preview": "Chưa có thẻ mẫu nào để xem trước.",
+      "sample_prefix": "Mẫu",
+      "sample_word_default": "Từ mẫu",
+      "quick_select": "Chọn nhanh từ mẫu:",
+      "samples_count_unit": "mẫu",
+      "word_hash": "Từ #",
+      "loading": "Đang tải bản xem trước thẻ...",
+      "empty_title": "Chưa có xem trước",
+      "empty_desc": "Deck này chưa cấu hình template hoặc không có thẻ mẫu."
     },
     "lessons": {
       "title": "Cấu trúc bộ thẻ ({{count}} bài)",
       "search_placeholder": "Tìm kiếm bài học...",
       "empty": "Không tìm thấy bài học phù hợp",
-      "subdeck_badge": "Bộ thẻ con"
+      "subdeck_badge": "Bộ thẻ con",
+      "not_found_query": "Không tìm thấy bài học nào phù hợp với từ khóa \"{{query}}\".",
+      "single_lesson_summary": "1 bài học tổng hợp"
     },
     "reviews": {
       "title": "Đánh giá từ cộng đồng",
@@ -155,7 +171,16 @@
       "submitting": "Đang gửi…",
       "remaining_notice": "Bạn còn {{count}} lần gửi đánh giá cho bộ thẻ này.",
       "empty": "Chưa có đánh giá nào. Hãy là người đầu tiên để lại cảm nhận!",
-      "success_toast": "Đã gửi đánh giá thành công! Cảm ơn đóng góp của bạn."
+      "success_toast": "Đã gửi đánh giá thành công! Cảm ơn đóng góp của bạn.",
+      "star_unit": "sao",
+      "your_review_label": "Đánh giá của bạn:",
+      "must_install_notice": "Bạn cần tải xuống & cài đặt học liệu để mở tính năng gửi đánh giá.",
+      "student_reviews_title": "Nhận xét từ học viên",
+      "reviews_count_unit": "nhận xét",
+      "default_student": "Học viên",
+      "no_comment": "Học viên không để lại lời nhắn.",
+      "empty_reviews_title": "Chưa có nhận xét",
+      "empty_reviews_desc": "Hãy là người đầu tiên đánh giá sau khi cài đặt bộ deck này."
     },
     "author": {
       "title": "Hồ sơ tác giả",
@@ -163,18 +188,46 @@
       "published_decks": "Bộ thẻ đã đăng",
       "total_installs": "Tổng lượt tải",
       "rating": "Đánh giá",
-      "other_items_title": "Các bộ thẻ khác của tác giả"
+      "other_items_title": "Các bộ thẻ khác của tác giả",
+      "published_decks_suffix": "bộ thẻ đã xuất bản"
     },
     "related": {
-      "title": "Bộ thẻ cùng chủ đề có thể bạn thích"
+      "title": "Bộ thẻ cùng chủ đề có thể bạn thích",
+      "desc": "Khám phá thêm các bộ thẻ cùng chủ đề trên Flama Marketplace"
     },
     "owner_admin": {
       "auto_publish_title": "Tự động phát hành bản mới",
       "auto_publish_desc": "Tự động tạo Release và cập nhật cho người dùng khi bạn thêm từ mới.",
       "change_request_inbox": "Hộp thư góp ý (Change Request)",
       "release_builder": "Tạo bản phát hành (Release)",
-      "access_keys_btn": "Quản lý mã truy cập (Keys)"
-    }
+      "access_keys_btn": "Quản lý mã truy cập (Keys)",
+      "confirm_revoke": "Bạn có chắc chắn muốn thu hồi bộ thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt bộ thẻ này nữa.",
+      "revoke_btn": "Thu hồi bộ deck",
+      "republish_btn": "Xuất bản lại",
+      "published_at": "Đã phát hành",
+      "last_error": "Lỗi phát hành gần nhất",
+      "auto_publish_enabled_toast": "Đã bật chế độ tự động phát hành phiên bản mới.",
+      "auto_publish_disabled_toast": "Đã tắt chế độ tự động phát hành."
+    },
+    "notetype_source": "NoteType nguồn",
+    "btn_change_request": "Đóng góp chỉnh sửa",
+    "saved_btn": "Đã lưu",
+    "save_btn": "Lưu bộ deck",
+    "creating_payment": "Đang tạo thanh toán…",
+    "download_student_free": "Tải xuống miễn phí (Ưu đãi Sinh viên)",
+    "install_free_btn": "Tải xuống & Cài đặt miễn phí",
+    "enter_code_btn": "Nhập mã kích hoạt",
+    "saved_to_list": "Đã lưu vào danh sách",
+    "lessons_structure_title": "Cấu trúc bài học & từ vựng",
+    "lessons_structure_desc": "Chi tiết danh sách các bài học và số lượng từ vựng trong bộ thẻ này.",
+    "reviews_heading": "Đánh giá & Nhận xét",
+    "reviews_subtitle": "Ý kiến đóng góp từ học viên đã trải nghiệm bộ deck này",
+    "toast_unsaved": "Đã bỏ lưu bộ deck",
+    "toast_saved": "Đã lưu bộ deck vào danh sách yêu thích",
+    "toast_revoked": "Đã thu hồi bộ deck khỏi Marketplace.",
+    "toast_republished": "Đã xuất bản lại bộ deck lên Marketplace.",
+    "loading": "Đang tải thông tin bộ thẻ…",
+    "error_load": "Không thể tải thông tin bộ thẻ này."
   },
   "notetype_detail": {
     "title_preview": "Xem trước giao diện Note Type",
@@ -208,7 +261,15 @@
     "reviews_empty": "Chưa có đánh giá nào cho loại thẻ này.",
     "review_placeholder": "Viết nhận xét của bạn về thiết kế loại thẻ này...",
     "btn_submit_review": "Gửi nhận xét",
-    "fields_unit": "trường"
+    "fields_unit": "trường",
+    "confirm_revoke": "Bạn có chắc chắn muốn thu hồi loại thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt loại thẻ này nữa. Những người đã cài đặt trước đó vẫn có thể tiếp tục sử dụng.",
+    "toast_unsaved": "Đã bỏ lưu loại thẻ",
+    "toast_saved": "Đã lưu loại thẻ",
+    "toast_revoked": "Đã thu hồi loại thẻ khỏi Marketplace.",
+    "toast_republished": "Đã xuất bản lại loại thẻ lên Marketplace.",
+    "loading": "Đang tải thông tin loại thẻ…",
+    "not_found": "Không tìm thấy loại thẻ",
+    "header_desc": "Chi tiết mẫu note type trên marketplace Flama."
   },
   "keys_manager": {
     "title": "Quản lý mã truy cập khóa học",
@@ -279,7 +340,10 @@
       "access_expires": "Hạn học: {{date}}",
       "forever": "Vĩnh viễn",
       "btn_close": "Đóng"
-    }
+    },
+    "hide_btn": "Ẩn Quản lý Mã",
+    "toast_created_count": "Đã tạo thành công {{count}} mã truy cập mới!",
+    "stat_active_suffix": "mã đang mở nhận học viên"
   },
   "redeem_modal": {
     "title": "Nhập Mã kích hoạt Bộ thẻ",
@@ -396,7 +460,22 @@
       "collapse_all": "Thu gọn",
       "search_placeholder": "Tìm bộ thẻ...",
       "empty_no_decks": "Không tìm thấy bộ thẻ phù hợp."
-    }
+    },
+    "summary_title": "Tiêu đề:",
+    "summary_not_set": "Chưa đặt",
+    "summary_subject": "Môn học:",
+    "summary_model": "Mô hình:",
+    "btn_prev": "Quay lại",
+    "step_counter": "Bước {{current}} / {{total}}: {{title}}",
+    "btn_next": "Tiếp tục (Bước {{step}})",
+    "summary_difficulty": "Độ khó:",
+    "toast_update_success": "Đã cập nhật thông tin bộ thẻ trên Marketplace!",
+    "toast_create_success": "Xuất bản bộ thẻ thành công! Bạn có thể quản lý release và phiên bản tại đây.",
+    "toast_error": "Không thể đăng tải bộ thẻ. Vui lòng kiểm tra lại thông tin.",
+    "toast_step_error": "Vui lòng hoàn thành các thông tin bắt buộc tại Bước {{step}}",
+    "toast_check_info": "Vui lòng kiểm tra và điền đủ thông tin trước khi chuyển bước",
+    "toast_finish_step_first": "Vui lòng hoàn thiện Bước {{step}} trước",
+    "btn_back_detail": "Quay lại chi tiết"
   },
   "publish_notetype": {
     "title_create": "Chia sẻ Mẫu Thẻ (Note Type) vào Marketplace",
@@ -475,5 +554,24 @@
     "step6_content": "Mỗi thẻ hiển thị chủ đề, giá bán (Miễn phí/Trả phí), tên tác giả, điểm đánh giá sao ⭐ và số lượng thẻ.",
     "step7_title": "📥 7. Xem Chi Tiết & Cài Đặt",
     "step7_content": "Bấm để xem trước danh sách thẻ, xem giao diện thực tế và cài đặt (Overlay Sync) trực tiếp vào tài khoản của bạn để học ngay!"
+  },
+  "common": {
+    "prev": "Trước",
+    "next": "Sau",
+    "updated_at": "Cập nhật",
+    "on": "BẬT",
+    "off": "TẮT",
+    "enabled": "Đang bật",
+    "disabled": "Đang tắt",
+    "pending": "Đang chờ",
+    "changes": "thay đổi",
+    "error": "Có lỗi xảy ra. Vui lòng thử lại.",
+    "author": "Tác giả",
+    "loading": "Đang tải dữ liệu...",
+    "share": "Chia sẻ",
+    "back": "Quay lại"
+  },
+  "marketplace": {
+    "tab_notetypes": "Loại thẻ"
   }
 }

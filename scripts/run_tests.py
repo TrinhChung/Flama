@@ -513,6 +513,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_mcp_note_concurrency_identity.py",
             "tests/test_mcp_note_type_capabilities.py",
             "tests/test_mcp_production_handshake.py",
+            "tests/test_mcp_public_search.py",
+            "tests/test_mcp_adversarial_challenge.py",
+            "tests/test_mcp_adversarial_challenger.py",
             "tests/test_mcp_taxonomy_metadata.py",
             "tests/test_note_sync_and_mcp.py",
             "tests/test_oauth_mcp.py",
@@ -763,6 +766,19 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_vocab_seed_sharing.py",
         ],
         "frontend_tests": [],
+    },
+    "i18n": {
+        "source_patterns": [
+            "frontend/src/shared/config/i18n/**",
+            "frontend/src/shared/ui/LanguageSwitcher*",
+        ],
+        "backend_tests": [],
+        "frontend_tests": [
+            "src/shared/config/i18n/i18n.test.ts",
+            "src/shared/config/i18n/i18n.stress.test.tsx",
+            "src/shared/config/i18n/translationKeys.test.ts",
+            "src/shared/ui/LanguageSwitcher.test.tsx",
+        ],
     },
     "tooling": {
         "source_patterns": [

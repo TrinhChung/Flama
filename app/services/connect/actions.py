@@ -150,7 +150,9 @@ def _parse_note(
         note_type = _resolve_note_type(user_id, model_name)
     if not allow_mixed_model and deck.note_type_id is not None and deck.note_type_id != note_type.id:
         raise ConnectError("deck is bound to a different model")
-    if not note_type.templates:
+    from app.repositories.template_release_repository import active_templates
+
+    if not active_templates(db.session, note_type.id):
         raise ConnectError("model has no card template")
 
     fields = raw_note.get("fields")

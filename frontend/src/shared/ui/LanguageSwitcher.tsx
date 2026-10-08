@@ -61,7 +61,7 @@ export function LanguageSwitcher({
     return (
       <div
         role="group"
-        aria-label={t('common.language.switch_aria', 'Chuyển đổi ngôn ngữ / Switch language')}
+        aria-label={t('language.switch_aria')}
         className={cn(
           'inline-flex items-center rounded-full border border-border/60 bg-muted/40 p-0.5',
           compact ? 'h-7' : 'h-8',
@@ -97,8 +97,8 @@ export function LanguageSwitcher({
     const nextLang = currentLang === 'vi' ? 'en' : 'vi'
     const tooltipText =
       currentLang === 'vi'
-        ? t('common.language.switch_to_en', 'Chuyển sang English')
-        : t('common.language.switch_to_vi', 'Chuyển sang Tiếng Việt')
+        ? t('language.switch_to_en')
+        : t('language.switch_to_vi')
 
     return (
       <Tooltip>
@@ -133,7 +133,7 @@ export function LanguageSwitcher({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label={t('common.language.switch_aria', 'Chuyển đổi ngôn ngữ / Switch language')}
+            aria-label={t('language.switch_aria')}
             className={cn(
               'group inline-flex items-center justify-center rounded-full border border-border/60 bg-muted/40 text-muted-foreground transition-all duration-200 hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 cursor-pointer select-none',
               compact ? 'size-7' : 'size-8',
@@ -149,7 +149,7 @@ export function LanguageSwitcher({
           className="w-40 rounded-xl border border-border/60 bg-popover/95 p-1 backdrop-blur-md animate-in fade-in-50 zoom-in-95"
         >
           <DropdownMenuLabel className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-            {t('common.language.label', 'Ngôn ngữ')}
+            {t('language.label')}
           </DropdownMenuLabel>
           <DropdownMenuSeparator className="-mx-1 my-1" />
           {LANGUAGES.map((item) => {
@@ -182,7 +182,7 @@ export function LanguageSwitcher({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={t('common.language.switch_aria', 'Chuyển đổi ngôn ngữ / Switch language')}
+            aria-label={t('language.switch_aria')}
           className={cn(
             'group inline-flex items-center justify-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 cursor-pointer select-none',
             compact ? 'h-7 px-2 text-[11px] gap-1' : 'h-8',
@@ -209,7 +209,7 @@ export function LanguageSwitcher({
         className="w-40 rounded-xl border border-border/60 bg-popover/95 p-1 backdrop-blur-md animate-in fade-in-50 zoom-in-95"
       >
         <DropdownMenuLabel className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-          {t('common.language.label', 'Ngôn ngữ')}
+            {t('language.label')}
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="-mx-1 my-1" />
         {LANGUAGES.map((item) => {

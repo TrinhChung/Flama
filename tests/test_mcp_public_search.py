@@ -340,6 +340,63 @@ class TestMcpPublicSearch(unittest.TestCase):
     # -----------------------------------------------------------------------
     # 4. Anti-scraping preview limit enforced (strictly 3 to 5 sample cards max)
     # -----------------------------------------------------------------------
+    def test_lookup_cannot_extract_words_outside_the_fixed_preview(self):
+        response = self._post_mcp({
+            "jsonrpc": "2.0", "id": 101, "method": "tools/call",
+            "params": {"name": "lookup_public_vocabulary", "arguments": {"query": "話す", "limit": 20}},
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["result"]["structuredContent"]["matches"], [])
+
+    def test_lookup_never_reads_working_values_after_publication(self):
+        from app.services import flashcards_share_service
+
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, "pub-deck-uuid-1")
+            flashcards_share_service._stage_initial_release_if_visible(item)
+            db.session.commit()
+            note = Note.query.filter_by(deck_id=self.pub_deck_id).first()
+            note.field_values = {"Word": "未公開の草稿", "Reading": "draft", "Meaning": "unpublished working secret"}
+            db.session.commit()
+        response = self._post_mcp({
+            "jsonrpc": "2.0", "id": 102, "method": "tools/call",
+            "params": {"name": "lookup_public_vocabulary", "arguments": {"query": "unpublished working secret"}},
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["result"]["structuredContent"]["matches"], [])
+
+    def test_preview_reconstructs_current_release_when_sample_cache_is_stale(self):
+        from app.services import flashcards_share_service
+
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, "pub-deck-uuid-1")
+            flashcards_share_service._stage_initial_release_if_visible(item)
+            db.session.commit()
+            item.preview_samples_release_id = "another-release"
+            item.preview_samples_json = [{"word": "STALE_PRIVATE_CONTENT", "meaning": "not in current release"}]
+            db.session.commit()
+        response = self._post_mcp({
+            "jsonrpc": "2.0", "id": 103, "method": "tools/call",
+            "params": {"name": "get_public_deck_preview", "arguments": {"deck_item_id": "pub-deck-uuid-1"}},
+        })
+        self.assertEqual(response.status_code, 200)
+        samples = response.get_json()["result"]["structuredContent"]["sample_preview"]
+        self.assertGreater(len(samples), 0)
+        self.assertNotIn("STALE_PRIVATE_CONTENT", json.dumps(samples))
+
+    def test_preview_does_not_read_live_notes_for_a_missing_published_release(self):
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, "pub-deck-uuid-1")
+            item.current_release_id = "missing-release"
+            item.preview_samples_json = None
+            db.session.commit()
+        response = self._post_mcp({
+            "jsonrpc": "2.0", "id": 104, "method": "tools/call",
+            "params": {"name": "get_public_deck_preview", "arguments": {"deck_item_id": "pub-deck-uuid-1"}},
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["result"]["structuredContent"]["sample_preview"], [])
+
     def test_anti_scraping_preview_limit_enforced(self):
         # Even though the published deck has 7 cards and can have 1000s,
         # get_public_deck_preview must strictly return <= 5 sample cards.

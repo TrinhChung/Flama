@@ -27,7 +27,7 @@ export function AnkiSyncPage() {
   } = useAnkiSyncPage()
 
   if (optionsQuery.isPending || bootstrapQuery.isPending) {
-    return <PageLoading label={t('common.loading', { defaultValue: 'Đang tải cấu hình đồng bộ...' })} />
+    return <PageLoading label={t('anki_sync.loading_config')} />
   }
   if (optionsQuery.error) {
     return <Page><PageError error={optionsQuery.error} /></Page>

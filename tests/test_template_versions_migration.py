@@ -126,6 +126,47 @@ class TemplateVersionsMigrationTests(unittest.TestCase):
         self.assertEqual(version["input_schema"], schema)
         self.assertEqual(self.connection.execute(sa.select(self._templates().c.input_schema)).scalar_one(), schema)
 
+    def _current_bootstrap_schema(self):
+        attachments = importlib.import_module("migrations.versions.20261007_000054_expand_template_attachments")
+        templates, _, _ = attachments._tables()
+        templates.metadata.create_all(self.connection)
+        return templates
+
+    def test_accepts_empty_current_bootstrap_before_attachment_revision(self):
+        self._current_bootstrap_schema()
+        before = set(sa.inspect(self.connection).get_table_names())
+        migration.upgrade()
+        migration.upgrade()
+        attachments = importlib.import_module("migrations.versions.20261007_000054_expand_template_attachments")
+        attachments.upgrade()
+        self.assertEqual(set(sa.inspect(self.connection).get_table_names()), before)
+        self.assertTrue(next(c for c in sa.inspect(self.connection).get_columns("templates") if c["name"] == "note_type_id")["nullable"])
+
+    def test_refuses_populated_later_bootstrap_without_rewriting_sources(self):
+        templates = self._current_bootstrap_schema()
+        self.connection.execute(sa.text("INSERT INTO users (id) VALUES (1)"))
+        self.connection.execute(sa.text("INSERT INTO note_types (id, user_id) VALUES ('note-type-1', 1)"))
+        original = self._seed(templates)
+        with self.assertRaisesRegex(RuntimeError, "populated later attachment schema"):
+            migration.upgrade()
+        row = self.connection.execute(sa.select(templates)).mappings().one()
+        for key, value in original.items():
+            self.assertEqual(row[key], value)
+        self.assertEqual(self.connection.execute(sa.select(sa.func.count()).select_from(self._versions())).scalar_one(), 0)
+
+    def test_refuses_incomplete_current_bootstrap(self):
+        self._current_bootstrap_schema()
+        self.connection.exec_driver_sql("DROP INDEX ix_templates_archived_at")
+        with self.assertRaisesRegex(RuntimeError, "indexes differ"):
+            migration.upgrade()
+
+    def test_downgrade_refuses_later_bootstrap_without_dropping_schema(self):
+        self._current_bootstrap_schema()
+        with self.assertRaisesRegex(RuntimeError, "cannot downgrade later attachment schema"):
+            migration.downgrade()
+        self.assertTrue(sa.inspect(self.connection).has_table("template_versions"))
+        self.assertIn("owner_user_id", self._templates().c)
+
     def test_backfill_is_idempotent_and_resumes_missing_pointer_without_duplicate(self):
         templates, _ = self._schema()
         self._seed(templates)

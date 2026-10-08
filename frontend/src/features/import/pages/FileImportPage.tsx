@@ -21,7 +21,7 @@ export function FileImportPage() {
   const wizard = useFileImportWizard()
   const { optionsQuery, currentStep, token, fields } = wizard
 
-  if (optionsQuery.isPending) return <PageLoading label={t('common.loading', { defaultValue: 'Đang tải cấu hình import…' })} />
+  if (optionsQuery.isPending) return <PageLoading label={t('file_import.loading_config')} />
   if (optionsQuery.error) return <Page><PageError error={optionsQuery.error} /></Page>
 
   const stepsConfig = [

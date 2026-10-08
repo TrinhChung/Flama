@@ -16,10 +16,15 @@ class SharedDeckDetailUiTests(unittest.TestCase):
             / "SharedDeckDetailPage.tsx"
         )
         script = script_path.read_text(encoding="utf-8")
+        preview = (
+            script_path.parent.parent / "components" / "deck-detail" / "DeckCardPreviewSection.tsx"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("/api/shared/decks/${id}/templates/${selectedTemplateId}/preview", script)
-        self.assertIn("<CardDisplay", script)
-        self.assertIn('scope="shared_deck_preview"', script)
+        self.assertIn("<DeckCardPreviewSection", script)
+        self.assertIn("previewQuery={previewQuery}", script)
+        self.assertIn("<CardDisplay", preview)
+        self.assertIn('scope="shared_deck_preview"', preview)
 
 
 if __name__ == "__main__":

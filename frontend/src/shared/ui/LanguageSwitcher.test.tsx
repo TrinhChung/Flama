@@ -107,4 +107,14 @@ describe("LanguageSwitcher Component — Zero Layout Shift & Dimensions", () => 
       expect(btn.className).toContain("h-6.5")
     })
   })
+
+  it("translates the accessible language picker label in English", async () => {
+    await act(async () => {
+      await i18n.changeLanguage("en")
+      root?.render(<LanguageSwitcher variant="pill" />)
+    })
+
+    expect(container?.querySelector('[role="group"]')?.getAttribute("aria-label"))
+      .toBe(i18n.getResource("en", "common", "language.switch_aria"))
+  })
 })

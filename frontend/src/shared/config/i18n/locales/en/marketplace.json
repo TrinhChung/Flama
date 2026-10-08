@@ -86,7 +86,9 @@
     "view_new_update": "View new update",
     "view_update": "View update",
     "contribute_edit": "Contribute edits",
-    "installed_badge": "Installed"
+    "installed_badge": "Installed",
+    "buy_deck": "Buy deck",
+    "author": "Author"
   },
   "sync_status": {
     "needs_sync": "Contribution needs sync",
@@ -127,7 +129,11 @@
       "badge": "Student offer",
       "title": "Student / Learner Discount",
       "desc": "You are eligible for a special discount for this course.",
-      "discount_apply": "Discount of {{percent}}% applied"
+      "discount_apply": "Discount of {{percent}}% applied",
+      "edu_detected": "You are using a school email address (.edu.vn).",
+      "verify_email_link": "Verify your email on your Profile page",
+      "to_receive_offer": "to receive {{offer}}!",
+      "discount": "a {{percent}}% discount"
     },
     "preview": {
       "title": "Sample card preview",
@@ -137,13 +143,23 @@
       "btn_flip": "Flip card",
       "template_label": "Active template:",
       "sample_nav": "Sample {{current}} / {{total}}",
-      "empty_preview": "No sample cards available for preview."
+      "empty_preview": "No sample cards available for preview.",
+      "sample_prefix": "Sample",
+      "sample_word_default": "Sample word",
+      "quick_select": "Select a sample word:",
+      "samples_count_unit": "samples",
+      "word_hash": "Word #",
+      "loading": "Loading card preview...",
+      "empty_title": "No preview available",
+      "empty_desc": "This deck has no template configured or no sample cards."
     },
     "lessons": {
       "title": "Deck structure ({{count}} lessons)",
       "search_placeholder": "Search lessons in this deck...",
       "empty": "No matching lessons found",
-      "subdeck_badge": "Subdeck"
+      "subdeck_badge": "Subdeck",
+      "not_found_query": "No lessons match \"{{query}}\".",
+      "single_lesson_summary": "1 combined lesson"
     },
     "reviews": {
       "title": "Community Reviews",
@@ -155,7 +171,16 @@
       "submitting": "Submitting…",
       "remaining_notice": "You have {{count}} review submission(s) remaining for this deck.",
       "empty": "No reviews yet. Be the first to share your thoughts!",
-      "success_toast": "Review submitted successfully! Thank you for your feedback."
+      "success_toast": "Review submitted successfully! Thank you for your feedback.",
+      "star_unit": "stars",
+      "your_review_label": "Your review:",
+      "must_install_notice": "Download and install this learning material to submit a review.",
+      "student_reviews_title": "Learner reviews",
+      "reviews_count_unit": "reviews",
+      "default_student": "Learner",
+      "no_comment": "The learner left no comment.",
+      "empty_reviews_title": "No reviews yet",
+      "empty_reviews_desc": "Be the first to review this deck after installing it."
     },
     "author": {
       "title": "Author Profile",
@@ -163,18 +188,46 @@
       "published_decks": "Published decks",
       "total_installs": "Total downloads",
       "rating": "Rating",
-      "other_items_title": "Other decks by this author"
+      "other_items_title": "Other decks by this author",
+      "published_decks_suffix": "published decks"
     },
     "related": {
-      "title": "Related decks you might like"
+      "title": "Related decks you might like",
+      "desc": "Explore more decks on the same topic on Flama Marketplace"
     },
     "owner_admin": {
       "auto_publish_title": "Auto-publish new versions",
       "auto_publish_desc": "Automatically create a Release and notify users whenever you add new notes.",
       "change_request_inbox": "Change Request Inbox",
       "release_builder": "Create Release",
-      "access_keys_btn": "Manage Access Keys"
-    }
+      "access_keys_btn": "Manage Access Keys",
+      "confirm_revoke": "Are you sure you want to withdraw this deck from the Marketplace?\n\nOther users will no longer be able to find or install it.",
+      "revoke_btn": "Withdraw deck",
+      "republish_btn": "Republish",
+      "published_at": "Published",
+      "last_error": "Last publication error",
+      "auto_publish_enabled_toast": "Automatic publication of new releases enabled.",
+      "auto_publish_disabled_toast": "Automatic publication disabled."
+    },
+    "notetype_source": "Source Note Type",
+    "btn_change_request": "Contribute edits",
+    "saved_btn": "Saved",
+    "save_btn": "Save deck",
+    "creating_payment": "Creating payment…",
+    "download_student_free": "Download for free (Student offer)",
+    "install_free_btn": "Download & install for free",
+    "enter_code_btn": "Enter activation key",
+    "saved_to_list": "Saved to your list",
+    "lessons_structure_title": "Lesson & vocabulary structure",
+    "lessons_structure_desc": "Lessons and vocabulary counts in this deck.",
+    "reviews_heading": "Ratings & reviews",
+    "reviews_subtitle": "Feedback from learners who have used this deck",
+    "toast_unsaved": "Deck removed from saved items",
+    "toast_saved": "Deck saved to your favorites",
+    "toast_revoked": "Deck withdrawn from the Marketplace.",
+    "toast_republished": "Deck republished on the Marketplace.",
+    "loading": "Loading deck information…",
+    "error_load": "Unable to load this deck."
   },
   "notetype_detail": {
     "title_preview": "Note Type Live Preview",
@@ -208,7 +261,15 @@
     "reviews_empty": "No reviews for this note type yet.",
     "review_placeholder": "Write your review about this note type design...",
     "btn_submit_review": "Submit review",
-    "fields_unit": "fields"
+    "fields_unit": "fields",
+    "confirm_revoke": "Are you sure you want to withdraw this Note Type from the Marketplace?\n\nOther users will no longer be able to find or install it. Users who already installed it can continue using it.",
+    "toast_unsaved": "Note Type removed from saved items",
+    "toast_saved": "Note Type saved",
+    "toast_revoked": "Note Type withdrawn from the Marketplace.",
+    "toast_republished": "Note Type republished on the Marketplace.",
+    "loading": "Loading Note Type information…",
+    "not_found": "Note Type not found",
+    "header_desc": "Note Type template details on Flama Marketplace."
   },
   "keys_manager": {
     "title": "Course Access Keys Management",
@@ -279,7 +340,10 @@
       "access_expires": "Access until: {{date}}",
       "forever": "Permanent",
       "btn_close": "Close"
-    }
+    },
+    "hide_btn": "Hide key manager",
+    "toast_created_count": "Successfully created {{count}} new access keys!",
+    "stat_active_suffix": "keys accepting learners"
   },
   "redeem_modal": {
     "title": "Enter Deck Activation Key",
@@ -396,7 +460,22 @@
       "collapse_all": "Collapse all",
       "search_placeholder": "Search decks...",
       "empty_no_decks": "No matching decks found."
-    }
+    },
+    "summary_title": "Title:",
+    "summary_not_set": "Not set",
+    "summary_subject": "Subject:",
+    "summary_model": "Distribution:",
+    "btn_prev": "Back",
+    "step_counter": "Step {{current}} / {{total}}: {{title}}",
+    "btn_next": "Continue (Step {{step}})",
+    "summary_difficulty": "Difficulty:",
+    "toast_update_success": "Deck information updated on the Marketplace!",
+    "toast_create_success": "Deck published! You can manage releases and versions here.",
+    "toast_error": "Unable to publish the deck. Please check the information.",
+    "toast_step_error": "Please complete the required information in Step {{step}}",
+    "toast_check_info": "Please check and complete all information before continuing",
+    "toast_finish_step_first": "Please complete Step {{step}} first",
+    "btn_back_detail": "Back to details"
   },
   "publish_notetype": {
     "title_create": "Share Note Type to Marketplace",
@@ -475,5 +554,24 @@
     "step6_content": "Each card displays topic badges, pricing (Free/Paid), author name, star rating ⭐ and total card count.",
     "step7_title": "📥 7. Details & Install",
     "step7_content": "Click to preview sample cards, see actual layouts, and install directly into your account to start studying immediately!"
+  },
+  "common": {
+    "prev": "Previous",
+    "next": "Next",
+    "updated_at": "Updated",
+    "on": "ON",
+    "off": "OFF",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "pending": "Pending",
+    "changes": "changes",
+    "error": "An error occurred. Please try again.",
+    "author": "Author",
+    "loading": "Loading data...",
+    "share": "Share",
+    "back": "Back"
+  },
+  "marketplace": {
+    "tab_notetypes": "Note Types"
   }
 }
