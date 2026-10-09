@@ -400,8 +400,8 @@ def add_note(user_id: int, raw_note: object) -> int:
                 note_type_id=prepared.note_type.id,
                 name="Card 1",
                 position=0,
-                front_format="{{Front}}",
-                back_format="{{Back}}",
+                front_html="{{Front}}",
+                back_html="{{Back}}",
             )
             db.session.add(tmpl)
             db.session.flush()

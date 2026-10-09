@@ -27,6 +27,7 @@ Contract đang chạy: [phiên bản A2](../../architecture/template-version-fou
 | GT-18A/B/C/D | Codex | Completed / verified | Preparation API/UI, opt-in nhớ lựa chọn, freeze/restore/rollover giữ mapping |
 | CT-R2 | Codex | Completed / local browser | Chrome profile riêng, API thật với DB tạm; desktop/mobile 375px, sáng/tối; xem báo cáo |
 | GT-14 | Codex | Completed | Hướng dẫn repo và bài `study/template-library-bindings` theo tên UI thực tế |
+| CT-R3 | Claude | Completed (code, chưa commit) | Đường ghi còn dùng nguồn gốc legacy: gỡ template dùng chung, Connect import, CSV, `sync_notes`, route NoteType; xem [báo cáo CT-R3](reviews/CT-R3_ATTACHMENT_WRITER_PATHS_2026-10-09.md) |
 
 Các spec/prompt dưới đây giữ làm tiêu chí đối chiếu; không giao lại phase đã hoàn thành. Khi tiếp tục sửa, giữ ownership entity/index/routes/page rõ ràng và kiểm tra code hiện tại trước khi dùng prompt cũ.
 
@@ -103,3 +104,4 @@ QUY TẮC BẮT BUỘC (Flama, template features)
 
 | 2026-10-08 | Codex hoàn tất backend handoff CT-04/05/06/07/08, cập nhật contract/spec/prompt GT-10B/11/12/13/18 và modular module templates. FE mới vẫn chờ Gemini. |
 | 2026-10-08 | Theo yêu cầu làm tiếp task còn thiếu, Codex hoàn thiện GT-10B/11/12/13/18/14, review GT-12A, sửa lỗi wizard native submit, bảo toàn dirty draft và bản nhận legacy; CT-R2 local browser qua. Chi tiết kiểm tra trong báo cáo CT-R2. |
+| 2026-10-09 | Claude rà backend sau CT-R2: phần chuyển chỗ đọc legacy sang occurrence (mục tiêu GT-16) còn sót ở các đường ghi. Sửa mất dữ liệu khi gỡ template dùng chung (REST/MCP) và khi Connect import lại, import vào NoteType đã nhận, CSV/`sync_notes`, route NoteType 404 với template gắn thêm, rò rỉ bản nháp qua MCP schema. 14 test mới; xem [CT-R3](reviews/CT-R3_ATTACHMENT_WRITER_PATHS_2026-10-09.md). |

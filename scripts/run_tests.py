@@ -360,6 +360,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_template_library_fe_contract.py",
             "tests/test_template_release_service.py",
             "tests/test_template_deck_release.py",
+            "tests/test_template_attachment_writers.py",
             "tests/test_study_template_application_sessions.py",
             "tests/test_study_template_presets.py"
         ],

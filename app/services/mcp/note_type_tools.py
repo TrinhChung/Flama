@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app.repositories import template_library_repository
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services import flashcard_content_service
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
@@ -128,6 +129,23 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
         }
         for t in sorted_templates
     ]
+    if not is_owner:
+        # Another author's live drafts are unpublished; show what the
+        # marketplace shows, the immutable published release content.
+        from app.services import marketplace_query_service
+
+        templates = [
+            {
+                "id": str(t["id"]),
+                "name": t["name"],
+                "position": t["position"],
+                "is_default": bool(t["is_default"]),
+                "front_html": t["front_html"],
+                "back_html": t["back_html"],
+                "shared_css": t["shared_css"] or "",
+            }
+            for t in marketplace_query_service.serialize_note_type_templates(nt, published=True)
+        ]
 
     return {
         "id": str(nt.id),
@@ -956,6 +974,16 @@ def update_note_type(
                 for row in current_templates.values()
                 if row.name not in requested_names and row.id not in requested_ids
             }
+        # A definition also used by another NoteType is only detached here;
+        # deleting it would erase that NoteType's Cards and progress.
+        shared_template_ids = {
+            template_id
+            for template_id in removed_template_ids
+            if template_library_repository.template_used_outside(db.session, template_id, nt.id)
+        }
+        for template_id in sorted(shared_template_ids):
+            template_library_repository.detach_template(db.session, nt.id, current_template_ids[template_id])
+        removed_template_ids -= shared_template_ids
         removed_card_ids = [
             str(row[0])
             for row in db.session.query(Card.id)
@@ -971,7 +999,7 @@ def update_note_type(
         if isinstance(templates, dict):
             for rem_name in templates.get("removed", []):
                 t_obj = current_templates.get(str(rem_name))
-                if t_obj:
+                if t_obj and str(t_obj.id) not in shared_template_ids:
                     Card.query.filter_by(template_id=t_obj.id).delete(synchronize_session=False)
                     db.session.delete(t_obj)
 
@@ -1011,7 +1039,7 @@ def update_note_type(
             new_t_names = {t.get("name") for t in templates if t.get("name")}
             new_t_ids = {t.get("id") for t in templates if t.get("id")}
             for curr_name, curr_t in current_templates.items():
-                if curr_name not in new_t_names and curr_t.id not in new_t_ids:
+                if curr_name not in new_t_names and curr_t.id not in new_t_ids and str(curr_t.id) not in shared_template_ids:
                     Card.query.filter_by(template_id=curr_t.id).delete(synchronize_session=False)
                     db.session.delete(curr_t)
 
@@ -1048,7 +1076,7 @@ def update_note_type(
                         db.session.add(Card(note_id=note.id, template_id=new_t.id))
 
         db.session.flush()
-        if not nt.templates:
+        if not template_library_repository.card_slots(db.session, nt.id):
             db.session.rollback()
             raise RequestValidationError(
                 "NoteType phải có ít nhất một Template.",

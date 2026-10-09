@@ -22,6 +22,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.repositories import (
     flashcards_share_repository,
     study_repository,
+    template_library_repository,
     vocabulary_repository,
 )
 from app.repositories.study_authority_repository import lock_study_authority_route
@@ -283,9 +284,22 @@ def _validate_existing_target(plan: NormalizedNoteTypePlan, target: NoteType) ->
     missing_required = sorted(required_targets - set(plan.field_mapping.values()))
     if missing_required:
         blockers.append(f"required target fields are not mapped: {', '.join(missing_required)}")
-    if len(target.templates) < len(plan.templates):
+    if len(_anki_card_slots(target)) < len(plan.templates):
         blockers.append("target has fewer card templates than the Anki NoteType")
     return blockers
+
+
+def _anki_card_slots(note_type: NoteType) -> list[str]:
+    """Card identities matched by Anki card ordinal, in ordinal order.
+
+    Mirrored Anki templates are this NoteType's own definitions (Template IDs,
+    retired ones included so later ordinals never shift). A received NoteType
+    has none and uses its active occurrences instead (application IDs).
+    """
+    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+    if templates:
+        return [template.id for template in templates]
+    return [row.id for row in template_library_repository.applications(db.session, note_type.id)]
 
 
 

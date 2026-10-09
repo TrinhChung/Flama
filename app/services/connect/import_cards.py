@@ -22,6 +22,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.repositories import (
     flashcards_share_repository,
     study_repository,
+    template_library_repository,
     vocabulary_repository,
 )
 from app.repositories.study_authority_repository import (
@@ -116,6 +117,7 @@ from app.services.connect.base import (
     _normalized_identity,
 )
 from app.services.connect.import_session import (
+    _anki_card_slots,
     _get_import_session,
     _target_note_type_hash,
     _upsert_note_type_ref,
@@ -127,19 +129,25 @@ from app.services.connect.resolvers import (
     _resolve_note_type,
 )
 
+def _note_card_plan(note: Note, note_type: NoteType):
+    # Active occurrences decide Cards; a reusable definition attached to this
+    # NoteType is not part of note_type.templates and must not be removed.
+    plan = template_library_repository.plan_note_cards(db.session, note_type.id, list(note.cards))
+    if not plan.has_slots:
+        raise ConnectError("model has no card template")
+    return plan
+
+
 def _reconcile_note_cards(
     note: Note,
     note_type: NoteType,
     *,
     is_new_note: bool = False,
     preserve_released_history: bool | None = None,
+    plan=None,
 ) -> None:
-    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
-    if not templates:
-        raise ConnectError("model has no card template")
-    expected_ids = {template.id for template in templates}
-    existing_by_template = {card.template_id: card for card in note.cards}
-    requires_reconcile = expected_ids != set(existing_by_template)
+    plan = plan or _note_card_plan(note, note_type)
+    requires_reconcile = bool(plan.missing or plan.removable)
     if requires_reconcile and not is_new_note:
         from app.services import deck_working_tree_service
 
@@ -153,12 +161,9 @@ def _reconcile_note_cards(
                 "cannot change card templates for a released shared note; "
                 "template-aware deck releases are required to preserve study history"
             )
-    for card in list(note.cards):
-        if card.template_id not in expected_ids:
-            db.session.delete(card)
-    for template in templates:
-        if template.id not in existing_by_template:
-            db.session.add(Card(note_id=note.id, template_id=template.id))
+    for card in plan.removable:
+        db.session.delete(card)
+    db.session.add_all(template_library_repository.build_cards([note.id], plan.missing))
 
 
 
@@ -178,12 +183,8 @@ def _reconcile_note_authority_cards(
     """
     from app.services import study_content_delete_service as content_topology
 
-    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
-    if not templates:
-        raise ConnectError("model has no card template")
-    expected_ids = {template.id for template in templates}
-    existing_by_template = {card.template_id: card for card in note.cards}
-    if expected_ids == set(existing_by_template):
+    plan = _note_card_plan(note, note_type)
+    if not plan.missing and not plan.removable:
         return
     if not is_new_note:
         from app.services import deck_working_tree_service
@@ -205,21 +206,17 @@ def _reconcile_note_authority_cards(
         card_ids=[str(card.id) for card in note.cards],
         deleted_note_ids=(),
     )
-    for template in templates:
-        if template.id in existing_by_template:
-            continue
+    for slot in plan.missing:
         expansion = content_topology.prepare_content_expansion(
             db.session, routes=routes, note_ids=note_ids)
         content_topology.verify_content_expansion_scope(db.session, routes=routes, note_ids=note_ids)
-        new_card = Card(note_id=note.id, template_id=template.id)
+        new_card, = template_library_repository.build_cards([note.id], [slot])
         db.session.add(new_card)
         db.session.flush()
         content_topology.finalize_content_expansion(expansion, new_cards=(new_card,))
-    removed_ids = [
-        str(card.id) for card in note.cards if card.template_id not in expected_ids
-    ]
+    removed_ids = [str(card.id) for card in plan.removable]
     if removed_ids:
-        plan = content_topology.prepare_content_delete(
+        removal = content_topology.prepare_content_delete(
             db.session, routes=routes, card_ids=removed_ids, note_ids=(),
             cancel_legacy_sessions=False)
         content_topology.verify_content_delete_scope(
@@ -227,7 +224,7 @@ def _reconcile_note_authority_cards(
         CardProgress.query.filter(CardProgress.card_id.in_(removed_ids)).delete(
             synchronize_session=False)
         content_topology.finalize_content_delete(
-            plan, source_path="connect.import_cards.reconcile", operation_key=operation_key)
+            removal, source_path="connect.import_cards.reconcile", operation_key=operation_key)
         Card.query.filter(Card.id.in_(removed_ids)).delete(synchronize_session=False)
     db.session.expire(note, ["cards"])
 
@@ -257,11 +254,13 @@ def _migrate_cards_progress(
     now = datetime.utcnow()
     today_day_index_flama = _day_index(now, boundary_hour, timezone_name=timezone_name)
 
-    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+    slots = _anki_card_slots(note_type)
 
     # Flush newly reconciled cards and query them directly
     db.session.flush()
-    existing_cards = {card.template_id: card for card in Card.query.filter_by(note_id=note.id).all()}
+    note_cards = Card.query.filter_by(note_id=note.id).all()
+    existing_cards = {card.template_id: card for card in note_cards}
+    existing_cards.update({card.application_id: card for card in note_cards if card.application_id})
 
     if not isinstance(cards_progress_payload, list) or len(cards_progress_payload) > 100:
         raise ConnectError("cardsProgress must be an array with at most 100 entries")
@@ -293,8 +292,8 @@ def _migrate_cards_progress(
         progress_map[ord_value] = item
 
     results: list[dict[str, Any]] = []
-    for ord_idx, template in enumerate(templates):
-        card = existing_cards.get(template.id)
+    for ord_idx, slot_id in enumerate(slots):
+        card = existing_cards.get(slot_id)
         if not card:
             continue
 
@@ -681,19 +680,17 @@ def _upsert_import_card(
             operation_key=reconcile_operation_key,
         )
     else:
-        expected_template_ids = {template.id for template in prepared.note_type.templates}
-        removed_cards = tuple(
-            card for card in note.cards if card.template_id not in expected_template_ids
-        )
-        if removed_cards:
+        card_plan = _note_card_plan(note, prepared.note_type)
+        if card_plan.removable:
             CardProgress.query.filter(
-                CardProgress.card_id.in_([str(card.id) for card in removed_cards])
+                CardProgress.card_id.in_([str(card.id) for card in card_plan.removable])
             ).delete(synchronize_session=False)
         _reconcile_note_cards(
             note,
             prepared.note_type,
             is_new_note=created,
             preserve_released_history=preserve_released_history,
+            plan=card_plan,
         )
     cards_progress_payload = card_data.get("cardsProgress")
     progress_results: list[dict[str, Any]] = []

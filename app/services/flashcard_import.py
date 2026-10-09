@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from app.repositories import template_library_repository
 from app.services.flashcard_renderer import is_field_empty
 from app.services.media_field_codec import (
     MEDIA_FIELD_TYPES,
@@ -19,7 +20,7 @@ from app.services.media_field_codec import (
     normalize_media_field_for_write,
 )
 from models import db
-from models.flashcard import Card, Note, Template
+from models.flashcard import Note
 
 IMPORT_MAX_FILE_BYTES = 50 * 1024 * 1024
 IMPORT_PREVIEW_ROWS = 4
@@ -673,9 +674,11 @@ def run_import(
     chunk_limit = max(50, int(chunk_size or IMPORT_DEFAULT_CHUNK_SIZE))
     pending_writes = 0
 
-    templates: list[Template] = []
+    # Cards follow the NoteType's active occurrences, including reusable and
+    # received templates whose legacy origin is another (or no) NoteType.
+    card_slots: list[tuple[str, str | None]] = []
     if apply_changes and normalized_mode in {"insert_only", "upsert"}:
-        templates = Template.query.filter_by(note_type_id=note_type.id).order_by(Template.position.asc()).all()
+        card_slots = template_library_repository.card_slots(db.session, note_type.id)
 
     insert_payload_buffer: list[dict[str, Any]] = []
     pending_updated_dirty: list[tuple[Note, set[str]]] = []
@@ -720,10 +723,7 @@ def run_import(
             db.session.add_all(notes)
             db.session.flush()
 
-            cards: list[Card] = []
-            for note in notes:
-                for template in templates:
-                    cards.append(Card(note_id=note.id, template_id=template.id))
+            cards = template_library_repository.build_cards([note.id for note in notes], card_slots)
             if cards:
                 db.session.add_all(cards)
 
