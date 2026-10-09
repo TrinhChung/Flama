@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
-import { ArrowLeft, BookOpen, Pencil, Share2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, LoaderCircle, Pencil, Save, Share2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog'
@@ -97,8 +98,17 @@ export function NoteTypeFieldsPage() {
 
   return (
     <NoteTypeSetupShell noteTypeId={noteTypeId ?? ''} name={detailQuery.data?.name ?? t('detail.header.fallback_title')}
-      activeTab="fields" fieldCount={fields.length} templateCount={applicationsQuery.data ? applications.length : undefined}
+      activeTab="fields" fill fieldCount={fields.length} templateCount={applicationsQuery.data ? applications.length : undefined}
       onNavigate={goTo} actions={<>
+        {editor.canSave && (
+          <span role="status" className="text-xs font-medium text-amber-600 dark:text-amber-400">
+            {t('setup.unsaved_field', { defaultValue: 'Chưa lưu thay đổi' })}
+          </span>
+        )}
+        <Button size="sm" disabled={isBusy || !editor.canSave} onClick={() => { void editor.saveAll().catch(() => undefined) }}>
+          {isBusy ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
+          {t('setup.save_field')}
+        </Button>
         <Button ref={renameButtonRef} variant="outline" size="sm" disabled={isBusy} onClick={() => {
           setRenameValue(detailQuery.data?.name ?? ''); setRenameError(null); setRenameOpen(true)
         }}><Pencil className="size-4" />{t('setup.rename')}</Button>
@@ -107,10 +117,9 @@ export function NoteTypeFieldsPage() {
         }}><Share2 className="size-4" />{t(isPublished ? 'detail.header.view_marketplace' : 'detail.header.share_marketplace')}</Link></Button>
         <Button variant="ghost" size="sm" asChild><Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer"><BookOpen className="size-4" />{t('detail.header.guide_btn')}</Link></Button>
       </>}>
-      <div className="grid gap-5 md:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.5fr)] xl:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] items-start">
-        <div className={mobileDetail ? 'hidden md:block' : ''}>
+      <div className="grid gap-3 sm:gap-4 lg:gap-5 md:grid-cols-[minmax(240px,0.7fr)_minmax(0,1.3fr)] lg:grid-cols-[minmax(260px,0.75fr)_minmax(0,1.5fr)] xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)] 2xl:max-w-[110rem] 2xl:mx-auto w-full md:min-h-[34rem] lg:min-h-0 lg:flex-1 items-stretch">
+        <div className={cn('h-full min-h-0 flex flex-col min-h-[min(28rem,calc(100svh-11rem))] md:min-h-0', mobileDetail ? 'hidden md:flex' : 'flex')}>
           <FieldListCard fields={fields} selectedFieldId={selectedFieldId} isAddingField={isAddingField}
-            isOrderDirty={editor.isOrderDirty} onSaveOrder={() => { void editor.saveOrder() }} onDiscardOrder={editor.discardOrder}
             onSelectField={(id) => {
               if (id === selectedFieldId && !isAddingField) { setMobileDetail(true); return }
               requestAction(() => { editor.selectField(id); setMobileDetail(true) })
@@ -120,22 +129,22 @@ export function NoteTypeFieldsPage() {
             onMoveUp={(index) => requestAction(() => editor.handleMoveUp(index))}
             onMoveDown={(index) => requestAction(() => editor.handleMoveDown(index))} isReordering={isBusy} />
         </div>
-        <div className={mobileDetail ? 'min-w-0 space-y-3' : 'hidden md:block min-w-0 space-y-3'}>
-          <Button variant="ghost" size="sm" className="md:hidden gap-2" disabled={isBusy}
-            onClick={() => requestAction(() => setMobileDetail(false))}><ArrowLeft className="size-4" />{t('setup.back_to_fields')}</Button>
+        <div className={cn('min-w-0 h-full min-h-0 flex flex-col min-h-[min(30rem,calc(100svh-11rem))] md:min-h-0', mobileDetail ? 'flex' : 'hidden md:flex')}>
+          <Button variant="ghost" size="sm" className="md:hidden gap-1.5 -ml-1 text-xs shrink-0 mb-2 self-start h-8 px-2" disabled={isBusy}
+            onClick={() => requestAction(() => setMobileDetail(false))}><ArrowLeft className="size-3.5" />{t('setup.back_to_fields')}</Button>
           {isAddingField ? <AddFieldCard newName={editor.newName} onNewNameChange={editor.setNewName} newType={editor.newType} onNewTypeChange={editor.setNewType}
             required={editor.newRequired} onRequiredChange={editor.setNewRequired} identity={editor.newIdentity} onIdentityChange={editor.setNewIdentity}
             preview={preview} error={editor.formError} isPending={isBusy}
             onCancel={() => requestAction(() => { editor.cancelAddField(); setMobileDetail(false) })}
-            onSubmit={(event) => { event.preventDefault(); void editor.saveDraft().catch(() => undefined) }} /> :
+            onSubmit={(event) => { event.preventDefault(); void editor.saveAll().catch(() => undefined) }} /> :
             selectedField ? <EditFieldCard selectedField={selectedField} editName={editor.editName} onEditNameChange={editor.setEditName}
               editType={editor.editType} onEditTypeChange={editor.setEditType} editRequired={editor.editRequired} onEditRequiredChange={editor.setEditRequired}
               editIdentity={editor.editIdentity} onEditIdentityChange={editor.setEditIdentity}
-              preview={preview} usage={usage} error={editor.formError} isDirty={editor.isDirty}
+              preview={preview} usage={usage} error={editor.formError} isDirty={editor.canSave}
               isUpdating={isBusy} isDeleting={editor.deleteMutation.isPending}
               onDelete={() => requestAction(() => setDeleteOpen(true))}
-              onSubmit={(event) => { event.preventDefault(); void editor.saveDraft().catch(() => undefined) }} /> :
-              <Card className="border-dashed bg-muted/20 flex items-center justify-center p-10 text-center rounded-2xl"><p className="text-sm text-muted-foreground">{t('fields.empty_selection')}</p></Card>}
+              onSubmit={(event) => { event.preventDefault(); void editor.saveAll().catch(() => undefined) }} /> :
+              <Card className="border-dashed bg-muted/20 flex flex-col items-center justify-center p-8 sm:p-10 text-center rounded-2xl h-full"><p className="text-sm text-muted-foreground">{t('fields.empty_selection')}</p></Card>}
         </div>
       </div>
       {confirmDialog}

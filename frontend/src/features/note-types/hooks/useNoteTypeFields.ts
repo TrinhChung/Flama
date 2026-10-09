@@ -221,12 +221,18 @@ export function useNoteTypeFields(api: FieldsApi) {
   const discardOrder = () => {
     setOrderDraft(null)
   }
+  const saveAll = async () => {
+    if (!noteTypeId || isBusy) return
+    if (isDirty) await saveDraft()
+    if (isOrderDirty) await saveOrder()
+  }
 
   return {
     noteTypeId, query, detailQuery, fields, selectedField, selectedFieldId, isAddingField,
     editName, setEditName, editType, setEditType, editRequired, setEditRequired, editIdentity, setEditIdentity,
     newName, setNewName, newType, setNewType, newRequired, setNewRequired, newIdentity, setNewIdentity,
-    formError, isDirty, isOrderDirty, isBusy, saveDraft, discardDraft, saveOrder, discardOrder, selectField, startAddField, cancelAddField,
+    formError, isDirty, isOrderDirty, canSave: isDirty || isOrderDirty, isBusy,
+    saveDraft, discardDraft, saveOrder, discardOrder, saveAll, selectField, startAddField, cancelAddField,
     createMutation, updateMutation, deleteMutation, reorderMutation,
     handleDragStart: (id: string) => setDraggedId(id),
     handleDrop: (targetId: string) => {

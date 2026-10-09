@@ -63,13 +63,18 @@ export function NoteTypeSetupShell({
   const effectiveBackLabel = backLabel ?? t('setup.back')
 
   return (
-    <Page size="full" fill={fill} className={cn('px-3 sm:px-6 lg:px-8 py-3.5 sm:py-5', fill ? 'space-y-3 sm:space-y-4 [--page-fill-min:56rem]' : 'space-y-4 sm:space-y-5')}>
+    <Page size="full" fill={fill} className={cn(
+      'px-3 sm:px-6 lg:px-8',
+      fill
+        ? 'py-2.5 sm:py-3.5 lg:py-4 space-y-2.5 sm:space-y-3 [--page-fill-min:34rem] sm:[--page-fill-min:38rem] lg:[--page-fill-min:40rem]'
+        : 'py-3.5 sm:py-5 space-y-4 sm:space-y-5'
+    )}>
       <AmbientBackground intensity="subtle" />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground min-w-0">
-          <Button variant="ghost" size="sm" asChild className="-ml-2 h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" size="sm" asChild className="-ml-2 h-7 sm:h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground">
             <Link to={effectiveBackTo} onClick={(event) => followLink(event, effectiveBackTo)}>
-              <ArrowLeft className="size-4 shrink-0" />
+              <ArrowLeft className="size-3.5 sm:size-4 shrink-0" />
               <span className="truncate">{effectiveBackLabel}</span>
             </Link>
           </Button>
@@ -82,19 +87,19 @@ export function NoteTypeSetupShell({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className={cn('font-bold tracking-tight text-foreground truncate', hideDescription ? 'text-xl sm:text-2xl' : 'text-2xl md:text-3xl')}>{name}</h1>
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-0.5 sm:space-y-1">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <h1 className={cn('font-bold tracking-tight text-foreground truncate', hideDescription ? 'text-lg sm:text-xl md:text-2xl' : 'text-xl sm:text-2xl md:text-3xl')}>{name}</h1>
             {titleBadge}
           </div>
           {!hideDescription && (
-            <p className="max-w-3xl text-sm text-muted-foreground md:text-base">
+            <p className="max-w-3xl text-xs sm:text-sm text-muted-foreground md:text-base line-clamp-1 sm:line-clamp-none">
               {t('setup.description')}
             </p>
           )}
         </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2">{actions}</div>}
       </div>
 
       <nav aria-label={t('setup.navigation')} className="flex flex-wrap gap-1 border-b border-border">
@@ -103,10 +108,10 @@ export function NoteTypeSetupShell({
           return (
             <Link key={id} to={to} aria-current={activeTab === id ? 'page' : undefined}
               onClick={(event) => followLink(event, to)}
-              className={cn('flex items-center gap-2 border-b-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              className={cn('flex items-center gap-1.5 sm:gap-2 border-b-2 px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 activeTab === id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}>
-              <Icon className="size-4" />{label}
-              {count !== undefined && <Badge variant="secondary" className="min-w-5 justify-center px-1.5 text-xs">{count}</Badge>}
+              <Icon className="size-3.5 sm:size-4" />{label}
+              {count !== undefined && <Badge variant="secondary" className="min-w-5 justify-center px-1.5 text-[11px] sm:text-xs h-4 sm:h-5">{count}</Badge>}
             </Link>
           )
         })}

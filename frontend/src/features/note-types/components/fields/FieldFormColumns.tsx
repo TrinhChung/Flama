@@ -6,10 +6,10 @@ import type { ReactNode } from 'react'
  */
 export function FieldFormColumns({ settings, preview }: { settings: ReactNode; preview?: ReactNode }) {
   return (
-    <div className="grid gap-4 @4xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] @4xl:items-start @4xl:gap-6">
-      <div className="min-w-0 space-y-4">{settings}</div>
+    <div className="grid gap-4 @xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] @xl:items-start @xl:gap-5">
+      <div className="min-w-0 space-y-3.5 sm:space-y-4">{settings}</div>
       {preview && (
-        <div className="min-w-0 @4xl:rounded-xl @4xl:border @4xl:border-border/70 @4xl:p-4 @4xl:[&>section]:border-t-0 @4xl:[&>section]:pt-0">
+        <div className="min-w-0 @xl:rounded-xl @xl:border @xl:border-border/70 @xl:p-3.5 @xl:[&>section]:border-t-0 @xl:[&>section]:pt-0">
           {preview}
         </div>
       )}

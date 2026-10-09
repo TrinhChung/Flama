@@ -143,18 +143,19 @@ describe('Note Type field draft lifecycle', () => {
     expect(fieldName().value).toBe('Saved identity')
     // Moving field does not auto-save to server
     expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
-    // Explicitly click "Lưu thứ tự" to persist
-    await click('Lưu thứ tự')
+    // Explicitly click "Lưu trường" (unified save button) to persist
+    await click('Lưu trường')
     expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', [{ id: 'f2', position: 0 }, { id: 'f1', position: 1 }])
   })
 
-  it('allows discarding a reorder draft to revert back to original positions without server call', async () => {
+  it('activates save upon reorder and allows discarding without server call', async () => {
     const down = container.querySelector('button[aria-label="Di chuyển xuống"]') as HTMLButtonElement
     await act(async () => down.click())
     expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
-    expect(container.textContent).toContain('Thứ tự trường đã đổi')
-    await click('Hủy')
-    expect(container.textContent).not.toContain('Thứ tự trường đã đổi')
+    expect(button('Lưu trường', container).disabled).toBe(false)
+    await act(async () => (container.querySelector('nav a[href$="/templates"]') as HTMLAnchorElement).click())
+    await click('Bỏ thay đổi và tiếp tục')
+    expect(container.textContent).toContain('Templates destination')
     expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
   })
 
