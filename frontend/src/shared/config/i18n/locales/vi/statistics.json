@@ -1,0 +1,105 @@
+{
+  "header": {
+    "title": "Thống kê học tập",
+    "description": "Theo dõi hiệu suất ghi nhớ, chuỗi ngày học và dự báo lịch ôn tập flashcard."
+  },
+  "filters": {
+    "scope_label": "Phạm vi",
+    "scope_deck": "Theo deck",
+    "scope_collection": "Toàn bộ",
+    "deck_label": "Bộ thẻ",
+    "entire_collection": "Toàn bộ collection",
+    "select_deck": "Chọn deck",
+    "review_cta": "Ôn tập →",
+    "history_label": "Lịch sử",
+    "history_12m": "12 tháng",
+    "history_all": "Tất cả"
+  },
+  "kpi": {
+    "today": {
+      "title": "Hôm nay",
+      "minutes": "{{minutes}} phút",
+      "cards_unit": "thẻ",
+      "speed_label": "Tốc độ",
+      "speed_value": "{{speed}}s / thẻ"
+    },
+    "streak": {
+      "title": "Chuỗi Streak",
+      "percent_days": "{{percent}}% ngày",
+      "days_unit": "ngày",
+      "longest_label": "Kỷ lục dài nhất",
+      "longest_value": "{{days}} ngày"
+    },
+    "forecast": {
+      "title": "Dự báo lượt ôn",
+      "tomorrow": "Mai: {{count}}",
+      "reviews_unit": "lượt",
+      "avg_label": "Trung bình",
+      "avg_value": "{{avg}} / ngày"
+    },
+    "workload": {
+      "title": "Tải lượng học",
+      "level_light": "Nhẹ nhàng",
+      "level_optimal": "Tối ưu",
+      "level_heavy": "Cường độ cao",
+      "cards_per_day": "bài/ngày",
+      "target_label": "Mục tiêu",
+      "target_value": "Duy trì trí nhớ"
+    }
+  },
+  "study_time_chart": {
+    "title": "Thời gian học & Tổng giờ học",
+    "description": "Theo dõi số phút học trung bình mỗi ngày và tổng thời gian ôn tập flashcard.",
+    "avg_badge": "TB: {{minutes}}p/ngày",
+    "total_badge": "Tổng: {{hours}}h",
+    "ranges": {
+      "7d": "7 ngày",
+      "7d_short": "7N",
+      "30d": "30 ngày",
+      "30d_short": "30N",
+      "90d": "90 ngày",
+      "90d_short": "90N",
+      "12m": "1 năm",
+      "12m_short": "1N",
+      "all": "Tất cả",
+      "all_short": "Tất cả"
+    },
+    "empty_title": "Chưa có dữ liệu thời gian học",
+    "empty_description": "Hãy hoàn thành một phiên ôn tập để xem thống kê thời gian học.",
+    "tooltip_time": "Thời gian:",
+    "tooltip_minutes": "{{minutes}} phút",
+    "tooltip_total_hours": "Tổng giờ:",
+    "tooltip_hours": "{{hours}} giờ",
+    "tooltip_reviews": "Lượt lật thẻ:",
+    "tooltip_cards": "{{count}} thẻ",
+    "tooltip_retention": "Tỷ lệ nhớ:",
+    "series_time": "Thời gian học (phút)",
+    "series_hours": "Tổng giờ học (h)"
+  },
+  "future_due": {
+    "section_title": "Dự báo thẻ đến hạn trong tương lai",
+    "section_description": "Phân bố số lượng bài ôn tập và tổng tích lũy theo từng ngày.",
+    "backlog_label": "Thẻ quá hạn (Backlog)",
+    "ranges": {
+      "30d": "30 ngày",
+      "90d": "90 ngày",
+      "1y": "1 năm",
+      "all": "Tất cả"
+    },
+    "timezone_notice": "Múi giờ hệ thống: {{tz}}",
+    "empty_title": "Không có dữ liệu",
+    "empty_description": "Không có thẻ đến hạn trong khoảng đã chọn.",
+    "today": "Hôm nay",
+    "card_types": {
+      "new": "Thẻ mới",
+      "learn": "Đang học",
+      "review": "Ôn tập",
+      "cumulative": "Tích lũy"
+    },
+    "total_due": "Tổng đến hạn:"
+  },
+  "loading": {
+    "config": "Đang tải cấu hình thống kê…",
+    "stats": "Đang tính toán số liệu thống kê…"
+  }
+}

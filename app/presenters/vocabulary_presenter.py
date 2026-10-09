@@ -6,7 +6,7 @@ from datetime import datetime
 import html
 import re
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Mapping
 
 from app.repositories.study_repository import (
     LEARNING_QUEUE,
@@ -396,12 +396,19 @@ def build_note_study_card_payload(card_obj: Card | None) -> SimpleNamespace | No
     return SimpleNamespace(**payload)
 
 
-def render_note_study_flashcard(card_obj: Card | None) -> dict[str, Any]:
+def render_note_study_flashcard(
+    card_obj: Card | None,
+    *,
+    clone_scope: Any = None,
+    template_overrides: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    from app.services.effective_template_service import resolve_effective_template
     from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 
     ret: dict[str, Any] = {"front": "", "back": "", "front_payload": None, "back_payload": None}
     if not card_obj or not card_obj.note or not card_obj.template:
         return ret
+    template = resolve_effective_template(card_obj, clone_scope, template_overrides=template_overrides)
 
     note_obj = card_obj.note
     note_type = note_obj.note_type
@@ -410,7 +417,7 @@ def render_note_study_flashcard(card_obj: Card | None) -> dict[str, Any]:
 
     try:
         rendered = render_template_pair(
-            template=card_obj.template,
+            template=template,
             field_defs=note_type.field_defs,
             field_values=note_obj.field_values or {},
             media_assets=note_obj.media_assets,

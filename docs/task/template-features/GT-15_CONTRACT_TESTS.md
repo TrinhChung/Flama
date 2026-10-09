@@ -1,14 +1,16 @@
 # GT-15 — Bổ sung test hợp đồng cho Contract A, D, E (3 lượt: GT-15A, GT-15D, GT-15E)
 
-- Owner: Gemini. Reviewer: Claude. Milestone: M2/M3/M4.
-- Trạng thái: **Blocked**. GT-15A mở sau CT-03; GT-15D sau CT-05; GT-15E sau CT-06.
+- Owner: Gemini. Reviewer: Codex (tiếp nhận Claude). Milestone: M2/M3/M4.
+- Trạng thái: **GT-15A Completed / verified**. Coverage D/E v2 đã được Codex bổ sung; không giao backend test v1 cho Gemini.
 - Loại: **chỉ viết test** backend theo bảng trường hợp. Không sửa source.
 
-## 0. Việc Claude làm trước mỗi lượt
+## 0. Contract và fixture đã xác nhận (2026-10-07)
 
-- [ ] Ghi tên file test Claude đã viết trong CT-03/05/06 và helper fixture có sẵn (tên lớp, hàm `_make_*`, cách đăng nhập) vào §2 của lượt tương ứng.
-- [ ] Đánh dấu những dòng trong bảng mà Claude đã phủ (Gemini bỏ qua dòng đó).
-- [ ] Đổi trạng thái README của lượt thành `Ready`.
+- Backend `app/services/template_version_service.py`, blueprint `app/api/v1/flashcards/card_templates.py`, [ADR-T1](../../architecture/template-version-foundation-adr-2026-10-07.md).
+- A2 canonical: `/api/card-templates/<tid>/versions`; alias NoteType giữ tương thích. Schema `template-versions.v2`, không có definition_id. Detail có `input_schema`, list/restore current_version_id được mô tả trong ADR.
+- Harness: copy setup/teardown và cách login từ `TemplateVersionsTests` trong `tests/test_template_versions.py`; **không subclass hoặc import TestCase đó**, tránh chạy lại test của Codex. SQLite in-memory, create_all/drop_all, REST tạo NoteType Kanji/Meaning, owner/other user và deck.
+- Đã phủ A1–A6, A8–A11 bằng test Codex, không viết bản sao. A10 đã chốt: content restore giữ input_schema trả **200** theo #138; restore đổi input_schema của NoteType đã released trả **409 SHARED_SCHEMA_VERSIONING_REQUIRED**. Không áp quy tắc v1 chặn mọi restore.
+- A7 và A12–A17 đã có trong `tests/test_template_versions_contract.py`. Giữ bảng dưới làm bằng chứng hợp đồng, không giao lại task Completed.
 
 ## 1. Quy tắc riêng
 
@@ -18,7 +20,7 @@
 
 ## 2. Lượt GT-15A — Contract A (phiên bản template của chủ sở hữu)
 
-File: `tests/test_template_versions_contract.py`. Harness: theo chỉ định của Claude ở §0 (mặc định sao chép `FlashcardApiIntegrationTests`).
+File duy nhất được tạo: `tests/test_template_versions_contract.py`. Harness đã chốt ở §0. Các dòng A1–A11 là reference, chỉ A7 cần bổ sung; chạy case A12–A17 để mở rộng coverage.
 
 | # | Tình huống | Kỳ vọng |
 |---|---|---|
@@ -34,59 +36,43 @@ File: `tests/test_template_versions_contract.py`. Harness: theo chỉ định c�
 | A10 | NoteType có release chia sẻ (dựng theo fixture Claude chỉ định) | restore trả 409 `SHARED_SCHEMA_VERSIONING_REQUIRED` nếu restore bị coi là thay đổi cấu trúc; nếu CT-03 coi restore là hotfix nội dung thì 200 — Claude ghi kỳ vọng đúng ở §0 |
 | A11 | Card ID của template trước/sau restore | không đổi; số Card không đổi |
 
-## 3. Lượt GT-15D — Contract D (bản riêng của người cài)
-
-File: `tests/test_install_template_forks_contract.py`. Harness overlay: theo Claude chỉ định (mặc định mẫu `_install_overlay` trong `tests/test_study_session_install_usage.py`).
+### Case bổ sung giao Gemini
 
 | # | Tình huống | Kỳ vọng |
 |---|---|---|
-| D1 | `GET .../templates` khi chưa fork | mọi item `state == 'following'`, `fork_id is None`, `upstream_changed_since_fork is False` |
-| D2 | `PUT .../<sid>/fork` lần đầu | 200, `state == 'forked'`; **mọi** hàng `templates`, `notes`, `cards` của tác giả giữ nguyên (so hash trước/sau) |
-| D3 | `PUT` lần hai | thêm 1 version, `fork_id` không đổi |
-| D4 | người cài khác (user C) cài cùng deck | `GET` của C vẫn `following`, nội dung = bản gốc |
-| D5 | tác giả sửa nội dung template (hotfix #138) sau khi B fork | `GET` của B: `upstream_changed_since_fork is True`, nội dung hiệu lực vẫn là fork |
-| D6 | `DELETE .../<sid>/fork` | `state == 'following'`; nội dung = bản gốc hiện tại; version của fork vẫn đọc được qua lịch sử nếu Claude chốt như vậy ở §0 |
-| D7 | user không sở hữu install gọi bất kỳ route | 404 `INSTALL_NOT_FOUND` |
-| D8 | `sid` không thuộc NoteType nguồn của install | 404 `TEMPLATE_NOT_IN_INSTALL` |
-| D9 | nội dung Mustache lỗi | 400 `TEMPLATE_COMPILE_ERROR`, không tạo version |
-| D10 | mở phiên học trước khi fork, fork, rồi lấy lại snapshot phiên | artifact template của phiên cũ giữ nguyên (`version` cũ); phiên mới: mọi artifact template vẫn có `id` = `template_id` nguồn, `version` khác phiên cũ, `front_source` chứa nội dung fork |
-| D11 | Card ID/`study_applications` trước/sau fork | không đổi |
+| A7 | Tạo hai template cùng owner, lấy version của B rồi GET/restore qua URL A | 404 `TEMPLATE_VERSION_NOT_FOUND`; nguồn/head/count của cả hai giữ nguyên |
+| A12 | Logout rồi gọi 3 canonical endpoint | 401 `AUTHENTICATION_REQUIRED`, không thêm version |
+| A13 | PATCH CSS có note 1000 ký tự; note 1001 ký tự hoặc object | hợp lệ 200 và note đúng; sai 400 `VALIDATION_ERROR`, field `change_note`, không đổi nguồn/head/count |
+| A14 | PATCH đổi CSS rồi POST reset template riêng | reset 200, version cuối origin `reset`, created_by đúng owner, nguồn đúng LEGACY_* trong renderer; Card ID/count không đổi |
+| A15 | Body restore JSON hỏng hoặc array/null; body không có dữ liệu | body hỏng/array/null 400 `VALIDATION_ERROR`, không đổi DB; body trống hợp lệ và append restore |
+| A16 | Tạo raw SQL template chưa có history, invoke CLI với/không --apply | dry run giữ pointer null và count 0; --apply tạo 1 backfill, nguồn/updated_at giữ nguyên; --apply lần hai không thêm |
+| A17 | GET canonical và alias NoteType | schema v2, cùng head/ID/version, Cache-Control `private, no-store`; alias sai NoteType trả 404 `TEMPLATE_NOT_FOUND` |
 
-## 4. Lượt GT-15E — Contract E (thư viện)
+A14 cần tạo Note/Card bằng REST giống test restore của Codex; không chỉ so count bằng 0. A16 dùng app.test_cli_runner và raw Core insert như fixture unversioned của Codex; không chạy CLI vào DB thật.
 
-File: `tests/test_template_library_contract.py`.
+## 3. D/E v2 coverage completed by Codex
 
-| # | Tình huống | Kỳ vọng |
-|---|---|---|
-| E1 | `POST /api/card-templates` | 201; `input_keys` = token trong front/back theo thứ tự xuất hiện |
-| E2 | `GET ?group=standalone` | chỉ định nghĩa `applied_count == 0` |
-| E3 | apply đủ binding | 201; template mới thuộc NoteType đích; `front_html` đã đổi token sang tên field; Card được tạo cho mọi note của NoteType |
-| E4 | apply thiếu input bắt buộc | 400 `INPUT_BINDING_INCOMPLETE`, `details.missing_keys` đúng; không tạo template/Card |
-| E5 | binding trỏ field đã xóa | 400 `INPUT_BINDING_STALE` |
-| E6 | binding trỏ field của NoteType khác | 403 `INPUT_BINDING_OUT_OF_SCOPE` |
-| E7 | sai kiểu (`image` → field `text`) | 400 `INPUT_BINDING_TYPE_MISMATCH` |
-| E8 | NoteType đích của user khác | 404 |
-| E9 | sửa nội dung định nghĩa sau khi apply | template đã apply **không** đổi; `applications[*].is_outdated == true` |
-| E10 | `sync-definition` | template cập nhật nội dung version mới; Card ID không đổi |
-| E11 | đổi tên field được bind (Q3) | template có binding đổi token theo tên mới; template không binding giữ nguyên |
-| E12 | `archive` | không còn trong `GET` mặc định; template đã apply vẫn hoạt động |
+The old per-install fork, token rewrite, sync-definition and required-input blocking cases are superseded by U1/U2/U6 and the implemented contracts. Do not create the v1 test files or adjust source to satisfy them.
 
-## 5. Kiểm tra (mỗi lượt)
+| Area | Existing focused suites and assertions |
+|---|---|
+| Owner/auth/history/restore/rollback | `test_template_versions.py`, `test_template_versions_contract.py`, `test_template_versions_migration.py` |
+| Library/group/usage/preview/ownership | `test_template_library.py`, `test_template_library_fe_contract.py`: standalone and ACTIVE shared use, distinct NoteTypes, note counts scoped to NoteType, draft preview without writes, foreign data hidden |
+| Attachment/retirement/binding | `test_template_binding_service.py`, `test_template_attachment_migration.py`: stable FieldDef IDs, strict type/foreign field validation, empty inputs advisory, retained cards/progress |
+| Receipt/update/publish restrictions | `test_template_release_service.py`: canonical user/source copy, paid entitlement, immutable snapshot, stale/idempotency fences, update conflict/reset, auto defaults, received-source republish prohibition, archived edits |
+| Deck release presentation parity | `test_template_deck_release.py`: old/new pins, template/binding-only working state, no raw code in deck atoms, independent-session atomic publish/rollback, legacy fallback and rebase preservation |
+| Preset/effective overlay/session freeze | `test_study_template_presets.py`, `test_study_template_application_sessions.py`, `test_effective_template_service.py`: clone schema, transient override validation, opt-in preparation parity and frozen artifacts |
+| Client runtime compatibility | content-patch/restore/quick-edit focused tests under `frontend/src/features/study/` |
+| Schema distribution | `test_template_distribution_migration.py`, disposable MySQL rehearsal tools |
+
+Coverage here describes the actual v2 invariants, not a claim that obsolete v1 cases ran. Remaining Gemini work is FE behavior tests in GT-10B/11/12/13/18. Additional backend bugs found by those tests return to Codex for repair.
+
+## 4. Verification
 
 ```powershell
-& .\.venv\Scripts\python.exe -m unittest tests.<file_lượt> -v
-& .\.venv\Scripts\python.exe scripts/run_tests.py --module flashcards,marketplace --backend-only
+& .\.venv\Scripts\python.exe scripts/run_tests.py --module templates --backend-only
+& .\.venv\Scripts\python.exe scripts/run_tests.py --module templates --frontend-only
 git diff --check
-git status --short
 ```
 
-## 6. Prompt cho Gemini (thay `<LƯỢT>` bằng A, D hoặc E)
-
-```text
-<dán nguyên khối QUY TẮC BẮT BUỘC trong docs/task/template-features/README.md §2>
-
-Task GT-15<LƯỢT>. Đọc docs/task/template-features/GT-15_CONTRACT_TESTS.md §1 và đúng mục của lượt <LƯỢT>
-(§2 cho A, §3 cho D, §4 cho E), cùng phần §0 Claude đã điền. Chỉ tạo file test của lượt đó.
-Không sửa source hay test có sẵn. Test fail do hành vi khác hợp đồng: giữ nguyên test và báo cáo ở mục
-"Sai lệch". Chạy lệnh §5, báo cáo theo README §3. Không commit.
-```
+There is no pending GT-15D/E Gemini backend prompt. See [backend handoff](reviews/CT-04_CT-08_BACKEND_HANDOFF_2026-10-08.md) for executed commands and limits.

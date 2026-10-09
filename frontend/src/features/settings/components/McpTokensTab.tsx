@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import {
   ArrowRight,
   BookOpen,
@@ -47,6 +49,7 @@ function getCategoryIcon(key: string) {
 }
 
 export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
+  const { t } = useTranslation('mcp')
   const { data: bootstrap } = useBootstrap()
   const canManageTokens = Boolean(
     bootstrap?.user?.is_admin || bootstrap?.user?.can_manage_mcp_tokens
@@ -61,9 +64,9 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
       await navigator.clipboard.writeText(value)
       setCopiedEndpoint(label)
       window.setTimeout(() => setCopiedEndpoint(null), 2000)
-      toast.success(`Đã sao chép ${label} vào bộ nhớ tạm.`)
+      toast.success(t('tokens_tab.endpoint_card.copied_toast', { label }))
     } catch {
-      toast.error('Không thể sao chép vào bộ nhớ tạm.')
+      toast.error(t('tokens_tab.endpoint_card.copy_failed_toast'))
     }
   }
 
@@ -77,10 +80,10 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
             </div>
             <div className="space-y-0.5">
               <div className="text-xs sm:text-sm font-bold text-foreground">
-                Bạn đang tìm cách kết nối Flashcard Flama với ChatGPT?
+                {t('tokens_tab.chatgpt_banner.question')}
               </div>
               <p className="text-[11px] sm:text-xs text-muted-foreground">
-                Hãy mở tab <strong>1. Kết nối ChatGPT</strong> để được hướng dẫn 5 bước kết nối tự động bằng OAuth, không cần tạo mã token thủ công.
+                {t('tokens_tab.chatgpt_banner.instruction')}
               </p>
             </div>
           </div>
@@ -90,7 +93,7 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
             onClick={onSwitchToChatGPT}
             className="h-8 text-xs gap-1.5 shrink-0 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 w-full sm:w-auto justify-center"
           >
-            <span>Mở Hướng Dẫn ChatGPT</span>
+            <span>{t('tokens_tab.chatgpt_banner.button')}</span>
             <ArrowRight className="size-3.5" />
           </Button>
         </div>
@@ -106,14 +109,14 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
               <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <CardTitle className="text-base sm:text-lg font-bold">
-                    Thông số Máy chủ MCP (Flama Remote Endpoint)
+                    {t('tokens_tab.endpoint_card.title')}
                   </CardTitle>
                   <Badge variant="outline" className="text-[10px] text-primary border-primary/30 font-mono">
-                    Stream HTTP POST / SSE
+                    {t('tokens_tab.endpoint_card.badge')}
                   </Badge>
                 </div>
                 <CardDescription className="text-xs sm:text-sm">
-                  Đường dẫn kết nối MCP dùng cho Cursor IDE, Antigravity, Cline và các script tự động hóa qua Personal Access Token. Đối với ChatGPT, hãy mở tab <strong className="text-foreground">1. Kết nối ChatGPT</strong> để sử dụng quy trình đăng nhập OAuth tự động.
+                  {t('tokens_tab.endpoint_card.desc')}
                 </CardDescription>
               </div>
             </div>
@@ -123,14 +126,14 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
                 className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1"
               >
                 <BookOpen className="size-3.5" />
-                <span>Hướng dẫn cài đặt &rarr;</span>
+                <span>{t('tokens_tab.endpoint_card.guide_link')}</span>
               </Link>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border bg-muted/40 p-2.5 text-xs font-mono">
-            <span className="text-muted-foreground font-sans text-[11px] font-semibold shrink-0">Endpoint URL:</span>
+            <span className="text-muted-foreground font-sans text-[11px] font-semibold shrink-0">{t('tokens_tab.endpoint_card.url_label')}</span>
             <span className="flex-1 break-all select-all font-semibold text-foreground text-xs sm:text-sm">{mcpServerUrl}</span>
             <Button
               size="sm"
@@ -139,14 +142,15 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
               onClick={() => copyEndpoint('Server URL', mcpServerUrl)}
             >
               {copiedEndpoint === 'Server URL' ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-              <span>{copiedEndpoint === 'Server URL' ? 'Đã chép' : 'Sao chép URL'}</span>
+              <span>{copiedEndpoint === 'Server URL' ? t('tokens_tab.endpoint_card.copied_button') : t('tokens_tab.endpoint_card.copy_button')}</span>
             </Button>
           </div>
 
           <div className="flex items-start gap-2.5 p-2.5 rounded-xl border bg-amber-500/5 border-amber-500/20 text-xs text-amber-900 dark:text-amber-200">
             <Info className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
             <div className="leading-relaxed text-[11px] sm:text-xs">
-              <span className="font-bold">Claude Desktop:</span> Tính năng kết nối trợ lý Claude Desktop hiện đang trong giai đoạn thử nghiệm nội bộ (chưa ra mắt chính thức). Màn hình này hiện chủ yếu phục vụ Cursor IDE, Antigravity, Cline và quản lý Personal Access Token.
+              <span className="font-bold">{t('tokens_tab.endpoint_card.claude_notice.label')} </span>
+              {t('tokens_tab.endpoint_card.claude_notice.text')}
             </div>
           </div>
         </CardContent>
@@ -161,10 +165,10 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
               </div>
               <div className="space-y-1">
                 <CardTitle className="text-base sm:text-lg font-bold">
-                  Thông số Kết nối AI do Quản trị viên Quản lý
+                  {t('tokens_tab.managed_card.title')}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm leading-relaxed">
-                  Tài khoản của bạn đang sử dụng cơ chế bảo mật kết nối AI tiêu chuẩn. Bạn có thể sao chép URL kết nối từ danh sách Token bên dưới để tích hợp với Cursor hoặc công cụ lập trình. Đối với ChatGPT, hãy chuyển sang tab <strong>1. Kết nối ChatGPT</strong> để làm theo hướng dẫn kết nối 5 bước dễ dàng.
+                  {t('tokens_tab.managed_card.desc')}
                 </CardDescription>
               </div>
             </div>
@@ -180,18 +184,18 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                     <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    Bảng Phân Quyền Tính Năng AI ({ALL_MCP_SCOPES.length} Scopes)
+                    {t('tokens_tab.all_scopes_card.title', { count: ALL_MCP_SCOPES.length })}
                   </CardTitle>
                   <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-semibold gap-1">
-                    <Check className="size-3" /> Cấp cho tất cả token
+                    <Check className="size-3" /> {t('tokens_tab.all_scopes_card.granted_badge')}
                   </Badge>
                 </div>
                 <CardDescription className="text-xs sm:text-sm">
-                  Tất cả các quyền hạn tính năng AI dưới đây được hệ thống kích hoạt đầy đủ cho toàn bộ token kết nối của bạn. Token của bạn có thể sử dụng tất cả công cụ tương ứng để tra cứu, tạo thẻ và ôn tập mà không cần cấu hình thủ công.
+                  {t('tokens_tab.all_scopes_card.desc')}
                 </CardDescription>
               </div>
               <Link to="/guide/integrations/mcp-tools" className="text-xs text-primary hover:underline font-normal shrink-0">
-                Xem 20 công cụ tương ứng &rarr;
+                {t('tokens_tab.all_scopes_card.tools_link')}
               </Link>
             </div>
           </CardHeader>
@@ -212,10 +216,10 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
                           <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
                             <CatIcon className="size-3.5" />
                           </div>
-                          <span className="font-semibold text-xs text-foreground truncate">{cat.name}</span>
+                          <span className="font-semibold text-xs text-foreground truncate">{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
                         </div>
                         <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/5 font-semibold">
-                          {catScopes.length}/{catScopes.length} quyền
+                          {t('tokens_tab.all_scopes_card.permissions_count', { count: catScopes.length, total: catScopes.length })}
                         </Badge>
                       </div>
 
@@ -230,10 +234,10 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="font-medium text-[11px] leading-tight text-foreground">
-                                {scope.label}
+                                {t(`scopes.items.${scope.key.replace(/[-:]/g, '_')}.label`, scope.label)}
                               </div>
                               <div className="text-[10px] text-muted-foreground leading-tight line-clamp-1 mt-0.5">
-                                {scope.desc}
+                                {t(`scopes.items.${scope.key.replace(/[-:]/g, '_')}.desc`, scope.desc)}
                               </div>
                             </div>
                           </div>

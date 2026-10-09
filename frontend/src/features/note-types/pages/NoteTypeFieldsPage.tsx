@@ -1,205 +1,57 @@
-import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import {
-  faArrowLeft,
-  faCode,
-  faPlus,
-} from '@fortawesome/free-solid-svg-icons'
-import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  GripVertical,
-  Info,
-  LoaderCircle,
-  Plus,
-  Trash2,
-} from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router-dom'
+import { faArrowLeft, faCode } from '@fortawesome/free-solid-svg-icons'
 import { toast } from 'sonner'
-import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Card } from '@/components/ui/card'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
-type FieldDefItem = {
-  id: string
-  name: string
-  field_type: string
-  required: boolean
-  position: number
-  identity_role: 'primary' | null
-}
-
-type NoteTypeDetail = {
-  id: string
-  name: string
-  field_defs?: FieldDefItem[]
-}
-
-const FIELD_TYPES = ['text', 'richtext', 'markdown', 'image', 'audio', 'diagram']
+import { useNoteTypeFields } from '../hooks/useNoteTypeFields'
+import { FieldListCard } from '../components/fields/FieldListCard'
+import { AddFieldCard } from '../components/fields/AddFieldCard'
+import { EditFieldCard } from '../components/fields/EditFieldCard'
 
 export function NoteTypeFieldsPage() {
-  const { id: noteTypeId } = useParams<{ id: string }>()
-  const queryClient = useQueryClient()
+  const { t } = useTranslation('note_types')
+  const {
+    noteTypeId,
+    query,
+    detailQuery,
+    fields,
+    selectedField,
+    selectedFieldId,
+    setSelectedFieldId,
+    isAddingField,
+    setIsAddingField,
+    editName,
+    setEditName,
+    editType,
+    setEditType,
+    editRequired,
+    setEditRequired,
+    editIdentity,
+    setEditIdentity,
+    newName,
+    setNewName,
+    newType,
+    setNewType,
+    editFormRef,
+    scrollToFormOnMobile,
+    createMutation,
+    updateMutation,
+    deleteMutation,
+    reorderMutation,
+    handleDragStart,
+    handleDrop,
+    handleMoveUp,
+    handleMoveDown,
+  } = useNoteTypeFields()
 
-  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
-  const [isAddingField, setIsAddingField] = useState(false)
-
-  // Edit Field State
-  const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState('text')
-  const [editRequired, setEditRequired] = useState(false)
-  const [editIdentity, setEditIdentity] = useState(false)
-
-  // New Field State
-  const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState('text')
-
-  // Drag & Drop State
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-
-  const editFormRef = useRef<HTMLDivElement>(null)
-  const scrollToFormOnMobile = () => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768 && editFormRef.current) {
-      setTimeout(() => {
-        editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      }, 50)
-    }
-  }
-
-  const query = useQuery({
-    queryKey: ['note-type-fields', noteTypeId],
-    queryFn: () => appApi.get<{ items: FieldDefItem[] }>(`/note-types/${noteTypeId}/fields`),
-    enabled: Boolean(noteTypeId),
-  })
-
-  const detailQuery = useQuery({
-    queryKey: ['note-type-detail', noteTypeId],
-    queryFn: () => appApi.get<NoteTypeDetail>(`/note-types/${noteTypeId}`),
-    enabled: Boolean(noteTypeId),
-  })
-
-  const fields = (query.data?.items || []).slice().sort((a, b) => a.position - b.position)
-  const selectedField = fields.find((f) => f.id === selectedFieldId) || null
-
-  // Auto-select first field when data loads if none selected
-  useEffect(() => {
-    if (fields.length && !selectedFieldId && !isAddingField) {
-      setSelectedFieldId(fields[0].id)
-    }
-  }, [fields, selectedFieldId, isAddingField])
-
-  // Sync edit form when selected field changes
-  useEffect(() => {
-    if (selectedField) {
-      setEditName(selectedField.name)
-      setEditType(selectedField.field_type)
-      setEditRequired(selectedField.required)
-      setEditIdentity(selectedField.identity_role === 'primary')
-    }
-  }, [selectedField])
-
-  // Create Field Mutation
-  const createMutation = useMutation({
-    mutationFn: (payload: { name: string; field_type: string; required: boolean; identity_role: 'primary' | null }) =>
-      appApi.mutate<FieldDefItem>(`/note-types/${noteTypeId}/fields`, 'POST', payload),
-    onSuccess: (newField) => {
-      toast.success('Đã thêm trường mới.')
-      setIsAddingField(false)
-      setSelectedFieldId(newField.id)
-      void queryClient.invalidateQueries({ queryKey: ['note-type-fields', noteTypeId] })
-    },
-    onError: (error: Error) => {
-      toast.error('Không thể tạo trường mới', { description: error.message })
-    },
-  })
-
-  // Patch Field Mutation
-  const updateMutation = useMutation({
-    mutationFn: (payload: { name: string; field_type: string; required: boolean; identity_role: 'primary' | null }) =>
-      appApi.mutate(`/note-types/${noteTypeId}/fields/${selectedFieldId}`, 'PATCH', payload),
-    onSuccess: () => {
-      toast.success('Đã cập nhật trường.')
-      void queryClient.invalidateQueries({ queryKey: ['note-type-fields', noteTypeId] })
-    },
-    onError: (error: Error) => {
-      toast.error('Không thể cập nhật trường', { description: error.message })
-    },
-  })
-
-  // Delete Field Mutation
-  const deleteMutation = useMutation({
-    mutationFn: (fieldId: string) =>
-      appApi.mutate(`/note-types/${noteTypeId}/fields/${fieldId}`, 'DELETE'),
-    onSuccess: () => {
-      toast.success('Đã xóa trường.')
-      setSelectedFieldId(null)
-      void queryClient.invalidateQueries({ queryKey: ['note-type-fields', noteTypeId] })
-    },
-    onError: (error: Error) => {
-      toast.error('Không thể xóa trường', { description: error.message })
-    },
-  })
-
-  // Reorder Mutation
-  const reorderMutation = useMutation({
-    mutationFn: (payload: Array<{ id: string; position: number }>) =>
-      appApi.mutate(`/note-types/${noteTypeId}/fields/reorder`, 'POST', payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['note-type-fields', noteTypeId] })
-    },
-    onError: (error: Error) => {
-      toast.error('Không thể sắp xếp lại vị trí', { description: error.message })
-    },
-  })
-
-  const handleDragStart = (id: string) => {
-    setDraggedId(id)
-  }
-
-  const handleDrop = (targetId: string) => {
-    if (!draggedId || draggedId === targetId) return
-    const draggedIndex = fields.findIndex((f) => f.id === draggedId)
-    const targetIndex = fields.findIndex((f) => f.id === targetId)
-    if (draggedIndex < 0 || targetIndex < 0) return
-
-    const reordered = [...fields]
-    const [item] = reordered.splice(draggedIndex, 1)
-    reordered.splice(targetIndex, 0, item)
-
-    const payload = reordered.map((f, idx) => ({ id: f.id, position: idx }))
-    setDraggedId(null)
-    reorderMutation.mutate(payload)
-  }
-
-  const handleMoveUp = (index: number) => {
-    if (index <= 0) return
-    const reordered = [...fields]
-    const [item] = reordered.splice(index, 1)
-    reordered.splice(index - 1, 0, item)
-    const payload = reordered.map((f, idx) => ({ id: f.id, position: idx }))
-    reorderMutation.mutate(payload)
-  }
-
-  const handleMoveDown = (index: number) => {
-    if (index >= fields.length - 1) return
-    const reordered = [...fields]
-    const [item] = reordered.splice(index, 1)
-    reordered.splice(index + 1, 0, item)
-    const payload = reordered.map((f, idx) => ({ id: f.id, position: idx }))
-    reorderMutation.mutate(payload)
-  }
-
-  if (query.isPending) return <PageLoading label="Đang tải danh sách trường…" />
+  if (query.isPending) return <PageLoading label={t('fields.loading')} />
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
   const noteTypeName = detailQuery.data?.name || 'NoteType'
@@ -210,17 +62,17 @@ export function NoteTypeFieldsPage() {
 
       <PageHeader
         title={noteTypeName}
-        description="Quản lý và sắp xếp thứ tự các trường thông tin trong NoteType."
+        description={t('fields.header.description')}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
               <Link to="/flashcards/note-types">
-                <FontAwesomeIcon icon={faArrowLeft} className="text-xs" /> Quay lại
+                <FontAwesomeIcon icon={faArrowLeft} className="text-xs" /> {t('fields.header.back_btn')}
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
               <Link to={`/flashcards/note-types/${noteTypeId}`}>
-                <FontAwesomeIcon icon={faCode} className="text-xs" /> Sửa template
+                <FontAwesomeIcon icon={faCode} className="text-xs" /> {t('fields.header.edit_templates_btn')}
               </Link>
             </Button>
           </div>
@@ -230,324 +82,97 @@ export function NoteTypeFieldsPage() {
       <div className="grid gap-6 md:grid-cols-12">
         {/* Left Column: Drag-and-drop / Touch-reorder Field List */}
         <div className="md:col-span-5">
-          <Card className="border-border/80 shadow-xs rounded-2xl h-full flex flex-col overflow-hidden bg-card">
-            <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between pb-2 sm:pb-2">
-              <CardTitle className="text-sm font-bold text-foreground">Danh sách trường</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-2.5 text-xs font-semibold rounded-xl gap-1.5"
-                onClick={() => {
-                  setIsAddingField(true)
-                  setSelectedFieldId(null)
-                  setNewName('')
-                  setNewType('text')
-                  scrollToFormOnMobile()
-                }}
-              >
-                <FontAwesomeIcon icon={faPlus} className="text-xs" /> Thêm
-              </Button>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 pt-0 flex-1 space-y-3">
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Info className="size-3.5 text-primary shrink-0" /> Kéo thả hoặc bấm ▲/▼ để đổi vị trí
-              </p>
-
-              <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-                {fields.map((field, index) => (
-                  <div
-                    key={field.id}
-                    draggable
-                    onDragStart={() => handleDragStart(field.id)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => handleDrop(field.id)}
-                    onClick={() => {
-                      setIsAddingField(false)
-                      setSelectedFieldId(field.id)
-                      scrollToFormOnMobile()
-                    }}
-                    className={`flex items-center gap-2 sm:gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
-                      selectedFieldId === field.id && !isAddingField
-                        ? 'border-primary bg-primary/10 shadow-xs'
-                        : 'border-border/60 bg-card hover:bg-muted/40 hover:border-primary/40'
-                    }`}
-                  >
-                    <GripVertical className="size-4 text-muted-foreground/60 shrink-0 hidden sm:block cursor-grab" />
-                    
-                    {/* Touch Reorder Buttons */}
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <button
-                        type="button"
-                        disabled={index === 0 || reorderMutation.isPending}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleMoveUp(index)
-                        }}
-                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
-                        title="Di chuyển lên"
-                        aria-label="Di chuyển lên"
-                      >
-                        <ChevronUp className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={index === fields.length - 1 || reorderMutation.isPending}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleMoveDown(index)
-                        }}
-                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
-                        title="Di chuyển xuống"
-                        aria-label="Di chuyển xuống"
-                      >
-                        <ChevronDown className="size-3.5" />
-                      </button>
-                    </div>
-
-                    <span className="flex-1 font-semibold text-sm truncate text-foreground min-w-0">
-                      {field.name}
-                    </span>
-
-                    <Badge variant="outline" className="text-[10px] sm:text-[11px] font-semibold lowercase px-2 py-0.5 rounded-md shrink-0">
-                      {field.field_type}
-                    </Badge>
-                    {field.identity_role === 'primary' ? (
-                      <Badge className="text-[10px] shrink-0">id</Badge>
-                    ) : null}
-                  </div>
-                ))}
-
-                {!fields.length ? (
-                  <div className="p-6 text-center text-xs text-muted-foreground border border-dashed rounded-xl">
-                    Chưa có trường nào. Bấm Nút Thêm để tạo trường mới.
-                  </div>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
+          <FieldListCard
+            fields={fields}
+            selectedFieldId={selectedFieldId}
+            isAddingField={isAddingField}
+            onSelectField={(id) => {
+              setIsAddingField(false)
+              setSelectedFieldId(id)
+              scrollToFormOnMobile()
+            }}
+            onStartAddField={() => {
+              setIsAddingField(true)
+              setSelectedFieldId(null)
+              setNewName('')
+              setNewType('text')
+              scrollToFormOnMobile()
+            }}
+            onDragStart={handleDragStart}
+            onDrop={handleDrop}
+            onMoveUp={handleMoveUp}
+            onMoveDown={handleMoveDown}
+            isReordering={reorderMutation.isPending}
+          />
         </div>
 
         {/* Right Column: Field Property Form / Add Field Form */}
         <div ref={editFormRef} className="md:col-span-7">
           {isAddingField ? (
-            /* Add New Field Card */
-            <Card className="border-primary/30 bg-card shadow-md rounded-2xl">
-              <CardHeader className="p-4 sm:p-5 pb-2">
-                <CardTitle className="text-sm font-bold text-primary">Thêm trường mới</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-5 pt-0">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    if (!newName.trim()) {
-                      toast.error('Tên trường là bắt buộc')
-                      return
-                    }
-                    createMutation.mutate({
-                      name: newName.trim(),
-                      field_type: newType,
-                      required: false,
-                      identity_role: null,
-                    })
-                  }}
-                  className="space-y-4"
-                >
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-field-name">Tên trường</Label>
-                    <Input
-                      id="new-field-name"
-                      placeholder="Ví dụ: PitchAccent, Audio, Sentence…"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
-                      autoFocus
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-field-type">Kiểu dữ liệu</Label>
-                    <NativeSelect
-                      id="new-field-type"
-                      value={newType}
-                      onChange={(e) => setNewType(e.target.value)}
-                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
-                    >
-                      {FIELD_TYPES.map((t) => (
-                        <NativeSelectOption key={t} value={t}>
-                          {t}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </div>
-
-                  <div className="flex justify-end gap-2.5 pt-3 border-t">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setIsAddingField(false)
-                        if (fields.length) setSelectedFieldId(fields[0].id)
-                      }}
-                      className="h-9 sm:h-10 px-4 text-xs sm:text-sm font-bold rounded-xl"
-                    >
-                      Hủy
-                    </Button>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={createMutation.isPending}
-                      className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm rounded-xl shadow-xs"
-                    >
-                      {createMutation.isPending ? (
-                        <LoaderCircle className="size-4 animate-spin mr-1" />
-                      ) : (
-                        <>
-                          <Plus className="size-4 mr-1" />
-                          Tạo trường
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+            <AddFieldCard
+              newName={newName}
+              onNewNameChange={setNewName}
+              newType={newType}
+              onNewTypeChange={setNewType}
+              isPending={createMutation.isPending}
+              onCancel={() => {
+                setIsAddingField(false)
+                if (fields.length) setSelectedFieldId(fields[0].id)
+              }}
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!newName.trim()) {
+                  toast.error(t('fields.messages.name_required'))
+                  return
+                }
+                createMutation.mutate({
+                  name: newName.trim(),
+                  field_type: newType,
+                  required: false,
+                  identity_role: null,
+                })
+              }}
+            />
           ) : selectedField ? (
-            /* Edit Field Property Card */
-            <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
-              <CardHeader className="p-4 sm:p-5 pb-2">
-                <CardTitle className="text-sm font-bold">Thuộc tính trường</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-5 pt-0">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    if (!editName.trim()) {
-                      toast.error('Tên trường không được trống')
-                      return
-                    }
-                    updateMutation.mutate({
-                      name: editName.trim(),
-                      field_type: editIdentity ? 'text' : editType,
-                      required: editIdentity ? true : editRequired,
-                      identity_role: editIdentity ? 'primary' : null,
-                    })
-                  }}
-                  className="space-y-4"
-                >
-                  <div className="space-y-1.5">
-                    <Label htmlFor="edit-field-name">Tên trường</Label>
-                    <Input
-                      id="edit-field-name"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="edit-field-type">Kiểu dữ liệu</Label>
-                    <NativeSelect
-                      id="edit-field-type"
-                      value={editType}
-                      onChange={(e) => setEditType(e.target.value)}
-                      disabled={editIdentity}
-                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
-                    >
-                      {FIELD_TYPES.map((t) => (
-                        <NativeSelectOption key={t} value={t}>
-                          {t}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </div>
-
-                  <div className="flex items-center space-x-2 pt-1">
-                    <Checkbox
-                      id="edit-field-required"
-                      checked={editRequired}
-                      disabled={editIdentity}
-                      onCheckedChange={(checked) => setEditRequired(Boolean(checked))}
-                    />
-                    <Label htmlFor="edit-field-required" className="text-xs font-semibold cursor-pointer">
-                      Trường bắt buộc
-                    </Label>
-                  </div>
-
-                  <div className="flex items-start space-x-2 rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <Checkbox
-                      id="edit-field-identity"
-                      checked={editIdentity}
-                      onCheckedChange={(checked) => {
-                        const enabled = Boolean(checked)
-                        setEditIdentity(enabled)
-                        if (enabled) {
-                          setEditType('text')
-                          setEditRequired(true)
-                        }
-                      }}
-                    />
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-field-identity" className="text-xs font-semibold cursor-pointer">
-                        Trường định danh chính
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Flama Connect dùng trường này để kiểm tra trùng trong đúng deck đích. Mỗi loại thẻ chỉ có một trường định danh.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 border-t">
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      disabled={deleteMutation.isPending || editIdentity}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Xóa trường "${selectedField.name}"? Dữ liệu tương ứng trong các ghi chú sẽ bị giải phóng.`,
-                          )
-                        ) {
-                          deleteMutation.mutate(selectedField.id)
-                        }
-                      }}
-                      className="h-9 sm:h-10 px-4 text-xs sm:text-sm font-bold rounded-xl"
-                    >
-                      {deleteMutation.isPending ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Trash2 className="size-4 mr-1" />
-                          Xóa trường
-                        </>
-                      )}
-                    </Button>
-
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={updateMutation.isPending}
-                      className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm rounded-xl shadow-xs"
-                    >
-                      {updateMutation.isPending ? (
-                        <LoaderCircle className="size-4 animate-spin mr-1" />
-                      ) : (
-                        <>
-                          <Check className="size-4 mr-1" />
-                          Lưu thay đổi
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+            <EditFieldCard
+              selectedField={selectedField}
+              editName={editName}
+              onEditNameChange={setEditName}
+              editType={editType}
+              onEditTypeChange={setEditType}
+              editRequired={editRequired}
+              onEditRequiredChange={setEditRequired}
+              editIdentity={editIdentity}
+              onEditIdentityChange={setEditIdentity}
+              isUpdating={updateMutation.isPending}
+              isDeleting={deleteMutation.isPending}
+              onDelete={() => {
+                if (
+                  window.confirm(
+                    t('fields.edit_card.confirm_delete', { name: selectedField.name }),
+                  )
+                ) {
+                  deleteMutation.mutate(selectedField.id)
+                }
+              }}
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!editName.trim()) {
+                  toast.error(t('fields.messages.name_empty'))
+                  return
+                }
+                updateMutation.mutate({
+                  name: editName.trim(),
+                  field_type: editIdentity ? 'text' : editType,
+                  required: editIdentity ? true : editRequired,
+                  identity_role: editIdentity ? 'primary' : null,
+                })
+              }}
+            />
           ) : (
-            /* Empty Selection Card */
             <Card className="border-dashed border-border bg-muted/20 h-full flex flex-col items-center justify-center p-10 text-center rounded-2xl">
               <p className="text-sm font-semibold text-muted-foreground">
-                Chọn một trường bên trái để chỉnh sửa hoặc bấm "Thêm" để tạo trường mới.
+                {t('fields.empty_selection')}
               </p>
             </Card>
           )}

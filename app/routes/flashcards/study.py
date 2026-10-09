@@ -51,6 +51,8 @@ from app.validators import (
 from app.services.stats_overview import get_effective_timezone_name
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services import study_artifact_service
+from app.repositories.template_library_repository import active_card_condition
+from app.validators.template_library import TemplateLibraryError
 from app.repositories.study_authority_repository import is_consolidated, lock_study_authority_route
 from app.services.study_authority_read_service import (
     load_study_authority_availability_snapshot,
@@ -145,6 +147,7 @@ def _build_study_scope_query(
             query = Card.query.join(Note, Card.note_id == Note.id).filter(
                 Note.user_id == current_user.id,
                 Note.deck_id.in_(scope_deck_ids),
+                active_card_condition(),
             )
             has_owned_card = bool(query.with_entities(Card.id).first())
 
@@ -201,6 +204,7 @@ def _build_study_scope_query(
         query = Card.query.join(Note, Card.note_id == Note.id).filter(
             Note.user_id == current_user.id,
             Note.note_type_id == normalized_scope_id,
+            active_card_condition(),
         )
 
     if query is None:
@@ -426,9 +430,9 @@ def _build_study_next_payload(
             "session_state": "active",
             "card_id": selected_card.id,
             "note_id": note.id,
-            "template_id": selected_card.template.id,
+            "template_id": effective_context.template.id,
             "template_ref": {
-                "id": str(selected_card.template.id),
+                "id": str(effective_context.template.id),
                 "version": template_version,
                 "url": template_url,
                 "visibility": visibility,
@@ -822,7 +826,7 @@ def study_scope_compositions(scope_type: str, scope_id: str):
         clone_scope=clone_scope,
     )
     groups = group_available_compositions(compositions)
-    return jsonify({
+    payload = {
         "schema_version": COMPOSITION_SCOPE_SCHEMA_VERSION,
         "scope_type": normalized_scope,
         "scope_id": scope_id,
@@ -834,7 +838,23 @@ def study_scope_compositions(scope_type: str, scope_id: str):
         ),
         "groups": [group.to_dict() for group in groups],
         "compositions": [c.to_dict() for c in compositions],
-    })
+    }
+    include_counts = str(request.args.get("include_counts") or "").strip().lower()
+    if include_counts in {"1", "true", "yes"}:
+        from app.services.study_composition_service import count_notes_by_composition
+
+        payload["note_counts"] = count_notes_by_composition(
+            query,
+            clone_scope=clone_scope,
+            compositions=compositions,
+        )
+    if str(request.args.get("include_template_inputs") or "").strip().lower() in {"1", "true", "yes"}:
+        from app.services.study_template_preset_service import template_inputs_for_compositions
+
+        payload["template_inputs"] = template_inputs_for_compositions(
+            compositions, user_id=current_user.id, clone_scope=clone_scope,
+        )
+    return jsonify(payload)
 
 
 @flashcards_bp.route("/api/study/sessions", methods=["POST"])
@@ -895,11 +915,16 @@ def study_session_open():
             resolve_composition_selection,
         )
 
+        from app.services.study_template_preset_service import resolve_session_preset
+        requested_composition_id = resolve_session_preset(
+            current_user.id, validated_query.scope, validated_query.scope_id_raw,
+            validated_composition.composition_id,
+        )
         composition_selection = resolve_composition_selection(
             query,
             clone_scope=clone_scope,
-            requested_composition_id=validated_composition.composition_id,
-            request_source=validated_composition.source,
+            requested_composition_id=requested_composition_id,
+            request_source="preset" if requested_composition_id != validated_composition.composition_id else validated_composition.source,
         )
         wire_schema_version = study_session_service.negotiate_session_wire_schema(
             payload.get("accepted_session_schema_versions"),
@@ -935,6 +960,7 @@ def study_session_open():
                 scope_id=validated_query.scope_id_raw,
                 timezone_name=timezone_name,
                 composition_selection=composition_selection,
+                input_bindings=payload.get("input_bindings"),
                 wire_schema_version=wire_schema_version,
                 legacy_wire_schema_version=legacy_wire_schema_version,
                 accepted_batch_schema_versions=payload.get("accepted_batch_schema_versions"),
@@ -943,6 +969,9 @@ def study_session_open():
             session=db.session,
             label="study session open",
         )
+    except TemplateLibraryError as exc:
+        db.session.rollback()
+        return _study_error(exc.code, str(exc), status=exc.status, details=exc.details)
     except StudyCompositionError as exc:
         db.session.rollback()
         return _study_error(

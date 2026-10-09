@@ -16,6 +16,7 @@ import {
   Filter,
   Files,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { useFileImportWizard } from '../hooks/useFileImportWizard'
 import { BatchFileTable } from './BatchFileTable'
 
@@ -24,6 +25,7 @@ interface ImportFileStepProps {
 }
 
 export function ImportFileStep({ wizard }: ImportFileStepProps) {
+  const { t } = useTranslation('import')
   const {
     token,
     file,
@@ -66,14 +68,29 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
           <div>
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <UploadCloud className="size-4 text-primary" />
-              Tải file &amp; Parse dữ liệu {isBatchMode && `(${files.length} bài học)`}
+              {isBatchMode
+                ? t('file_import.step2.title_batch', {
+                    count: files.length,
+                    defaultValue: `Tải file & Parse dữ liệu (${files.length} bài học)`,
+                  })
+                : t('file_import.step2.title', 'Tải file & Parse dữ liệu')}
             </CardTitle>
             <CardDescription className="text-xs">
-              Chọn 1 hoặc nhiều tệp CSV, TSV cùng lúc (mỗi tệp tương ứng 1 bài học / Deck con).
+              {t(
+                'file_import.step2.desc',
+                'Chọn 1 hoặc nhiều tệp CSV, TSV cùng lúc (mỗi tệp tương ứng 1 bài học / Deck con).'
+              )}
             </CardDescription>
           </div>
           <Badge variant={token ? 'default' : 'secondary'} className="text-xs">
-            {token ? (isBatchMode ? `Đã phân tích ${batchFiles.length} bài` : 'Parse thành công') : 'Chờ tải file'}
+            {token
+              ? isBatchMode
+                ? t('file_import.step2.badge_batch_parsed', {
+                    count: batchFiles.length,
+                    defaultValue: `Đã phân tích ${batchFiles.length} bài`,
+                  })
+                : t('file_import.step2.badge_parsed', 'Parse thành công')
+              : t('file_import.step2.badge_waiting', 'Chờ tải file')}
           </Badge>
         </div>
       </CardHeader>
@@ -110,29 +127,39 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
               ? `Đã chọn ${files.length} tệp (${files.map((f) => f.name).slice(0, 3).join(', ')}${files.length > 3 ? '...' : ''})`
               : file
               ? file.name
-              : 'Kéo thả 1 hoặc nhiều tệp vào đây hoặc nhấp để chọn'}
+              : t(
+                  'file_import.step2.dropzone_prompt',
+                  'Kéo thả tệp CSV / TSV vào đây hoặc bấm để chọn tệp'
+                )}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Định dạng hỗ trợ: CSV, TSV, TXT (Tối đa 50MB mỗi tệp, hỗ trợ nạp hàng loạt nhiều bài)
+            {t(
+              'file_import.step2.dropzone_hint',
+              'Hỗ trợ tải lên nhiều file cùng lúc để tạo hàng loạt bài học'
+            )}
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div className="space-y-1.5">
-            <Label htmlFor={delimiterModeSelectId} className="text-xs font-medium">Ký tự phân tách</Label>
+            <Label htmlFor={delimiterModeSelectId} className="text-xs font-medium">
+              {t('file_import.step2.delimiter_label', 'Ký tự phân tách')}
+            </Label>
             <NativeSelect
               id={delimiterModeSelectId}
               value={delimiterMode}
               onChange={(e) => setDelimiterMode(e.target.value as 'csv' | 'tsv' | 'custom')}
             >
-              <option value="csv">CSV (,)</option>
-              <option value="tsv">TSV (tab)</option>
-              <option value="custom">Tùy chỉnh</option>
+              <option value="csv">{t('file_import.step2.delimiter_csv', 'Tự động phân tách (Phẩy - CSV)')}</option>
+              <option value="tsv">{t('file_import.step2.delimiter_tsv', 'Phân tách bằng Tab (TSV)')}</option>
+              <option value="custom">{t('file_import.step2.delimiter_custom', 'Ký tự tùy chỉnh…')}</option>
             </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor={customDelimiterInputId} className="text-xs font-medium">Ký tự tùy chỉnh</Label>
+            <Label htmlFor={customDelimiterInputId} className="text-xs font-medium">
+              {t('file_import.step2.delimiter_custom', 'Ký tự tùy chỉnh')}
+            </Label>
             <Input
               id={customDelimiterInputId}
               maxLength={1}
@@ -157,7 +184,7 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
               }}
             >
               {isParsing ? <Loader2 className="size-4 animate-spin mr-1.5" /> : <RotateCcw className="size-4 mr-1.5" />}
-              Parse lại
+              {t('file_import.step3.btn_auto_remap', 'Parse lại')}
             </Button>
           </div>
         </div>
@@ -165,7 +192,7 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
         {parseMeta && (
           <div className="flex flex-wrap gap-2 text-xs pt-1">
             <Badge variant="secondary"><FileText className="size-3 mr-1" /> {parseMeta.filename}</Badge>
-            <Badge variant="secondary"><TableIcon className="size-3 mr-1" /> {parseMeta.totalRows} dòng</Badge>
+            <Badge variant="secondary"><TableIcon className="size-3 mr-1" /> {parseMeta.totalRows} {t('file_import.step4.stat_total', 'dòng')}</Badge>
             <Badge variant="secondary"><Columns className="size-3 mr-1" /> {parseMeta.columnCount} cột</Badge>
             <Badge variant="secondary"><Filter className="size-3 mr-1" /> Ký tự: {parseMeta.delimiterLabel}</Badge>
           </div>
@@ -191,7 +218,9 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
           <div className="border border-border/80 rounded-2xl overflow-hidden mt-3">
             <div className="bg-muted/40 p-3 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h4 className="text-xs font-bold text-foreground">Xem trước dữ liệu tệp</h4>
+                <h4 className="text-xs font-bold text-foreground">
+                  {t('file_import.step2.preview_table_title', 'Bảng xem trước dữ liệu trích xuất (Preview)')}
+                </h4>
                 <p className="text-[11px] text-muted-foreground">Hiển thị các dòng mẫu đã phân tách cột.</p>
               </div>
               <div className="flex items-center gap-4 text-xs font-medium">

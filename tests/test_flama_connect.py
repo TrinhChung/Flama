@@ -32,6 +32,7 @@ from models.field_def import FieldDef
 from models.media_asset import MediaAsset
 from models.note import Note
 from models.note_type import NoteType
+from models.study_application import StudyApplication
 from models.template import Template
 from models.user import User
 
@@ -953,6 +954,10 @@ class FlamaConnectTests(unittest.TestCase):
                 )
             )
             db.session.commit()
+            # Adding a presentation is itself a valid working-tree change.
+            # The rejected import below must preserve that new revision.
+            revision_after_template_add = int(db.session.get(DeckMarketplaceItem, item_id).working_revision or 0)
+            self.assertEqual(revision_after_template_add, 2)
 
         template_plan = note_type_plan(
             self.note_type_id,
@@ -996,7 +1001,7 @@ class FlamaConnectTests(unittest.TestCase):
                 ],
                 sorted(original_card_ids),
             )
-            self.assertEqual(int(item.working_revision or 0), 1)
+            self.assertEqual(int(item.working_revision or 0), revision_after_template_add)
             self.assertEqual(
                 DeckWorkingDirtyEntity.query.filter_by(
                     deck_item_id=item_id,
@@ -1243,6 +1248,30 @@ class FlamaConnectTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+
+    def test_add_note_accepts_active_application_without_legacy_template_origin(self):
+        with self.app.app_context():
+            template = Template.query.filter_by(note_type_id=self.note_type_id).one()
+            template.note_type_id = None
+            db.session.commit()
+            self.assertEqual(Template.query.filter_by(note_type_id=self.note_type_id).count(), 0)
+            self.assertEqual(StudyApplication.query.filter_by(note_type_id=self.note_type_id, status_code="ACTIVE").count(), 1)
+        response = self._call("addNote", {"note": self._note()})
+        self.assertIsInstance(response.get_json(), int)
+        with self.app.app_context():
+            self.assertEqual(Note.query.filter_by(note_type_id=self.note_type_id).count(), 1)
+            self.assertEqual(Card.query.count(), 1)
+
+    def test_add_note_rejects_retired_applications_without_creating_content(self):
+        with self.app.app_context():
+            application = StudyApplication.query.filter_by(note_type_id=self.note_type_id).one()
+            application.status_code = "RETIRED"
+            db.session.commit()
+        response = self._call("canAddNotesWithErrorDetail", {"notes": [self._note()]})
+        self.assertEqual(response.get_json(), [{"canAdd": False, "error": "model has no card template"}])
+        with self.app.app_context():
+            self.assertEqual(Note.query.count(), 0)
+            self.assertEqual(Card.query.count(), 0)
 
     def test_add_binds_empty_deck_and_duplicate_is_exact_target_deck(self):
         response = self._call("addNote", {"note": self._note()})

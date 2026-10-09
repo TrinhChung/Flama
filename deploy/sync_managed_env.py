@@ -140,7 +140,7 @@ MANAGED_VARIABLE_DEFAULTS = {
     "TRUST_PROXY": "1",
     "FRONTEND_URL": "https://flama.vn",
     "PUBLIC_APP_URL": "https://flama.vn",
-    "CORS_ALLOWED_ORIGINS": "https://flama.vn,https://flama.stmtp.com",
+    "CORS_ALLOWED_ORIGINS": "https://flama.vn",
     "CONNECT_CORS_ALLOWED_ORIGINS": "*",
     "GOOGLE_OAUTH_REDIRECT_URI": "https://api.flama.vn/auth/google/callback",
 }

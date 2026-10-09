@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Check, FolderTree, Database, LayoutGrid, Printer } from 'lucide-react'
 
 export type WizardStepId = 'deck' | 'mapping' | 'template' | 'studio'
@@ -55,16 +56,52 @@ export const WorksheetWizardStepper: React.FC<WorksheetWizardStepperProps> = ({
   isStandalone = false,
   className = '',
 }) => {
+  const { t } = useTranslation('worksheets')
+
+  const wizardSteps = React.useMemo<WizardStep[]>(
+    () => [
+      {
+        id: 'deck',
+        number: 1,
+        label: t('stepper.step_deck', 'Chọn bộ thẻ'),
+        shortLabel: t('stepper.step_deck_short', 'Bộ thẻ'),
+        icon: FolderTree,
+      },
+      {
+        id: 'mapping',
+        number: 2,
+        label: t('stepper.step_mapping', 'Ánh xạ dữ liệu'),
+        shortLabel: t('stepper.step_mapping_short', 'Ánh xạ'),
+        icon: Database,
+      },
+      {
+        id: 'template',
+        number: 3,
+        label: t('stepper.step_template', 'Chọn mẫu bài tập'),
+        shortLabel: t('stepper.step_template_short', 'Mẫu bài'),
+        icon: LayoutGrid,
+      },
+      {
+        id: 'studio',
+        number: 4,
+        label: t('stepper.step_studio', 'Cấu hình & In ấn'),
+        shortLabel: t('stepper.step_studio_short', 'In ấn'),
+        icon: Printer,
+      },
+    ],
+    [t]
+  )
+
   // If standalone (no deck required), step 2 (mapping) is skipped
   const visibleSteps = React.useMemo(() => {
     if (isStandalone) {
-      return WIZARD_STEPS.filter((s) => s.id !== 'mapping').map((s, idx) => ({
+      return wizardSteps.filter((s) => s.id !== 'mapping').map((s, idx) => ({
         ...s,
         number: idx + 1,
       }))
     }
-    return WIZARD_STEPS
-  }, [isStandalone])
+    return wizardSteps
+  }, [isStandalone, wizardSteps])
 
   const currentIndex = visibleSteps.findIndex((s) => s.id === currentStep)
   const currentStepObj = visibleSteps[currentIndex] || visibleSteps[0]
@@ -132,7 +169,10 @@ export const WorksheetWizardStepper: React.FC<WorksheetWizardStepperProps> = ({
             <span>{currentStepObj.label}</span>
           </div>
           <span className="text-[11px] font-semibold text-muted-foreground">
-            Bước {currentStepObj.number}/{visibleSteps.length}
+            {t('stepper.step_counter', 'Bước {{current}}/{{total}}', {
+              current: currentStepObj.number,
+              total: visibleSteps.length,
+            })}
           </span>
         </div>
         {/* Progress Bar */}

@@ -15,6 +15,7 @@ from models import db
 from models.card_progress import CardProgress
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
+from models.study_application import StudyApplication
 from models.flashcard import (
     Card,
     DeckCloneAddedFieldDef,
@@ -393,13 +394,34 @@ def get_deck_with_notes_by_user_and_id(user_id: int, deck_id: int) -> Optional[D
         deleted_at=None,
     ).first()
 
-def get_templates_by_note_type(note_type_id: str) -> List[Template]:
-    """Retrieves all templates for a note type."""
-    return (
-        Template.query.filter_by(note_type_id=note_type_id)
-        .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
-        .all()
-    )
+def get_templates_by_note_type(note_type_id: str, *, applications=None) -> List[Template]:
+    """List unique active attached definitions, including independent templates."""
+    rows = get_template_applications_by_note_type(note_type_id) if applications is None else applications
+    result = []
+    seen = set()
+    for template, _application in rows:
+        if template.id not in seen:
+            result.append(template)
+            seen.add(template.id)
+    # Explicit compatibility for imported pre-attachment definitions only.
+    # A retired occurrence never turns into this fallback.
+    legacy = Template.query.filter(
+        Template.note_type_id == note_type_id,
+        ~db.session.query(StudyApplication.id).filter(
+            StudyApplication.note_type_id == note_type_id,
+            StudyApplication.template_id == Template.id,
+        ).exists(),
+    ).order_by(Template.position, Template.created_at, Template.id).all()
+    return result + legacy
+
+
+def get_template_applications_by_note_type(note_type_id: str):
+    return db.session.query(Template, StudyApplication).join(
+        StudyApplication, StudyApplication.template_id == Template.id,
+    ).filter(
+        StudyApplication.note_type_id == note_type_id,
+        StudyApplication.status_code == "ACTIVE",
+    ).order_by(StudyApplication.position, Template.created_at, Template.id, StudyApplication.id).all()
 
 def get_cards_for_note(note_id: str) -> List[Card]:
     """Retrieves all cards belonging to a specific note."""

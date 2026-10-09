@@ -128,6 +128,13 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.study_session_authority_pin import StudySessionAuthorityPin  # noqa: F401
     from models.study_progress_subject import StudyProgressSubject  # noqa: F401
     from models.study_application import StudyApplication  # noqa: F401
+    from models.template_version import TemplateVersion  # noqa: F401
+    from models.template_publication import TemplatePublication  # noqa: F401
+    from models.template_release import TemplateRelease  # noqa: F401
+    from models.template_subscription import TemplateSubscription  # noqa: F401
+    from models.study_template_preset import StudyTemplatePreset  # noqa: F401
+    from models.deck_release_template_pin import DeckReleaseTemplatePin  # noqa: F401
+    from app.services import template_version_service as _template_versions
     from models.study_progress_history_fact import StudyProgressHistoryFact  # noqa: F401
     from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent  # noqa: F401
     from models.study_progress_backfill_run import StudyProgressBackfillRun  # noqa: F401
@@ -216,6 +223,7 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     else:
         register_blueprints(app)
         register_cli_commands(app)
+        _template_versions.register_cli(app)
 
     def _rollback_failed_session() -> None:
         try:

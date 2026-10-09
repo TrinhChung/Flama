@@ -2,6 +2,7 @@ import { GitCompare, GraduationCap } from 'lucide-react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCreditCard, faGift, faKey } from '@fortawesome/free-solid-svg-icons'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -60,16 +61,24 @@ export function PublishStep4Pricing({
   setVersion,
   clearFieldError,
 }: PublishStep4PricingProps) {
+  const { t, i18n } = useTranslation('marketplace')
   const calculatedStudentPrice = Math.max(
     0,
     Math.round(priceAmountMinor * (1 - (studentDiscountPercent || 0) / 100))
   )
 
+  const currencyUnit = i18n.language === 'en' ? ' VND' : ' đ'
+  const formattedStudentPrice = calculatedStudentPrice.toLocaleString(
+    i18n.language === 'en' ? 'en-US' : 'vi-VN'
+  ) + currencyUnit
+
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
       {/* Distribution Mode Selector Cards */}
       <div className="space-y-3">
-        <Label className="text-xs font-semibold">Mô hình phân phối & Giá bán</Label>
+        <Label className="text-xs font-semibold">
+          {t('publish_deck.step4.section_title', 'Mô hình phân phối & Giá bán')}
+        </Label>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Free Option */}
           <div
@@ -88,8 +97,12 @@ export function PublishStep4Pricing({
             <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
               <FontAwesomeIcon icon={faGift} className="size-4" />
             </div>
-            <div className="font-bold text-sm sm:text-base">Miễn phí (Free)</div>
-            <div className="text-xs opacity-80 mt-0.5">Chia sẻ tự do tới mọi người</div>
+            <div className="font-bold text-sm sm:text-base">
+              {t('publish_deck.step4.mode_free_title', 'Miễn phí (Free)')}
+            </div>
+            <div className="text-xs opacity-80 mt-0.5">
+              {t('publish_deck.step4.mode_free_desc', 'Chia sẻ tự do tới mọi người')}
+            </div>
           </div>
 
           {/* Paid Option */}
@@ -107,8 +120,12 @@ export function PublishStep4Pricing({
             <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
               <FontAwesomeIcon icon={faCreditCard} className="size-4" />
             </div>
-            <div className="font-bold text-sm sm:text-base">Có phí (Paid)</div>
-            <div className="text-xs opacity-80 mt-0.5">Bán qua cổng payOS</div>
+            <div className="font-bold text-sm sm:text-base">
+              {t('publish_deck.step4.mode_paid_title', 'Có phí (Paid)')}
+            </div>
+            <div className="text-xs opacity-80 mt-0.5">
+              {t('publish_deck.step4.mode_paid_desc', 'Bán qua cổng payOS')}
+            </div>
           </div>
 
           {/* Course Key Option */}
@@ -128,8 +145,12 @@ export function PublishStep4Pricing({
             <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
               <FontAwesomeIcon icon={faKey} className="size-4" />
             </div>
-            <div className="font-bold text-sm sm:text-base">Mã lớp học (Keys)</div>
-            <div className="text-xs opacity-80 mt-0.5">Kích hoạt qua Access Keys</div>
+            <div className="font-bold text-sm sm:text-base">
+              {t('publish_deck.step4.mode_key_title', 'Mã lớp học (Keys)')}
+            </div>
+            <div className="text-xs opacity-80 mt-0.5">
+              {t('publish_deck.step4.mode_key_desc', 'Kích hoạt qua Access Keys')}
+            </div>
           </div>
         </div>
 
@@ -139,7 +160,7 @@ export function PublishStep4Pricing({
             {/* Listed Base Price */}
             <div className="space-y-1.5">
               <Label htmlFor="price" className="text-xs font-semibold">
-                Giá bán niêm yết (VNĐ) <span className="text-destructive">*</span>
+                {t('publish_deck.step4.price_label', 'Giá bán niêm yết (VNĐ)')} <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
                 <Input
@@ -168,7 +189,7 @@ export function PublishStep4Pricing({
               <div className="flex items-center gap-2">
                 <GraduationCap className="size-4 text-primary" />
                 <Label className="text-xs font-bold text-foreground">
-                  Ưu đãi dành cho sinh viên
+                  {t('publish_deck.step4.student_offer_title', 'Ưu đãi dành cho sinh viên')}
                 </Label>
               </div>
 
@@ -181,7 +202,7 @@ export function PublishStep4Pricing({
                       : 'border-border bg-card text-muted-foreground hover:bg-muted/50'
                   }`}
                 >
-                  Không có ưu đãi
+                  {t('publish_deck.step4.student_opt_none', 'Không có ưu đãi')}
                 </div>
                 <div
                   onClick={() => setStudentOfferMode('free')}
@@ -191,7 +212,7 @@ export function PublishStep4Pricing({
                       : 'border-border bg-card text-muted-foreground hover:bg-muted/50'
                   }`}
                 >
-                  Miễn phí cho SV
+                  {t('publish_deck.step4.student_opt_free', 'Miễn phí cho SV')}
                 </div>
                 <div
                   onClick={() => {
@@ -204,14 +225,14 @@ export function PublishStep4Pricing({
                       : 'border-border bg-card text-muted-foreground hover:bg-muted/50'
                   }`}
                 >
-                  Giảm giá (%) cho SV
+                  {t('publish_deck.step4.student_opt_discount', 'Giảm giá (%) cho SV')}
                 </div>
               </div>
 
               {studentOfferMode === 'percent_discount' && (
                 <div className="space-y-2 pt-1 animate-in fade-in duration-150">
                   <Label htmlFor="student_discount" className="text-xs font-semibold">
-                    Mức giảm giá cho sinh viên (%) <span className="text-destructive">*</span>
+                    {t('publish_deck.step4.student_discount_percent_label', 'Mức giảm giá cho sinh viên (%)')} <span className="text-destructive">*</span>
                   </Label>
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="relative w-36">
@@ -233,9 +254,9 @@ export function PublishStep4Pricing({
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Giá sinh viên trả:{' '}
+                      {t('publish_deck.step4.student_price_label', 'Giá sinh viên trả:')}{' '}
                       <strong className="text-primary font-bold">
-                        {calculatedStudentPrice.toLocaleString('vi-VN')} đ
+                        {formattedStudentPrice}
                       </strong>
                     </div>
                   </div>
@@ -245,12 +266,14 @@ export function PublishStep4Pricing({
 
               {studentOfferMode === 'free' && (
                 <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-in fade-in duration-150">
-                  Sinh viên đã xác thực email trường (.edu.vn) sẽ được tải xuống & cài đặt bộ thẻ này hoàn toàn <strong>0 đ</strong>.
+                  {t('publish_deck.step4.student_free_note', 'Sinh viên đã xác thực email trường (.edu.vn) sẽ được tải xuống & cài đặt bộ thẻ này hoàn toàn')}{' '}
+                  <strong>0 đ</strong>.
                 </p>
               )}
 
               <p className="text-[11px] leading-relaxed text-muted-foreground/80 pt-1">
-                Flama chỉ áp dụng ưu đãi này cho tài khoản đã được xác thực là sinh viên thông qua email trường có đuôi <code className="text-[10px] font-semibold bg-muted px-1 py-0.5 rounded text-foreground">.edu.vn</code>.
+                {t('publish_deck.step4.student_policy_note', 'Flama chỉ áp dụng ưu đãi này cho tài khoản đã được xác thực là sinh viên thông qua email trường có đuôi')}{' '}
+                <code className="text-[10px] font-semibold bg-muted px-1 py-0.5 rounded text-foreground">.edu.vn</code>.
               </p>
             </div>
           </div>
@@ -263,20 +286,20 @@ export function PublishStep4Pricing({
               <div className="flex items-center gap-2">
                 <GraduationCap className="size-4 text-muted-foreground" />
                 <Label className="text-xs font-bold text-foreground">
-                  Thông tin khóa học & Hướng dẫn nhận mã
+                  {t('publish_deck.step4.course_info_title', 'Thông tin khóa học & Hướng dẫn nhận mã')}
                 </Label>
               </div>
 
               {/* Course Title */}
               <div className="space-y-1.5">
                 <Label htmlFor="course_title" className="text-xs font-semibold">
-                  Tên khóa học / Lớp học
+                  {t('publish_deck.step4.course_title_label', 'Tên khóa học / Lớp học')}
                 </Label>
                 <Input
                   id="course_title"
                   value={courseTitle}
                   onChange={(e) => setCourseTitle(e.target.value)}
-                  placeholder="VD: Khóa Luyện thi JLPT N2 Cấp tốc 2026"
+                  placeholder={t('publish_deck.step4.course_title_placeholder', 'VD: Khóa Luyện thi JLPT N2 Cấp tốc 2026')}
                   className="h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
@@ -284,13 +307,13 @@ export function PublishStep4Pricing({
               {/* Course Description */}
               <div className="space-y-1.5">
                 <Label htmlFor="course_description" className="text-xs font-semibold">
-                  Mô tả ngắn về khóa học
+                  {t('publish_deck.step4.course_desc_label', 'Mô tả ngắn về khóa học')}
                 </Label>
                 <Textarea
                   id="course_description"
                   value={courseDescription}
                   onChange={(e) => setCourseDescription(e.target.value)}
-                  placeholder="VD: Dành riêng cho học viên lớp N2 Online K15. Bao gồm toàn bộ từ vựng và Kanji trọng tâm."
+                  placeholder={t('publish_deck.step4.course_desc_placeholder', 'VD: Dành riêng cho học viên lớp N2 Online K15. Bao gồm toàn bộ từ vựng và Kanji trọng tâm.')}
                   rows={2}
                   className="text-xs sm:text-sm rounded-xl resize-none"
                 />
@@ -299,14 +322,14 @@ export function PublishStep4Pricing({
               {/* Course URL */}
               <div className="space-y-1.5">
                 <Label htmlFor="course_url" className="text-xs font-semibold">
-                  Link trang web / Khóa học (nếu có)
+                  {t('publish_deck.step4.course_url_label', 'Link trang web / Khóa học (nếu có)')}
                 </Label>
                 <Input
                   id="course_url"
                   type="url"
                   value={courseUrl}
                   onChange={(e) => setCourseUrl(e.target.value)}
-                  placeholder="https://example.com/courses/n2-intensive"
+                  placeholder={t('publish_deck.step4.course_url_placeholder', 'https://example.com/courses/n2-intensive')}
                   className="h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
@@ -314,20 +337,22 @@ export function PublishStep4Pricing({
               {/* Course Instructions */}
               <div className="space-y-1.5">
                 <Label htmlFor="course_instructions" className="text-xs font-semibold">
-                  Hướng dẫn học viên nhận mã kích hoạt
+                  {t('publish_deck.step4.course_instructions_label', 'Hướng dẫn học viên nhận mã kích hoạt')}
                 </Label>
                 <Textarea
                   id="course_instructions"
                   value={courseInstructions}
                   onChange={(e) => setCourseInstructions(e.target.value)}
-                  placeholder="VD: Học viên liên hệ trợ giảng lớp qua nhóm Zalo hoặc kiểm tra email đăng ký khóa học để lấy mã kích hoạt."
+                  placeholder={t('publish_deck.step4.course_instructions_placeholder', 'VD: Học viên liên hệ trợ giảng lớp qua nhóm Zalo hoặc kiểm tra email đăng ký khóa học để lấy mã kích hoạt.')}
                   rows={2}
                   className="text-xs sm:text-sm rounded-xl resize-none"
                 />
               </div>
 
               <p className="text-[11px] leading-relaxed text-muted-foreground pt-1">
-                Gợi ý: Sau khi đăng tải deck, bạn có thể tạo hàng loạt <strong>Mã kích hoạt (Access Keys)</strong> và theo dõi danh sách học viên đã kích hoạt trong trang chi tiết của bộ deck.
+                {t('publish_deck.step4.course_hint', 'Gợi ý: Sau khi đăng tải deck, bạn có thể tạo hàng loạt')}{' '}
+                <strong>{t('publish_deck.step4.access_keys_bold', 'Mã kích hoạt (Access Keys)')}</strong>{' '}
+                {t('publish_deck.step4.course_hint_suffix', 'và theo dõi danh sách học viên đã kích hoạt trong trang chi tiết của bộ deck.')}
               </p>
             </div>
           </div>
@@ -339,22 +364,27 @@ export function PublishStep4Pricing({
         <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold text-foreground">
-              Phiên bản {version || 'hiện tại'} được khóa theo immutable release
+              {t('publish_deck.step4.version_locked_title', {
+                version: version || t('publish_deck.step4.version_current', 'hiện tại'),
+                defaultValue: `Phiên bản ${version || 'hiện tại'} được khóa theo immutable release`
+              })}
             </p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Cập nhật listing không phát hành dữ liệu mới tới những người đã clone deck.
+              {t('publish_deck.step4.version_locked_desc', 'Cập nhật listing không phát hành dữ liệu mới tới những người đã clone deck.')}
             </p>
           </div>
           <Button type="button" variant="outline" size="sm" asChild>
             <Link to={`/creator/decks/${deckItemId}/releases/new`}>
               <GitCompare className="size-3.5" />
-              Tạo release mới
+              {t('publish_deck.step4.btn_create_release', 'Tạo release mới')}
             </Link>
           </Button>
         </div>
       ) : (
         <div className="space-y-1.5">
-          <Label htmlFor="version" className="text-xs font-semibold">Phiên bản phát hành</Label>
+          <Label htmlFor="version" className="text-xs font-semibold">
+            {t('publish_deck.step4.version_label', 'Phiên bản phát hành')}
+          </Label>
           <Input
             id="version"
             value={version}

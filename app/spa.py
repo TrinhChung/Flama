@@ -29,6 +29,7 @@ def init_spa_delivery(app) -> None:
             or path.startswith("/.well-known/")
             or path.startswith("/auth/")
             or (path.startswith("/oauth/") and path != "/oauth/consent")
+            or path in ("/robots.txt", "/sitemap.xml", "/llms.txt")
         ):
             return None
 
@@ -56,6 +57,14 @@ def init_spa_delivery(app) -> None:
                 )
             ):
                 return None
+
+            if path != "/" and not path.endswith("/"):
+                candidate_name = path.lstrip("/")
+                if "/" not in candidate_name and candidate_name != "index.html":
+                    candidate_file = _FRONTEND_DIST / candidate_name
+                    if candidate_file.is_file():
+                        return send_from_directory(str(_FRONTEND_DIST), candidate_name)
+
             return serve_react_spa()
 
         if legacy_adapters_enabled:

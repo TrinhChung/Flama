@@ -1,0 +1,215 @@
+{
+  "page": {
+    "loading": "Đang tải dashboard…",
+    "auth_error": "Không thể tải phiên đăng nhập."
+  },
+  "toolbar": {
+    "tabs": {
+      "decks": "Decks",
+      "study": "Study",
+      "study_disabled_tooltip": "Vui lòng chọn một deck để học",
+      "stats": "Stats",
+      "import": "Import",
+      "browse": "Browse"
+    },
+    "actions": {
+      "create_deck": "Tạo Deck",
+      "browse": "Browse"
+    }
+  },
+  "deck_board": {
+    "title": "Deck",
+    "create_deck": "Tạo Deck",
+    "columns": {
+      "new": "New",
+      "learn": "Learn",
+      "due": "Due"
+    },
+    "empty_state": {
+      "title": "Chào mừng bạn đến với Flama!",
+      "desc_line1": "Tài khoản của bạn chưa có deck nào.",
+      "desc_line2_prefix": "Hãy vào ",
+      "desc_line2_bold": "Thư viện",
+      "desc_line2_suffix": " để tìm và cài bộ thẻ phù hợp với bạn.",
+      "btn_marketplace_decks": "Thư viện Deck",
+      "btn_marketplace_templates": "Thư viện Template"
+    }
+  },
+  "tree": {
+    "drag": {
+      "invalid_move": "Không thể di chuyển \"{{name}}\" vào chính nó / deck con",
+      "moving": "Di chuyển \"{{name}}\"",
+      "drop_to_root": "→ Thả vào Root",
+      "drop_to_deck": "→ Thả vào deck",
+      "root_drop_prompt": "📍 Thả vào đây để chuyển “{{name}}” ra ngoài cấp Root (không có deck cha)"
+    },
+    "row": {
+      "cannot_move_badge": "🚫 Không thể di chuyển",
+      "drop_into_badge": "➕ Thả vào \"{{name}}\"",
+      "settings_aria": "Deck Settings",
+      "menu": {
+        "rename": "Đổi tên Deck",
+        "move": "Di chuyển Deck",
+        "copy_move_id": "Copy Move ID",
+        "share": "Chia sẻ Deck",
+        "import_cards": "Import thẻ",
+        "card_types": "Kiểu thẻ (template)",
+        "worksheet": "Xuất bài tập / Worksheet",
+        "reset_progress": "Reset Progress",
+        "delete_deck": "Xóa Deck"
+      }
+    },
+    "toasts": {
+      "move_error": "Không thể di chuyển deck.",
+      "moved_title": "Đã di chuyển “{{name}}”",
+      "moved_target_prefix": "Vào ",
+      "target_root": "cấp Root",
+      "target_deck": "deck \"{{name}}\"",
+      "btn_undo": "Hoàn tác",
+      "restored_toast": "Đã khôi phục vị trí ban đầu của “{{name}}”."
+    }
+  },
+  "modals": {
+    "create_deck": {
+      "title": "Tạo deck mới",
+      "desc_nested": "Đường dẫn phân cấp (sử dụng dấu “::” để thay đổi deck cha hoặc tạo cấu trúc lồng nhau).",
+      "desc_root": "Tạo deck mới (sử dụng dấu “::” để phân cấp thư mục, ví dụ: SAA::deck10).",
+      "name_label": "Tên hoặc đường dẫn Deck",
+      "name_placeholder": "Ví dụ: SAA::deck10",
+      "name_description": "Dùng dấu :: để phân cấp thư mục (ví dụ: SAA::deck10)",
+      "notetype_label": "Mẫu thẻ (Note Type)",
+      "notetype_loading": "Đang tải mẫu thẻ...",
+      "notetype_default": "Mặc định",
+      "notetype_help_inherited": "Mặc định kế thừa từ deck cha đã chọn.",
+      "notetype_help_default": "Mẫu thẻ sẽ áp dụng cho các thẻ thuộc deck này.",
+      "btn_cancel": "Hủy",
+      "btn_submit": "Tạo deck",
+      "toast_success": "Deck đã được tạo."
+    },
+    "actions": {
+      "titles": {
+        "rename": "Đổi tên “{{name}}”",
+        "move": "Di chuyển “{{name}}”",
+        "delete": "Xác nhận xóa deck",
+        "reset": "Đặt lại tiến độ"
+      },
+      "descriptions": {
+        "delete": "Xóa “{{name}}” cùng toàn bộ nội dung thuộc deck? Hành động này có thể không hoàn tác được.",
+        "reset": "Đặt lại toàn bộ tiến độ học của tài khoản hiện tại trong “{{name}}”?"
+      },
+      "rename_form": {
+        "name_label": "Tên mới",
+        "btn_save": "Lưu"
+      },
+      "move_form": {
+        "parent_label": "Deck cha mới",
+        "root_option": "Root",
+        "btn_move": "Di chuyển"
+      },
+      "purge": {
+        "checkbox_label": "Xóa sạch hoàn toàn dữ liệu (Purge)",
+        "alert_warning": "Cảnh báo: Chức năng này chỉ dùng để xóa các bộ deck lỗi trong quá trình phát triển. Hành động này sẽ xóa sạch hoàn toàn các bản cài đặt, bản sao, đánh giá, lịch sử học tập và các thay đổi liên quan đến bộ deck này từ tất cả người dùng và không thể hoàn tác."
+      },
+      "buttons": {
+        "cancel": "Hủy",
+        "delete_purge": "Xóa sạch dữ liệu",
+        "delete_deck": "Xóa deck",
+        "reset": "Đặt lại"
+      },
+      "toast_success": "Thao tác deck đã hoàn tất."
+    },
+    "card_types": {
+      "title": "Kiểu thẻ của “{{name}}”",
+      "description": "Mỗi kiểu thẻ là một template hiển thị cùng dữ liệu note. Khi học, bạn chọn một kiểu cho cả phiên.",
+      "loading": "Đang tải kiểu thẻ…",
+      "error_fallback": "Có lỗi xảy ra khi tải kiểu thẻ.",
+      "empty": "Deck này chưa có thẻ để học.",
+      "context": {
+        "installed_source": "Thẻ gốc từ bộ đã cài",
+        "installed_local": "Thẻ riêng trong bộ đã cài",
+        "user_deck": "Thẻ trong bộ của bạn"
+      },
+      "badge_default": "Mặc định",
+      "badge_note_count": "{{count}} note",
+      "badge_note_count_one": "{{count}} note",
+      "badge_note_count_other": "{{count}} note",
+      "badge_note_count_plural": "{{count}} note",
+      "btn_edit": "Sửa giao diện",
+      "btn_edit_disabled_title": "Sắp có: tạo bản riêng cho thẻ gốc của bộ đã cài.",
+      "btn_close": "Đóng",
+      "btn_study": "Học deck này"
+    },
+    "worksheet_loader": {
+      "title": "Mẫu giấy luyện viết & In ấn (A4)",
+      "loading": "Đang tải công cụ tạo bài tập…",
+      "failed": "Không thể tải công cụ tạo bài tập. Hãy tải lại trang để thử lại.",
+      "sr_loading": "Đang tải…"
+    }
+  },
+  "heatmap": {
+    "summary_with_data": "Hôm nay đã học {{cards}} thẻ trong {{minutes}} phút ({{seconds}}s/thẻ)",
+    "summary_zero": "Hôm nay đã học 0 thẻ trong 0.00 phút (0.00s/thẻ)",
+    "nav": {
+      "prev_year_aria": "Previous year",
+      "next_year_aria": "Next year",
+      "mobile_swipe_hint": "← Vuốt ngang xem cả năm →",
+      "jump_today": "Về hôm nay"
+    },
+    "tooltips": {
+      "default_hint": "Rê chuột hoặc chạm vào các ô để xem chi tiết học tập.",
+      "today_suffix": " (Hôm nay)",
+      "not_studied": "{{date}}{{today}}: Chưa học",
+      "future_due": "{{date}}{{today}}: {{cards}} thẻ đến hạn",
+      "peak_day": "🔥 {{date}}{{today}} [KỶ LỤC NĂM]: {{cards}} thẻ · {{minutes}} phút",
+      "studied_day": "{{date}}{{today}}: {{cards}} thẻ · {{minutes}} phút"
+    },
+    "legend": {
+      "studied_label": "Đã học:",
+      "due_label": "Tới hạn:",
+      "less": "Ít",
+      "more_fire": "Nhiều 🔥",
+      "more_hourglass": "Nhiều ⏳",
+      "levels": {
+        "level_0": "0 thẻ",
+        "level_1": "Mức 1",
+        "level_2": "Mức 2",
+        "level_3": "Mức 3",
+        "level_4": "Mức 4",
+        "level_5": "Mức 5",
+        "level_6": "Mức 6",
+        "level_7_peak": "Mức 7 (Đạt đỉnh)"
+      },
+      "due_levels": {
+        "due_level_0": "0 thẻ",
+        "due_level_1": "Tới hạn mức 1",
+        "due_level_3": "Tới hạn mức 3",
+        "due_level_5": "Tới hạn mức 5",
+        "due_level_7": "Tới hạn mức 7"
+      }
+    },
+    "metrics": {
+      "daily_avg_label": "TB hàng ngày:",
+      "daily_avg_value": "{{count}} thẻ",
+      "daily_avg_value_one": "{{count}} thẻ",
+      "daily_avg_value_other": "{{count}} thẻ",
+      "daily_avg_value_plural": "{{count}} thẻ",
+      "days_learned_label": "Tỷ lệ ngày học:",
+      "days_learned_value": "{{percent}}%",
+      "longest_streak_label": "Kỷ lục chuỗi:",
+      "longest_streak_value": "{{days}} ngày",
+      "longest_streak_value_one": "{{days}} ngày",
+      "longest_streak_value_other": "{{days}} ngày",
+      "longest_streak_value_plural": "{{days}} ngày",
+      "current_streak_label": "Chuỗi hiện tại:",
+      "current_streak_value": "{{days}} ngày",
+      "current_streak_value_one": "{{days}} ngày",
+      "current_streak_value_other": "{{days}} ngày",
+      "current_streak_value_plural": "{{days}} ngày"
+    }
+  },
+  "validation": {
+    "name_required": "Vui lòng nhập tên deck.",
+    "name_max": "Tên deck quá dài.",
+    "path_max": "Đường dẫn deck quá dài."
+  }
+}

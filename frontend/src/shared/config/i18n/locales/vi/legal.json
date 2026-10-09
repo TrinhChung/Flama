@@ -1,0 +1,56 @@
+{
+  "nav": {
+    "aria_label": "Chuyển đổi văn bản pháp lý",
+    "terms": "Điều khoản dịch vụ",
+    "privacy": "Chính sách bảo mật",
+    "marketplace": "Quy chế Marketplace",
+    "community": "Chuẩn mực cộng đồng",
+    "cookies": "Chính sách cookie"
+  },
+  "metadata": {
+    "version": "Phiên bản {{version}}",
+    "effective_date": "Ngày hiệu lực",
+    "last_updated": "Cập nhật lần cuối",
+    "read_time": "~{{minutes}} phút đọc tiêu chuẩn",
+    "official_standard": "Quy chuẩn chính thức",
+    "executive_summary": "Tóm tắt điều hành"
+  },
+  "actions": {
+    "copy_document": "Sao chép",
+    "copy_document_title": "Sao chép liên kết tài liệu",
+    "copied_toast": "Đã sao chép liên kết văn bản!",
+    "print_pdf": "In PDF",
+    "print_pdf_title": "In văn bản hoặc xuất PDF",
+    "copy_anchor": "Sao chép liên kết điều khoản",
+    "copy_subclause": "Sao chép liên kết tiểu mục",
+    "copy_anchor_aria": "Sao chép liên kết {{number}}",
+    "copied_clause_toast": "Đã sao chép liên kết: {{title}}",
+    "selected_clause_toast": "Đã chọn: {{title}}"
+  },
+  "toc": {
+    "title": "Mục lục văn bản",
+    "aria_label": "Mục lục điều khoản",
+    "clause_count": "{{count}} điều khoản",
+    "mobile_button": "Mục lục ({{count}} điều)",
+    "related_policies": "Văn bản pháp lý liên quan"
+  },
+  "support": {
+    "title": "Bạn có thắc mắc hoặc cần giải quyết tranh chấp pháp lý?",
+    "body": "Nếu bạn cần làm rõ bất kỳ điều khoản nào, báo cáo vi phạm bản quyền theo quy trình Notice & Takedown, hoặc có yêu cầu liên quan đến quyền riêng tư và dữ liệu cá nhân theo Nghị định 13/2023/NĐ-CP, đội ngũ Pháp chế Flama luôn sẵn sàng tiếp nhận và phản hồi trong 24–48 giờ.",
+    "button": "Gửi yêu cầu hỗ trợ"
+  },
+  "effective_date": "Ngày hiệu lực",
+  "last_updated": "Cập nhật lần cuối",
+  "read_time": "~{{minutes}} phút đọc tiêu chuẩn",
+  "official_standard": "Quy chuẩn chính thức",
+  "copy_anchor": "Sao chép liên kết điều khoản",
+  "copied_toast": "Đã sao chép liên kết văn bản!",
+  "print_pdf": "In PDF",
+  "toc_title": "Mục lục văn bản",
+  "clause_count": "{{count}} điều khoản",
+  "related_policies": "Văn bản pháp lý liên quan",
+  "mobile_toc_button": "Mục lục ({{count}} điều)",
+  "support_title": "Bạn có thắc mắc hoặc cần giải quyết tranh chấp pháp lý?",
+  "support_body": "Nếu bạn cần làm rõ bất kỳ điều khoản nào, báo cáo vi phạm bản quyền theo quy trình Notice & Takedown, hoặc có yêu cầu liên quan đến quyền riêng tư và dữ liệu cá nhân theo Nghị định 13/2023/NĐ-CP, đội ngũ Pháp chế Flama luôn sẵn sàng tiếp nhận và phản hồi trong 24–48 giờ.",
+  "support_button": "Gửi yêu cầu hỗ trợ"
+}

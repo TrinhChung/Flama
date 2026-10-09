@@ -6,7 +6,9 @@ import hashlib
 import json
 from typing import Any, Iterable
 
-from sqlalchemy import tuple_
+from sqlalchemy import event, inspect, select, tuple_, update
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.repositories.deck_tree_query import collect_ancestor_ids
 from models import db
@@ -16,6 +18,98 @@ from models.deck_release_entity_membership import DeckReleaseEntityMembership
 from models.deck_working_dirty_entity import DeckWorkingDirtyEntity
 from models.field_def import FieldDef
 from models.note import Note
+from models.study_application import StudyApplication
+from models.template import Template
+
+_PRESENTATION_PENDING = "flama.deck_presentation.pending"
+_PRESENTATION_ITEMS = "flama.deck_presentation.items"
+_PRESENTATION_NESTED = "flama.deck_presentation.nested"
+_PRESENTATION_CONTENT = ("front_html", "back_html", "shared_css", "input_schema")
+_PRESENTATION_APPLICATION = ("template_id", "note_type_id", "input_bindings", "status_code", "occurrence_key", "display_name", "position", "is_default")
+
+
+@event.listens_for(Session, "before_flush")
+def _collect_presentation_mutations(session, _context, _instances):
+    pending = session.info.setdefault(_PRESENTATION_PENDING, set())
+    for row in list(session.new) + list(session.dirty) + list(session.deleted):
+        properties = _PRESENTATION_CONTENT if isinstance(row, Template) else _PRESENTATION_APPLICATION if isinstance(row, StudyApplication) else None
+        if properties is None:
+            continue
+        if isinstance(row, StudyApplication) and row.status_code not in (None, "ACTIVE") and "ACTIVE" not in inspect(row).attrs.status_code.history.deleted:
+            continue
+        if row in session.new or row in session.deleted or any(inspect(row).attrs[key].history.has_changes() for key in properties):
+            if row not in session.new and row not in session.deleted:
+                model = type(row)
+                stored = session.execute(select(*(getattr(model, key) for key in properties)).where(model.id == row.id)).mappings().first()
+                if stored is not None and all(stored[key] == getattr(row, key) for key in properties):
+                    continue
+            pending.add(row)
+
+
+@event.listens_for(Session, "after_flush_postexec")
+def _record_presentation_mutations(session, _context):
+    pending = session.info.pop(_PRESENTATION_PENDING, set())
+    if not pending:
+        return
+    template_ids = [row.id for row in pending if isinstance(row, Template) and row.id]
+    note_type_ids = {row.note_type_id for row in pending if isinstance(row, StudyApplication) and row.note_type_id}
+    if template_ids:
+        note_type_ids.update(session.execute(select(StudyApplication.note_type_id).where(
+            StudyApplication.template_id.in_(template_ids), StudyApplication.status_code == "ACTIVE",
+        )).scalars())
+    if not note_type_ids:
+        return
+    table = DeckMarketplaceItem.__table__
+    items = session.execute(select(table).where(
+        table.c.source_note_type_id.in_(sorted(note_type_ids)), table.c.current_release_id.is_not(None),
+    ).order_by(table.c.id).with_for_update()).mappings().all()
+    marked = session.info.setdefault(_PRESENTATION_ITEMS, set())
+    for item in items:
+        if item["id"] in marked:
+            continue
+        revision = int(item["working_revision"] or 0) + 1
+        complete = int(item["dirty_tracking_revision"] or 0) == revision - 1
+        values = {"working_revision": table.c.working_revision + 1}
+        if complete:
+            values["dirty_tracking_revision"] = table.c.dirty_tracking_revision + 1
+        session.execute(update(table).where(table.c.id == item["id"]).values(**values))
+        for loaded in list(session.identity_map.values()):
+            if isinstance(loaded, DeckMarketplaceItem) and loaded.id == item["id"]:
+                set_committed_value(loaded, "working_revision", revision)
+                if complete:
+                    set_committed_value(loaded, "dirty_tracking_revision", revision)
+        marked.add(item["id"])
+
+
+@event.listens_for(Session, "before_commit")
+def _publish_presentation_mutations(session):
+    if session.in_nested_transaction():
+        return
+    session.flush()
+    for item_id in sorted(session.info.get(_PRESENTATION_ITEMS, set())):
+        from app.services.deck_auto_publish_service import trigger_auto_publish_for_deck_item
+        trigger_auto_publish_for_deck_item(deck_item_id=item_id, session=session)
+
+
+@event.listens_for(Session, "after_transaction_create")
+def _presentation_savepoint_started(session, transaction):
+    if transaction.nested:
+        session.info.setdefault(_PRESENTATION_NESTED, {})[transaction] = set(session.info.get(_PRESENTATION_ITEMS, set()))
+
+
+@event.listens_for(Session, "after_soft_rollback")
+def _presentation_savepoint_rolled_back(session, transaction):
+    checkpoint = session.info.get(_PRESENTATION_NESTED, {}).pop(transaction, None)
+    if checkpoint is not None:
+        session.info[_PRESENTATION_ITEMS] = checkpoint
+        session.info.pop(_PRESENTATION_PENDING, None)
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _presentation_transaction_finished(session, transaction):
+    if transaction.parent is None:
+        for key in (_PRESENTATION_PENDING, _PRESENTATION_ITEMS, _PRESENTATION_NESTED):
+            session.info.pop(key, None)
 
 
 def _hash_value(value: Any) -> str:

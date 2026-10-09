@@ -18,18 +18,22 @@ import {
   faWrench,
 } from '@fortawesome/free-solid-svg-icons'
 import { LoaderCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Page, PageHeader } from '@/shared/components/Page'
-import { ContextHelpButton } from '@/features/guide'
 import { resolveBackendUrl } from '@/config/env'
+import { ContextHelpButton } from '@/features/guide'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
+import { Page, PageHeader } from '@/shared/components/Page'
 
 export function FlamaAudioGuidePage() {
-  const [serviceStatus, setServiceStatus] = useState<'unchecked' | 'checking' | 'online' | 'offline'>('unchecked')
+  const { t } = useTranslation('support')
+  const [serviceStatus, setServiceStatus] = useState<
+    'unchecked' | 'checking' | 'online' | 'offline'
+  >('unchecked')
   const downloadUrl = resolveBackendUrl('/api/download/flama-audio')
   const checksumUrl = resolveBackendUrl('/api/download/flama-audio.sha256')
 
@@ -38,38 +42,48 @@ export function FlamaAudioGuidePage() {
     try {
       await flamaAudioClient.getHealth()
       setServiceStatus('online')
-      toast.success('Đã kết nối thành công với Flama Audio Desktop (127.0.0.1:4791)!')
+      toast.success(t('toast.audio_connected'))
     } catch {
       setServiceStatus('offline')
-      toast.error('Chưa tìm thấy Flama Audio Desktop đang chạy tại port 4791.')
+      toast.error(t('toast.audio_offline'))
     }
   }
 
   return (
     <Page className="max-w-5xl space-y-7">
       <PageHeader
-        title="Hướng dẫn sử dụng & Tải Flama Audio Desktop"
-        description="Ứng dụng Windows Desktop cung cấp dịch vụ tổng hợp phát âm (VOICEVOX & Kokoro Engine) chạy cục bộ không giới hạn cho Flama."
+        title={t('audio_guide.title')}
+        description={t('audio_guide.description')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="default" size="sm" className="gap-2 font-bold rounded-xl shadow-xs">
+            <Button
+              asChild
+              variant="default"
+              size="sm"
+              className="gap-2 font-bold rounded-xl shadow-xs"
+            >
               <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download>
                 <FontAwesomeIcon icon={faDownload} className="text-xs" />
-                <span>Tải Flama Audio (FlamaAudio-Portable.exe)</span>
+                <span>{t('audio_guide.download_btn')}</span>
               </a>
             </Button>
-            <Button asChild variant="outline" size="sm" className="gap-2 font-semibold rounded-xl">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="gap-2 font-semibold rounded-xl"
+            >
               <a href={checksumUrl} target="_blank" rel="noopener noreferrer" download>
                 <FontAwesomeIcon icon={faShieldHalved} className="text-xs" />
-                <span>SHA-256</span>
+                <span>{t('audio_guide.sha256_btn')}</span>
               </a>
             </Button>
             <ContextHelpButton
               guidePath="/guide/audio/flama-audio"
-              guideTitle="Cẩm nang Flama Audio Desktop"
+              guideTitle={t('audio_guide.context_help_guide_title', 'Cẩm nang Flama Audio Desktop')}
               troubleshootPath="/guide/troubleshooting/flama-audio"
-              troubleshootTitle="Khắc phục sự cố không nghe thấy tiếng"
-              label="Tài liệu & Sửa lỗi"
+              troubleshootTitle={t('audio_guide.context_help_troubleshoot_title', 'Khắc phục sự cố không nghe thấy tiếng')}
+              label={t('audio_guide.docs_btn')}
             />
           </div>
         }
@@ -77,22 +91,33 @@ export function FlamaAudioGuidePage() {
 
       {/* Download Warning Alert */}
       <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-900 dark:text-amber-200">
-        <FontAwesomeIcon icon={faTriangleExclamation} className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <FontAwesomeIcon
+          icon={faTriangleExclamation}
+          className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
+        />
         <div className="space-y-1 text-xs leading-relaxed">
           <h4 className="font-bold text-sm text-amber-800 dark:text-amber-300">
-            Lưu ý khi tải xuống trên Windows (Bỏ qua cảnh báo SmartScreen)
+            {t('audio_guide.warning_title')}
           </h4>
           <p className="text-amber-800/90 dark:text-amber-200/90">
-            Do tệp <code className="font-mono font-bold bg-amber-500/20 px-1 py-0.5 rounded">FlamaAudio-Portable.exe</code> tự biên dịch nội bộ, trình duyệt hoặc Windows SmartScreen có thể hiển thị cảnh báo bảo mật. Để mở tệp:
+            {t('audio_guide.warning_desc')}
           </p>
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] font-medium text-amber-900 dark:text-amber-100">
-            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">1. Bấm dấu ba chấm (...)</span>
+            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">
+              {t('audio_guide.warning_steps.s1')}
+            </span>
             <span>&rarr;</span>
-            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">2. Chọn Giữ lại (Keep)</span>
+            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">
+              {t('audio_guide.warning_steps.s2')}
+            </span>
             <span>&rarr;</span>
-            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">3. Bấm mở rộng cạnh nút Xóa</span>
+            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">
+              {t('audio_guide.warning_steps.s3')}
+            </span>
             <span>&rarr;</span>
-            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">4. Chọn Vẫn giữ (Keep anyway)</span>
+            <span className="px-2 py-0.5 rounded-md bg-amber-500/20">
+              {t('audio_guide.warning_steps.s4')}
+            </span>
           </div>
         </div>
       </div>
@@ -107,28 +132,37 @@ export function FlamaAudioGuidePage() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-sm sm:text-base text-foreground">
-                  Trạng thái Flama Audio Service
+                  {t('audio_guide.service_status.title')}
                 </h3>
                 {serviceStatus === 'online' && (
-                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px] font-semibold gap-1">
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px] font-semibold gap-1"
+                  >
                     <FontAwesomeIcon icon={faCircleCheck} className="text-[10px]" />
-                    Đã kết nối (127.0.0.1:4791)
+                    {t('audio_guide.service_status.connected')}
                   </Badge>
                 )}
                 {serviceStatus === 'offline' && (
-                  <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30 text-[11px] font-semibold gap-1">
+                  <Badge
+                    variant="outline"
+                    className="bg-rose-500/10 text-rose-600 border-rose-500/30 text-[11px] font-semibold gap-1"
+                  >
                     <FontAwesomeIcon icon={faCircleXmark} className="text-[10px]" />
-                    Chưa chạy (Offline)
+                    {t('audio_guide.service_status.offline')}
                   </Badge>
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Cổng dịch vụ máy trạm: <code className="text-primary font-mono font-bold">127.0.0.1:4791</code>
+                {t('audio_guide.service_status.port_info')}
                 {serviceStatus === 'offline' && (
                   <span className="ml-2 text-rose-600 dark:text-rose-400 font-medium">
-                    &bull; Gặp sự cố?{' '}
-                    <Link to="/guide/troubleshooting/flama-audio" className="underline hover:text-rose-700">
-                      Xem hướng dẫn sửa lỗi
+                    &bull; {t('audio_guide.service_status.troubleshoot_hint')}{' '}
+                    <Link
+                      to="/guide/troubleshooting/flama-audio"
+                      className="underline hover:text-rose-700"
+                    >
+                      {t('audio_guide.service_status.troubleshoot_link')}
                     </Link>
                   </span>
                 )}
@@ -148,7 +182,7 @@ export function FlamaAudioGuidePage() {
             ) : (
               <FontAwesomeIcon icon={faRotateRight} className="text-xs text-primary" />
             )}
-            <span>Kiểm tra kết nối</span>
+            <span>{t('audio_guide.service_status.check_btn')}</span>
           </Button>
         </CardContent>
       </Card>
@@ -160,9 +194,11 @@ export function FlamaAudioGuidePage() {
             <div className="size-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-2">
               <FontAwesomeIcon icon={faBolt} className="text-sm" />
             </div>
-            <CardTitle className="text-sm sm:text-base font-bold text-foreground">Không giới hạn &amp; Miễn phí</CardTitle>
+            <CardTitle className="text-sm sm:text-base font-bold text-foreground">
+              {t('audio_guide.features.unlimited.title')}
+            </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Tổng hợp âm thanh phát âm trực tiếp trên phần cứng PC mà không tốn chi phí API hay giới hạn băng thông.
+              {t('audio_guide.features.unlimited.desc')}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -172,9 +208,11 @@ export function FlamaAudioGuidePage() {
             <div className="size-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2">
               <FontAwesomeIcon icon={faShieldHalved} className="text-sm" />
             </div>
-            <CardTitle className="text-sm sm:text-base font-bold text-foreground">Ghép nối an toàn (PNA Token)</CardTitle>
+            <CardTitle className="text-sm sm:text-base font-bold text-foreground">
+              {t('audio_guide.features.pair.title')}
+            </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Bảo mật Private Network Access với cơ chế phê duyệt Pair Code, bảo vệ thiết bị an toàn tuyệt đối.
+              {t('audio_guide.features.pair.desc')}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -184,9 +222,11 @@ export function FlamaAudioGuidePage() {
             <div className="size-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center mb-2">
               <FontAwesomeIcon icon={faSliders} className="text-sm" />
             </div>
-            <CardTitle className="text-sm sm:text-base font-bold text-foreground">VOICEVOX &amp; Kokoro Offline</CardTitle>
+            <CardTitle className="text-sm sm:text-base font-bold text-foreground">
+              {t('audio_guide.features.engines.title')}
+            </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Tích hợp sẵn bộ giọng đọc tiếng Nhật tự nhiên cùng mô hình Kokoro đa ngôn ngữ với bộ tinh chỉnh cao độ &amp; tốc độ.
+              {t('audio_guide.features.engines.desc')}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -197,10 +237,10 @@ export function FlamaAudioGuidePage() {
         <CardHeader className="bg-muted/30 p-4 sm:p-5 border-b border-border/70">
           <CardTitle className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
             <FontAwesomeIcon icon={faVolumeHigh} className="text-primary text-sm" />
-            <span>Quy trình khởi chạy &amp; Sử dụng Flama Audio</span>
+            <span>{t('audio_guide.steps.title')}</span>
           </CardTitle>
           <CardDescription className="text-xs text-muted-foreground">
-            Chỉ mất chưa đầy 1 phút để thiết lập hệ thống phát âm local trên máy tính Windows.
+            {t('audio_guide.steps.subtitle')}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-5 space-y-5">
@@ -211,10 +251,12 @@ export function FlamaAudioGuidePage() {
                 <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0">
                   1
                 </span>
-                <h4 className="font-bold text-xs sm:text-sm text-foreground">Tải &amp; Khởi chạy</h4>
+                <h4 className="font-bold text-xs sm:text-sm text-foreground">
+                  {t('audio_guide.steps.s1_title')}
+                </h4>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Tải <code className="text-foreground font-mono text-[11px] font-semibold">FlamaAudio-Portable.exe</code> và chạy trực tiếp, ứng dụng tự khởi tạo service ở cổng 4791.
+                {t('audio_guide.steps.s1_desc')}
               </p>
             </div>
 
@@ -224,10 +266,12 @@ export function FlamaAudioGuidePage() {
                 <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0">
                   2
                 </span>
-                <h4 className="font-bold text-xs sm:text-sm text-foreground">Yêu cầu ghép nối</h4>
+                <h4 className="font-bold text-xs sm:text-sm text-foreground">
+                  {t('audio_guide.steps.s2_title')}
+                </h4>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Vào <Link to="/audio/deck-generator" className="text-primary font-semibold hover:underline">Studio Tạo Âm</Link> hoặc trang <Link to="/browse" className="text-primary font-semibold hover:underline">Duyệt thẻ</Link>, bấm yêu cầu kết nối thiết bị.
+                {t('audio_guide.steps.s2_desc')}
               </p>
             </div>
 
@@ -237,10 +281,12 @@ export function FlamaAudioGuidePage() {
                 <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0">
                   3
                 </span>
-                <h4 className="font-bold text-xs sm:text-sm text-foreground">Phê duyệt trên App</h4>
+                <h4 className="font-bold text-xs sm:text-sm text-foreground">
+                  {t('audio_guide.steps.s3_title')}
+                </h4>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Cửa sổ Flama Audio Desktop hiển thị thông báo. Nhấn nút <strong>Đồng ý (Approve)</strong> để lưu token xác thực an toàn.
+                {t('audio_guide.steps.s3_desc')}
               </p>
             </div>
 
@@ -250,10 +296,12 @@ export function FlamaAudioGuidePage() {
                 <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0">
                   4
                 </span>
-                <h4 className="font-bold text-xs sm:text-sm text-foreground">Tạo âm thanh hàng loạt</h4>
+                <h4 className="font-bold text-xs sm:text-sm text-foreground">
+                  {t('audio_guide.steps.s4_title')}
+                </h4>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Chọn giọng đọc nhân vật mong muốn, tùy chỉnh thông số và kích hoạt tạo phát âm tự động cho hàng nghìn thẻ.
+                {t('audio_guide.steps.s4_desc')}
               </p>
             </div>
           </div>
@@ -263,23 +311,31 @@ export function FlamaAudioGuidePage() {
             <div className="space-y-0.5 text-center sm:text-left">
               <h4 className="font-bold text-sm text-foreground flex items-center justify-center sm:justify-start gap-2">
                 <FontAwesomeIcon icon={faDesktop} className="text-primary text-xs" />
-                <span>Trải nghiệm tạo phát âm từ vựng ngay bây giờ</span>
+                <span>{t('audio_guide.callout.title')}</span>
               </h4>
               <p className="text-xs text-muted-foreground">
-                Tự động quét bộ thẻ và tạo hàng loạt âm thanh cho toàn bộ deck chỉ với 1 cú nhấp.
+                {t('audio_guide.callout.desc')}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-center">
               <Button asChild size="sm" className="gap-2 font-bold rounded-xl shadow-xs">
                 <Link to="/audio/deck-generator">
-                  <span>Mở Studio Tạo Âm Deck</span>
+                  <span>{t('audio_guide.callout.open_studio')}</span>
                   <FontAwesomeIcon icon={faArrowRight} className="text-xs" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="sm" className="gap-1.5 font-semibold rounded-xl">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="gap-1.5 font-semibold rounded-xl"
+              >
                 <Link to="/browse">
-                  <span>Duyệt thẻ</span>
-                  <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="text-[10px] opacity-70" />
+                  <span>{t('audio_guide.callout.browse_cards')}</span>
+                  <FontAwesomeIcon
+                    icon={faArrowUpRightFromSquare}
+                    className="text-[10px] opacity-70"
+                  />
                 </Link>
               </Button>
             </div>
@@ -292,57 +348,81 @@ export function FlamaAudioGuidePage() {
         <CardHeader className="bg-muted/30 p-4 sm:p-5 border-b border-border/70">
           <CardTitle className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
             <FontAwesomeIcon icon={faCircleQuestion} className="text-primary text-sm" />
-            <span>Câu hỏi thường gặp &amp; Xử lý sự cố</span>
+            <span>{t('audio_guide.faq.title')}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-5 space-y-4 text-xs text-muted-foreground leading-relaxed">
           <div className="space-y-1">
             <h5 className="font-bold text-foreground text-xs sm:text-sm flex items-center gap-2">
-              <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500 text-xs shrink-0" />
-              <span>Ứng dụng báo lỗi "Không thể kết nối Flama Audio Service (port 4791)"?</span>
+              <FontAwesomeIcon
+                icon={faCircleCheck}
+                className="text-emerald-500 text-xs shrink-0"
+              />
+              <span>{t('audio_guide.faq.q1')}</span>
             </h5>
             <p className="pl-5 text-muted-foreground">
-              Hãy đảm bảo bạn đã mở ứng dụng <strong>Flama Audio Desktop</strong> (<code className="font-mono text-[11px] font-semibold text-foreground">FlamaAudio-Portable.exe</code>). Nếu bị Windows Firewall chặn, hãy chọn "Allow access" cho mạng Private.{' '}
-              <Link to="/guide/troubleshooting/flama-audio" className="text-primary font-semibold hover:underline inline-flex items-center gap-1">
-                Xem cẩm nang sửa lỗi kết nối <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="text-[9px]" />
+              {t('audio_guide.faq.a1')}{' '}
+              <Link
+                to="/guide/troubleshooting/flama-audio"
+                className="text-primary font-semibold hover:underline inline-flex items-center gap-1"
+              >
+                {t('audio_guide.service_status.troubleshoot_link')}{' '}
+                <FontAwesomeIcon
+                  icon={faArrowUpRightFromSquare}
+                  className="text-[9px]"
+                />
               </Link>
             </p>
           </div>
 
           <div className="space-y-1">
             <h5 className="font-bold text-foreground text-xs sm:text-sm flex items-center gap-2">
-              <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500 text-xs shrink-0" />
-              <span>Cần cài đặt VOICEVOX Engine như thế nào?</span>
+              <FontAwesomeIcon
+                icon={faCircleCheck}
+                className="text-emerald-500 text-xs shrink-0"
+              />
+              <span>{t('audio_guide.faq.q2')}</span>
             </h5>
-            <p className="pl-5 text-muted-foreground">
-              Flama Audio Desktop đã tích hợp sẵn cơ chế tải và quản lý VOICEVOX Engine tự động. Bạn chỉ cần nhấn nút <strong>"Tải &amp; Cài Engine"</strong> trực tiếp ngay trên giao diện ứng dụng Desktop khi được nhắc.
-            </p>
+            <p className="pl-5 text-muted-foreground">{t('audio_guide.faq.a2')}</p>
           </div>
 
           {/* Quick Hub Links */}
           <div className="pt-2 border-t border-border/60">
-            <p className="text-[11px] font-semibold text-foreground mb-2">Tài liệu &amp; Hướng dẫn liên quan:</p>
+            <p className="text-[11px] font-semibold text-foreground mb-2">
+              {t('audio_guide.faq.related_docs')}
+            </p>
             <div className="grid gap-2 sm:grid-cols-3">
               <Link
                 to="/guide/audio/batch-generation"
                 className="flex items-center gap-2 p-2.5 rounded-xl border border-border/70 bg-muted/20 hover:border-primary/50 hover:bg-primary/5 transition-all text-xs font-semibold text-foreground"
               >
-                <FontAwesomeIcon icon={faBookOpen} className="text-primary text-xs shrink-0" />
-                <span className="truncate">Tạo âm thanh hàng loạt</span>
+                <FontAwesomeIcon
+                  icon={faBookOpen}
+                  className="text-primary text-xs shrink-0"
+                />
+                <span className="truncate">{t('audio_guide.faq.batch_link')}</span>
               </Link>
               <Link
                 to="/guide/audio/cloud-tts-keys"
                 className="flex items-center gap-2 p-2.5 rounded-xl border border-border/70 bg-muted/20 hover:border-primary/50 hover:bg-primary/5 transition-all text-xs font-semibold text-foreground"
               >
-                <FontAwesomeIcon icon={faSliders} className="text-primary text-xs shrink-0" />
-                <span className="truncate">Cấu hình Cloud TTS</span>
+                <FontAwesomeIcon
+                  icon={faSliders}
+                  className="text-primary text-xs shrink-0"
+                />
+                <span className="truncate">{t('audio_guide.faq.cloud_link')}</span>
               </Link>
               <Link
                 to="/guide/troubleshooting/flama-audio"
                 className="flex items-center gap-2 p-2.5 rounded-xl border border-border/70 bg-muted/20 hover:border-primary/50 hover:bg-primary/5 transition-all text-xs font-semibold text-foreground"
               >
-                <FontAwesomeIcon icon={faWrench} className="text-amber-500 text-xs shrink-0" />
-                <span className="truncate">Khắc phục lỗi phát âm</span>
+                <FontAwesomeIcon
+                  icon={faWrench}
+                  className="text-amber-500 text-xs shrink-0"
+                />
+                <span className="truncate">
+                  {t('audio_guide.faq.troubleshoot_link')}
+                </span>
               </Link>
             </div>
           </div>
@@ -351,4 +431,3 @@ export function FlamaAudioGuidePage() {
     </Page>
   )
 }
-

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, LoaderCircle } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
@@ -21,11 +23,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { LazyDeckWorksheetModal } from '@/features/worksheets/components/LazyDeckWorksheetModal'
+import { DeckCardTypesDialog } from './DeckCardTypesDialog'
 import { dashboardQueryKey } from '../api'
 import {
-  createDeckSchema,
+  getCreateDeckSchema,
+  getRenameDeckSchema,
   moveDeckSchema,
-  renameDeckSchema,
   type CreateDeckForm,
   type MoveDeckForm,
   type RenameDeckForm,
@@ -98,9 +101,11 @@ export function CreateDeckModal({
   dashboard: DashboardPayload
   selectedDeck?: DeckNode | null
 }) {
+  const { t } = useTranslation('dashboard')
   const queryClient = useQueryClient()
+  const createSchema = useMemo(() => getCreateDeckSchema((k: any) => t(k)), [t])
   const form = useForm<CreateDeckForm>({
-    resolver: zodResolver(createDeckSchema),
+    resolver: zodResolver(createSchema),
     defaultValues: { name: '', deck_path: '', parent_id: '', note_type_id: '' },
   })
 
@@ -150,37 +155,37 @@ export function CreateDeckModal({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
-      toast.success('Deck đã được tạo.')
+      toast.success(t('modals.create_deck.toast_success'))
       form.reset()
       onClose()
     },
   })
 
   const descriptionText = selectedDeck
-    ? 'Đường dẫn phân cấp (sử dụng dấu “::” để thay đổi deck cha hoặc tạo cấu trúc lồng nhau).'
-    : 'Tạo deck mới (sử dụng dấu “::” để phân cấp thư mục, ví dụ: SAA::deck10).'
+    ? t('modals.create_deck.desc_nested')
+    : t('modals.create_deck.desc_root')
 
   return (
     <Dialog open={opened} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Tạo deck mới</DialogTitle>
+          <DialogTitle>{t('modals.create_deck.title')}</DialogTitle>
           <DialogDescription>{descriptionText}</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
           <MutationError error={mutation.error} />
           <Field
             id="create-deck-name"
-            label="Tên hoặc đường dẫn Deck"
-            placeholder="Ví dụ: SAA::deck10"
-            description="Dùng dấu :: để phân cấp thư mục (ví dụ: SAA::deck10)"
+            label={t('modals.create_deck.name_label')}
+            placeholder={t('modals.create_deck.name_placeholder')}
+            description={t('modals.create_deck.name_description')}
             autoFocus
             onFocus={(e) => e.target.select()}
             error={form.formState.errors.name?.message}
             {...form.register('name')}
           />
           <div className="space-y-2">
-            <Label htmlFor="create-deck-notetype">Mẫu thẻ (Note Type)</Label>
+            <Label htmlFor="create-deck-notetype">{t('modals.create_deck.notetype_label')}</Label>
             <NativeSelect
               id="create-deck-notetype"
               className="w-full"
@@ -189,7 +194,7 @@ export function CreateDeckModal({
             >
               {noteTypes.length === 0 ? (
                 <NativeSelectOption value="">
-                  {noteTypesQuery.isPending ? 'Đang tải mẫu thẻ...' : 'Mặc định'}
+                  {noteTypesQuery.isPending ? t('modals.create_deck.notetype_loading') : t('modals.create_deck.notetype_default')}
                 </NativeSelectOption>
               ) : (
                 noteTypes.map((nt) => (
@@ -201,15 +206,15 @@ export function CreateDeckModal({
             </NativeSelect>
             <p className="text-xs text-muted-foreground">
               {selectedDeck?.note_type_id
-                ? 'Mặc định kế thừa từ deck cha đã chọn.'
-                : 'Mẫu thẻ sẽ áp dụng cho các thẻ thuộc deck này.'}
+                ? t('modals.create_deck.notetype_help_inherited')
+                : t('modals.create_deck.notetype_help_default')}
             </p>
           </div>
           <input type="hidden" {...form.register('parent_id')} />
           <input type="hidden" {...form.register('deck_path')} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
-            <SubmitButton pending={mutation.isPending}>Tạo deck</SubmitButton>
+            <Button type="button" variant="outline" onClick={onClose}>{t('modals.create_deck.btn_cancel')}</Button>
+            <SubmitButton pending={mutation.isPending}>{t('modals.create_deck.btn_submit')}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -222,13 +227,15 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
   onClose: () => void
   dashboard: DashboardPayload
 }) {
+  const { t } = useTranslation('dashboard')
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
   const [purge, setPurge] = useState(false)
 
+  const renameSchema = useMemo(() => getRenameDeckSchema((k: any) => t(k)), [t])
   const renameForm = useForm<RenameDeckForm>({
-    resolver: zodResolver(renameDeckSchema),
+    resolver: zodResolver(renameSchema),
     defaultValues: { name: '' },
   })
   const moveForm = useForm<MoveDeckForm>({
@@ -249,7 +256,7 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
-      toast.success('Thao tác deck đã hoàn tất.')
+      toast.success(t('modals.actions.toast_success'))
       onClose()
     },
   })
@@ -276,12 +283,23 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
     )
   }
 
+  if (type === 'card-types') {
+    return (
+      <DeckCardTypesDialog
+        open
+        onOpenChange={(open) => !open && onClose()}
+        deckId={deck.id}
+        deckName={deck.name}
+      />
+    )
+  }
+
   const options = flattenDecks(dashboard.decks).filter((option) => option.value !== String(deck.id))
   const destructive = type === 'delete'
   const title =
-    type === 'rename' ? `Đổi tên “${deck.name}”`
-      : type === 'move' ? `Di chuyển “${deck.name}”`
-        : destructive ? 'Xác nhận xóa deck' : 'Đặt lại tiến độ'
+    type === 'rename' ? t('modals.actions.titles.rename', { name: deck.name })
+      : type === 'move' ? t('modals.actions.titles.move', { name: deck.name })
+        : destructive ? t('modals.actions.titles.delete') : t('modals.actions.titles.reset')
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -291,8 +309,8 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
           {type === 'delete' || type === 'reset' ? (
             <DialogDescription>
               {destructive
-                ? `Xóa “${deck.name}” cùng toàn bộ nội dung thuộc deck? Hành động này có thể không hoàn tác được.`
-                : `Đặt lại toàn bộ tiến độ học của tài khoản hiện tại trong “${deck.name}”?`}
+                ? t('modals.actions.descriptions.delete', { name: deck.name })
+                : t('modals.actions.descriptions.reset', { name: deck.name })}
             </DialogDescription>
           ) : null}
         </DialogHeader>
@@ -300,27 +318,27 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
         {type === 'rename' ? (
           <form className="space-y-4" onSubmit={renameForm.handleSubmit((values) => mutation.mutate({ type, deckId: deck.id, values }))}>
             <MutationError error={mutation.error} />
-            <Field id="rename-deck-name" label="Tên mới" error={renameForm.formState.errors.name?.message} {...renameForm.register('name')} />
+            <Field id="rename-deck-name" label={t('modals.actions.rename_form.name_label')} error={renameForm.formState.errors.name?.message} {...renameForm.register('name')} />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
-              <SubmitButton pending={mutation.isPending}>Lưu</SubmitButton>
+              <Button type="button" variant="outline" onClick={onClose}>{t('modals.actions.buttons.cancel')}</Button>
+              <SubmitButton pending={mutation.isPending}>{t('modals.actions.rename_form.btn_save')}</SubmitButton>
             </DialogFooter>
           </form>
         ) : type === 'move' ? (
           <form className="space-y-4" onSubmit={moveForm.handleSubmit((values) => mutation.mutate({ type, deckId: deck.id, values }))}>
             <MutationError error={mutation.error} />
             <div className="space-y-2">
-              <Label htmlFor="move-deck-parent">Deck cha mới</Label>
+              <Label htmlFor="move-deck-parent">{t('modals.actions.move_form.parent_label')}</Label>
               <NativeSelect id="move-deck-parent" className="w-full" {...moveForm.register('parent_id')}>
-                <NativeSelectOption value="">Root</NativeSelectOption>
+                <NativeSelectOption value="">{t('modals.actions.move_form.root_option')}</NativeSelectOption>
                 {options.map((option) => (
                   <NativeSelectOption key={option.value} value={option.value}>{option.label}</NativeSelectOption>
                 ))}
               </NativeSelect>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
-              <SubmitButton pending={mutation.isPending}>Di chuyển</SubmitButton>
+              <Button type="button" variant="outline" onClick={onClose}>{t('modals.actions.buttons.cancel')}</Button>
+              <SubmitButton pending={mutation.isPending}>{t('modals.actions.move_form.btn_move')}</SubmitButton>
             </DialogFooter>
           </form>
         ) : (
@@ -336,28 +354,28 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
                     className="border-destructive/60 data-checked:bg-destructive data-checked:border-destructive data-checked:text-destructive-foreground cursor-pointer"
                   />
                   <Label htmlFor="purge-deck-checkbox" className="font-bold text-destructive cursor-pointer select-none">
-                    Xóa sạch hoàn toàn dữ liệu (Purge)
+                    {t('modals.actions.purge.checkbox_label')}
                   </Label>
                 </div>
                 {purge && (
                   <Alert variant="destructive" className="border-none bg-transparent p-0 flex items-start">
                     <AlertCircle className="size-4 mt-0.5 text-destructive shrink-0" />
                     <AlertDescription className="text-xs text-destructive/90 font-medium ml-2 leading-relaxed">
-                      Cảnh báo: Chức năng này chỉ dùng để xóa các bộ deck lỗi trong quá trình phát triển. Hành động này sẽ xóa sạch hoàn toàn các bản cài đặt, bản sao, đánh giá, lịch sử học tập và các thay đổi liên quan đến bộ deck này từ tất cả người dùng và không thể hoàn tác.
+                      {t('modals.actions.purge.alert_warning')}
                     </AlertDescription>
                   </Alert>
                 )}
               </div>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
+              <Button type="button" variant="outline" onClick={onClose}>{t('modals.actions.buttons.cancel')}</Button>
               <Button
                 variant={destructive ? 'destructive' : 'default'}
                 disabled={mutation.isPending}
                 onClick={() => mutation.mutate({ type, deckId: deck.id, values: {}, purge })}
               >
                 {mutation.isPending ? <LoaderCircle className="animate-spin" /> : null}
-                {destructive ? (purge ? 'Xóa sạch dữ liệu' : 'Xóa deck') : 'Đặt lại'}
+                {destructive ? (purge ? t('modals.actions.buttons.delete_purge') : t('modals.actions.buttons.delete_deck')) : t('modals.actions.buttons.reset')}
               </Button>
             </DialogFooter>
           </div>

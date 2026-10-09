@@ -1,0 +1,85 @@
+app/services/deck_install_rebase_service.py:159:        "entity_kind": change.entity_kind,
+app/services/deck_install_rebase_service.py:382:    entity_kind: str | None = None,
+app/services/deck_install_rebase_service.py:398:    normalized_kind = str(entity_kind or "").strip().lower()
+app/services/deck_install_rebase_service.py:400:    if not normalized_kind and normalized_operation in {"note_field", "field_def"}:
+app/services/deck_install_rebase_service.py:405:    elif normalized_kind not in {"note_field", "field_def"}:
+app/services/deck_install_rebase_service.py:407:            "entity_kind must be note_field or field_def.",
+app/services/deck_install_rebase_service.py:408:            field="entity_kind",
+app/services/deck_install_rebase_service.py:459:        entity_kind=(normalized_kind or None),
+app/services/deck_install_rebase_service.py:573:    if change.entity_kind == "note_field":
+app/services/deck_install_rebase_service.py:582:        return _LocalOverlay("note_field", row, field_name, value)
+app/services/deck_install_rebase_service.py:584:    if change.entity_kind == "field_def":
+app/services/deck_install_rebase_service.py:595:        return _LocalOverlay("field_def", row, property_key, properties[property_key])
+app/services/deck_install_rebase_service.py:597:    if change.entity_kind == "field_order" and order_row is not None:
+app/services/deck_install_rebase_service.py:610:        key = str(row.change_key or f"{row.entity_kind}:{row.entity_id}:{row.property_key}")
+app/services/deck_install_rebase_service.py:743:                    or f"{change.entity_kind}:{change.entity_id}:{change.property_key}"
+app/services/deck_install_rebase_service.py:745:                entity_kind=change.entity_kind,
+app/services/deck_install_rebase_service.py:770:        "entity_kind": conflict.entity_kind,
+app/services/deck_install_rebase_service.py:984:    if local.kind in {"note_field", "field_order"}:
+app/services/deck_install_rebase_service.py:999:    if local.kind == "note_field":
+app/services/deck_install_rebase_service.py:1056:            or f"{change.entity_kind}:{change.entity_id}:{change.property_key}"
+app/services/deck_install_rebase_service.py:1079:        key = str(change.change_key or f"{change.entity_kind}:{change.entity_id}:{change.property_key}")
+app/services/deck_release_service.py:30:VISIBLE_ENTITY_KINDS = {"note_field", "field_def"}
+app/services/deck_release_service.py:357:        entity_kinds=VISIBLE_ENTITY_KINDS,
+app/services/deck_release_service.py:359:    field_changes = [row for row in history if row.entity_kind == "field_def"]
+app/services/deck_release_service.py:360:    note_changes = [row for row in history if row.entity_kind == "note_field"]
+app/services/deck_release_service.py:417:        if membership.entity_kind == "note":
+app/services/deck_release_service.py:421:        elif membership.entity_kind == "field_def":
+app/services/deck_release_service.py:529:        entity_kinds=["field_def"],
+app/services/deck_release_service.py:534:        entity_kind="field_def",
+app/services/deck_release_service.py:578:        entity_kinds=["field_def"],
+app/services/deck_release_service.py:583:        entity_kind="field_def",
+app/services/deck_release_service.py:622:                entity_kind="note",
+app/services/deck_release_service.py:759:    entity_kind: str,
+app/services/deck_release_service.py:779:        "entity_kind": entity_kind,
+app/services/deck_release_service.py:825:                    entity_kind="field_def",
+app/services/deck_release_service.py:885:                    entity_kind="note_field",
+app/services/deck_release_service.py:945:    for entity_kind, entity_ids in entity_ids_by_kind.items():
+app/services/deck_release_service.py:949:                entity_kind=entity_kind,
+app/services/deck_release_service.py:955:                key = (str(row.entity_kind), str(row.entity_id))
+app/services/deck_release_service.py:996:            str(row.entity_kind) not in VISIBLE_ENTITY_KINDS
+app/services/deck_release_service.py:1007:        if row.entity_kind == "note_field"
+app/services/deck_release_service.py:1012:        if row.entity_kind == "field_def"
+app/services/deck_release_service.py:1016:        if row.entity_kind == "note_field" and row.field_def_id
+app/services/deck_release_service.py:1020:        "field_def": field_ids,
+app/services/deck_release_service.py:1080:        sparse_memberships[("field_def", field_id)] = (
+app/services/deck_release_service.py:1103:        if dirty.entity_kind == "field_def":
+app/services/deck_release_service.py:1128:                    entity_kind="field_def",
+app/services/deck_release_service.py:1190:                entity_kind="note_field",
+app/services/deck_release_service.py:1288:            {(row["entity_kind"], row["entity_id"]) for row in changes}
+app/services/deck_release_service.py:1307:    entity_kind: str | None,
+app/services/deck_release_service.py:1312:    if entity_kind and change["entity_kind"] != entity_kind:
+app/services/deck_release_service.py:1339:    entity_kind: str | None = None,
+app/services/deck_release_service.py:1345:    normalized_kind = (entity_kind or "").strip() or None
+app/services/deck_release_service.py:1387:            entity_kind=normalized_kind,
+app/services/deck_release_service.py:1490:                "entity_kind",
+app/services/deck_release_service.py:1547:            entity_kind=row["entity_kind"],
+app/services/deck_release_service.py:1598:        (row.entity_kind, str(row.entity_id)): row
+app/services/deck_release_service.py:1604:        current[("field_def", field_id)] = {
+app/services/deck_release_service.py:1629:                entity_kind=key[0],
+app/services/deck_release_service.py:1652:    for entity_kind, entity_id in current:
+app/services/deck_release_service.py:1653:        entity_ids_by_kind.setdefault(entity_kind, set()).add(entity_id)
+app/services/deck_release_service.py:1656:    for entity_kind, entity_ids in entity_ids_by_kind.items():
+app/services/deck_release_service.py:1660:                entity_kind=entity_kind,
+app/services/deck_release_service.py:1666:                key = (str(row.entity_kind), str(row.entity_id))
+app/services/deck_release_service.py:1693:                entity_kind=key[0],
+app/services/deck_release_service.py:1922:        "entity_kind": change.entity_kind,
+app/services/deck_release_service.py:1989:    entity_kind: str | None = None,
+app/services/deck_release_service.py:2000:    normalized_kind = (entity_kind or "").strip() or None
+app/services/deck_release_service.py:2026:        entity_kind=normalized_kind,
+app/services/deck_release_service.py:2118:                "entity_kind": row.entity_kind,
+app/services/deck_release_service.py:2131:                "entity_kind": row.entity_kind,
+app/services/deck_working_tree_service.py:65:    entity_kind: str,
+app/services/deck_working_tree_service.py:76:        entity_kind=entity_kind,
+app/services/deck_working_tree_service.py:83:            entity_kind=entity_kind,
+app/services/deck_working_tree_service.py:126:                entity_kind="note_field",
+app/services/deck_working_tree_service.py:183:                entity_kind="field_def",
+app/services/deck_working_tree_service.py:286:                        "entity_kind": "note_field",
+app/services/deck_working_tree_service.py:327:                DeckWorkingDirtyEntity.entity_kind,
+app/services/deck_working_tree_service.py:334:                (str(row.entity_kind), str(row.entity_id), str(row.property_key)): row
+app/services/deck_working_tree_service.py:358:        entity_kind = str(raw_change.get("entity_kind") or "").strip()
+app/services/deck_working_tree_service.py:364:            entity_kind not in {"note_field", "field_def"}
+app/services/deck_working_tree_service.py:371:        normalized[(entity_kind, entity_id, property_key)] = {
+app/services/deck_working_tree_service.py:373:            "entity_kind": entity_kind,
+app/services/deck_working_tree_service.py:394:                entity_kind=change["entity_kind"],
+app/services/deck_working_tree_service.py:431:            DeckReleaseEntityMembership.entity_kind == "note",

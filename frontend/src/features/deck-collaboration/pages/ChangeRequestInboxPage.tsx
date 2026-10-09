@@ -1,65 +1,57 @@
-import { useEffect, useState } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
 import { ArrowLeft, ChevronRight, FileDiff, Inbox, LoaderCircle, UserRound } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
-import { getIncomingDeckChangeRequests } from '../api'
+import '@/shared/config/i18n'
 import { ChangeRequestStatusBadge } from '../components/ChangeRequestStatusBadge'
-
-const PAGE_SIZE = 30
-
-function formatDate(value?: string | null) {
-  if (!value) return 'Chưa rõ thời gian'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Chưa rõ thời gian'
-  return new Intl.DateTimeFormat('vi-VN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
+import { formatDate, useChangeRequestInbox } from '../hooks/useChangeRequestInbox'
 
 export function ChangeRequestInboxPage() {
-  const [searchParams] = useSearchParams()
-  const deckItemId = searchParams.get('deck_item_id')?.trim() || null
-  const [pageIndex, setPageIndex] = useState(0)
-  const query = useInfiniteQuery({
-    queryKey: ['incoming-deck-change-requests', deckItemId],
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => getIncomingDeckChangeRequests(
-      deckItemId,
-      { cursor: pageParam, limit: PAGE_SIZE },
-      signal,
-    ),
-    getNextPageParam: (page) => page.page?.next_cursor || undefined,
-  })
+  const { t, i18n } = useTranslation('collaboration')
+  const locale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
+  const {
+    deckItemId,
+    query,
+    pageIndex,
+    loadedPages,
+    items,
+    hasNextPage,
+    onPreviousPage,
+    onNextPage,
+  } = useChangeRequestInbox()
 
-  const loadedPages = query.data?.pages || []
-  const visiblePageIndex = Math.min(pageIndex, Math.max(loadedPages.length - 1, 0))
-  const items = loadedPages[visiblePageIndex]?.items || []
+  if (query.isPending) {
+    return <PageLoading label={t('inbox.loading', 'Đang tải đóng góp chờ duyệt…')} />
+  }
+  if (query.error) {
+    return (
+      <Page>
+        <PageError error={query.error} />
+      </Page>
+    )
+  }
 
-  useEffect(() => {
-    setPageIndex(0)
-  }, [deckItemId])
-
-  if (query.isPending) return <PageLoading label="Đang tải đóng góp chờ duyệt…" />
-  if (query.error) return <Page><PageError error={query.error} /></Page>
+  const description = deckItemId
+    ? t('inbox.description_scoped', 'Các change request đang chờ duyệt cho shared deck đã chọn.')
+    : t(
+        'inbox.description_all',
+        'Kiểm tra diff, merge vào working deck hoặc từ chối mà không xóa bản local của người đóng góp.',
+      )
 
   return (
     <Page>
       <PageHeader
-        title="Đóng góp cần duyệt"
-        description={deckItemId
-          ? 'Các change request đang chờ duyệt cho shared deck đã chọn.'
-          : 'Kiểm tra diff, merge vào working deck hoặc từ chối mà không xóa bản local của người đóng góp.'}
+        title={t('inbox.title', 'Đóng góp cần duyệt')}
+        description={description}
         actions={
           <Button variant="outline" asChild>
             <Link to={deckItemId ? `/marketplace/decks/${deckItemId}` : '/dashboard'}>
               <ArrowLeft />
-              Quay lại
+              {t('inbox.btn_back', 'Quay lại')}
             </Link>
           </Button>
         }
@@ -67,99 +59,114 @@ export function ChangeRequestInboxPage() {
 
       {!items.length ? (
         <EmptyState
-          title="Không có đóng góp chờ duyệt"
-          description="Change request mới sẽ xuất hiện ở đây sau khi người dùng sync và gửi review."
+          title={t('inbox.empty_title', 'Không có đóng góp chờ duyệt')}
+          description={t(
+            'inbox.empty_desc',
+            'Change request mới sẽ xuất hiện ở đây sau khi người dùng sync và gửi review.',
+          )}
           action={
             <Button variant="outline" asChild>
-              <Link to="/marketplace/decks">Mở Marketplace</Link>
+              <Link to="/marketplace/decks">{t('inbox.btn_open_marketplace', 'Mở Marketplace')}</Link>
             </Button>
           }
         />
       ) : (
         <div className="space-y-3">
-          {items.map((request) => (
-            <Card key={request.id} className="transition-colors hover:border-primary/40">
-              <CardHeader className="pb-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CardTitle className="truncate text-base">{request.title}</CardTitle>
-                      <ChangeRequestStatusBadge status={request.status} />
+          {items.map((req) => {
+            const formattedDate = formatDate(req.submitted_at, locale)
+            const dateText = formattedDate
+              ? t('inbox.submitted_date', {
+                  date: formattedDate,
+                  defaultValue: `gửi ${formattedDate}`,
+                })
+              : t('inbox.unknown_time', 'Chưa rõ thời gian')
+
+            return (
+              <Card key={req.id} className="transition-colors hover:border-primary/40">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="truncate text-base">{req.title}</CardTitle>
+                        <ChangeRequestStatusBadge status={req.status} />
+                      </div>
+                      <CardDescription>
+                        {req.deck_item?.title || 'Shared deck'} · {dateText}
+                      </CardDescription>
                     </div>
-                    <CardDescription>
-                      {request.deck_item?.title || 'Shared deck'} · gửi {formatDate(request.submitted_at)}
-                    </CardDescription>
+                    <Button asChild>
+                      <Link to={`/flashcards/change-requests/${req.id}`}>
+                        {t('inbox.btn_view_diff', 'Xem diff')}
+                        <ChevronRight />
+                      </Link>
+                    </Button>
                   </div>
-                  <Button asChild>
-                    <Link to={`/flashcards/change-requests/${request.id}`}>
-                      Xem diff
-                      <ChevronRight />
-                    </Link>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary">
-                  <UserRound />
-                  {request.requester.username}
-                </Badge>
-                <Badge variant="outline">
-                  <FileDiff />
-                  {request.item_count.toLocaleString('vi-VN')} thay đổi
-                </Badge>
-                {request.unresolved_conflict_count ? (
-                  <Badge variant="destructive">
-                    {request.unresolved_conflict_count} xung đột
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Badge variant="secondary">
+                    <UserRound />
+                    {req.requester.username}
                   </Badge>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
+                  <Badge variant="outline">
+                    <FileDiff />
+                    {t('inbox.card_items', {
+                      count: req.item_count.toLocaleString(locale),
+                      defaultValue: `${req.item_count.toLocaleString(locale)} thay đổi`,
+                    })}
+                  </Badge>
+                  {req.unresolved_conflict_count ? (
+                    <Badge variant="destructive">
+                      {t('inbox.card_conflicts', {
+                        count: req.unresolved_conflict_count,
+                        defaultValue: `${req.unresolved_conflict_count} xung đột`,
+                      })}
+                    </Badge>
+                  ) : null}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 
-      {visiblePageIndex > 0
-        || visiblePageIndex < loadedPages.length - 1
-        || query.hasNextPage ? (
-        <nav className="flex items-center justify-center gap-2" aria-label="Phân trang đóng góp">
+      {pageIndex > 0 || pageIndex < loadedPages.length - 1 || hasNextPage ? (
+        <nav
+          className="flex items-center justify-center gap-2"
+          aria-label={t('inbox.pagination_aria_label', 'Phân trang đóng góp')}
+        >
           <Button
             type="button"
             variant="outline"
-            disabled={visiblePageIndex === 0 || query.isFetchingNextPage}
-            onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+            disabled={pageIndex === 0 || query.isFetchingNextPage}
+            onClick={onPreviousPage}
           >
-            Trang trước
+            {t('inbox.btn_prev', 'Trang trước')}
           </Button>
           <span className="px-2 text-xs text-muted-foreground">
-            Trang {visiblePageIndex + 1}
+            {t('inbox.page_indicator', {
+              page: pageIndex + 1,
+              defaultValue: `Trang ${pageIndex + 1}`,
+            })}
           </span>
           <Button
             type="button"
             variant="outline"
-            disabled={query.isFetchingNextPage || (
-              visiblePageIndex >= loadedPages.length - 1 && !query.hasNextPage
-            )}
-            onClick={() => {
-              if (visiblePageIndex < loadedPages.length - 1) {
-                setPageIndex((current) => current + 1)
-                return
-              }
-              void query.fetchNextPage().then((result) => {
-                if ((result.data?.pages.length || 0) > loadedPages.length) {
-                  setPageIndex((current) => current + 1)
-                }
-              })
-            }}
+            disabled={query.isFetchingNextPage || (!hasNextPage && pageIndex >= loadedPages.length - 1)}
+            onClick={onNextPage}
           >
             {query.isFetchingNextPage ? <LoaderCircle className="animate-spin" /> : null}
-            Trang tiếp
+            {t('inbox.btn_next', 'Trang tiếp')}
           </Button>
         </nav>
       ) : null}
 
       <div className="sr-only" aria-live="polite">
         <Inbox />
-        {items.length} đóng góp chờ duyệt trên trang {visiblePageIndex + 1}
+        {t('inbox.sr_inbox_count', {
+          count: items.length,
+          page: pageIndex + 1,
+          defaultValue: `${items.length} đóng góp chờ duyệt trên trang ${pageIndex + 1}`,
+        })}
       </div>
     </Page>
   )

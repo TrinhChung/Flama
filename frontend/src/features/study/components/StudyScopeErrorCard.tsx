@@ -1,4 +1,6 @@
+import '@/shared/config/i18n'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   AlertCircle,
   ArrowLeft,
@@ -32,6 +34,7 @@ export function StudyScopeErrorCard({
   deckId,
   onRetry,
 }: StudyScopeErrorCardProps) {
+  const { t } = useTranslation('study')
   const isApiError = error instanceof ApiError
   const errorCode = isApiError ? error.code : ''
   const errorStatus = isApiError ? error.status : 0
@@ -56,14 +59,13 @@ export function StudyScopeErrorCard({
 
           <div className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground">
-              {details.deck_name || deckName || (deckId ? `Deck #${deckId}` : 'Phiên học')}
+              {details.deck_name || deckName || (deckId ? `Deck #${deckId}` : t('page.session_title'))}
             </div>
             <h2 className="text-2xl font-bold text-foreground tracking-tight">
-              Bạn không thể truy cập bộ thẻ này
+              {t('scope_error.unauthorized_title')}
             </h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Bộ thẻ này thuộc quyền sở hữu của người dùng khác hoặc chưa được cài đặt vào tài khoản của bạn.
-              Hãy kiểm tra trên Chợ bộ thẻ để cài đặt hoặc quay lại trang chính.
+              {t('scope_error.unauthorized_desc')}
             </p>
           </div>
 
@@ -71,13 +73,13 @@ export function StudyScopeErrorCard({
             <Button asChild className="w-full sm:w-auto">
               <Link to={marketplaceUrl}>
                 <ShoppingBag className="mr-2 size-4" />
-                Khám phá Chợ bộ thẻ
+                {t('scope_error.explore_market')}
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full sm:w-auto">
               <Link to="/dashboard">
                 <Home className="mr-2 size-4" />
-                Về Dashboard
+                {t('scope_error.back_to_dashboard')}
               </Link>
             </Button>
           </div>
@@ -96,13 +98,13 @@ export function StudyScopeErrorCard({
 
           <div className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground">
-              {deckId ? `Deck #${deckId}` : 'Phiên học'}
+              {deckId ? `Deck #${deckId}` : t('page.session_title')}
             </div>
             <h2 className="text-2xl font-bold text-foreground tracking-tight">
-              Bộ thẻ không tồn tại
+              {t('scope_error.not_found_title')}
             </h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Bộ thẻ này không tồn tại hoặc đã bị xóa. Vui lòng quay lại Dashboard để chọn bộ thẻ đang được cài đặt.
+              {t('scope_error.not_found_desc')}
             </p>
           </div>
 
@@ -110,13 +112,13 @@ export function StudyScopeErrorCard({
             <Button asChild className="w-full sm:w-auto">
               <Link to="/dashboard">
                 <Home className="mr-2 size-4" />
-                Về Dashboard
+                {t('scope_error.back_to_dashboard')}
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full sm:w-auto">
               <Link to="/marketplace/decks">
                 <ShoppingBag className="mr-2 size-4" />
-                Khám phá Chợ bộ thẻ
+                {t('scope_error.explore_market')}
               </Link>
             </Button>
           </div>
@@ -135,13 +137,13 @@ export function StudyScopeErrorCard({
 
           <div className="space-y-2">
             <div className="text-xs font-medium text-muted-foreground">
-              {deckName || (deckId ? `Deck #${deckId}` : 'Phiên học')}
+              {deckName || (deckId ? `Deck #${deckId}` : t('page.session_title'))}
             </div>
             <h2 className="text-2xl font-bold text-foreground tracking-tight">
-              Bộ thẻ chưa có thẻ học
+              {t('scope_error.empty_deck_title')}
             </h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Bộ thẻ này hiện chưa có thẻ nào để bắt đầu phiên ôn tập.
+              {t('scope_error.empty_deck_desc')}
             </p>
           </div>
 
@@ -149,13 +151,13 @@ export function StudyScopeErrorCard({
             <Button asChild className="w-full sm:w-auto">
               <Link to="/dashboard">
                 <Home className="mr-2 size-4" />
-                Về Dashboard
+                {t('scope_error.back_to_dashboard')}
               </Link>
             </Button>
             {deckId ? (
               <Button asChild variant="outline" className="w-full sm:w-auto">
                 <Link to={`/browse?deck_id=${deckId}`}>
-                  Quản lý thẻ
+                  {t('scope_error.manage_cards')}
                 </Link>
               </Button>
             ) : null}
@@ -168,7 +170,7 @@ export function StudyScopeErrorCard({
   // Generic fallback error
   const errorMessage = error instanceof Error
     ? error.message
-    : (typeof error === 'string' ? error : 'Đã có lỗi xảy ra khi tải phiên học.')
+    : (typeof error === 'string' ? error : t('scope_error.load_failed_default'))
 
   return (
     <div className="w-full max-w-xl mx-auto py-6 px-4">
@@ -179,10 +181,10 @@ export function StudyScopeErrorCard({
 
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">
-            {deckName || (deckId ? `Deck #${deckId}` : 'Phiên học')}
+            {deckName || (deckId ? `Deck #${deckId}` : t('page.session_title'))}
           </div>
           <h2 className="text-2xl font-bold text-foreground tracking-tight">
-            Không thể tải phiên học
+            {t('scope_error.load_failed_title')}
           </h2>
           <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
             {errorMessage}
@@ -193,13 +195,13 @@ export function StudyScopeErrorCard({
           {onRetry ? (
             <Button type="button" onClick={onRetry} className="w-full sm:w-auto">
               <RotateCw className="mr-2 size-4" />
-              Thử lại
+              {t('scope_error.retry')}
             </Button>
           ) : null}
           <Button asChild variant="outline" className="w-full sm:w-auto">
             <Link to="/dashboard">
               <ArrowLeft className="mr-2 size-4" />
-              Về Dashboard
+              {t('scope_error.back_to_dashboard')}
             </Link>
           </Button>
         </div>

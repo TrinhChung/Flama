@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Eye, Loader2, RotateCcw } from 'lucide-react'
+import '@/shared/config/i18n'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
@@ -50,16 +52,19 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
   fieldDefs,
   isLoading = false,
   error = null,
-  title = 'Live Card Preview',
-  subtitle = '(Mẫu thẻ với dữ liệu mẫu)',
+  title,
+  subtitle,
   className = '',
   containerHeightClass = 'h-[clamp(14rem,40vh,30rem)] min-h-[240px]',
   showSideSelector = true,
   slots,
 }) => {
+  const { t } = useTranslation('note_types')
   const [internalSide, setInternalSide] = useState<'front' | 'back'>('front')
 
   const activeSide = controlledSide !== undefined ? controlledSide : internalSide
+  const displayTitle = title ?? t('live_preview.title')
+  const displaySubtitle = subtitle ?? t('live_preview.subtitle')
 
   const handleSideToggle = (newSide: 'front' | 'back') => {
     if (onSideChange) {
@@ -77,12 +82,12 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
             <Eye className="size-4" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-foreground">{title}</h4>
-            {subtitle && <span className="text-[10px] text-muted-foreground block">{subtitle}</span>}
+            <h4 className="text-sm font-bold text-foreground">{displayTitle}</h4>
+            {displaySubtitle && <span className="text-[10px] text-muted-foreground block">{displaySubtitle}</span>}
           </div>
           {isLoading && (
             <span className="text-xs text-primary font-semibold animate-pulse ml-2 flex items-center gap-1">
-              <Loader2 className="size-3 animate-spin shrink-0" /> Đang cập nhật…
+              <Loader2 className="size-3 animate-spin shrink-0" /> {t('live_preview.updating')}
             </span>
           )}
         </div>
@@ -110,7 +115,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
                 onClick={() => handleSideToggle('front')}
                 className="h-7 px-3 text-xs font-bold rounded-lg transition-all"
               >
-                Mặt trước
+                {t('live_preview.front_side')}
               </Button>
               <Button
                 size="sm"
@@ -118,7 +123,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
                 onClick={() => handleSideToggle('back')}
                 className="h-7 px-3 text-xs font-bold rounded-lg transition-all"
               >
-                <RotateCcw className="size-3 mr-1" /> Mặt sau
+                <RotateCcw className="size-3 mr-1" /> {t('live_preview.back_side')}
               </Button>
             </div>
           )}
@@ -146,7 +151,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-            Đang chuẩn bị bản xem trước…
+            {t('live_preview.preparing')}
           </div>
         )}
       </div>

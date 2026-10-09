@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useId, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import { appApi } from '@/app/api'
 import { apiRequest } from '@/shared/api/client'
 import type {
@@ -93,6 +94,7 @@ export type ImportReport = {
 }
 
 export function useFileImportWizard() {
+  const { t } = useTranslation('import')
   const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -290,10 +292,10 @@ export function useFileImportWizard() {
         delimiterLabel: data.delimiter === '\t' ? 'tab' : data.delimiter,
       })
 
-      toast.success('Parse file thành công')
+      toast.success(t('file_import.toasts.parse_success', 'Parse file thành công'))
     },
     onError: (err: Error) => {
-      toast.error('Lỗi parse file', { description: err.message })
+      toast.error(t('file_import.toasts.parse_error', 'Lỗi parse file'), { description: err.message })
     },
   })
 
@@ -351,10 +353,17 @@ export function useFileImportWizard() {
         delimiterLabel: delimiterMode,
       })
 
-      toast.success(`Đã phân tích ${uploadedFiles.length} tệp bài học thành công!`)
+      toast.success(
+        t('file_import.toasts.batch_parsed_success', {
+          count: uploadedFiles.length,
+          defaultValue: `Đã phân tích ${uploadedFiles.length} tệp bài học thành công!`,
+        })
+      )
     },
     onError: (err: Error) => {
-      toast.error('Lỗi phân tích nhiều file', { description: err.message })
+      toast.error(t('file_import.toasts.batch_parsed_error', 'Lỗi phân tích nhiều file'), {
+        description: err.message,
+      })
     },
   })
 
@@ -386,13 +395,23 @@ export function useFileImportWizard() {
       setExecutionDone(false)
       const summary = data.summary
       if (summary.errors > 0) {
-        toast.warning(`Ước lượng hoàn tất: ${summary.errors} dòng lỗi.`)
+        toast.warning(
+          t('file_import.toasts.estimate_warning', {
+            errors: summary.errors,
+            defaultValue: `Ước lượng hoàn tất: ${summary.errors} dòng lỗi.`,
+          })
+        )
       } else {
-        toast.success('Ước lượng thành công. Đã sẵn sàng thực thi import.')
+        toast.success(
+          t('file_import.toasts.estimate_success', 'Ước lượng thành công. Đã sẵn sàng thực thi import.')
+        )
       }
     },
     onError: (err: Error) => {
-      toast.error('Ước lượng thất bại', { id: 'file-import-op', description: err.message })
+      toast.error(t('file_import.toasts.estimate_error', 'Ước lượng thất bại'), {
+        id: 'file-import-op',
+        description: err.message,
+      })
     },
   })
 
@@ -426,13 +445,28 @@ export function useFileImportWizard() {
       setExecutionDone(false)
       const s = data.overall_summary
       if (s.errors > 0) {
-        toast.warning(`Ước lượng hoàn tất: ${s.errors} lỗi, ${s.inserted} thẻ mới sẽ thêm.`)
+        toast.warning(
+          t('file_import.toasts.batch_estimate_warning', {
+            errors: s.errors,
+            inserted: s.inserted,
+            defaultValue: `Ước lượng hoàn tất: ${s.errors} lỗi, ${s.inserted} thẻ mới sẽ thêm.`,
+          })
+        )
       } else {
-        toast.success(`Ước lượng thành công: Tạo ${s.created_decks} bài mới, nạp ${s.inserted} thẻ.`)
+        toast.success(
+          t('file_import.toasts.batch_estimate_success', {
+            created_decks: s.created_decks,
+            inserted: s.inserted,
+            defaultValue: `Ước lượng thành công: Tạo ${s.created_decks} bài mới, nạp ${s.inserted} thẻ.`,
+          })
+        )
       }
     },
     onError: (err: Error) => {
-      toast.error('Ước lượng hàng loạt thất bại', { id: 'file-import-op', description: err.message })
+      toast.error(t('file_import.toasts.batch_estimate_error', 'Ước lượng hàng loạt thất bại'), {
+        id: 'file-import-op',
+        description: err.message,
+      })
     },
   })
 
@@ -461,12 +495,23 @@ export function useFileImportWizard() {
       setReport(data)
       setExecutionDone(true)
       const s = data.summary
-      toast.success(`Import hoàn tất! Thêm mới: ${s.inserted}, Cập nhật: ${s.updated}, Bỏ qua: ${s.skipped}.`, {
-        id: 'file-import-op',
-      })
+      toast.success(
+        t('file_import.toasts.execute_success', {
+          inserted: s.inserted,
+          updated: s.updated,
+          skipped: s.skipped,
+          defaultValue: `Import hoàn tất! Thêm mới: ${s.inserted}, Cập nhật: ${s.updated}, Bỏ qua: ${s.skipped}.`,
+        }),
+        {
+          id: 'file-import-op',
+        }
+      )
     },
     onError: (err: Error) => {
-      toast.error('Thực thi import thất bại', { id: 'file-import-op', description: err.message })
+      toast.error(t('file_import.toasts.execute_error', 'Thực thi import thất bại'), {
+        id: 'file-import-op',
+        description: err.message,
+      })
     },
   })
 
@@ -497,12 +542,23 @@ export function useFileImportWizard() {
       setBatchReport(data)
       setExecutionDone(true)
       const s = data.overall_summary
-      toast.success(`Import thành công ${s.processed_files} bài học! Thêm mới: ${s.inserted} thẻ, Tạo mới: ${s.created_decks} deck con.`, {
-        id: 'file-import-op',
-      })
+      toast.success(
+        t('file_import.toasts.batch_execute_success', {
+          processed_files: s.processed_files,
+          inserted: s.inserted,
+          created_decks: s.created_decks,
+          defaultValue: `Import thành công ${s.processed_files} bài học! Thêm mới: ${s.inserted} thẻ, Tạo mới: ${s.created_decks} deck con.`,
+        }),
+        {
+          id: 'file-import-op',
+        }
+      )
     },
     onError: (err: Error) => {
-      toast.error('Thực thi import hàng loạt thất bại', { id: 'file-import-op', description: err.message })
+      toast.error(t('file_import.toasts.batch_execute_error', 'Thực thi import hàng loạt thất bại'), {
+        id: 'file-import-op',
+        description: err.message,
+      })
     },
   })
 

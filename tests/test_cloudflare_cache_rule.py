@@ -39,9 +39,35 @@ class CloudflareCacheRuleTests(unittest.TestCase):
     def test_rule_expression_matches_media_proxy_root_and_subpaths(self):
         rule = cache_rule_script._build_cache_rule()
         expression = rule["expression"]
+        self.assertIn('http.host eq "api.flama.vn"', expression)
         self.assertIn('http.request.uri.path eq "/media/proxy"', expression)
         self.assertIn('starts_with(http.request.uri.path, "/media/proxy/")', expression)
         self.assertEqual(expression, cache_rule_script.MATCH_EXPRESSION)
+
+    def test_missing_zone_id_stops_before_loading_token_or_calling_api(self):
+        with (
+            patch.object(cache_rule_script, "_load_optional_setting", return_value=""),
+            patch.object(cache_rule_script, "_load_token") as load_token,
+            patch.object(cache_rule_script, "_cf_api") as api,
+            patch("sys.stderr"),
+        ):
+            with self.assertRaises(SystemExit) as error:
+                cache_rule_script.main()
+
+        self.assertEqual(error.exception.code, 1)
+        load_token.assert_not_called()
+        api.assert_not_called()
+
+    def test_zone_id_can_be_loaded_from_dotenv(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value='CLOUDFLARE_ZONE_ID="zone-from-dotenv"\n'),
+        ):
+            self.assertEqual(
+                cache_rule_script._load_optional_setting(("CLOUDFLARE_ZONE_ID",)),
+                "zone-from-dotenv",
+            )
 
     def test_existing_rule_is_reconciled_with_patch(self):
         calls: list[tuple[str, str, dict | None]] = []

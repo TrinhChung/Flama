@@ -25,7 +25,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import {
+  getLegalDocument,
   legalDocuments,
   type LegalDocument,
   type StatutoryCallout,
@@ -96,8 +99,12 @@ function TableOfContentsNav({
   activeClauseId: string
   onSelectClause: (id: string) => void
 }) {
+  const { t } = useTranslation('legal')
   return (
-    <nav className="space-y-1.5 text-xs" aria-label="Mục lục điều khoản">
+    <nav
+      className="space-y-1.5 text-xs"
+      aria-label={t('toc.aria_label', 'Mục lục điều khoản')}
+    >
       {documentData.clauses.map((clause) => {
         const isClauseActive =
           activeClauseId === clause.id ||
@@ -154,10 +161,18 @@ function TableOfContentsNav({
 }
 
 function LegalDocumentViewer({
-  documentData,
+  documentData: initialDocumentData,
+  documentId,
 }: {
-  documentData: LegalDocument
+  documentData?: LegalDocument
+  documentId?: string
 }) {
+  const { i18n, t } = useTranslation('legal')
+  const locale = (i18n.language?.startsWith('en') ? 'en' : 'vi') as 'vi' | 'en'
+  const docId = documentId || initialDocumentData?.id || 'terms'
+  const documentData =
+    getLegalDocument(docId, locale) || initialDocumentData || legalDocuments.terms
+
   const [activeClauseId, setActiveClauseId] = useState<string>(
     documentData.clauses[0]?.id || '',
   )
@@ -239,12 +254,22 @@ function LegalDocumentViewer({
       .then(() => {
         window.history.replaceState(null, '', `#${id}`)
         setActiveClauseId(id)
-        toast.success(`Đã sao chép liên kết: ${clauseTitle}`)
+        toast.success(
+          t('actions.copied_clause_toast', {
+            title: clauseTitle,
+            defaultValue: `Đã sao chép liên kết: ${clauseTitle}`,
+          }),
+        )
       })
       .catch(() => {
         window.history.replaceState(null, '', `#${id}`)
         setActiveClauseId(id)
-        toast.success(`Đã chọn: ${clauseTitle}`)
+        toast.success(
+          t('actions.selected_clause_toast', {
+            title: clauseTitle,
+            defaultValue: `Đã chọn: ${clauseTitle}`,
+          }),
+        )
       })
   }
 
@@ -252,7 +277,7 @@ function LegalDocumentViewer({
     const url = `${window.location.origin}${window.location.pathname}`
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true)
-      toast.success('Đã sao chép liên kết văn bản!')
+      toast.success(t('actions.copied_toast', 'Đã sao chép liên kết văn bản!'))
       setTimeout(() => setCopied(false), 2000)
     })
   }
@@ -260,6 +285,18 @@ function LegalDocumentViewer({
   const handlePrint = () => {
     window.print()
   }
+
+  const navItems = LEGAL_NAV_ITEMS.map((item) => ({
+    ...item,
+    label: t(
+      item.id === 'marketplace-guidelines'
+        ? 'nav.marketplace'
+        : item.id === 'community-guidelines'
+          ? 'nav.community'
+          : `nav.${item.id}`,
+      item.label,
+    ),
+  }))
 
   return (
     <Page className="max-w-6xl pb-20 print:m-0 print:max-w-none print:p-0">
@@ -291,10 +328,10 @@ function LegalDocumentViewer({
 
       {/* Top Document Switcher Tabs */}
       <nav
-        aria-label="Chuyển đổi văn bản pháp lý"
+        aria-label={t('nav.aria_label', 'Chuyển đổi văn bản pháp lý')}
         className="no-scrollbar mb-6 flex items-center gap-1.5 overflow-x-auto border-b border-border/40 pb-2.5 print:hidden"
       >
-        {LEGAL_NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isCurrent = item.id === documentData.id
           return (
             <Link
@@ -324,7 +361,10 @@ function LegalDocumentViewer({
               <Shield className="size-3" /> {documentData.officialBadge}
             </Badge>
             <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-              Phiên bản {documentData.version}
+              {t('metadata.version', {
+                version: documentData.version,
+                defaultValue: `Phiên bản ${documentData.version}`,
+              })}
             </Badge>
           </div>
 
@@ -334,14 +374,16 @@ function LegalDocumentViewer({
               size="sm"
               className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={handleCopyDocumentLink}
-              title="Sao chép liên kết tài liệu"
+              title={t('actions.copy_document_title', 'Sao chép liên kết tài liệu')}
             >
               {copied ? (
                 <Check className="size-3.5 text-emerald-600" />
               ) : (
                 <Copy className="size-3.5" />
               )}
-              <span className="hidden sm:inline">Sao chép</span>
+              <span className="hidden sm:inline">
+                {t('actions.copy_document', 'Sao chép')}
+              </span>
             </Button>
             <span className="text-border">·</span>
             <Button
@@ -349,10 +391,12 @@ function LegalDocumentViewer({
               size="sm"
               className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={handlePrint}
-              title="In văn bản hoặc xuất PDF"
+              title={t('actions.print_pdf_title', 'In văn bản hoặc xuất PDF')}
             >
               <Printer className="size-3.5" />
-              <span className="hidden sm:inline">In PDF</span>
+              <span className="hidden sm:inline">
+                {t('actions.print_pdf', 'In PDF')}
+              </span>
             </Button>
           </div>
         </div>
@@ -363,26 +407,32 @@ function LegalDocumentViewer({
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>
-            Ngày hiệu lực:{' '}
+            {t('metadata.effective_date', 'Ngày hiệu lực')}:{' '}
             <strong className="font-medium text-foreground">
               {documentData.effectiveDate}
             </strong>
           </span>
           <span className="text-border">·</span>
           <span>
-            Cập nhật lần cuối:{' '}
+            {t('metadata.last_updated', 'Cập nhật lần cuối')}:{' '}
             <strong className="font-medium text-foreground">
               {documentData.lastUpdated}
             </strong>
           </span>
           <span className="text-border">·</span>
-          <span>~{documentData.readTimeMinutes} phút đọc tiêu chuẩn</span>
+          <span>
+            {t('metadata.read_time', {
+              minutes: documentData.readTimeMinutes,
+              defaultValue: `~${documentData.readTimeMinutes} phút đọc tiêu chuẩn`,
+            })}
+          </span>
         </div>
 
         {/* Executive Summary Editorial Callout (Clean paper quote style, zero box-in-box) */}
         <div className="my-4 rounded-r-lg border-l-2 border-primary/50 bg-muted/20 py-2.5 pl-4 pr-3">
           <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            <Info className="size-3.5 text-primary" /> Tóm tắt điều hành
+            <Info className="size-3.5 text-primary" />{' '}
+            {t('metadata.executive_summary', 'Tóm tắt điều hành')}
           </div>
           <p className="text-sm leading-relaxed font-medium text-foreground/90 sm:text-base">
             {documentData.executiveSummary}
@@ -419,8 +469,11 @@ function LegalDocumentViewer({
                     )
                   }
                   className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary focus:opacity-100 group-hover:opacity-100 print:hidden"
-                  title="Sao chép liên kết điều khoản"
-                  aria-label={`Sao chép liên kết ${clause.clauseNumber}`}
+                  title={t('actions.copy_anchor', 'Sao chép liên kết điều khoản')}
+                  aria-label={t('actions.copy_anchor_aria', {
+                    number: clause.clauseNumber,
+                    defaultValue: `Sao chép liên kết ${clause.clauseNumber}`,
+                  })}
                 >
                   <Link2 className="size-4" />
                 </button>
@@ -484,8 +537,11 @@ function LegalDocumentViewer({
                             )
                           }
                           className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary focus:opacity-100 group-hover/sub:opacity-100 print:hidden"
-                          title="Sao chép liên kết tiểu mục"
-                          aria-label={`Sao chép liên kết ${subClause.clauseNumber}`}
+                          title={t('actions.copy_subclause', 'Sao chép liên kết tiểu mục')}
+                          aria-label={t('actions.copy_anchor_aria', {
+                            number: subClause.clauseNumber,
+                            defaultValue: `Sao chép liên kết ${subClause.clauseNumber}`,
+                          })}
                         >
                           <Link2 className="size-3.5" />
                         </button>
@@ -519,15 +575,23 @@ function LegalDocumentViewer({
           {/* Editorial Support & Dispute Resolution Note */}
           <footer className="mt-14 space-y-3 border-t border-border/60 pt-8 print:hidden">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <HelpCircle className="size-4 text-primary" /> Bạn có thắc mắc hoặc cần giải quyết tranh chấp pháp lý?
+              <HelpCircle className="size-4 text-primary" />{' '}
+              {t(
+                'support.title',
+                'Bạn có thắc mắc hoặc cần giải quyết tranh chấp pháp lý?',
+              )}
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              Nếu bạn cần làm rõ bất kỳ điều khoản nào, báo cáo vi phạm bản quyền theo quy trình Notice &amp; Takedown, hoặc có yêu cầu liên quan đến quyền riêng tư và dữ liệu cá nhân theo Nghị định 13/2023/NĐ-CP, đội ngũ Pháp chế Flama luôn sẵn sàng tiếp nhận và phản hồi trong 24–48 giờ.
+              {t(
+                'support.body',
+                'Nếu bạn cần làm rõ bất kỳ điều khoản nào, báo cáo vi phạm bản quyền theo quy trình Notice & Takedown, hoặc có yêu cầu liên quan đến quyền riêng tư và dữ liệu cá nhân theo Nghị định 13/2023/NĐ-CP, đội ngũ Pháp chế Flama luôn sẵn sàng tiếp nhận và phản hồi trong 24–48 giờ.',
+              )}
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
                 <Link to="/support">
-                  Gửi yêu cầu hỗ trợ <ChevronRight className="size-3.5" />
+                  {t('support.button', 'Gửi yêu cầu hỗ trợ')}{' '}
+                  <ChevronRight className="size-3.5" />
                 </Link>
               </Button>
             </div>
@@ -541,10 +605,13 @@ function LegalDocumentViewer({
             <div className="flex max-h-[calc(100vh-14rem)] flex-col rounded-xl border border-border/60 bg-card/40 p-4 shadow-2xs backdrop-blur-xs">
               <div className="mb-3 flex items-center justify-between gap-2 border-b border-border/40 pb-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 <span className="flex items-center gap-1.5">
-                  <List className="size-3.5 text-primary" /> Mục lục văn bản
+                  <List className="size-3.5 text-primary" /> {t('toc.title', 'Mục lục văn bản')}
                 </span>
                 <span className="text-[11px] font-normal lowercase">
-                  {documentData.clauses.length} điều khoản
+                  {t('toc.clause_count', {
+                    count: documentData.clauses.length,
+                    defaultValue: `${documentData.clauses.length} điều khoản`,
+                  })}
                 </span>
               </div>
 
@@ -560,11 +627,12 @@ function LegalDocumentViewer({
             {/* Related Policies Nav Box */}
             <div className="rounded-xl border border-border/60 bg-card/30 p-3.5 space-y-2">
               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Văn bản pháp lý liên quan
+                {t('toc.related_policies', 'Văn bản pháp lý liên quan')}
               </div>
               <div className="space-y-1">
-                {LEGAL_NAV_ITEMS.filter((item) => item.id !== documentData.id).map(
-                  (link) => (
+                {navItems
+                  .filter((item) => item.id !== documentData.id)
+                  .map((link) => (
                     <Link
                       key={link.id}
                       to={link.path}
@@ -575,8 +643,7 @@ function LegalDocumentViewer({
                       </span>
                       <ChevronRight className="size-3 opacity-60" />
                     </Link>
-                  ),
-                )}
+                  ))}
               </div>
             </div>
           </div>
@@ -593,7 +660,12 @@ function LegalDocumentViewer({
               className="gap-2 rounded-full border border-primary/20 px-4 py-2.5 text-xs font-semibold shadow-lg shadow-primary/25"
             >
               <List className="size-4" />
-              <span>Mục lục ({documentData.clauses.length} điều)</span>
+              <span>
+                {t('toc.mobile_button', {
+                  count: documentData.clauses.length,
+                  defaultValue: `Mục lục (${documentData.clauses.length} điều)`,
+                })}
+              </span>
             </Button>
           </SheetTrigger>
           <SheetContent
@@ -602,7 +674,7 @@ function LegalDocumentViewer({
           >
             <SheetHeader className="border-b border-border/40 p-4">
               <SheetTitle className="flex items-center gap-2 text-sm font-bold">
-                <List className="size-4 text-primary" /> Mục lục văn bản
+                <List className="size-4 text-primary" /> {t('toc.title', 'Mục lục văn bản')}
               </SheetTitle>
             </SheetHeader>
             <ScrollArea className="flex-1 p-4">
@@ -620,16 +692,27 @@ function LegalDocumentViewer({
 }
 
 export function TermsPage() {
-  return <LegalDocumentViewer documentData={legalDocuments.terms} />
+  return (
+    <LegalDocumentViewer
+      documentId="terms"
+      documentData={legalDocuments.terms}
+    />
+  )
 }
 
 export function PrivacyPage() {
-  return <LegalDocumentViewer documentData={legalDocuments.privacy} />
+  return (
+    <LegalDocumentViewer
+      documentId="privacy"
+      documentData={legalDocuments.privacy}
+    />
+  )
 }
 
 export function MarketplaceGuidelinesPage() {
   return (
     <LegalDocumentViewer
+      documentId="marketplace-guidelines"
       documentData={legalDocuments['marketplace-guidelines']}
     />
   )
@@ -638,11 +721,17 @@ export function MarketplaceGuidelinesPage() {
 export function CommunityGuidelinesPage() {
   return (
     <LegalDocumentViewer
+      documentId="community-guidelines"
       documentData={legalDocuments['community-guidelines']}
     />
   )
 }
 
 export function CookiesPage() {
-  return <LegalDocumentViewer documentData={legalDocuments.cookies} />
+  return (
+    <LegalDocumentViewer
+      documentId="cookies"
+      documentData={legalDocuments.cookies}
+    />
+  )
 }

@@ -93,6 +93,15 @@ const InstalledDecksPage = lazy(() =>
     default: module.InstalledDecksPage,
   })),
 )
+const TemplateLibraryPage = lazy(() =>
+  import('./features/template-library').then((module) => ({ default: module.TemplateLibraryPage })),
+)
+const TemplateDetailPage = lazy(() =>
+  import('./features/template-library').then((module) => ({ default: module.TemplateDetailPage })),
+)
+const InstallTemplatesPage = lazy(() =>
+  import('./features/library/pages/InstallTemplatesPage').then((module) => ({ default: module.InstallTemplatesPage })),
+)
 const AnkiSyncPage = lazy(() =>
   import('./features/import/pages/AnkiSyncPage').then((module) => ({
     default: module.AnkiSyncPage,
@@ -425,6 +434,8 @@ const router = createBrowserRouter([
             element: <Navigate to="/study" replace />,
           },
           { path: 'note-types', element: deferred(<NoteTypeManagerPage />) },
+          { path: 'card-templates', element: deferred(<TemplateLibraryPage />) },
+          { path: 'card-templates/:id', element: deferred(<TemplateDetailPage />) },
           {
             path: 'note-types/guide',
             element: deferred(<NoteTypeGuidePage />),
@@ -456,6 +467,10 @@ const router = createBrowserRouter([
           {
             path: 'installed-decks',
             element: deferred(<InstalledDecksPage />),
+          },
+          {
+            path: 'installed-decks/:installId/templates',
+            element: deferred(<InstallTemplatesPage />),
           },
           {
             path: 'installed-decks/:installId/updates/:releaseId',

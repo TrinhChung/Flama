@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   removeSession: vi.fn(),
   removeSessionIfMatches: vi.fn(),
   quarantineSession: vi.fn(),
+  templatePreset: vi.fn(),
+  saveTemplatePreset: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -51,6 +53,19 @@ vi.mock('@/app/api', () => ({
 
 vi.mock('@/shared/api/bootstrap', () => ({
   useBootstrap: () => mocks.bootstrap,
+}))
+
+vi.mock('@/entities/card-template', () => ({
+  fetchStudyTemplateInputs: async (deckId: string) => {
+    const availability = await mocks.get(`/api/study/scopes/deck/${deckId}/compositions`)
+    return { ...availability, note_counts: {}, template_inputs: Object.fromEntries(availability.compositions.map((choice: { composition_id: string }) => [choice.composition_id, {
+      input_schema: [{ key: 'term', label: 'Term', type: 'text', required: true }],
+      field_defs: [{ id: 'field-1', name: 'Front', field_type: 'text' }, { id: 'field-2', name: 'Back', field_type: 'text' }],
+      input_bindings: { term: 'field-1' }, warnings: [],
+    }])) }
+  },
+  fetchStudyTemplatePreset: mocks.templatePreset,
+  saveStudyTemplatePreset: mocks.saveTemplatePreset,
 }))
 
 vi.mock('../session/sessionStore', () => ({
@@ -78,7 +93,7 @@ vi.mock('../session/studySessionLease', async (importOriginal) => {
   }
 })
 
-import { useStudySession } from './useStudySession'
+import { openSnapshot, useStudySession } from './useStudySession'
 import { createPersistedSession } from '../session/studySessionEngine'
 
 type LeaseRecord = {
@@ -427,6 +442,9 @@ async function openReadySessionWithId(sessionId: string) {
 
 beforeEach(() => {
   mocks.bootstrap = { data: undefined }
+  mocks.templatePreset.mockReset().mockResolvedValue({ schema_version: 'study-template-preset.v2', deck_id: 12,
+    selected_compositions: [snapshot().selected_composition_id!], input_bindings: {}, ask_before_study: false, stale_compositions: [] })
+  mocks.saveTemplatePreset.mockReset().mockResolvedValue({})
   mocks.get.mockReset().mockImplementation((path: string) => {
     if (path.endsWith('/compositions')) return Promise.resolve(compositionAvailability())
     return Promise.resolve({
@@ -493,6 +511,93 @@ afterEach(async () => {
 })
 
 describe('useStudySession cross-tab ownership', () => {
+  it('prompts for a singleton and opens transient complete bindings without a preference write', async () => {
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness(); await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    await act(async () => latest.templatePreparation.changeBindings({ term: null }))
+    await act(async () => latest.startPreparedSession())
+    expect(mocks.mutate).toHaveBeenCalledWith('/api/study/sessions', 'POST', expect.objectContaining({ input_bindings: { term: null } }))
+    expect(mocks.saveTemplatePreset).not.toHaveBeenCalled(); expect(latest.session?.snapshot.session_id).toBe('session-1')
+  })
+
+  it('waits for a successful remembered map write and allows retry after preference failure', async () => {
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness(); await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+    await act(async () => { latest.templatePreparation.setRemember(true); latest.templatePreparation.changeBindings({ term: 'field-2' }); latest.templatePreparation.setAskBeforeStudy(false) })
+    mocks.saveTemplatePreset.mockRejectedValueOnce(new Error('Remember failed'))
+    await act(async () => latest.startPreparedSession())
+    expect(mocks.mutate).not.toHaveBeenCalled(); expect(latest.awaitingCompositionSelection).toBe(true)
+    expect(String(latest.templatePreparation.error)).toContain('Remember failed')
+    const pending = deferred<unknown>(); mocks.saveTemplatePreset.mockReturnValueOnce(pending.promise)
+    let start!: Promise<void>
+    await act(async () => { start = latest.startPreparedSession() })
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    pending.resolve({}); await act(async () => start)
+    expect(mocks.saveTemplatePreset).toHaveBeenLastCalledWith('12', { selected_compositions: [snapshot().selected_composition_id!], input_bindings: { [snapshot().selected_composition_id!]: { term: 'field-2' } }, ask_before_study: false })
+    expect(mocks.mutate).toHaveBeenCalledWith('/api/study/sessions', 'POST', expect.objectContaining({ input_bindings: { term: 'field-2' } }))
+  })
+
+  it('bypasses preparation for an existing active frozen lease', async () => {
+    mocks.loadSession.mockResolvedValue(createPersistedSession(snapshot()))
+    mocks.templatePreset.mockRejectedValue(new Error('must not fetch'))
+    await openReadySession()
+    expect(mocks.templatePreset).not.toHaveBeenCalled(); expect(mocks.saveTemplatePreset).not.toHaveBeenCalled()
+    expect(mocks.get.mock.calls.some(([path]) => String(path).includes('/compositions'))).toBe(false)
+  })
+
+  it('does not open a lease when ownership is lost during the remembered preference write', async () => {
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness(); await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+    await act(async () => latest.templatePreparation.setRemember(true))
+    const pending = deferred<unknown>(); mocks.saveTemplatePreset.mockReturnValueOnce(pending.promise)
+    let start!: Promise<void>
+    await act(async () => { start = latest.startPreparedSession() })
+    await act(async () => leaseRecords[0].handlers.onLost?.(new DOMException('Ownership changed', 'AbortError')))
+    pending.resolve({}); await act(async () => start)
+    expect(latest.leaseConflict).toBe(true); expect(mocks.mutate).not.toHaveBeenCalled(); expect(latest.session).toBeNull()
+  })
+
+  it('keeps a restored pending commit in its existing recovery flow without fetching preferences', async () => {
+    mocks.loadSession.mockResolvedValue({ ...createPersistedSession(snapshot()), status: 'pending_commit', commit_id: '00000000-0000-4000-8000-000000000001', commit_reason: 'manual_exit' })
+    mocks.mutate.mockRejectedValue(new Error('Offline commit'))
+    await openReadySession()
+    expect(latest.session?.status).toBe('pending_commit'); expect(mocks.templatePreset).not.toHaveBeenCalled(); expect(mocks.saveTemplatePreset).not.toHaveBeenCalled()
+    expect(mocks.get.mock.calls.some(([path]) => String(path).includes('/compositions'))).toBe(false)
+  })
+
+  it('deduplicates equivalent binding maps and keeps distinct maps and absence separate', async () => {
+    const pending = deferred<StudySessionSnapshot>(); mocks.mutate.mockReturnValue(pending.promise)
+    const map = { term: 'field-1', answer: null }
+    const first = openSnapshot(7, '12', 'dedupe-choice', map)
+    map.term = 'field-2'
+    const same = openSnapshot(7, '12', 'dedupe-choice', { answer: null, term: 'field-1' })
+    const different = openSnapshot(7, '12', 'dedupe-choice', { term: 'field-2', answer: null })
+    const empty = openSnapshot(7, '12', 'dedupe-choice', {})
+    const defaults = openSnapshot(7, '12', 'dedupe-choice')
+    expect(first).toBe(same); expect(first).not.toBe(different); expect(empty).not.toBe(defaults)
+    expect(mocks.mutate).toHaveBeenCalledTimes(4)
+    expect(mocks.mutate.mock.calls[0][2].input_bindings).toEqual({ term: 'field-1', answer: null })
+    pending.resolve(snapshot()); await Promise.all([first, same, different, empty, defaults])
+  })
+
+  it('carries transient bindings on reload and synchronous rollover without writing preferences', async () => {
+    await openReadySession()
+    const choice = snapshot().selected_composition_id!
+    await act(async () => latest.selectComposition(choice, { term: 'field-2' }))
+    await act(async () => latest.reloadSession())
+    expect(mocks.mutate.mock.calls.filter(([path]) => path === '/api/study/sessions').at(-1)?.[2].input_bindings).toEqual({ term: 'field-2' })
+    await act(async () => latest.answer('card-1', 'again', latest.prepareDecision('card-1'), 250))
+    mocks.mutate.mockImplementation((path: string) => path.endsWith('/commit')
+      ? Promise.resolve({ ...receipt(), commit_reason: 'rollover', applied_event_count: 1 }) : Promise.resolve({ ...snapshot(), session_id: 'session-2' }))
+    await act(async () => latest.commit({ reason: 'rollover', resumeAfterCommit: true }))
+    expect(mocks.mutate.mock.calls.filter(([path]) => path === '/api/study/sessions').at(-1)?.[2].input_bindings).toEqual({ term: 'field-2' })
+    expect(latest.session?.snapshot.session_id).toBe('session-2'); expect(mocks.saveTemplatePreset).not.toHaveBeenCalled()
+  })
+
   it('blocks opening a replacement session when restored data was quarantined', async () => {
     mocks.loadQuarantine = {
       reason: 'EVENT_CONTRACT_MISMATCH',
@@ -558,6 +663,7 @@ describe('useStudySession cross-tab ownership', () => {
         scope: 'deck',
         scope_id: '12',
         composition_id: 'comp:notetype:type-1:template:template-1',
+        input_bindings: { term: 'field-1' },
         accepted_session_schema_versions: [
           'study-session.v4',
           'study-session.v3',
@@ -570,6 +676,7 @@ describe('useStudySession cross-tab ownership', () => {
   })
 
   it('does not open a session until one composition is selected from an ambiguous scope', async () => {
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
     const first = snapshot().selected_composition!
     const second = {
       ...first,
@@ -638,6 +745,7 @@ describe('useStudySession cross-tab ownership', () => {
   })
 
   it('recovers a failed selection without allowing duplicate open requests', async () => {
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
     const first = snapshot().selected_composition!
     const second = {
       ...first,

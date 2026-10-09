@@ -16,6 +16,7 @@ from app.repositories.study_authority_repository import (
 )
 from app.services import stats_overview
 from app.services.db_errors import domain_error_code, run_with_deadlock_retry
+from app.services.effective_template_service import resolve_effective_template
 from app.services.flashcard_renderer import render_template_pair
 from app.services.mcp.base import _resolve_deck_for_user
 from app.services.scheduler_config_service import resolve_deck_options
@@ -109,6 +110,7 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
             "new_cards": 0,
             "review_cards": 0,
             "learn_cards": 0,
+            "learning_cards": 0,
             "authority_mode": authority_route.mode_code,
         }
 
@@ -162,6 +164,7 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
         "new_cards": new_count,
         "review_cards": due_count,
         "learn_cards": learn_count,
+        "learning_cards": learn_count,
         "authority_mode": authority_route.mode_code,
     }
 
@@ -278,8 +281,9 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
             timezone_name=timezone_name,
         )
 
+        template = resolve_effective_template(card)
         rendered = render_template_pair(
-            template=card.template,
+            template=template,
             field_defs=note.note_type.field_defs,
             field_values=note.field_values,
             media_assets=note.media_assets,
@@ -290,7 +294,7 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
                 "card_id": str(card.id),
                 "note_id": str(note.id),
                 "deck_id": int(note.deck_id) if note.deck_id else None,
-                "template_name": card.template.name if card.template else None,
+                "template_name": template.name if template else None,
                 "queue": card_state.type,
                 "authority_mode": authority_read.route.mode_code,
                 "authority_revision": authority_read.authority_revision,
@@ -354,8 +358,9 @@ def get_card(*, user_id: int, card_id: str) -> dict[str, Any]:
         now=now,
         timezone_name=timezone_name,
     )
+    template = resolve_effective_template(card)
     rendered = render_template_pair(
-        template=card.template,
+        template=template,
         field_defs=card.note.note_type.field_defs if card.note.note_type else [],
         field_values=card.note.field_values,
         media_assets=card.note.media_assets,
@@ -366,7 +371,7 @@ def get_card(*, user_id: int, card_id: str) -> dict[str, Any]:
         "note_id": str(card.note.id),
         "deck_id": int(card.note.deck_id) if card.note.deck_id else None,
         "template_id": str(card.template_id),
-        "template_name": card.template.name if card.template else None,
+        "template_name": template.name if template else None,
         "queue": card_state.type,
         "authority_mode": authority_read.route.mode_code,
         "authority_revision": authority_read.authority_revision,
@@ -605,16 +610,68 @@ def get_study_stats(*, user_id: int, year: int | None = None) -> dict[str, Any]:
     )
     due_counts = get_due_card_counts(user_id=user_id)
 
+    metrics = overview.get("metrics") or {}
+    today = overview.get("today") or {}
+
+    current_streak = metrics.get("current_streak_days")
+    if current_streak is None:
+        current_streak = overview.get("current_streak", 0)
+    current_streak = int(current_streak or 0)
+
+    longest_streak = metrics.get("longest_streak_days")
+    if longest_streak is None:
+        longest_streak = overview.get("longest_streak", 0)
+    longest_streak = int(longest_streak or 0)
+
+    today_cards = today.get("cards")
+    if today_cards is None:
+        today_cards = overview.get("today_cards", 0)
+    today_cards = int(today_cards or 0)
+
+    today_minutes = today.get("minutes")
+    if today_minutes is None:
+        today_minutes = overview.get("today_minutes", 0.0)
+    today_minutes = float(today_minutes or 0.0)
+
+    total_reviews = metrics.get("total_cards")
+    if total_reviews is None:
+        total_reviews = overview.get("total_cards")
+    if total_reviews is None:
+        total_reviews = sum(
+            int(d.get("cards") or 0)
+            for d in overview.get("heatmap", [])
+            if d.get("source") == "reviewed"
+        )
+    total_reviews = int(total_reviews or 0)
+
+    total_minutes = metrics.get("total_minutes")
+    if total_minutes is None:
+        total_minutes = overview.get("total_minutes")
+    if total_minutes is None:
+        total_ms = sum(
+            int(d.get("study_time") or 0)
+            for d in overview.get("heatmap", [])
+            if d.get("source") == "reviewed"
+        )
+        total_minutes = round(total_ms / 60000.0 + 1e-12, 2)
+    learning_cards = due_counts.get("learning_cards")
+    if learning_cards is None:
+        learning_cards = due_counts.get("learn_cards", 0)
+    learning_cards = int(learning_cards or 0)
+
     return {
-        "current_streak_days": overview.get("current_streak", 0),
-        "longest_streak_days": overview.get("longest_streak", 0),
-        "reviewed_today_cards": overview.get("today_cards", 0),
-        "study_time_today_minutes": overview.get("today_minutes", 0.0),
-        "total_reviews_in_year": overview.get("total_cards", 0),
-        "total_study_time_year_minutes": overview.get("total_minutes", 0.0),
+        "current_streak_days": current_streak,
+        "longest_streak_days": longest_streak,
+        "reviewed_today_cards": today_cards,
+        "study_time_today_minutes": today_minutes,
+        "total_reviews_in_year": total_reviews,
+        "total_study_time_year_minutes": total_minutes,
         "total_decks": total_decks,
         "total_notes": total_notes,
         "total_cards": total_cards,
+        "new_cards": int(due_counts.get("new_cards") or 0),
+        "learning_cards": learning_cards,
+        "review_cards": int(due_counts.get("review_cards") or 0),
         "due_counts": due_counts,
     }
 

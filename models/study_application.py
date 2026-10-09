@@ -21,7 +21,7 @@ from models import db
 from models.model_uuid import uuid_str
 
 COMPAT_OCCURRENCE_KEY = "compat"
-APPLICATION_STATUSES = ("ACTIVE",)
+APPLICATION_STATUSES = ("ACTIVE", "RETIRED")
 
 
 class StudyApplication(db.Model):
@@ -40,6 +40,10 @@ class StudyApplication(db.Model):
     )
     occurrence_key = db.Column(db.String(64), nullable=False)
     source_ord = db.Column(db.Integer, nullable=True)
+    input_bindings = db.Column(db.JSON, nullable=True)
+    display_name = db.Column(db.String(255), nullable=True)
+    position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    is_default = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
     status_code = db.Column(db.String(16), nullable=False, default="ACTIVE")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
@@ -52,9 +56,10 @@ class StudyApplication(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint(
+            "note_type_id",
             "template_id",
             "occurrence_key",
-            name="uq_study_applications_template_occurrence",
+            name="uq_study_applications_note_type_template_occurrence",
         ),
         db.Index(
             "ix_study_applications_note_type_ord",
@@ -62,7 +67,7 @@ class StudyApplication(db.Model):
             "source_ord",
         ),
         db.CheckConstraint(
-            "status_code IN ('ACTIVE')",
+            "status_code IN ('ACTIVE', 'RETIRED')",
             name="ck_study_applications_status",
         ),
     )
@@ -82,19 +87,43 @@ def _template_of(session: Session, card):
     return session.get(Template, card.template_id)
 
 
-def _new_compat_application(template) -> StudyApplication:
+def _note_of(session: Session, card):
+    from models.note import Note
+
+    note = card.__dict__.get("note")
+    if note is not None:
+        return note
+    for pending in session.new:
+        if isinstance(pending, Note) and pending.id == card.note_id:
+            return pending
+    return session.get(Note, card.note_id) if card.note_id is not None else None
+
+
+def _note_type_of(template, note=None):
+    if note is not None:
+        return note.__dict__.get("note_type"), note.note_type_id
+    return template.__dict__.get("note_type"), template.note_type_id
+
+
+def _scope_key(template, note_type, note_type_id):
+    return id(template), (str(note_type_id) if note_type_id is not None else id(note_type))
+
+
+def _new_compat_application(template, *, note_type=None, note_type_id=None) -> StudyApplication:
     application = StudyApplication(
         occurrence_key=COMPAT_OCCURRENCE_KEY,
         source_ord=template.position if template.position is not None else 0,
         status_code="ACTIVE",
+        position=template.position if template.position is not None else 0,
+        is_default=bool(template.is_default),
     )
     # Relationships, not IDs: a Template or NoteType added in this same flush
     # has no primary key yet.
     application.template = template
-    if template.note_type_id is not None:
-        application.note_type_id = template.note_type_id
+    if note_type_id is not None:
+        application.note_type_id = note_type_id
     else:
-        application.note_type = template.note_type
+        application.note_type = note_type
     return application
 
 
@@ -137,32 +166,42 @@ def _assign_compat_applications(session: Session, _flush_context, _instances) ->
     ]
     if not new_templates and not new_cards:
         return
-    by_template: dict[int, StudyApplication] = {}
+    by_template: dict[tuple, StudyApplication] = {}
     for item in pending:
         if isinstance(item, StudyApplication) and item.occurrence_key == COMPAT_OCCURRENCE_KEY:
             template = item.__dict__.get("template")
             if template is not None:
-                by_template[id(template)] = item
+                by_template[_scope_key(template, item.__dict__.get("note_type"), item.note_type_id)] = item
     with session.no_autoflush:
         for template in new_templates:
-            if id(template) not in by_template:
-                application = _new_compat_application(template)
+            note_type, note_type_id = _note_type_of(template)
+            if note_type is None and note_type_id is None:
+                continue  # An independent library Template has no occurrence.
+            key = _scope_key(template, note_type, note_type_id)
+            if key not in by_template:
+                application = _new_compat_application(template, note_type=note_type, note_type_id=note_type_id)
                 session.add(application)
-                by_template[id(template)] = application
+                by_template[key] = application
         for card in new_cards:
             template = _template_of(session, card)
             if template is None:
                 continue  # the Card's own foreign key rejects it
-            application = by_template.get(id(template))
-            if application is None and template.id is not None:
+            note = _note_of(session, card)
+            note_type, note_type_id = _note_type_of(template, note)
+            if note_type is None and note_type_id is None:
+                continue  # The Card's Note/attachment validation rejects this.
+            key = _scope_key(template, note_type, note_type_id)
+            application = by_template.get(key)
+            if application is None and template.id is not None and note_type_id is not None:
                 application = session.execute(
                     select(StudyApplication).where(
                         StudyApplication.template_id == template.id,
+                        StudyApplication.note_type_id == note_type_id,
                         StudyApplication.occurrence_key == COMPAT_OCCURRENCE_KEY,
                     )
                 ).scalar_one_or_none()
             if application is None:
-                application = _new_compat_application(template)
+                application = _new_compat_application(template, note_type=note_type, note_type_id=note_type_id)
                 session.add(application)
-            by_template[id(template)] = application
+            by_template[key] = application
             card.application = application

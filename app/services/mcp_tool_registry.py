@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.services import mcp_tool_service
+from app.services.mcp import public_search_tools
 from app.validators import RequestValidationError
 from models import db
 from app.validators.mcp import (
@@ -81,6 +82,7 @@ class McpToolDefinition:
     title: str | None = None
     output_schema: dict[str, Any] | None = None
     annotations: dict[str, Any] | None = None
+    is_public: bool = False
 
     def to_mcp_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -96,7 +98,7 @@ class McpToolDefinition:
             payload["annotations"] = self.annotations
         return payload
 
-    def execute(self, *, user_id: int, arguments: Any) -> dict[str, Any]:
+    def execute(self, *, user_id: int | None = None, arguments: Any) -> dict[str, Any]:
         normalized_arguments = self.arguments_validator(arguments)
         return self.handler(user_id=user_id, arguments=normalized_arguments)
 
@@ -1901,6 +1903,199 @@ LIST_INSTALLED_DECKS_TOOL = McpToolDefinition(
     arguments_validator=validate_list_installed_decks_arguments,
 )
 
+
+# ---------------------------------------------------------------------------
+# 10. Public AI Search & Documentation Tools
+# ---------------------------------------------------------------------------
+
+def _call_search_marketplace_decks(*, user_id: int | None = None, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        public_search_tools.search_marketplace_decks(
+            query=arguments.get("query", ""),
+            jlpt_level=arguments.get("jlpt_level", "All"),
+            category=arguments.get("category", ""),
+            pricing_mode=arguments.get("pricing_mode", "all"),
+            sort_by=arguments.get("sort_by", "popular"),
+            limit=arguments.get("limit", 10),
+            offset=arguments.get("offset", 0),
+            user_id=user_id,
+        )
+    )
+
+
+SEARCH_MARKETPLACE_DECKS_TOOL = McpToolDefinition(
+    name="search_marketplace_decks",
+    title="Search Flama Marketplace Decks",
+    description="Search public published flashcard decks on the Flama Marketplace by keyword, JLPT level (N5-N1), category, and pricing. Sample preview capped at 3-5 cards.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search keyword in deck title, description, or tags",
+                "default": "",
+            },
+            "jlpt_level": {
+                "type": "string",
+                "enum": ["N5", "N4", "N3", "N2", "N1", "All"],
+                "description": "Filter by JLPT level",
+                "default": "All",
+            },
+            "category": {
+                "type": "string",
+                "description": "Filter by primary category/subject",
+                "default": "",
+            },
+            "pricing_mode": {
+                "type": "string",
+                "enum": ["free", "paid", "all"],
+                "description": "Filter by pricing mode",
+                "default": "all",
+            },
+            "sort_by": {
+                "type": "string",
+                "enum": ["popular", "rating", "newest", "card_count"],
+                "description": "Ordering criteria",
+                "default": "popular",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of deck items to return (default 10, max 20)",
+                "default": 10,
+                "maximum": 20,
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Pagination offset",
+                "default": 0,
+            },
+        },
+        "additionalProperties": False,
+    },
+    required_scope=None,
+    is_public=True,
+    annotations={"readOnly": True},
+    handler=_call_search_marketplace_decks,
+    arguments_validator=public_search_tools.validate_search_marketplace_decks_arguments,
+)
+
+
+def _call_lookup_public_vocabulary(*, user_id: int | None = None, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        public_search_tools.lookup_public_vocabulary(
+            query=arguments.get("query", ""),
+            jlpt_level=arguments.get("jlpt_level", "All"),
+            limit=arguments.get("limit", 10),
+            offset=arguments.get("offset", 0),
+            user_id=user_id,
+        )
+    )
+
+
+LOOKUP_PUBLIC_VOCABULARY_TOOL = McpToolDefinition(
+    name="lookup_public_vocabulary",
+    title="Lookup Public Japanese Vocabulary",
+    description="Search vocabulary words, kana readings, and definitions across published Flama marketplace decks. Excludes all private user data.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Japanese word (kanji/kana), romaji, or meaning keyword",
+            },
+            "jlpt_level": {
+                "type": "string",
+                "enum": ["N5", "N4", "N3", "N2", "N1", "All"],
+                "description": "Filter by JLPT level",
+                "default": "All",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of vocabulary matches to return (default 10, max 20)",
+                "default": 10,
+                "maximum": 20,
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Pagination offset",
+                "default": 0,
+            },
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    },
+    required_scope=None,
+    is_public=True,
+    annotations={"readOnly": True},
+    handler=_call_lookup_public_vocabulary,
+    arguments_validator=public_search_tools.validate_lookup_public_vocabulary_arguments,
+)
+
+
+def _call_get_public_deck_preview(*, user_id: int | None = None, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        public_search_tools.get_public_deck_preview(
+            deck_item_id=arguments.get("deck_item_id", ""),
+            user_id=user_id,
+        )
+    )
+
+
+GET_PUBLIC_DECK_PREVIEW_TOOL = McpToolDefinition(
+    name="get_public_deck_preview",
+    title="Get Public Deck Preview",
+    description="Inspect metadata and sample cards of a published marketplace deck (strictly 3 to 5 sample preview cards max, anti-scraping enforced).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_item_id": {
+                "type": "string",
+                "description": "UUID of the published marketplace deck",
+            },
+        },
+        "required": ["deck_item_id"],
+        "additionalProperties": False,
+    },
+    required_scope=None,
+    is_public=True,
+    annotations={"readOnly": True},
+    handler=_call_get_public_deck_preview,
+    arguments_validator=public_search_tools.validate_get_public_deck_preview_arguments,
+)
+
+
+def _call_get_flama_documentation(*, user_id: int | None = None, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        public_search_tools.get_flama_documentation(
+            topic=arguments.get("topic", "overview"),
+            user_id=user_id,
+        )
+    )
+
+
+GET_FLAMA_DOCUMENTATION_TOOL = McpToolDefinition(
+    name="get_flama_documentation",
+    title="Get Flama Feature Documentation",
+    description="Reference official Flama documentation on SRS spaced repetition, Yomitan mining bridge, Local TTS (VoiceVox/Kokoro), and Community Marketplace.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "topic": {
+                "type": "string",
+                "enum": ["overview", "srs", "yomitan", "tts", "marketplace", "faq"],
+                "description": "Specific feature domain documentation topic",
+                "default": "overview",
+            },
+        },
+        "additionalProperties": False,
+    },
+    required_scope=None,
+    is_public=True,
+    annotations={"readOnly": True},
+    handler=_call_get_flama_documentation,
+    arguments_validator=public_search_tools.validate_get_flama_documentation_arguments,
+)
+
 # All Registered MCP Tools
 # ---------------------------------------------------------------------------
 
@@ -1965,15 +2160,26 @@ _MCP_TOOL_DEFINITIONS = (
     PUBLISH_DECK_RELEASE_TOOL,
     LIST_DECK_RELEASES_TOOL,
     LIST_INSTALLED_DECKS_TOOL,
+    # Public AI Search & Documentation Tools
+    SEARCH_MARKETPLACE_DECKS_TOOL,
+    LOOKUP_PUBLIC_VOCABULARY_TOOL,
+    GET_PUBLIC_DECK_PREVIEW_TOOL,
+    GET_FLAMA_DOCUMENTATION_TOOL,
 )
 
 _MCP_TOOLS_BY_NAME = {tool.name: tool for tool in _MCP_TOOL_DEFINITIONS}
 _MCP_TOOLS_BY_LOWER_NAME = {tool.name.lower(): tool for tool in _MCP_TOOL_DEFINITIONS}
 
 
-def list_mcp_tools() -> list[dict[str, Any]]:
-    """Return MCP-compatible metadata for every exposed tool."""
-    return [tool.to_mcp_payload() for tool in _MCP_TOOL_DEFINITIONS]
+def list_mcp_tools(*, include_public: bool = True) -> list[dict[str, Any]]:
+    """Return MCP-compatible metadata for exposed tools."""
+    if include_public:
+        return [tool.to_mcp_payload() for tool in _MCP_TOOL_DEFINITIONS]
+    return [
+        tool.to_mcp_payload()
+        for tool in _MCP_TOOL_DEFINITIONS
+        if not getattr(tool, "is_public", False)
+    ]
 
 
 def get_mcp_tool(tool_name: str) -> McpToolDefinition | None:
@@ -2022,8 +2228,8 @@ def get_mcp_tool(tool_name: str) -> McpToolDefinition | None:
     return None
 
 
-def call_mcp_tool(*, tool_name: str, user_id: int, arguments: Any) -> dict[str, Any]:
-    """Execute a registered tool for the current user."""
+def call_mcp_tool(*, tool_name: str, user_id: int | None = None, arguments: Any) -> dict[str, Any]:
+    """Execute a registered tool for the current user or guest."""
     tool_definition = get_mcp_tool(tool_name)
     if tool_definition is None:
         raise KeyError(str(tool_name or "").strip())

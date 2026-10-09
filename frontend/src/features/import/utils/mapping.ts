@@ -6,7 +6,7 @@ import type { FieldMapping, NoteField, ParsedColumn } from '../hooks/useFileImpo
  */
 export function normalizeFieldName(val: string | null | undefined): string {
   if (!val) return ''
-  return val.toLowerCase().replace(/[\s_\-]+/g, '')
+  return val.toLowerCase().replace(/[\s_-]+/g, '')
 }
 
 /**

@@ -56,7 +56,7 @@ jobs:
           GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID || secrets.GOOGLE_OAUTH_CLIENT_ID || '992185847654-b1aekjqb7dh3hddetgve8qfps17nro08.apps.googleusercontent.com' }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           GOOGLE_OAUTH_REDIRECT_URI: ${{ vars.GOOGLE_OAUTH_REDIRECT_URI || 'https://api.flama.vn/auth/google/callback' }}
-          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS || 'https://flama.vn,https://flama.stmtp.com' }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS || 'https://flama.vn' }}
           CONNECT_CORS_ALLOWED_ORIGINS: ${{ vars.CONNECT_CORS_ALLOWED_ORIGINS || '*' }}
           FLASK_APP: ${{ vars.FLASK_APP || 'wsgi.py' }}
           DB_PORT: ${{ vars.DB_PORT || '3306' }}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import {
   CheckCircle2,
   KeyRound,
@@ -61,6 +62,7 @@ export function RedeemDeckKeyModal({
   onClose,
   initialKey = '',
 }: RedeemDeckKeyModalProps) {
+  const { t } = useTranslation('marketplace')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -98,11 +100,11 @@ export function RedeemDeckKeyModal({
         setErrorMessage(null)
       } else {
         setValidationData(null)
-        setErrorMessage(res.error || 'Mã kích hoạt không hợp lệ.')
+        setErrorMessage(res.error || t('redeem_modal.invalid_error', 'Mã kích hoạt không hợp lệ.'))
       }
     } catch (err: any) {
       setValidationData(null)
-      setErrorMessage(err?.message || 'Mã kích hoạt không hợp lệ hoặc đã hết hạn.')
+      setErrorMessage(err?.message || t('redeem_modal.invalid_or_expired', 'Mã kích hoạt không hợp lệ hoặc đã hết hạn.'))
     } finally {
       setIsValidating(false)
     }
@@ -117,13 +119,12 @@ export function RedeemDeckKeyModal({
       setSuccessData(data)
       queryClient.invalidateQueries({ queryKey: ['installed-decks'] })
       queryClient.invalidateQueries({ queryKey: ['shared-deck-detail'] })
-      toast.success(data.message || 'Kích hoạt thành công!')
+      toast.success(data.message || t('redeem_modal.success_toast', 'Kích hoạt thành công!'))
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Không thể kích hoạt mã. Vui lòng thử lại.')
+      toast.error(err?.message || t('common.error', 'Không thể kích hoạt mã. Vui lòng thử lại.'))
     },
   })
-
 
   const handleClose = () => {
     setKeyCode('')
@@ -139,10 +140,13 @@ export function RedeemDeckKeyModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
             <KeyRound className="size-5 text-primary" />
-            Nhập Mã kích hoạt Bộ thẻ
+            {t('redeem_modal.title', 'Nhập Mã kích hoạt Bộ thẻ')}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Nhập mã truy cập nhận được từ giáo viên hoặc tác giả để tải bộ thẻ về tài khoản.
+            {t(
+              'redeem_modal.desc',
+              'Nhập mã truy cập nhận được từ giáo viên hoặc tác giả để tải bộ thẻ về tài khoản.'
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -153,11 +157,15 @@ export function RedeemDeckKeyModal({
             </div>
             <div className="space-y-1.5">
               <h3 className="font-bold text-base text-foreground">
-                {successData.already_installed ? 'Bộ thẻ đã sẵn sàng!' : 'Kích hoạt thành công!'}
+                {successData.already_installed
+                  ? t('redeem_modal.ready_title', 'Bộ thẻ đã sẵn sàng!')
+                  : t('redeem_modal.success_title', 'Kích hoạt thành công!')}
               </h3>
               <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                Bộ thẻ <span className="font-semibold text-foreground">&quot;{successData.title}&quot;</span> đã được
-                cài đặt vào Thư viện học tập của bạn.
+                {t('redeem_modal.installed_desc', {
+                  title: successData.title,
+                  defaultValue: `Bộ thẻ "${successData.title}" đã được cài đặt vào Thư viện học tập của bạn.`,
+                })}
               </p>
             </div>
 
@@ -168,7 +176,7 @@ export function RedeemDeckKeyModal({
                 onClick={handleClose}
                 className="rounded-xl flex-1 text-xs"
               >
-                Đóng
+                {t('redeem_modal.btn_close', 'Đóng')}
               </Button>
               <Button
                 type="button"
@@ -183,7 +191,7 @@ export function RedeemDeckKeyModal({
                 className="rounded-xl flex-1 text-xs font-semibold gap-1.5 shadow-sm"
               >
                 <BookOpen className="size-3.5" />
-                Vào học ngay
+                {t('redeem_modal.btn_study_now', 'Vào học ngay')}
               </Button>
             </div>
           </div>
@@ -192,12 +200,12 @@ export function RedeemDeckKeyModal({
             {/* Input Key Code */}
             <div className="space-y-1.5">
               <Label htmlFor="input-key-code" className="text-xs font-semibold">
-                Mã kích hoạt (Access Key)
+                {t('redeem_modal.key_label', 'Mã kích hoạt (Access Key)')}
               </Label>
               <div className="flex gap-2">
                 <Input
                   id="input-key-code"
-                  placeholder="VD: FLM-XXXX-XXXX-XXXX"
+                  placeholder={t('redeem_modal.placeholder', 'VD: FLM-XXXX-XXXX-XXXX')}
                   value={keyCode}
                   onChange={(e) => {
                     const val = e.target.value.toUpperCase()
@@ -218,7 +226,11 @@ export function RedeemDeckKeyModal({
                   disabled={!keyCode.trim() || isValidating}
                   className="rounded-xl h-11 px-4 text-xs font-semibold shrink-0"
                 >
-                  {isValidating ? <LoaderCircle className="size-4 animate-spin" /> : 'Kiểm tra'}
+                  {isValidating ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    t('redeem_modal.btn_check', 'Kiểm tra')
+                  )}
                 </Button>
               </div>
               {errorMessage && (
@@ -234,7 +246,7 @@ export function RedeemDeckKeyModal({
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 mb-1">
-                      {validationData.primary_category || 'Lớp học'}
+                      {validationData.primary_category || t('redeem_modal.default_category', 'Lớp học')}
                     </Badge>
                     <h4 className="font-bold text-sm text-foreground line-clamp-1">
                       {validationData.title}
@@ -242,7 +254,7 @@ export function RedeemDeckKeyModal({
                   </div>
                   {validationData.already_installed && (
                     <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] shrink-0">
-                      Đã có trong thư viện
+                      {t('redeem_modal.already_installed', 'Đã có trong thư viện')}
                     </Badge>
                   )}
                 </div>
@@ -250,14 +262,20 @@ export function RedeemDeckKeyModal({
                 <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-1 border-t border-border/40">
                   <div className="flex items-center gap-1.5">
                     <User className="size-3.5 text-primary" />
-                    <span>Tác giả: <strong className="text-foreground">{validationData.author}</strong></span>
+                    <span>
+                      {t('redeem_modal.author_label', 'Tác giả:')}{' '}
+                      <strong className="text-foreground">{validationData.author}</strong>
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Clock className="size-3.5 text-primary" />
                     <span>
                       {validationData.access_duration_days
-                        ? `Học trong ${validationData.access_duration_days} ngày`
-                        : 'Học vĩnh viễn'}
+                        ? t('redeem_modal.access_duration', {
+                            days: validationData.access_duration_days,
+                            defaultValue: `Học trong ${validationData.access_duration_days} ngày`,
+                          })
+                        : t('redeem_modal.access_forever', 'Học vĩnh viễn')}
                     </span>
                   </div>
                 </div>
@@ -271,7 +289,7 @@ export function RedeemDeckKeyModal({
                 onClick={handleClose}
                 className="rounded-xl"
               >
-                Hủy
+                {t('redeem_modal.btn_cancel', 'Hủy')}
               </Button>
               <Button
                 type="button"
@@ -284,7 +302,7 @@ export function RedeemDeckKeyModal({
                 ) : (
                   <KeyRound className="size-4" />
                 )}
-                Kích hoạt & Cài đặt
+                {t('redeem_modal.btn_confirm', 'Kích hoạt & Cài đặt')}
               </Button>
             </DialogFooter>
           </div>

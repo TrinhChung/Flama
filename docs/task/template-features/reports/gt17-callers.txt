@@ -1,0 +1,111 @@
+app/api/v1/marketplace/deck_releases.py:34:    if raw_type in deck_release_service.VISIBLE_ENTITY_KINDS:
+app/api/v1/marketplace/deck_releases.py:54:        payload = deck_release_service.list_deck_releases(
+app/api/v1/marketplace/deck_releases.py:71:        payload = deck_release_service.preview_release(
+app/api/v1/marketplace/deck_releases.py:102:        result = deck_release_service.publish_release(
+app/api/v1/marketplace/deck_releases.py:140:                "release": deck_release_service.serialize_release(result.release),
+app/api/v1/marketplace/deck_releases.py:154:        payload = deck_release_service.get_deck_release_detail(
+app/api/v1/marketplace/deck_releases.py:170:        payload = deck_release_service.list_deck_release_changes(
+app/api/v1/marketplace/deck_releases.py:189:        payload = deck_auto_publish_service.get_auto_publish_status(
+app/api/v1/marketplace/deck_releases.py:221:        payload = deck_auto_publish_service.update_auto_publish_setting(
+app/api/v1/marketplace/installations.py:51:        payload = deck_install_rebase_service.get_update_status(
+app/api/v1/marketplace/installations.py:66:        payload = deck_install_rebase_service.get_update_diff(
+app/api/v1/marketplace/installations.py:96:        rebase = deck_install_rebase_service.prepare_update(
+app/api/v1/marketplace/installations.py:111:    return jsonify({"rebase": deck_install_rebase_service.serialize_rebase(rebase)})
+app/api/v1/marketplace/installations.py:129:        rebase = deck_install_rebase_service.prepare_and_apply_update(
+app/api/v1/marketplace/installations.py:151:            "rebase": deck_install_rebase_service.serialize_rebase(
+app/api/v1/marketplace/installations.py:165:        payload = deck_install_rebase_service.mark_update_seen(
+app/api/v1/marketplace/installations.py:192:        rebase = deck_install_rebase_service.resolve_conflict(
+app/api/v1/marketplace/installations.py:206:            "rebase": deck_install_rebase_service.serialize_rebase(
+app/api/v1/marketplace/installations.py:218:        payload = deck_install_rebase_service.get_rebase_conflicts_page(
+app/api/v1/marketplace/installations.py:233:        rebase = deck_install_rebase_service.apply_prepared_update(
+app/api/v1/marketplace/installations.py:246:            "rebase": deck_install_rebase_service.serialize_rebase(
+app/api/v1/marketplace/installations.py:258:        payload = deck_install_rebase_service.get_install_settings(
+app/api/v1/marketplace/installations.py:286:        payload = deck_install_rebase_service.update_install_settings(
+app/api/v1/marketplace/installations.py:306:        payload = deck_install_rebase_service.detach_installed_deck(
+app/api/v1/marketplace/installations.py:343:        rebase = deck_install_rebase_service.resolve_all_conflicts(
+app/api/v1/marketplace/installations.py:358:            "rebase": deck_install_rebase_service.serialize_rebase(
+app/services/anki_content_normalizer.py:570:                deck_working_tree_service.mark_note_field_batches_changed(
+app/services/anki_content_normalizer.py:575:    deck_working_tree_service.mark_note_field_batches_changed(
+app/services/browse_card_service.py:939:            resolved_values = deck_release_service.get_note_values_for_ids_at_release(
+app/services/browse_card_service.py:1162:    if card_obj.note is not None and deck_working_tree_service.note_has_shared_release_dependents(
+app/services/browse_card_service.py:1188:            deck_working_tree_service.mark_note_field_batches_changed(
+app/services/browse_card_service.py:1237:        if card_obj.note is not None and deck_working_tree_service.note_has_shared_release_dependents(
+app/services/browse_card_service.py:1280:                deck_working_tree_service.mark_note_field_batches_changed(
+app/services/browse_card_service.py:1355:        deck_working_tree_service.mark_note_fields_changed(
+app/services/browse_card_service.py:1456:            and deck_working_tree_service.note_has_shared_release_dependents(
+app/services/browse_card_service.py:1482:            and deck_working_tree_service.note_has_shared_release_dependents(
+app/services/browse_card_service.py:1507:        deck_working_tree_service.mark_note_fields_changed(
+app/services/browse_card_service.py:1513:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/browse_voicevox_service.py:464:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/change_request/merge.py:537:            deck_working_tree_service.mark_deck_item_batch_changed(
+app/services/change_request/preview.py:88:        base_field_defs = deck_release_service.get_field_defs_at_release(
+app/services/change_request/preview.py:288:        base_note_values = deck_release_service.get_note_values_for_ids_at_release(
+app/services/connect/actions.py:360:                    deck_working_tree_service.mark_note_fields_changed(
+app/services/connect/actions.py:418:            deck_working_tree_service.mark_note_fields_changed(
+app/services/connect/import_cards.py:147:            deck_working_tree_service.note_has_shared_release_dependents(note)
+app/services/connect/import_cards.py:192:            deck_working_tree_service.note_has_shared_release_dependents(note)
+app/services/connect/import_cards.py:571:            deck_working_tree_service.note_has_shared_release_dependents(note)
+app/services/connect/import_cards.py:766:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcard_content_service.py:157:        and deck_working_tree_service.note_type_has_shared_release_dependents(
+app/services/flashcard_content_service.py:521:    deck_working_tree_service.mark_field_def_changed(
+app/services/flashcard_content_service.py:640:        deck_working_tree_service.mark_field_def_changed(
+app/services/flashcard_content_service.py:678:    if deck_working_tree_service.note_type_has_shared_release_dependents(
+app/services/flashcard_content_service.py:760:        deck_working_tree_service.mark_field_def_changed(
+app/services/flashcard_content_service.py:1321:    deck_working_tree_service.mark_note_fields_changed(
+app/services/flashcard_content_service.py:1377:        and deck_working_tree_service.note_has_shared_release_dependents(note)
+app/services/flashcard_content_service.py:1422:        deck_working_tree_service.mark_note_fields_changed(
+app/services/flashcard_content_service.py:1428:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcard_content_service.py:1455:    if deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/flashcard_content_service.py:1474:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcard_content_service.py:1546:    if not deck_working_tree_service.note_type_has_shared_release_dependents(
+app/services/flashcard_content_service.py:1577:    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/flashcard_import.py:733:                deck_working_tree_service.mark_note_fields_changed(
+app/services/flashcard_import.py:743:                deck_working_tree_service.mark_note_fields_changed(
+app/services/flashcard_legacy.py:486:    if not deck_working_tree_service.note_type_has_shared_release_dependents(
+app/services/flashcard_media_api_service.py:125:                deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcard_media_api_service.py:171:            deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcard_media_api_service.py:425:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcard_media_api_service.py:501:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcard_media_normalizer.py:474:        deck_working_tree_service.mark_note_field_batches_changed(mutations=semantic_mutations)
+app/services/flashcard_media_normalizer.py:567:            deck_working_tree_service.mark_note_field_batches_changed(
+app/services/flashcards_share_service.py:95:        deck_release_service.publish_release(
+app/services/flashcards_share_service.py:104:    except deck_release_service.DeckReleaseError as exc:
+app/services/flashcards_share_service.py:2979:        release_field_defs = deck_release_service.get_field_defs_at_release(
+app/services/flashcards_share_service.py:3135:            release_values = deck_release_service.get_note_values_at_release(
+app/services/flashcards_share_service.py:3219:                for field_id, properties in deck_release_service.get_field_defs_at_release(
+app/services/image_crawl_service.py:288:                deck_working_tree_service.mark_note_field_batches_changed(
+app/services/image_crawl_service.py:331:            deck_working_tree_service.mark_note_field_batches_changed(
+app/services/image_crawl_service.py:597:            deck_working_tree_service.mark_note_field_batches_changed(
+app/services/marketplace_query_service.py:706:    values_by_note = deck_release_service.get_note_values_for_ids_at_release(
+app/services/mcp/marketplace_tools.py:403:        payload = deck_release_service.preview_release(
+app/services/mcp/marketplace_tools.py:410:    except deck_release_service.DeckReleaseError as exc:
+app/services/mcp/marketplace_tools.py:456:        result = deck_release_service.publish_release(
+app/services/mcp/marketplace_tools.py:467:            "release": deck_release_service.serialize_release(result.release),
+app/services/mcp/marketplace_tools.py:470:    except deck_release_service.DeckReleaseError as exc:
+app/services/mcp/marketplace_tools.py:491:        return deck_release_service.list_deck_releases(
+app/services/mcp/marketplace_tools.py:497:    except deck_release_service.DeckReleaseError as exc:
+app/services/mcp/note_tools.py:522:    deck_working_tree_service.mark_note_fields_changed(
+app/services/mcp/note_tools.py:569:        and deck_working_tree_service.note_has_shared_release_dependents(note)
+app/services/mcp/note_tools.py:604:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/mcp/note_tools.py:621:        deck_working_tree_service.mark_note_fields_changed(
+app/services/mcp/note_tools.py:645:    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/mcp/note_tools.py:668:    if deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/mcp/note_tools.py:881:        if deck_working_tree_service.note_has_shared_release_dependents(note)
+app/services/mcp/note_tools.py:939:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/mcp/note_tools.py:1005:        and deck_working_tree_service.note_has_shared_release_dependents(note)
+app/services/mcp/note_tools.py:1039:    deck_working_tree_service.mark_note_field_batches_changed(
+app/services/mcp/note_type_tools.py:667:    has_shared_lineage = deck_working_tree_service.note_type_has_shared_release_dependents(
+app/services/note_sync_service.py:82:    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/note_sync_service.py:103:    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/note_sync_service.py:782:    deck_working_tree_service.mark_note_field_batches_changed(
+app/services/release/publish.py:545:    deck_working_tree_service.clear_dirty_entities(deck_item_id=item.id)
+app/services/share/helpers.py:125:        deck_release_service.publish_release(
+app/services/share/helpers.py:134:    except deck_release_service.DeckReleaseError as exc:
+app/services/share/overlay.py:507:        release_field_defs = deck_release_service.get_field_defs_at_release(
+app/services/share/overlay.py:663:            release_values = deck_release_service.get_note_values_at_release(
+app/services/share/overlay.py:748:                for field_id, properties in deck_release_service.get_field_defs_at_release(
+app/services/strokes/stroke_service.py:542:            deck_working_tree_service.mark_note_field_batches_changed(
+app/services/study_card_editor_service.py:85:    if deck_changed and deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/study_card_editor_service.py:92:    if tags_changed and deck_working_tree_service.note_has_shared_release_dependents(note):
+app/services/study_card_editor_service.py:139:        deck_working_tree_service.mark_note_field_batches_changed(
+app/services/study_service.py:336:            and not deck_working_tree_service.note_has_shared_release_dependents(

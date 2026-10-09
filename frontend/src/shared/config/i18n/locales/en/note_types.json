@@ -1,0 +1,314 @@
+{
+  "manager": {
+    "loading": "Loading NoteTypes…",
+    "header": {
+      "title": "Note Types Management",
+      "description": "Define field schemas and customize flashcard display templates.",
+      "tour_btn": "Guided Tour",
+      "ai_prompt_btn": "AI Prompt",
+      "guide_concept": "Architecture: 1 Note generates multiple Cards",
+      "troubleshoot_import": "Fix field & template errors",
+      "docs_btn": "Documentation",
+      "ai_prompt_banner_title": "Create Templates with AI in 1 Minute",
+      "ai_prompt_banner_desc": "No coding needed! Use standardized Prompts for ChatGPT / Claude to design Flashcards as desired.",
+      "ai_prompt_banner_btn": "Open AI Guide & Prompts"
+    },
+    "create": {
+      "title": "Create New Note Type",
+      "description": "Initialize data structure and custom template.",
+      "placeholder": "e.g. Japanese Vocabulary, JLPT N2 Grammar, Kanji Characters…",
+      "submit_btn": "Create NoteType"
+    },
+    "empty": {
+      "title": "No Note Types yet",
+      "description": "Enter a name in the form above to create a new NoteType."
+    },
+    "card": {
+      "templates_badge": "{{count}} templates",
+      "fields_badge": "{{count}} fields",
+      "shared_badge": "Shared",
+      "btn_fields": "Fields",
+      "btn_templates": "Templates",
+      "btn_view": "View",
+      "btn_share": "Share",
+      "btn_delete_title": "Delete NoteType"
+    },
+    "delete_dialog": {
+      "title": "Confirm NoteType Deletion",
+      "description": "Delete NoteType “{{name}}”? This action may be irreversible.",
+      "purge_label": "Completely Purge All Data (Purge)",
+      "purge_warning": "Warning: This feature is intended only for deleting broken note types during development. It will permanently remove the note type along with its fields, templates, notes/cards, study progress, and related changes from the system.",
+      "cancel": "Cancel",
+      "delete_btn": "Delete NoteType",
+      "purge_btn": "Purge Data"
+    },
+    "messages": {
+      "create_success": "New NoteType created.",
+      "create_error": "Failed to create NoteType",
+      "delete_success": "NoteType deleted successfully.",
+      "delete_error": "Failed to delete NoteType",
+      "name_required": "Please enter a NoteType name"
+    }
+  },
+  "fields": {
+    "loading": "Loading fields…",
+    "header": {
+      "description": "Manage and reorder fields within this NoteType.",
+      "back_btn": "Back",
+      "edit_templates_btn": "Edit templates"
+    },
+    "list": {
+      "title": "Fields List",
+      "add_btn": "Add",
+      "reorder_hint": "Drag and drop or use ▲/▼ to change order",
+      "move_up": "Move up",
+      "move_down": "Move down",
+      "empty": "No fields yet. Click Add button to create a new field.",
+      "primary_badge": "id"
+    },
+    "add_card": {
+      "title": "Add New Field",
+      "field_name": "Field Name",
+      "placeholder": "e.g. PitchAccent, Audio, Sentence…",
+      "field_type": "Data Type",
+      "cancel": "Cancel",
+      "submit": "Create Field"
+    },
+    "edit_card": {
+      "title": "Field Properties",
+      "field_name": "Field Name",
+      "field_type": "Data Type",
+      "required": "Required field",
+      "primary_identity": "Primary Identity Field",
+      "primary_identity_desc": "Flama Connect uses this field to check for duplicates within the target deck. Each note type has only one primary identity field.",
+      "delete_btn": "Delete Field",
+      "save_btn": "Save Changes",
+      "confirm_delete": "Delete field \"{{name}}\"? Associated data across notes will be discarded."
+    },
+    "empty_selection": "Select a field on the left to edit or click \"Add\" to create a new field.",
+    "messages": {
+      "create_success": "New field added.",
+      "create_error": "Failed to create field",
+      "update_success": "Field updated.",
+      "update_error": "Failed to update field",
+      "delete_success": "Field deleted.",
+      "delete_error": "Failed to delete field",
+      "reorder_error": "Failed to reorder fields",
+      "name_required": "Field name is required",
+      "name_empty": "Field name cannot be empty"
+    }
+  },
+  "detail": {
+    "loading": "Loading NoteType details…",
+    "header": {
+      "fallback_title": "NoteType Details",
+      "description": "Customize Front HTML, Back HTML, and CSS, and live preview rendering effects.",
+      "back_btn": "Back",
+      "view_marketplace": "View on Marketplace",
+      "share_marketplace": "Share to Market",
+      "guide_btn": "Guide & AI Prompts",
+      "fields_btn": "Manage Fields"
+    },
+    "editor_actions": {
+      "new": "New",
+      "reset": "Reset",
+      "reset_confirm": "Reset template to initial defaults?",
+      "reset_tooltip": "Reset default template",
+      "save_template": "Save Template"
+    },
+    "messages": {
+      "save_success": "Template saved.",
+      "save_error": "Failed to save template",
+      "create_success": "New template created.",
+      "create_error": "Failed to create template",
+      "reset_success": "Template reset to defaults.",
+      "reset_error": "Failed to reset template"
+    }
+  },
+  "template_bar": {
+    "default_badge": "Default",
+    "note_count": "{{count}} notes",
+    "note_count_loading": "… notes",
+    "rename_btn": "Rename",
+    "delete_btn": "Delete",
+    "cannot_delete_default": "Cannot delete default template.",
+    "cannot_delete_single": "Note type requires at least one template.",
+    "rename_dialog": {
+      "title": "Rename Template",
+      "label": "Template Name",
+      "error_empty": "Template name cannot be empty.",
+      "error_max_length": "Template name maximum 255 characters.",
+      "cancel": "Cancel",
+      "submit": "Save Name"
+    },
+    "delete_dialog": {
+      "title": "Delete template “{{name}}”?",
+      "description": "Cards using this template will be removed. Study progress of each note is retained.",
+      "note_count_warning": "{{count}} notes currently have cards using this template.",
+      "confirm": "Delete Template",
+      "cancel": "Cancel"
+    },
+    "messages": {
+      "rename_success": "Template renamed.",
+      "rename_error": "Failed to rename template",
+      "delete_success": "Template deleted.",
+      "delete_error": "Failed to delete template"
+    }
+  },
+  "live_preview": {
+    "title": "Live Preview",
+    "subtitle": "(Simulating sample card data)",
+    "updating": "Updating…",
+    "front_side": "Front Side",
+    "back_side": "Back Side",
+    "preparing": "Preparing preview…",
+    "error": "Failed to load template preview."
+  },
+  "guide": {
+    "header": {
+      "title": "Note Type Creation Guide & AI Prompts",
+      "description": "All technical details and standard prompts to help you craft perfect Flashcard templates without coding.",
+      "tour_btn": "Guided Tour",
+      "manager_link": "NoteTypes Manager",
+      "start_btn": "Create Note Type Now"
+    },
+    "tabs": {
+      "prompt": "🤖 Sample AI Prompts",
+      "tech": "⚙️ Card Technology",
+      "steps": "🚀 Workflow Steps",
+      "rules": "⚠️ Error Prevention Rules"
+    },
+    "prompt_tab": {
+      "master_title": "Standardized Master Prompt",
+      "master_desc": "Copy the prompt frame below, append your requirements, and send it to ChatGPT / Claude / Gemini.",
+      "copy_master": "Copy Master Prompt",
+      "copied_master": "Prompt Copied",
+      "quick_tip_title": "Quick tip:",
+      "quick_tip_text": "After AI responds, you will get: (1) Fields list to enter on Fields page, and (2) Front/Back/CSS code to paste on Template page.",
+      "ex1_badge": "Example 1: JLPT Vocab",
+      "ex1_title": "Vocabulary card with Kanji, Furigana, Sino-Vietnamese & Audio sentences",
+      "ex2_badge": "Example 2: Advanced Grammar",
+      "ex2_title": "Grammar card with Structure, Literary citations & Nuance comparisons",
+      "copy_btn": "Copy",
+      "copied_btn": "Copied",
+      "copied_toast_title": "Copied to Clipboard!",
+      "copied_toast_desc": "Open ChatGPT, Claude, or Gemini and paste this prompt."
+    },
+    "tech_tab": {
+      "card1_title": "Mustache Template Engine",
+      "card1_desc": "Flama uses standard Mustache templating. Vocabulary data is auto-populated into {{placeholder}} tags.",
+      "card2_title": "Audio & Sound System",
+      "card2_desc": "Supports safe mp3 pronunciation playback via speaker button 🔊 or auto-reading scripts.",
+      "card3_title": "Secure Iframe Sandbox",
+      "card3_desc": "Each card renders in an isolated environment, ensuring responsive layouts on both mobile and desktop.",
+      "field_types_title": "6 Supported Field Data Types",
+      "ft_text_title": "Plain Text",
+      "ft_text_desc": "Vocabulary, Kanji, short definitions, Romaji, author names...",
+      "ft_richtext_title": "Rich Text",
+      "ft_richtext_desc": "Text with bold, italics, color highlights, underline, bullet lists.",
+      "ft_audio_title": "Audio File",
+      "ft_audio_desc": "Pronunciation audio, example sentences, audio clips (mp3, wav, m4a).",
+      "ft_image_title": "Image",
+      "ft_image_desc": "Vocabulary illustrations, contextual pictures.",
+      "ft_markdown_title": "Markdown Format",
+      "ft_markdown_desc": "Long articles, comparison tables, complex grammar formulas.",
+      "ft_diagram_title": "Diagram / Chart",
+      "ft_diagram_desc": "Sentence syntax tree, visual semantics diagram."
+    },
+    "steps_tab": {
+      "step1_title": "Create Note Type",
+      "step1_desc": "Go to NoteTypes Manager, enter a name (e.g. N3 Vocab), and click Create NoteType.",
+      "step2_title": "Create Data Fields",
+      "step2_desc": "Click Manage Fields, add fields according to AI's table (matching field names and types).",
+      "step3_title": "Paste Front / Back / CSS Code",
+      "step3_desc": "Navigate to Template Details, paste Front HTML, Back HTML, and Shared CSS, then click Save Template.",
+      "step4_title": "Live Preview",
+      "step4_desc": "Right panel will display live card mockup. Flip Front / Back and test speaker 🔊 button."
+    },
+    "rules_tab": {
+      "rule1_title": "⚠️ 1. Balance HTML Tags in Mustache",
+      "rule1_desc": "When opening a <div> inside {{#field}}, you must close </div> before closing {{/field}}.",
+      "rule2_title": "💡 2. Field Naming Conventions",
+      "rule2_desc": "Use lowercase alphanumeric characters separated by underscores (e.g. word, audio_word, example_en) for maximum compatibility.",
+      "rule3_title": "✨ 3. Avoid style height: 100vh",
+      "rule3_desc": "On Front side, use centering Flexbox: style=\"min-height: 200px; display: flex; align-items: center; justify-content: center;\" for smooth responsiveness across devices."
+    }
+  },
+  "errors": {
+    "shared_schema_versioning": "This template is part of a shared deck and cannot be added, deleted, or reset. You can still modify HTML/CSS content.",
+    "compile_error": "Template syntax error: {{message}}",
+    "cannot_delete_default": "Cannot delete default template.",
+    "requires_at_least_one": "Note type requires at least one template.",
+    "generic": "An error occurred. Please try again."
+  },
+  "tour": {
+    "step_badge": "Tour Guide: Step {{current}}/{{total}}",
+    "subtitle": "For beginners",
+    "skip_title": "Skip guide",
+    "step1_title": "🎉 1. Welcome to Note Type Management!",
+    "step1_desc": "A Note Type defines data structures (such as vocabulary, readings, audio files, images...) and determines how Flashcards look.",
+    "step2_title": "✨ 2. No coding skills? Use AI Prompts!",
+    "step2_desc": "Flama provides standardized Master Prompts. Simply copy the prompt, fill in your requirements, and send it to ChatGPT / Claude for automated HTML/CSS generation.",
+    "step2_btn": "Open AI Prompt page in new tab",
+    "step3_title": "📝 3. Create a New Note Type",
+    "step3_desc": "Enter the note type name (e.g., JLPT N3 Vocabulary, N2 Grammar) into the \"Create New Note Type\" input below, then click Create NoteType.",
+    "step4_title": "🚀 4. Manage Fields & Edit Templates",
+    "step4_desc": "After creation, the system takes you to Manage Fields to add data columns. Next, visit Template Details to paste Front/Back/CSS code and check Live Preview.",
+    "dot_aria": "Go to step {{step}}",
+    "back_btn": "Back",
+    "skip_btn": "Skip",
+    "finish_btn": "Finish & Get Started",
+    "next_btn": "Next"
+  },
+  "manager_tour": {
+    "step1_title": "📝 1. Enter New Note Type Name",
+    "step1_desc": "Enter the name of the note type you want to create (e.g., N3 Vocabulary, N2 Grammar, Kanji) in this field.",
+    "step2_title": "🚀 2. Click Create NoteType",
+    "step2_desc": "Click this button to initialize the note type. You will automatically be redirected to the Fields management page to add data columns.",
+    "step3_title": "🤖 3. Guide & AI Prompts",
+    "step3_desc": "No programming needed! Click here to open the guide and copy the Master Prompt for ChatGPT / Claude to design card templates for you.",
+    "step4_cards_title": "📇 4. NoteType Card & Badges",
+    "step4_cards_desc": "Each card displays the note type name along with two key badges: number of Templates (display card faces) and number of Fields.",
+    "step5_fields_title": "⚙️ 5. \"Fields\" Button (Data Columns)",
+    "step5_fields_desc": "Click here to add fields like Word, Meaning, Audio, Example, Furigana... defining data storage structure.",
+    "step6_templates_title": "🎨 6. \"Templates\" Button (Edit & Preview)",
+    "step6_templates_desc": "Click here to open the Front & Back HTML/CSS editor, paste AI-generated code, and view real-time Live Preview.",
+    "step7_share_title": "🌐 7. \"Share\" Button (Community Marketplace)",
+    "step7_share_desc": "Once designed, click this button to publish your card template to the Marketplace for the Flama community.",
+    "step4_empty_title": "📋 4. Note Types List Area",
+    "step4_empty_desc": "After creating note types, they will appear here with action buttons: Manage Fields, Customize Templates, Live Preview, and Share to Marketplace."
+  },
+  "guide_tour": {
+    "step1_title": "📘 1. Guide Center & AI Prompts",
+    "step1_desc": "This comprehensive documentation helps you create any Flashcard template for Flama without writing code.",
+    "step2_title": "📑 2. Navigate Guide Topics",
+    "step2_desc": "Quickly switch between 4 categories: Sample AI Prompts, Card Technology, 4-Step Process, and Golden Rules to Avoid Errors.",
+    "step3_title": "🤖 3. Standardized Master Prompt for AI",
+    "step3_desc": "Click \"Copy Full Prompt\" to copy the standard instructions and send to ChatGPT / Claude / Gemini to generate HTML/CSS.",
+    "step4_title": "💡 4. Real-world Request Examples",
+    "step4_desc": "Browse and quickly copy sample prompts for Vocabulary cards or JLPT Grammar cards.",
+    "step5_title": "🚀 5. Start Creating Note Types Now",
+    "step5_desc": "After getting code from AI, click this button to return to Note Types Management and apply your designs."
+  },
+  "ai_modal": {
+    "dialog_title": "Guide & AI Prompts for NoteType Templates",
+    "dialog_desc": "Use AI (ChatGPT, Claude, Gemini) to generate standard Flama Flashcard templates in 1 minute.",
+    "tab_prompt": "🤖 AI Prompt",
+    "tab_tech": "⚙️ Technology",
+    "tab_steps": "🚀 Steps",
+    "tab_rules": "⚠️ Avoid Errors",
+    "simple_usage_title": "Simple Usage:",
+    "simple_usage_desc": "Copy the Master Prompt below, customize [MY REQUIREMENTS] to your liking, and send it to AI. It will generate field definitions, Front HTML, Back HTML, and CSS.",
+    "master_heading": "📋 Standard Master Prompt:",
+    "copy_master": "Copy Master Prompt",
+    "copied_master": "Copied",
+    "example_heading": "💡 Example [MY REQUIREMENTS] for Vocabulary Cards:",
+    "copy_example": "Copy this example",
+    "copied_example": "Copied example",
+    "toast_title": "Prompt copied to clipboard!",
+    "toast_desc": "Open ChatGPT, Claude, or Gemini and paste this prompt."
+  },
+  "editor": {
+    "badge_new": "New"
+  }
+}

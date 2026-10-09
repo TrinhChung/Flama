@@ -2,14 +2,136 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/logo.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Canonical & Primary Meta -->
+    <link rel="canonical" href="https://flama.vn" />
+    <meta name="title" content="Flama — Nền Tảng Học Tiếng Nhật &amp; SRS Flashcard Thông Minh" />
     <meta
       name="description"
-      content="Flama — Nền tảng học tập đa lĩnh vực & kho dữ liệu bộ thẻ chuyên biệt do cộng đồng cùng đóng góp. Ghi nhớ mọi kiến thức với Spaced Repetition."
+      content="Ghi nhớ từ vựng tiếng Nhật đỉnh cao với thuật toán Spaced Repetition (SRS), khai thác 1-click từ Yomitan, phát âm chuẩn Local TTS (VoiceVox/Kokoro), và kho thẻ JLPT N5-N1."
     />
     <meta name="theme-color" content="#1f1a17" />
-    <title>Flama</title>
+    <title>Flama — Nền Tảng Học Tiếng Nhật &amp; SRS Flashcard Thông Minh</title>
+
+    <!-- OpenGraph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://flama.vn" />
+    <meta property="og:site_name" content="Flama" />
+    <meta property="og:title" content="Flama — Nền Tảng Học Tiếng Nhật &amp; SRS Flashcard Thông Minh" />
+    <meta
+      property="og:description"
+      content="Ghi nhớ từ vựng tiếng Nhật đỉnh cao với thuật toán Spaced Repetition (SRS), khai thác 1-click từ Yomitan, phát âm chuẩn Local TTS, và kho thẻ JLPT N5-N1."
+    />
+    <meta property="og:image" content="https://flama.vn/logo.png" />
+    <meta property="og:locale" content="vi_VN" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://flama.vn" />
+    <meta name="twitter:title" content="Flama — Nền Tảng Học Tiếng Nhật &amp; SRS Flashcard Thông Minh" />
+    <meta
+      name="twitter:description"
+      content="Ghi nhớ từ vựng tiếng Nhật đỉnh cao với thuật toán Spaced Repetition (SRS), khai thác 1-click từ Yomitan, phát âm chuẩn Local TTS, và kho thẻ JLPT N5-N1."
+    />
+    <meta name="twitter:image" content="https://flama.vn/logo.png" />
+
+    <!-- Schema.org Multi-Entity JSON-LD Graph -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://flama.vn/#organization",
+          "name": "Flama",
+          "legalName": "Flama Vietnam",
+          "url": "https://flama.vn",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://flama.vn/logo.png"
+          },
+          "sameAs": [
+            "https://github.com/TrinhChung/Flama"
+          ],
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer support",
+            "url": "https://flama.vn/support"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://flama.vn/#website",
+          "url": "https://flama.vn",
+          "name": "Flama",
+          "publisher": {
+            "@id": "https://flama.vn/#organization"
+          },
+          "inLanguage": "vi"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://flama.vn/#app",
+          "name": "Flama",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Web, Windows",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "VND"
+          },
+          "description": "Nền tảng học tiếng Nhật và bộ thẻ flashcard thông minh với thuật toán Spaced Repetition (SRS), khai thác từ vựng Yomitan 1-click và Local TTS (VoiceVox, Kokoro).",
+          "publisher": {
+            "@id": "https://flama.vn/#organization"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://flama.vn/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Flama là gì và có điểm gì khác biệt so với Anki?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Flama là nền tảng học tiếng Nhật và ghi nhớ đa lĩnh vực thông minh thế hệ mới, kết hợp thuật toán Spaced Repetition (SRS), khai thác từ vựng 1-click qua Yomitan bridge, phát âm chuẩn ngữ điệu với Local TTS (VoiceVox & Kokoro), và mô hình chia sẻ bộ thẻ Clone Overlay độc quyền."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Làm thế nào để khai thác từ vựng 1-click từ Yomitan vào Flama?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Bạn chỉ cần kết nối Yomitan với tiện ích Flama Connect hoặc cổng bridge tương thích AnkiConnect của Flama để lưu từ vựng, kanji, furigana và âm thanh trực tiếp vào bộ thẻ chỉ với 1 cú click."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Flama Audio hỗ trợ những công nghệ phát âm (TTS) nào?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Flama Audio hỗ trợ công nghệ Local TTS miễn phí hoàn toàn ngoại tuyến với VoiceVox và Kokoro TTS trên Windows, cùng các nhà cung cấp Cloud TTS."
+              }
+            }
+          ]
+        },
+        {
+          "@type": "Course",
+          "@id": "https://flama.vn/#course-jlpt",
+          "name": "Lộ trình Từ vựng & Thẻ học JLPT (N5 - N1)",
+          "description": "Hệ thống bộ thẻ từ vựng phân cấp theo chuẩn JLPT N5, N4, N3, N2, N1 ứng dụng phương pháp lặp lại ngắt quãng SRS.",
+          "provider": {
+            "@id": "https://flama.vn/#organization"
+          },
+          "inLanguage": "vi"
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

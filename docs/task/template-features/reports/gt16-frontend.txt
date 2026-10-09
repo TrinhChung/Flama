@@ -1,0 +1,108 @@
+frontend/src/entities/card-template/api/cardTemplateApi.ts:2:import type { CardTemplateItem, DeckCardTypesResponse, NoteTypeTemplatesResponse } from '../model/types'
+frontend/src/entities/card-template/api/cardTemplateApi.ts:7:  return apiRequest<NoteTypeTemplatesResponse>(`/api/note-types/${enc(noteTypeId)}/templates`, { signal })
+frontend/src/entities/card-template/api/cardTemplateApi.ts:19:  body: { name?: string; front_html?: string; back_html?: string; shared_css?: string },
+frontend/src/entities/card-template/api/cardTemplateApi.ts:21:  return apiJson<CardTemplateItem>(`/api/note-types/${enc(noteTypeId)}/templates`, 'POST', body)
+frontend/src/entities/card-template/api/cardTemplateApi.ts:25:  return apiJson<CardTemplateItem>(`/api/note-types/${enc(noteTypeId)}/templates/${enc(templateId)}`, 'PATCH', { name })
+frontend/src/entities/card-template/api/cardTemplateApi.ts:29:  return apiJson<{ success: boolean }>(`/api/note-types/${enc(noteTypeId)}/templates/${enc(templateId)}`, 'DELETE')
+frontend/src/entities/card-template/index.ts:2:  CardTemplateItem,
+frontend/src/entities/card-template/index.ts:3:  CardTemplateWithNoteCount,
+frontend/src/entities/card-template/model/types.ts:1:export type CardTemplateItem = {
+frontend/src/entities/card-template/model/types.ts:5:  front_html: string
+frontend/src/entities/card-template/model/types.ts:6:  back_html: string
+frontend/src/entities/card-template/model/types.ts:7:  shared_css: string
+frontend/src/entities/card-template/model/types.ts:13:export type CardTemplateWithNoteCount = CardTemplateItem & { note_count: number }
+frontend/src/entities/card-template/model/types.ts:15:export type NoteTypeTemplatesResponse = { items: CardTemplateWithNoteCount[] }
+frontend/src/entities/card-template/model/types.ts:23:  template_id: string
+frontend/src/entities/card-template/ui/TemplateDiffView.tsx:3:export type TemplateSources = { front_html: string; back_html: string; shared_css: string }
+frontend/src/entities/card-template/ui/TemplateDiffView.tsx:13:  { key: 'front_html', label: 'Front HTML' },
+frontend/src/entities/card-template/ui/TemplateDiffView.tsx:14:  { key: 'back_html', label: 'Back HTML' },
+frontend/src/entities/card-template/ui/TemplateDiffView.tsx:15:  { key: 'shared_css', label: 'Shared CSS' },
+frontend/src/entities/flashcard/lib/clientRenderer.ts:571:  const css = safeCss(template.shared_css)
+frontend/src/entities/flashcard/model/types.ts:37:  shared_css: string
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:77:  front_html?: string
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:78:  back_html?: string
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:192:            front_html: activeTemplate.front,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:193:            back_html: activeTemplate.back,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:194:            shared_css: activeModelDetail.css,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:267:                front_html: firstTmpl.front || `{{${modelDetail.fields[0] || 'Front'}}}`,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:268:                back_html: firstTmpl.back || `{{FrontSide}}<hr id=answer>{{${modelDetail.fields[1] || 'Back'}}}`,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:269:                shared_css: modelDetail.css || '',
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:294:              await appApi.mutate(`/note-types/${flamaNoteTypeId}/templates`, 'POST', {
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:296:                front_html: tmpl.front,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:297:                back_html: tmpl.back,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:298:                shared_css: modelDetail.css || '',
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:349:                front_html: tmpl.front,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:350:                back_html: tmpl.back,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:351:                shared_css: modelDetail.css || '',
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:356:                  `/note-types/${flamaNoteTypeId}/templates/${matchedTemplate.id}`,
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:363:                await appApi.mutate(`/note-types/${flamaNoteTypeId}/templates`, 'POST', templatePayload)
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:605:                  frontHtml={previewResult?.front_html || activeTemplate?.front}
+frontend/src/features/import/components/AnkiNoteTypeSyncTab.tsx:606:                  backHtml={previewResult?.back_html || activeTemplate?.back}
+frontend/src/features/import/components/AnkiSyncTab.tsx:56:  front_html?: string
+frontend/src/features/import/components/AnkiSyncTab.tsx:57:  back_html?: string
+frontend/src/features/import/components/AnkiSyncTab.tsx:58:  shared_css?: string
+frontend/src/features/import/components/AnkiSyncTab.tsx:69:  front_html?: string
+frontend/src/features/import/components/AnkiSyncTab.tsx:70:  back_html?: string
+frontend/src/features/import/components/AnkiSyncTab.tsx:342:          front_html: activePreviewTemplate.front_html || '',
+frontend/src/features/import/components/AnkiSyncTab.tsx:343:          back_html: activePreviewTemplate.back_html || '',
+frontend/src/features/import/components/AnkiSyncTab.tsx:344:          shared_css: activePreviewTemplate.shared_css || '',
+frontend/src/features/import/components/AnkiSyncTab.tsx:711:                frontHtml={previewResult?.front_html}
+frontend/src/features/import/components/AnkiSyncTab.tsx:712:                backHtml={previewResult?.back_html}
+frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:90:type TemplateItem = {
+frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:100:  templates?: TemplateItem[]
+frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:178:  front_html?: string
+frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:179:  back_html?: string
+frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:275:        `/api/shared/decks/${id}/templates/${selectedTemplateId}/preview`,
+frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:1148:                    frontHtml={previewQuery.data.front_html}
+frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:1149:                    backHtml={previewQuery.data.back_html}
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:45:type TemplateItem = {
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:48:  front_html?: string
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:49:  back_html?: string
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:90:  templates?: TemplateItem[]
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:96:  front_html?: string
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:97:  back_html?: string
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:145:        `/api/shared/note-types/${id}/templates/${selectedTemplateId}/preview`,
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:492:            frontHtml={previewQuery.data?.front_html}
+frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx:493:            backHtml={previewQuery.data?.back_html}
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:39:type TemplateItem = {
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:42:  front_html?: string
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:43:  back_html?: string
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:44:  shared_css?: string
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:53:  templates?: TemplateItem[]
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:57:  front_html?: string
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:58:  back_html?: string
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:116:  const frontHtmlVal = selectedTemplate?.front_html
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:117:  const backHtmlVal = selectedTemplate?.back_html
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:118:  const sharedCssVal = selectedTemplate?.shared_css
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:129:    mutationFn: (payload: { front_html: string; back_html: string; shared_css: string }) =>
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:130:      appApi.mutate(`/note-types/${noteTypeId}/templates/${selectedTemplateId}`, 'PATCH', payload),
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:143:      appApi.mutate<TemplateItem>(`/note-types/${noteTypeId}/templates`, 'POST', {
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:159:      appApi.mutate<TemplateItem>(
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:160:        `/note-types/${noteTypeId}/templates/${selectedTemplateId}/reset`,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:165:      setFrontHtml(reset.front_html || '')
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:166:      setBackHtml(reset.back_html || '')
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:167:      setSharedCss(reset.shared_css || '')
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:184:          `/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:187:            front_html: frontHtml,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:188:            back_html: backHtml,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:189:            shared_css: sharedCss,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:346:                    front_html: frontHtml,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:347:                    back_html: backHtml,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:348:                    shared_css: sharedCss,
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:367:            frontHtml={previewResult?.front_html}
+frontend/src/features/note-types/pages/NoteTypeDetailPage.tsx:368:            backHtml={previewResult?.back_html}
+frontend/src/features/study/queries.ts:29:    manifest?.template_id || '',
+frontend/src/features/study/session/sessionRestore.ts:605:        && typeof selectedRecord.template_id === 'string'
+frontend/src/features/study/session/sessionRestore.ts:606:        && selectedRecord.template_id.length > 0
+frontend/src/features/study/session/sessionRestore.ts:611:        && selectedRecord.definition_id === `legacy-template:${selectedRecord.template_id}`
+frontend/src/features/study/session/sessionRestore.ts:677:          rawCard.template_id !== selectedRecord.template_id
+frontend/src/features/study/session/sessionRestore.ts:680:          || template.id !== rawCard.template_id
+frontend/src/features/study/session/sessionStore.ts:524:  front_html?: string
+frontend/src/features/study/session/sessionStore.ts:525:  back_html?: string
+frontend/src/features/study/session/sessionStore.ts:526:  shared_css?: string
+frontend/src/features/study/session/studySessionTestFixture.ts:56:      template_id: 'template-1',
+frontend/src/features/study/session/studySessionTestFixture.ts:96:        shared_css: '',
+frontend/src/features/study/types.ts:37:  template_id?: string | null
+frontend/src/features/study/types.ts:65:  shared_css: string
+frontend/src/features/study/types.ts:119:  template_id: string
+frontend/src/features/study/types.ts:170:  template_id: string

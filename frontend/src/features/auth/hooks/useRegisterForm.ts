@@ -3,17 +3,19 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { register } from '../api'
-import { registerSchema, type RegisterFormValues } from '../schemas'
+import { getRegisterSchema, type RegisterFormValues } from '../schemas'
 
 export function useRegisterForm() {
+  const { t } = useTranslation('auth')
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const form = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(getRegisterSchema((k) => t(k as any))),
     defaultValues: { email: '', username: '', password: '', confirm_password: '' },
     mode: 'onChange',
   })

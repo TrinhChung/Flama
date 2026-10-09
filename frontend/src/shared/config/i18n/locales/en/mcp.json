@@ -1,0 +1,520 @@
+{
+  "page": {
+    "title": "AI Integration via Model Context Protocol (MCP)",
+    "description": "Connect ChatGPT, Cursor, and AI assistants to your Flama workspace to search vocabulary, generate flashcards, and study seamlessly.",
+    "quick_links_label": "Quick Reference:",
+    "quick_guide_ai": "ChatGPT & AI Assistant Integration Guide",
+    "quick_tools_prompts": "20 AI Tools & Prompt Catalog",
+    "quick_troubleshooting": "MCP Troubleshooting Guide",
+    "connect_guide_btn": "Setup Guide",
+    "connect_guide_title": "Guide: Connecting AI Assistants via MCP",
+    "troubleshoot_title": "MCP Troubleshooting",
+    "loading": "Loading MCP tokens…",
+    "tabs": {
+      "chatgpt": {
+        "title": "1. Connect ChatGPT",
+        "badge": "Recommended",
+        "desc": "Look up words and generate flashcards seamlessly within ChatGPT conversations"
+      },
+      "tokens": {
+        "title": "2. API Access Tokens & Permissions",
+        "badge": "Developers",
+        "desc": "Personal Access Tokens for Cursor, Cline, and Claude Desktop (Experimental)"
+      }
+    },
+    "docs_strip": {
+      "title": "MCP Documentation & Reference",
+      "view_all": "View all",
+      "card_ai": {
+        "title": "MCP Integration Handbook",
+        "desc": "Configure Claude Desktop, Cursor IDE, Antigravity, and verify cURL commands."
+      },
+      "card_tools": {
+        "title": "Tools & Prompts Catalog",
+        "desc": "Reference 20 Flashcard tools and sample prompt templates for AI agents."
+      },
+      "card_yomitan": {
+        "title": "Yomitan 1-Click Mining",
+        "desc": "Automatically mine vocabulary while reading news and manga in your browser."
+      }
+    }
+  },
+  "tokens_tab": {
+    "chatgpt_banner": {
+      "question": "Looking to connect Flama Flashcards to ChatGPT?",
+      "instruction": "Open tab 1. Connect ChatGPT for a 5-step automated OAuth setup guide — no manual token required.",
+      "button": "Open ChatGPT Guide"
+    },
+    "endpoint_card": {
+      "title": "MCP Server Configuration (Flama Remote Endpoint)",
+      "badge": "Stream HTTP POST / SSE",
+      "desc": "Remote MCP endpoint URL for Cursor IDE, Antigravity, Cline, and automation scripts using Personal Access Tokens. For ChatGPT, use tab 1. Connect ChatGPT for automatic OAuth sign-in.",
+      "guide_link": "Installation Guide →",
+      "url_label": "Endpoint URL:",
+      "copy_button": "Copy URL",
+      "copied_button": "Copied",
+      "copied_toast": "Copied {{label}} to clipboard.",
+      "copy_failed_toast": "Failed to copy to clipboard.",
+      "claude_notice": {
+        "label": "Claude Desktop:",
+        "text": "Claude Desktop integration is currently in private experimental testing. This view primarily supports Cursor IDE, Antigravity, Cline, and Personal Access Token management."
+      }
+    },
+    "managed_card": {
+      "title": "Managed AI Connection Settings",
+      "desc": "Your account uses standard secure AI connection policies. You can copy the connection URL from the Token list below to integrate with Cursor or IDE tools. For ChatGPT, switch to tab 1. Connect ChatGPT for easy 5-step onboarding."
+    },
+    "all_scopes_card": {
+      "title": "AI Feature Permissions Directory ({{count}} Scopes)",
+      "granted_badge": "Granted to all tokens",
+      "desc": "All AI capabilities below are automatically enabled for all your access tokens. Tokens can utilize corresponding tools to search, create flashcards, and review without manual permission configuration.",
+      "tools_link": "View 20 available tools →",
+      "permissions_count": "{{count}}/{{total}} permissions"
+    }
+  },
+  "manager": {
+    "title": "Manage MCP Access Tokens",
+    "admin_title": "MCP Tokens & Secrets List",
+    "inline_title": "Token & Secret Key Inventory ({{count}})",
+    "desc": "Issue and manage API tokens to connect your workspace directly to external developer tools (Cursor IDE, Antigravity, Claude Desktop).",
+    "admin_desc": "Manage and distribute Flama MCP Access Tokens for all users across the system.",
+    "create_btn": "Create New Token",
+    "admin_create_btn": "Issue Token for User",
+    "cleanup_btn": "Clean up {{count}} inactive tokens",
+    "stats": {
+      "total": "Total Tokens",
+      "active": "Active Tokens",
+      "inactive": "Expired / Revoked"
+    },
+    "search_placeholder": "Search tokens by name, scopes...",
+    "filter": {
+      "all": "All statuses",
+      "active": "Active",
+      "revoked": "Revoked",
+      "expired": "Expired"
+    }
+  },
+  "table": {
+    "cols": {
+      "owner": "Owner",
+      "name": "Token Name",
+      "status": "Status",
+      "expiry": "Expiration",
+      "scopes": "Permissions (Scopes)",
+      "last_used": "Last Used",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "revoked": "Revoked",
+      "expired": "Expired",
+      "exhausted": "Exhausted"
+    },
+    "empty": {
+      "user_title": "No MCP tokens found",
+      "admin_title": "No tokens found",
+      "user_desc": "Enter a token name and click 'Create New Token' above. You have not created any tokens yet, or no tokens match your search criteria.",
+      "admin_desc": "Click 'Issue Token for User' above to create a token for a user. No tokens have been issued yet, or none match your search criteria."
+    },
+    "never_expires": "Never expires / Permanent",
+    "never_used": "Never used",
+    "admin_never_used": "Never used",
+    "unknown_user": "Unknown",
+    "view_scopes": "View scopes",
+    "scopes_count": "{{count}} Scopes",
+    "full_access": "Full Access",
+    "read_only": "Read-only",
+    "actions_tooltip": {
+      "permissions": "Configure Permissions & Scopes",
+      "edit_user": "Edit name & expiration",
+      "edit_admin": "Edit permissions & metadata",
+      "rotate_user": "Rotate / Regenerate Secret Key",
+      "rotate_admin": "Rotate Secret (Generate new key preserving scopes)",
+      "revoke": "Revoke Token",
+      "purge_user": "Permanently delete token",
+      "purge_admin": "Permanently delete",
+      "view_scopes_details": "View scope details"
+    },
+    "pagination": {
+      "page_info": "Page {{page}} of {{totalPages}}",
+      "prev": "Previous",
+      "next": "Next"
+    }
+  },
+  "inline_create": {
+    "title": "Create New MCP Access Token",
+    "desc": "Create a separate token for each AI coding tool (Cursor IDE, Antigravity, Cline) for granular access control.",
+    "json_guide_link": "View JSON configuration guide →",
+    "name_label": "Token Name (Client / Device)",
+    "name_placeholder": "e.g. Cursor IDE - Work Laptop",
+    "expiry_label": "Expiration Period",
+    "submit_btn": "Create New Token",
+    "submitting_btn": "Creating…",
+    "duplicate_warning": "An active token already exists with this name. You can edit its permissions or rotate its secret key below instead of creating a duplicate.",
+    "scopes_header": "Permissions Granted ({{count}}/{{total}} Scopes):",
+    "presets_label": "Quick Presets:"
+  },
+  "modal": {
+    "title_permissions_only": "Edit MCP Token Permissions",
+    "title_edit_user": "Edit MCP Token",
+    "title_edit_admin": "Edit Token & Scopes",
+    "title_create_user": "Create New MCP Access Token",
+    "title_create_admin": "Issue New MCP Access Token",
+    "desc_permissions_only": "Update granted permissions (scopes) for this token.",
+    "desc_edit": "Update token name, expiration, or modify granted permissions directly.",
+    "desc_create": "Generate an API authorization token for a client application or developer environment.",
+    "select_user_label": "Target User Account *",
+    "select_user_placeholder": "-- Select a user --",
+    "name_label": "Token Name (Client / Device) *",
+    "name_placeholder_user": "e.g. Cursor IDE - MacBook Pro",
+    "name_placeholder_admin": "e.g. Claude Desktop PC, ChatGPT Connector...",
+    "custom_token_label": "Custom Secret Token String (Optional)",
+    "custom_token_placeholder": "Paste a custom token string or leave blank to auto-generate",
+    "expiry_label": "Expiration Period",
+    "expiry_options": {
+      "keep": "Keep current expiration",
+      "days_180": "6 months (180 days) - Default",
+      "days_365": "1 year (365 days)",
+      "none": "Permanent (Never expires)",
+      "days_90": "3 months (90 days)",
+      "days_30": "1 month (30 days)",
+      "days_7": "7 days (Short-term / Test)"
+    },
+    "scopes_count": "Permissions Granted ({{count}}/{{total}} Scopes)",
+    "select_all": "Select all",
+    "deselect_all": "Deselect all",
+    "category_select_all": "Select all",
+    "category_deselect_all": "Deselect",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save_edit_user": "Save Permissions",
+    "save_edit_admin": "Save Changes",
+    "save_create_user": "Create Token",
+    "save_create_admin": "Issue Token"
+  },
+  "secret_modal": {
+    "title": "Token & Secret Key Generated Successfully",
+    "desc": "Your secret access token is ready! Please copy the secret key below immediately. For security reasons, this token will NEVER be shown again once you close this dialog.",
+    "token_name_label": "Token Name:",
+    "owner_label": "Owner:",
+    "expiry_label": "Expires At:",
+    "one_time_warning": "Displayed only once. If misplaced, you must use Rotate Secret Key to generate a new credential.",
+    "bearer_header": "Secret Access Token (Bearer Key)",
+    "endpoint_header": "Endpoint URL for AI Assistants (Cursor / Claude)",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copy_url": "Copy URL",
+    "copied_token_toast_user": "Token copied to clipboard.",
+    "copied_token_toast_admin": "Secret token copied to clipboard.",
+    "copied_url_toast_user": "Endpoint URL copied to clipboard.",
+    "copied_url_toast_admin": "URL copied to clipboard.",
+    "copy_failed_toast_user": "Failed to copy to clipboard.",
+    "copy_failed_toast_admin": "Failed to copy to clipboard.",
+    "json_snippet_title": "Quick Config for Cursor / Claude Desktop (mcpServers)",
+    "close_btn": "Close",
+    "saved_and_close_btn": "I Have Saved My Secret — Close"
+  },
+  "actions": {
+    "rotate": {
+      "title_user": "Rotate Secret Token",
+      "title_admin": "Rotate Secret Key for Token",
+      "desc_user": "Rotating this secret will generate a new Bearer token immediately. Any tool using the current secret key will be invalidated immediately.",
+      "desc_admin": "Rotating the secret key generates a new credential while preserving existing scope configurations. The previous secret key will be invalidated immediately.",
+      "confirm_user": "Confirm Rotate Secret",
+      "confirm_admin": "Confirm Secret Rotation",
+      "expiry_label": "Validity period for new secret",
+      "days_30": "30 days",
+      "days_90": "90 days",
+      "days_180": "180 days (Recommended)",
+      "days_365": "1 year",
+      "none": "Permanent (Never expires)"
+    },
+    "revoke": {
+      "title_user": "Confirm Token Revocation",
+      "title_admin": "Revoke This Token?",
+      "desc_user": "This token will be immediately deactivated. Connected AI assistants will lose access to your Flama workspace.",
+      "desc_admin": "The token status will change to Revoked. Any AI assistant currently using this credential will no longer be able to make API requests.",
+      "confirm_user": "Revoke Token",
+      "confirm_admin": "Confirm Revoke"
+    },
+    "purge": {
+      "title_user": "Permanently Delete Token",
+      "title_admin": "Permanently Delete Token?",
+      "desc": "This action cannot be undone. The token record \"{{name}}\" will be permanently deleted from the system.",
+      "confirm_user": "Delete Permanently",
+      "confirm_admin": "Delete Permanently"
+    },
+    "cleanup": {
+      "title_user": "Clean Up Inactive & Expired Tokens",
+      "title_admin": "Clean Up Expired & Revoked Tokens",
+      "desc_user": "Permanently purge all {{count}} revoked or expired tokens from your account?",
+      "desc_admin": "Permanently delete all {{count}} expired and revoked tokens across the system to optimize database records.",
+      "confirm_user": "Clean up {{count}} tokens",
+      "confirm_admin": "Confirm Cleanup"
+    },
+    "scope_details": {
+      "title": "Scope Details ({{name}})",
+      "user_desc": "List of scopes and capabilities granted to this token",
+      "admin_desc": "Owner: {{username}} ({{email}})",
+      "empty": "No permissions or scopes are assigned to this token.",
+      "close": "Close"
+    }
+  },
+  "scopes": {
+    "categories": {
+      "decks": {
+        "name": "Decks & Collaboration",
+        "description": "View, create deck hierarchies, and publish shared decks to Marketplace"
+      },
+      "notes": {
+        "name": "Notes & Synchronization",
+        "description": "Search, create, update, delete, and synchronize vocabulary notes"
+      },
+      "note_types": {
+        "name": "Card Templates (Note Types)",
+        "description": "Inspect and manage field schemas and card rendering templates"
+      },
+      "study_stats": {
+        "name": "SRS Study & Analytics",
+        "description": "Fetch due cards, record Spaced Repetition review ratings, and track analytics"
+      },
+      "media": {
+        "name": "Media Assets",
+        "description": "Search, upload, and organize illustration assets for flashcards"
+      },
+      "account": {
+        "name": "User Account & Profile",
+        "description": "Authenticate identity and read basic account profile details"
+      }
+    },
+    "presets": {
+      "all": {
+        "label": "Full Access",
+        "badge": "17 Scopes",
+        "desc": "Grant all 17 permissions (recommended for Cursor / Claude Desktop / Antigravity)"
+      },
+      "readonly": {
+        "label": "Read-Only",
+        "badge": "8 Scopes",
+        "desc": "Inspect and query data without mutating workspace contents"
+      },
+      "manager": {
+        "label": "Deck & Note Management",
+        "badge": "12 Scopes",
+        "desc": "Create and edit notes, manage deck hierarchies, and publish deck updates"
+      },
+      "study": {
+        "label": "Study Companion",
+        "badge": "5 Scopes",
+        "desc": "Conduct review sessions, submit SRS grades, and check study streak"
+      }
+    },
+    "items": {
+      "deck_read": {
+        "label": "View Decks List",
+        "desc": "Read deck metadata and hierarchical folder trees"
+      },
+      "deck_write": {
+        "label": "Manage & Create Decks",
+        "desc": "Create new decks, rename, update, and organize deck tree"
+      },
+      "deck_share_read": {
+        "label": "Browse Shared Decks & Marketplace",
+        "desc": "Discover community decks and explore published flashcard packages"
+      },
+      "deck_share_write": {
+        "label": "Publish & Release Decks",
+        "desc": "Publish decks to Marketplace and release version updates"
+      },
+      "note_read": {
+        "label": "Read Flashcard Notes",
+        "desc": "Read fields including vocabulary, kanji, definitions, and sentence examples"
+      },
+      "note_check": {
+        "label": "Search & Duplicate Checking",
+        "desc": "Verify whether vocabulary or expressions already exist in target decks"
+      },
+      "note_create": {
+        "label": "Create New Flashcard Notes",
+        "desc": "Automate single or batch flashcard creation into specified decks"
+      },
+      "note_update": {
+        "label": "Update Notes & Tags",
+        "desc": "Modify card content fields, assign categorization tags, or move decks"
+      },
+      "note_delete": {
+        "label": "Delete Flashcard Notes",
+        "desc": "Remove flashcard notes and associated review items from decks"
+      },
+      "note_sync": {
+        "label": "Sync External Notes",
+        "desc": "Synchronize note operations bidirectionally from external connectors"
+      },
+      "note_type_read": {
+        "label": "Inspect Card Templates",
+        "desc": "Read schema definitions, field layouts, and card display styling"
+      },
+      "note_type_write": {
+        "label": "Manage Card Templates",
+        "desc": "Design and customize field structures and template layouts"
+      },
+      "study_read": {
+        "label": "Query SRS Study Queue",
+        "desc": "Retrieve today's due cards and upcoming review schedules"
+      },
+      "study_write": {
+        "label": "Submit Review Ratings",
+        "desc": "Record recall feedback (Again, Hard, Good, Easy) into the SRS algorithm"
+      },
+      "stats_read": {
+        "label": "Study Statistics & Streak",
+        "desc": "Monitor study streaks, daily review volume, and learning progress"
+      },
+      "media_read": {
+        "label": "Browse Media Assets",
+        "desc": "Search and inspect images stored in the media library"
+      },
+      "media_write": {
+        "label": "Upload & Tag Media Assets",
+        "desc": "Upload assets, import images via URL, and attach illustration media"
+      },
+      "openid": {
+        "label": "OpenID Connect Identity",
+        "desc": "Authenticate user identity via OpenID Connect."
+      },
+      "profile": {
+        "label": "Basic Account Profile",
+        "desc": "Read display name and basic account profile."
+      },
+      "email": {
+        "label": "Email Address",
+        "desc": "Read email address associated with your Flama account."
+      }
+    }
+  },
+  "oauth": {
+    "consent": {
+      "badge": "OAuth 2.1 • Remote MCP",
+      "title": "Authorize {{client}}",
+      "title_prefix": "Authorize",
+      "default_client": "External Application",
+      "description": "This application requests secure access to your Flama card collection to support vocabulary lookups, flashcard creation, and study progress synchronization.",
+      "account_badge": "Flama Account",
+      "permissions_title": "Requested Permissions",
+      "permissions_count": "{{count}} permissions",
+      "permissions_count_one": "{{count}} permission",
+      "permissions_count_other": "{{count}} permissions",
+      "security_note_title": "Security & Privacy:",
+      "security_note_desc": "Flama enforces safe confirmations for destructive actions. AI cannot delete data without your explicit approval. You can revoke permissions at any time in Settings.",
+      "deny_button": "Deny",
+      "allow_button": "Allow connection",
+      "connecting_button": "Connecting…",
+      "footer_standard": "Flama Study Platform • OAuth 2.1 & RFC 9728 Compliant",
+      "loading": "Loading application authorization details…",
+      "unknown_scope_fallback": "Access permission: {{id}}",
+      "flama_platform_title": "Flama Study Platform",
+      "errors": {
+        "invalid_request_title": "Invalid Request",
+        "missing_client_id_desc": "Missing client_id parameter in OAuth connection request. Please verify your application configuration.",
+        "load_failed_title": "Unable to Load Authorization Details",
+        "client_not_found": "The requested client_id does not exist or has been revoked.",
+        "authorization_failed": "Authorization failed: {{error}}",
+        "processing_error": "An error occurred while processing authorization."
+      },
+      "scopes": {
+        "deck_read": {
+          "title": "View Decks & Folder Structure",
+          "desc": "Read flashcard deck collections, hierarchical folder trees, and card counts."
+        },
+        "deck_write": {
+          "title": "Manage & Create Decks",
+          "desc": "Create new decks, rename, update descriptions, and organize deck folder trees."
+        },
+        "deck_share_read": {
+          "title": "Browse Shared Decks & Marketplace",
+          "desc": "Browse shared decks on the Flama Marketplace, view card details, and inspect release history."
+        },
+        "deck_share_write": {
+          "title": "Publish & Manage Shared Decks",
+          "desc": "Share decks to the Marketplace, update public information, and publish new version releases."
+        },
+        "note_read": {
+          "title": "View & Search Flashcard Notes",
+          "desc": "Read note fields (vocabulary, kanji, definitions, example sentences) and perform search queries."
+        },
+        "note_check": {
+          "title": "Check Duplicate Notes",
+          "desc": "Verify whether vocabulary or flashcard notes already exist in your collection."
+        },
+        "note_create": {
+          "title": "Create New Flashcards",
+          "desc": "Add new vocabulary notes and flashcards to your decks with automated field population."
+        },
+        "note_update": {
+          "title": "Update Flashcard Notes & Tags",
+          "desc": "Edit note fields, manage tags, or organize cards across decks."
+        },
+        "note_delete": {
+          "title": "Delete Flashcard Notes (Protected)",
+          "desc": "Delete notes and associated review cards (requires explicit user confirmation)."
+        },
+        "note_sync": {
+          "title": "Sync Notes from External Sources",
+          "desc": "Automatically create, update, and organize notes and decks synced from external sources."
+        },
+        "study_read": {
+          "title": "View SRS Review Queue",
+          "desc": "Check cards due for review today and inspect spaced repetition schedules."
+        },
+        "study_write": {
+          "title": "Record Review Results",
+          "desc": "Submit study ratings (Again, Hard, Good, Easy) to Flama's SRS scheduling engine."
+        },
+        "stats_read": {
+          "title": "View Study Analytics & Streaks",
+          "desc": "Track study streaks, cards reviewed today, and overall learning progress."
+        },
+        "note_type_read": {
+          "title": "View Note Type Templates",
+          "desc": "Inspect card templates (Vocabulary, Basic, Cloze) and custom field configurations."
+        },
+        "note_type_write": {
+          "title": "Manage Note Type Templates",
+          "desc": "Create, edit field schemas, or configure card template layouts."
+        },
+        "media_read": {
+          "title": "View & Search Images",
+          "desc": "Browse and search media assets in the shared Image Library."
+        },
+        "media_write": {
+          "title": "Upload & Manage Images",
+          "desc": "Upload images, import from URLs, and manage asset tags in the media library."
+        },
+        "openid": {
+          "title": "OpenID Connect Authentication",
+          "desc": "Provides standard OpenID Connect user identifier."
+        },
+        "profile": {
+          "title": "Basic Profile Information",
+          "desc": "Read display name and basic user profile information."
+        },
+        "email": {
+          "title": "Email Address",
+          "desc": "Read the email address associated with your Flama account."
+        },
+        "read": {
+          "title": "Full Read Access (Legacy)",
+          "desc": "View and query all flashcard notes and study data."
+        },
+        "write": {
+          "title": "Full Write Access (Legacy)",
+          "desc": "Create, modify, and manage all flashcard collections."
+        },
+        "wildcard": {
+          "title": "Full System Access",
+          "desc": "Grants comprehensive access to all Flama API capabilities."
+        }
+      }
+    }
+  }
+}

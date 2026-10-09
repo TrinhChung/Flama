@@ -1,4 +1,5 @@
 import { HelpCircle, Layers, NotebookTabs } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { ContextHelpButton } from '@/features/guide'
@@ -9,6 +10,7 @@ import { AnkiCorsGuideTab } from '../components/AnkiCorsGuideTab'
 import { useAnkiSyncPage } from '../hooks/useAnkiSyncPage'
 
 export function AnkiSyncPage() {
+  const { t } = useTranslation('import')
   const {
     activeTab,
     setActiveTab,
@@ -25,7 +27,7 @@ export function AnkiSyncPage() {
   } = useAnkiSyncPage()
 
   if (optionsQuery.isPending || bootstrapQuery.isPending) {
-    return <PageLoading label="Đang tải cấu hình đồng bộ..." />
+    return <PageLoading label={t('anki_sync.loading_config')} />
   }
   if (optionsQuery.error) {
     return <Page><PageError error={optionsQuery.error} /></Page>
@@ -34,15 +36,15 @@ export function AnkiSyncPage() {
   return (
     <Page className="w-full max-w-6xl px-3 sm:px-6 lg:px-8 py-3 space-y-4 sm:space-y-6">
       <PageHeader
-        title="Đồng bộ Anki Desktop (AnkiConnect)"
-        description="Nhập và đồng bộ bộ thẻ (Deck), loại thẻ (NoteType), nội dung HTML, hình ảnh và âm thanh trực tiếp từ Anki Desktop lên Flama."
+        title={t('anki_sync.page_title', { defaultValue: 'Đồng bộ Anki Desktop (AnkiConnect)' })}
+        description={t('anki_sync.page_desc', { defaultValue: 'Nhập và đồng bộ bộ thẻ (Deck), loại thẻ (NoteType), nội dung HTML, hình ảnh và âm thanh trực tiếp từ Anki Desktop lên Flama.' })}
         actions={
           <ContextHelpButton
             guidePath="/guide/import-sync/anki-connect-sync"
             guideTitle="Hướng dẫn đồng bộ AnkiConnect"
             troubleshootPath="/guide/troubleshooting/anki-sync"
             troubleshootTitle="Khắc phục lỗi kết nối Anki"
-            label="Hướng dẫn kết nối"
+            label={t('anki_sync.help_btn', { defaultValue: 'Hướng dẫn kết nối' })}
           />
         }
       />
@@ -70,7 +72,7 @@ export function AnkiSyncPage() {
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <Layers className="size-4" /> 1. Bộ Thẻ &amp; Thẻ
+          <Layers className="size-4" /> {t('anki_sync.tabs.decks', { defaultValue: '1. Bộ Thẻ & Thẻ' })}
         </button>
         <button
           type="button"
@@ -81,7 +83,7 @@ export function AnkiSyncPage() {
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <NotebookTabs className="size-4" /> 2. Loại Thẻ (NoteTypes)
+          <NotebookTabs className="size-4" /> {t('anki_sync.tabs.notetypes', { defaultValue: '2. Loại Thẻ (NoteTypes)' })}
         </button>
         <button
           type="button"
@@ -92,7 +94,7 @@ export function AnkiSyncPage() {
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <HelpCircle className="size-4 text-amber-500" /> 3. Hướng dẫn CORS
+          <HelpCircle className="size-4 text-amber-500" /> {t('anki_sync.tabs.guide', { defaultValue: '3. Hướng dẫn CORS' })}
         </button>
       </div>
 
@@ -117,3 +119,4 @@ export function AnkiSyncPage() {
     </Page>
   )
 }
+

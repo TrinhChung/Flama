@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Bot,
   Check,
@@ -19,42 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-
-const MASTER_PROMPT = `Bạn là một chuyên gia thiết kế Flashcard học ngôn ngữ trên nền tảng Flama (sử dụng chuẩn Mustache Template, HTML5, CSS3 và JavaScript trong iframe sandbox).
-
-Nhiệm vụ của bạn là dựa vào [YÊU CẦU CỦA TÔI], hãy thiết kế:
-1. Danh sách các Trường dữ liệu (Field Definitions) cần tạo trong Note Type (gồm Tên trường và Loại trường: text / richtext / audio / image / markdown...).
-2. Mã Front HTML (Mặt trước).
-3. Mã Back HTML (Mặt sau).
-4. Mã Shared CSS (Định dạng kiểu dáng chung).
-
-YÊU CẦU KỸ THUẬT BẮT BUỘC ĐỂ KHÔNG BỊ LỖI:
-- Đặt tên trường dữ liệu theo chuẩn snake_case chữ thường (ví dụ: word, reading, meaning, audio_word, example_jp, example_vi).
-- Sử dụng cú pháp Mustache {{Tên_Trường}} hoặc {{{Tên_Trường}}} (nếu là richtext).
-- Mọi khối có điều kiện ẩn hiện bắt buộc dùng: {{#Tên_Trường}} ... {{/Tên_Trường}}.
-- Đóng mở thẻ HTML chuẩn xác: Mọi thẻ HTML mở bên trong block Mustache {{#...}} PHẢI ĐƯỢC ĐÓNG trước {{/...}}.
-- Khung thẻ mặt trước căn giữa bằng Flexbox (không dùng style height: 100vh).
-- Các trường Audio phải tạo thẻ <audio id="..." src="{{Tên_Trường}}"></audio> và nút bấm loa 🔊 tương ứng.
-- Nếu có script tự động phát âm tuần tự trong thẻ <script>, phải kiểm tra phần tử tồn tại trước khi phát (safePlay).
-- Thiết kế giao diện hiện đại, tinh tế, font chữ rõ ràng, phân cấp thị giác đẹp mắt, hỗ trợ hiển thị đẹp trên cả mobile và desktop.
-
-[YÊU CẦU CỦA TÔI]:
-- Mục đích thẻ: (Ví dụ: Thẻ học Ngữ pháp JLPT N2 / Thẻ học Kanji N1 / Thẻ học từ vựng Y tế...)
-- Các thông tin tôi muốn có trên thẻ:
-  + Mặt trước: (Ví dụ: Mẫu ngữ pháp lớn màu đỏ nổi bật, nút nghe audio câu ví dụ tiêu biểu)
-  + Mặt sau: (Ví dụ: Ý nghĩa, Cấu trúc ngữ pháp, Giải thích chi tiết, 2 ví dụ có câu dịch và audio, phần phân biệt với ngữ pháp tương đương)
-- Phong cách giao diện: (Ví dụ: Tối giản, tông màu xanh dương đậm thanh lịch, font chữ Nhật Bản rõ nét)`
-
-const EXAMPLE_VOCAB_PROMPT = `[YÊU CẦU CỦA TÔI]:
-- Mục đích thẻ: Học từ vựng JLPT kèm âm Hán Việt và ví dụ đời sống.
-- Mặt trước: Từ vựng Kanji to ở giữa, nút loa phát âm từ vựng.
-- Mặt sau:
-  + Hiển thị lại Kanji kèm Furigana và Âm Hán Việt.
-  + Ý nghĩa tiếng Việt (chữ đậm màu xanh).
-  + Câu ví dụ tiếng Nhật + Câu dịch tiếng Việt + Audio phát âm câu ví dụ.
-  + Ghi chú / Từ đồng nghĩa (nếu có mới hiện).
-  + Script tự động đọc: Đọc từ vựng trước, sau đó tự đọc câu ví dụ.
-- Phong cách: Sang trọng, bo góc tròn, màu sắc hiện đại.`
+import { getMasterPrompt, getExampleVocabPrompt } from './guide/guidePrompts'
 
 export interface NoteTypeAiGuideModalProps {
   open: boolean
@@ -62,9 +28,13 @@ export interface NoteTypeAiGuideModalProps {
 }
 
 export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModalProps) {
+  const { t, i18n } = useTranslation('note_types')
   const [activeTab, setActiveTab] = useState('prompt')
   const [copiedMaster, setCopiedMaster] = useState(false)
   const [copiedExample, setCopiedExample] = useState(false)
+
+  const masterPrompt = getMasterPrompt(i18n.language)
+  const exampleVocabPrompt = getExampleVocabPrompt(i18n.language)
 
   const copyToClipboard = (text: string, isExample = false) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -75,8 +45,8 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
         setCopiedMaster(true)
         setTimeout(() => setCopiedMaster(false), 2000)
       }
-      toast.success('Đã sao chép prompt vào Clipboard!', {
-        description: 'Hãy mở ChatGPT, Claude hoặc Gemini và dán prompt này vào.',
+      toast.success(t('ai_modal.toast_title', 'Đã sao chép prompt vào Clipboard!'), {
+        description: t('ai_modal.toast_desc', 'Hãy mở ChatGPT, Claude hoặc Gemini và dán prompt này vào.'),
       })
     })
   }
@@ -91,10 +61,10 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
             </div>
             <div>
               <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
-                Hướng Dẫn & Prompt AI Tạo Template NoteType
+                {t('ai_modal.dialog_title', 'Hướng Dẫn & Prompt AI Tạo Template NoteType')}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Dùng AI (ChatGPT, Claude, Gemini) tạo mẫu thẻ Flashcard đúng chuẩn Flama trong 1 phút.
+                {t('ai_modal.dialog_desc', 'Dùng AI (ChatGPT, Claude, Gemini) tạo mẫu thẻ Flashcard đúng chuẩn Flama trong 1 phút.')}
               </DialogDescription>
             </div>
           </div>
@@ -104,16 +74,16 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto p-1 mb-4 rounded-xl bg-muted/60 gap-1">
               <TabsTrigger value="prompt" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
-                🤖 Prompt AI
+                {t('ai_modal.tab_prompt', '🤖 Prompt AI')}
               </TabsTrigger>
               <TabsTrigger value="tech" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
-                ⚙️ Công Nghệ
+                {t('ai_modal.tab_tech', '⚙️ Công Nghệ')}
               </TabsTrigger>
               <TabsTrigger value="steps" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
-                🚀 Các Bước
+                {t('ai_modal.tab_steps', '🚀 Các Bước')}
               </TabsTrigger>
               <TabsTrigger value="rules" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
-                ⚠️ Tránh Lỗi
+                {t('ai_modal.tab_rules', '⚠️ Tránh Lỗi')}
               </TabsTrigger>
             </TabsList>
 
@@ -122,42 +92,50 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
               <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-xs text-foreground flex items-start gap-2.5">
                 <Lightbulb className="size-4 text-primary shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold text-primary">Cách sử dụng đơn giản:</span> Sao chép <strong>Master Prompt</strong> dưới đây, sửa phần <code>[YÊU CẦU CỦA TÔI]</code> theo ý bạn rồi gửi cho AI. AI sẽ tự viết đầy đủ danh sách trường, Front HTML, Back HTML và CSS đúng chuẩn Flama.
+                  <span className="font-bold text-primary">{t('ai_modal.simple_usage_title', 'Cách sử dụng đơn giản:')}</span>{' '}
+                  {t(
+                    'ai_modal.simple_usage_desc',
+                    'Sao chép Master Prompt dưới đây, sửa phần [YÊU CẦU CỦA TÔI] theo ý bạn rồi gửi cho AI. AI sẽ tự viết đầy đủ danh sách trường, Front HTML, Back HTML và CSS đúng chuẩn Flama.'
+                  )}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground">📋 Master Prompt Chuẩn:</span>
+                  <span className="text-xs font-bold text-foreground">
+                    {t('ai_modal.master_heading', '📋 Master Prompt Chuẩn:')}
+                  </span>
                   <Button
                     size="sm"
-                    onClick={() => copyToClipboard(MASTER_PROMPT)}
+                    onClick={() => copyToClipboard(masterPrompt)}
                     className="h-8 px-3 text-xs font-bold rounded-xl shadow-xs"
                   >
                     {copiedMaster ? <Check className="size-3.5 mr-1 text-emerald-300" /> : <Copy className="size-3.5 mr-1" />}
-                    {copiedMaster ? 'Đã sao chép' : 'Sao chép Master Prompt'}
+                    {copiedMaster ? t('ai_modal.copied_master', 'Đã sao chép') : t('ai_modal.copy_master', 'Sao chép Master Prompt')}
                   </Button>
                 </div>
                 <pre className="p-3.5 rounded-xl bg-muted/60 border border-border/80 font-mono text-[11px] leading-relaxed text-foreground/90 overflow-x-auto max-h-56 select-all whitespace-pre-wrap">
-                  {MASTER_PROMPT}
+                  {masterPrompt}
                 </pre>
               </div>
 
               <div className="space-y-2 pt-2 border-t">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground">💡 Ví dụ mẫu [YÊU CẦU CỦA TÔI] cho Thẻ Từ Vựng:</span>
+                  <span className="text-xs font-bold text-foreground">
+                    {t('ai_modal.example_heading', '💡 Ví dụ mẫu [YÊU CẦU CỦA TÔI] cho Thẻ Từ Vựng:')}
+                  </span>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => copyToClipboard(EXAMPLE_VOCAB_PROMPT, true)}
+                    onClick={() => copyToClipboard(exampleVocabPrompt, true)}
                     className="h-7 px-2.5 text-[11px] font-semibold rounded-lg"
                   >
                     {copiedExample ? <Check className="size-3 mr-1 text-emerald-500" /> : <Copy className="size-3 mr-1" />}
-                    {copiedExample ? 'Đã chép ví dụ' : 'Sao chép ví dụ này'}
+                    {copiedExample ? t('ai_modal.copied_example', 'Đã chép ví dụ') : t('ai_modal.copy_example', 'Sao chép ví dụ này')}
                   </Button>
                 </div>
                 <pre className="p-3 rounded-xl bg-muted/40 border border-border/60 font-mono text-[11px] leading-relaxed text-muted-foreground overflow-x-auto max-h-36 whitespace-pre-wrap">
-                  {EXAMPLE_VOCAB_PROMPT}
+                  {exampleVocabPrompt}
                 </pre>
               </div>
             </TabsContent>
@@ -298,6 +276,7 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
 }
 
 export function NoteTypeAiGuideBanner({ onOpenGuide }: { onOpenGuide: () => void }) {
+  const { t } = useTranslation('note_types')
   return (
     <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5 shadow-xs">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -307,13 +286,13 @@ export function NoteTypeAiGuideBanner({ onOpenGuide }: { onOpenGuide: () => void
           </div>
           <div className="space-y-0.5">
             <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-              Tạo Template Bằng AI Trong 1 Phút
+              {t('manager.header.ai_prompt_banner_title', 'Tạo Template Bằng AI Trong 1 Phút')}
               <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
-                Mới
+                {t('editor.badge_new', 'Mới')}
               </Badge>
             </h4>
             <p className="text-xs text-muted-foreground">
-              Không cần biết lập trình! Dùng Prompt chuẩn cho ChatGPT / Claude để tự thiết kế mẫu thẻ Flashcard đúng ý bạn.
+              {t('manager.header.ai_prompt_banner_desc', 'Không cần biết lập trình! Dùng Prompt chuẩn cho ChatGPT / Claude để tự thiết kế mẫu thẻ Flashcard đúng ý bạn.')}
             </p>
           </div>
         </div>
@@ -324,7 +303,7 @@ export function NoteTypeAiGuideBanner({ onOpenGuide }: { onOpenGuide: () => void
           className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-xl shadow-xs shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <Bot className="size-3.5 mr-1.5" />
-          Mở Hướng Dẫn & Prompt AI
+          {t('manager.header.ai_prompt_banner_btn', 'Mở Hướng Dẫn & Prompt AI')}
         </Button>
       </div>
     </div>

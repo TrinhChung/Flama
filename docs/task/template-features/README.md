@@ -1,38 +1,36 @@
-# Template features: task Gemini và tracker
+# Template features: triển khai và tracker
 
-Kế hoạch tổng: [TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md](../../plans/proposals/TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md). Hợp đồng API nằm ở §5 của kế hoạch tổng; spec dưới đây chỉ trích phần cần cho từng task.
+Cập nhật **2026-10-08**: Codex đã kiểm tra và hoàn tất các task frontend còn thiếu, review chéo, sửa lỗi và kiểm tra Chrome riêng với Flask API/dữ liệu SQLite tạm. Backend và frontend trong phạm vi U1–U8 đã hoàn thành ở workspace; xem [báo cáo CT-R2](reviews/CT-R2_TEMPLATE_UI_COMPLETION_2026-10-08.md). Chưa commit/push phần hoàn thiện UI này.
+
+Contract đang chạy: [phiên bản A2](../../architecture/template-version-foundation-adr-2026-10-07.md), [library/attachment](../../architecture/template-library-attachments-contract-2026-10-07.md), [study preset/binding](../../architecture/template-study-bindings-contract-2026-10-07.md), [distribution](GT-11_INSTALL_TEMPLATE_EDITOR.md). Bằng chứng và giới hạn: [backend handoff](reviews/CT-04_CT-08_BACKEND_HANDOFF_2026-10-08.md). Kế hoạch giữ U1–U8: [execution plan](../../plans/proposals/TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md).
 
 ## 1. Tracker
 
-| ID | Tiêu đề | Owner | Trạng thái | Phụ thuộc | Spec |
-|---|---|---|---|---|---|
-| CT-00 | Chốt Q1–Q5, chạy baseline | Claude | Planned | người dùng duyệt | kế hoạch §7 |
-| CT-01 | ADR definition/version/fork, đóng băng Contract A/D/E | Claude | Planned | CT-00 | kế hoạch §7 |
-| GT-01 | Nội dung mặc định template theo field thật | Gemini | Planned | CT-00 | [GT-01](GT-01_DEFAULT_TEMPLATE_CONTENT.md) |
-| GT-02 | `note_count` trong danh sách template | Gemini | Planned | CT-00 | [GT-02](GT-02_TEMPLATE_NOTE_COUNT.md) |
-| GT-03 | `include_counts` cho compositions | Gemini | Planned | CT-00 | [GT-03](GT-03_COMPOSITION_NOTE_COUNTS.md) |
-| GT-04 | Entity `card-template` (frontend) | Gemini | Planned | CT-00 | [GT-04](GT-04_CARD_TEMPLATE_ENTITY.md) |
-| GT-05 | Tách `TemplateCodeEditor` (không đổi giao diện) | Gemini | Planned | GT-04 | [GT-05](GT-05_EXTRACT_TEMPLATE_CODE_EDITOR.md) |
-| GT-06 | Quản lý template trên trang loại thẻ | Gemini | Planned | GT-02, GT-04, GT-05 | [GT-06](GT-06_TEMPLATE_MANAGEMENT_UI.md) |
-| GT-07 | Dialog "Kiểu thẻ" trên dashboard | Gemini | Planned | GT-03, GT-04 | [GT-07](GT-07_DECK_CARD_TYPES_DIALOG.md) |
-| GT-08 | Python: token Mustache + content hash | Gemini | Planned | CT-00 | [GT-08](GT-08_TEMPLATE_TOKENS_PURE.md) |
-| GT-09 | TS: `lineDiff` + `TemplateDiffView` | Gemini | Planned | GT-05 | [GT-09](GT-09_LINE_DIFF_VIEW.md) |
-| CT-02 | Schema + migration 51 + backfill | Claude | Planned | CT-01, GT-08 | kế hoạch §7 |
-| CT-03 | Version service + Contract A | Claude | Planned | CT-02 | kế hoạch §7 |
-| GT-15A | Test hợp đồng Contract A | Gemini | Blocked | CT-03 | [GT-15](GT-15_CONTRACT_TESTS.md) |
-| GT-10 | UI lịch sử phiên bản | Gemini | Blocked | CT-03, GT-06, GT-09 | [GT-10](GT-10_VERSION_HISTORY_UI.md) |
-| CT-04 | Seam `resolve_effective_template` | Claude | Planned | CT-01 | kế hoạch §7 |
-| CT-05 | Fork của người cài + Contract D | Claude | Blocked | CT-03, CT-04, Q1 | kế hoạch §7 |
-| GT-15D | Test hợp đồng Contract D | Gemini | Blocked | CT-05 | [GT-15](GT-15_CONTRACT_TESTS.md) |
-| GT-11 | Trang sửa template deck đã cài | Gemini | Blocked | CT-05, GT-05, GT-07, GT-10 | [GT-11](GT-11_INSTALL_TEMPLATE_EDITOR.md) |
-| CT-06 | Thư viện mẫu thẻ + Contract E | Claude | Blocked | CT-03, GT-08, Q2, Q3 | kế hoạch §7 |
-| GT-15E | Test hợp đồng Contract E | Gemini | Blocked | CT-06 | [GT-15](GT-15_CONTRACT_TESTS.md) |
-| GT-12 | Trang thư viện mẫu thẻ | Gemini | Blocked | CT-06, GT-05, GT-10 | [GT-12](GT-12_TEMPLATE_LIBRARY_PAGES.md) |
-| GT-13 | Wizard áp dụng + `FieldMappingEditor` | Gemini | Blocked | GT-12 | [GT-13](GT-13_APPLY_WIZARD.md) |
-| GT-14 | Tài liệu người dùng | Gemini | Blocked | M3, M4 Accepted | [GT-14](GT-14_USER_DOCS.md) |
-| CT-07 | Pin release cho tác giả (#137) | Claude | Chờ Q4 | M3 production | kế hoạch §7 |
+| ID | Owner | Trạng thái hiện tại | Kết quả / công việc tiếp theo |
+|---|---|---|---|
+| CT-00/01 | Codex | Completed | U1–U8 giữ nguyên; A2 và contract thực tế đã đối chiếu code |
+| GT-01..09 | Gemini + Codex review/fix | Completed (code) | Default, counts, editor/draft, dashboard, token/diff; không giao lại |
+| CT-02/03 | Codex | Completed | Immutable history, ORM transaction hooks, backfill, A2; migration 53 |
+| GT-10A / GT-15A | Gemini | Completed / verified | Entity A2 và test contract đã có; không giao lại |
+| CT-04 | Codex | Completed | Effective resolver cho owned/install/local-added, pinned content và binding |
+| CT-06 | Codex | Completed | Template độc lập, ACTIVE attachment theo FieldDef ID, library/preview/filter/usage; migration 54 |
+| CT-07 | Codex | Completed | `release_core` dùng chung; deck parity; immutable template releases và deck pins; migration 55 |
+| CT-05 | Codex | Completed | Một market copy/user/source, entitlement qua deck/NoteType, update/conflict/reset, chặn republish |
+| CT-08 | Codex | Completed | Opt-in preparation, personal deck preset, transient validation, session freeze và quick-edit projection |
+| GT-15D/E | Codex | Superseded / covered in v2 suites | D/E v1 bỏ; xem [coverage v2](GT-15_CONTRACT_TESTS.md), không giao test backend v1 cho Gemini |
+| GT-16/17 | Codex review | Superseded inventory request | Báo cáo ứng viên cũ chưa được Accepted; audit code/test hiện tại trong handoff thay gate này |
+| GT-10B | Codex | Completed / verified | History sheet, diff, restore thay draft và bỏ phản hồi cũ |
+| GT-12A | Gemini + Codex review | Completed / verified | Entity library/schema/attachment khớp E2/F2; giữ các test A2 |
+| GT-12B/C/D/E | Codex | Completed / verified | Library/create, schema, editor/preview/archive, route/sidebar; thêm tìm lại mẫu lưu trữ |
+| GT-13A/B/C/D | Codex | Completed / verified | Stable ID mapping, attach wizard, library action, NoteType application management |
+| GT-11A/B/C | Codex | Completed / verified | Distribution API, install entry, author/recipient controls và xử lý xung đột |
+| GT-18A/B/C/D | Codex | Completed / verified | Preparation API/UI, opt-in nhớ lựa chọn, freeze/restore/rollover giữ mapping |
+| CT-R2 | Codex | Completed / local browser | Chrome profile riêng, API thật với DB tạm; desktop/mobile 375px, sáng/tối; xem báo cáo |
+| GT-14 | Codex | Completed | Hướng dẫn repo và bài `study/template-library-bindings` theo tên UI thực tế |
 
-Mỗi lần đổi trạng thái, Claude ghi thêm một dòng vào §5 (nhật ký).
+Các spec/prompt dưới đây giữ làm tiêu chí đối chiếu; không giao lại phase đã hoàn thành. Khi tiếp tục sửa, giữ ownership entity/index/routes/page rõ ràng và kiểm tra code hiện tại trước khi dùng prompt cũ.
+
+Archive ẩn library mặc định và chặn attachment mới, nhưng attachment đang ACTIVE tiếp tục dùng được. Retire attachment giữ Card/progress. HTML không bị rewrite theo tên field; binding dùng ID. Reset bản nhận áp dụng release đã đăng qua subscription, không xóa market copy hay lịch sử. Chợ template độc lập (N5) và input nhận danh sách field (N6) nằm ngoài phạm vi đã chốt.
 
 ## 2. Quy tắc chung cho Gemini (dán vào đầu mọi prompt)
 
@@ -40,7 +38,7 @@ Mọi spec đã nhúng khối dưới đây trong phần "Prompt cho Gemini". Kh
 
 ```text
 QUY TẮC BẮT BUỘC (Flama, template features)
-1. Repo: D:\Project\nihongo (worktree Claude chỉ định). Đọc AGENTS.md trước.
+1. Repo: D:\Project\nihongo (workspace/worktree Codex chỉ định). Đọc AGENTS.md trước.
 2. Chỉ sửa/tạo đúng các file trong mục "File được sửa". Mọi file khác là CẤM sửa,
    kể cả để "dọn dẹp", đổi format, sửa import hoặc sửa test khác.
 3. KHÔNG bịa: nếu một hàm, file, prop, field JSON, route, fixture mà spec nhắc tới
@@ -76,7 +74,7 @@ QUY TẮC BẮT BUỘC (Flama, template features)
   <20 dòng cuối output thật>
 ### Sai lệch so với spec
 - <không có> | <mô tả: spec nói X, code thật là Y, tôi đã dừng/đã làm Z>
-### Điểm chưa chắc chắn cần Claude xem
+### Điểm chưa chắc chắn cần reviewer xem
 - ...
 ### Việc còn lại
 - ...
@@ -84,20 +82,24 @@ QUY TẮC BẮT BUỘC (Flama, template features)
 
 ## 4. Môi trường và cách chạy
 
-- Repo local: `D:\Project\nihongo`; Python: `.\.venv\Scripts\python.exe`; frontend: `npm --prefix frontend ...`.
-- Mỗi task Gemini chạy trong worktree riêng do Claude tạo, ví dụ `git worktree add ..\nihongo-gt01 -b feat/template-m1-gt01 <base>`; nhánh cuối cùng do người dùng chốt (Q5).
-- Lệnh giao (theo `skills/antigravity-cli/references/worker-orchestration.md`):
-
-```powershell
-$taskPrompt = Get-Content -Raw docs\task\template-features\GT-01_DEFAULT_TEMPLATE_CONTENT.prompt.txt
-agy --print $taskPrompt --model gemini-3.7-flash-high --effort high --mode accept-edits --output-format text
-```
-
-  File `.prompt.txt` là phần "Prompt cho Gemini" của spec, Claude tách ra khi đánh dấu task `Ready` (để không gửi nhầm phần ghi chú review dành cho Claude).
-- Kiểm tra quota trước task dài theo `$antigravity-manager-api`; xoay tài khoản chỉ theo quy tắc trong worker-orchestration.
+- Workspace: `D:\Project\nihongo`; Python: `.\.venv\Scripts\python.exe`; frontend: `npm --prefix frontend ...`.
+- Tiếp tục trên `refactor/frontend-fsd-renderer-boundary` (U8). Nền library/distribution/runtime hiện đã có trong lịch sử nhánh. Kiểm tra `git status` và nền thực tế trước khi giao; workspace có thay đổi của các task khác đang chạy.
+- Làm từng phase theo whitelist. Nếu dùng worktree, đưa cả commit nền và diff bổ sung đã review sang trước; không checkout một HEAD cũ rồi giả định API đã có.
+- Prompt `.prompt.txt` là đầu vào triển khai của đúng một phase. Không giao toàn bộ spec nhiều phase trong một lượt. Không tự khởi chạy worker ngoài phase được giao.
+- Khi dùng `agy`, áp dụng `skills/antigravity-cli/references/worker-orchestration.md` và skill Manager hiện có; không lưu key trong repo.
 
 ## 5. Nhật ký
 
 | Ngày | Sự kiện |
 |---|---|
 | 2026-10-05 | Claude lập kế hoạch và spec GT-01..GT-15. Chưa giao task, chưa chạy baseline (container lập kế hoạch không có dependency). |
+| 2026-10-05 | Gemini / teamwork_preview hoàn thành và kiểm thử toàn diện Milestone M1 (GT-01..GT-04). Pass 100% test suites (30 unit tests, 15 adversarial tests, 52 Vitest, typecheck, lint, 24 flashcard backend suites). |
+| 2026-10-06 | Gemini / teamwork_preview hoàn thành GT-05 và GT-06 (tách TemplateCodeEditor không đổi DOM snapshot, TemplateManagementBar, localized errors). Pass 87 frontend tests, typecheck 0 lỗi, lint 0 lỗi, build:ci exit code 0. |
+| 2026-10-06 | Gemini / teamwork_preview hoàn thành GT-07 (Dashboard DeckCardTypesDialog và tích hợp menu deck). Victory Auditor phê duyệt VICTORY CONFIRMED. Pass 24/24 dialog tests, 58/58 dashboard tests, typecheck 0 lỗi, lint 0 lỗi, build:ci clean. |
+| 2026-10-06 | Gemini / teamwork_preview hoàn thành GT-08 và GT-09 (Python Mustache tokens & hash; TS lineDiff LCS & TemplateDiffView). Victory Auditor phê duyệt VICTORY CONFIRMED. Pass 20 Python tests, golden hash khớp, 81/81 card-template tests, typecheck 0 lỗi, lint 0 lỗi, build:ci clean. |
+| 2026-10-06 | Codex tiếp nhận review của Claude: review GT-01..GT-09 tại HEAD `965b565`; 392 test backend và 165 test frontend đang có qua, typecheck/lint/build qua. Reproducer bổ sung xác nhận 2 lỗi; GT-01 và GT-06 → Needs revision. Xem [CT-R1 review](reviews/CT-R1_CODEX_REVIEW_2026-10-06.md). |
+| 2026-10-07 | Người dùng giao Codex phần code Claude. Hoàn thành CT-02/03 expand + A2 v2; MySQL 8.0.40 rehearsal/concurrency và cleanup qua, main wsgi + standalone Connect boot qua; sửa GT-01/06. GT-10A và GT-15A Ready, GT-10B sau review entity. Xem [báo cáo](reviews/CT-02_CT-03_CODEX_IMPLEMENTATION_2026-10-07.md). |
+| 2026-10-07 | Gemini / teamwork_preview hoàn thành và kiểm thử toàn diện GT-10A (Frontend entity API/types/keys/tests) và GT-15A (Backend contract tests A7, A12–A17). Victory Auditor phê duyệt VICTORY CONFIRMED. Pass 93/93 card-template tests, 45/45 backend modular tests, typecheck 0 lỗi, lint 0 lỗi, build:ci clean. GT-10B chuyển sang Ready. |
+
+| 2026-10-08 | Codex hoàn tất backend handoff CT-04/05/06/07/08, cập nhật contract/spec/prompt GT-10B/11/12/13/18 và modular module templates. FE mới vẫn chờ Gemini. |
+| 2026-10-08 | Theo yêu cầu làm tiếp task còn thiếu, Codex hoàn thiện GT-10B/11/12/13/18/14, review GT-12A, sửa lỗi wizard native submit, bảo toàn dirty draft và bản nhận legacy; CT-R2 local browser qua. Chi tiết kiểm tra trong báo cáo CT-R2. |

@@ -1,3 +1,5 @@
+import '@/shared/config/i18n'
+import type { TFunction } from 'i18next'
 import { useMemo, useState } from 'react'
 import {
   Code2,
@@ -6,6 +8,7 @@ import {
   Search,
   Shapes,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 
@@ -19,7 +22,10 @@ export type PublishNoteTypeOption = {
   is_marketplace_install?: boolean
 }
 
-export function getNoteTypeBlockInfo(noteType: PublishNoteTypeOption): {
+export function getNoteTypeBlockInfo(
+  noteType: PublishNoteTypeOption,
+  t?: TFunction<'marketplace'>,
+): {
   isBlocked: boolean
   label: string | null
   reason: string | null
@@ -27,15 +33,23 @@ export function getNoteTypeBlockInfo(noteType: PublishNoteTypeOption): {
   if (noteType.is_marketplace_install) {
     return {
       isBlocked: true,
-      label: 'Từ Marketplace',
-      reason: 'Mẫu thẻ được tải về từ Marketplace nên không thể chia sẻ lại.',
+      label: t
+        ? t('publish_notetype.notetype_badge_marketplace')
+        : 'Từ Marketplace',
+      reason: t
+        ? t('publish_notetype.notetype_reason_marketplace')
+        : 'Mẫu thẻ được tải về từ Marketplace nên không thể chia sẻ lại.',
     }
   }
   if (noteType.publish_status === 'published' || noteType.publish_status === 'unlisted') {
     return {
       isBlocked: true,
-      label: 'Đã xuất bản',
-      reason: 'Mẫu thẻ này đã được xuất bản lên Marketplace.',
+      label: t
+        ? t('publish_notetype.notetype_badge_published')
+        : 'Đã xuất bản',
+      reason: t
+        ? t('publish_notetype.notetype_reason_published')
+        : 'Mẫu thẻ này đã được xuất bản lên Marketplace.',
     }
   }
   return {
@@ -58,17 +72,18 @@ export function PublishNoteTypeSelector({
   onSelectNoteType,
   hasError = false,
 }: PublishNoteTypeSelectorProps) {
+  const { t } = useTranslation('marketplace')
   const [search, setSearch] = useState('')
 
   const filteredNoteTypes = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('vi')
     if (!query) return noteTypes
     return noteTypes.filter((nt) => {
-      const blockInfo = getNoteTypeBlockInfo(nt)
+      const blockInfo = getNoteTypeBlockInfo(nt, t)
       const haystack = `${nt.name} ${nt.id} ${blockInfo.label || ''} ${blockInfo.reason || ''}`.toLocaleLowerCase('vi')
       return haystack.includes(query)
     })
-  }, [noteTypes, search])
+  }, [noteTypes, search, t])
 
   return (
     <div className="space-y-2.5">
@@ -78,7 +93,7 @@ export function PublishNoteTypeSelector({
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Tìm kiếm mẫu thẻ theo tên..."
+            placeholder={t('publish_notetype.search_placeholder')}
             className="h-9 rounded-xl pl-9 text-xs"
           />
         </div>
@@ -86,7 +101,7 @@ export function PublishNoteTypeSelector({
 
       <div
         role="listbox"
-        aria-label="Danh sách mẫu thẻ nguồn"
+        aria-label={t('publish_notetype.listbox_aria')}
         className={`max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border p-2.5 shadow-inner transition-colors ${
           hasError
             ? 'border-destructive/60 bg-destructive/5'
@@ -95,7 +110,7 @@ export function PublishNoteTypeSelector({
       >
         {filteredNoteTypes.length > 0 ? (
           filteredNoteTypes.map((nt) => {
-            const blockInfo = getNoteTypeBlockInfo(nt)
+            const blockInfo = getNoteTypeBlockInfo(nt, t)
             const isSelected = nt.id === selectedNoteTypeId
             const fieldCount = nt.field_defs?.length ?? nt.field_count ?? 0
             const templateCount = nt.templates?.length ?? 0
@@ -113,7 +128,10 @@ export function PublishNoteTypeSelector({
                 aria-selected={isSelected}
                 aria-disabled={blockInfo.isBlocked}
                 tabIndex={blockInfo.isBlocked ? -1 : 0}
-                title={blockInfo.reason || `Chọn mẫu thẻ ${nt.name}`}
+                title={
+                  blockInfo.reason ||
+                  t('publish_notetype.select_option_title', { name: nt.name })
+                }
                 onClick={handleSelect}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
@@ -157,12 +175,12 @@ export function PublishNoteTypeSelector({
                   {fieldCount > 0 && (
                     <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium shrink-0 bg-background/80 border">
                       <Code2 className="size-2.5 mr-1 text-muted-foreground" />
-                      {fieldCount} trường
+                      {fieldCount} {t('publish_notetype.fields_unit')}
                     </Badge>
                   )}
                   {templateCount > 0 && (
                     <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-medium shrink-0 hidden sm:inline-flex">
-                      {templateCount} template
+                      {templateCount} {t('publish_notetype.template_unit')}
                     </Badge>
                   )}
                   {blockInfo.label && (
@@ -181,8 +199,8 @@ export function PublishNoteTypeSelector({
         ) : (
           <div className="py-6 text-center text-xs text-muted-foreground">
             {noteTypes.length === 0
-              ? 'Bạn chưa có mẫu thẻ nào. Hãy tạo hoặc chỉnh sửa mẫu thẻ trước khi đăng tải.'
-              : 'Không tìm thấy mẫu thẻ phù hợp.'}
+              ? t('publish_notetype.empty_no_notetypes')
+              : t('publish_notetype.empty_no_matches')}
           </div>
         )}
       </div>

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import {
   ArrowLeftRight,
   ArrowCounterclockwise,
@@ -19,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { Printer } from 'lucide-react'
+import { Layers, Printer } from 'lucide-react'
 import type { DeckNode, SelectedDeckAction } from '../types'
 
 export interface DeckRowProps {
@@ -65,7 +67,9 @@ export function DeckRow({
   isExpanded,
   onToggleExpand,
 }: DeckRowProps) {
+  const { t, i18n } = useTranslation('dashboard')
   const navigate = useNavigate()
+  const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
   const [localExpanded, setLocalExpanded] = useState(false)
   const hasChildren = node.children.length > 0
   const expanded = isExpanded ? isExpanded(node.id) : localExpanded
@@ -175,8 +179,8 @@ export function DeckRow({
               )}
             >
               {isInvalidDrop
-                ? '🚫 Không thể di chuyển'
-                : `➕ Thả vào "${node.name}"`}
+                ? t('tree.row.cannot_move_badge')
+                : t('tree.row.drop_into_badge', { name: node.name })}
             </span>
           )}
         </div>
@@ -184,13 +188,13 @@ export function DeckRow({
         {/* Stats Column */}
         <div className="deck-stats-col pointer-events-auto grid grid-cols-[repeat(3,38px)_26px] sm:grid-cols-[repeat(3,64px)_30px] gap-1 sm:gap-2 items-center text-right shrink-0">
           <span className="stat-num stat-new text-xs sm:text-base font-normal tabular-nums text-emerald-600">
-            {node.counts.new.toLocaleString('vi-VN')}
+            {node.counts.new.toLocaleString(numberLocale)}
           </span>
           <span className="stat-num stat-learn text-xs sm:text-base font-normal tabular-nums text-rose-600">
-            {node.counts.learning.toLocaleString('vi-VN')}
+            {node.counts.learning.toLocaleString(numberLocale)}
           </span>
           <span className="stat-num stat-due text-xs sm:text-base font-semibold tabular-nums text-orange-600">
-            {node.counts.due.toLocaleString('vi-VN')}
+            {node.counts.due.toLocaleString(numberLocale)}
           </span>
 
           {/* Deck Settings Gear Dropdown */}
@@ -206,8 +210,8 @@ export function DeckRow({
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                   onDoubleClick={(e) => e.stopPropagation()}
-                  aria-label="Deck Settings"
-                  title="Deck Settings"
+                  aria-label={t('tree.row.settings_aria')}
+                  title={t('tree.row.settings_aria')}
                 >
                   <GearFill className="size-3.5 sm:size-4" />
                 </button>
@@ -221,7 +225,7 @@ export function DeckRow({
                       onSelect={() => onAction({ type: 'rename', deck: node })}
                     >
                       <PencilSquare className="size-4 text-muted-foreground" />
-                      <span>Rename Deck</span>
+                      <span>{t('tree.row.menu.rename')}</span>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem
@@ -229,7 +233,7 @@ export function DeckRow({
                       onSelect={() => onAction({ type: 'move', deck: node })}
                     >
                       <ArrowLeftRight className="size-4 text-muted-foreground" />
-                      <span>Move Deck</span>
+                      <span>{t('tree.row.menu.move')}</span>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem
@@ -237,7 +241,7 @@ export function DeckRow({
                       onSelect={handleCopyMoveId}
                     >
                       <Copy className="size-4 text-muted-foreground" />
-                      <span>Copy Move ID</span>
+                      <span>{t('tree.row.menu.copy_move_id')}</span>
                     </DropdownMenuItem>
 
                     <DropdownMenuSeparator className="my-1" />
@@ -249,7 +253,7 @@ export function DeckRow({
                   onSelect={() => window.location.assign(node.actions.share)}
                 >
                   <Share className="size-4 text-orange-600" />
-                  <span>Share Deck</span>
+                  <span>{t('tree.row.menu.share')}</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
@@ -257,7 +261,15 @@ export function DeckRow({
                   onSelect={() => navigate(`/flashcards/import?deck_id=${node.id}`)}
                 >
                   <Upload className="size-4 text-muted-foreground" />
-                  <span>Import thẻ</span>
+                  <span>{t('tree.row.menu.import_cards')}</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  className="cursor-pointer text-sm py-2 px-2.5 font-medium flex items-center gap-2"
+                  onSelect={() => onAction({ type: 'card-types', deck: node })}
+                >
+                  <Layers className="size-4 text-orange-600" />
+                  <span>{t('tree.row.menu.card_types')}</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
@@ -265,7 +277,7 @@ export function DeckRow({
                   onSelect={() => onAction({ type: 'worksheet', deck: node })}
                 >
                   <Printer className="size-4 text-orange-600" />
-                  <span>Xuất bài tập / Worksheet</span>
+                  <span>{t('tree.row.menu.worksheet')}</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator className="my-1" />
@@ -275,7 +287,7 @@ export function DeckRow({
                   onSelect={() => onAction({ type: 'reset', deck: node })}
                 >
                   <ArrowCounterclockwise className="size-4 text-amber-600" />
-                  <span>Reset Progress</span>
+                  <span>{t('tree.row.menu.reset_progress')}</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
@@ -283,7 +295,7 @@ export function DeckRow({
                   onSelect={() => onAction({ type: 'delete', deck: node })}
                 >
                   <TrashFill className="size-4 text-rose-600" />
-                  <span>Delete Deck</span>
+                  <span>{t('tree.row.menu.delete_deck')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

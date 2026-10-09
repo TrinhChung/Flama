@@ -150,7 +150,9 @@ def _parse_note(
         note_type = _resolve_note_type(user_id, model_name)
     if not allow_mixed_model and deck.note_type_id is not None and deck.note_type_id != note_type.id:
         raise ConnectError("deck is bound to a different model")
-    if not note_type.templates:
+    from app.repositories.template_release_repository import active_templates
+
+    if not active_templates(db.session, note_type.id):
         raise ConnectError("model has no card template")
 
     fields = raw_note.get("fields")
@@ -386,8 +388,14 @@ def add_note(user_id: int, raw_note: object) -> int:
         )
         db.session.add(note)
         db.session.flush()
-        templates = Template.query.filter_by(note_type_id=prepared.note_type.id).order_by(Template.position.asc()).all()
+        from app.repositories.template_library_repository import create_cards_for_note
+        from models.study_application import StudyApplication
+        templates = StudyApplication.query.filter_by(note_type_id=prepared.note_type.id, status_code="ACTIVE").all()
         if not templates:
+            # An intentionally retired NoteType stays empty. Only legacy
+            # types without any occurrence receive the compatibility default.
+            if StudyApplication.query.filter_by(note_type_id=prepared.note_type.id).first() is not None:
+                raise ValueError("NoteType has no active template application.")
             tmpl = Template(
                 note_type_id=prepared.note_type.id,
                 name="Card 1",
@@ -397,9 +405,7 @@ def add_note(user_id: int, raw_note: object) -> int:
             )
             db.session.add(tmpl)
             db.session.flush()
-            templates = [tmpl]
-        for template in templates:
-            db.session.add(Card(note_id=note.id, template_id=template.id))
+        create_cards_for_note(db.session, note)
 
         materialized = flama_connect_media_service.materialize_audio(
             user_id=user_id,

@@ -1,0 +1,321 @@
+{
+  "hero": {
+    "badge": "Học đều hơn, nhớ lâu hơn",
+    "title_start": "Giữ ",
+    "title_highlight": "lửa",
+    "title_end": " học tập cho mọi kiến thức.",
+    "description": "Nền tảng học tập đa lĩnh vực giúp bạn ghi nhớ ngoại ngữ, IT, Y khoa, Luật hay bất kỳ kiến thức nào. Cùng cộng đồng đóng góp và kiến tạo kho dữ liệu bộ thẻ chuyên biệt cho mọi chủ đề.",
+    "cta_start_free": "Bắt đầu học miễn phí",
+    "cta_open_dashboard": "Mở dashboard",
+    "cta_login": "Đăng nhập",
+    "cta_view_progress": "Xem tiến độ",
+    "proof_points": {
+      "all_fields": "Học mọi lĩnh vực",
+      "community_data": "Kho dữ liệu cộng đồng đóng góp",
+      "smart_srs": "Spaced Repetition thông minh"
+    },
+    "cards": {
+      "english": {
+        "category": "Tiếng Anh",
+        "front": "affect vs effect",
+        "back": "affect (v) = ảnh hưởng · effect (n) = kết quả"
+      },
+      "it_aws": {
+        "category": "IT · AWS",
+        "front": "S3 dùng để làm gì?",
+        "back": "Object storage có độ bền và khả năng mở rộng cao."
+      },
+      "physics": {
+        "category": "Vật lý cơ bản",
+        "front": "Định luật II Newton",
+        "back": "F = ma"
+      }
+    },
+    "review_buttons": {
+      "again": "Học lại",
+      "hard": "Khó",
+      "good": "Tốt",
+      "easy": "Dễ"
+    }
+  },
+  "how_it_works": {
+    "eyebrow": "Cách hoạt động",
+    "title": "Từ kiến thức mới đến trí nhớ dài hạn",
+    "description": "Một vòng lặp đơn giản để bạn bắt đầu nhanh và duy trì được nhịp học.",
+    "steps": {
+      "step_1": {
+        "title": "Tạo thẻ trong 30 giây",
+        "description": "Thêm công thức, thuật ngữ hay định nghĩa nhanh chóng. Thiết kế tối giản giúp bạn tập trung vào nội dung."
+      },
+      "step_2": {
+        "title": "Học theo lịch thông minh",
+        "description": "Flama tự động sắp xếp lịch nhắc lại vào đúng khoảnh khắc bạn chuẩn bị quên."
+      },
+      "step_3": {
+        "title": "Giữ vững động lực",
+        "description": "Theo dõi tải học mỗi ngày và nhìn rõ tiến độ qua New, Learn và Due."
+      }
+    }
+  },
+  "product_preview": {
+    "eyebrow": "Product preview",
+    "title": "Một workspace cho toàn bộ vòng đời flashcard",
+    "description": "Tạo nội dung, học theo scheduler và quản lý collection mà không phải nhảy qua nhiều công cụ.",
+    "frame_create": {
+      "title": "Tạo note linh hoạt",
+      "description": "Chọn NoteType, nhập field và gán deck trong một luồng."
+    },
+    "frame_study": {
+      "title": "Ôn đúng thẻ cần nhớ",
+      "description": "Scheduler đưa thẻ đến hạn vào một phiên học tập trung.",
+      "badge_new": "New 16",
+      "badge_learn": "Learn 7",
+      "badge_due": "Due 24",
+      "mock_front": "What is least privilege?",
+      "mock_back": "Design principle for limiting permissions."
+    },
+    "frame_browse": {
+      "title": "Tìm và sửa nhanh",
+      "description": "Duyệt deck tree, lọc thẻ và kiểm tra nội dung tại chỗ."
+    }
+  },
+  "use_cases": {
+    "eyebrow": "Linh hoạt",
+    "title": "Một phương pháp, nhiều lĩnh vực",
+    "description": "Bất kỳ kiến thức nào cần ghi nhớ đều có thể trở thành một deck có cấu trúc.",
+    "items": [
+      "IT · AWS/Security",
+      "Lập trình · System Design",
+      "JLPT · Kanji/Từ vựng",
+      "Y khoa · Thuật ngữ lâm sàng",
+      "Luật · Điều khoản cốt lõi",
+      "Ngoại ngữ · Cụm từ thường gặp"
+    ]
+  },
+  "benefits": {
+    "eyebrow": "Lợi ích",
+    "title": "Tại sao chọn Flama?",
+    "items": {
+      "srs": {
+        "title": "Ôn tập ngắt quãng",
+        "description": "Nhớ lâu hơn với thời gian học ngắn hơn so với học nhồi nhét truyền thống."
+      },
+      "due_focus": {
+        "title": "Tập trung phần sắp quên",
+        "description": "Hệ thống ưu tiên các thẻ đến hạn và giảm thời gian cho phần bạn đã thuộc."
+      },
+      "clear_progress": {
+        "title": "Tiến độ rõ ràng",
+        "description": "Dashboard và thống kê cho bạn thấy tải học, lịch sử và dự báo thẻ đến hạn."
+      },
+      "focused_experience": {
+        "title": "Trải nghiệm tập trung",
+        "description": "Luồng học gọn, thao tác nhanh và hoạt động tốt trên cả máy tính lẫn điện thoại."
+      }
+    }
+  },
+  "mini_demo": {
+    "badge": "Mini demo",
+    "title": "Học một thẻ trong vài giây",
+    "description": "Lật thẻ, tự đánh giá mức độ nhớ và để Flama đề xuất nhịp ôn tiếp theo.",
+    "bullets": [
+      "Front/Back rõ ràng, tập trung kiến thức chính.",
+      "Again/Hard/Good/Easy điều chỉnh lịch học.",
+      "Phù hợp cho các phiên ôn ngắn mỗi ngày."
+    ],
+    "card": {
+      "front_label": "Mặt trước",
+      "question": "IAM Role khác IAM User ở điểm nào?",
+      "front_hint": "Chạm để lật thẻ",
+      "back_label": "Mặt sau",
+      "answer": "Role dùng credentials tạm thời; User thường có danh tính cố định.",
+      "back_hint": "Chạm để xem lại câu hỏi"
+    },
+    "rating_intervals": {
+      "again": "Nhắc lại sau 1 phút",
+      "hard": "Nhắc lại sau 10 phút",
+      "good": "Nhắc lại sau 1 ngày",
+      "easy": "Nhắc lại sau 5 ngày"
+    },
+    "schedule_label": "Lịch gợi ý: {{schedule}}"
+  },
+  "roadmap": {
+    "eyebrow": "Roadmap",
+    "title": "Flama đang đi tới đâu?",
+    "description": "Những gì đã có, đang được ưu tiên và nằm trong tầm nhìn dài hạn.",
+    "tiers": {
+      "now": {
+        "label": "Now",
+        "description": "Đang có trong sản phẩm",
+        "items": [
+          {
+            "title": "NoteType + Note Editor",
+            "desc": "Tạo thẻ linh hoạt theo mẫu riêng."
+          },
+          {
+            "title": "Study với 4 mức đánh giá",
+            "desc": "Ôn đúng nhịp bằng Again, Hard, Good và Easy."
+          },
+          {
+            "title": "Browse deck tree + card editor",
+            "desc": "Lọc, tìm và sửa thẻ ngay trong collection."
+          },
+          {
+            "title": "Dashboard New/Learn/Due",
+            "desc": "Theo dõi tải học mỗi ngày rõ ràng."
+          },
+          {
+            "title": "Import/Export CSV",
+            "desc": "Chủ động đưa học liệu vào và ra khỏi Flama."
+          }
+        ]
+      },
+      "next": {
+        "label": "Next",
+        "description": "Sắp triển khai",
+        "items": [
+          {
+            "title": "Báo cáo học tập theo tuần",
+            "desc": "Nhìn rõ xu hướng học trong từng tuần."
+          },
+          {
+            "title": "Preset theo mục tiêu",
+            "desc": "Khởi tạo nhanh theo ngành học cụ thể."
+          },
+          {
+            "title": "Marketplace tinh gọn hơn",
+            "desc": "Tìm bộ thẻ phù hợp nhanh và chính xác hơn."
+          }
+        ]
+      },
+      "later": {
+        "label": "Later",
+        "description": "Kế hoạch dài hạn",
+        "items": [
+          {
+            "title": "Đồng bộ đa thiết bị sâu hơn",
+            "desc": "Học liền mạch trên mọi thiết bị."
+          },
+          {
+            "title": "Không gian học nhóm",
+            "desc": "Chia sẻ deck và nhịp học nội bộ."
+          },
+          {
+            "title": "Ứng dụng mobile",
+            "desc": "Tối ưu các phiên ôn nhanh khi di chuyển."
+          }
+        ]
+      }
+    }
+  },
+  "updates": {
+    "eyebrow": "Product updates",
+    "title": "Cập nhật mới cho người học",
+    "description": "Những cải tiến gần đây giúp phiên học nhanh, an toàn và tự nhiên hơn.",
+    "items": [
+      {
+        "tag": "Giao diện",
+        "date": "04/03/2026",
+        "title": "Tối ưu lại giao diện học",
+        "description": "Bố cục học thẻ gọn, rõ và dễ theo dõi hơn khi bạn ôn nhiều từ liên tục."
+      },
+      {
+        "tag": "Tập trung",
+        "date": "04/03/2026",
+        "title": "Học toàn màn hình không ngắt nhịp",
+        "description": "Phiên học giữ trạng thái ổn định để bạn tập trung khi chuyển qua từng thẻ."
+      },
+      {
+        "tag": "Chỉnh sửa",
+        "date": "04/03/2026",
+        "title": "Chỉnh sửa thẻ an toàn hơn",
+        "description": "Giảm rủi ro ghi đè nhầm dữ liệu khi cập nhật nội dung trong collection."
+      },
+      {
+        "tag": "Âm thanh",
+        "date": "04/03/2026",
+        "title": "Tạo audio tiếng Nhật bằng VoiceVox",
+        "description": "Tạo audio từ từ vựng hoặc câu ví dụ và nghe trực tiếp ngay trên thẻ."
+      }
+    ]
+  },
+  "faq": {
+    "eyebrow": "FAQ",
+    "title": "Câu hỏi thường gặp",
+    "items": [
+      {
+        "question": "Điểm khác biệt của Flama là gì?",
+        "answer": "Flama không giới hạn ở một lĩnh vực duy nhất mà là nơi học tập cho mọi ngành học (Ngoại ngữ, IT, Y khoa, Luật, Chứng chỉ...). Đặc biệt, Flama xây dựng một hệ sinh thái mở cho phép mọi người cùng đóng góp và chia sẻ để tạo nên kho dữ liệu bộ thẻ chuyên biệt cho từng chủ đề."
+      },
+      {
+        "question": "Mục đích của Flama là gì?",
+        "answer": "Flama giúp bạn tự do tạo bộ thẻ theo cách riêng và duy trì nhịp học mỗi ngày. Xa hơn, Flama là nền tảng cho phép cộng đồng cùng đóng góp và kiến tạo nên kho dữ liệu học tập chuyên biệt, dễ tiếp cận và có cấu trúc."
+      },
+      {
+        "question": "Flama phù hợp với ai?",
+        "answer": "Phù hợp với người học theo kiểu mỗi ngày một chút nhưng đều: học ngoại ngữ, ôn chứng chỉ, ghi nhớ thuật ngữ IT, Y khoa, Luật hoặc bất kỳ kiến thức nào cần nhớ lâu."
+      },
+      {
+        "question": "Tôi có thể tự tạo bộ thẻ không?",
+        "answer": "Có. Bạn có thể tạo note type, nhập nội dung, tổ chức theo deck và tùy chỉnh template hiển thị theo cách học của mình."
+      },
+      {
+        "question": "Audio trong Flama dùng để làm gì?",
+        "answer": "Audio giúp luyện cách đọc, nhịp nói và phản xạ nghe ngay trong lúc ôn thẻ thay vì chỉ học bằng mặt chữ."
+      },
+      {
+        "question": "Flama có dùng tốt trên điện thoại không?",
+        "answer": "Có. Giao diện responsive hỗ trợ các phiên học ngắn trên điện thoại cũng như quản lý nội dung trên máy tính."
+      },
+      {
+        "question": "Deck lớn có làm tôi bị ngợp không?",
+        "answer": "Flama chia thẻ theo New, Learn và Due, sau đó ưu tiên phần sắp quên để bạn tập trung vào khối lượng thực sự cần học hôm nay."
+      },
+      {
+        "question": "Tôi có thể chia sẻ bộ thẻ không?",
+        "answer": "Có. Marketplace hỗ trợ chia sẻ deck và note type. Deck được cài theo logical overlay để nguồn học liệu và tiến độ cá nhân luôn tách biệt."
+      },
+      {
+        "question": "Tôi có thể chuyển dữ liệu sang nền tảng khác không?",
+        "answer": "Có. Flama hỗ trợ các luồng import và export phổ biến như CSV/TSV để bạn chủ động với dữ liệu của mình."
+      },
+      {
+        "question": "Flama có miễn phí không?",
+        "answer": "Bạn có thể đăng ký và dùng luồng học cốt lõi. Marketplace có cả nội dung miễn phí và trả phí tùy người chia sẻ."
+      }
+    ]
+  },
+  "sponsors": {
+    "eyebrow": "Community",
+    "title": "Nhà tài trợ thiên thần",
+    "description": "Cảm ơn những người đã góp sức duy trì hạ tầng và phát triển Flama.",
+    "tiers": {
+      "diamond": "Kim cương",
+      "gold": "Vàng",
+      "platinum": "Bạch kim"
+    }
+  },
+  "privacy_callout": {
+    "title": "Dữ liệu của bạn thuộc về bạn.",
+    "description_prefix": "Flama tôn trọng quyền riêng tư và giữ dữ liệu học tập tách biệt theo tài khoản. Đọc thêm trong ",
+    "terms_link": "Điều khoản",
+    "and": " và ",
+    "privacy_link": "Chính sách bảo mật",
+    "dot": "."
+  },
+  "final_cta": {
+    "title": "Sẵn sàng giữ lửa học tập mỗi ngày?",
+    "description": "Bắt đầu bằng một bộ thẻ nhỏ và duy trì nhịp ôn đều đặn.",
+    "btn_start_free": "Bắt đầu học miễn phí",
+    "btn_continue_study": "Tiếp tục học",
+    "btn_login": "Đăng nhập",
+    "btn_view_stats": "Xem thống kê"
+  },
+  "feature_badges": {
+    "flexible_notetype": "NoteType linh hoạt",
+    "import_export": "Import/Export",
+    "spaced_repetition": "Spaced repetition",
+    "responsive": "Responsive",
+    "logical_overlay": "Logical overlay"
+  }
+}

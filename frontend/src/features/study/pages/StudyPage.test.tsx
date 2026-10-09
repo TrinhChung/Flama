@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   reloadSession: vi.fn(),
   prepareDecision: vi.fn(),
   updateCardContent: vi.fn(),
+  startPreparedSession: vi.fn(),
   getBootstrap: vi.fn(),
   blockerState: {
     state: 'unblocked' as 'unblocked' | 'blocked' | 'proceeding',
@@ -64,6 +65,7 @@ vi.mock('../hooks/useStudySession', () => ({
     reloadSession: mocks.reloadSession,
     requestTakeover: mocks.requestTakeover,
     updateCardContent: mocks.updateCardContent,
+    startPreparedSession: mocks.startPreparedSession,
   }),
 }))
 
@@ -129,6 +131,20 @@ afterEach(async () => {
 })
 
 describe('StudyPage session conflict keyboard behavior', () => {
+  it('shows preparation for a new lease and forwards its start action without study controls', async () => {
+    mocks.sessionHookData = { ...mocks.sessionHookData, leaseConflict: false, awaitingCompositionSelection: true,
+      templatePreparation: { compositionId: 'c1', inputBindings: {}, staleInputs: [], remember: false, askBeforeStudy: true,
+        isLoading: false, isSaving: false, error: null, availability: { compositions: [{ composition_id: 'c1', template_name: 'Card' }] },
+        entry: { input_schema: [], field_defs: [], input_bindings: {}, warnings: [] },
+        selectComposition: vi.fn(), changeBindings: vi.fn(), setRemember: vi.fn(), setAskBeforeStudy: vi.fn() } }
+    container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
+    await act(async () => root?.render(renderWithClient(<StudyPage />)))
+    expect(container.textContent).toContain('Chuẩn bị phiên học')
+    expect(container.querySelector('.study-page')).toBeNull()
+    const start = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Bắt đầu học')!
+    await act(async () => start.click()); expect(mocks.startPreparedSession).toHaveBeenCalledOnce()
+  })
+
   it('leaves Enter, Space, and fullscreen shortcuts to the conflict UI', async () => {
     container = document.createElement('div')
     document.body.appendChild(container)

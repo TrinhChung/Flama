@@ -1,12 +1,21 @@
 import { useMemo, useState } from 'react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileEdit,
+  LayoutGrid,
+  Printer,
+  Sparkles,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Printer, ArrowLeft, Sparkles, FileEdit, LayoutGrid, CheckCircle2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { DeckWorksheetModal } from '../components/DeckWorksheetModal'
 
 export function WorksheetsPage() {
+  const { t } = useTranslation('worksheets')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const paramDeckId = searchParams.get('deckId') || searchParams.get('deck_id')
@@ -30,14 +39,17 @@ export function WorksheetsPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                  Mẫu giấy luyện viết & In bài tập (A4)
+                  {t('page.title')}
                 </h1>
-                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold">
-                  Tự do & Không cần Deck
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold"
+                >
+                  {t('page.badge_standalone')}
                 </Badge>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                Tạo trang trắng làm văn tiêu chuẩn (Genkō Yōshi / 作文纸 400 ô), ô chữ Hán, ô chữ thập để in ra luyện viết tay bằng bút mực.
+                {t('page.description')}
               </p>
             </div>
           </div>
@@ -51,7 +63,7 @@ export function WorksheetsPage() {
             className="h-9 gap-1.5 text-xs font-semibold rounded-lg"
           >
             <ArrowLeft className="size-3.5" />
-            <span>Quay lại</span>
+            <span>{t('page.back_button')}</span>
           </Button>
           <Button
             size="sm"
@@ -59,7 +71,7 @@ export function WorksheetsPage() {
             className="h-9 gap-1.5 text-xs font-bold rounded-lg shadow-sm"
           >
             <Sparkles className="size-3.5" />
-            <span>Mở Live Studio</span>
+            <span>{t('page.open_studio')}</span>
           </Button>
         </div>
       </div>
@@ -71,19 +83,21 @@ export function WorksheetsPage() {
             <div className="size-8 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-1">
               <FileEdit className="size-4" />
             </div>
-            <CardTitle className="text-sm font-bold">Giấy làm văn 400 ô (Genkō Yōshi)</CardTitle>
+            <CardTitle className="text-sm font-bold">
+              {t('page.cards.genkouyoushi.title')}
+            </CardTitle>
             <CardDescription className="text-xs">
-              Chuẩn 作文纸 20 cột × 20 dòng kèm dải đệm ngang giữa các hàng, dòng ghi họ tên và ngày tháng.
+              {t('page.cards.genkouyoushi.description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-1.5 pt-1 border-t border-border/40">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
-              <span>In trang trắng sạch đẹp 100%</span>
+              <span>{t('page.cards.genkouyoushi.f1')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
-              <span>Hỗ trợ điền bài văn mẫu & tô chữ mờ</span>
+              <span>{t('page.cards.genkouyoushi.f2')}</span>
             </div>
             <Button
               variant="secondary"
@@ -91,7 +105,7 @@ export function WorksheetsPage() {
               onClick={() => setIsStudioOpen(true)}
               className="w-full mt-2 h-7.5 text-xs font-semibold"
             >
-              Mở mẫu 400 ô &rarr;
+              {t('page.cards.genkouyoushi.action')}
             </Button>
           </CardContent>
         </Card>
@@ -101,19 +115,21 @@ export function WorksheetsPage() {
             <div className="size-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-1">
               <LayoutGrid className="size-4" />
             </div>
-            <CardTitle className="text-sm font-bold">Lưới kẻ ô chữ Hán (Kanji Grid)</CardTitle>
+            <CardTitle className="text-sm font-bold">
+              {t('page.cards.kanji_grid.title')}
+            </CardTitle>
             <CardDescription className="text-xs">
-              Lưới ô chữ thập (+), hoa thị (*), ô trơn để luyện tập cấu trúc nét viết tay chữ Hán và Kana.
+              {t('page.cards.kanji_grid.description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-1.5 pt-1 border-t border-border/40">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
-              <span>Tuỳ chỉnh kích thước ô 28px - 44px</span>
+              <span>{t('page.cards.kanji_grid.f1')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
-              <span>Màu mực xám than photocopy chuẩn nét</span>
+              <span>{t('page.cards.kanji_grid.f2')}</span>
             </div>
             <Button
               variant="secondary"
@@ -121,7 +137,7 @@ export function WorksheetsPage() {
               onClick={() => setIsStudioOpen(true)}
               className="w-full mt-2 h-7.5 text-xs font-semibold"
             >
-              Xem mẫu ô chữ Hán &rarr;
+              {t('page.cards.kanji_grid.action')}
             </Button>
           </CardContent>
         </Card>
@@ -131,19 +147,21 @@ export function WorksheetsPage() {
             <div className="size-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-1">
               <Printer className="size-4" />
             </div>
-            <CardTitle className="text-sm font-bold">Xuất file PDF & In ngay A4</CardTitle>
+            <CardTitle className="text-sm font-bold">
+              {t('page.cards.pdf_print.title')}
+            </CardTitle>
             <CardDescription className="text-xs">
-              Tích hợp cơ chế print styling tự động căn lề chuẩn 0mm, không bị vỡ hàng, không thừa trang trắng.
+              {t('page.cards.pdf_print.description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground space-y-1.5 pt-1 border-t border-border/40">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
-              <span>Khổ giấy A4 Dọc (Portrait) chuẩn</span>
+              <span>{t('page.cards.pdf_print.f1')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
-              <span>Xem trước trực tiếp theo thời gian thực</span>
+              <span>{t('page.cards.pdf_print.f2')}</span>
             </div>
             <Button
               variant="secondary"
@@ -151,7 +169,7 @@ export function WorksheetsPage() {
               onClick={() => setIsStudioOpen(true)}
               className="w-full mt-2 h-7.5 text-xs font-semibold"
             >
-              In ngay &rarr;
+              {t('page.cards.pdf_print.action')}
             </Button>
           </CardContent>
         </Card>

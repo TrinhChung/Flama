@@ -1,6 +1,8 @@
+import '@/shared/config/i18n'
 import { Check } from 'lucide-react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faLayerGroup } from '@fortawesome/free-solid-svg-icons'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -73,13 +75,15 @@ export function PublishStep2Taxonomy({
   setTags,
   clearFieldError,
 }: PublishStep2TaxonomyProps) {
+  const { t } = useTranslation('marketplace')
+
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
       {/* Domain & Subject in 2 columns */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="tax-domain" className="text-xs font-semibold">
-            Lĩnh vực học tập (Domain) <span className="text-destructive">*</span>
+            {t('publish_deck.step2.domain_label')} <span className="text-destructive">*</span>
           </Label>
           <NativeSelect
             id="tax-domain"
@@ -120,7 +124,7 @@ export function PublishStep2Taxonomy({
 
         <div className="space-y-2">
           <Label htmlFor="tax-subject" className="text-xs font-semibold">
-            Ngôn ngữ / Môn học (Subject) <span className="text-destructive">*</span>
+            {t('publish_deck.step2.subject_label')} <span className="text-destructive">*</span>
           </Label>
           <NativeSelect
             id="tax-subject"
@@ -252,7 +256,7 @@ export function PublishStep2Taxonomy({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="tax-diff" className="text-xs font-semibold">
-            Mức độ khó (Difficulty) <span className="text-destructive">*</span>
+            {t('publish_deck.step2.difficulty_label')} <span className="text-destructive">*</span>
           </Label>
           <NativeSelect
             id="tax-diff"

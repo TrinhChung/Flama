@@ -1,0 +1,112 @@
+{
+  "header": {
+    "title": "Installed Decks",
+    "description": "Manage and continue studying decks installed from Marketplace or created by you.",
+    "btn_tour": "Guided Tour",
+    "btn_help": "Help",
+    "btn_explore": "Explore Marketplace"
+  },
+  "search_filter": {
+    "placeholder": "Search installed decks by name, author... (Press '/' to focus)",
+    "filter_btn": "Filters",
+    "clear_search": "Clear search query",
+    "clear_all": "Clear all",
+    "tabs": {
+      "all": "All",
+      "using_now": "In Use",
+      "update_available": "New Release"
+    },
+    "advanced": {
+      "status_label": "Deck status",
+      "status_all": "All statuses",
+      "status_using_now": "In use",
+      "status_installed": "Installed",
+      "status_owned": "Your deck",
+      "status_update_available": "Update available",
+      "status_conflict": "Conflict detected",
+      "domain_label": "Domain",
+      "domain_all": "All domains",
+      "subject_label": "Subject",
+      "subject_all": "All subjects",
+      "level_label": "Framework / Level",
+      "level_all": "All levels",
+      "difficulty_label": "Difficulty",
+      "difficulty_all": "All difficulties"
+    },
+    "active": {
+      "prefix": "Applied filters:",
+      "query": "Keyword: \"{{query}}\"",
+      "category": "Topic: {{category}}",
+      "status": "Status: {{status}}",
+      "domain": "Domain: {{label}}",
+      "subject": "Subject: {{label}}",
+      "level": "Level: {{label}}",
+      "difficulty": "Difficulty: {{label}}"
+    }
+  },
+  "categories": {
+    "title": "Topics:",
+    "all": "All"
+  },
+  "summary": {
+    "results_count": "Showing {{filtered}} of {{total}} decks {{suffix}}",
+    "suffix_filtered": "matching filters",
+    "suffix_installed": "installed",
+    "empty_title": "No decks installed yet",
+    "empty_desc": "Explore the marketplace and install a deck to start learning.",
+    "no_match_title": "No matching decks found",
+    "no_match_desc": "Try adjusting your search query or clear current filter criteria.",
+    "btn_reset_filters": "Clear current filters"
+  },
+  "curated": {
+    "deck_count": "({{count}} decks)",
+    "view_all": "View all {{category}}",
+    "other_heading": "Other Decks & Topics"
+  },
+  "card_actions": {
+    "study_now": "Study now",
+    "details": "Details",
+    "has_update": "View update",
+    "has_update_new": "View new update",
+    "handle_conflict": "Resolve conflict ({{count}})",
+    "change_request": "Contribute edits"
+  },
+  "sync_status": {
+    "needs_sync": "Contribution needs sync",
+    "draft": "Draft contribution",
+    "has_conflict": "Has conflict",
+    "conflict": "Conflict requires resolution",
+    "synced": "Up to date",
+    "detached": "Detached",
+    "error": "Sync error",
+    "pending_review": "Pending review",
+    "rejected": "Contribution rejected",
+    "merged": "Contribution merged"
+  },
+  "tour": {
+    "step1_title": "📚 1. Manage Installed Decks",
+    "step1_content": "Organize all flashcard decks installed from the Marketplace or created by you to begin studying.",
+    "step2_title": "🛍️ 2. Explore Marketplace Decks",
+    "step2_content": "Click here to discover hundreds of high-quality vocabulary, grammar, and Kanji decks shared by the community.",
+    "step3_title": "🔍 3. Search & Filter Decks",
+    "step3_content": "Quickly search by deck name, filter by topic category, JLPT level, or active study status.",
+    "step4_title_installed": "🎴 4. Deck Information Card",
+    "step4_content_installed": "Displays deck title, author name, current study status (In Use / Installed), and brief summary.",
+    "step4_title_empty": "📦 4. Personal Decks Area",
+    "step4_content_empty": "After installing decks from Marketplace, they will appear here for you to study and track progress.",
+    "step5_title": "🚀 5. \"Study Now\" Button (Spaced Repetition)",
+    "step5_content": "Click this button to start a review session powered by smart spaced repetition (Anki SM-2 / FSRS) for deep memory retention."
+  },
+  "note_types_page": {
+    "title": "Note Types",
+    "description": "Manage fields, templates, and flashcard rendering specifications.",
+    "empty_title": "No note types yet",
+    "empty_desc": "Create your first note type or install a template from marketplace.",
+    "templates_count": "{{count}} template(s)",
+    "fields_count": "{{count}} field(s)",
+    "no_desc": "No description provided for this note type.",
+    "updated_at": "Updated {{date}}",
+    "no_updated_at": "No update timestamp",
+    "loading": "Loading note types…"
+  }
+}

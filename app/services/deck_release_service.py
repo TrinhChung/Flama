@@ -1,8 +1,8 @@
 """Immutable release orchestration for shared marketplace decks.
 
-V1 deliberately versions only source note fields and field-definition state.
-It keeps source Note/Card identities untouched, stores an initial checkpoint,
-and appends atomic property changes for later releases.
+Release atoms cover source fields and immutable template presentation pins.
+Source Note/Card identities stay untouched; templates inherit through their
+separate per-user subscriptions.
 
 The service never commits or rolls back.  HTTP/CLI adapters own transactions.
 """
@@ -19,6 +19,7 @@ from typing import Any
 
 from app.repositories import deck_release_repository
 from app.repositories.deck_tree_query import collect_subtree_ids
+from app.services import release_core
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.deck_release_change import DeckReleaseChange
@@ -27,7 +28,7 @@ from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
 
 
 VISIBLE_PUBLISH_STATUSES = {"published", "unlisted"}
-VISIBLE_ENTITY_KINDS = {"note_field", "field_def"}
+VISIBLE_ENTITY_KINDS = {"note_field", "field_def", "template"}
 FILTER_OPERATION_ALIASES = {
     "add": "add",
     "added": "add",
@@ -1224,6 +1225,30 @@ def _build_release_diff_plan(
     item: DeckMarketplaceItem,
     include_initial_checkpoint_state: bool = True,
 ) -> ReleaseDiffPlan:
+    plan = _build_content_release_diff_plan(item=item, include_initial_checkpoint_state=include_initial_checkpoint_state)
+    from models import db
+    from app.services.template_release_service import deck_template_presentations
+    before = deck_template_presentations(db.session, note_type_id=item.source_note_type_id, release_id=item.current_release_id) if item.current_release_id else {}
+    after = deck_template_presentations(db.session, note_type_id=item.source_note_type_id)
+    for template_id in sorted(set(before) | set(after)):
+        if template_id in before and template_id in after and release_core.same(before[template_id], after[template_id]):
+            continue
+        plan.changes.append(_change_descriptor(
+            change_key=f"template:{template_id}:presentation", entity_kind="template", entity_id=template_id,
+            field_def_id=None, field_name=None, property_key="presentation",
+            before_exists=template_id in before, after_exists=template_id in after,
+            before_value=before.get(template_id), after_value=after.get(template_id),
+            source_deck_id=item.source_deck_id, sort_key=f"template:{template_id}",
+        ))
+    plan.changes.sort(key=lambda row: (str(row["sort_key"]), str(row["change_key"])))
+    return plan
+
+
+def _build_content_release_diff_plan(
+    *,
+    item: DeckMarketplaceItem,
+    include_initial_checkpoint_state: bool = True,
+) -> ReleaseDiffPlan:
     base_release = item.current_release
     if base_release is not None:
         sparse_plan = _try_build_sparse_diff(
@@ -1346,7 +1371,7 @@ def preview_release(
     if normalized_kind and normalized_kind not in VISIBLE_ENTITY_KINDS:
         raise DeckReleaseError(
             "VALIDATION_ERROR",
-            "type must be note_field or field_def.",
+            "type must be note_field, field_def, or template.",
             field="type",
         )
     normalized_operation = (operation or "").strip().lower() or None
@@ -1731,74 +1756,60 @@ def publish_release(
         user_id=user_id,
         lock=True,
     )
-    existing_idempotent = deck_release_repository.get_release_by_idempotency_key(
-        deck_item_id=item.id,
-        idempotency_key=normalized_key,
+    request = release_core.PublishRequest(
+        normalized_version, normalized_key, normalized_expected_head,
+        normalized_expected_revision, normalized_changelog, normalized_publish_mode,
     )
-    if existing_idempotent is not None:
-        same_request = (
-            existing_idempotent.version_label == normalized_version
-            and existing_idempotent.parent_release_id == normalized_expected_head
-            and (existing_idempotent.changelog or None) == (normalized_changelog or None)
-            and (
-                normalized_expected_revision is None
-                or int(existing_idempotent.source_working_revision or 0)
-                == normalized_expected_revision
-            )
-        )
-        if not same_request:
-            raise DeckReleaseError(
-                "IDEMPOTENCY_KEY_REUSED",
-                "Idempotency-Key was already used for another release request.",
-                status=409,
-                field="Idempotency-Key",
-            )
-        return PublishReleaseResult(existing_idempotent, replayed=True)
+    release, replayed = release_core.publish(_DeckPublishAdapter(item, user_id), request)
+    return PublishReleaseResult(release, replayed=replayed)
 
-    current_head_id = str(item.current_release_id) if item.current_release_id else None
-    if normalized_expected_head != current_head_id:
-        raise DeckReleaseError(
-            "RELEASE_HEAD_STALE",
-            "The published release changed. Refresh the preview and retry.",
-            status=409,
-            field="expected_current_release_id",
-        )
-    if (
-        normalized_expected_revision is not None
-        and normalized_expected_revision != int(item.working_revision or 0)
-    ):
-        raise DeckReleaseError(
-            "WORKING_REVISION_STALE",
-            "The owner working revision changed. Refresh the preview and retry.",
-            status=409,
-            field="expected_working_revision",
-        )
-    if deck_release_repository.get_release_by_version_label(
-        deck_item_id=item.id,
-        version_label=normalized_version,
-    ):
-        raise DeckReleaseError(
-            "VERSION_ALREADY_EXISTS",
-            "version_label already exists for this deck.",
-            status=409,
-            field="version_label",
+
+class _DeckPublishAdapter:
+    """Keep deck sparse journals/checkpoints behind the shared publisher policy."""
+
+    def __init__(self, item, user_id):
+        self.item = item
+        self.user_id = user_id
+        self.head_id = str(item.current_release_id) if item.current_release_id else None
+        self.revision = int(item.working_revision or 0)
+
+    def fail(self, code, message, *, field=None):
+        raise DeckReleaseError(code, message, status=409, field=field)
+
+    def find_replay(self, key):
+        return deck_release_repository.get_release_by_idempotency_key(deck_item_id=self.item.id, idempotency_key=key)
+
+    def matches_replay(self, existing, request):
+        return (
+            existing.version_label == request.version_label
+            and existing.parent_release_id == request.expected_head_id
+            and (existing.changelog or None) == (request.change_note or None)
+            and (request.expected_revision is None or int(existing.source_working_revision or 0) == request.expected_revision)
         )
 
+    def label_exists(self, label):
+        return deck_release_repository.get_release_by_version_label(deck_item_id=self.item.id, version_label=label) is not None
+
+    def plan(self):
+        if self.item.current_release is not None and self.item.current_release.status != "published":
+            self.fail("RELEASE_HEAD_INVALID", "The current release is not published.")
+        return _build_release_diff_plan(item=self.item)
+
+    def has_changes(self, plan):
+        return bool(plan.changes)
+
+    def persist(self, plan, request):
+        return _stage_deck_release(item=self.item, user_id=self.user_id, diff_plan=plan, request=request)
+
+
+def _stage_deck_release(*, item, user_id, diff_plan, request):
+    normalized_version = request.version_label
+    normalized_key = request.idempotency_key
+    normalized_changelog = request.change_note
+    normalized_publish_mode = request.mode
+    current_head_id = request.expected_head_id
     parent_release = item.current_release
-    if parent_release is not None and parent_release.status != "published":
-        raise DeckReleaseError(
-            "RELEASE_HEAD_INVALID",
-            "The current release is not published.",
-            status=409,
-        )
-    diff_plan = _build_release_diff_plan(item=item)
     changes = diff_plan.changes
-    if parent_release is not None and not changes:
-        raise DeckReleaseError(
-            "NO_RELEASE_CHANGES",
-            "There are no unpublished source changes.",
-            status=409,
-        )
 
     sequence_no = deck_release_repository.next_release_sequence(item.id)
     summary = _summary_for_changes(changes)
@@ -1881,7 +1892,10 @@ def publish_release(
     deck_working_tree_service.clear_dirty_entities(deck_item_id=item.id)
     item.dirty_tracking_revision = int(item.working_revision or 0)
     deck_release_repository.flush()
-    return PublishReleaseResult(release, replayed=False)
+    from models import db
+    from app.services.template_release_service import capture_deck_release_template_pins
+    capture_deck_release_template_pins(db.session, release, actor_user_id=user_id)
+    return release
 
 
 def serialize_release(release: DeckRelease | None) -> dict[str, Any] | None:
@@ -2001,7 +2015,7 @@ def list_deck_release_changes(
     if normalized_kind and normalized_kind not in VISIBLE_ENTITY_KINDS:
         raise DeckReleaseError(
             "VALIDATION_ERROR",
-            "type must be note_field or field_def.",
+            "type must be note_field, field_def, or template.",
             field="type",
         )
     normalized_operation = (operation or "").strip().lower() or None

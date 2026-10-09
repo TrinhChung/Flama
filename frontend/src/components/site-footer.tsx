@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { Brand } from '@/shared/components/Brand'
 import type { FrontendBootstrap } from '@/shared/types/api'
 
@@ -29,6 +31,7 @@ function FooterLink({ to, children }: { to: string; children: React.ReactNode })
 }
 
 export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
+	const { t } = useTranslation('shell')
 	const email = bootstrap.support_contact_email
 	const user = bootstrap.user
 
@@ -48,15 +51,14 @@ export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 						<div>
 							<Brand compact className="mb-3" />
 							<p className="max-w-xs text-xs leading-relaxed text-white/45">
-								Flama là nền tảng học tập đa lĩnh vực, ứng dụng phương pháp Spaced Repetition để tối
-								ưu khả năng ghi nhớ và đồng hành cùng tiến độ của bạn mỗi ngày.
+								{t('footer.brand_desc')}
 							</p>
 						</div>
 
 						{/* Concierge Support Block */}
 						<div className="mt-6 border-t border-white/[0.04] pt-4 lg:border-t-0 lg:pt-0">
 							<span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-white/30">
-								Hỗ trợ trực tiếp
+								{t('footer.support_concierge')}
 							</span>
 							{email ? (
 								<a
@@ -68,7 +70,7 @@ export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 							) : null}
 							<div className="mt-2 flex items-center gap-1.5 text-xs text-white/35">
 								<span className="size-1.5 shrink-0 rounded-full bg-emerald-500/80" />
-								<span>Phản hồi trong 24–48h</span>
+								<span>{t('footer.response_sla')}</span>
 							</div>
 						</div>
 					</div>
@@ -77,73 +79,75 @@ export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 					<div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-2 md:grid-cols-4 lg:contents">
 
 						{/* Col 2 — Học tập & Quản lý */}
-						<FooterColumn title="Học tập & Quản lý">
+						<FooterColumn title={t('footer.col_learning')}>
 							{user ? (
 								<>
-									<FooterLink to={bootstrap.links.dashboard || '/dashboard'}>Tổng quan học tập</FooterLink>
-									<FooterLink to={bootstrap.links.study || '/study'}>Học flashcard</FooterLink>
-									<FooterLink to="/browse">Kho từ vựng &amp; Thẻ</FooterLink>
-									<FooterLink to="/statistics">Thống kê &amp; Lịch học</FooterLink>
-									{user.is_admin ? <FooterLink to="/import">Nhập dữ liệu CSV/TSV</FooterLink> : null}
-									<FooterLink to={bootstrap.links.note_types || '/note-types'}>Quản lý NoteTypes</FooterLink>
+									<FooterLink to={bootstrap.links.dashboard || '/dashboard'}>{t('footer.link_dashboard')}</FooterLink>
+									<FooterLink to={bootstrap.links.study || '/study'}>{t('footer.link_study')}</FooterLink>
+									<FooterLink to="/browse">{t('footer.link_browse')}</FooterLink>
+									<FooterLink to="/statistics">{t('footer.link_stats')}</FooterLink>
+									<FooterLink to="/import">{t('footer.link_import')}</FooterLink>
 								</>
 							) : (
 								<>
-									<FooterLink to="/">Trang giới thiệu</FooterLink>
-									<FooterLink to="/login">Đăng nhập</FooterLink>
-									<FooterLink to="/register">Đăng ký tài khoản</FooterLink>
+									<FooterLink to="/">{t('footer.link_home')}</FooterLink>
+									<FooterLink to={bootstrap.links.shared_decks || '/marketplace/decks'}>{t('footer.link_explore_guest')}</FooterLink>
+									<FooterLink to="/guide">{t('footer.link_guide_guest')}</FooterLink>
+									<FooterLink to="/login">{t('footer.link_login')}</FooterLink>
+									<FooterLink to="/register">{t('footer.link_register')}</FooterLink>
 								</>
 							)}
 						</FooterColumn>
 
 						{/* Col 3 — Chợ bộ thẻ & Đóng góp */}
-						<FooterColumn title="Chợ bộ thẻ & Đóng góp">
-							<FooterLink to={bootstrap.links.shared_decks || '/marketplace/decks'}>Khám phá Decks</FooterLink>
-							<FooterLink to={bootstrap.links.shared_note_types || '/marketplace/note-types'}>Khám phá NoteTypes</FooterLink>
+						<FooterColumn title={t('footer.col_market')}>
+							<FooterLink to={bootstrap.links.shared_decks || '/marketplace/decks'}>{t('footer.link_explore_decks')}</FooterLink>
 							{user && (
 								<>
-									<FooterLink to="/marketplace/decks/publish">Đăng bộ thẻ lên Chợ</FooterLink>
-									<FooterLink to="/marketplace/note-types/publish">Chia sẻ NoteType</FooterLink>
-									<FooterLink to="/installed-decks">Bộ thẻ đã cài</FooterLink>
-									<FooterLink to="/orders">Lịch sử đơn hàng</FooterLink>
+									<FooterLink to="/marketplace/decks/publish">{t('footer.link_publish_deck')}</FooterLink>
+									<FooterLink to="/installed-decks">{t('footer.link_installed')}</FooterLink>
+									<FooterLink to="/flashcards/change-requests/incoming">{t('footer.link_change_requests')}</FooterLink>
+									<FooterLink to="/orders">{t('footer.link_orders')}</FooterLink>
 								</>
 							)}
 						</FooterColumn>
 
 						{/* Col 4 — Công cụ & Tích hợp */}
-						<FooterColumn title="Công cụ & Tích hợp">
-							<FooterLink to="/settings/yomitan">Tích hợp Yomitan</FooterLink>
-							<FooterLink to="/guide/tts-key">Hướng dẫn Key TTS</FooterLink>
-							<FooterLink to="/feedback">Gửi góp ý &amp; Báo lỗi</FooterLink>
+						<FooterColumn title={t('footer.col_tools')}>
+							<FooterLink to="/settings/yomitan">{t('footer.link_yomitan')}</FooterLink>
+							<FooterLink to="/guide/flama-audio">{t('footer.link_flama_audio')}</FooterLink>
+							<FooterLink to="/sync">{t('footer.link_anki_sync')}</FooterLink>
+							<FooterLink to="/guide">{t('footer.link_guide')}</FooterLink>
 							{user?.is_admin && (
-								<FooterLink to={bootstrap.links.admin_users || '/admin/users'}>Quản trị hệ thống</FooterLink>
+								<FooterLink to={bootstrap.links.admin_users || '/admin/users'}>{t('footer.link_admin')}</FooterLink>
 							)}
 						</FooterColumn>
 
 						{/* Col 5 — Pháp lý & Hỗ trợ */}
-						<FooterColumn title="Pháp lý & Hỗ trợ">
-							<FooterLink to={bootstrap.links.terms || '/terms'}>Điều khoản sử dụng</FooterLink>
-							<FooterLink to={bootstrap.links.privacy || '/privacy'}>Chính sách bảo mật</FooterLink>
-							<FooterLink to="/marketplace-guidelines">Quy chế Marketplace</FooterLink>
-							<FooterLink to="/community-guidelines">Chuẩn mực cộng đồng</FooterLink>
-							<FooterLink to={bootstrap.links.cookies || '/cookies'}>Chính sách cookie</FooterLink>
-							<FooterLink to={bootstrap.links.support || '/support'}>Ủng hộ hệ thống</FooterLink>
+						<FooterColumn title={t('footer.col_legal')}>
+							<FooterLink to={bootstrap.links.terms || '/terms'}>{t('footer.link_terms')}</FooterLink>
+							<FooterLink to={bootstrap.links.privacy || '/privacy'}>{t('footer.link_privacy')}</FooterLink>
+							<FooterLink to="/marketplace-guidelines">{t('footer.link_market_guidelines')}</FooterLink>
+							<FooterLink to="/community-guidelines">{t('footer.link_community')}</FooterLink>
+							<FooterLink to={bootstrap.links.cookies || '/cookies'}>{t('footer.link_cookies')}</FooterLink>
+							<FooterLink to="/feedback">{t('footer.link_feedback')}</FooterLink>
+							<FooterLink to={bootstrap.links.support || '/support'}>{t('footer.link_support')}</FooterLink>
 						</FooterColumn>
 					</div>
 				</div>
 
 				{/* ── Bottom Bar: Copyright & Editorial Back to Top ── */}
 				<div className="flex flex-col items-center justify-between gap-4 pt-6 text-xs text-white/35 sm:flex-row">
-					<div>
-						© {new Date().getFullYear()} Flama. Được phát triển với ❤️ bởi Chung Trịnh.
+					<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+						<span>{t('footer.copyright', { year: new Date().getFullYear() })}</span>
 					</div>
 
 					<button
 						type="button"
 						onClick={handleScrollToTop}
-						className="group inline-flex items-center gap-1.5 text-xs uppercase tracking-wider text-white/40 transition-colors hover:text-white"
+						className="group inline-flex items-center gap-1.5 text-xs uppercase tracking-wider text-white/40 transition-colors hover:text-white cursor-pointer"
 					>
-						<span>Lên đầu trang</span>
+						<span>{t('footer.back_to_top')}</span>
 						<span className="inline-block transition-transform duration-200 group-hover:-translate-y-0.5">↑</span>
 					</button>
 				</div>

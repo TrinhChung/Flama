@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +21,7 @@ from app.services import (
     marketplace_query_service,
     payment_service,
 )
+from app.repositories import flashcards_share_repository, template_release_repository
 from app.services.flashcard_renderer import (
     PREVIEW_MEDIA_AUDIO_TOKEN,
     PREVIEW_MEDIA_DIAGRAM_TOKEN,
@@ -380,19 +382,31 @@ def preview_shared_note_type_template(
             "FIELD_NOT_FOUND", "Note type not found.", status=404
         )
 
-    template = Template.query.filter_by(
-        id=template_id, note_type_id=note_type.id
-    ).first()
+    attached = flashcards_share_repository.get_template_applications_by_note_type(note_type.id)
+    application = next((app for template, app in attached if template.id == template_id), None)
+    template = next((template for template, _app in attached if template.id == template_id), None)
+    if template is None:
+        template = next((row for row in flashcards_share_repository.get_templates_by_note_type(note_type.id) if row.id == template_id), None)
     if not template:
         raise MarketplaceNoteTypeError(
             "FIELD_NOT_FOUND", "Template not found.", status=404
         )
 
     sample_field_values = _build_preview_sample_values(note_type.field_defs)
+    publication = template_release_repository.publication(db.session, template.id)
+    release = template_release_repository.release(db.session, publication["current_release_id"], template.id) if publication and publication["current_release_id"] else None
+    content = template_release_repository.version(db.session, release["version_id"], template.id) if release else None
+    preview_template = SimpleNamespace(
+        id=template.id, input_bindings=application.input_bindings if application else None,
+        input_schema=content["input_schema"] if content else template.input_schema,
+        front_html=content["front_html"] if content else template.front_html,
+        back_html=content["back_html"] if content else template.back_html,
+        shared_css=content["shared_css"] if content else template.shared_css,
+    )
 
     try:
         rendered = render_template_pair(
-            template=template,
+            template=preview_template,
             field_defs=note_type.field_defs,
             field_values=sample_field_values,
             media_assets=[],

@@ -23,6 +23,8 @@ import {
   Zap,
 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,211 +37,6 @@ import {
 import { useBootstrap } from '@/shared/api/bootstrap'
 
 type IconType = ComponentType<{ className?: string }>
-
-const steps: Array<{
-  title: string
-  description: string
-  icon: IconType
-}> = [
-  {
-    title: 'Tạo thẻ trong 30 giây',
-    description:
-      'Thêm công thức, thuật ngữ hay định nghĩa nhanh chóng. Thiết kế tối giản giúp bạn tập trung vào nội dung.',
-    icon: PencilLine,
-  },
-  {
-    title: 'Học theo lịch thông minh',
-    description:
-      'Flama tự động sắp xếp lịch nhắc lại vào đúng khoảnh khắc bạn chuẩn bị quên.',
-    icon: CalendarCheck2,
-  },
-  {
-    title: 'Giữ vững động lực',
-    description:
-      'Theo dõi tải học mỗi ngày và nhìn rõ tiến độ qua New, Learn và Due.',
-    icon: TrendingUp,
-  },
-]
-
-const useCases = [
-  'IT · AWS/Security',
-  'Lập trình · System Design',
-  'JLPT · Kanji/Từ vựng',
-  'Y khoa · Thuật ngữ lâm sàng',
-  'Luật · Điều khoản cốt lõi',
-  'Ngoại ngữ · Cụm từ thường gặp',
-]
-
-const benefits: Array<{
-  title: string
-  description: string
-  icon: IconType
-}> = [
-  {
-    title: 'Ôn tập ngắt quãng',
-    description:
-      'Nhớ lâu hơn với thời gian học ngắn hơn so với học nhồi nhét truyền thống.',
-    icon: Zap,
-  },
-  {
-    title: 'Tập trung phần sắp quên',
-    description:
-      'Hệ thống ưu tiên các thẻ đến hạn và giảm thời gian cho phần bạn đã thuộc.',
-    icon: Target,
-  },
-  {
-    title: 'Tiến độ rõ ràng',
-    description:
-      'Dashboard và thống kê cho bạn thấy tải học, lịch sử và dự báo thẻ đến hạn.',
-    icon: BarChart3,
-  },
-  {
-    title: 'Trải nghiệm tập trung',
-    description:
-      'Luồng học gọn, thao tác nhanh và hoạt động tốt trên cả máy tính lẫn điện thoại.',
-    icon: Focus,
-  },
-]
-
-const roadmap = [
-  {
-    label: 'Now',
-    description: 'Đang có trong sản phẩm',
-    tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    items: [
-      ['NoteType + Note Editor', 'Tạo thẻ linh hoạt theo mẫu riêng.'],
-      ['Study với 4 mức đánh giá', 'Ôn đúng nhịp bằng Again, Hard, Good và Easy.'],
-      ['Browse deck tree + card editor', 'Lọc, tìm và sửa thẻ ngay trong collection.'],
-      ['Dashboard New/Learn/Due', 'Theo dõi tải học mỗi ngày rõ ràng.'],
-      ['Import/Export CSV', 'Chủ động đưa học liệu vào và ra khỏi Flama.'],
-    ],
-  },
-  {
-    label: 'Next',
-    description: 'Sắp triển khai',
-    tone: 'bg-primary/10 text-primary',
-    items: [
-      ['Báo cáo học tập theo tuần', 'Nhìn rõ xu hướng học trong từng tuần.'],
-      ['Preset theo mục tiêu', 'Khởi tạo nhanh theo ngành học cụ thể.'],
-      ['Marketplace tinh gọn hơn', 'Tìm bộ thẻ phù hợp nhanh và chính xác hơn.'],
-    ],
-  },
-  {
-    label: 'Later',
-    description: 'Kế hoạch dài hạn',
-    tone: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
-    items: [
-      ['Đồng bộ đa thiết bị sâu hơn', 'Học liền mạch trên mọi thiết bị.'],
-      ['Không gian học nhóm', 'Chia sẻ deck và nhịp học nội bộ.'],
-      ['Ứng dụng mobile', 'Tối ưu các phiên ôn nhanh khi di chuyển.'],
-    ],
-  },
-]
-
-const updates = [
-  {
-    tag: 'Giao diện',
-    date: '04/03/2026',
-    title: 'Tối ưu lại giao diện học',
-    description:
-      'Bố cục học thẻ gọn, rõ và dễ theo dõi hơn khi bạn ôn nhiều từ liên tục.',
-  },
-  {
-    tag: 'Tập trung',
-    date: '04/03/2026',
-    title: 'Học toàn màn hình không ngắt nhịp',
-    description:
-      'Phiên học giữ trạng thái ổn định để bạn tập trung khi chuyển qua từng thẻ.',
-  },
-  {
-    tag: 'Chỉnh sửa',
-    date: '04/03/2026',
-    title: 'Chỉnh sửa thẻ an toàn hơn',
-    description:
-      'Giảm rủi ro ghi đè nhầm dữ liệu khi cập nhật nội dung trong collection.',
-  },
-  {
-    tag: 'Âm thanh',
-    date: '04/03/2026',
-    title: 'Tạo audio tiếng Nhật bằng VoiceVox',
-    description:
-      'Tạo audio từ từ vựng hoặc câu ví dụ và nghe trực tiếp ngay trên thẻ.',
-  },
-]
-
-const faqs = [
-  {
-    question: 'Điểm khác biệt của Flama là gì?',
-    answer:
-      'Flama không giới hạn ở một lĩnh vực duy nhất mà là nơi học tập cho mọi ngành học (Ngoại ngữ, IT, Y khoa, Luật, Chứng chỉ...). Đặc biệt, Flama xây dựng một hệ sinh thái mở cho phép mọi người cùng đóng góp và chia sẻ để tạo nên kho dữ liệu bộ thẻ chuyên biệt cho từng chủ đề.',
-  },
-  {
-    question: 'Mục đích của Flama là gì?',
-    answer:
-      'Flama giúp bạn tự do tạo bộ thẻ theo cách riêng và duy trì nhịp học mỗi ngày. Xa hơn, Flama là nền tảng cho phép cộng đồng cùng đóng góp và kiến tạo nên kho dữ liệu học tập chuyên biệt, dễ tiếp cận và có cấu trúc.',
-  },
-  {
-    question: 'Flama phù hợp với ai?',
-    answer:
-      'Phù hợp với người học theo kiểu mỗi ngày một chút nhưng đều: học ngoại ngữ, ôn chứng chỉ, ghi nhớ thuật ngữ IT, Y khoa, Luật hoặc bất kỳ kiến thức nào cần nhớ lâu.',
-  },
-  {
-    question: 'Tôi có thể tự tạo bộ thẻ không?',
-    answer:
-      'Có. Bạn có thể tạo note type, nhập nội dung, tổ chức theo deck và tùy chỉnh template hiển thị theo cách học của mình.',
-  },
-  {
-    question: 'Audio trong Flama dùng để làm gì?',
-    answer:
-      'Audio giúp luyện cách đọc, nhịp nói và phản xạ nghe ngay trong lúc ôn thẻ thay vì chỉ học bằng mặt chữ.',
-  },
-  {
-    question: 'Flama có dùng tốt trên điện thoại không?',
-    answer:
-      'Có. Giao diện responsive hỗ trợ các phiên học ngắn trên điện thoại cũng như quản lý nội dung trên máy tính.',
-  },
-  {
-    question: 'Deck lớn có làm tôi bị ngợp không?',
-    answer:
-      'Flama chia thẻ theo New, Learn và Due, sau đó ưu tiên phần sắp quên để bạn tập trung vào khối lượng thực sự cần học hôm nay.',
-  },
-  {
-    question: 'Tôi có thể chia sẻ bộ thẻ không?',
-    answer:
-      'Có. Marketplace hỗ trợ chia sẻ deck và note type. Deck được cài theo logical overlay để nguồn học liệu và tiến độ cá nhân luôn tách biệt.',
-  },
-  {
-    question: 'Tôi có thể chuyển dữ liệu sang nền tảng khác không?',
-    answer:
-      'Có. Flama hỗ trợ các luồng import và export phổ biến như CSV/TSV để bạn chủ động với dữ liệu của mình.',
-  },
-  {
-    question: 'Flama có miễn phí không?',
-    answer:
-      'Bạn có thể đăng ký và dùng luồng học cốt lõi. Marketplace có cả nội dung miễn phí và trả phí tùy người chia sẻ.',
-  },
-]
-
-const sponsors = [
-  {
-    label: 'Kim cương',
-    icon: Gem,
-    names: ['Trịnh Văn Chung'],
-    className: 'border-sky-500/25 bg-sky-500/8 text-sky-700 dark:text-sky-300',
-  },
-  {
-    label: 'Vàng',
-    icon: Trophy,
-    names: ['Hoàn Xuân Nguyên', 'Nguyễn Xuân Bách'],
-    className: 'border-amber-500/25 bg-amber-500/8 text-amber-700 dark:text-amber-300',
-  },
-  {
-    label: 'Bạch kim',
-    icon: Award,
-    names: ['Thân Đức Trí', 'Đỗ Việt Hưng'],
-    className: 'border-violet-500/25 bg-violet-500/8 text-violet-700 dark:text-violet-300',
-  },
-]
 
 function SectionHeading({
   eyebrow,
@@ -270,19 +67,20 @@ function SectionHeading({
 }
 
 function ReviewButtons() {
+  const { t } = useTranslation('landing')
   return (
     <div className="grid grid-cols-4 gap-1.5 text-center text-[11px] font-semibold">
       <span className="rounded-md bg-rose-500/10 px-1.5 py-1.5 text-rose-700 dark:text-rose-300">
-        Học lại
+        {t('hero.review_buttons.again')}
       </span>
       <span className="rounded-md bg-amber-500/10 px-1.5 py-1.5 text-amber-700 dark:text-amber-300">
-        Khó
+        {t('hero.review_buttons.hard')}
       </span>
       <span className="rounded-md bg-emerald-500/10 px-1.5 py-1.5 text-emerald-700 dark:text-emerald-300">
-        Tốt
+        {t('hero.review_buttons.good')}
       </span>
       <span className="rounded-md bg-sky-500/10 px-1.5 py-1.5 text-sky-700 dark:text-sky-300">
-        Dễ
+        {t('hero.review_buttons.easy')}
       </span>
     </div>
   )
@@ -318,21 +116,22 @@ function HeroCard({
 }
 
 function ProductPreview() {
+  const { t } = useTranslation('landing')
   return (
     <section className="relative overflow-hidden border-y bg-muted/20 py-16 md:py-24">
       <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_50%_30%,color-mix(in_oklab,var(--color-primary)_12%,transparent),transparent_50%)]" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_22%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_22%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_85%_75%_at_50%_50%,black_70%,transparent_100%)]" />
       <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
         <SectionHeading
-          eyebrow="Product preview"
-          title="Một workspace cho toàn bộ vòng đời flashcard"
-          description="Tạo nội dung, học theo scheduler và quản lý collection mà không phải nhảy qua nhiều công cụ."
+          eyebrow={t('product_preview.eyebrow')}
+          title={t('product_preview.title')}
+          description={t('product_preview.description')}
         />
         <div className="grid gap-5 lg:grid-cols-3">
           <PreviewFrame
             path="/flashcards/notes/new"
-            title="Tạo note linh hoạt"
-            description="Chọn NoteType, nhập field và gán deck trong một luồng."
+            title={t('product_preview.frame_create.title')}
+            description={t('product_preview.frame_create.description')}
             icon={PencilLine}
           >
             <div className="space-y-3">
@@ -350,20 +149,20 @@ function ProductPreview() {
           </PreviewFrame>
           <PreviewFrame
             path="/study?deck_id=…"
-            title="Ôn đúng thẻ cần nhớ"
-            description="Scheduler đưa thẻ đến hạn vào một phiên học tập trung."
+            title={t('product_preview.frame_study.title')}
+            description={t('product_preview.frame_study.description')}
             icon={Brain}
           >
             <div className="space-y-4">
               <div className="flex justify-center gap-2">
-                <Badge variant="secondary">New 16</Badge>
-                <Badge variant="outline">Learn 7</Badge>
-                <Badge variant="destructive">Due 24</Badge>
+                <Badge variant="secondary">{t('product_preview.frame_study.badge_new')}</Badge>
+                <Badge variant="outline">{t('product_preview.frame_study.badge_learn')}</Badge>
+                <Badge variant="destructive">{t('product_preview.frame_study.badge_due')}</Badge>
               </div>
               <div className="rounded-xl border bg-background p-5 text-center">
-                <p className="font-semibold">What is least privilege?</p>
+                <p className="font-semibold">{t('product_preview.frame_study.mock_front')}</p>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Design principle for limiting permissions.
+                  {t('product_preview.frame_study.mock_back')}
                 </p>
               </div>
               <ReviewButtons />
@@ -371,8 +170,8 @@ function ProductPreview() {
           </PreviewFrame>
           <PreviewFrame
             path="/browse"
-            title="Tìm và sửa nhanh"
-            description="Duyệt deck tree, lọc thẻ và kiểm tra nội dung tại chỗ."
+            title={t('product_preview.frame_browse.title')}
+            description={t('product_preview.frame_browse.description')}
             icon={Search}
           >
             <div className="grid h-44 grid-cols-[0.7fr_1.5fr] gap-3">
@@ -436,14 +235,21 @@ function PreviewFrame({
 }
 
 function MiniDemo() {
+  const { t } = useTranslation('landing')
   const [revealed, setRevealed] = useState(false)
   const [rating, setRating] = useState<'again' | 'hard' | 'good' | 'easy'>('good')
   const labels = {
-    again: 'Nhắc lại sau 1 phút',
-    hard: 'Nhắc lại sau 10 phút',
-    good: 'Nhắc lại sau 1 ngày',
-    easy: 'Nhắc lại sau 5 ngày',
+    again: t('mini_demo.rating_intervals.again'),
+    hard: t('mini_demo.rating_intervals.hard'),
+    good: t('mini_demo.rating_intervals.good'),
+    easy: t('mini_demo.rating_intervals.easy'),
   }
+
+  const bullets = (t('mini_demo.bullets', { returnObjects: true }) as string[]) || [
+    'Front/Back rõ ràng, tập trung kiến thức chính.',
+    'Again/Hard/Good/Easy điều chỉnh lịch học.',
+    'Phù hợp cho các phiên ôn ngắn mỗi ngày.',
+  ]
 
   return (
     <section className="relative overflow-hidden py-16 md:py-24">
@@ -451,19 +257,15 @@ function MiniDemo() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_50%,black_70%,transparent_100%)]" />
       <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 md:px-6 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <Badge variant="secondary">Mini demo</Badge>
+          <Badge variant="secondary">{t('mini_demo.badge')}</Badge>
           <h2 className="mt-4 text-3xl font-bold tracking-tight md:text-4xl">
-            Học một thẻ trong vài giây
+            {t('mini_demo.title')}
           </h2>
           <p className="mt-4 text-lg leading-8 text-muted-foreground">
-            Lật thẻ, tự đánh giá mức độ nhớ và để Flama đề xuất nhịp ôn tiếp theo.
+            {t('mini_demo.description')}
           </p>
           <ul className="mt-6 space-y-3 text-sm">
-            {[
-              'Front/Back rõ ràng, tập trung kiến thức chính.',
-              'Again/Hard/Good/Easy điều chỉnh lịch học.',
-              'Phù hợp cho các phiên ôn ngắn mỗi ngày.',
-            ].map((item) => (
+            {bullets.map((item) => (
               <li key={item} className="flex gap-3">
                 <Check className="mt-0.5 size-4 shrink-0 text-primary" />
                 {item}
@@ -482,24 +284,24 @@ function MiniDemo() {
               >
                 <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl bg-muted/25 p-8 text-center backface-hidden">
                   <span className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
-                    Mặt trước
+                    {t('mini_demo.card.front_label')}
                   </span>
                   <strong className="mt-4 text-2xl leading-relaxed">
-                    IAM Role khác IAM User ở điểm nào?
+                    {t('mini_demo.card.question')}
                   </strong>
                   <span className="mt-4 text-xs text-muted-foreground">
-                    Chạm để lật thẻ
+                    {t('mini_demo.card.front_hint')}
                   </span>
                 </div>
                 <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl bg-muted/25 p-8 text-center backface-hidden rotate-y-180">
                   <span className="text-xs font-semibold tracking-[0.16em] text-primary uppercase">
-                    Mặt sau
+                    {t('mini_demo.card.back_label')}
                   </span>
                   <strong className="mt-4 text-2xl leading-relaxed">
-                    Role dùng credentials tạm thời; User thường có danh tính cố định.
+                    {t('mini_demo.card.answer')}
                   </strong>
                   <span className="mt-4 text-xs text-muted-foreground">
-                    Chạm để xem lại câu hỏi
+                    {t('mini_demo.card.back_hint')}
                   </span>
                 </div>
               </div>
@@ -520,7 +322,8 @@ function MiniDemo() {
               ))}
             </div>
             <p className="text-center text-sm text-muted-foreground">
-              Lịch gợi ý: <strong className="text-foreground">{labels[rating]}</strong>
+              {t('mini_demo.schedule_label', { schedule: '___' }).split('___')[0]}
+              <strong className="text-foreground">{labels[rating]}</strong>
             </p>
           </CardContent>
         </Card>
@@ -567,6 +370,7 @@ function SponsorLane({
 }
 
 export function LandingPage() {
+  const { t } = useTranslation('landing')
   const { data } = useBootstrap()
   const authenticated = Boolean(data?.user)
 
@@ -577,6 +381,122 @@ export function LandingPage() {
   const primaryTo = '/register'
   const secondaryTo = '/login'
 
+  const steps = [
+    {
+      title: t('how_it_works.steps.step_1.title'),
+      description: t('how_it_works.steps.step_1.description'),
+      icon: PencilLine,
+    },
+    {
+      title: t('how_it_works.steps.step_2.title'),
+      description: t('how_it_works.steps.step_2.description'),
+      icon: CalendarCheck2,
+    },
+    {
+      title: t('how_it_works.steps.step_3.title'),
+      description: t('how_it_works.steps.step_3.description'),
+      icon: TrendingUp,
+    },
+  ]
+
+  const useCases = (t('use_cases.items', { returnObjects: true }) as string[]) || []
+
+  const benefits = [
+    {
+      title: t('benefits.items.srs.title'),
+      description: t('benefits.items.srs.description'),
+      icon: Zap,
+    },
+    {
+      title: t('benefits.items.due_focus.title'),
+      description: t('benefits.items.due_focus.description'),
+      icon: Target,
+    },
+    {
+      title: t('benefits.items.clear_progress.title'),
+      description: t('benefits.items.clear_progress.description'),
+      icon: BarChart3,
+    },
+    {
+      title: t('benefits.items.focused_experience.title'),
+      description: t('benefits.items.focused_experience.description'),
+      icon: Focus,
+    },
+  ]
+
+  const roadmap = [
+    {
+      label: t('roadmap.tiers.now.label'),
+      description: t('roadmap.tiers.now.description'),
+      tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+      items: (
+        t('roadmap.tiers.now.items', { returnObjects: true }) as Array<{
+          title: string
+          desc: string
+        }>
+      ).map((item) => [item.title, item.desc] as [string, string]),
+    },
+    {
+      label: t('roadmap.tiers.next.label'),
+      description: t('roadmap.tiers.next.description'),
+      tone: 'bg-primary/10 text-primary',
+      items: (
+        t('roadmap.tiers.next.items', { returnObjects: true }) as Array<{
+          title: string
+          desc: string
+        }>
+      ).map((item) => [item.title, item.desc] as [string, string]),
+    },
+    {
+      label: t('roadmap.tiers.later.label'),
+      description: t('roadmap.tiers.later.description'),
+      tone: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+      items: (
+        t('roadmap.tiers.later.items', { returnObjects: true }) as Array<{
+          title: string
+          desc: string
+        }>
+      ).map((item) => [item.title, item.desc] as [string, string]),
+    },
+  ]
+
+  const updates = (
+    t('updates.items', { returnObjects: true }) as Array<{
+      tag: string
+      date: string
+      title: string
+      description: string
+    }>
+  ) || []
+
+  const faqs = (
+    t('faq.items', { returnObjects: true }) as Array<{
+      question: string
+      answer: string
+    }>
+  ) || []
+
+  const sponsors = [
+    {
+      label: t('sponsors.tiers.diamond'),
+      icon: Gem,
+      names: ['Trịnh Văn Chung'],
+      className: 'border-sky-500/25 bg-sky-500/8 text-sky-700 dark:text-sky-300',
+    },
+    {
+      label: t('sponsors.tiers.gold'),
+      icon: Trophy,
+      names: ['Hoàn Xuân Nguyên', 'Nguyễn Xuân Bách'],
+      className: 'border-amber-500/25 bg-amber-500/8 text-amber-700 dark:text-amber-300',
+    },
+    {
+      label: t('sponsors.tiers.platinum'),
+      icon: Award,
+      names: ['Thân Đức Trí', 'Đỗ Việt Hưng'],
+      className: 'border-violet-500/25 bg-violet-500/8 text-violet-700 dark:text-violet-300',
+    },
+  ]
+
   return (
     <div className="overflow-hidden">
       <section className="relative overflow-hidden border-b">
@@ -586,31 +506,35 @@ export function LandingPage() {
           <div className="space-y-7">
             <Badge className="border-primary/20 bg-primary/8 text-primary" variant="secondary">
               <Flame className="fill-current" />
-              Học đều hơn, nhớ lâu hơn
+              {t('hero.badge')}
             </Badge>
             <div className="space-y-5">
               <h1 className="max-w-3xl text-5xl font-bold tracking-[-0.045em] text-balance sm:text-6xl lg:text-7xl">
-                Giữ <span className="text-primary">lửa</span> học tập cho mọi kiến thức.
+                {t('hero.title_start')}<span className="text-primary">{t('hero.title_highlight')}</span>{t('hero.title_end')}
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-muted-foreground md:text-xl">
-                Nền tảng học tập đa lĩnh vực giúp bạn ghi nhớ ngoại ngữ, IT, Y khoa, Luật hay bất kỳ kiến thức nào. Cùng cộng đồng đóng góp và kiến tạo kho dữ liệu bộ thẻ chuyên biệt cho mọi chủ đề.
+                {t('hero.description')}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button size="lg" asChild>
                 <Link to={primaryTo}>
-                  {authenticated ? 'Mở dashboard' : 'Bắt đầu học miễn phí'}
+                  {authenticated ? t('hero.cta_open_dashboard') : t('hero.cta_start_free')}
                   <ArrowRight />
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
                 <Link to={secondaryTo}>
-                  {authenticated ? 'Xem tiến độ' : 'Đăng nhập'}
+                  {authenticated ? t('hero.cta_view_progress') : t('hero.cta_login')}
                 </Link>
               </Button>
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-3 pt-2 text-sm text-muted-foreground">
-              {['Học mọi lĩnh vực', 'Kho dữ liệu cộng đồng đóng góp', 'Spaced Repetition thông minh'].map((item) => (
+              {[
+                t('hero.proof_points.all_fields'),
+                t('hero.proof_points.community_data'),
+                t('hero.proof_points.smart_srs'),
+              ].map((item) => (
                 <span key={item} className="inline-flex items-center gap-2">
                   <Check className="size-4 text-emerald-600" />
                   {item}
@@ -622,24 +546,24 @@ export function LandingPage() {
             <div className="absolute inset-0 m-auto h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
             <HeroCard
               className="top-12 hero-stack-card hero-stack-card-3"
-              category="Tiếng Anh"
+              category={t('hero.cards.english.category')}
               categoryClassName="bg-violet-500/10 text-violet-700 dark:text-violet-300"
-              front="affect vs effect"
-              back={<span>affect (v) = ảnh hưởng · effect (n) = kết quả</span>}
+              front={t('hero.cards.english.front')}
+              back={<span>{t('hero.cards.english.back')}</span>}
             />
             <HeroCard
               className="top-12 hero-stack-card hero-stack-card-2"
-              category="IT · AWS"
+              category={t('hero.cards.it_aws.category')}
               categoryClassName="bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              front="S3 dùng để làm gì?"
-              back={<span>Object storage có độ bền và khả năng mở rộng cao.</span>}
+              front={t('hero.cards.it_aws.front')}
+              back={<span>{t('hero.cards.it_aws.back')}</span>}
             />
             <HeroCard
               className="top-12 hero-stack-card hero-stack-card-1"
-              category="Vật lý cơ bản"
+              category={t('hero.cards.physics.category')}
               categoryClassName="bg-sky-500/10 text-sky-700 dark:text-sky-300"
-              front={<>Định luật II Newton</>}
-              back={<span className="text-2xl">F = ma</span>}
+              front={<>{t('hero.cards.physics.front')}</>}
+              back={<span className="text-2xl">{t('hero.cards.physics.back')}</span>}
             />
           </div>
         </div>
@@ -649,9 +573,9 @@ export function LandingPage() {
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_50%,black_60%,transparent_100%)]" />
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <SectionHeading
-            eyebrow="Cách hoạt động"
-            title="Từ kiến thức mới đến trí nhớ dài hạn"
-            description="Một vòng lặp đơn giản để bạn bắt đầu nhanh và duy trì được nhịp học."
+            eyebrow={t('how_it_works.eyebrow')}
+            title={t('how_it_works.title')}
+            description={t('how_it_works.description')}
           />
           <div className="grid gap-5 md:grid-cols-3">
             {steps.map((item, index) => (
@@ -677,9 +601,9 @@ export function LandingPage() {
       <section className="py-16 md:py-24">
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <SectionHeading
-            eyebrow="Linh hoạt"
-            title="Một phương pháp, nhiều lĩnh vực"
-            description="Bất kỳ kiến thức nào cần ghi nhớ đều có thể trở thành một deck có cấu trúc."
+            eyebrow={t('use_cases.eyebrow')}
+            title={t('use_cases.title')}
+            description={t('use_cases.description')}
           />
           <div className="flex flex-wrap justify-center gap-3">
             {useCases.map((item) => (
@@ -697,7 +621,7 @@ export function LandingPage() {
 
       <section className="border-y bg-muted/25 py-16 md:py-24">
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
-          <SectionHeading eyebrow="Lợi ích" title="Tại sao chọn Flama?" />
+          <SectionHeading eyebrow={t('benefits.eyebrow')} title={t('benefits.title')} />
           <div className="grid gap-x-10 gap-y-8 md:grid-cols-2">
             {benefits.map((item) => (
               <div key={item.title} className="flex gap-4">
@@ -720,9 +644,9 @@ export function LandingPage() {
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_80%_70%_at_50%_50%,black_60%,transparent_100%)]" />
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <SectionHeading
-            eyebrow="Roadmap"
-            title="Flama đang đi tới đâu?"
-            description="Những gì đã có, đang được ưu tiên và nằm trong tầm nhìn dài hạn."
+            eyebrow={t('roadmap.eyebrow')}
+            title={t('roadmap.title')}
+            description={t('roadmap.description')}
           />
           <div className="grid gap-5 lg:grid-cols-3">
             {roadmap.map((column) => (
@@ -757,9 +681,9 @@ export function LandingPage() {
       <section id="landing-updates" className="py-16 md:py-24">
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <SectionHeading
-            eyebrow="Product updates"
-            title="Cập nhật mới cho người học"
-            description="Những cải tiến gần đây giúp phiên học nhanh, an toàn và tự nhiên hơn."
+            eyebrow={t('updates.eyebrow')}
+            title={t('updates.title')}
+            description={t('updates.description')}
           />
           <div className="grid gap-5 md:grid-cols-2">
             {updates.map((item) => (
@@ -780,7 +704,7 @@ export function LandingPage() {
 
       <section className="border-y bg-muted/25 py-16 md:py-24">
         <div className="mx-auto w-full max-w-4xl px-4 md:px-6">
-          <SectionHeading eyebrow="FAQ" title="Câu hỏi thường gặp" />
+          <SectionHeading eyebrow={t('faq.eyebrow')} title={t('faq.title')} />
           <div className="space-y-3">
             {faqs.map((item, index) => (
               <details
@@ -806,9 +730,9 @@ export function LandingPage() {
       <section className="py-16 md:py-24">
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <SectionHeading
-            eyebrow="Community"
-            title="Nhà tài trợ thiên thần"
-            description="Cảm ơn những người đã góp sức duy trì hạ tầng và phát triển Flama."
+            eyebrow={t('sponsors.eyebrow')}
+            title={t('sponsors.title')}
+            description={t('sponsors.description')}
           />
           <div className="space-y-3">
             {sponsors.map((sponsor, index) => (
@@ -823,17 +747,17 @@ export function LandingPage() {
           <span className="flex size-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
             <ShieldCheck className="size-6" />
           </span>
-          <h2 className="mt-5 text-2xl font-bold">Dữ liệu của bạn thuộc về bạn.</h2>
+          <h2 className="mt-5 text-2xl font-bold">{t('privacy_callout.title')}</h2>
           <p className="mt-3 max-w-2xl leading-7 text-muted-foreground">
-            Flama tôn trọng quyền riêng tư và giữ dữ liệu học tập tách biệt theo tài khoản.
-            Đọc thêm trong{' '}
+            {t('privacy_callout.description_prefix')}
             <Link className="font-medium text-primary hover:underline" to="/terms">
-              Điều khoản
-            </Link>{' '}
-            và{' '}
+              {t('privacy_callout.terms_link')}
+            </Link>
+            {t('privacy_callout.and')}
             <Link className="font-medium text-primary hover:underline" to="/privacy">
-              Chính sách bảo mật
-            </Link>.
+              {t('privacy_callout.privacy_link')}
+            </Link>
+            {t('privacy_callout.dot')}
           </p>
         </div>
       </section>
@@ -846,15 +770,15 @@ export function LandingPage() {
             <div className="relative mx-auto max-w-3xl">
               <Rocket className="mx-auto size-8 text-primary" />
               <h2 className="mt-5 text-3xl font-bold tracking-tight text-balance md:text-5xl">
-                Sẵn sàng giữ lửa học tập mỗi ngày?
+                {t('final_cta.title')}
               </h2>
               <p className="mt-5 text-lg leading-8 text-background/70">
-                Bắt đầu bằng một bộ thẻ nhỏ và duy trì nhịp ôn đều đặn.
+                {t('final_cta.description')}
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
                 <Button size="lg" asChild>
                   <Link to={primaryTo}>
-                    {authenticated ? 'Tiếp tục học' : 'Bắt đầu học miễn phí'}
+                    {authenticated ? t('final_cta.btn_continue_study') : t('final_cta.btn_start_free')}
                     <ArrowRight />
                   </Link>
                 </Button>
@@ -865,7 +789,7 @@ export function LandingPage() {
                   asChild
                 >
                   <Link to={secondaryTo}>
-                    {authenticated ? 'Xem thống kê' : 'Đăng nhập'}
+                    {authenticated ? t('final_cta.btn_view_stats') : t('final_cta.btn_login')}
                   </Link>
                 </Button>
               </div>
@@ -876,11 +800,11 @@ export function LandingPage() {
 
       <section className="pb-16">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-4 text-sm text-muted-foreground md:px-6">
-          <span className="inline-flex items-center gap-2"><Layers3 className="size-4" /> NoteType linh hoạt</span>
-          <span className="inline-flex items-center gap-2"><Upload className="size-4" /> Import/Export</span>
-          <span className="inline-flex items-center gap-2"><Clock3 className="size-4" /> Spaced repetition</span>
-          <span className="inline-flex items-center gap-2"><Smartphone className="size-4" /> Responsive</span>
-          <span className="inline-flex items-center gap-2"><ShieldCheck className="size-4" /> Logical overlay</span>
+          <span className="inline-flex items-center gap-2"><Layers3 className="size-4" /> {t('feature_badges.flexible_notetype')}</span>
+          <span className="inline-flex items-center gap-2"><Upload className="size-4" /> {t('feature_badges.import_export')}</span>
+          <span className="inline-flex items-center gap-2"><Clock3 className="size-4" /> {t('feature_badges.spaced_repetition')}</span>
+          <span className="inline-flex items-center gap-2"><Smartphone className="size-4" /> {t('feature_badges.responsive')}</span>
+          <span className="inline-flex items-center gap-2"><ShieldCheck className="size-4" /> {t('feature_badges.logical_overlay')}</span>
         </div>
       </section>
     </div>

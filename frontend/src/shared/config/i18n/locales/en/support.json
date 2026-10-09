@@ -1,0 +1,343 @@
+{
+  "status": {
+    "open": "Pending",
+    "in_progress": "In Progress",
+    "resolved": "Resolved",
+    "rejected": "Rejected",
+    "closed": "Closed"
+  },
+  "category": {
+    "bug": {
+      "title": "Bug Report",
+      "subtitle": "Unresponsive buttons, layout issues, audio errors",
+      "placeholder_title": "Example: Start Study button on /study is unresponsive",
+      "placeholder_desc": "Describe the specific issue you encountered, which screen, error messages if any..."
+    },
+    "feature": {
+      "title": "New Idea",
+      "subtitle": "Feature proposals & tool requests",
+      "placeholder_title": "Example: Add Katakana alphabet review mode",
+      "placeholder_desc": "Describe the feature you want and how it helps Japanese learning..."
+    },
+    "ui": {
+      "title": "UI / UX",
+      "subtitle": "Layout, typography, colors",
+      "placeholder_title": "Example: Increase kanji font size on mobile devices",
+      "placeholder_desc": "Describe the UI area that needs polish and your suggestions..."
+    },
+    "other": {
+      "title": "Other Topic",
+      "subtitle": "Account, vocabulary, general support",
+      "placeholder_title": "Example: Feedback regarding N2 vocabulary deck content",
+      "placeholder_desc": "Your detailed feedback or question..."
+    }
+  },
+  "relative_time": {
+    "just_now": "Just now",
+    "minutes_ago": "{{count}}m ago",
+    "hours_ago": "{{count}}h ago",
+    "days_ago": "{{count}}d ago",
+    "sent_at": "Sent {{time}}"
+  },
+  "feedback": {
+    "badge": "Support & Feedback Hub",
+    "title": "System Feedback & Bug Reports",
+    "description": "Submit bug reports, feature suggestions, or UI improvements to help the Flama team refine the platform.",
+    "tabs": {
+      "create": "Submit Feedback",
+      "my_tickets": "My Tickets"
+    },
+    "step_category": "Feedback Category",
+    "step_category_hint": "Select 1 category",
+    "step_screen": "Screen Where Issue Occurred (URL)",
+    "get_current_url": "Get Current URL",
+    "url_placeholder": "Paste screen URL (e.g. http://localhost:5173/study)",
+    "quick_presets_label": "Quick presets:",
+    "recognized_screen": "Detected screen:",
+    "unrecognized_screen": "(Please enter a URL for auto-detection)",
+    "step_title": "Summary Title",
+    "optional": "Optional",
+    "step_desc": "Detailed Description",
+    "reproduce_steps": "Steps to Reproduce",
+    "reproduce_placeholder": "1. Open Browse page\n2. Select N3 deck\n3. Click Start Study and button does not respond...",
+    "step_screenshots": "Screenshots ({{count}}/5 images)",
+    "paste_hint": "Ctrl + V to paste image",
+    "upload_button": "Upload Image",
+    "upload_rules": "Supports PNG, JPG, WEBP (max 2MB). Take a screenshot and press Ctrl+V to paste directly.",
+    "submit_note": "Ticket will be delivered directly to the engineering team",
+    "submitting": "Submitting Ticket...",
+    "submit_button": "Submit Feedback Now",
+    "search_placeholder": "Search ticket code, title, content...",
+    "all_statuses": "All Statuses",
+    "all_categories": "All Categories",
+    "clear_filters": "Clear Filters",
+    "empty_tickets_title": "You haven't submitted any tickets yet",
+    "empty_tickets_desc": "Use the 'Submit Feedback' form to report issues or suggest ideas to the development team.",
+    "create_first_ticket": "Create First Ticket",
+    "empty_search_title": "No matching tickets found",
+    "empty_search_desc": "No reports match your current search filters.",
+    "clear_search_filters": "Clear Search Filters",
+    "copy_code_tooltip": "Copy ticket code",
+    "replies_count": "{{count}} replies",
+    "images_count": "{{count}} images",
+    "view_details": "View Details",
+    "char_count": "{{count}}/{{max}} characters",
+    "view_large_image": "View large image",
+    "delete_image": "Delete image",
+    "screens": {
+      "dashboard": "Home / Overview",
+      "statistics": "Study Statistics",
+      "browse": "Browse Words & Flashcards",
+      "study": "Flashcard Study Screen",
+      "note_types": "Note Type Management",
+      "installed_decks": "Installed Decks",
+      "import": "Import Cards",
+      "marketplace_decks_publish": "Publish Deck",
+      "marketplace_decks": "Deck Marketplace",
+      "marketplace_note_types_publish": "Publish Note Type",
+      "marketplace_note_types": "Note Type Marketplace",
+      "orders": "Orders List",
+      "settings_yomitan": "Yomitan Settings",
+      "settings_mcp_tokens": "MCP Access Tokens",
+      "feedback": "Feedback & Bug Report",
+      "tickets": "Support Tickets",
+      "admin_users": "Admin - User Management",
+      "admin_permissions": "Admin - Permissions",
+      "admin_payments": "Admin - Payments",
+      "admin_tts": "Admin - TTS Provider",
+      "admin_image_library": "Admin - Image Library",
+      "admin_support": "Admin - Donation Settings",
+      "dashboard_default": "Home (Dashboard)"
+    },
+    "presets": {
+      "study": "Study Flashcards",
+      "browse": "Browse Words",
+      "note_types": "Manage Note Types",
+      "marketplace": "Marketplace",
+      "dashboard": "Home"
+    }
+  },
+  "ticket_detail": {
+    "back_to_list": "Back to Tickets List",
+    "reported_date": "Reported on {{date}}",
+    "guest": "Guest",
+    "no_email": "No email",
+    "reported_screen": "Reported Screen:",
+    "description_section": "Detailed Description:",
+    "reproduce_section": "Steps to Reproduce:",
+    "screenshots_section": "Attached Screenshots ({{count}}):",
+    "conversation_title": "Discussion History ({{count}})",
+    "in_progress_title": "Ticket In Progress",
+    "in_progress_desc": "Your request has been received. Our administrators will respond here as soon as possible.",
+    "admin_label": "Administrator (Admin)",
+    "you_label": "You",
+    "reply_label": "Send a reply to Administrators:",
+    "send_shortcut": "Ctrl + Enter to send",
+    "reply_placeholder": "Enter additional information or your follow-up questions...",
+    "sending": "Sending...",
+    "send_reply": "Send Reply",
+    "not_found": "Ticket not found."
+  },
+  "donation": {
+    "badge": "Support Flama Platform",
+    "default_title": "Support System Sustainability",
+    "default_description": "Your contribution fuels continuous maintenance and community development.",
+    "status_banner": {
+      "headline_default": "Donation Transaction Result",
+      "amount_label": "Amount",
+      "recheck": "Recheck"
+    },
+    "online_card": {
+      "title": "Online Support (QR Code / Bank)",
+      "description": "Secure online payment via Bank QR Code / Napas247",
+      "amount_label": "Donation Amount (VND)",
+      "limit_hint": "From {{min}} VND to {{max}} VND",
+      "presets_label": "Suggested amounts:",
+      "anonymous_label": "Donate anonymously",
+      "anonymous_desc": "Do not show this donation in public contributor history.",
+      "guest_warning_title": "You are currently in guest mode",
+      "guest_warning_desc": "To keep contribution history attached to your account, please",
+      "guest_login_link": "Log in",
+      "guest_login_after": "before proceeding.",
+      "pay_button": "Pay {{amount}} via QR Code",
+      "view_history": "View my donation history"
+    },
+    "manual_card": {
+      "title": "Manual Bank Transfer",
+      "description": "Scan QR code or copy bank account details below",
+      "qr_hint": "Scan QR with your Banking app",
+      "qr_alt": "Transfer QR code",
+      "account_name": "Account Holder",
+      "account_number": "Account Number",
+      "copy": "Copy",
+      "copied": "Copied",
+      "thank_you_title": "A Thank You from Flama",
+      "default_thank_you": "Thank you for supporting and accompanying Flama's journey!"
+    },
+    "modal": {
+      "title": "Support Flama Payment",
+      "subtitle": "Automated payment gateway VietQR / Napas247",
+      "safe_badge": "Secure",
+      "success_badge": "TRANSACTION SUCCESSFUL",
+      "success_title": "Thank you for supporting Flama! 🎉",
+      "success_desc": "The system has received your contribution and automatically recorded it.",
+      "donated_amount": "Contribution amount:",
+      "order_code": "Order code:",
+      "complete": "Finish",
+      "amount_to_transfer": "Amount to Transfer",
+      "qr_scan_hint": "Quickly scan with any Banking app",
+      "qr_generating": "Generating QR code...",
+      "vietqr_alt": "VietQR payment code",
+      "bank_account": "Account Number",
+      "transfer_reference": "Transfer Reference",
+      "required_badge": "Required",
+      "waiting_title": "Awaiting your payment...",
+      "waiting_desc": "Automatically detected once transferred",
+      "check_status": "Check",
+      "open_payos": "Open separate PayOS gateway",
+      "close": "Close window"
+    }
+  },
+  "tts_guide": {
+    "title": "Guide to Getting TTS Audio API Keys",
+    "description": "Step-by-step instructions for VoiceVox, OpenAI, Google TTS, and ElevenLabs API keys to generate native Japanese audio for Flama flashcards.",
+    "to_browse": "Go to Browse Cards",
+    "alert_title": "Why should you use your personal API Key?",
+    "alert_desc": "Flama supports direct integration with popular Text-to-Speech engines. Personal API Keys ensure rapid audio synthesis, avoid shared bandwidth throttling, and give you complete control over voice quality.",
+    "step_badge": "Step {{step}}",
+    "voicevox": {
+      "badge": "Free & Default",
+      "desc": "Natural Japanese native voice synthesis (Shikikoin Metan, Kasukabe Tsumugi, Namine Ritsu...)",
+      "open_page": "Open Key Page",
+      "step1_title": "Visit Su-Shiki API",
+      "step1_desc": "Click the link below or visit the free key generation website directly:",
+      "step2_title": "Generate & Copy API Key",
+      "step2_desc": "On Su-Shiki, click Generate Key and copy your generated API Key string.",
+      "step3_title": "Paste into Flama",
+      "step3_desc": "Open Flama, navigate to Browse > Select card > Click VoiceVox TTS > Paste key into VoiceVox API Key field.",
+      "points_alert_title": "Notice regarding VoiceVox point quota:",
+      "points_alert_desc": "Each voice playback or audio generation deducts a small point amount from your key. Points regenerate over time, or you can generate a fresh key on Su-Shiki."
+    },
+    "other_services": "Other AI Voice Services",
+    "openai": {
+      "title": "OpenAI TTS",
+      "badge": "AI Voice",
+      "link": "Get OpenAI Key",
+      "desc": "High quality AI voices (Alloy, Echo, Fable, Onyx, Nova, Shimmer).",
+      "step1": "Log in to your account at <strong>platform.openai.com</strong>.",
+      "step2": "Go to <strong>API Keys</strong> > Select <strong>Create new secret key</strong>.",
+      "step3": "Copy the key string starting with <code>sk-...</code> and store it securely."
+    },
+    "elevenlabs": {
+      "title": "ElevenLabs",
+      "badge": "Realistic Voice",
+      "link": "Get ElevenLabs Key",
+      "desc": "Ultra-realistic emotional voice synthesis with fine prosody controls.",
+      "step1": "Visit and log in to <strong>elevenlabs.io</strong>.",
+      "step2": "Click your profile picture at bottom left > <strong>Profile + API Key</strong>.",
+      "step3": "Click the eye icon to reveal and copy your personal API Key."
+    },
+    "google": {
+      "title": "Google Cloud / Gemini",
+      "badge": "Google Speech",
+      "link": "Google AI Studio",
+      "desc": "Multi-lingual speech synthesis and cutting-edge Google AI models.",
+      "step1": "Visit <strong>aistudio.google.com</strong> or Google Cloud Console.",
+      "step2": "Click <strong>Get API key</strong> > Select <strong>Create API key</strong>.",
+      "step3": "Copy the key code and save it for use."
+    },
+    "faq": {
+      "title": "Frequently Asked Questions & Key Security",
+      "q1": "Is my API Key securely stored on Flama?",
+      "a1": "Yes. On Flama, all user-provided keys are encrypted with military-grade encryption (Fernet / AES-256) prior to storage and only invoked upon your explicit action.",
+      "q2": "Am I required to provide an API Key?",
+      "a2": "No, pre-generated audio plays without a key. A personal key is only required when performing batch VoiceVox generation for custom cards in the Browse view."
+    }
+  },
+  "audio_guide": {
+    "title": "Flama Audio Desktop Guide & Download",
+    "description": "Windows Desktop app providing unlimited local VOICEVOX & Kokoro TTS synthesis engines for Flama.",
+    "download_btn": "Download Flama Audio (FlamaAudio-Portable.exe)",
+    "sha256_btn": "SHA-256",
+    "docs_btn": "Docs & Troubleshooting",
+    "context_help_guide_title": "Flama Audio Desktop Handbook",
+    "context_help_troubleshoot_title": "Troubleshooting Audio Not Playing",
+    "warning_title": "Windows Download Notice (SmartScreen Warning Bypass)",
+    "warning_desc": "Because FlamaAudio-Portable.exe is self-compiled, Windows SmartScreen may flag a warning. To launch:",
+    "warning_steps": {
+      "s1": "1. Click the three dots (...)",
+      "s2": "2. Select Keep",
+      "s3": "3. Click expand next to Delete",
+      "s4": "4. Select Keep anyway"
+    },
+    "service_status": {
+      "title": "Flama Audio Service Status",
+      "connected": "Connected (127.0.0.1:4791)",
+      "offline": "Offline",
+      "port_info": "Local service port: 127.0.0.1:4791",
+      "troubleshoot_hint": "Having issues?",
+      "troubleshoot_link": "View troubleshooting guide",
+      "check_btn": "Check Connection"
+    },
+    "features": {
+      "unlimited": {
+        "title": "Unlimited & Free",
+        "desc": "Synthesize voice directly on PC hardware without API costs or quota limits."
+      },
+      "pair": {
+        "title": "Secure Pairing (PNA Token)",
+        "desc": "Private Network Access protected by Pair Code approval, keeping your machine completely safe."
+      },
+      "engines": {
+        "title": "VOICEVOX & Kokoro Offline",
+        "desc": "Built-in natural Japanese character voices plus multi-lingual Kokoro model with pitch and speed sliders."
+      }
+    },
+    "steps": {
+      "title": "Startup & Usage Workflow",
+      "subtitle": "Takes less than 1 minute to setup local speech synthesis on Windows.",
+      "s1_title": "Download & Launch",
+      "s1_desc": "Download FlamaAudio-Portable.exe and run directly; service starts on port 4791.",
+      "s2_title": "Request Pairing",
+      "s2_desc": "In Deck Audio Generator or Browse, click connect device.",
+      "s3_title": "Approve in App",
+      "s3_desc": "Flama Audio Desktop will prompt a dialogue. Click Approve to securely register token.",
+      "s4_title": "Batch Audio Synthesis",
+      "s4_desc": "Select character voice, adjust parameters, and generate speech for thousands of cards."
+    },
+    "callout": {
+      "title": "Experience Audio Generation Now",
+      "desc": "Automatically scan decks and batch generate audio with a single click.",
+      "open_studio": "Open Deck Audio Studio",
+      "browse_cards": "Browse Cards"
+    },
+    "faq": {
+      "title": "Frequently Asked Questions & Troubleshooting",
+      "q1": "App reports \"Cannot connect to Flama Audio Service (port 4791)\"?",
+      "a1": "Ensure Flama Audio Desktop (FlamaAudio-Portable.exe) is open. If blocked by Windows Firewall, allow access on Private networks.",
+      "q2": "How do I install the VOICEVOX Engine?",
+      "a2": "Flama Audio Desktop includes automated engine management. Simply click \"Download & Install Engine\" in Desktop app when prompted.",
+      "related_docs": "Related Guides & Documentation:",
+      "batch_link": "Batch Audio Synthesis",
+      "cloud_link": "Cloud TTS Configuration",
+      "troubleshoot_link": "Fix Audio Glitches"
+    }
+  },
+  "toast": {
+    "copied": "Copied {{name}}",
+    "ticket_sent": "Submitted ticket [{{code}}] successfully! Our team will follow up soon.",
+    "ticket_failed": "Failed to submit bug report.",
+    "image_only": "Only image files (PNG, JPG, WEBP, GIF) are accepted!",
+    "image_too_large": "Image size exceeds 2MB limit. Please choose a smaller image.",
+    "max_images": "Maximum 5 attachments reached!",
+    "image_uploaded": "Screenshot uploaded!",
+    "upload_failed": "Failed to upload image.",
+    "clipboard_uploading": "Uploading image from clipboard...",
+    "reply_sent": "Reply sent successfully!",
+    "reply_failed": "Failed to send reply.",
+    "checkout_created": "Payment session created! Scan QR code to complete.",
+    "checkout_failed": "Unable to initialize payment.",
+    "audio_connected": "Connected successfully to Flama Audio Desktop (127.0.0.1:4791)!",
+    "audio_offline": "Flama Audio Desktop not detected on port 4791."
+  }
+}

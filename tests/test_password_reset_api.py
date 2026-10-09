@@ -29,7 +29,7 @@ class PasswordResetApiTests(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SECRET_KEY": "test-secret-key-for-password-reset",
-                "PUBLIC_APP_URL": "https://flama.stmtp.com",
+                "PUBLIC_APP_URL": "https://flama.vn",
                 "EMAIL_ENABLED": True,
                 "EMAIL_PROVIDER": "memory",
                 "EMAIL_ENVIRONMENT": "test",

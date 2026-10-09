@@ -25,6 +25,7 @@ vi.mock('@/app/api', () => ({
 
 import { StudyQuickEditDialog } from './StudyQuickEditDialog'
 import type { StudyContentArtifact, StudyTemplateArtifact } from '../types'
+import { canonicalDigest } from '../session/canonicalDigest'
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
@@ -119,6 +120,67 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 }
 
 describe('StudyQuickEditDialog', () => {
+  it('uses frozen note fields and excludes aliases while authoritative detail is loading', async () => {
+    mocks.get.mockImplementation(() => new Promise(() => {}))
+    const projection = {
+      schema_version: 'template-input-bindings.v1' as const,
+      input_bindings: { term: 'field-word' },
+      field_defs: [
+        { id: 'field-word', name: 'Word', field_type: 'text', required: true, position: 0 },
+        { id: 'field-meaning', name: 'Meaning', field_type: 'text', position: 1 },
+      ],
+    }
+    const template = { ...mockTemplate,
+      field_defs: [...mockTemplate.field_defs, { id: 'alias-term', name: 'term', field_type: 'text' }],
+      binding_projection: { ...projection, fingerprint: canonicalDigest(projection) },
+    }
+    const content = { ...mockContent, field_values: { Word: 'dog', Meaning: 'animal', term: 'dog' } }
+    const onCardUpdated = vi.fn()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyQuickEditDialog open={true} onOpenChange={vi.fn()}
+        cardId="card-123" template={template} content={content} onCardUpdated={onCardUpdated} />))
+    })
+    expect(document.querySelector('input[placeholder*="term"]')).toBeNull()
+    expect(document.querySelector('textarea[placeholder*="term"]')).toBeNull()
+    const word = document.querySelector('input[placeholder*="Word"]') as HTMLInputElement
+    expect(word.value).toBe('dog')
+    await act(async () => { setNativeValue(word, 'cat') })
+    const save = Array.from(document.querySelectorAll('button')).find((button) => (
+      button.textContent?.includes('Lưu thay đổi')
+    ))
+    await act(async () => { save?.click() })
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', expect.objectContaining({
+      field_values: { Word: 'cat', Meaning: 'animal' },
+    }))
+  })
+
+  it('does not use a projected alias as a same-name note value before detail loads', async () => {
+    mocks.get.mockImplementation(() => new Promise(() => {}))
+    const projection = {
+      schema_version: 'template-input-bindings.v1' as const,
+      input_bindings: { Word: 'field-meaning' },
+      field_defs: [
+        { id: 'field-word', name: 'Word', field_type: 'text', position: 0 },
+        { id: 'field-meaning', name: 'Meaning', field_type: 'text', position: 1 },
+      ],
+    }
+    const template = { ...mockTemplate, binding_projection: { ...projection, fingerprint: canonicalDigest(projection) } }
+    const content = { ...mockContent, field_values: { Word: 'projected meaning', Meaning: 'real meaning' } }
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyQuickEditDialog open={true} onOpenChange={vi.fn()}
+        cardId="card-123" template={template} content={content} onCardUpdated={vi.fn()} />))
+    })
+    const word = document.querySelector('input[placeholder*="Word"]') as HTMLInputElement
+    expect(word.value).toBe('')
+    expect((document.querySelector('textarea[placeholder*="Meaning"]') as HTMLTextAreaElement).value).toBe('real meaning')
+  })
+
   it('renders pre-populated field values immediately from study session content', async () => {
     const onOpenChange = vi.fn()
     const onCardUpdated = vi.fn()

@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from app.repositories import deck_install_rebase_repository
+from app.services import release_core
 from models import db
 from models.deck_clone_field_def_override import DeckCloneFieldDefOverride
 from models.deck_clone_field_order_override import DeckCloneFieldOrderOverride
@@ -70,7 +71,7 @@ def _stable(value: Any) -> str:
 
 
 def _same(left: Any, right: Any) -> bool:
-    return _stable(left) == _stable(right)
+    return release_core.same(left, right)
 
 
 def _is_missing(value: Any) -> bool:
@@ -397,14 +398,14 @@ def get_update_diff(
     cursor_sequence, cursor_id = _decode_cursor(cursor)
     normalized_kind = str(entity_kind or "").strip().lower()
     normalized_operation = str(operation or "").strip().lower()
-    if not normalized_kind and normalized_operation in {"note_field", "field_def"}:
+    if not normalized_kind and normalized_operation in {"note_field", "field_def", "template"}:
         normalized_kind = normalized_operation
         normalized_operation = ""
     if normalized_kind in {"", "all"}:
         normalized_kind = ""
-    elif normalized_kind not in {"note_field", "field_def"}:
+    elif normalized_kind not in {"note_field", "field_def", "template"}:
         raise DeckInstallUpdateError(
-            "entity_kind must be note_field or field_def.",
+            "entity_kind must be note_field, field_def, or template.",
             field="entity_kind",
         )
     operation_aliases = {
@@ -727,12 +728,7 @@ def prepare_update(
             schema_by_id=schema_by_id,
             order_row=order_row,
         )
-        if (
-            local is None
-            or _same(local.value, upstream_value)
-            or _same(local.value, base_value)
-            or _same(upstream_value, base_value)
-        ):
+        if local is None or not release_core.has_conflict(base_value, upstream_value, local.value):
             continue
         db.session.add(
             DeckInstallRebaseConflict(
@@ -1078,22 +1074,19 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
             continue
         key = str(change.change_key or f"{change.entity_kind}:{change.entity_id}:{change.property_key}")
         conflict = conflicts_by_key.get(key)
-        if _same(local.value, upstream_value) or _same(local.value, base_value):
+        action, merged_value = release_core.merge_unit(
+            base_value, upstream_value, local.value,
+            resolution=conflict.resolution_mode if conflict else None,
+            manual_value=conflict.resolved_value if conflict else None,
+        )
+        if action == "clear":
             overlay_mutated = _clear_local_overlay(local) or overlay_mutated
-        elif _same(upstream_value, base_value):
+        elif action == "keep":
             continue
-        elif conflict is None:
+        elif action == "conflict":
             raise DeckInstallUpdateError("Upstream changes no longer match this preparation.", status=409, error="REBASE_STALE")
-        elif conflict.resolution_mode == "keep_upstream":
-            overlay_mutated = _clear_local_overlay(local) or overlay_mutated
-        elif conflict.resolution_mode == "manual":
-            if _same(conflict.resolved_value, upstream_value):
-                overlay_mutated = _clear_local_overlay(local) or overlay_mutated
-            else:
-                overlay_mutated = (
-                    _set_local_overlay(local, conflict.resolved_value)
-                    or overlay_mutated
-                )
+        elif action == "set":
+            overlay_mutated = _set_local_overlay(local, merged_value) or overlay_mutated
 
     now = _utcnow()
     if overlay_mutated:
@@ -1106,6 +1099,8 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
     rebase.applied_change_count = int(rebase.change_count or 0)
     rebase.applied_at = now
     db.session.flush()
+    from app.services.template_release_service import stage_install_template_subscriptions
+    stage_install_template_subscriptions(db.session, install_id=install.id, user_id=user_id)
     return rebase
 
 

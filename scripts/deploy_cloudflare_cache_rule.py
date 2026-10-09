@@ -4,7 +4,8 @@
 Usage:
     python scripts/deploy_cloudflare_cache_rule.py
 
-Reads CLOUDFLARE_API_TOKEN (or legacy CLOUD_FLARE_TOKEN) from .env or environment.
+Reads CLOUDFLARE_API_TOKEN (or legacy CLOUD_FLARE_TOKEN) and CLOUDFLARE_ZONE_ID
+from .env or environment. Set CLOUDFLARE_ZONE_ID to the flama.vn zone ID.
 Requires the token to have Zone > Cache Rules > Edit permission. Prefix purge
 uses CLOUDFLARE_GLOBAL_API_KEY with CLOUDFLARE_EMAIL (or EMAIL_SMTP_USER) when
 available, otherwise the API token must also have Cache Purge permission.
@@ -19,12 +20,11 @@ from pathlib import Path
 from urllib import request as urllib_request
 from urllib.error import HTTPError
 
-DEFAULT_ZONE_ID = "1a2fa8889b8d03b3755b5bd7ef89e210"  # stmtp.com
 PHASE = "http_request_cache_settings"
 RULE_DESCRIPTION = "Cache media proxy assets at edge (bounded audio/image TTL)"
 LEGACY_RULE_DESCRIPTION = "Cache media proxy assets at edge (immutable audio/image)"
 MATCH_EXPRESSION = (
-    '(http.host in {"api.flama.vn", "be-flama.stmtp.com"}'
+    '(http.host eq "api.flama.vn"'
     ' and (http.request.uri.path eq "/media/proxy"'
     ' or starts_with(http.request.uri.path, "/media/proxy/")))'
 )
@@ -131,11 +131,11 @@ def _build_cache_rule() -> dict:
 
 
 def main(*, purge_existing: bool = False) -> None:
-    token = _load_token()
-    zone_id = os.environ.get("CLOUDFLARE_ZONE_ID", DEFAULT_ZONE_ID).strip()
+    zone_id = _load_optional_setting(("CLOUDFLARE_ZONE_ID",))
     if not zone_id:
-        print("ERROR: CLOUDFLARE_ZONE_ID is empty", file=sys.stderr)
+        print("ERROR: Set CLOUDFLARE_ZONE_ID to the flama.vn zone ID in environment or .env", file=sys.stderr)
         sys.exit(1)
+    token = _load_token()
     print(f"Zone: {zone_id}")
     print(f"Phase: {PHASE}")
 

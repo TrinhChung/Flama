@@ -18,6 +18,7 @@ import {
   Layers,
   Info,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type {
   BatchFileMeta,
   BatchFileConfig,
@@ -46,6 +47,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
   onApplyNamingRule,
   isReparsing,
 }) => {
+  const { t } = useTranslation('import')
   const hasDangerousCollision = batchFiles.some(
     (f) => f.collision.is_collision && f.collision.status === 'different'
   )
@@ -64,7 +66,10 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="size-4 text-muted-foreground" />
             <span className="text-xs font-semibold text-foreground">
-              Quy tắc đặt tên bài học ({batchFiles.length} tệp)
+              {t('file_import.batch_table.toolbar_title', {
+                count: batchFiles.length,
+                defaultValue: `Quy tắc đặt tên bài học (${batchFiles.length} tệp)`,
+              })}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -77,7 +82,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
                   : 'border-border/60 hover:bg-muted text-muted-foreground'
               }`}
             >
-              Tự động theo Deck cha
+              {t('file_import.batch_table.rule_auto', 'Tự động theo Deck cha')}
             </button>
             <button
               type="button"
@@ -88,7 +93,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
                   : 'border-border/60 hover:bg-muted text-muted-foreground'
               }`}
             >
-              Theo tên tệp gốc
+              {t('file_import.batch_table.rule_filename', 'Theo tên tệp gốc')}
             </button>
             <button
               type="button"
@@ -99,7 +104,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
                   : 'border-border/60 hover:bg-muted text-muted-foreground'
               }`}
             >
-              Mẫu tùy biến
+              {t('file_import.batch_table.rule_custom', 'Tùy biến mẫu số…')}
             </button>
           </div>
         </div>
@@ -112,7 +117,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
             <Input
               value={customPattern}
               onChange={(e) => onChangeCustomPattern(e.target.value)}
-              placeholder="Ví dụ: Bài {n} hoặc Lesson {n}"
+              placeholder={t('file_import.batch_table.custom_pattern_placeholder', 'Mẫu tên bài (Ví dụ: Bài {n})')}
               className="h-8 text-xs max-w-xs"
             />
             <button
@@ -121,7 +126,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
               onClick={onApplyNamingRule}
               className="text-xs px-3 py-1.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors shrink-0"
             >
-              Áp dụng mẫu
+              {t('file_import.batch_table.btn_apply_all', 'Áp dụng cho tất cả')}
             </button>
           </div>
         )}
@@ -150,10 +155,16 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
             <TableRow>
               <TableHead className="w-12 text-center">#</TableHead>
               <TableHead className="min-w-44">Tệp dữ liệu</TableHead>
-              <TableHead className="w-24 text-center">Số dòng</TableHead>
-              <TableHead className="min-w-48">Tên Deck con tạo mới</TableHead>
+              <TableHead className="w-24 text-center">
+                {t('file_import.batch_table.col_rows', 'Số dòng')}
+              </TableHead>
+              <TableHead className="min-w-48">
+                {t('file_import.batch_table.col_lesson_name', 'Tên bài học')}
+              </TableHead>
               <TableHead className="min-w-44">Kiểm tra trùng lặp</TableHead>
-              <TableHead className="min-w-36">Hành động xử lý</TableHead>
+              <TableHead className="min-w-36">
+                {t('file_import.batch_table.col_action', 'Hành vi xử lý')}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -185,7 +196,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
                           {fileMeta.filename}
                         </div>
                         <div className="text-[11px] text-muted-foreground">
-                          {formatFileSize(fileMeta.file_size)} • {fileMeta.column_count} cột
+                          {formatFileSize(fileMeta.file_size)} • {fileMeta.column_count} {t('file_import.batch_table.col_columns', 'cột')}
                         </div>
                       </div>
                     </div>
@@ -207,7 +218,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
                             target_deck_name: e.target.value,
                           })
                         }
-                        placeholder="Tên bài học"
+                        placeholder={t('file_import.batch_table.col_lesson_name', 'Tên bài học')}
                         className="h-8 text-xs font-medium"
                       />
                     </div>
@@ -270,10 +281,16 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
                       }
                       className="h-8 text-xs"
                     >
-                      <option value="create_new">Tạo bài mới</option>
+                      <option value="create_new">
+                        {t('file_import.batch_table.action_create', 'Tạo bài mới')}
+                      </option>
                       <option value="auto_rename">Tự đổi tên mới</option>
-                      <option value="upsert">Cập nhật vào deck cũ</option>
-                      <option value="skip">Bỏ qua file này</option>
+                      <option value="upsert">
+                        {t('file_import.batch_table.action_overwrite', 'Cập nhật vào deck cũ')}
+                      </option>
+                      <option value="skip">
+                        {t('file_import.batch_table.action_ignore', 'Bỏ qua tệp này')}
+                      </option>
                     </NativeSelect>
                   </TableCell>
                 </TableRow>

@@ -64,11 +64,12 @@ def _templates_without_occurrence():
         select(StudyApplication.id)
         .where(
             StudyApplication.template_id == Template.id,
+            StudyApplication.note_type_id == Template.note_type_id,
             StudyApplication.occurrence_key == COMPAT_OCCURRENCE_KEY,
         )
         .exists()
     )
-    return select(Template.id, Template.note_type_id, Template.position).where(~compat)
+    return select(Template.id, Template.note_type_id, Template.position).where(Template.note_type_id.isnot(None), ~compat)
 
 
 def _stale_ref_condition():

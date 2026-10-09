@@ -1,0 +1,33 @@
+// @vitest-environment jsdom
+;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TemplateInputSpec } from '@/entities/card-template'
+import { TemplateInputSchemaEditor } from './TemplateInputSchemaEditor'
+
+describe('TemplateInputSchemaEditor', () => {
+  let root: Root
+  let container: HTMLDivElement
+  const change = vi.fn()
+  const value: TemplateInputSpec[] = [{ key: 'Input1', label: 'First', type: 'text', required: true }]
+  beforeEach(() => { vi.clearAllMocks(); container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
+  afterEach(async () => { await act(async () => root.unmount()); container.remove() })
+  async function render(disabled = false) { await act(async () => root.render(<TemplateInputSchemaEditor value={value} onChange={change} disabled={disabled} />)) }
+  it('uses all exact types, advisory required wording and immutable add/delete', async () => {
+    await render(); expect([...container.querySelectorAll('option')].map((el) => el.value)).toEqual(['text', 'richtext', 'markdown', 'image', 'audio', 'diagram'])
+    expect(container.textContent).toContain('Khuyến nghị ánh xạ'); expect(container.textContent).toContain('Input chưa ánh xạ sẽ hiển thị rỗng.')
+    await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Thêm input')!.click())
+    expect(change).toHaveBeenLastCalledWith([...value, { key: 'Input2', label: 'Input2', type: 'text', required: false }]); expect(value).toHaveLength(1)
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Xóa input 1"]')!.click()); expect(change).toHaveBeenLastCalledWith([]); expect(value).toHaveLength(1)
+  })
+  it('allows an invalid key draft and clones the changed item', async () => {
+    await render(); const input = container.querySelector('input')!
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, ' bad '); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(change).toHaveBeenCalledWith([{ ...value[0], key: ' bad ' }]); expect(change.mock.calls[0][0][0]).not.toBe(value[0]); expect(value[0].key).toBe('Input1')
+  })
+  it('disables every editing control without mutations', async () => {
+    await render(true); expect([...container.querySelectorAll('input,select,button')].every((el) => (el as HTMLInputElement).disabled)).toBe(true)
+    await act(async () => [...container.querySelectorAll('button')].forEach((el) => el.click())); expect(change).not.toHaveBeenCalled()
+  })
+})

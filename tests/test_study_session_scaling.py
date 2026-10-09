@@ -128,15 +128,17 @@ class StudySessionScalingTests(unittest.TestCase):
         with self.app.app_context():
             template = db.session.get(Card, self.snapshot["cards"][0]["card_id"]).template
             card_ids = tuple(db.session.execute(select(Card.id)).scalars())
+            initial_card_count = len(card_ids)
             routes = lock_content_delete_routes(
                 db.session, actor_user_ids=[self.user_id], card_ids=card_ids, deleted_note_ids=[],
             )
-            stage_repeated_application(
+            repeated_application = stage_repeated_application(
                 db.session, routes=routes, template=template, occurrence_key="scaling-repeat",
             )
+            repeated_application_id = repeated_application.id
             db.session.commit()
         self.snapshot = self._open()
-        self.assertEqual(len(self.snapshot["cards"]), 80)
+        self.assertEqual(len(self.snapshot["cards"]), 40)
         with self.app.app_context():
             lease = db.session.get(StudySession, self.snapshot["session_id"])
             members = db.session.execute(select(StudySessionCard).where(StudySessionCard.session_id == lease.id).order_by(StudySessionCard.ordinal)).scalars().all()
@@ -149,7 +151,13 @@ class StudySessionScalingTests(unittest.TestCase):
                     reads.append(key)
                     return super().__getitem__(key)
             authority_pins = replace(authority_pins, identity_by_session_card_id=CountingMap(authority_pins.identity_by_session_card_id))
-            events = [self._event(i, card=card) for i,card in enumerate(self.snapshot["cards"], 1)]
+            # Each occurrence is selected separately. Review every selected
+            # Note twice to retain the linear replay and state propagation gate.
+            self.assertEqual(Card.query.count(), initial_card_count + len(members))
+            projections = db.session.execute(select(Card.note_id, Card.application_id)).all()
+            self.assertEqual(len(projections), len(set(projections)))
+            self.assertEqual(Card.query.filter_by(application_id=repeated_application_id).count(), len(members))
+            events = [self._event(i, card=card) for i,card in enumerate(self.snapshot["cards"] * 2, 1)]
             states, replayed, touched, _ids = study_session_service._replay_session_events(
                 session=lease,
                 payload={"selected_composition_id": self.snapshot["selected_composition_id"]},

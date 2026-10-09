@@ -195,7 +195,7 @@ source docs/architecture/artifacts/db_load_test_2026-09-29/env.sh
 
 ## 9. Open questions / needs verification
 
-- Production VPS size, MySQL configuration (`innodb_buffer_pool_size`, `max_connections`, isolation level), and whether Cloudflare proxies `be-flama.stmtp.com`.
+- Production VPS size, MySQL configuration (`innodb_buffer_pool_size`, `max_connections`, isolation level), and whether Cloudflare proxies `api.flama.vn`.
 - Real collection sizes and daily answers per learner; whether the SPA retries a failed session open automatically.
 - Current production row counts for `study_session_cards`, `study_session_authority_pins`, and the NOTE tables (the queries in the companion report §5 apply).
 - Whether any NOTE reader truly requires exclusive, CAS-grade locking, which decides how far A1 can be relaxed without weakening the cutover invariants.

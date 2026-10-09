@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
@@ -26,9 +27,10 @@ export type TokensResponse = {
 }
 
 export function useYomitanTokenCRUD() {
+  const { t } = useTranslation('settings')
   const queryClient = useQueryClient()
   const queryKey = ['integration-tokens'] as const
-  const [name, setName] = useState('Yomitan - PC cá nhân')
+  const [name, setName] = useState(() => t('yomitan.tokens.default_name', 'Yomitan - PC cá nhân'))
   const [expiry, setExpiry] = useState('180')
   const [issued, setIssued] = useState<IntegrationToken | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -55,7 +57,7 @@ export function useYomitanTokenCRUD() {
     onSuccess: async ({ item }) => {
       setIssued(item)
       await refresh()
-      toast.success('Đã tạo token Flama Connect thành công.')
+      toast.success(t('yomitan.messages.create_success'))
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -64,7 +66,7 @@ export function useYomitanTokenCRUD() {
     mutationFn: (id: number) => appApi.mutate(`/integration-tokens/${id}`, 'DELETE'),
     onSuccess: async () => {
       await refresh()
-      toast.success('Token đã được thu hồi ngay lập tức.')
+      toast.success(t('yomitan.messages.revoke_success'))
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -76,7 +78,7 @@ export function useYomitanTokenCRUD() {
     onSuccess: async ({ item }) => {
       setIssued(item)
       await refresh()
-      toast.success('Đã thu hồi token cũ và tạo token mới thành công.')
+      toast.success(t('yomitan.messages.rotate_success'))
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -97,20 +99,20 @@ export function useYomitanTokenCRUD() {
       )
 
       if (expiredToken) {
-        toast.info('Phát hiện token đã hết hạn. Đang tự động làm mới (renew) token cho bạn...')
+        toast.info(t('yomitan.messages.renew_detected'))
         rotateMutation.mutate(expiredToken.id)
       } else {
-        toast.info('Chưa có token kết nối. Đang tự động tạo key Flama Connect mới...')
+        toast.info(t('yomitan.messages.auto_create'))
         createMutation.mutate()
       }
     }
-  }, [query.data, createMutation, rotateMutation])
+  }, [query.data, createMutation, rotateMutation, t])
 
   const copy = async (label: string, value: string) => {
     await navigator.clipboard.writeText(value)
     setCopied(label)
     window.setTimeout(() => setCopied(null), 1800)
-    toast.success(`Đã sao chép ${label.startsWith('{') ? label : ''} vào bộ nhớ tạm.`)
+    toast.success(t('yomitan.messages.copied'))
   }
 
   return {

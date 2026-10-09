@@ -1,5 +1,7 @@
 import { Component, lazy, Suspense, type ReactNode } from 'react'
 import { LoaderCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import {
   Dialog,
   DialogContent,
@@ -17,19 +19,20 @@ function WorksheetLoadDialog({ onOpenChange, failed = false }: {
   onOpenChange: DeckWorksheetModalProps['onOpenChange']
   failed?: boolean
 }) {
+  const { t } = useTranslation('dashboard')
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Mẫu giấy luyện viết &amp; In ấn (A4)</DialogTitle>
+          <DialogTitle>{t('modals.worksheet_loader.title')}</DialogTitle>
           <DialogDescription>
-            {failed ? 'Không thể tải công cụ tạo bài tập. Hãy tải lại trang để thử lại.' : 'Đang tải công cụ tạo bài tập…'}
+            {failed ? t('modals.worksheet_loader.failed') : t('modals.worksheet_loader.loading')}
           </DialogDescription>
         </DialogHeader>
         {!failed && (
           <div role="status" className="flex justify-center py-6">
             <LoaderCircle className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
-            <span className="sr-only">Đang tải…</span>
+            <span className="sr-only">{t('modals.worksheet_loader.sr_loading')}</span>
           </div>
         )}
       </DialogContent>

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ArrowLeftRight, CheckCircle2, RotateCcw } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
@@ -19,6 +21,7 @@ export function findDeck(nodes: DeckNode[], deckId: number | null): DeckNode | n
 }
 
 export function useDashboardPage() {
+  const { t } = useTranslation('dashboard')
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const dashboardQuery = useDashboard()
@@ -38,7 +41,7 @@ export function useDashboardPage() {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Không thể di chuyển deck.')
+      toast.error(error.message || t('tree.toasts.move_error'))
     },
   })
 
@@ -53,10 +56,12 @@ export function useDashboardPage() {
     try {
       await moveMutation.mutateAsync({ deckId, parentId: targetParentId })
       const targetParent = targetParentId !== null ? findDeck(dashboardQuery.data.decks, targetParentId) : null
-      const targetLabel = targetParent ? `deck "${targetParent.name}"` : 'cấp Root'
+      const targetLabel = targetParent
+        ? t('tree.toasts.target_deck', { name: targetParent.name })
+        : t('tree.toasts.target_root')
 
       toast.custom(
-        (t) => (
+        (toastId) => (
           <div className="flex items-center gap-3 bg-card border border-orange-200/80 dark:border-orange-900/40 p-2.5 sm:p-3 pr-3 rounded-2xl shadow-xl shadow-orange-950/10 text-foreground text-xs sm:text-sm animate-in slide-in-from-bottom-4 duration-200">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-950/70 text-orange-600 dark:text-orange-400">
               <ArrowLeftRight className="size-4" />
@@ -64,10 +69,10 @@ export function useDashboardPage() {
 
             <div className="flex flex-col min-w-0 pr-1 space-y-0.5">
               <div className="font-bold text-foreground truncate max-w-[180px] sm:max-w-[220px]">
-                Đã di chuyển “{deckName}”
+                {t('tree.toasts.moved_title', { name: deckName })}
               </div>
               <div className="text-[11px] text-muted-foreground truncate max-w-[180px] sm:max-w-[220px]">
-                Vào {targetLabel}
+                {t('tree.toasts.moved_target_prefix')}{targetLabel}
               </div>
             </div>
 
@@ -75,7 +80,7 @@ export function useDashboardPage() {
               type="button"
               className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-primary to-orange-500 hover:opacity-95 text-primary-foreground font-bold text-xs shadow-xs hover:shadow transition-all shrink-0 active:scale-95 cursor-pointer h-auto"
               onClick={() => {
-                toast.dismiss(t)
+                toast.dismiss(toastId)
                 moveMutation.mutate(
                   { deckId, parentId: previousParentId },
                   {
@@ -84,7 +89,7 @@ export function useDashboardPage() {
                         () => (
                           <div className="flex items-center gap-2.5 bg-card border border-emerald-200 dark:border-emerald-900/40 p-2.5 px-3.5 rounded-2xl shadow-lg text-xs font-semibold text-emerald-800 dark:text-emerald-300">
                             <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                            <span>Đã khôi phục vị trí ban đầu của “{deckName}”.</span>
+                            <span>{t('tree.toasts.restored_toast', { name: deckName })}</span>
                           </div>
                         ),
                         { duration: 3500 },
@@ -95,7 +100,7 @@ export function useDashboardPage() {
               }}
             >
               <RotateCcw className="size-3.5" />
-              <span>Hoàn tác</span>
+              <span>{t('tree.toasts.btn_undo')}</span>
             </Button>
           </div>
         ),

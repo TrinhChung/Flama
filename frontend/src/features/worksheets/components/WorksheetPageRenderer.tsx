@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import QRCode from 'qrcode'
 import { Table as TableIcon } from 'lucide-react'
 import type {
@@ -175,6 +176,7 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
   zoom = 1,
   isPrintMode = false,
 }: WorksheetPageRendererProps) {
+  const { t } = useTranslation('worksheets')
   const { header, items, page_number, total_pages } = page
   const orientation = options.orientation || 'portrait'
   const isLandscape = orientation === 'landscape'
@@ -424,9 +426,9 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                 </>
               ) : (
                 <>
-                  <span>Lớp: ____________</span>
-                  <span>Họ tên: ____________</span>
-                  <span>Điểm: ____________</span>
+                  <span>{t('renderer.student_class', 'Lớp')}: ____________</span>
+                  <span>{t('renderer.student_name', 'Họ tên')}: ____________</span>
+                  <span>{t('renderer.student_score', 'Điểm')}: ____________</span>
                 </>
               )}
             </div>
@@ -442,8 +444,11 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="absolute bottom-0 -left-2.5 w-[54px] h-[54px] p-1 bg-white border border-slate-300 rounded shadow-xs flex items-center justify-center hover:opacity-85 transition-opacity z-20"
-                  title={`Quét mã QR để mở trang: ${currentUrl}`}
-                  aria-label="Mã QR trang bài tập"
+                  title={t('renderer.qr_title', {
+                    url: currentUrl,
+                    defaultValue: `Quét mã QR để mở trang: ${currentUrl}`,
+                  })}
+                  aria-label={t('renderer.qr_aria', 'Mã QR trang bài tập')}
                 >
                   <svg
                     viewBox={`0 0 ${qrData.totalSize} ${qrData.totalSize}`}
@@ -468,16 +473,20 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
           <div className="flex items-center gap-3 text-[10px] text-slate-700 font-medium shrink-0">
             {header.show_student_info && (
               <span>
-                <strong className="text-slate-900">Họ tên:</strong> _______________
+                <strong className="text-slate-900">{t('renderer.name_label', 'Họ tên')}:</strong> _______________
               </span>
             )}
             {header.show_date && (
               <span>
-                <strong className="text-slate-900">Ngày:</strong> ___/___/20___
+                <strong className="text-slate-900">{t('renderer.date_label', 'Ngày')}:</strong> ___/___/20___
               </span>
             )}
             <span className="text-slate-500 font-normal">
-              Trang {page_number} / {total_pages}
+              {t('renderer.page_label', {
+                current: page_number,
+                total: total_pages,
+                defaultValue: `Trang ${page_number} / ${total_pages}`,
+              })}
             </span>
           </div>
         </header>
@@ -492,7 +501,7 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
               <span className="text-base font-bold leading-none select-none">📝</span>
               <div className="flex-1">
                 <span className="font-bold uppercase tracking-wider text-[9.5px] text-amber-800 block mb-0.5">
-                  Đề bài / Yêu cầu bài tập:
+                  {t('renderer.exercise_prompt_label', 'Đề bài / Yêu cầu bài tập:')}
                 </span>
                 <span className="font-semibold text-xs leading-relaxed text-slate-800">
                   {options.exercise_prompt}
@@ -1206,10 +1215,22 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
               <table className="w-full border-collapse text-xs border border-slate-400">
                 <thead>
                   <tr className="bg-slate-100 text-slate-900 text-left font-semibold">
-                    <th className={`border border-slate-400 px-2 py-1 ${wWord} text-xs`}>Từ vựng</th>
-                    {showReading && <th className={`border border-slate-400 px-2 py-1 ${wRead} text-xs`}>Cách đọc</th>}
-                    {showMeaning && <th className={`border border-slate-400 px-2 py-1 ${wMean} text-xs`}>Ý nghĩa</th>}
-                    <th className={`border border-slate-400 px-2 py-1 ${wPrac} text-xs`}>Luyện viết</th>
+                    <th className={`border border-slate-400 px-2 py-1 ${wWord} text-xs`}>
+                      {t('renderer.table_vocab', 'Từ vựng')}
+                    </th>
+                    {showReading && (
+                      <th className={`border border-slate-400 px-2 py-1 ${wRead} text-xs`}>
+                        {t('renderer.table_reading', 'Cách đọc')}
+                      </th>
+                    )}
+                    {showMeaning && (
+                      <th className={`border border-slate-400 px-2 py-1 ${wMean} text-xs`}>
+                        {t('renderer.table_meaning', 'Ý nghĩa')}
+                      </th>
+                    )}
+                    <th className={`border border-slate-400 px-2 py-1 ${wPrac} text-xs`}>
+                      {t('renderer.table_practice', 'Luyện viết')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1275,10 +1296,10 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
             <thead>
               <tr className="bg-slate-100 text-slate-900 text-left font-semibold">
                 <th className="border border-slate-400 px-2 py-1.5 w-1/2 text-xs">
-                  Gợi ý (Ý nghĩa / Âm đọc)
+                  {t('renderer.cloze_hint', 'Gợi ý (Ý nghĩa / Âm đọc)')}
                 </th>
                 <th className="border border-slate-400 px-2 py-1.5 w-1/2 text-xs">
-                  Từ vựng mục tiêu (Tự nhớ & Viết lại)
+                  {t('renderer.cloze_target', 'Từ vựng mục tiêu (Tự nhớ & Viết lại)')}
                 </th>
               </tr>
             </thead>
@@ -1335,9 +1356,14 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                   <div className="size-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
                     <TableIcon className="size-5" />
                   </div>
-                  <div className="text-sm font-bold text-slate-700">Chưa chọn cột nào để hiển thị</div>
+                  <div className="text-sm font-bold text-slate-700">
+                    {t('renderer.no_columns_selected', 'Chưa chọn cột nào để hiển thị')}
+                  </div>
                   <p className="text-xs text-slate-500 max-w-sm">
-                    Vui lòng mở tab <strong>&ldquo;Dữ liệu &amp; Trường&rdquo;</strong> ở bảng điều khiển bên trái và tích chọn các trường bạn muốn xuất bảng.
+                    {t(
+                      'renderer.no_columns_hint',
+                      'Vui lòng mở tab "Dữ liệu & Trường" ở bảng điều khiển bên trái và tích chọn các trường bạn muốn xuất bảng.'
+                    )}
                   </p>
                 </div>
               )
@@ -1351,7 +1377,7 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
             const auxTitle =
               options.auxiliary_column_title ||
               options.practice_column_label ||
-              'Ghi chú / Luyện viết'
+              t('renderer.auxiliary_default_title', 'Ghi chú / Luyện viết')
             const auxType = options.auxiliary_column_type || 'dashed_line'
             const auxWidth = options.auxiliary_column_width
             const auxBoxesCount = options.auxiliary_column_boxes_count || 4
@@ -1558,7 +1584,10 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                 >
                   <div className="flex items-start gap-2">
                     <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shrink-0">
-                      Cấu trúc #{idx + 1}
+                      {t('renderer.grammar_structure_index', {
+                        index: idx + 1,
+                        defaultValue: `Cấu trúc #${idx + 1}`,
+                      })}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold text-slate-900 leading-snug">
@@ -1571,7 +1600,9 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                       )}
                       {options.show_example_hint !== false && item.example && (
                         <div className="text-xs text-slate-500 mt-1 bg-slate-50 border-l-2 border-slate-400 px-2 py-1 rounded-r">
-                          <span className="font-semibold text-slate-700">Ví dụ: </span>
+                          <span className="font-semibold text-slate-700">
+                            {t('renderer.example_label', 'Ví dụ: ')}
+                          </span>
                           {item.example}
                         </div>
                       )}
@@ -1683,7 +1714,11 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
             {options.footer_brand_label || 'Flama (400格)'}
           </span>
           <span className="text-[9px] text-slate-400 font-sans">
-            Trang {page_number} / {total_pages}
+            {t('renderer.page_label', {
+              current: page_number,
+              total: total_pages,
+              defaultValue: `Trang ${page_number} / ${total_pages}`,
+            })}
           </span>
           <span className="tracking-widest">
             {options.footer_date_format === 'vietnamese'

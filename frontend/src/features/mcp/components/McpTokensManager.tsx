@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { Plus, Trash2, Key, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { SearchInput } from '@/shared/ui'
 import { Button } from '@/components/ui/button'
@@ -32,6 +34,7 @@ export function McpTokensManager({
   headerDescription,
   createLayout = 'modal',
 }: McpTokensManagerProps) {
+  const { t } = useTranslation('mcp')
   const {
     tokens, isLoading, search, setSearch, statusFilter, setStatusFilter,
     page, setPage, totalPages, totalItems, inactiveCount, canManageTokens,
@@ -58,16 +61,16 @@ export function McpTokensManager({
           <h2 className="text-lg font-bold tracking-tight text-foreground">
             {headerTitle ||
               (createLayout === 'inline'
-                ? `Danh sách Token & Secrets (${tokens.length})`
+                ? t('manager.inline_title', { count: tokens.length })
                 : mode === 'admin'
-                ? 'Danh sách MCP Tokens & Secrets'
-                : 'Quản lý MCP Access Tokens')}
+                ? t('manager.admin_title')
+                : t('manager.title'))}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {headerDescription ||
               (mode === 'admin'
-                ? 'Quản lý và cấp phát Access Token kết nối Flama MCP cho tất cả người dùng trong hệ thống.'
-                : 'Cấp quyền và quản lý các khóa token kết nối trực tiếp với ứng dụng lập trình (Cursor IDE, Antigravity, Claude Desktop).')}
+                ? t('manager.admin_desc')
+                : t('manager.desc'))}
           </p>
         </div>
 
@@ -81,7 +84,7 @@ export function McpTokensManager({
                 className="gap-1.5 text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400"
               >
                 <Trash2 className="size-3.5" />
-                <span>Dọn dẹp {inactiveCount} token cũ</span>
+                <span>{t('manager.cleanup_btn', { count: inactiveCount })}</span>
               </Button>
             )}
 
@@ -95,7 +98,7 @@ export function McpTokensManager({
                 className="gap-1.5 text-xs font-semibold shadow-2xs"
               >
                 <Plus className="size-3.5" />
-                <span>{mode === 'admin' ? 'Cấp Token mới cho User' : 'Tạo Token mới'}</span>
+                <span>{mode === 'admin' ? t('manager.admin_create_btn') : t('manager.create_btn')}</span>
               </Button>
             )}
           </div>
@@ -105,7 +108,7 @@ export function McpTokensManager({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Tổng số Token</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('manager.stats.total')}</span>
             <Key className="size-3.5 text-primary" />
           </div>
           <div className="text-xl font-bold mt-1">{totalItems}</div>
@@ -113,7 +116,7 @@ export function McpTokensManager({
 
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Token đang hoạt động</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('manager.stats.active')}</span>
             <ShieldCheck className="size-3.5 text-emerald-600" />
           </div>
           <div className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{activeCount}</div>
@@ -121,7 +124,7 @@ export function McpTokensManager({
 
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Đã hết hạn / Thu hồi</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('manager.stats.inactive')}</span>
             <ShieldAlert className="size-3.5 text-amber-600" />
           </div>
           <div className="text-xl font-bold mt-1 text-amber-600 dark:text-amber-400">{inactiveCount}</div>
@@ -144,7 +147,7 @@ export function McpTokensManager({
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex-1 max-w-sm">
           <SearchInput
-            placeholder="Tìm kiếm token theo tên, scopes..."
+            placeholder={t('manager.search_placeholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onClear={() => setSearch('')}
@@ -159,10 +162,10 @@ export function McpTokensManager({
             size="sm"
             className="w-40 text-xs"
           >
-            <NativeSelectOption value="all">Tất cả trạng thái</NativeSelectOption>
-            <NativeSelectOption value="active">Đang hoạt động</NativeSelectOption>
-            <NativeSelectOption value="revoked">Đã thu hồi</NativeSelectOption>
-            <NativeSelectOption value="expired">Đã hết hạn</NativeSelectOption>
+            <NativeSelectOption value="all">{t('manager.filter.all')}</NativeSelectOption>
+            <NativeSelectOption value="active">{t('manager.filter.active')}</NativeSelectOption>
+            <NativeSelectOption value="revoked">{t('manager.filter.revoked')}</NativeSelectOption>
+            <NativeSelectOption value="expired">{t('manager.filter.expired')}</NativeSelectOption>
           </NativeSelect>
         </div>
       </div>

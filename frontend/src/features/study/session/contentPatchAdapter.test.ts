@@ -5,6 +5,7 @@ import { applyCardContentPatch } from './contentPatchAdapter'
 import { createPersistedSession } from './studySessionEngine'
 import type { PersistedStudySession } from './sessionStore'
 import type { StudySessionSnapshot } from '../types'
+import { canonicalDigest } from './canonicalDigest'
 
 function createSampleSnapshot(): StudySessionSnapshot {
   return {
@@ -311,5 +312,71 @@ describe('applyCardContentPatch', () => {
 
     expect(session.snapshot.cards[0].content_key).toBe(originalContentKey)
     expect(session.snapshot.contents[originalContentKey].field_values).toEqual(originalFieldValues)
+  })
+
+  it('patches bound aliases with the frozen mapping and keeps unbound inputs empty', () => {
+    const session = createSampleSession()
+    const template = session.snapshot.templates.template
+    template.field_defs.push({ id: 'alias-term', name: 'term', field_type: 'text' },
+      { id: 'alias-answer', name: 'answer', field_type: 'text' })
+    const projection = {
+      schema_version: 'template-input-bindings.v1' as const,
+      input_bindings: { term: 'field-word', answer: null },
+      field_defs: [{ id: 'field-word', name: 'Word', field_type: 'text' }],
+    }
+    template.binding_projection = { ...projection, fingerprint: canonicalDigest(projection) }
+    session.snapshot.contents['content-2'].field_values.term = 'dog'
+    session.snapshot.contents['content-2'].field_values.answer = ''
+    session.snapshot.contents['content-2'].render_context.term = 'dog'
+    const originalTemplate = structuredClone(template)
+    const result = applyCardContentPatch(session, 'card-3', { Word: 'wolf', term: 'leak', answer: 'leak' })
+    const card = result.nextSession.snapshot.cards.find((item) => item.card_id === 'card-3')!
+    const content = result.nextSession.snapshot.contents[card.content_key]
+    expect(content.field_values).toMatchObject({ Word: 'wolf', term: 'wolf', answer: '' })
+    expect(content.render_context).toMatchObject({ term: 'wolf', answer: '' })
+    expect(result.nextSession.snapshot.templates.template).toEqual(originalTemplate)
+    expect(result.nextSession.snapshot.cards[2].state).toEqual(session.snapshot.cards[2].state)
+    expect(session.snapshot.contents['content-2'].field_values.term).toBe('dog')
+  })
+
+  it('uses original source values when inputs bind to each other and preserves partial updates', () => {
+    const session = createSampleSession()
+    const template = session.snapshot.templates.template
+    const projection = {
+      schema_version: 'template-input-bindings.v1' as const,
+      input_bindings: { Word: 'field-meaning', Meaning: 'field-word' },
+      field_defs: [{ id: 'field-word', name: 'Word', field_type: 'text' },
+        { id: 'field-meaning', name: 'Meaning', field_type: 'text' }],
+    }
+    template.binding_projection = { ...projection, fingerprint: canonicalDigest(projection) }
+    const original = session.snapshot.contents['content-2']
+    original.field_values = { Word: 'meaning', Meaning: 'dog' }
+    original.render_context = { ...original.field_values }
+    const result = applyCardContentPatch(session, 'card-3', { Word: 'wolf' })
+    const content = result.nextSession.snapshot.contents[result.nextSession.snapshot.cards[2].content_key]
+    expect(content.field_values).toEqual({ Word: 'meaning', Meaning: 'wolf' })
+    expect(content.render_context).toEqual({ Word: 'meaning', Meaning: 'wolf' })
+  })
+
+  it('updates bound media helpers and prevents unbound helper fallback from note fields', () => {
+    const session = createSampleSession()
+    const template = session.snapshot.templates.template
+    template.field_defs.push({ id: 'alias-voice', name: 'voice', field_type: 'audio' },
+      { id: 'alias-empty', name: 'empty_voice', field_type: 'audio' })
+    const projection = {
+      schema_version: 'template-input-bindings.v1' as const,
+      input_bindings: { voice: 'field-audio', empty_voice: null },
+      field_defs: [{ id: 'field-audio', name: 'Audio', field_type: 'audio' }],
+    }
+    template.binding_projection = { ...projection, fingerprint: canonicalDigest(projection) }
+    const result = applyCardContentPatch(session, 'card-3', {
+      Audio: '/media/proxy/new-audio', empty_voice: '/media/proxy/secret', empty_voice_url: '/media/proxy/secret',
+    })
+    const content = result.nextSession.snapshot.contents[result.nextSession.snapshot.cards[2].content_key]
+    expect(content.render_context.voice_url).toBe('/media/proxy/new-audio')
+    expect(content.render_context.voice).toContain('src="/media/proxy/new-audio"')
+    expect(content.render_context.empty_voice).toBe('')
+    expect(content.render_context.empty_voice_url).toBe('')
+    expect(content.render_context.empty_voice_urls).toEqual([])
   })
 })

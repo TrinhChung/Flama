@@ -1,0 +1,127 @@
+{
+  "study_goals": {
+    "header": {
+      "title": "Study Goals",
+      "description": "Customize language, target proficiency, and daily new card volume.",
+      "guide_title": "Guide to deck organization and grouping",
+      "help_btn": "Help"
+    },
+    "actions": {
+      "save": "Save Goals",
+      "saved": "Saved",
+      "reset_defaults": "Reset Defaults",
+      "toast_save_success": "Study goals updated successfully!",
+      "toast_reset_success": "Default study goals restored."
+    },
+    "summary": {
+      "current_goal": "Current Goal",
+      "new_cards_per_day": "{{count}} new cards / day",
+      "roadmap_applied": "Current learning track: <bold>{{subject}}</bold>, goal <bold>{{count}} new cards/day</bold> ({{time}})."
+    },
+    "sections": {
+      "subject_title": "1. Select Language / Subject",
+      "level_title": "2. Target Proficiency Level",
+      "daily_target_title": "3. Daily New Card Target",
+      "study_time_title": "4. Preferred Study Schedule",
+      "library_decks_title": "5. Decks in Library"
+    },
+    "decks": {
+      "marketplace_link": "Marketplace Library →",
+      "loading": "Checking decks…",
+      "card_count": "{{count}} cards",
+      "installed_badge": "Installed",
+      "install_btn": "Install",
+      "empty_title": "No matching decks found for this level in Library",
+      "empty_desc": "You can create custom flashcard decks or consult the guide on deck creation and grouping.",
+      "guide_btn": "Card Creation Guide",
+      "dashboard_btn": "Create Deck on Dashboard"
+    }
+  },
+  "yomitan": {
+    "loading": "Loading Yomitan tokens…",
+    "header": {
+      "title": "Yomitan Token & Flama Connect Management",
+      "description": "Integrate the browser Yomitan dictionary extension with Flama to automatically mine Flashcards in 1 click.",
+      "guide_title": "Yomitan Connection Guide",
+      "troubleshoot_title": "Troubleshoot Yomitan",
+      "guide_btn": "Connection Guide"
+    },
+    "quick_links": {
+      "label": "Quick references:",
+      "install": "Install & Download Extension",
+      "markers": "55 Field Markers Table",
+      "mobile": "Mobile Usage & Troubleshooting"
+    },
+    "highlights": {
+      "lookup_title": "0.1s Lookup",
+      "lookup_sub": "Hover / touch popup",
+      "one_click_title": "1-Click Card",
+      "one_click_sub": "Auto-filled data",
+      "immersion_title": "Immersion Study",
+      "immersion_sub": "PC Web & Mobile",
+      "connect_title": "Flama Connect",
+      "connect_sub": "Cloud integration"
+    },
+    "form": {
+      "title": "Create Flama Connect API Token",
+      "description": "Each device or browser should use a dedicated token for easy monitoring and secure revocation. See <link>Detailed Connection Guide</link> if this is your first time.",
+      "guide_link_text": "Detailed Connection Guide",
+      "name_label": "Device / Browser Name",
+      "name_placeholder": "e.g. Yomitan - Chrome PC / Kiwi Mobile",
+      "expiry_label": "Validity Period",
+      "expiry_30": "30 days",
+      "expiry_90": "90 days",
+      "expiry_180": "180 days (default)",
+      "expiry_365": "365 days",
+      "expiry_none": "Never expires",
+      "submit_btn": "Generate New Token",
+      "config_alert_title": "Quick Yomitan Configuration",
+      "config_alert_text": "Generate a token and paste the full issued URL into the <bold>Server URL</bold> field in Yomitan Settings (Settings ➔ Anki/Connect) without entering a separate API Key.",
+      "config_alert_ref": "Refer to the <link1>Setup Guide</link1> or <link2>55 Field Markers Table</link2> to map card template fields.",
+      "issued_warning_title": "Copy this URL now — Flama will not display the full URL again after you leave this page!",
+      "copy_btn": "Copy URL",
+      "copied_btn": "URL Copied"
+    },
+    "tokens": {
+      "default_name": "Yomitan - Personal PC",
+      "title": "Generated Tokens",
+      "description": "Active and revoked API keys for your account",
+      "refresh": "Refresh",
+      "refresh_tooltip": "Reload token list",
+      "empty_title": "No Yomitan tokens yet",
+      "empty_desc": "Create your first token to connect the Yomitan extension to Flama.",
+      "status_active": "Active",
+      "status_revoked": "Revoked",
+      "status_expired": "Expired",
+      "th_name": "Device Name",
+      "th_status": "Status",
+      "th_expiry": "Expires",
+      "th_last_used": "Last Used",
+      "th_actions": "Actions",
+      "never_expires": "Never expires",
+      "never_used": "Never used",
+      "action_rotate": "Regenerate",
+      "action_revoke": "Revoke",
+      "confirm_rotate": "Revoke the old token and create a new token with this name?",
+      "confirm_revoke": "Are you sure you want to revoke this token immediately?"
+    },
+    "docs": {
+      "title": "Documentation & Reference Guides",
+      "view_all": "View all",
+      "card1_title": "Install & Download Yomitan",
+      "card1_desc": "Step-by-step extension installation on Chrome/Firefox and Server URL setup.",
+      "card2_title": "55 Field Markers Table",
+      "card2_desc": "Complete directory of markers {expression}, {furigana}... for card mapping.",
+      "card3_title": "Mobile & Troubleshooting",
+      "card3_desc": "Guide for Kiwi Browser, Firefox Android, and resolving connection issues."
+    },
+    "messages": {
+      "create_success": "Flama Connect token created successfully.",
+      "revoke_success": "Token was revoked immediately.",
+      "rotate_success": "Old token revoked and new token created successfully.",
+      "renew_detected": "Expired token detected. Automatically renewing token for you...",
+      "auto_create": "No connection token found. Automatically generating a new Flama Connect key...",
+      "copied": "Copied to clipboard."
+    }
+  }
+}

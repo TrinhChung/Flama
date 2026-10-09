@@ -1,0 +1,22 @@
+{
+  "save": "Lưu",
+  "cancel": "Hủy",
+  "confirm": "Xác nhận",
+  "close": "Đóng",
+  "search": "Tìm kiếm",
+  "loading": "Đang tải...",
+  "back": "Quay lại",
+  "error": "Lỗi",
+  "success": "Thành công",
+  "or": "hoặc",
+  "copy": "Sao chép",
+  "copied": "Đã sao chép",
+  "language": {
+    "vi": "Tiếng Việt",
+    "en": "English",
+    "switch_aria": "Chuyển đổi ngôn ngữ / Switch language",
+    "label": "Ngôn ngữ",
+    "switch_to_en": "Chuyển sang English",
+    "switch_to_vi": "Chuyển sang Tiếng Việt"
+  }
+}

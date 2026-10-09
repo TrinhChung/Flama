@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { KeyRound, AlertTriangle, Check, Copy, LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { CodeSnippetBox } from '@/shared/ui'
@@ -27,6 +29,7 @@ export function McpTokenSecretModal({
   onClose,
   mode = 'user',
 }: McpTokenSecretModalProps) {
+  const { t } = useTranslation('mcp')
   const showModal = isOpen !== undefined ? isOpen : Boolean(issuedToken)
   const [copiedToken, setCopiedToken] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
@@ -61,10 +64,10 @@ export function McpTokenSecretModal({
         throw new Error('Clipboard API unavailable')
       }
       setCopiedToken(true)
-      toast.success(mode === 'admin' ? 'Đã sao chép Secret Token' : 'Đã sao chép Token vào bộ nhớ tạm.')
+      toast.success(mode === 'admin' ? t('secret_modal.copied_token_toast_admin') : t('secret_modal.copied_token_toast_user'))
       setTimeout(() => setCopiedToken(false), 2000)
     } catch {
-      toast.error(mode === 'admin' ? 'Không thể sao chép vào bộ nhớ tạm' : 'Không thể sao chép vào bộ nhớ tạm.')
+      toast.error(mode === 'admin' ? t('secret_modal.copy_failed_toast_admin') : t('secret_modal.copy_failed_toast_user'))
     }
   }
 
@@ -77,10 +80,10 @@ export function McpTokenSecretModal({
         throw new Error('Clipboard API unavailable')
       }
       setCopiedUrl(true)
-      toast.success(mode === 'admin' ? 'Đã sao chép URL' : 'Đã sao chép URL Endpoint vào bộ nhớ tạm.')
+      toast.success(mode === 'admin' ? t('secret_modal.copied_url_toast_admin') : t('secret_modal.copied_url_toast_user'))
       setTimeout(() => setCopiedUrl(false), 2000)
     } catch {
-      toast.error(mode === 'admin' ? 'Không thể sao chép vào bộ nhớ tạm' : 'Không thể sao chép vào bộ nhớ tạm.')
+      toast.error(mode === 'admin' ? t('secret_modal.copy_failed_toast_admin') : t('secret_modal.copy_failed_toast_user'))
     }
   }
 
@@ -90,10 +93,10 @@ export function McpTokenSecretModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
             <KeyRound className="size-5" />
-            Token & Secret Đã Được Tạo Thành Công
+            {t('secret_modal.title')}
           </DialogTitle>
           <DialogDescription>
-            Secret Token của bạn đã sẵn sàng! Hãy sao chép ngay chuỗi Secret token bên dưới. Vì lý do an toàn, chuỗi secret đầy đủ sẽ không được hiển thị lại sau khi bạn đóng hộp thoại này.
+            {t('secret_modal.desc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -109,19 +112,19 @@ export function McpTokenSecretModal({
             />
 
             <div className="p-3 rounded-lg border bg-muted/40 text-xs space-y-1">
-              <div><strong>Tên gợi nhớ:</strong> {issuedToken.name}</div>
-              {issuedToken.username && <div><strong>Chủ sở hữu:</strong> {issuedToken.username}</div>}
-              {issuedToken.expires_at && <div><strong>Hạn dùng:</strong> {issuedToken.expires_at}</div>}
+              <div><strong>{t('secret_modal.token_name_label')}</strong> {issuedToken.name}</div>
+              {issuedToken.username && <div><strong>{t('secret_modal.owner_label')}</strong> {issuedToken.username}</div>}
+              {issuedToken.expires_at && <div><strong>{t('secret_modal.expiry_label')}</strong> {issuedToken.expires_at}</div>}
             </div>
 
             <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
               <AlertTriangle className="size-4 shrink-0 mt-0.5" />
-              <span>Chỉ hiển thị 1 lần duy nhất. Nếu đánh mất, bạn cần dùng chức năng <strong>Xoay vòng Secret (Rotate)</strong> để sinh key mới.</span>
+              <span>{t('secret_modal.one_time_warning')}</span>
             </div>
 
             <div className="rounded-lg border bg-muted/20 overflow-hidden text-sm">
               <div className="flex items-center justify-between border-b border-border/80 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground font-mono">Secret Access Token (Bearer Key)</span>
+                <span className="font-medium text-foreground font-mono">{t('secret_modal.bearer_header')}</span>
                 <Button
                   type="button"
                   variant="ghost"
@@ -130,7 +133,7 @@ export function McpTokenSecretModal({
                   className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
                 >
                   {copiedToken ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
-                  <span>{copiedToken ? 'Đã chép' : 'Sao chép'}</span>
+                  <span>{copiedToken ? t('secret_modal.copied') : t('secret_modal.copy')}</span>
                 </Button>
               </div>
               <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground">
@@ -140,7 +143,7 @@ export function McpTokenSecretModal({
 
             <div className="rounded-lg border bg-muted/20 overflow-hidden text-sm">
               <div className="flex items-center justify-between border-b border-border/80 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground font-mono">Endpoint URL dành cho AI Assistant (Cursor / Claude)</span>
+                <span className="font-medium text-foreground font-mono">{t('secret_modal.endpoint_header')}</span>
                 <Button
                   type="button"
                   variant="ghost"
@@ -149,7 +152,7 @@ export function McpTokenSecretModal({
                   className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
                 >
                   {copiedUrl ? <Check className="size-3 text-emerald-500" /> : <LinkIcon className="size-3" />}
-                  <span>{copiedUrl ? 'Đã chép' : 'Sao chép URL'}</span>
+                  <span>{copiedUrl ? t('secret_modal.copied') : t('secret_modal.copy_url')}</span>
                 </Button>
               </div>
               <pre className="p-3 overflow-x-auto font-mono text-xs text-foreground">
@@ -160,15 +163,15 @@ export function McpTokenSecretModal({
             <CodeSnippetBox
               code={jsonConfig}
               language="json"
-              title="Cấu hình nhanh Cursor / Claude Desktop (mcpServers)"
+              title={t('secret_modal.json_snippet_title')}
               showCopyButton
             />
           </div>
         )}
 
         <DialogFooter className="flex-row justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Đóng</Button>
-          <Button onClick={onClose}>Đã lưu Secret & Đóng</Button>
+          <Button variant="outline" onClick={onClose}>{t('secret_modal.close_btn')}</Button>
+          <Button onClick={onClose}>{t('secret_modal.saved_and_close_btn')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

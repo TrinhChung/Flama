@@ -1,0 +1,314 @@
+{
+  "manager": {
+    "loading": "Đang tải danh sách NoteTypes…",
+    "header": {
+      "title": "Quản lý Loại Thẻ (Note Types)",
+      "description": "Định nghĩa cấu trúc các trường dữ liệu và tùy chỉnh mẫu hiển thị Flashcard.",
+      "tour_btn": "Tour Hướng Dẫn",
+      "ai_prompt_btn": "Prompt AI",
+      "guide_concept": "Kiến trúc 1 Note sinh nhiều Cards",
+      "troubleshoot_import": "Khắc phục lỗi trường & mẫu thẻ",
+      "docs_btn": "Tài liệu",
+      "ai_prompt_banner_title": "Tạo Template Bằng AI Trong 1 Phút",
+      "ai_prompt_banner_desc": "Không cần biết lập trình! Dùng Prompt chuẩn cho ChatGPT / Claude để tự thiết kế mẫu thẻ Flashcard đúng ý bạn.",
+      "ai_prompt_banner_btn": "Mở Hướng Dẫn & Prompt AI"
+    },
+    "create": {
+      "title": "Tạo loại thẻ mới",
+      "description": "Khởi tạo cấu trúc dữ liệu và template tùy chỉnh.",
+      "placeholder": "Ví dụ: Từ vựng Tiếng Nhật, Ngữ pháp JLPT N2, Kanji Hán Tự…",
+      "submit_btn": "Tạo NoteType"
+    },
+    "empty": {
+      "title": "Chưa có Loại thẻ nào",
+      "description": "Nhập tên ở biểu mẫu trên để tạo NoteType mới."
+    },
+    "card": {
+      "templates_badge": "{{count}} template",
+      "fields_badge": "{{count}} trường",
+      "shared_badge": "Đã chia sẻ",
+      "btn_fields": "Trường",
+      "btn_templates": "Templates",
+      "btn_view": "Xem",
+      "btn_share": "Chia sẻ",
+      "btn_delete_title": "Xóa NoteType"
+    },
+    "delete_dialog": {
+      "title": "Xác nhận xóa NoteType",
+      "description": "Xóa NoteType “{{name}}”? Hành động này có thể không hoàn tác được.",
+      "purge_label": "Xóa sạch hoàn toàn dữ liệu (Purge)",
+      "purge_warning": "Cảnh báo: Chức năng này chỉ dùng để xóa các bộ note type lỗi trong quá trình phát triển. Nó sẽ xóa sạch toàn bộ note type cùng với các trường (fields), templates, note/card, tiến trình học và các thay đổi liên quan khỏi hệ thống và không thể hoàn tác.",
+      "cancel": "Hủy",
+      "delete_btn": "Xóa NoteType",
+      "purge_btn": "Xóa sạch dữ liệu"
+    },
+    "messages": {
+      "create_success": "Đã tạo NoteType mới.",
+      "create_error": "Không thể tạo NoteType",
+      "delete_success": "Thao tác xóa NoteType đã hoàn tất.",
+      "delete_error": "Không thể xóa NoteType",
+      "name_required": "Vui lòng nhập tên NoteType"
+    }
+  },
+  "fields": {
+    "loading": "Đang tải danh sách trường…",
+    "header": {
+      "description": "Quản lý và sắp xếp thứ tự các trường thông tin trong NoteType.",
+      "back_btn": "Quay lại",
+      "edit_templates_btn": "Sửa template"
+    },
+    "list": {
+      "title": "Danh sách trường",
+      "add_btn": "Thêm",
+      "reorder_hint": "Kéo thả hoặc bấm ▲/▼ để đổi vị trí",
+      "move_up": "Di chuyển lên",
+      "move_down": "Di chuyển xuống",
+      "empty": "Chưa có trường nào. Bấm Nút Thêm để tạo trường mới.",
+      "primary_badge": "id"
+    },
+    "add_card": {
+      "title": "Thêm trường mới",
+      "field_name": "Tên trường",
+      "placeholder": "Ví dụ: PitchAccent, Audio, Sentence…",
+      "field_type": "Kiểu dữ liệu",
+      "cancel": "Hủy",
+      "submit": "Tạo trường"
+    },
+    "edit_card": {
+      "title": "Thuộc tính trường",
+      "field_name": "Tên trường",
+      "field_type": "Kiểu dữ liệu",
+      "required": "Trường bắt buộc",
+      "primary_identity": "Trường định danh chính",
+      "primary_identity_desc": "Flama Connect dùng trường này để kiểm tra trùng trong đúng deck đích. Mỗi loại thẻ chỉ có một trường định danh.",
+      "delete_btn": "Xóa trường",
+      "save_btn": "Lưu thay đổi",
+      "confirm_delete": "Xóa trường \"{{name}}\"? Dữ liệu tương ứng trong các ghi chú sẽ bị giải phóng."
+    },
+    "empty_selection": "Chọn một trường bên trái để chỉnh sửa hoặc bấm \"Thêm\" để tạo trường mới.",
+    "messages": {
+      "create_success": "Đã thêm trường mới.",
+      "create_error": "Không thể tạo trường mới",
+      "update_success": "Đã cập nhật trường.",
+      "update_error": "Không thể cập nhật trường",
+      "delete_success": "Đã xóa trường.",
+      "delete_error": "Không thể xóa trường",
+      "reorder_error": "Không thể sắp xếp lại vị trí",
+      "name_required": "Tên trường là bắt buộc",
+      "name_empty": "Tên trường không được trống"
+    }
+  },
+  "detail": {
+    "loading": "Đang tải thông tin NoteType…",
+    "header": {
+      "fallback_title": "Chi tiết Loại thẻ",
+      "description": "Tùy chỉnh mã Front HTML, Back HTML, CSS và kiểm tra trực tiếp hiệu ứng hiển thị.",
+      "back_btn": "Quay lại",
+      "view_marketplace": "Xem trên Marketplace",
+      "share_marketplace": "Chia sẻ lên Kho",
+      "guide_btn": "Hướng Dẫn & Prompt AI",
+      "fields_btn": "Quản lý Trường"
+    },
+    "editor_actions": {
+      "new": "Mới",
+      "reset": "Reset",
+      "reset_confirm": "Khôi phục template về mặc định ban đầu?",
+      "reset_tooltip": "Đặt lại template mặc định",
+      "save_template": "Lưu Template"
+    },
+    "messages": {
+      "save_success": "Đã lưu Template.",
+      "save_error": "Không thể lưu Template",
+      "create_success": "Đã tạo Template mới.",
+      "create_error": "Không thể tạo Template",
+      "reset_success": "Đã đặt lại Template mặc định.",
+      "reset_error": "Không thể đặt lại Template"
+    }
+  },
+  "template_bar": {
+    "default_badge": "Mặc định",
+    "note_count": "{{count}} note",
+    "note_count_loading": "… note",
+    "rename_btn": "Đổi tên",
+    "delete_btn": "Xóa",
+    "cannot_delete_default": "Không thể xóa template mặc định.",
+    "cannot_delete_single": "Loại thẻ cần ít nhất một template.",
+    "rename_dialog": {
+      "title": "Đổi tên template",
+      "label": "Tên template",
+      "error_empty": "Tên template không được để trống.",
+      "error_max_length": "Tên template tối đa 255 ký tự.",
+      "cancel": "Hủy",
+      "submit": "Lưu tên"
+    },
+    "delete_dialog": {
+      "title": "Xóa template “{{name}}”?",
+      "description": "Thẻ của template này sẽ bị xóa. Tiến độ học của từng note vẫn được giữ.",
+      "note_count_warning": "{{count}} note đang có thẻ dùng template này.",
+      "confirm": "Xóa template",
+      "cancel": "Hủy"
+    },
+    "messages": {
+      "rename_success": "Đã đổi tên template.",
+      "rename_error": "Không thể đổi tên template",
+      "delete_success": "Đã xóa template.",
+      "delete_error": "Không thể xóa template"
+    }
+  },
+  "live_preview": {
+    "title": "Xem Trước Trực Tiếp (Live Preview)",
+    "subtitle": "(Hiển thị mô phỏng dữ liệu thẻ mẫu)",
+    "updating": "Đang cập nhật…",
+    "front_side": "Mặt trước",
+    "back_side": "Mặt sau",
+    "preparing": "Đang chuẩn bị bản xem trước…",
+    "error": "Lỗi tải xem trước template."
+  },
+  "guide": {
+    "header": {
+      "title": "Hướng Dẫn Tạo Note Type & Prompt AI",
+      "description": "Toàn bộ kiến thức công nghệ và công cụ Prompt chuẩn giúp bạn tự thiết kế mẫu thẻ Flashcard hoàn hảo mà không cần biết code.",
+      "tour_btn": "Tour Hướng Dẫn",
+      "manager_link": "Quản lý NoteTypes",
+      "start_btn": "Tạo Loại Thẻ Ngay"
+    },
+    "tabs": {
+      "prompt": "🤖 Prompt AI Mẫu",
+      "tech": "⚙️ Công Nghệ Thẻ",
+      "steps": "🚀 Các Bước Làm",
+      "rules": "⚠️ Quy Tắc Tránh Lỗi"
+    },
+    "prompt_tab": {
+      "master_title": "Master Prompt Chuẩn Hóa",
+      "master_desc": "Sao chép khung lệnh dưới đây, điền mong muốn của bạn vào cuối rồi gửi cho ChatGPT / Claude / Gemini.",
+      "copy_master": "Sao chép Master Prompt",
+      "copied_master": "Đã sao chép Prompt",
+      "quick_tip_title": "Mẹo nhanh:",
+      "quick_tip_text": "Sau khi AI phản hồi, bạn sẽ nhận được: (1) Danh sách trường để nhập vào trang Quản lý Trường, và (2) Mã Front/Back/CSS để dán vào trang Template.",
+      "ex1_badge": "Ví Dụ 1: Từ Vựng JLPT",
+      "ex1_title": "Thẻ từ vựng có Kanji, Furigana, Hán Việt & Audio câu ví dụ",
+      "ex2_badge": "Ví Dụ 2: Ngữ Pháp Nâng Cao",
+      "ex2_title": "Thẻ ngữ pháp có Cấu trúc, Trích dẫn văn học & Phân biệt mẫu câu",
+      "copy_btn": "Sao chép",
+      "copied_btn": "Đã chép",
+      "copied_toast_title": "Đã sao chép vào Clipboard!",
+      "copied_toast_desc": "Hãy mở ChatGPT, Claude hoặc Gemini và dán prompt này vào."
+    },
+    "tech_tab": {
+      "card1_title": "Mustache Template Engine",
+      "card1_desc": "Flama sử dụng chuẩn Mustache tiêu chuẩn. Dữ liệu từ vựng được tự động điền vào các thẻ {{placeholder}}.",
+      "card2_title": "Hệ Thống Âm Thanh & Audio",
+      "card2_desc": "Hỗ trợ phát âm file mp3 an toàn qua nút bấm loa 🔊 hoặc script tự động đọc nối tiếp từ vựng đến câu ví dụ.",
+      "card3_title": "Iframe Sandbox An Toàn",
+      "card3_desc": "Mỗi thẻ được hiển thị trong môi trường cô lập, giúp giao diện co giãn hoàn hảo trên cả điện thoại di động và máy tính.",
+      "field_types_title": "6 Loại Trường Dữ Liệu Được Hỗ Trợ",
+      "ft_text_title": "Chữ thuần",
+      "ft_text_desc": "Từ vựng, chữ Kanji, nghĩa ngắn, phiên âm Romaji, tên tác giả...",
+      "ft_richtext_title": "Văn bản định dạng",
+      "ft_richtext_desc": "Chữ có bôi đậm, in nghiêng, đổi màu, gạch chân, danh sách gạch đầu dòng.",
+      "ft_audio_title": "File âm thanh",
+      "ft_audio_desc": "File phát âm từ vựng, câu ví dụ, trích dẫn âm thanh (mp3, wav, m4a).",
+      "ft_image_title": "Hình ảnh",
+      "ft_image_desc": "Ảnh minh họa ý nghĩa từ vựng, hình vẽ ngữ cảnh thực tế.",
+      "ft_markdown_title": "Định dạng Markdown",
+      "ft_markdown_desc": "Đoạn văn dài, bảng biểu so sánh, công thức ngữ pháp phức tạp.",
+      "ft_diagram_title": "Sơ đồ / Biểu đồ",
+      "ft_diagram_desc": "Sơ đồ cây cấu trúc câu, biểu đồ ngữ nghĩa trực quan."
+    },
+    "steps_tab": {
+      "step1_title": "Tạo Loại Thẻ (Note Type)",
+      "step1_desc": "Truy cập Quản lý NoteTypes, nhập tên loại thẻ mới (ví dụ: Từ vựng N3) và bấm Tạo NoteType.",
+      "step2_title": "Tạo Các Trường Dữ Liệu",
+      "step2_desc": "Bấm vào Quản lý Trường, thêm các trường theo bảng do AI cung cấp (chọn đúng tên trường và loại trường).",
+      "step3_title": "Dán Mã Front / Back / CSS",
+      "step3_desc": "Vào trang Chi tiết Template, dán lần lượt Front HTML, Back HTML, Shared CSS rồi bấm Lưu Template.",
+      "step4_title": "Xem Trước Trực Tiếp (Live Preview)",
+      "step4_desc": "Khung bên phải sẽ tự động hiển thị mẫu thẻ mô phỏng. Bấm lật Mặt trước / Mặt sau và kiểm tra nút loa 🔊 để nghiệm thu."
+    },
+    "rules_tab": {
+      "rule1_title": "⚠️ 1. Đóng/Mở thẻ HTML cân xứng trong Mustache",
+      "rule1_desc": "Khi mở thẻ <div> bên trong điều kiện {{#field}}, bắt buộc phải đóng </div> trước khi đóng {{/field}}.",
+      "rule2_title": "💡 2. Quy tắc đặt tên trường dữ liệu",
+      "rule2_desc": "Nên dùng chữ thường không dấu, nối bằng dấu gạch dưới (VD: word, audio_word, example_vi) để đảm bảo tính tương thích cao nhất.",
+      "rule3_title": "✨ 3. Tránh style height: 100vh",
+      "rule3_desc": "Ở Mặt trước, dùng Flexbox căn giữa: style=\"min-height: 200px; display: flex; align-items: center; justify-content: center;\" giúp giao diện co giãn mượt trên cả điện thoại và máy tính."
+    }
+  },
+  "errors": {
+    "shared_schema_versioning": "Template này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.",
+    "compile_error": "Template có lỗi cú pháp: {{message}}",
+    "cannot_delete_default": "Không thể xóa template mặc định.",
+    "requires_at_least_one": "Loại thẻ cần ít nhất một template.",
+    "generic": "Đã có lỗi xảy ra. Vui lòng thử lại."
+  },
+  "tour": {
+    "step_badge": "Tour Hướng Dẫn: Bước {{current}}/{{total}}",
+    "subtitle": "Dành cho người mới bắt đầu",
+    "skip_title": "Bỏ qua hướng dẫn",
+    "step1_title": "🎉 1. Chào mừng bạn đến với Quản lý Note Type!",
+    "step1_desc": "Note Type (Loại thẻ) là khung xương định nghĩa cấu trúc dữ liệu (như từ vựng, âm Hán Việt, file audio, ảnh...) và quyết định giao diện hiển thị của các thẻ Flashcard.",
+    "step2_title": "✨ 2. Không cần biết lập trình? Dùng Prompt AI!",
+    "step2_desc": "Flama cung cấp sẵn Master Prompt chuẩn hóa. Bạn chỉ cần sao chép prompt, điền mong muốn và gửi cho ChatGPT / Claude để AI tự sinh mã thẻ HTML/CSS hoàn hảo.",
+    "step2_btn": "Mở trang Prompt AI trong tab mới",
+    "step3_title": "📝 3. Tạo Loại Thẻ Mới",
+    "step3_desc": "Hãy nhập tên loại thẻ bạn muốn tạo (Ví dụ: Từ vựng JLPT N3, Ngữ pháp N2) vào ô \"Tạo Loại Thẻ Mới\" ngay bên dưới rồi bấm Tạo NoteType.",
+    "step4_title": "🚀 4. Quản lý Trường & Soạn Thảo Template",
+    "step4_desc": "Sau khi tạo xong, hệ thống sẽ đưa bạn đến trang Quản lý Trường để thêm các cột dữ liệu. Tiếp theo, bạn vào trang Chi tiết Template để dán mã Front/Back/CSS và kiểm tra Live Preview.",
+    "dot_aria": "Chuyển đến bước {{step}}",
+    "back_btn": "Quay lại",
+    "skip_btn": "Bỏ qua",
+    "finish_btn": "Hoàn tất & Bắt đầu",
+    "next_btn": "Tiếp tục"
+  },
+  "manager_tour": {
+    "step1_title": "📝 1. Nhập Tên Loại Thẻ Mới",
+    "step1_desc": "Nhập tên loại thẻ bạn muốn tạo (Ví dụ: Từ vựng N3, Ngữ pháp N2, Kanji Hán Tự) vào ô này.",
+    "step2_title": "🚀 2. Bấm Tạo NoteType",
+    "step2_desc": "Bấm nút này để khởi tạo loại thẻ. Hệ thống sẽ tự động chuyển bạn sang trang Quản lý Trường (Fields) để thêm cột dữ liệu.",
+    "step3_title": "🤖 3. Hướng Dẫn & Prompt AI",
+    "step3_desc": "Không cần biết lập trình! Bấm nút này để mở trang hướng dẫn và sao chép Master Prompt cho ChatGPT / Claude tự thiết kế mẫu thẻ cho bạn.",
+    "step4_cards_title": "📇 4. Thẻ NoteType & Huy Hiệu Thông Số",
+    "step4_cards_desc": "Mỗi thẻ hiển thị tên loại thẻ cùng 2 huy hiệu quan trọng: số lượng Template (các mặt thẻ hiển thị) và số lượng Trường dữ liệu hiện có trong bộ thẻ.",
+    "step5_fields_title": "⚙️ 5. Nút \"Trường\" (Quản Lý Cột Dữ Liệu)",
+    "step5_fields_desc": "Bấm vào đây để thêm các trường như Word, Meaning, Audio, Example, Furigana... định hình cấu trúc dữ liệu lưu trữ cho thẻ.",
+    "step6_templates_title": "🎨 6. Nút \"Templates\" (Soạn Giao Diện & Xem Trước)",
+    "step6_templates_desc": "Bấm vào đây để mở trình soạn thảo HTML/CSS Front & Back, dán mã code tạo bởi AI và xem mô phỏng thẻ mẫu (Live Preview) theo thời gian thực.",
+    "step7_share_title": "🌐 7. Nút \"Chia Sẻ\" Lên Kho Cộng Đồng",
+    "step7_share_desc": "Khi đã thiết kế xong mẫu thẻ ưng ý, bạn có thể bấm nút này để xuất bản lên Marketplace cho cộng đồng Flama cùng sử dụng.",
+    "step4_empty_title": "📋 4. Khu Vực Danh Sách Loại Thẻ",
+    "step4_empty_desc": "Sau khi tạo loại thẻ, các thẻ NoteType sẽ xuất hiện tại đây kèm các nút chức năng: Quản lý Trường (Fields), Tùy chỉnh Template (HTML/CSS), Xem trước Live Preview và Chia sẻ lên Kho Marketplace."
+  },
+  "guide_tour": {
+    "step1_title": "📘 1. Trung Tâm Hướng Dẫn & Prompt AI",
+    "step1_desc": "Trang tài liệu toàn diện này giúp bạn tạo ra bất kỳ mẫu Flashcard nào ưng ý cho Flama mà không cần biết viết code.",
+    "step2_title": "📑 2. Điều Hướng Các Chủ Đề Hướng Dẫn",
+    "step2_desc": "Chuyển nhanh giữa 4 chuyên mục: Prompt AI Mẫu, Công Nghệ Thẻ, Quy Trình 4 Bước và Quy Tắc Vàng Tránh Lỗi.",
+    "step3_title": "🤖 3. Master Prompt Chuẩn Hóa Cho AI",
+    "step3_desc": "Bấm nút \"Sao Chép Toàn Bộ Prompt\" để copy mẫu chỉ thị chuẩn rồi gửi cho ChatGPT / Claude / Gemini tạo sẵn HTML/CSS cho bạn.",
+    "step4_title": "💡 4. Các Mẫu Yêu Cầu Thực Tế",
+    "step4_desc": "Tham khảo và sao chép nhanh các prompt mẫu cho Thẻ Từ Vựng hoặc Thẻ Ngữ Pháp JLPT có sẵn.",
+    "step5_title": "🚀 5. Bắt Đầu Tạo Note Type Ngay",
+    "step5_desc": "Sau khi có mã code từ AI, bấm nút này để quay lại trang Quản lý Loại Thẻ và áp dụng mẫu thiết kế của bạn."
+  },
+  "ai_modal": {
+    "dialog_title": "Hướng Dẫn & Prompt AI Tạo Template NoteType",
+    "dialog_desc": "Dùng AI (ChatGPT, Claude, Gemini) tạo mẫu thẻ Flashcard đúng chuẩn Flama trong 1 phút.",
+    "tab_prompt": "🤖 Prompt AI",
+    "tab_tech": "⚙️ Công Nghệ",
+    "tab_steps": "🚀 Các Bước",
+    "tab_rules": "⚠️ Tránh Lỗi",
+    "simple_usage_title": "Cách sử dụng đơn giản:",
+    "simple_usage_desc": "Sao chép Master Prompt dưới đây, sửa phần [YÊU CẦU CỦA TÔI] theo ý bạn rồi gửi cho AI. AI sẽ tự viết đầy đủ danh sách trường, Front HTML, Back HTML và CSS đúng chuẩn Flama.",
+    "master_heading": "📋 Master Prompt Chuẩn:",
+    "copy_master": "Sao chép Master Prompt",
+    "copied_master": "Đã sao chép",
+    "example_heading": "💡 Ví dụ mẫu [YÊU CẦU CỦA TÔI] cho Thẻ Từ Vựng:",
+    "copy_example": "Sao chép ví dụ này",
+    "copied_example": "Đã chép ví dụ",
+    "toast_title": "Đã sao chép prompt vào Clipboard!",
+    "toast_desc": "Hãy mở ChatGPT, Claude hoặc Gemini và dán prompt này vào."
+  },
+  "editor": {
+    "badge_new": "Mới"
+  }
+}

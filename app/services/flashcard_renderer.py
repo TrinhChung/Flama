@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import json
 import logging
 import re
 import threading
@@ -18,6 +19,7 @@ import bleach
 import chevron
 from bleach.css_sanitizer import CSSSanitizer
 from app.services.media_field_codec import is_canonical_media_url, split_media_field_value
+from app.services.template_binding_service import prepare_bound_fields
 try:
     from markdown_it import MarkdownIt
 except Exception:  # pragma: no cover - optional dependency fallback
@@ -1008,6 +1010,7 @@ def render_template_pair(
     allow_inline_script: bool = False,
     defer_inline_script: bool = False,
 ) -> dict[str, Any]:
+    field_defs, field_values = prepare_bound_fields(template, field_defs, field_values)
     css = sanitize_css(getattr(template, "shared_css", ""))
     preview_key = None
     if preview_note_key:
@@ -1017,6 +1020,16 @@ def render_template_pair(
                 + getattr(template, "back_html", "")
                 + css
                 + preview_note_key
+                + json.dumps({
+                    "fields": [{"id": str(getattr(field, "id", "")), "name": field.name,
+                                "type": field.field_type, "required": bool(getattr(field, "required", False))}
+                               for field in field_defs],
+                    "values": field_values or {},
+                    "media": [{"id": str(getattr(asset, "id", "")),
+                               "filename": str(getattr(asset, "filename", "")),
+                               "sha256": str(getattr(asset, "sha256", ""))}
+                              for asset in media_assets or []],
+                }, sort_keys=True, ensure_ascii=False, default=str)
             ).encode("utf-8")
         ).hexdigest()
         preview_key = preview_hash

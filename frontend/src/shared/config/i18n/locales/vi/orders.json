@@ -1,0 +1,43 @@
+{
+  "title": "Lịch sử đơn hàng",
+  "description": "Theo dõi giao dịch marketplace và quyền truy cập học liệu.",
+  "empty": {
+    "title": "Chưa có đơn hàng",
+    "description": "Các giao dịch marketplace của bạn sẽ xuất hiện tại đây."
+  },
+  "table": {
+    "order_code": "Mã đơn",
+    "item": "Học liệu",
+    "date": "Thời gian",
+    "amount": "Giá trị",
+    "status": "Trạng thái",
+    "actions": "Thao tác",
+    "total_count": "Tổng cộng {{count}} đơn hàng"
+  },
+  "actions": {
+    "check": "Kiểm tra",
+    "details": "Chi tiết"
+  },
+  "detail": {
+    "title": "Chi tiết Đơn hàng",
+    "code_description": "Mã đơn hàng: #{{code}}",
+    "transaction_code": "Mã giao dịch",
+    "status": "Trạng thái",
+    "total_payment": "Tổng thanh toán",
+    "grant_status": "Cấp quyền",
+    "completed": "Hoàn tất",
+    "items_in_order": "Học liệu trong đơn:",
+    "free": "Miễn phí",
+    "pending_payment_banner": "Đơn hàng đang chờ thanh toán",
+    "pay_now": "Thanh toán ngay",
+    "recheck_status": "Kiểm tra lại trạng thái",
+    "close": "Đóng"
+  },
+  "loading": "Đang tải đơn hàng…",
+  "detail_loading": "Đang tải chi tiết đơn hàng…",
+  "toast": {
+    "status_updated": "Đã cập nhật trạng thái đơn hàng!",
+    "update_failed": "Không thể cập nhật trạng thái",
+    "try_again": "Vui lòng thử lại sau."
+  }
+}

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from app.repositories import study_card_editor_repository as study_edit_repo
 from app.repositories.vocabulary_repository import note_display_triplet, note_field_values_as_strings
 from app.services import deck_working_tree_service
+from app.services.effective_template_service import resolve_effective_template
 from app.services.flashcard_renderer import (
     TemplateCompileError,
     render_template_pair,
@@ -38,6 +39,7 @@ def update_study_card_note(
     card_id: str,
     payload: dict[str, Any] | None,
     render_result: bool = True,
+    template_overrides: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate and persist edited note fields for the active study card."""
     card = study_edit_repo.load_owned_card_for_study_edit(user_id=user_id, card_id=card_id)
@@ -148,9 +150,10 @@ def update_study_card_note(
     rendered_front_payload = None
     rendered_back_payload = None
     if render_result and card.template:
+        template = resolve_effective_template(card, template_overrides=template_overrides)
         try:
             rendered = render_template_pair(
-                template=card.template,
+                template=template,
                 field_defs=note_type.field_defs,
                 field_values=note.field_values or {},
                 media_assets=note.media_assets,

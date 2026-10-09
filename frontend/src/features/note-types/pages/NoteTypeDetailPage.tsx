@@ -1,225 +1,89 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faArrowLeft,
   faArrowUpRightFromSquare,
   faCheck,
   faCircleCheck,
+  faClockRotateLeft,
   faPlus,
   faRobot,
   faRotateLeft,
   faShareNodes,
   faSliders,
 } from '@fortawesome/free-solid-svg-icons'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router-dom'
-import { toast } from 'sonner'
-import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AmbientBackground } from '@/components/ambient-background'
+import { TemplateCodeEditor, cardTemplateQueryKeys, fetchTemplateVersion, fetchTemplateVersions, restoreTemplateVersion, type CardTemplateItem, type NoteTypeTemplatesResponse } from '@/entities/card-template'
+import { TemplateVersionHistorySheet } from '@/features/template-versions'
 import { NoteTypeLivePreview } from '../components/NoteTypeLivePreview'
+import { TemplateManagementBar } from '../components/TemplateManagementBar'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-
-type FieldDefItem = {
-  id: string
-  name: string
-  field_type: string
-  position: number
-}
-
-type TemplateItem = {
-  id: string
-  name: string
-  front_html?: string
-  back_html?: string
-  shared_css?: string
-}
-
-type NoteTypeDetail = {
-  id: string
-  name: string
-  publish_status?: string
-  field_defs?: FieldDefItem[]
-  templates?: TemplateItem[]
-}
-
-type PreviewResponse = {
-  front_html?: string
-  back_html?: string
-  front_renderer_payload?: unknown
-  back_renderer_payload?: unknown
-}
+import { useNoteTypeDetail } from '../hooks/useNoteTypeDetail'
+import { TemplateApplicationsPanel } from '@/features/template-library'
 
 export function NoteTypeDetailPage() {
-  const { id: noteTypeId } = useParams<{ id: string }>()
+  const { t } = useTranslation('note_types')
   const queryClient = useQueryClient()
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const {
+    noteTypeId,
+    detailQuery,
+    noteType,
+    templates,
+    fields,
+    selectedTemplate,
+    selectedNoteCount,
+    setSelectedTemplateId,
+    activeTab,
+    setActiveTab,
+    frontHtml,
+    setFrontHtml,
+    backHtml,
+    setBackHtml,
+    sharedCss,
+    setSharedCss,
+    previewResult,
+    previewError,
+    isPreviewLoading,
+    saveMutation,
+    createTemplateMutation,
+    resetTemplateMutation,
+    invalidateTemplates,
+  } = useNoteTypeDetail()
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'front' | 'back' | 'css'>('front')
+  const templateId = selectedTemplate?.id
+  const selectedIdentity = useRef<string | undefined>(templateId)
+  selectedIdentity.current = templateId
+  const historySource = useMemo(() => ({
+    listKey: cardTemplateQueryKeys.templateVersions(templateId ?? ''),
+    detailKey: (versionId: string) => cardTemplateQueryKeys.templateVersion(templateId ?? '', versionId),
+    list: (signal?: AbortSignal) => fetchTemplateVersions(templateId!, signal),
+    get: (versionId: string, signal?: AbortSignal) => fetchTemplateVersion(templateId!, versionId, signal),
+    restore: (versionId: string) => restoreTemplateVersion(templateId!, versionId),
+  }), [templateId])
 
-  const [frontHtml, setFrontHtml] = useState('')
-  const [backHtml, setBackHtml] = useState('')
-  const [sharedCss, setSharedCss] = useState('')
-
-  const [previewResult, setPreviewResult] = useState<PreviewResponse | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
-
-  const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-
-  const detailQuery = useQuery({
-    queryKey: ['note-type-detail', noteTypeId],
-    queryFn: () => appApi.get<NoteTypeDetail>(`/note-types/${noteTypeId}`),
-    enabled: Boolean(noteTypeId),
-  })
-
-  const noteType = detailQuery.data
-  const templates = useMemo(() => noteType?.templates || [], [noteType?.templates])
-  const fields = (noteType?.field_defs || []).slice().sort((a, b) => a.position - b.position)
-
-  const selectedTemplate = useMemo(() => {
-    return templates.find((t) => t.id === selectedTemplateId) || templates[0] || null
-  }, [templates, selectedTemplateId])
-
-  // Auto select initial template
-  useEffect(() => {
-    if (templates.length && !selectedTemplateId) {
-      setSelectedTemplateId(templates[0].id)
-    }
-  }, [templates, selectedTemplateId])
-
-  // Sync editor values when selected template changes
-  const frontHtmlVal = selectedTemplate?.front_html
-  const backHtmlVal = selectedTemplate?.back_html
-  const sharedCssVal = selectedTemplate?.shared_css
-  useEffect(() => {
-    if (selectedTemplate) {
-      setFrontHtml(frontHtmlVal || '')
-      setBackHtml(backHtmlVal || '')
-      setSharedCss(sharedCssVal || '')
-    }
-  }, [selectedTemplate, frontHtmlVal, backHtmlVal, sharedCssVal])
-
-  // Save Template Mutation
-  const saveMutation = useMutation({
-    mutationFn: (payload: { front_html: string; back_html: string; shared_css: string }) =>
-      appApi.mutate(`/note-types/${noteTypeId}/templates/${selectedTemplateId}`, 'PATCH', payload),
-    onSuccess: () => {
-      toast.success('Đã lưu Template.')
-      void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
-    },
-    onError: (error: Error) => {
-      toast.error('Không thể lưu Template', { description: error.message })
-    },
-  })
-
-  // Create New Template Mutation
-  const createTemplateMutation = useMutation({
-    mutationFn: () =>
-      appApi.mutate<TemplateItem>(`/note-types/${noteTypeId}/templates`, 'POST', {
-        name: `Card ${templates.length + 1}`,
-        front_html: '{{Word}}',
-        back_html: '{{Word}}',
-      }),
-    onSuccess: (created) => {
-      toast.success('Đã tạo Template mới.')
-      setSelectedTemplateId(created.id)
-      void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
-    },
-    onError: (error: Error) => {
-      toast.error('Không thể tạo Template', { description: error.message })
-    },
-  })
-
-  // Reset Template Mutation
-  const resetTemplateMutation = useMutation({
-    mutationFn: () =>
-      appApi.mutate<TemplateItem>(
-        `/note-types/${noteTypeId}/templates/${selectedTemplateId}/reset`,
-        'POST',
-      ),
-    onSuccess: (reset) => {
-      toast.success('Đã đặt lại Template mặc định.')
-      setFrontHtml(reset.front_html || '')
-      setBackHtml(reset.back_html || '')
-      setSharedCss(reset.shared_css || '')
-      void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
-    },
-    onError: (error: Error) => {
-      toast.error('Không thể đặt lại Template', { description: error.message })
-    },
-  })
-
-  // Live Preview Fetcher
-  useEffect(() => {
-    if (!noteTypeId || !selectedTemplateId) return
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      setIsPreviewLoading(true)
-      setPreviewError(null)
-      try {
-        const res = await appApi.mutate<PreviewResponse>(
-          `/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`,
-          'POST',
-          {
-            front_html: frontHtml,
-            back_html: backHtml,
-            shared_css: sharedCss,
-            use_sample_data: true,
-          },
-        )
-        if (!cancelled) {
-          setPreviewResult(res)
-        }
-      } catch {
-        if (!cancelled) {
-          setPreviewResult(null)
-          setPreviewError('Lỗi tải xem trước template.')
-        }
-      } finally {
-        if (!cancelled) {
-          setIsPreviewLoading(false)
-        }
-      }
-    }, 500)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [noteTypeId, selectedTemplateId, frontHtml, backHtml, sharedCss])
-
-  // Placeholder Toolbar Click Handler
-  const insertPlaceholder = (fieldName: string) => {
-    const placeholder = `{{${fieldName}}}`
-    const textarea = activeTextareaRef.current
-
-    if (activeTab === 'front') {
-      if (textarea) {
-        const start = textarea.selectionStart || 0
-        const end = textarea.selectionEnd || 0
-        setFrontHtml((prev) => prev.slice(0, start) + placeholder + prev.slice(end))
-      } else {
-        setFrontHtml((prev) => prev + placeholder)
-      }
-    } else if (activeTab === 'back') {
-      if (textarea) {
-        const start = textarea.selectionStart || 0
-        const end = textarea.selectionEnd || 0
-        setBackHtml((prev) => prev.slice(0, start) + placeholder + prev.slice(end))
-      } else {
-        setBackHtml((prev) => prev + placeholder)
-      }
-    } else {
-      setSharedCss((prev) => prev + `/* ${placeholder} */`)
-    }
+  const applyRestored = (restored: CardTemplateItem) => {
+    if (restored.id !== selectedIdentity.current) return
+    setFrontHtml(restored.front_html)
+    setBackHtml(restored.back_html)
+    setSharedCss(restored.shared_css)
+    queryClient.setQueryData(['note-type-detail', noteTypeId], (old: typeof noteType) => old && ({
+      ...old, templates: old.templates?.map((item) => item.id === restored.id ? { ...item, ...restored } : item),
+    }))
+    queryClient.setQueryData<NoteTypeTemplatesResponse>(cardTemplateQueryKeys.noteTypeTemplates(noteTypeId ?? ''), (old) => old && ({
+      ...old, items: old.items.map((item) => item.id === restored.id ? { ...item, ...restored } : item),
+    }))
+    invalidateTemplates()
   }
 
-  if (detailQuery.isPending) return <PageLoading label="Đang tải thông tin NoteType…" />
+  if (detailQuery.isPending) return <PageLoading label={t('detail.loading')} />
   if (detailQuery.error) return <Page><PageError error={detailQuery.error} /></Page>
 
   return (
@@ -228,26 +92,38 @@ export function NoteTypeDetailPage() {
 
       {/* Standardized Flama PageHeader */}
       <PageHeader
-        title={noteType?.name || 'Chi tiết Loại thẻ'}
-        description="Tùy chỉnh mã Front HTML, Back HTML, CSS và kiểm tra trực tiếp hiệu ứng hiển thị."
+        title={noteType?.name || t('detail.header.fallback_title')}
+        description={t('detail.header.description')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
               <Link to="/flashcards/note-types">
-                <FontAwesomeIcon icon={faArrowLeft} className="text-xs" /> Quay lại
+                <FontAwesomeIcon icon={faArrowLeft} className="text-xs" /> {t('detail.header.back_btn')}
               </Link>
             </Button>
 
             {noteType?.publish_status === 'published' || noteType?.publish_status === 'unlisted' ? (
-              <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-xl gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 gap-1.5"
+              >
                 <Link to={`/marketplace/note-types/${noteTypeId}`}>
-                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500 text-xs" /> Xem trên Marketplace
+                  <FontAwesomeIcon icon={faCircleCheck} className="text-xs text-emerald-500" />
+                  {t('detail.header.view_marketplace')}
                 </Link>
               </Button>
             ) : (
-              <Button size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-bold rounded-xl shadow-xs gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl text-primary border-primary/30 hover:bg-primary/10 gap-1.5"
+              >
                 <Link to={`/marketplace/note-types/publish?id=${noteTypeId}`}>
-                  <FontAwesomeIcon icon={faShareNodes} className="text-xs" /> Chia sẻ lên Kho
+                  <FontAwesomeIcon icon={faShareNodes} className="text-xs text-primary" />
+                  {t('detail.header.share_marketplace')}
                 </Link>
               </Button>
             )}
@@ -259,14 +135,15 @@ export function NoteTypeDetailPage() {
               className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
             >
               <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
-                <FontAwesomeIcon icon={faRobot} className="text-primary text-xs" /> Hướng Dẫn & Prompt AI
+                <FontAwesomeIcon icon={faRobot} className="text-primary text-xs" />
+                {t('detail.header.guide_btn')}
                 <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="opacity-70 text-[10px]" />
               </Link>
             </Button>
 
-            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
+            <Button size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-bold rounded-xl shadow-xs gap-1.5">
               <Link to={`/flashcards/note-types/${noteTypeId}/fields`}>
-                <FontAwesomeIcon icon={faSliders} className="text-xs" /> Quản lý Trường
+                <FontAwesomeIcon icon={faSliders} className="text-xs" /> {t('detail.header.fields_btn')}
               </Link>
             </Button>
           </div>
@@ -274,14 +151,28 @@ export function NoteTypeDetailPage() {
       />
 
       <div className="grid gap-5 lg:grid-cols-12 items-stretch">
-        {/* Left Column: Template Editor */}
-        <div className="lg:col-span-6 flex flex-col">
-          <Card className="p-4 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl bg-card">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
-              <h3 className="text-sm font-bold text-foreground">Trình Soạn Thảo Template</h3>
-              <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
+        {/* Left Column: Code Editor & Template Selector */}
+        <div className="lg:col-span-6 flex flex-col gap-4">
+          <TemplateManagementBar
+            noteTypeId={noteTypeId ?? ''}
+            template={selectedTemplate}
+            noteCount={selectedNoteCount}
+            templateCount={templates.length}
+            onRenamed={invalidateTemplates}
+            onDeleted={(deletedId) => {
+              invalidateTemplates()
+              const remaining = templates.filter((t) => t.id !== deletedId)
+              if (remaining.length > 0) {
+                setSelectedTemplateId(remaining[0].id)
+              }
+            }}
+          />
+
+          <TemplateCodeEditor
+            headerActions={
+              <>
                 <NativeSelect
-                  value={selectedTemplateId || ''}
+                  value={selectedTemplate?.id}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
                   className="h-8 sm:h-9 text-xs font-medium flex-1 sm:w-40 min-w-[120px] rounded-xl bg-background"
                 >
@@ -298,7 +189,7 @@ export function NoteTypeDetailPage() {
                   className="h-8 sm:h-9 px-2.5 text-xs font-semibold rounded-xl shrink-0 gap-1.5"
                   onClick={() => createTemplateMutation.mutate()}
                 >
-                  <FontAwesomeIcon icon={faPlus} className="text-xs" /> Mới
+                  <FontAwesomeIcon icon={faPlus} className="text-xs" /> {t('detail.editor_actions.new')}
                 </Button>
 
                 <Button
@@ -306,100 +197,30 @@ export function NoteTypeDetailPage() {
                   variant="ghost"
                   className="h-8 sm:h-9 px-2.5 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl shrink-0 gap-1.5"
                   onClick={() => {
-                    if (window.confirm('Khôi phục template về mặc định ban đầu?')) {
+                    if (window.confirm(t('detail.editor_actions.reset_confirm'))) {
                       resetTemplateMutation.mutate()
                     }
                   }}
-                  title="Đặt lại template mặc định"
+                  title={t('detail.editor_actions.reset_tooltip')}
                 >
-                  <FontAwesomeIcon icon={faRotateLeft} className="text-xs" /> Reset
+                  <FontAwesomeIcon icon={faRotateLeft} className="text-xs" /> {t('detail.editor_actions.reset')}
                 </Button>
-              </div>
-            </div>
-
-            {/* Placeholder Toolbar with Horizontal Touch Scroll & Wrap */}
-            <div className="mb-3 space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                <span>Chèn trường dữ liệu (Placeholders):</span>
-                <span className="text-[10px] font-normal sm:hidden text-muted-foreground">(Chạm để chèn)</span>
-              </div>
-              <div
-                className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none touch-pan-x overscroll-x-contain sm:flex-wrap"
-                style={{ WebkitOverflowScrolling: 'touch' }}
-              >
-                {fields.map((field) => (
-                  <Button
-                    key={field.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => insertPlaceholder(field.name)}
-                    className="shrink-0 h-7 px-2.5 text-xs font-mono text-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-all cursor-pointer rounded-lg border-border/80"
-                  >
-                    {`{{${field.name}}}`}
-                  </Button>
-                ))}
-                {!fields.length ? (
-                  <span className="text-xs text-muted-foreground italic">Chưa có trường nào</span>
-                ) : null}
-              </div>
-            </div>
-
-            <Tabs
-              value={activeTab}
-              onValueChange={(val) => setActiveTab(val as 'front' | 'back' | 'css')}
-              className="flex-1 flex flex-col"
-            >
-              <TabsList className="grid grid-cols-3 w-full h-9 p-1 mb-2 rounded-xl">
-                <TabsTrigger value="front" className="text-xs font-semibold py-1 rounded-lg">
-                  Front HTML
-                </TabsTrigger>
-                <TabsTrigger value="back" className="text-xs font-semibold py-1 rounded-lg">
-                  Back HTML
-                </TabsTrigger>
-                <TabsTrigger value="css" className="text-xs font-semibold py-1 rounded-lg">
-                  Shared CSS
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="front" className="flex-1 mt-0">
-                <textarea
-                  ref={(el) => {
-                    if (activeTab === 'front') activeTextareaRef.current = el
-                  }}
-                  value={frontHtml}
-                  onChange={(e) => setFrontHtml(e.target.value)}
-                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
-                  placeholder="<h2>{{Word}}</h2>"
-                />
-              </TabsContent>
-
-              <TabsContent value="back" className="flex-1 mt-0">
-                <textarea
-                  ref={(el) => {
-                    if (activeTab === 'back') activeTextareaRef.current = el
-                  }}
-                  value={backHtml}
-                  onChange={(e) => setBackHtml(e.target.value)}
-                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
-                  placeholder="<h2>{{Word}}</h2><hr/><p>{{Meaning}}</p>"
-                />
-              </TabsContent>
-
-              <TabsContent value="css" className="flex-1 mt-0">
-                <textarea
-                  ref={(el) => {
-                    if (activeTab === 'css') activeTextareaRef.current = el
-                  }}
-                  value={sharedCss}
-                  onChange={(e) => setSharedCss(e.target.value)}
-                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
-                  placeholder=".card { text-align: center; color: #333; }"
-                />
-              </TabsContent>
-            </Tabs>
-
-            <div className="pt-3 flex justify-start border-t mt-3">
+                <Button size="sm" variant="outline" className="h-8 sm:h-9 px-2.5 text-xs font-semibold rounded-xl shrink-0 gap-1.5"
+                  onClick={() => setHistoryOpen(true)} disabled={!templateId}>
+                  <FontAwesomeIcon icon={faClockRotateLeft} className="text-xs" /> Lịch sử
+                </Button>
+              </>
+            }
+            fields={fields}
+            activeTab={activeTab}
+            onActiveTabChange={setActiveTab}
+            frontHtml={frontHtml}
+            backHtml={backHtml}
+            sharedCss={sharedCss}
+            onFrontHtmlChange={setFrontHtml}
+            onBackHtmlChange={setBackHtml}
+            onSharedCssChange={setSharedCss}
+            footer={
               <Button
                 size="sm"
                 disabled={saveMutation.isPending}
@@ -412,32 +233,36 @@ export function NoteTypeDetailPage() {
                 }
                 className="w-full sm:w-auto font-bold px-5 h-9 sm:h-10 text-xs sm:text-sm rounded-xl shadow-xs justify-center gap-1.5"
               >
-                <FontAwesomeIcon icon={faCheck} className="text-xs" /> Lưu Template
+                <FontAwesomeIcon icon={faCheck} className="text-xs" /> {t('detail.editor_actions.save_template')}
               </Button>
-            </div>
-          </Card>
+            }
+          />
+          {templateId && historyOpen && <TemplateVersionHistorySheet key={`${noteTypeId}:${templateId}`} open={historyOpen} onOpenChange={setHistoryOpen}
+            source={historySource} current={{ front_html: frontHtml, back_html: backHtml, shared_css: sharedCss }} onRestored={applyRestored} />}
         </div>
 
         {/* Right Column: Live Preview Frame */}
         <div className="lg:col-span-6 flex flex-col">
           <NoteTypeLivePreview
-            cardId={`note-type-live-preview-${noteTypeId}`}
-            side={activeTab === 'back' ? 'back' : 'front'}
-            onSideChange={(s) => setActiveTab(s === 'back' ? 'back' : 'front')}
+            cardId={selectedTemplate?.id || 'preview'}
+            templates={templates}
+            selectedTemplateId={selectedTemplate?.id}
+            onSelectTemplate={setSelectedTemplateId}
             frontPayload={previewResult?.front_renderer_payload}
             backPayload={previewResult?.back_renderer_payload}
-            frontHtml={previewResult?.front_html}
-            backHtml={previewResult?.back_html}
-            scope="note_type_live_preview"
-            scopeId={noteTypeId}
-            fieldDefs={fields}
+            frontHtml={previewResult?.front_html || frontHtml}
+            backHtml={previewResult?.back_html || backHtml}
             isLoading={isPreviewLoading}
             error={previewError}
-            title="Xem Trước Trực Tiếp (Live Preview)"
-            subtitle="(Hiển thị mô phỏng dữ liệu thẻ mẫu)"
+            fieldDefs={noteType?.field_defs}
+            scope="note_type_editor_live_preview"
+            scopeId={noteTypeId}
+            className="h-full flex-1 min-h-[480px] lg:min-h-[580px]"
+            containerHeightClass="h-[clamp(20rem,55vh,42rem)] min-h-[360px]"
           />
         </div>
       </div>
+      {noteTypeId && <TemplateApplicationsPanel noteTypeId={noteTypeId} onChanged={invalidateTemplates} />}
     </Page>
   )
 }

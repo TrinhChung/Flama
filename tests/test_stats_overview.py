@@ -253,6 +253,12 @@ class StatsOverviewTests(unittest.TestCase):
             self.assertEqual(future_review_skew_day["source"], "due")
             self.assertTrue(future_review_skew_day["is_future"])
 
+            # Year totals must only aggregate up to today_local, excluding future clock skew
+            self.assertEqual(payload["metrics"]["total_cards"], 10)
+            self.assertEqual(payload["total_cards"], 10)
+            self.assertEqual(payload["metrics"]["total_minutes"], 0.17)
+            self.assertEqual(payload["total_minutes"], 0.17)
+
     def test_future_due_local_day_boundary(self):
         with self.app.app_context():
             # UTC+7 study-day boundary is 04:00 local, so 00:30 local still belongs to Jan 10.
@@ -527,6 +533,52 @@ class StatsOverviewTests(unittest.TestCase):
                 self.assertEqual(self._canonical_day_counts(
                     timezone_name="America/New_York", start=date(2026, 3, 8), end=date(2026, 3, 10),
                 ), {date(2026, 3, 8): 1, date(2026, 3, 9): 1})
+
+    def test_overview_year_metrics_and_aliases(self):
+        with self.app.app_context():
+            # 5 reviews in 2025 (30s each = 150s = 2.5 min)
+            for day in range(1, 6):
+                self._add_event(when_utc=datetime(2025, 6, day, 10, 0, 0), duration_ms=30000)
+            # 3 reviews in 2026 (60s each = 180s = 3.0 min)
+            for day in range(1, 4):
+                self._add_event(when_utc=datetime(2026, 1, day, 10, 0, 0), duration_ms=60000)
+            db.session.commit()
+
+            # Query year 2025 (past year)
+            p2025 = build_stats_overview(
+                user_id=self.user_id,
+                year=2025,
+                timezone_name="UTC",
+                now_utc=datetime(2026, 1, 10, 12, 0, 0),
+            )
+            self.assertEqual(p2025["metrics"]["total_cards"], 5)
+            self.assertEqual(p2025["total_cards"], 5)
+            self.assertEqual(p2025["metrics"]["total_minutes"], 2.5)
+            self.assertEqual(p2025["total_minutes"], 2.5)
+
+            # Query year 2026 (current year)
+            p2026 = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=datetime(2026, 1, 10, 12, 0, 0),
+            )
+            self.assertEqual(p2026["metrics"]["total_cards"], 3)
+            self.assertEqual(p2026["total_cards"], 3)
+            self.assertEqual(p2026["metrics"]["total_minutes"], 3.0)
+            self.assertEqual(p2026["total_minutes"], 3.0)
+
+            # Query future year 2030 (no reviews)
+            p2030 = build_stats_overview(
+                user_id=self.user_id,
+                year=2030,
+                timezone_name="UTC",
+                now_utc=datetime(2026, 1, 10, 12, 0, 0),
+            )
+            self.assertEqual(p2030["metrics"]["total_cards"], 0)
+            self.assertEqual(p2030["total_cards"], 0)
+            self.assertEqual(p2030["metrics"]["total_minutes"], 0.0)
+            self.assertEqual(p2030["total_minutes"], 0.0)
 
 
 if __name__ == "__main__":

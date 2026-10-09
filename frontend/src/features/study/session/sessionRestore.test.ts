@@ -165,6 +165,63 @@ describe('persisted study session normalization', () => {
     )
   })
 
+  it('retains additive input projection metadata and rejects corrupted mappings', () => {
+    const stored = persistedSession()
+    const projection = {
+      schema_version: 'template-input-bindings.v1' as const,
+      input_bindings: { Word: 'field-1' },
+      field_defs: [{ id: 'field-1', name: 'SourceWord', field_type: 'text' }],
+    }
+    stored.snapshot.templates.template.field_defs = [{ id: 'alias-word', name: 'Word', field_type: 'text' }]
+    stored.snapshot.templates.template.binding_projection = {
+      ...projection, fingerprint: canonicalDigest(projection),
+    }
+    const result = normalizePersistedStudySession(stored)
+    expect(result.status).toBe('restored')
+    if (result.status === 'restored') {
+      expect(result.session.snapshot.templates.template.binding_projection).toEqual(
+        stored.snapshot.templates.template.binding_projection,
+      )
+    }
+    stored.snapshot.templates.template.binding_projection.input_bindings.Word = 'different-field'
+    expect(normalizePersistedStudySession(stored)).toMatchObject({
+      status: 'quarantine', quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+    })
+  })
+
+  it('rejects malformed projection schema, missing fingerprint, unknown input, and duplicate source IDs', () => {
+    const mutations = [
+      (projection: Record<string, unknown>) => { projection.schema_version = 'unsupported' },
+      (projection: Record<string, unknown>) => { delete projection.fingerprint },
+      (projection: Record<string, unknown>) => { projection.input_bindings = { Foreign: 'field-1' } },
+      (projection: Record<string, unknown>) => {
+        projection.input_bindings = { Word: 'foreign-field' }
+        const material = { ...projection }
+        delete material.fingerprint
+        projection.fingerprint = canonicalDigest(material)
+      },
+      (projection: Record<string, unknown>) => { projection.field_defs = [
+        { id: 'field-1', name: 'Source', field_type: 'text' },
+        { id: 'field-1', name: 'Duplicate', field_type: 'text' },
+      ] },
+    ]
+    for (const mutate of mutations) {
+      const stored = persistedSession()
+      stored.snapshot.templates.template.field_defs = [{ id: 'alias-word', name: 'Word', field_type: 'text' }]
+      const material = {
+        schema_version: 'template-input-bindings.v1' as const,
+        input_bindings: { Word: 'field-1' },
+        field_defs: [{ id: 'field-1', name: 'Source', field_type: 'text' }],
+      }
+      const projection = { ...material, fingerprint: canonicalDigest(material) }
+      mutate(projection)
+      stored.snapshot.templates.template.binding_projection = projection
+      expect(normalizePersistedStudySession(stored)).toMatchObject({
+        status: 'quarantine', quarantine: { reason: 'COMPOSITION_CONTRACT_MISMATCH' },
+      })
+    }
+  })
+
   it('quarantines tampered frozen fingerprints and artifact relationships', () => {
     const badFingerprint = addFrozenCompositionContract(persistedSession())
     badFingerprint.snapshot.composition_binding!.binding_fingerprint = `sha256-${'0'.repeat(64)}`

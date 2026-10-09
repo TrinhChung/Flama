@@ -1,0 +1,105 @@
+{
+  "header": {
+    "title": "Study Statistics",
+    "description": "Track memory retention performance, study streaks, and flashcard review forecasts."
+  },
+  "filters": {
+    "scope_label": "Scope",
+    "scope_deck": "By Deck",
+    "scope_collection": "Entire Collection",
+    "deck_label": "Deck",
+    "entire_collection": "Entire collection",
+    "select_deck": "Select deck",
+    "review_cta": "Study →",
+    "history_label": "History",
+    "history_12m": "12 Months",
+    "history_all": "All Time"
+  },
+  "kpi": {
+    "today": {
+      "title": "Today",
+      "minutes": "{{minutes}} min",
+      "cards_unit": "cards",
+      "speed_label": "Speed",
+      "speed_value": "{{speed}}s / card"
+    },
+    "streak": {
+      "title": "Study Streak",
+      "percent_days": "{{percent}}% of days",
+      "days_unit": "days",
+      "longest_label": "Best streak",
+      "longest_value": "{{days}} days"
+    },
+    "forecast": {
+      "title": "Review Forecast",
+      "tomorrow": "Tomorrow: {{count}}",
+      "reviews_unit": "reviews",
+      "avg_label": "Average",
+      "avg_value": "{{avg}} / day"
+    },
+    "workload": {
+      "title": "Daily Workload",
+      "level_light": "Light",
+      "level_optimal": "Optimal",
+      "level_heavy": "Intensive",
+      "cards_per_day": "cards/day",
+      "target_label": "Goal",
+      "target_value": "Memory retention"
+    }
+  },
+  "study_time_chart": {
+    "title": "Study Time & Total Hours",
+    "description": "Monitor daily average study minutes and total flashcard review duration.",
+    "avg_badge": "Avg: {{minutes}}m/day",
+    "total_badge": "Total: {{hours}}h",
+    "ranges": {
+      "7d": "7 Days",
+      "7d_short": "7D",
+      "30d": "30 Days",
+      "30d_short": "30D",
+      "90d": "90 Days",
+      "90d_short": "90D",
+      "12m": "1 Year",
+      "12m_short": "1Y",
+      "all": "All Time",
+      "all_short": "All"
+    },
+    "empty_title": "No Study Time Data",
+    "empty_description": "Complete a study review session to view study time statistics.",
+    "tooltip_time": "Duration:",
+    "tooltip_minutes": "{{minutes}} minutes",
+    "tooltip_total_hours": "Total Hours:",
+    "tooltip_hours": "{{hours}} hours",
+    "tooltip_reviews": "Cards Flipped:",
+    "tooltip_cards": "{{count}} cards",
+    "tooltip_retention": "Retention Rate:",
+    "series_time": "Study Time (min)",
+    "series_hours": "Total Study Time (h)"
+  },
+  "future_due": {
+    "section_title": "Future Due Forecast",
+    "section_description": "Distribution of scheduled review volume and cumulative totals by day.",
+    "backlog_label": "Overdue Cards (Backlog)",
+    "ranges": {
+      "30d": "30 Days",
+      "90d": "90 Days",
+      "1y": "1 Year",
+      "all": "All Time"
+    },
+    "timezone_notice": "System timezone: {{tz}}",
+    "empty_title": "No Data Available",
+    "empty_description": "No cards due in the selected time range.",
+    "today": "Today",
+    "card_types": {
+      "new": "New Cards",
+      "learn": "Learning",
+      "review": "Review",
+      "cumulative": "Cumulative"
+    },
+    "total_due": "Total Due:"
+  },
+  "loading": {
+    "config": "Loading statistics configuration…",
+    "stats": "Calculating statistics data…"
+  }
+}

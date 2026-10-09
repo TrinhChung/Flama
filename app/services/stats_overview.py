@@ -480,10 +480,14 @@ def build_stats_overview(
     if counted_start and counted_end and counted_end >= counted_start:
         counted_days = (counted_end - counted_start).days + 1
         counted_total_cards = 0
+        counted_total_duration_ms = 0
         counted_active_days = 0
         for day_value in _iter_days(counted_start, counted_end):
-            cards = _safe_int((day_map.get(day_value) or {}).get("cards"))
+            bucket = day_map.get(day_value) or {}
+            cards = _safe_int(bucket.get("cards"))
+            dur = max(0, _safe_int(bucket.get("duration_ms")))
             counted_total_cards += cards
+            counted_total_duration_ms += dur
             if cards > 0:
                 counted_active_days += 1
         daily_average_cards = counted_total_cards / counted_days if counted_days > 0 else 0.0
@@ -495,6 +499,8 @@ def build_stats_overview(
         )
     else:
         counted_days = 0
+        counted_total_cards = 0
+        counted_total_duration_ms = 0
         daily_average_cards = 0.0
         days_learned_percent = 0.0
         longest_streak_days = 0
@@ -567,6 +573,9 @@ def build_stats_overview(
             }
         )
 
+    total_year_cards = counted_total_cards
+    total_year_minutes = _round2(counted_total_duration_ms / 60000.0)
+
     return {
         "year": selected_year,
         "timezone": effective_timezone_name,
@@ -583,5 +592,13 @@ def build_stats_overview(
             "longest_streak_days": _safe_int(longest_streak_days),
             "current_streak_days": _safe_int(current_streak_days),
             "days_counted": counted_days,
+            "total_cards": total_year_cards,
+            "total_minutes": total_year_minutes,
         },
+        "current_streak": _safe_int(current_streak_days),
+        "longest_streak": _safe_int(longest_streak_days),
+        "today_cards": today_cards,
+        "today_minutes": today_minutes,
+        "total_cards": total_year_cards,
+        "total_minutes": total_year_minutes,
     }

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   FolderTree,
@@ -42,6 +43,7 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
   onCancel,
   className = '',
 }) => {
+  const { t } = useTranslation('worksheets')
   const [activeDeckId, setActiveDeckId] = useState<number | null>(selectedDeckId)
   const [deckMeta, setDeckMeta] = useState<DeckWorksheetMeta | null>(null)
   const [isLoadingMeta, setIsLoadingMeta] = useState<boolean>(false)
@@ -137,14 +139,14 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
           <div>
             <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
               <FolderTree className="size-4 text-primary" />
-              <span>Bước 1: Chọn bộ thẻ để xuất bài tập</span>
+              <span>{t('deck_select.header_title', 'Bước 1: Chọn bộ thẻ để xuất bài tập')}</span>
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Chọn bộ thẻ chứa từ vựng hoặc chữ Hán bạn muốn tạo mẫu giấy luyện viết & in ấn.
+              {t('deck_select.header_desc', 'Chọn bộ thẻ chứa từ vựng hoặc chữ Hán bạn muốn tạo mẫu giấy luyện viết & in ấn.')}
             </p>
           </div>
           <Badge variant="outline" className="text-[11px] font-semibold">
-            {deckOptions.length} bộ thẻ
+            {t('deck_select.deck_count', '{{count}} bộ thẻ', { count: deckOptions.length })}
           </Badge>
         </div>
       </div>
@@ -163,14 +165,14 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="text-xs font-bold text-foreground">
-                  Tạo mẫu giấy in tự do (Không cần thẻ học)
+                  {t('deck_select.standalone_card_title', 'Tạo mẫu giấy in tự do (Không cần thẻ học)')}
                 </h4>
                 <Badge variant="secondary" className="text-[9.5px] px-1.5 py-0 font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20">
-                  Genkō Yōshi / Ô kẻ tay
+                  {t('deck_select.standalone_card_badge', 'Genkō Yōshi / Ô kẻ tay')}
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                In trang trắng giấy làm văn 400 ô, ô chữ Hán hoa thị, chữ thập để tự do viết tay bằng bút mực.
+                {t('deck_select.standalone_card_desc', 'In trang trắng giấy làm văn 400 ô, ô chữ Hán hoa thị, chữ thập để tự do viết tay bằng bút mực.')}
               </p>
             </div>
           </div>
@@ -180,7 +182,7 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
             size="sm"
             className="h-8 text-xs font-semibold text-primary group-hover:translate-x-0.5 transition-transform shrink-0"
           >
-            <span>Chọn mẫu tự do &rarr;</span>
+            <span>{t('deck_select.standalone_card_action', 'Chọn mẫu tự do →')}</span>
           </Button>
         </div>
 
@@ -188,7 +190,7 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
         <div className="flex items-center gap-3">
           <div className="h-px bg-border/80 flex-1" />
           <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-            Hoặc chọn từ bộ thẻ của bạn
+            {t('deck_select.divider_or', 'Hoặc chọn từ bộ thẻ của bạn')}
           </span>
           <div className="h-px bg-border/80 flex-1" />
         </div>
@@ -198,12 +200,12 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
           {isLoadingDecks ? (
             <div className="h-48 flex flex-col items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="size-6 animate-spin text-primary" />
-              <span className="text-xs">Đang tải danh sách bộ thẻ...</span>
+              <span className="text-xs">{t('deck_select.loading_decks', 'Đang tải danh sách bộ thẻ...')}</span>
             </div>
           ) : deckOptions.length === 0 ? (
             <div className="h-36 flex flex-col items-center justify-center gap-2 text-muted-foreground text-center">
               <FolderTree className="size-8 opacity-40" />
-              <p className="text-xs font-medium">Chưa có bộ thẻ nào.</p>
+              <p className="text-xs font-medium">{t('deck_select.empty_decks', 'Chưa có bộ thẻ nào.')}</p>
             </div>
           ) : (
             <div className="max-h-[260px] overflow-y-auto">
@@ -220,7 +222,7 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
         {isLoadingMeta && (
           <div className="p-3 rounded-xl border border-border/60 bg-muted/30 flex items-center gap-2.5 text-xs text-muted-foreground">
             <Loader2 className="size-4 animate-spin text-primary shrink-0" />
-            <span>Đang kiểm tra cấu trúc loại thẻ của bộ thẻ...</span>
+            <span>{t('deck_select.checking_structure', 'Đang kiểm tra cấu trúc loại thẻ của bộ thẻ...')}</span>
           </div>
         )}
 
@@ -240,26 +242,25 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
                   <AlertTriangle className="size-4.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-xs font-bold text-amber-950 dark:text-amber-100">
-                      Không thể tiếp tục: Bộ thẻ chứa {deckMeta.note_types?.length || 2} loại thẻ khác nhau
+                      {t('deck_select.mixed_note_types_title', 'Không thể tiếp tục: Bộ thẻ chứa {{count}} loại thẻ khác nhau', { count: deckMeta.note_types?.length || 2 })}
                     </h4>
                     <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
-                      Để hệ thống ánh xạ dữ liệu và trích xuất chữ Hán chính xác, bộ thẻ phải đồng nhất{' '}
-                      <strong>duy nhất 1 loại thẻ (Note Type)</strong>.
+                      {t('deck_select.mixed_note_types_desc', 'Để hệ thống ánh xạ dữ liệu và trích xuất chữ Hán chính xác, bộ thẻ phải đồng nhất duy nhất 1 loại thẻ (Note Type).')}
                     </p>
                     <div className="mt-2 space-y-1 bg-background/60 p-2 rounded-lg border border-amber-500/20 text-[11px]">
                       <div className="font-semibold text-foreground">
-                        Các loại thẻ phát hiện trong bộ thẻ này:
+                        {t('deck_select.detected_note_types', 'Các loại thẻ phát hiện trong bộ thẻ này:')}
                       </div>
                       <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
                         {deckMeta.note_types?.map((nt) => (
                           <li key={nt.id}>
-                            <span className="font-medium text-foreground">{nt.name}</span> ({nt.note_count} ghi chú)
+                            <span className="font-medium text-foreground">{nt.name}</span> ({t('deck_select.note_count_parens', '{{count}} ghi chú', { count: nt.note_count })})
                           </li>
                         ))}
                       </ul>
                     </div>
                     <p className="text-[10.5px] font-semibold text-amber-700 dark:text-amber-300 mt-2">
-                      👉 Vui lòng chọn một bộ thẻ con cụ thể hoặc bộ thẻ khác chỉ có 1 loại thẻ duy nhất.
+                      {t('deck_select.mixed_note_types_hint', '👉 Vui lòng chọn một bộ thẻ con cụ thể hoặc bộ thẻ khác chỉ có 1 loại thẻ duy nhất.')}
                     </p>
                   </div>
                 </div>
@@ -271,9 +272,9 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
               <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 flex items-start gap-2.5 text-xs">
                 <Info className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold">Bộ thẻ này hiện chưa có ghi chú nào</div>
+                  <div className="font-bold">{t('deck_select.empty_deck_title', 'Bộ thẻ này hiện chưa có ghi chú nào')}</div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">
-                    Vui lòng thêm thẻ vào bộ thẻ hoặc chọn bộ thẻ khác có sẵn dữ liệu để tạo bài tập.
+                    {t('deck_select.empty_deck_desc', 'Vui lòng thêm thẻ vào bộ thẻ hoặc chọn bộ thẻ khác có sẵn dữ liệu để tạo bài tập.')}
                   </div>
                 </div>
               </div>
@@ -289,16 +290,16 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
                       {deckMeta.deck_name}
                     </div>
                     <div className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap mt-0.5">
-                      <span>{deckMeta.total_notes} ghi chú</span>
+                      <span>{t('deck_select.total_notes_badge', '{{count}} ghi chú', { count: deckMeta.total_notes })}</span>
                       <span>&bull;</span>
-                      <span>Loại thẻ: <strong>{deckMeta.note_types[0]?.name}</strong></span>
+                      <span>{t('deck_select.note_type_label', 'Loại thẻ:')} <strong>{deckMeta.note_types[0]?.name}</strong></span>
                       <span>&bull;</span>
-                      <span>{deckMeta.note_types[0]?.fields?.length} trường dữ liệu</span>
+                      <span>{t('deck_select.fields_count', '{{count}} trường dữ liệu', { count: deckMeta.note_types[0]?.fields?.length || 0 })}</span>
                     </div>
                   </div>
                 </div>
                 <Badge variant="outline" className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-bold shrink-0">
-                  Hợp lệ
+                  {t('deck_select.valid_badge', 'Hợp lệ')}
                 </Badge>
               </div>
             )}
@@ -316,7 +317,7 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
             onClick={onCancel}
             className="h-9 px-3 text-xs"
           >
-            Đóng
+            {t('deck_select.close_button', 'Đóng')}
           </Button>
         )}
         <div className="flex items-center gap-2 ml-auto">
@@ -327,7 +328,7 @@ export const WorksheetDeckSelectStep: React.FC<WorksheetDeckSelectStepProps> = (
             onClick={handleConfirm}
             className="h-9 px-4 text-xs font-bold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
           >
-            <span>Tiếp tục: Ánh xạ dữ liệu</span>
+            <span>{t('deck_select.next_step', 'Tiếp tục: Ánh xạ dữ liệu')}</span>
             <ArrowRight className="size-3.5" />
           </Button>
         </div>

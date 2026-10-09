@@ -236,7 +236,10 @@ def run_bench(notes: int, events: int, refs: int) -> dict:
             db.session.remove()
 
             _result, seconds, writer = _writer_during(
-                settings, name, notes, refs, "wu", lambda: upgrade(directory="migrations")
+                settings, name, notes, refs, "wu",
+                # Rehearse 45 -> 46 only. Later revisions require their own
+                # historical schemas and writers, not this hybrid fixture.
+                lambda: upgrade(directory="migrations", revision="20260930_000046")
             )
             report["upgrade"] = {"seconds": seconds, "old_release_writer": writer}
             db.session.remove()

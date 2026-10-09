@@ -471,15 +471,15 @@ class McpAccessTokenTests(unittest.TestCase):
 
     def test_cors_preflight_allowed_on_admin_mcp_routes(self):
         # Unauthenticated client sends preflight OPTIONS request
-        self.app.config["CORS_ALLOWED_ORIGINS"] = ("https://flama.stmtp.com",)
+        self.app.config["CORS_ALLOWED_ORIGINS"] = ("https://flama.vn",)
         client = self.app.test_client()
         res = client.options(
             "/api/admin/mcp-tokens/summary",
-            headers={"Origin": "https://flama.stmtp.com"},
+            headers={"Origin": "https://flama.vn"},
         )
         self.assertEqual(res.status_code, 200)
         self.assertIn("OPTIONS", res.headers.get("Allow", ""))
-        self.assertEqual(res.headers.get("Access-Control-Allow-Origin"), "https://flama.stmtp.com")
+        self.assertEqual(res.headers.get("Access-Control-Allow-Origin"), "https://flama.vn")
         self.assertEqual(res.headers.get("Access-Control-Allow-Credentials"), "true")
 
 

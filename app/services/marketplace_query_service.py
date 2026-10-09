@@ -8,12 +8,13 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 UTC = timezone.utc
 SHARED_DECK_SAMPLE_CACHE_MAX_BYTES = 16 * 1024
 
 from app.repositories.deck_tree_query import collect_subtree_ids
+from app.repositories import flashcards_share_repository, template_release_repository
 from app.template_formatters import format_vnd
 from app.services import marketplace_taxonomy_service
 from models import db
@@ -57,14 +58,39 @@ def serialize_template(template: Template) -> dict[str, Any]:
         "shared_css": template.shared_css,
         "position": template.position,
         "is_default": bool(template.is_default),
+        "current_version_id": template.current_version_id,
         "updated_at": template.updated_at.isoformat() if template.updated_at else None,
     }
+
+
+def serialize_note_type_templates(note_type: NoteType, *, published=False):
+    if not note_type.id or not has_app_context():
+        return [serialize_template(template) for template in sorted(note_type.templates, key=lambda item: item.position)]
+    applications = {}
+    attached = flashcards_share_repository.get_template_applications_by_note_type(note_type.id)
+    for template, app in attached:
+        applications.setdefault(template.id, app)
+    result = []
+    for template in flashcards_share_repository.get_templates_by_note_type(note_type.id, applications=attached):
+        payload = serialize_template(template)
+        app = applications.get(template.id)
+        if app is not None:
+            payload.update(note_type_id=note_type.id, position=app.position, is_default=bool(app.is_default), input_schema=template.input_schema or [], input_bindings=app.input_bindings or {})
+        if published:
+            publication = template_release_repository.publication(db.session, template.id)
+            release = template_release_repository.release(db.session, publication["current_release_id"], template.id) if publication and publication["current_release_id"] else None
+            content = template_release_repository.version(db.session, release["version_id"], template.id) if release else None
+            if content:
+                payload.update(**{key: content[key] for key in ("front_html", "back_html", "shared_css", "input_schema")}, current_version_id=content["id"])
+        result.append(payload)
+    return result
 
 
 def serialize_note_type(
     note_type: NoteType,
     *,
     include_definition: bool = True,
+    published_template_content: bool = False,
 ) -> dict[str, Any]:
     price_amount_minor = int(note_type.price_amount_minor or 0)
     taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(note_type, content_type="note_type")
@@ -107,10 +133,7 @@ def serialize_note_type(
             serialize_field(field)
             for field in sorted(note_type.field_defs, key=lambda item: item.position)
         ]
-        payload["templates"] = [
-            serialize_template(template)
-            for template in sorted(note_type.templates, key=lambda item: item.position)
-        ]
+        payload["templates"] = serialize_note_type_templates(note_type, published=published_template_content)
     return payload
 
 
@@ -225,6 +248,7 @@ def serialize_note_type_marketplace_card(
     payload = serialize_note_type(
         note_type,
         include_definition=include_definition,
+        published_template_content=True,
     )
     payload["price_display"] = _format_marketplace_price_display(
         str(note_type.pricing_mode or "free"),

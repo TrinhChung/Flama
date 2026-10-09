@@ -1,5 +1,6 @@
 import { AlertCircle, ArrowRight, Check, Eye, EyeOff, GraduationCap, Lock, Mail, User, LoaderCircle, X } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +10,7 @@ import { AuthCard } from '../components/AuthCard'
 import { useRegisterForm } from '../hooks/useRegisterForm'
 
 export function RegisterPage() {
+  const { t } = useTranslation('auth')
   const bootstrapQuery = useBootstrap()
   const bootstrap = bootstrapQuery.data
   const {
@@ -40,24 +42,24 @@ export function RegisterPage() {
 
   return (
     <AuthCard
-      title="Tạo tài khoản mới"
-      description="Bắt đầu xây dựng bộ thẻ và lịch học thông minh của riêng bạn."
-      alternateText="Đã có tài khoản?"
-      alternateLabel="Đăng nhập ngay"
+      title={t('register.title')}
+      description={t('register.description')}
+      alternateText={t('register.alternate_text')}
+      alternateLabel={t('register.alternate_label')}
       alternateTo="/login"
     >
       <form className="space-y-4" onSubmit={onSubmit}>
         {error ? (
           <Alert variant="destructive" className="animate-in fade-in-50 duration-200">
             <AlertCircle className="size-4" />
-            <AlertTitle>Đăng ký không thành công</AlertTitle>
+            <AlertTitle>{t('register.error_title')}</AlertTitle>
             <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         ) : null}
 
         {/* Email */}
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t('register.email_label')}</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
@@ -73,7 +75,11 @@ export function RegisterPage() {
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground/85 flex items-start gap-1.5 pt-0.5">
             <GraduationCap className="size-3.5 shrink-0 text-primary/80 mt-0.5" />
-            <span>Sinh viên? Hãy sử dụng email trường có đuôi <code className="text-[10px] font-semibold bg-muted px-1 py-0.5 rounded text-foreground">.edu.vn</code> để có thể nhận các ưu đãi dành cho sinh viên trên Flama.</span>
+            <span>
+              {t('register.student_hint_prefix')}
+              <code className="text-[10px] font-semibold bg-muted px-1 py-0.5 rounded text-foreground">.edu.vn</code>
+              {t('register.student_hint_suffix')}
+            </span>
           </p>
           {form.formState.errors.email?.message ? (
             <p className="text-xs font-medium text-destructive">{form.formState.errors.email.message}</p>
@@ -82,13 +88,13 @@ export function RegisterPage() {
 
         {/* Username */}
         <div className="space-y-2">
-          <Label htmlFor="username">Tên đăng nhập</Label>
+          <Label htmlFor="username">{t('register.username_label')}</Label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               id="username"
               type="text"
-              placeholder="Tên hiển thị của bạn"
+              placeholder={t('register.username_placeholder')}
               autoComplete="username"
               className="pl-9"
               aria-invalid={Boolean(form.formState.errors.username)}
@@ -102,13 +108,13 @@ export function RegisterPage() {
 
         {/* Password */}
         <div className="space-y-2">
-          <Label htmlFor="password">Mật khẩu</Label>
+          <Label htmlFor="password">{t('register.password_label')}</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               id="password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Ít nhất 8 ký tự"
+              placeholder={t('register.password_placeholder')}
               autoComplete="new-password"
               className="pl-9 pr-10"
               aria-invalid={Boolean(form.formState.errors.password)}
@@ -131,13 +137,13 @@ export function RegisterPage() {
 
         {/* Confirm Password */}
         <div className="space-y-2">
-          <Label htmlFor="confirm_password">Xác nhận mật khẩu</Label>
+          <Label htmlFor="confirm_password">{t('register.confirm_label')}</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               id="confirm_password"
               type={showConfirmPassword ? 'text' : 'password'}
-              placeholder="Nhập lại mật khẩu"
+              placeholder={t('register.confirm_placeholder')}
               autoComplete="new-password"
               className="pl-9 pr-10"
               aria-invalid={Boolean(form.formState.errors.confirm_password)}
@@ -163,12 +169,12 @@ export function RegisterPage() {
           <div className="rounded-xl border border-border/70 bg-muted/40 p-3 text-xs space-y-1.5 animate-in fade-in-50 duration-200">
             <div className={`flex items-center gap-2 ${isMinLength ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-muted-foreground'}`}>
               {isMinLength ? <Check className="size-3.5" /> : <X className="size-3.5 text-muted-foreground/60" />}
-              <span>Mật khẩu ít nhất 8 ký tự</span>
+              <span>{t('register.check_min_length')}</span>
             </div>
             {confirmPasswordValue.length > 0 ? (
               <div className={`flex items-center gap-2 ${isMatching ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-destructive'}`}>
                 {isMatching ? <Check className="size-3.5" /> : <X className="size-3.5" />}
-                <span>Mật khẩu xác nhận trùng khớp</span>
+                <span>{t('register.check_matching')}</span>
               </div>
             ) : null}
           </div>
@@ -184,7 +190,7 @@ export function RegisterPage() {
             <LoaderCircle className="size-4 animate-spin" />
           ) : (
             <>
-              Tạo tài khoản
+              {t('register.submit_btn')}
               <ArrowRight className="size-4 ml-1.5" />
             </>
           )}

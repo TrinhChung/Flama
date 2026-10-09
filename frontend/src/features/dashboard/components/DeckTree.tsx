@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import '@/shared/config/i18n'
 import { cn } from '@/lib/utils'
 import type { DeckNode, SelectedDeckAction } from '../types'
 import { useDeckTreeDragDrop } from '../hooks/useDeckTreeDragDrop'
@@ -27,6 +29,7 @@ export function DeckTree({
   isExpanded,
   onToggleExpand,
 }: DeckTreeProps) {
+  const { t } = useTranslation('dashboard')
   const expandedState = useDeckTreeExpanded(nodes, selectedDeckId)
   const activeIsExpanded = isExpanded ?? expandedState.isExpanded
   const activeToggleExpand = onToggleExpand ?? expandedState.toggleExpand
@@ -65,16 +68,16 @@ export function DeckTree({
           <span className="text-base sm:text-lg">{isInvalidDrop ? '🚫' : '📦'}</span>
           <span>
             {isInvalidDrop
-              ? `Không thể di chuyển "${draggedDeck.name}" vào chính nó / deck con`
-              : `Di chuyển "${draggedDeck.name}"`}
+              ? t('tree.drag.invalid_move', { name: draggedDeck.name })
+              : t('tree.drag.moving', { name: draggedDeck.name })}
           </span>
           {dragOverId === 'root' ? (
             <span className="text-[11px] bg-white/25 px-2 py-0.5 rounded-md font-medium">
-              → Thả vào Root
+              {t('tree.drag.drop_to_root')}
             </span>
           ) : dragOverId && typeof dragOverId === 'number' && !isInvalidDrop ? (
             <span className="text-[11px] bg-white/25 px-2 py-0.5 rounded-md font-medium">
-              → Thả vào deck
+              {t('tree.drag.drop_to_deck')}
             </span>
           ) : null}
         </div>
@@ -93,7 +96,7 @@ export function DeckTree({
           onDragOver={handleDragOverRoot}
           onDrop={handleDropOnRoot}
         >
-          <span>📍 Thả vào đây để chuyển <strong>“{draggedDeck.name}”</strong> ra ngoài cấp Root (không có deck cha)</span>
+          <span>{t('tree.drag.root_drop_prompt', { name: draggedDeck.name })}</span>
         </div>
       ) : null}
 

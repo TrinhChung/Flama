@@ -1,0 +1,10 @@
+Task GT-18A — entity API/types only.
+Read AGENTS.md, skills/flama-frontend-architecture/SKILL.md, GT-18_STUDY_TEMPLATE_PREPARATION.md Phase A and docs/architecture/template-study-bindings-contract-2026-10-07.md.
+Edit only these five files:
+frontend/src/entities/card-template/model/studyTemplateTypes.ts (new)
+frontend/src/entities/card-template/api/studyTemplateApi.ts (new)
+frontend/src/entities/card-template/api/studyTemplateApi.test.ts (new)
+frontend/src/entities/card-template/api/queryKeys.ts
+frontend/src/entities/card-template/index.ts
+Use shared apiRequest/apiJson, exact include_template_inputs=1&include_counts=1 GET composition URL and GET/PUT /api/decks/<id>/study-template-preset. Bindings store field IDs/null; no app/feature imports. Keep all existing exports and card-type fetch behavior. No frontend screens, dependency changes, backend/model/migration/DB writes, commit or push.
+Run .\.venv\Scripts\python.exe scripts/run_tests.py --file frontend/src/entities/card-template/api/studyTemplateApi.test.ts --frontend-only from D:\Project\nihongo, then npm run typecheck in frontend. Report exact changed files, commands, actual final 20 lines, deviations, remaining work; stop after Phase A.

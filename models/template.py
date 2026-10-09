@@ -8,7 +8,31 @@ class Template(db.Model):
     __tablename__ = "templates"
 
     id = db.Column(db.String(36), primary_key=True, default=uuid_str)
-    note_type_id = db.Column(db.String(36), db.ForeignKey("note_types.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Legacy origin label only; reusable attachments live in StudyApplication.
+    note_type_id = db.Column(db.String(36), db.ForeignKey("note_types.id", ondelete="SET NULL", name="fk_templates_origin_note_type"), nullable=True, index=True)
+    # Owner stays nullable during writer cutover. Independent authoring requires
+    # an owner in the service; history fills ownership for legacy ORM writers.
+    owner_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE", name="fk_templates_owner_user"),
+        nullable=True,
+        index=True,
+    )
+    input_schema = db.Column(db.JSON, nullable=True)
+    current_version_id = db.Column(db.String(36), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    primary_category = db.Column(db.String(120), nullable=True, index=True)
+    origin = db.Column(db.String(24), nullable=False, default="authored", server_default="authored")
+    source_template_id = db.Column(
+        db.String(36), db.ForeignKey("templates.id", ondelete="SET NULL", name="fk_templates_source_template"),
+        nullable=True, index=True,
+    )
+    source_version_id = db.Column(
+        db.String(36),
+        db.ForeignKey("template_versions.id", ondelete="SET NULL", name="fk_templates_source_version", use_alter=True),
+        nullable=True,
+    )
+    archived_at = db.Column(db.DateTime, nullable=True, index=True)
     name = db.Column(db.String(255), nullable=False)
     front_html = db.Column(db.Text, nullable=False, default="")
     back_html = db.Column(db.Text, nullable=False, default="")
@@ -20,4 +44,9 @@ class Template(db.Model):
 
     note_type = db.relationship("NoteType", back_populates="templates")
     cards = db.relationship("Card", back_populates="template")
+    owner = db.relationship("User", foreign_keys=[owner_user_id])
+
+    __table_args__ = (
+        db.CheckConstraint("origin IN ('authored', 'market_copy')", name="ck_templates_origin"),
+    )
 

@@ -1,14 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  ArrowLeft,
-  GitCompare,
-  LoaderCircle,
-  Rocket,
-  Tag,
-} from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { toast } from 'sonner'
+import { ArrowLeft, GitCompare, LoaderCircle, Rocket, Tag } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,132 +10,83 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { createDeckRelease, getReleasePreview } from '../api'
+import '@/shared/config/i18n'
 import { DiffWorkspace } from '../components/DiffWorkspace'
-import type { DiffFilters } from '../types'
-
-const PAGE_SIZE = 100
-
-function nextVersion(current?: string | null) {
-  if (!current) return '1.0.0'
-  const match = current.match(/^(\d+)\.(\d+)\.(\d+)$/)
-  if (!match) return current
-  return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`
-}
-
-function newIdempotencyKey() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `release-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
+import { useReleaseBuilder } from '../hooks/useReleaseBuilder'
 
 export function ReleaseBuilderPage() {
-  const { itemId = '' } = useParams<{ itemId: string }>()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [filters, setFilters] = useState<DiffFilters>({
-    query: '',
-    changeType: 'all',
-  })
-  const [pageIndex, setPageIndex] = useState(0)
-  const [versionLabel, setVersionLabel] = useState('')
-  const [changelog, setChangelog] = useState('')
-  const publishIdempotencyKey = useRef(newIdempotencyKey())
-
-  const previewQuery = useInfiniteQuery({
-    queryKey: ['deck-release-preview', itemId, filters],
-    enabled: Boolean(itemId),
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam, signal }) => getReleasePreview(
-      itemId,
-      {
-        cursor: pageParam,
-        limit: PAGE_SIZE,
-        changeType: filters.changeType,
-        query: filters.query,
-      },
-      signal,
-    ),
-    getNextPageParam: (page) => page.next_cursor || undefined,
-  })
-
-  const firstPage = previewQuery.data?.pages[0]
-  const loadedPages = previewQuery.data?.pages || []
-  const visiblePageIndex = Math.min(pageIndex, Math.max(loadedPages.length - 1, 0))
-  const items = loadedPages[visiblePageIndex]?.items || []
-
-  useEffect(() => {
-    setPageIndex(0)
-  }, [filters, itemId])
-
-  useEffect(() => {
-    if (versionLabel || !firstPage) return
-    setVersionLabel(
-      firstPage.suggested_version || nextVersion(firstPage.base_release?.version_label),
-    )
-  }, [firstPage, versionLabel])
-
-  const publishMutation = useMutation({
-    mutationFn: () => createDeckRelease(
-      itemId,
-      {
-        version_label: versionLabel.trim(),
-        changelog: changelog.trim(),
-        expected_current_release_id: firstPage?.base_release?.id || null,
-        expected_working_revision: firstPage?.working_revision ?? null,
-      },
-      publishIdempotencyKey.current,
-    ),
-    onMutate: () => {
-      toast?.loading?.('Đang tạo và đóng gói bản phát hành…', {
-        id: 'deck-publish',
-        description: 'Hệ thống đang snapshot toàn bộ flashcard và cấu trúc deck.',
-      })
-    },
-    onSuccess: async (release) => {
-      await queryClient.invalidateQueries({
-        queryKey: ['deck-release-preview', itemId],
-      })
-      await queryClient.invalidateQueries({
-        queryKey: ['deck-releases', itemId],
-      })
-      toast.success(`Đã phát hành phiên bản ${release.version_label}.`, {
-        id: 'deck-publish',
-      })
-      navigate(`/marketplace/decks/${itemId}`)
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Không thể phát hành phiên bản mới.', {
-        id: 'deck-publish',
-      })
-    },
-  })
+  const { t } = useTranslation('collaboration')
+  const {
+    itemId,
+    filters,
+    setFilters,
+    pageIndex,
+    versionLabel,
+    setVersionLabel,
+    changelog,
+    setChangelog,
+    previewQuery,
+    firstPage,
+    items,
+    canPublish,
+    publishMutation,
+    onPreviousPage,
+    onLoadMore,
+    hasMore,
+  } = useReleaseBuilder()
 
   if (!itemId) {
-    return <Page><PageError error={new Error('Thiếu mã deck cần phát hành.')} /></Page>
+    return (
+      <Page>
+        <PageError
+          error={new Error(t('release.error_missing_deck_id', 'Thiếu mã deck cần phát hành.'))}
+        />
+      </Page>
+    )
   }
   if (previewQuery.isPending) {
-    return <PageLoading label="Đang tính các thay đổi chưa phát hành…" />
+    return (
+      <PageLoading
+        label={t('release.loading_calculating', 'Đang tính các thay đổi chưa phát hành…')}
+      />
+    )
   }
   if (previewQuery.error || !firstPage) {
-    return <Page><PageError error={previewQuery.error || new Error('Không có dữ liệu preview.')} /></Page>
+    return (
+      <Page>
+        <PageError
+          error={
+            previewQuery.error ||
+            new Error(t('release.error_no_preview_data', 'Không có dữ liệu preview.'))
+          }
+        />
+      </Page>
+    )
   }
 
-  const canPublish = firstPage.has_changes && Boolean(versionLabel.trim())
+  const pageDescription = firstPage.deck_title
+    ? t('release.description_deck', {
+        title: firstPage.deck_title,
+        defaultValue: `Kiểm tra diff của “${firstPage.deck_title}” trước khi tạo release bất biến.`,
+      })
+    : t(
+        'release.description_working',
+        'Kiểm tra diff của working deck trước khi tạo release bất biến.',
+      )
+
+  const defaultVersionText = t('release.badge_new_version', 'Phiên bản mới')
+  const defaultNoReleaseText = t('release.badge_no_release', 'Chưa có release')
 
   return (
     <Page className="max-w-[96rem]">
       <PageHeader
-        title="Phát hành phiên bản mới"
-        description={firstPage.deck_title
-          ? `Kiểm tra diff của “${firstPage.deck_title}” trước khi tạo release bất biến.`
-          : 'Kiểm tra diff của working deck trước khi tạo release bất biến.'}
+        title={t('release.title', 'Phát hành phiên bản mới')}
+        description={pageDescription}
         actions={
           <Button variant="outline" asChild>
             <Link to={`/marketplace/decks/${itemId}`}>
               <ArrowLeft />
-              Quay lại deck
+              {t('release.back_to_shared', 'Quay lại deck')}
             </Link>
           </Button>
         }
@@ -155,22 +98,28 @@ export function ReleaseBuilderPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
                 <GitCompare />
-                {firstPage.base_release?.version_label || 'Chưa có release'}
+                {firstPage.base_release?.version_label || defaultNoReleaseText}
                 <span aria-hidden="true">→</span>
-                {versionLabel || 'Phiên bản mới'}
+                {versionLabel || defaultVersionText}
               </Badge>
               <Badge variant="secondary">
-                Working revision {firstPage.working_revision ?? '—'}
+                {t('release.working_revision', {
+                  revision: firstPage.working_revision ?? '—',
+                  defaultValue: `Working revision ${firstPage.working_revision ?? '—'}`,
+                })}
               </Badge>
             </div>
-            <CardTitle>Nội dung phát hành</CardTitle>
+            <CardTitle>{t('release.content_title', 'Nội dung phát hành')}</CardTitle>
             <CardDescription>
-              Owner edit chỉ nằm trong working tree. Chỉ thao tác này mới tạo cập nhật cho người đã cài deck.
+              {t(
+                'release.content_desc',
+                'Owner edit chỉ nằm trong working tree. Chỉ thao tác này mới tạo cập nhật cho người đã cài deck.',
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
             <div className="space-y-2">
-              <Label htmlFor="release-version">Phiên bản</Label>
+              <Label htmlFor="release-version">{t('release.version_label', 'Phiên bản')}</Label>
               <div className="relative">
                 <Tag className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -178,18 +127,21 @@ export function ReleaseBuilderPage() {
                   value={versionLabel}
                   onChange={(event) => setVersionLabel(event.target.value)}
                   className="pl-9 font-mono"
-                  placeholder="1.1.0"
+                  placeholder={t('release.version_placeholder', '1.1.0')}
                   autoComplete="off"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="release-changelog">Ghi chú phát hành</Label>
+              <Label htmlFor="release-changelog">{t('release.changelog_label', 'Ghi chú phát hành')}</Label>
               <Textarea
                 id="release-changelog"
                 value={changelog}
                 onChange={(event) => setChangelog(event.target.value)}
-                placeholder="Tóm tắt các nội dung quan trọng trong phiên bản này…"
+                placeholder={t(
+                  'release.changelog_placeholder',
+                  'Tóm tắt các nội dung quan trọng trong phiên bản này…',
+                )}
                 rows={3}
               />
             </div>
@@ -198,17 +150,20 @@ export function ReleaseBuilderPage() {
 
         <Card className="h-fit lg:sticky lg:top-4">
           <CardHeader>
-            <CardTitle className="text-base">Xác nhận phát hành</CardTitle>
+            <CardTitle className="text-base">{t('release.confirm_title', 'Xác nhận phát hành')}</CardTitle>
             <CardDescription>
-              Release được lưu bất biến. Người cài deck sẽ tự chọn thời điểm cập nhật.
+              {t(
+                'release.confirm_desc',
+                'Release được lưu bất biến. Người cài deck sẽ tự chọn thời điểm cập nhật.',
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {!firstPage.has_changes ? (
               <Alert>
-                <AlertTitle>Không có thay đổi mới</AlertTitle>
+                <AlertTitle>{t('release.no_changes_title', 'Không có thay đổi mới')}</AlertTitle>
                 <AlertDescription>
-                  Working deck hiện giống release gần nhất.
+                  {t('release.no_changes_desc', 'Working deck hiện giống release gần nhất.')}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -221,17 +176,26 @@ export function ReleaseBuilderPage() {
               {publishMutation.isPending ? (
                 <>
                   <LoaderCircle className="animate-spin" />
-                  Đang phát hành {versionLabel || 'phiên bản mới'}…
+                  {t('release.btn_publishing', {
+                    version: versionLabel || defaultVersionText,
+                    defaultValue: `Đang phát hành ${versionLabel || defaultVersionText}…`,
+                  })}
                 </>
               ) : (
                 <>
                   <Rocket />
-                  Phát hành {versionLabel || 'phiên bản mới'}
+                  {t('release.btn_publish', {
+                    version: versionLabel || defaultVersionText,
+                    defaultValue: `Phát hành ${versionLabel || defaultVersionText}`,
+                  })}
                 </>
               )}
             </Button>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Thao tác dùng revision hiện tại để ngăn phát hành nhầm khi deck vừa được sửa ở nơi khác.
+              {t(
+                'release.revision_warning',
+                'Thao tác dùng revision hiện tại để ngăn phát hành nhầm khi deck vừa được sửa ở nơi khác.',
+              )}
             </p>
           </CardContent>
         </Card>
@@ -244,23 +208,19 @@ export function ReleaseBuilderPage() {
         onFiltersChange={setFilters}
         isFetching={previewQuery.isFetching}
         isFetchingMore={previewQuery.isFetchingNextPage}
-        hasPrevious={visiblePageIndex > 0}
-        onPrevious={() => setPageIndex((current) => Math.max(0, current - 1))}
-        hasMore={visiblePageIndex < loadedPages.length - 1 || previewQuery.hasNextPage}
-        onLoadMore={() => {
-          if (visiblePageIndex < loadedPages.length - 1) {
-            setPageIndex((current) => current + 1)
-            return
-          }
-          void previewQuery.fetchNextPage().then((result) => {
-            if ((result.data?.pages.length ?? 0) > loadedPages.length) {
-              setPageIndex((current) => current + 1)
-            }
-          })
-        }}
-        pageLabel={`Trang ${visiblePageIndex + 1}`}
-        emptyTitle="Không có thay đổi để phát hành"
-        emptyDescription="Hãy đổi bộ lọc hoặc chỉnh sửa deck trước khi tạo release mới."
+        hasPrevious={pageIndex > 0}
+        onPrevious={onPreviousPage}
+        hasMore={hasMore}
+        onLoadMore={onLoadMore}
+        pageLabel={t('diff.page_label', {
+          page: pageIndex + 1,
+          defaultValue: `Trang ${pageIndex + 1}`,
+        })}
+        emptyTitle={t('release.diff_empty_title', 'Không có thay đổi để phát hành')}
+        emptyDescription={t(
+          'release.diff_empty_desc',
+          'Hãy đổi bộ lọc hoặc chỉnh sửa deck trước khi tạo release mới.',
+        )}
       />
     </Page>
   )

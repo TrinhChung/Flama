@@ -1,5 +1,6 @@
 import React, { useId } from 'react'
 import { RefreshCw, Wifi, WifiOff, HelpCircle, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AnkiConnectStatus } from '@/lib/ankiConnectClient'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -37,6 +38,7 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
   onCheckConnection,
   onOpenGuide,
 }) => {
+  const { t } = useTranslation('import')
   const endpointInputId = useId()
   const isConnected = connectionStatus === 'Connected'
 
@@ -68,7 +70,10 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
               </span>
               {isConnected ? (
                 <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] sm:text-[11px] font-semibold py-0.5 px-2">
-                  Đã kết nối {ankiVersion ? `(v${ankiVersion})` : ''}
+                  {t('anki_sync.connection_bar.connected', {
+                    version: ankiVersion ? `${ankiVersion}` : '',
+                    defaultValue: `Đã kết nối ${ankiVersion ? `(v${ankiVersion})` : ''}`,
+                  })}
                 </Badge>
               ) : (
                 <Badge variant="destructive" className="text-[10px] sm:text-[11px] font-medium py-0.5 px-2">
@@ -79,7 +84,7 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
             {!isConnected ? (
               <div className="text-[11px] sm:text-xs mt-1 leading-relaxed">
                 <span className="text-destructive font-medium">
-                  {connectionError || 'Không thể kết nối đến Anki Desktop.'}
+                  {connectionError || t('anki_sync.connection_bar.failed', { defaultValue: 'Không thể kết nối đến Anki Desktop.' })}
                 </span>{' '}
                 {onOpenGuide && (
                   <Button
@@ -88,7 +93,7 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
                     onClick={onOpenGuide}
                     className="p-0 h-auto font-bold text-primary hover:underline inline-flex items-center gap-0.5 cursor-pointer ml-1 text-[11px] sm:text-xs"
                   >
-                    Xem hướng dẫn sửa lỗi kết nối / CORS &rarr;
+                    {t('anki_sync.connection_bar.btn_guide', { defaultValue: 'Xem hướng dẫn sửa lỗi kết nối / CORS' })} &rarr;
                   </Button>
                 )}
               </div>
@@ -125,7 +130,7 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
               ) : (
                 <RefreshCw className="size-3.5 mr-1.5" />
               )}
-              Kiểm tra
+              {t('anki_sync.connection_bar.btn_check', { defaultValue: 'Kiểm tra' })}
             </Button>
 
             {onOpenGuide && !isConnected && (
@@ -136,7 +141,7 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
                 className="h-8 text-xs font-semibold bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30 flex-1 sm:flex-initial shrink-0"
               >
                 <HelpCircle className="size-3.5 mr-1 text-amber-500" />
-                Sửa lỗi CORS
+                {t('anki_sync.connection_bar.btn_guide', { defaultValue: 'Sửa lỗi CORS' })}
               </Button>
             )}
           </div>
@@ -145,3 +150,4 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
     </Card>
   )
 }
+
