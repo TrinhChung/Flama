@@ -30,6 +30,8 @@
     "stay": "Continue editing",
     "save_continue": "Save and continue"
   },
+  "pagination_load_more": "Load more",
+  "pagination_loading": "Loading...",
   "language": {
     "vi": "Tiếng Việt",
     "en": "English",

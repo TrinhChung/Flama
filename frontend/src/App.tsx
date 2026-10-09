@@ -8,6 +8,7 @@ import { RequireCreator } from './features/auth/components/RequireCreator'
 import { LandingPage } from './pages/LandingPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import i18n from './shared/config/i18n'
 import {
   MAINTENANCE_PATH,
   subscribeBackendUnavailable,
@@ -180,7 +181,11 @@ const AdminMcpTokensPage = lazy(() =>
   })),
 )
 const StudyGoalsPage = lazy(() =>
-  import('./features/settings/pages/StudyGoalsPage').then((module) => ({
+  // Goal option getters use i18n.t directly rather than useTranslation.
+  Promise.all([
+    import('./features/settings/pages/StudyGoalsPage'),
+    i18n.loadNamespaces('onboarding'),
+  ]).then(([module]) => ({
     default: module.StudyGoalsPage,
   })),
 )
@@ -353,7 +358,7 @@ function deferred(element: ReactNode) {
 const router = createBrowserRouter([
   {
     path: MAINTENANCE_PATH,
-    element: <MaintenancePage />,
+    element: deferred(<MaintenancePage />),
   },
   {
     path: 'oauth/consent',
@@ -362,7 +367,7 @@ const router = createBrowserRouter([
   {
     element: <AppLayout />,
     children: [
-      { index: true, element: <LandingPage /> },
+      { index: true, element: deferred(<LandingPage />) },
       { path: 'login', element: deferred(<LoginPage />) },
       { path: 'register', element: deferred(<RegisterPage />) },
       { path: 'forgot-password', element: deferred(<ForgotPasswordPage />) },
@@ -661,7 +666,7 @@ const router = createBrowserRouter([
         ],
       },
       { path: 'home', element: <Navigate to="/dashboard" replace /> },
-      { path: '*', element: <NotFoundPage /> },
+      { path: '*', element: deferred(<NotFoundPage />) },
     ],
   },
 ])

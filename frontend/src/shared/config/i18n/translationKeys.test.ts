@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
-import { resources } from './index'
+import { resources } from './testResources'
 
 const sourceRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 
