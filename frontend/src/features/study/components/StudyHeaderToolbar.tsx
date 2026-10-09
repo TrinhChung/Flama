@@ -14,6 +14,7 @@ import {
   MoreVertical,
   Pencil,
   RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,6 +33,7 @@ type StudyHeaderToolbarProps = {
   canEdit?: boolean
   onEdit?: () => void
   onReload?: () => void
+  onConfigureFields?: () => void
   newCount?: number
   learnCount?: number
   dueCount?: number
@@ -44,6 +46,7 @@ export function StudyHeaderToolbar({
   canEdit = false,
   onEdit,
   onReload,
+  onConfigureFields,
   newCount = 0,
   learnCount = 0,
   dueCount = 0,
@@ -164,6 +167,18 @@ export function StudyHeaderToolbar({
                   <div className="flex items-center gap-2.5 w-full">
                     <RotateCcw className="size-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs font-medium">{t('header.reload_session')}</span>
+                  </div>
+                </DropdownMenuItem>
+              ) : null}
+
+              {onConfigureFields ? (
+                <DropdownMenuItem
+                  onClick={onConfigureFields}
+                  className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary"
+                >
+                  <div className="flex items-center gap-2.5 w-full">
+                    <SlidersHorizontal className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-medium">{t('header.configure_fields')}</span>
                   </div>
                 </DropdownMenuItem>
               ) : null}

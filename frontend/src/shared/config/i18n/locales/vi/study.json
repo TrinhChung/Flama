@@ -22,7 +22,8 @@
     "counter_due": "Hạn {{count}}",
     "tooltip_new": "Thẻ mới: {{count}}",
     "tooltip_learn": "Thẻ đang học: {{count}}",
-    "tooltip_due": "Thẻ đến hạn cần ôn: {{count}}"
+    "tooltip_due": "Thẻ đến hạn cần ôn: {{count}}",
+    "configure_fields": "Thiết lập trường template"
   },
   "interaction": {
     "show_answer": "Hiện đáp án",
@@ -54,13 +55,19 @@
     "uncommitted_events": "{{count}} trả lời chưa đồng bộ",
     "syncing_session": "Đang đồng bộ phiên học…",
     "incomplete_card_data": "Dữ liệu hiển thị thẻ không đầy đủ. Hãy tải lại phiên học.",
-    "saving_progress_redirecting": "Đang lưu tiến độ và chuyển trang…"
+    "saving_progress_redirecting": "Đang lưu tiến độ và chuyển trang…",
+    "choose_template": "Chọn template để học",
+    "choose_template_desc": "Bấm vào template để vào học ngay. Thiết lập trường được ghi nhớ cho bộ thẻ này."
   },
   "mode_selector": {
     "aria_label": "Chọn kiểu thẻ để học",
     "source_installed": "Thẻ gốc từ bộ đã cài",
     "custom_installed": "Thẻ riêng trong bộ đã cài",
-    "user_deck": "Thẻ trong bộ của bạn"
+    "user_deck": "Thẻ trong bộ của bạn",
+    "card_count": "{{count}} thẻ",
+    "custom_fields": "Trường tùy chỉnh",
+    "configure_fields": "Thiết lập trường",
+    "configure_fields_for": "Thiết lập trường cho {{name}}"
   },
   "quick_edit": {
     "title": "Sửa nhanh thẻ",
@@ -181,5 +188,21 @@
   },
   "renderer": {
     "render_error": "Không thể render thẻ."
+  },
+  "fields": {
+    "title": "Thiết lập trường",
+    "description": "Chọn trường dữ liệu đưa vào từng input của template {{name}}.",
+    "empty_option": "Để trống",
+    "unmapped_hint": "Input để trống sẽ hiển thị rỗng trên thẻ.",
+    "stale": "Trường đã lưu không còn phù hợp — đang dùng mặc định.",
+    "recommended": "Nên chọn",
+    "no_inputs": "Template này không có input cần thiết lập.",
+    "loading": "Đang tải thiết lập trường…",
+    "reset": "Về mặc định",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "save_and_apply": "Lưu & áp dụng",
+    "remember_hint": "Thiết lập được ghi nhớ cho bộ thẻ này.",
+    "apply_hint": "Tiến độ được lưu, phiên học mở lại với thiết lập mới."
   }
 }

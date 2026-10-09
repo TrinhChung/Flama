@@ -20,7 +20,10 @@ const mocks = vi.hoisted(() => ({
   discardSession: vi.fn(),
   prepareDecision: vi.fn(),
   updateCardContent: vi.fn(),
-  startPreparedSession: vi.fn(),
+  startComposition: vi.fn(),
+  applyTemplateBindings: vi.fn(),
+  loadPreparation: vi.fn(),
+  saveBindings: vi.fn(),
   getBootstrap: vi.fn(),
   blockerState: {
     state: 'unblocked' as 'unblocked' | 'blocked' | 'proceeding',
@@ -67,12 +70,24 @@ vi.mock('../hooks/useStudySession', () => ({
     discardSession: mocks.discardSession,
     requestTakeover: mocks.requestTakeover,
     updateCardContent: mocks.updateCardContent,
-    startPreparedSession: mocks.startPreparedSession,
+    startComposition: mocks.startComposition,
+    applyTemplateBindings: mocks.applyTemplateBindings,
+    templatePreparation: mocks.sessionHookData.templatePreparation ?? preparationState(null),
   }),
 }))
 
 import { MemoryRouter } from 'react-router-dom'
 import { StudyPage } from './StudyPage'
+
+function preparationState(availability: unknown) {
+  return {
+    availability, preset: null, isLoading: false, isSaving: false, error: null,
+    load: mocks.loadPreparation, saveBindings: mocks.saveBindings,
+    mappingOf: (compositionId: string) => compositionId === 'c1'
+      ? { inputBindings: { term: 'f1' }, staleInputs: [], customized: false } : null,
+    selectionFor: (compositionId: string) => ({ compositionId }),
+  }
+}
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
@@ -111,6 +126,7 @@ beforeEach(() => {
     isBusy: false,
     canUndo: false,
     updateCardContent: mocks.updateCardContent,
+    templatePreparation: preparationState(null),
   }
   mocks.blockerState = {
     state: 'unblocked',
@@ -133,18 +149,44 @@ afterEach(async () => {
 })
 
 describe('StudyPage session conflict keyboard behavior', () => {
-  it('shows preparation for a new lease and forwards its start action without study controls', async () => {
+  it('starts a template with one click and keeps field setup separate from studying', async () => {
+    const first = { composition_id: 'c1', template_name: 'Card A', context_kind: 'owned' }
+    const second = { composition_id: 'c2', template_name: 'Card B', context_kind: 'owned' }
+    mocks.saveBindings.mockResolvedValue({ compositionId: 'c1', inputBindings: { term: 'f1' } })
     mocks.sessionHookData = { ...mocks.sessionHookData, leaseConflict: false, awaitingCompositionSelection: true,
-      templatePreparation: { compositionId: 'c1', inputBindings: {}, staleInputs: [], remember: false, askBeforeStudy: true,
-        isLoading: false, isSaving: false, error: null, availability: { compositions: [{ composition_id: 'c1', template_name: 'Card' }] },
-        entry: { input_schema: [], field_defs: [], input_bindings: {}, warnings: [] },
-        selectComposition: vi.fn(), changeBindings: vi.fn(), setRemember: vi.fn(), setAskBeforeStudy: vi.fn() } }
+      compositionGroups: [{ note_type_id: 'nt', note_type_name: 'Basic', compositions: [first, second] }],
+      templatePreparation: preparationState({
+        compositions: [first, second], note_counts: { c1: 5, c2: 3 },
+        template_inputs: {
+          c1: { input_schema: [{ key: 'term', label: 'Term', type: 'text', required: true }], field_defs: [{ id: 'f1', name: 'Front', field_type: 'text' }], input_bindings: { term: 'f1' }, warnings: [] },
+          c2: { input_schema: [], field_defs: [], input_bindings: {}, warnings: [] },
+        },
+      }) }
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
     await act(async () => root?.render(renderWithClient(<StudyPage />)))
-    expect(container.textContent).toContain('Chuẩn bị phiên học')
+    expect(container.textContent).toContain('Chọn template để học')
+    expect(container.textContent).toContain('5 thẻ')
     expect(container.querySelector('.study-page')).toBeNull()
-    const start = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Bắt đầu học')!
-    await act(async () => start.click()); expect(mocks.startPreparedSession).toHaveBeenCalledOnce()
+    expect(container.querySelector('a[href="/dashboard"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('Bắt đầu học')
+
+    // Only templates with inputs offer field setup; the map is not shown inline.
+    expect(container.querySelector('[aria-label="Thiết lập trường cho Card B"]')).toBeNull()
+    expect(container.querySelector('select')).toBeNull()
+    const cardA = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.startsWith('Card A'))!
+    await act(async () => cardA.click())
+    expect(mocks.startComposition).toHaveBeenCalledWith('c1')
+
+    const setup = container.querySelector<HTMLButtonElement>('[aria-label="Thiết lập trường cho Card A"]')!
+    await act(async () => setup.click())
+    const dialog = document.body.querySelector('[role="dialog"]')!
+    expect(dialog.textContent).toContain('Term')
+    expect(dialog.querySelector('select')).not.toBeNull()
+    const save = Array.from(dialog.querySelectorAll('button')).find((button) => button.textContent === 'Lưu')!
+    await act(async () => save.click())
+    expect(mocks.saveBindings).toHaveBeenCalledWith('c1', { term: 'f1' })
+    expect(mocks.applyTemplateBindings).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
   })
 
   it('leaves Enter, Space, and fullscreen shortcuts to the conflict UI', async () => {

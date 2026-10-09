@@ -10,10 +10,15 @@ import type { StudyCompositionGroup } from '../types'
 
 export type StudyCompositionPickerViewProps = {
   deckName?: string | null
+  deckId?: string | null
   error?: unknown
   compositionGroups: StudyCompositionGroup[]
   selectedCompositionId?: string | null
   onSelectComposition: (compositionId: string) => void
+  noteCounts?: Record<string, number> | null
+  onConfigureComposition?: (compositionId: string) => void
+  canConfigureComposition?: (compositionId: string) => boolean
+  isCompositionCustomized?: (compositionId: string) => boolean
   disabled?: boolean
 }
 
@@ -23,6 +28,10 @@ export function StudyCompositionPickerView({
   compositionGroups,
   selectedCompositionId,
   onSelectComposition,
+  noteCounts,
+  onConfigureComposition,
+  canConfigureComposition,
+  isCompositionCustomized,
   disabled = false,
 }: StudyCompositionPickerViewProps) {
   const { t } = useTranslation('study')
@@ -46,12 +55,12 @@ export function StudyCompositionPickerView({
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">
             {t('page.prepare_session')}
           </p>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t('page.choose_card_type')}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t('page.choose_template')}</h1>
           <p className="text-xs sm:text-sm leading-5 sm:leading-6 text-muted-foreground">
             {deckName
               ? t('page.deck_multiple_types', { deckName })
               : t('page.scope_multiple_types')}{' '}
-            {t('page.choose_single_type_desc')}
+            {t('page.choose_template_desc')}
           </p>
         </div>
 
@@ -65,6 +74,10 @@ export function StudyCompositionPickerView({
           groups={compositionGroups}
           selectedCompositionId={selectedCompositionId}
           onSelectComposition={onSelectComposition}
+          noteCounts={noteCounts}
+          onConfigureComposition={onConfigureComposition}
+          canConfigureComposition={canConfigureComposition}
+          isCompositionCustomized={isCompositionCustomized}
           disabled={disabled}
           className="mt-5 sm:mt-6"
         />

@@ -93,4 +93,29 @@ describe('StudyModeSelector', () => {
 
     await act(async () => root.unmount())
   })
+
+  it('configures fields without starting a session and only offers setup for eligible templates', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onSelect = vi.fn()
+    const onConfigure = vi.fn()
+    const firstId = mockCompositions[0].composition_id
+    await act(async () => root.render(
+      <StudyModeSelector
+        groups={groups}
+        onSelectComposition={onSelect}
+        onConfigureComposition={onConfigure}
+        canConfigureComposition={id => id === firstId}
+        isCompositionCustomized={id => id === firstId}
+        noteCounts={{ [firstId]: 12 }}
+      />,
+    ))
+    expect(container.textContent).toContain('12 thẻ')
+    expect(container.querySelectorAll('button[aria-label]').length).toBe(1)
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label]')!.click())
+    expect(onConfigure).toHaveBeenCalledWith(firstId)
+    expect(onSelect).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
 })

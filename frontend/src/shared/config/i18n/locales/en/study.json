@@ -22,7 +22,8 @@
     "counter_due": "Due {{count}}",
     "tooltip_new": "New cards: {{count}}",
     "tooltip_learn": "Learning cards: {{count}}",
-    "tooltip_due": "Due cards: {{count}}"
+    "tooltip_due": "Due cards: {{count}}",
+    "configure_fields": "Template field setup"
   },
   "interaction": {
     "show_answer": "Show Answer",
@@ -54,13 +55,19 @@
     "uncommitted_events": "{{count}} unsynced reviews",
     "syncing_session": "Syncing study session…",
     "incomplete_card_data": "Card display data is incomplete. Please reload the study session.",
-    "saving_progress_redirecting": "Saving progress and redirecting…"
+    "saving_progress_redirecting": "Saving progress and redirecting…",
+    "choose_template": "Choose a template",
+    "choose_template_desc": "Click a template to start studying. Field setup is remembered for this deck."
   },
   "mode_selector": {
     "aria_label": "Select card type to study",
     "source_installed": "Original cards from installed deck",
     "custom_installed": "Custom cards in installed deck",
-    "user_deck": "Cards in your deck"
+    "user_deck": "Cards in your deck",
+    "card_count": "{{count}} cards",
+    "custom_fields": "Custom fields",
+    "configure_fields": "Field setup",
+    "configure_fields_for": "Field setup for {{name}}"
   },
   "quick_edit": {
     "title": "Quick Edit Card",
@@ -181,5 +188,21 @@
   },
   "renderer": {
     "render_error": "Could not render card."
+  },
+  "fields": {
+    "title": "Field setup",
+    "description": "Choose which note field feeds each input of the {{name}} template.",
+    "empty_option": "Leave empty",
+    "unmapped_hint": "Empty inputs render blank on the card.",
+    "stale": "The saved field no longer fits — using the default.",
+    "recommended": "Recommended",
+    "no_inputs": "This template has no inputs to set up.",
+    "loading": "Loading field setup…",
+    "reset": "Reset to default",
+    "cancel": "Cancel",
+    "save": "Save",
+    "save_and_apply": "Save & apply",
+    "remember_hint": "The setup is remembered for this deck.",
+    "apply_hint": "Progress is saved and the session reopens with the new setup."
   }
 }
