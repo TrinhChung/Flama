@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { FIELD_TYPES, type FieldDefItem } from '../../hooks/useNoteTypeFields'
+import { FieldFormColumns } from './FieldFormColumns'
 
 interface EditFieldCardProps {
   selectedField: FieldDefItem
@@ -57,9 +58,10 @@ export function EditFieldCard({
           {selectedField.name}
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-4 sm:p-5 pt-0">
+      <CardContent className="@container p-4 sm:p-5 pt-0">
         <form onSubmit={onSubmit} className="space-y-4" aria-busy={isUpdating || isDeleting}>
           <fieldset disabled={isUpdating || isDeleting} className="space-y-4">
+          <FieldFormColumns preview={preview} settings={<>
           <div className="space-y-1.5">
             <Label htmlFor="edit-field-name">{t('fields.edit_card.field_name')}</Label>
             <Input
@@ -122,8 +124,7 @@ export function EditFieldCard({
               </p>
             </div>
           </div>
-
-          {preview}
+          </>} />
           {usage}
           {error && <p id="edit-field-error" role="alert" className="text-xs text-destructive">{error}</p>}
 

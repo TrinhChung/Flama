@@ -1,4 +1,4 @@
-import type { TourStep } from '../SpotlightTour'
+import type { TourStep } from '@/shared/components/SpotlightTour'
 
 export function getNoteTypeManagerTourSteps(
   hasNoteTypes: boolean,

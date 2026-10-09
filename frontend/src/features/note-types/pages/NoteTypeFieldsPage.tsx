@@ -45,12 +45,22 @@ export function NoteTypeFieldsPage() {
   })
   const applications = applicationsQuery.data?.items.filter((item) => item.status_code === 'ACTIVE') ?? []
   const usedBy = selectedField ? applications.filter((item) => Object.values(item.input_bindings).includes(selectedField.id)) : []
-  const { requestNavigation, confirmDialog } = useUnsavedChangesGuard(editor.isDirty, t('setup.unsaved_field'), {
-    onSave: editor.saveDraft,
-    onDiscard: editor.discardDraft,
+  const { requestNavigation, confirmDialog } = useUnsavedChangesGuard(editor.isDirty || editor.isOrderDirty, t('setup.unsaved_field'), {
+    onSave: async () => {
+      if (editor.isDirty) await editor.saveDraft()
+      if (editor.isOrderDirty) await editor.saveOrder()
+    },
+    onDiscard: () => {
+      if (editor.isDirty) editor.discardDraft()
+      if (editor.isOrderDirty) editor.discardOrder()
+    },
   })
-  const requestAction = (action: () => void) => { if (!isBusy) requestNavigation(action) }
-  const goTo = (to: string) => requestAction(() => navigate(to))
+  const requestAction = (action: () => void) => {
+    if (isBusy) return
+    if (editor.isDirty) requestNavigation(action)
+    else action()
+  }
+  const goTo = (to: string) => { if (!isBusy) requestNavigation(() => navigate(to)) }
   const renameMutation = useMutation({
     mutationFn: (name: string) => appApi.mutate(`/note-types/${encodeURIComponent(noteTypeId!)}`, 'PATCH', { name }),
     onSuccess: async () => {
@@ -97,9 +107,10 @@ export function NoteTypeFieldsPage() {
         }}><Share2 className="size-4" />{t(isPublished ? 'detail.header.view_marketplace' : 'detail.header.share_marketplace')}</Link></Button>
         <Button variant="ghost" size="sm" asChild><Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer"><BookOpen className="size-4" />{t('detail.header.guide_btn')}</Link></Button>
       </>}>
-      <div className="grid gap-5 md:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.5fr)] items-start">
+      <div className="grid gap-5 md:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.5fr)] xl:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] items-start">
         <div className={mobileDetail ? 'hidden md:block' : ''}>
           <FieldListCard fields={fields} selectedFieldId={selectedFieldId} isAddingField={isAddingField}
+            isOrderDirty={editor.isOrderDirty} onSaveOrder={() => { void editor.saveOrder() }} onDiscardOrder={editor.discardOrder}
             onSelectField={(id) => {
               if (id === selectedFieldId && !isAddingField) { setMobileDetail(true); return }
               requestAction(() => { editor.selectField(id); setMobileDetail(true) })

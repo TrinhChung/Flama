@@ -34,6 +34,8 @@
   "edit_design": "Edit design",
   "manage_fields": "Manage data fields",
   "back": "Back to templates",
+  "mapping_tab": "Mapping",
+  "workspace_tabs": "Mapping workspace",
   "preview_title": "Preview",
   "preview_description": "Illustrative data · does not write to a note",
   "samples": "Illustrative data",

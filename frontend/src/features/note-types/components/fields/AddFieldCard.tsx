@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { FIELD_TYPES } from '../../hooks/useNoteTypeFields'
+import { FieldFormColumns } from './FieldFormColumns'
 
 interface AddFieldCardProps {
   newName: string
@@ -49,9 +50,10 @@ export function AddFieldCard({
           {t('fields.add_card.title')}
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-4 sm:p-5 pt-0">
+      <CardContent className="@container p-4 sm:p-5 pt-0">
         <form onSubmit={onSubmit} className="space-y-4" aria-busy={isPending}>
           <fieldset disabled={isPending} className="space-y-4">
+          <FieldFormColumns preview={preview} settings={<>
           <div className="space-y-1.5">
             <Label htmlFor="new-field-name">{t('fields.add_card.field_name')}</Label>
             <Input
@@ -93,7 +95,7 @@ export function AddFieldCard({
             }} />
             <div className="space-y-1"><Label htmlFor="new-field-identity">{t('fields.edit_card.primary_identity')}</Label><p className="text-xs text-muted-foreground">{t('fields.edit_card.primary_identity_desc')}</p></div>
           </div>
-          {preview}
+          </>} />
           {error && <p id="new-field-error" role="alert" className="text-xs text-destructive">{error}</p>}
 
           <div className="flex justify-end gap-2.5 pt-3 border-t">

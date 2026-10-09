@@ -42,7 +42,32 @@ export function useTemplateMappingDraft(noteTypeId: string, applicationId: strin
     queryFn: ({ signal }) => apiRequest<MappingNoteType>(`/api/note-types/${encodeURIComponent(noteTypeId)}`, { signal }) })
   const applications = useQuery({ queryKey: cardTemplateQueryKeys.applications(noteTypeId, true), enabled: Boolean(noteTypeId),
     queryFn: ({ signal }) => fetchTemplateApplications(noteTypeId, true, signal) })
-  const application = applications.data?.items.find((item) => item.id === applicationId)
+  const application = useMemo(() => {
+    const items = applications.data?.items
+    if (!items || !applicationId) return undefined
+
+    const exact = items.find((item) => item.id === applicationId)
+    if (exact) return exact
+
+    const byTemplate = items.find((item) => item.template_id === applicationId)
+    if (byTemplate) return byTemplate
+
+    const appMatch = applicationId.match(/:application:([^:]+)/)?.[1]
+    if (appMatch) {
+      const byApp = items.find((item) => item.id === appMatch)
+      if (byApp) return byApp
+    }
+
+    const tmplMatch = applicationId.match(/:template:([^:]+)/)?.[1]
+    if (tmplMatch) {
+      const byTmpl = items.find((item) => item.template_id === tmplMatch)
+      if (byTmpl) return byTmpl
+    }
+
+    return undefined
+  }, [applications.data?.items, applicationId])
+
+  const effectiveApplicationId = application?.id ?? applicationId
   const fields = useMemo(() => detail.data?.field_defs ?? [], [detail.data])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [samples, setSamples] = useState<Record<string, string>>({})
@@ -52,7 +77,7 @@ export function useTemplateMappingDraft(noteTypeId: string, applicationId: strin
     setDraft((old) => old?.applicationId === application.id && fingerprint(old.name, old.bindings) !== old.baseline
       ? old : fromApplication(application, detail.data.field_defs))
   }, [application, detail.data])
-  const current = draft?.applicationId === applicationId ? draft : null
+  const current = draft?.applicationId === effectiveApplicationId ? draft : null
   const dirty = Boolean(current && fingerprint(current.name, current.bindings) !== current.baseline)
   const issues = application && current ? validateBindings(application.input_schema, fields, current.bindings) : []
   const invalid = !application || !current || application.status_code !== 'ACTIVE' || issues.some((issue) => issue.blocking)
@@ -67,11 +92,11 @@ export function useTemplateMappingDraft(noteTypeId: string, applicationId: strin
         client.fetchQuery({ queryKey: cardTemplateQueryKeys.applications(noteTypeId, true), queryFn: ({ signal }) => fetchTemplateApplications(noteTypeId, true, signal), staleTime: 0 }),
         client.fetchQuery({ queryKey: ['note-type-detail', noteTypeId], queryFn: ({ signal }) => apiRequest<MappingNoteType>(`/api/note-types/${encodeURIComponent(noteTypeId)}`, { signal }), staleTime: 0 }),
       ])
-      const latest = fresh.items.find((item) => item.id === applicationId)
+      const latest = fresh.items.find((item) => item.id === effectiveApplicationId)
       if (!latest || latest.status_code !== 'ACTIVE') throw new Error(t('retired_notice'))
       if (validateBindings(latest.input_schema, freshDetail.field_defs, captured.input_bindings).some((issue) => issue.blocking)) throw new Error(t('source_changed'))
-      const result = await updateTemplateApplication(noteTypeId, applicationId, { input_bindings: captured.input_bindings, display_name: captured.name })
-      if (result.id !== applicationId || result.note_type_id !== noteTypeId || result.template_id !== latest.template_id) throw new Error(t('not_found'))
+      const result = await updateTemplateApplication(noteTypeId, effectiveApplicationId, { input_bindings: captured.input_bindings, display_name: captured.name })
+      if (result.id !== effectiveApplicationId || result.note_type_id !== noteTypeId || result.template_id !== latest.template_id) throw new Error(t('not_found'))
       return { result, fields: freshDetail.field_defs }
     },
     onSuccess: async ({ result, fields: latestFields }) => {

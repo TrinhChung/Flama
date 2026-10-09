@@ -11,7 +11,7 @@ import { TemplateDetailPage } from './TemplateDetailPage'
 const preview = vi.hoisted(() => vi.fn())
 const composition = vi.hoisted(() => ({ apply: vi.fn(), distribution: vi.fn() }))
 vi.mock('@/entities/card-template', async (original) => ({ ...await original<typeof import('@/entities/card-template')>(), fetchLibraryTemplate: vi.fn(), updateLibraryTemplate: vi.fn(), previewLibraryTemplate: vi.fn(), archiveLibraryTemplate: vi.fn(), fetchTemplateVersions: vi.fn(), fetchTemplateVersion: vi.fn(), restoreTemplateVersion: vi.fn() }))
-vi.mock('@/features/note-types/components/NoteTypeLivePreview', () => ({ NoteTypeLivePreview: preview }))
+vi.mock('@/entities/flashcard/ui/CardPreviewPanel', () => ({ CardPreviewPanel: preview }))
 vi.mock('@/features/template-distribution', () => ({ TemplateDistributionPanel: composition.distribution }))
 vi.mock('../components/ApplyTemplateWizard', () => ({ ApplyTemplateWizard: composition.apply }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))

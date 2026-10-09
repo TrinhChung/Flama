@@ -14,7 +14,7 @@ import { TemplateDetailPage } from '@/features/template-library/pages/TemplateDe
 const api = vi.hoisted(() => ({ get: vi.fn(), mutate: vi.fn(), request: vi.fn(), json: vi.fn() }))
 vi.mock('@/app/api', () => ({ appApi: { get: api.get, mutate: api.mutate } }))
 vi.mock('@/shared/api/client', async (original) => ({ ...await original<typeof import('@/shared/api/client')>(), apiRequest: api.request, apiJson: api.json }))
-vi.mock('@/features/note-types/components/NoteTypeLivePreview', () => ({ NoteTypeLivePreview: () => null }))
+vi.mock('@/entities/flashcard/ui/CardPreviewPanel', () => ({ CardPreviewPanel: () => null }))
 vi.mock('@/components/ambient-background', () => ({ AmbientBackground: () => null }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))

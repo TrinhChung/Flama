@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faPlus } from '@fortawesome/free-solid-svg-icons'
-import { ChevronDown, ChevronUp, GripVertical, Info } from 'lucide-react'
+import { ChevronDown, ChevronUp, GripVertical, Info, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,6 +20,9 @@ interface FieldListCardProps {
   onMoveUp: (index: number) => void
   onMoveDown: (index: number) => void
   isReordering: boolean
+  isOrderDirty?: boolean
+  onSaveOrder?: () => void
+  onDiscardOrder?: () => void
 }
 
 export function FieldListCard({
@@ -33,9 +36,12 @@ export function FieldListCard({
   onMoveUp,
   onMoveDown,
   isReordering,
+  isOrderDirty = false,
+  onSaveOrder,
+  onDiscardOrder,
 }: FieldListCardProps) {
   const { t } = useTranslation('note_types')
-  const [search, setSearch] = useState('')
+  const [search] = useState('')
   const visibleFields = fields.filter((field) => field.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
 
   return (
@@ -55,6 +61,35 @@ export function FieldListCard({
         </Button>
       </CardHeader>
       <CardContent className="p-4 sm:p-5 pt-0 flex-1 space-y-3">
+        {isOrderDirty && (
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-primary/30 bg-primary/5 text-xs animate-in fade-in duration-150">
+            <span className="font-medium text-foreground truncate">
+              {t('fields.list.order_changed')}
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={onDiscardOrder}
+                disabled={isReordering}
+              >
+                {t('fields.list.discard_order')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2.5 text-xs font-semibold gap-1.5"
+                onClick={onSaveOrder}
+                disabled={isReordering}
+              >
+                <Save className="size-3" />
+                {t('fields.list.save_order')}
+              </Button>
+            </div>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
           <Info className="size-3.5 text-primary shrink-0" /> {t('fields.list.reorder_hint')}
         </p>

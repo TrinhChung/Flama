@@ -48,6 +48,7 @@ export function useNoteTypeFields(api: FieldsApi) {
   const [newIdentity, setNewIdentity] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [orderDraft, setOrderDraft] = useState<string[] | null>(null)
 
   const query = useQuery({
     queryKey: ['note-type-fields', noteTypeId],
@@ -59,7 +60,24 @@ export function useNoteTypeFields(api: FieldsApi) {
     queryFn: () => api.get<NoteTypeDetail>(`/note-types/${encodeURIComponent(noteTypeId!)}`),
     enabled: Boolean(noteTypeId),
   })
-  const fields = useMemo(() => (query.data?.items ?? []).slice().sort((a, b) => a.position - b.position), [query.data])
+  const serverFields = useMemo(() => (query.data?.items ?? []).slice().sort((a, b) => a.position - b.position), [query.data])
+  const isOrderDirty = useMemo(() => {
+    if (!orderDraft || orderDraft.length !== serverFields.length) return false
+    return orderDraft.some((id, idx) => id !== serverFields[idx]?.id)
+  }, [orderDraft, serverFields])
+  const fields = useMemo(() => {
+    if (!orderDraft) return serverFields
+    const map = new Map(serverFields.map((f) => [f.id, f]))
+    const result: FieldDefItem[] = []
+    for (const id of orderDraft) {
+      const f = map.get(id)
+      if (f) result.push(f)
+    }
+    for (const f of serverFields) {
+      if (!result.includes(f)) result.push(f)
+    }
+    return result
+  }, [orderDraft, serverFields])
   const serverField = fields.find((field) => field.id === selectedFieldId) ?? null
   const selectedField = serverField ?? (baseline?.id === selectedFieldId ? baseline : null)
   const isDirty = isAddingField
@@ -90,6 +108,7 @@ export function useNoteTypeFields(api: FieldsApi) {
     loadField(null)
     resetNewField()
     setDraggedId(null)
+    setOrderDraft(null)
   }, [noteTypeId])
   useEffect(() => {
     if (!isAddingField && !selectedFieldId && fields.length) setSelectedFieldId(fields[0].id)
@@ -151,7 +170,10 @@ export function useNoteTypeFields(api: FieldsApi) {
   const reorderMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: Array<{ id: string; position: number }> }) =>
       api.mutate(`/note-types/${encodeURIComponent(id)}/fields/reorder`, 'POST', payload),
-    onSuccess: async (_result, { id }) => { await invalidateFields(id) },
+    onSuccess: async (_result, { id }) => {
+      setOrderDraft(null)
+      await invalidateFields(id)
+    },
     onError: (error: Error) => toast.error(t('fields.messages.reorder_error'), { description: error.message }),
   })
   const isBusy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending || reorderMutation.isPending
@@ -182,17 +204,29 @@ export function useNoteTypeFields(api: FieldsApi) {
   const cancelAddField = () => { resetNewField(); setIsAddingField(false); setSelectedFieldId(fields[0]?.id ?? null); loadField(fields[0] ?? null) }
   const reorder = (from: number, to: number) => {
     if (!noteTypeId || isBusy || from < 0 || to < 0 || to >= fields.length || from === to) return
-    const reordered = [...fields]
-    const [field] = reordered.splice(from, 1)
-    reordered.splice(to, 0, field)
-    reorderMutation.mutate({ id: noteTypeId, payload: reordered.map((item, position) => ({ id: item.id, position })) })
+    const reorderedIds = fields.map((f) => f.id)
+    const [movedId] = reorderedIds.splice(from, 1)
+    reorderedIds.splice(to, 0, movedId)
+    const isSameAsServer = reorderedIds.length === serverFields.length &&
+      reorderedIds.every((id, idx) => id === serverFields[idx]?.id)
+    setOrderDraft(isSameAsServer ? null : reorderedIds)
+  }
+  const saveOrder = async () => {
+    if (!noteTypeId || isBusy || !isOrderDirty) return
+    const payload = fields.map((item, position) => ({ id: item.id, position }))
+    await reorderMutation.mutateAsync({ id: noteTypeId, payload })
+    setOrderDraft(null)
+    toast.success(t('fields.messages.reorder_success'))
+  }
+  const discardOrder = () => {
+    setOrderDraft(null)
   }
 
   return {
     noteTypeId, query, detailQuery, fields, selectedField, selectedFieldId, isAddingField,
     editName, setEditName, editType, setEditType, editRequired, setEditRequired, editIdentity, setEditIdentity,
     newName, setNewName, newType, setNewType, newRequired, setNewRequired, newIdentity, setNewIdentity,
-    formError, isDirty, isBusy, saveDraft, discardDraft, selectField, startAddField, cancelAddField,
+    formError, isDirty, isOrderDirty, isBusy, saveDraft, discardDraft, saveOrder, discardOrder, selectField, startAddField, cancelAddField,
     createMutation, updateMutation, deleteMutation, reorderMutation,
     handleDragStart: (id: string) => setDraggedId(id),
     handleDrop: (targetId: string) => {

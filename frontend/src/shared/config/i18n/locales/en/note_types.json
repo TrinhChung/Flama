@@ -118,6 +118,9 @@
       "title": "Fields List",
       "add_btn": "Add",
       "reorder_hint": "Drag and drop or use ▲/▼ to change order",
+      "order_changed": "Field order changed",
+      "save_order": "Save order",
+      "discard_order": "Discard",
       "move_up": "Move up",
       "move_down": "Move down",
       "empty": "No fields yet. Click Add button to create a new field.",
@@ -150,6 +153,7 @@
       "update_error": "Failed to update field",
       "delete_success": "Field deleted.",
       "delete_error": "Failed to delete field",
+      "reorder_success": "Field order saved.",
       "reorder_error": "Failed to reorder fields",
       "name_required": "Field name is required",
       "name_empty": "Field name cannot be empty"
@@ -211,15 +215,6 @@
       "delete_success": "Template deleted.",
       "delete_error": "Failed to delete template"
     }
-  },
-  "live_preview": {
-    "title": "Live Preview",
-    "subtitle": "(Simulating sample card data)",
-    "updating": "Updating…",
-    "front_side": "Front Side",
-    "back_side": "Back Side",
-    "preparing": "Preparing preview…",
-    "error": "Failed to load template preview."
   },
   "guide": {
     "header": {

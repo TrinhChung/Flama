@@ -118,6 +118,9 @@
       "title": "Danh sách trường",
       "add_btn": "Thêm",
       "reorder_hint": "Kéo thả hoặc bấm ▲/▼ để đổi vị trí",
+      "order_changed": "Thứ tự trường đã đổi",
+      "save_order": "Lưu thứ tự",
+      "discard_order": "Hủy",
       "move_up": "Di chuyển lên",
       "move_down": "Di chuyển xuống",
       "empty": "Chưa có trường nào. Bấm Nút Thêm để tạo trường mới.",
@@ -150,6 +153,7 @@
       "update_error": "Không thể cập nhật trường",
       "delete_success": "Đã xóa trường.",
       "delete_error": "Không thể xóa trường",
+      "reorder_success": "Đã lưu thứ tự trường.",
       "reorder_error": "Không thể sắp xếp lại vị trí",
       "name_required": "Tên trường là bắt buộc",
       "name_empty": "Tên trường không được trống"
@@ -211,15 +215,6 @@
       "delete_success": "Đã xóa template.",
       "delete_error": "Không thể xóa template"
     }
-  },
-  "live_preview": {
-    "title": "Xem Trước Trực Tiếp (Live Preview)",
-    "subtitle": "(Hiển thị mô phỏng dữ liệu thẻ mẫu)",
-    "updating": "Đang cập nhật…",
-    "front_side": "Mặt trước",
-    "back_side": "Mặt sau",
-    "preparing": "Đang chuẩn bị bản xem trước…",
-    "error": "Lỗi tải xem trước template."
   },
   "guide": {
     "header": {

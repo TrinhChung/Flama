@@ -9,8 +9,7 @@ import i18n from '@/shared/config/i18n'
 import { fetchTemplateLibrary, type TemplateLibraryItem } from '@/entities/card-template'
 import { TemplateLibraryPage } from './TemplateLibraryPage'
 import { CreateTemplateDialog } from '../components/CreateTemplateDialog'
-import { FieldMappingEditor } from '../components/FieldMappingEditor'
-import type { MappingIssue } from '../lib/fieldMapping'
+import { FieldMappingEditor, type MappingIssue } from '@/entities/card-template'
 import { TemplateVersionHistorySheet } from '@/features/template-versions'
 
 vi.mock('@/entities/card-template', async (original) => ({

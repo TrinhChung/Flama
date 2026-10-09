@@ -134,14 +134,28 @@ describe('Note Type field draft lifecycle', () => {
     expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
   })
 
-  it('protects an unsaved field before reorder and keeps renamed field IDs', async () => {
+  it('protects an unsaved field before reorder and only commits positions upon explicit save', async () => {
     await editName('Saved identity')
     const down = container.querySelector('button[aria-label="Di chuyển xuống"]') as HTMLButtonElement
     await act(async () => down.click())
     await click('Lưu và tiếp tục')
     expect(state.fields.find((field) => field.id === 'f1')?.name).toBe('Saved identity')
     expect(fieldName().value).toBe('Saved identity')
+    // Moving field does not auto-save to server
+    expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
+    // Explicitly click "Lưu thứ tự" to persist
+    await click('Lưu thứ tự')
     expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', [{ id: 'f2', position: 0 }, { id: 'f1', position: 1 }])
+  })
+
+  it('allows discarding a reorder draft to revert back to original positions without server call', async () => {
+    const down = container.querySelector('button[aria-label="Di chuyển xuống"]') as HTMLButtonElement
+    await act(async () => down.click())
+    expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
+    expect(container.textContent).toContain('Thứ tự trường đã đổi')
+    await click('Hủy')
+    expect(container.textContent).not.toContain('Thứ tự trường đã đổi')
+    expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
   })
 
   it('creates a typed field without storing samples or editor options', async () => {

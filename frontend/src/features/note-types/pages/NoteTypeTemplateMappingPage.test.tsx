@@ -9,7 +9,7 @@ import type { TemplateApplication } from '@/entities/card-template'
 import { NoteTypeTemplateMappingPage } from './NoteTypeTemplateMappingPage'
 
 const preview = vi.hoisted(() => vi.fn())
-vi.mock('../components/NoteTypeLivePreview', () => ({ NoteTypeLivePreview: preview }))
+vi.mock('@/entities/flashcard/ui/CardPreviewPanel', () => ({ CardPreviewPanel: preview }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const fields = [
@@ -112,5 +112,15 @@ describe('Note Type application mapping workspace', () => {
     await act(async () => { await router.navigate('/flashcards/note-types/n1/templates/not-owned') }); await flush()
     expect(document.body.textContent).toContain('Không tìm thấy lần dùng template')
     expect(document.querySelector('select')).toBeNull()
+  })
+  it('resolves application and allows saving when accessed via composite ID or template ID', async () => {
+    // Access using composite ID: comp:notetype:n1:template:t1
+    await render('comp:notetype:n1:template:t1')
+    expect(document.querySelector('select')).not.toBeNull()
+    expect(document.querySelector('select')!.value).toBe('f1')
+    await choose('f2'); await act(async () => button('Lưu mapping').click()); await flush()
+    const [url, options] = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH')!
+    expect(url).toContain('/template-applications/a1')
+    expect(JSON.parse(String(options.body))).toEqual({ input_bindings: { Word: 'f2' }, display_name: 'Vocabulary' })
   })
 })
