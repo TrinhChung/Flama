@@ -9,7 +9,7 @@ import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { StudyCompositionPickerView } from '../components/StudyCompositionPickerView'
-import { StudyTemplatePreparation } from '../components/StudyTemplatePreparation'
+import { StudyTemplateFieldsDialog } from '../components/StudyTemplateFieldsDialog'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
@@ -39,6 +39,14 @@ export function StudyPage() {
   } | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
+  // Field setup dialog (picker or running session). The target outlives
+  // `fieldsOpen` so the closing animation keeps showing the same form.
+  const [fieldsCompositionId, setFieldsCompositionId] = useState<string | null>(null)
+  const [fieldsOpen, setFieldsOpen] = useState(false)
+  const openFields = useCallback((compositionId: string) => {
+    setFieldsCompositionId(compositionId)
+    setFieldsOpen(true)
+  }, [])
   const startedAtRef = useRef(performance.now())
 
   const {
@@ -170,10 +178,46 @@ export function StudyPage() {
     }
   }, [])
 
+  const preparation = study.templatePreparation
+  const loadPreparation = preparation.load
+  const preparationLoaded = Boolean(preparation.availability)
+  const sessionCompositionId = study.session?.snapshot.selected_composition_id ?? null
+  const handleOpenFields = useCallback(() => {
+    if (!sessionCompositionId || study.isBusy) return
+    openFields(sessionCompositionId)
+    if (!preparationLoaded) void loadPreparation().catch(() => {})
+  }, [loadPreparation, openFields, preparationLoaded, sessionCompositionId, study.isBusy])
+  const fieldsEntry = fieldsCompositionId ? preparation.availability?.template_inputs[fieldsCompositionId] ?? null : null
+  const fieldsTemplateName = fieldsCompositionId
+    ? preparation.availability?.compositions.find((choice) => choice.composition_id === fieldsCompositionId)?.template_name
+      ?? (fieldsCompositionId === sessionCompositionId ? study.session?.snapshot.selected_composition?.template_name ?? null : null)
+    : null
+  const fieldsDialog = (
+    <StudyTemplateFieldsDialog
+      open={fieldsOpen && fieldsCompositionId !== null}
+      onOpenChange={setFieldsOpen}
+      templateName={fieldsTemplateName}
+      entry={fieldsEntry}
+      mapping={fieldsCompositionId ? preparation.mappingOf(fieldsCompositionId) : null}
+      loading={preparation.isLoading}
+      saving={preparation.isSaving}
+      error={preparation.error}
+      appliesToSession={!study.awaitingCompositionSelection}
+      onSave={(bindings) => {
+        const compositionId = fieldsCompositionId
+        if (!compositionId) return
+        const saved = study.awaitingCompositionSelection
+          ? preparation.saveBindings(compositionId, bindings).then(Boolean)
+          : study.applyTemplateBindings(bindings)
+        void saved.then((ok) => { if (ok) setFieldsOpen(false) })
+      }}
+    />
+  )
+
   useStudyKeyboardShortcuts({
     cardId: card?.card_id,
     revealed,
-    isQuickEditOpen,
+    isQuickEditOpen: isQuickEditOpen || fieldsOpen,
     leaseConflict: Boolean(study.leaseConflict),
     hasReceipt: Boolean(study.receipt),
     onReveal: handleReveal,
@@ -220,19 +264,23 @@ export function StudyPage() {
   }
 
   if (study.awaitingCompositionSelection) {
-    if (study.templatePreparation?.availability) {
-      return <StudyTemplatePreparation preparation={study.templatePreparation} deckName={study.scopeName} error={study.error}
-        disabled={study.isBusy} onStart={() => { void study.startPreparedSession() }} />
-    }
     return (
-      <StudyCompositionPickerView
-        deckName={deckName}
-        error={study.error}
-        compositionGroups={study.compositionGroups}
-        selectedCompositionId={study.selectedCompositionId}
-        onSelectComposition={(compositionId) => { void study.selectComposition(compositionId) }}
-        disabled={study.isBusy}
-      />
+      <>
+        <StudyCompositionPickerView
+          deckName={deckName}
+          deckId={deckIdRaw}
+          error={study.error}
+          compositionGroups={study.compositionGroups}
+          selectedCompositionId={study.selectedCompositionId}
+          onSelectComposition={(compositionId) => { void study.startComposition(compositionId) }}
+          noteCounts={preparation.availability?.note_counts}
+          onConfigureComposition={preparation.availability ? openFields : undefined}
+          canConfigureComposition={(compositionId) => Boolean(preparation.availability?.template_inputs[compositionId]?.input_schema.length)}
+          isCompositionCustomized={(compositionId) => Boolean(preparation.mappingOf(compositionId)?.customized)}
+          disabled={study.isBusy || preparation.isSaving}
+        />
+        {fieldsDialog}
+      </>
     )
   }
 
@@ -289,6 +337,7 @@ export function StudyPage() {
             canEdit={Boolean(card?.card_id && card?.can_edit_card !== false)}
             onEdit={handleOpenEdit}
             onReload={() => { void study.reloadSession() }}
+            onConfigureFields={sessionCompositionId ? handleOpenFields : undefined}
             newCount={counts.new}
             learnCount={counts.learning}
             dueCount={counts.due}
@@ -392,6 +441,8 @@ export function StudyPage() {
         content={content}
         onCardUpdated={study.updateCardContent}
       />
+
+      {fieldsDialog}
 
       <StudyExitConfirmDialog
         open={blocker.state === 'blocked'}
