@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation, Trans } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
@@ -37,6 +38,7 @@ export function EmailVerificationDialog({
   open,
   onOpenChange,
 }: EmailVerificationDialogProps) {
+  const { t } = useTranslation('profile')
   const queryClient = useQueryClient()
   const [code, setCode] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -69,18 +71,18 @@ export function EmailVerificationDialog({
       setErrorMessage(null)
       setCooldownSeconds(60)
       if (data.already_verified) {
-        toast.info(data.message || 'Email của bạn đã được xác thực trước đó.')
+        toast.info(data.message || t('verify.toast.already_verified'))
         queryClient.invalidateQueries({ queryKey: ['profile'] })
         queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
         onOpenChange(false)
       } else {
-        toast.success(data.message || 'Mã xác thực đã được gửi đến email của bạn.')
+        toast.success(data.message || t('verify.toast.code_sent'))
       }
     },
     onError: (error: any) => {
       const msg =
         error?.message ||
-        'Không thể gửi mã xác thực. Vui lòng thử lại sau.'
+        t('verify.toast.send_code_failed')
       setErrorMessage(msg)
       toast.error(msg)
     },
@@ -90,11 +92,11 @@ export function EmailVerificationDialog({
     mutationFn: (otp: string) => profileApi.verifyEmail(otp),
     onSuccess: (data) => {
       setErrorMessage(null)
-      setSuccessMessage(data.message || 'Xác thực email thành công!')
+      setSuccessMessage(data.message || t('verify.toast.success'))
       toast.success(
         data.is_verified_student
-          ? 'Chúc mừng! Bạn đã được kích hoạt ưu đãi Sinh viên thành công!'
-          : 'Xác thực địa chỉ email thành công!'
+          ? t('verify.toast.student_perk_success')
+          : t('verify.toast.email_verified_success')
       )
       queryClient.invalidateQueries({ queryKey: ['profile'] })
       queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
@@ -105,7 +107,7 @@ export function EmailVerificationDialog({
     onError: (error: any) => {
       const msg =
         error?.message ||
-        'Mã xác thực không hợp lệ hoặc đã hết hạn.'
+        t('verify.toast.invalid_code')
       setErrorMessage(msg)
       toast.error(msg)
     },
@@ -119,7 +121,7 @@ export function EmailVerificationDialog({
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault()
     if (!code.trim()) {
-      setErrorMessage('Vui lòng nhập mã xác thực gồm 6 chữ số.')
+      setErrorMessage(t('verify.validation_error'))
       return
     }
     setErrorMessage(null)
@@ -142,10 +144,10 @@ export function EmailVerificationDialog({
             )}
           </div>
           <DialogTitle className="text-center text-lg sm:text-xl font-bold">
-            {isEdu ? 'Xác thực Email Sinh viên' : 'Xác thực Địa chỉ Email'}
+            {isEdu ? t('verify.title_edu') : t('verify.title_email')}
           </DialogTitle>
           <DialogDescription className="text-center text-xs">
-            Mã xác thực 6 chữ số sẽ được gửi tới hòm thư:{' '}
+            {t('verify.description_prompt')}{' '}
             <strong className="text-foreground break-all">{user.email}</strong>
           </DialogDescription>
         </DialogHeader>
@@ -155,10 +157,13 @@ export function EmailVerificationDialog({
             <div className="flex items-start gap-2">
               <GraduationCap className="size-4 shrink-0 text-primary mt-0.5" />
               <span>
-                Hệ thống phát hiện email trường học kết thúc bằng{' '}
-                <strong className="text-primary font-semibold">.edu.vn</strong>.
-                Sau khi xác thực, tài khoản của bạn sẽ nhận ngay huy hiệu Sinh viên và
-                tự động áp dụng các ưu đãi giảm giá hoặc tải miễn phí trên Marketplace!
+                <Trans
+                  i18nKey="verify.edu_banner"
+                  ns="profile"
+                  components={{
+                    strong: <strong className="text-primary font-semibold" />,
+                  }}
+                />
               </span>
             </div>
           </div>
@@ -183,7 +188,7 @@ export function EmailVerificationDialog({
         {!codeSent ? (
           <div className="space-y-4 pt-2">
             <p className="text-center text-xs text-muted-foreground">
-              Bấm nút bên dưới để nhận mã xác thực qua email. Mã có hiệu lực trong vòng 15 phút.
+              {t('verify.send_instructions')}
             </p>
             <Button
               type="button"
@@ -194,12 +199,12 @@ export function EmailVerificationDialog({
               {sendCodeMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Đang gửi mã...
+                  {t('verify.btn_sending')}
                 </>
               ) : (
                 <>
                   <Send className="mr-2 size-4" />
-                  Gửi mã xác thực đến email
+                  {t('verify.btn_send')}
                 </>
               )}
             </Button>
@@ -208,7 +213,7 @@ export function EmailVerificationDialog({
           <form onSubmit={handleVerify} className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label htmlFor="otp_code" className="text-xs font-semibold">
-                Nhập mã xác thực (6 chữ số)
+                {t('verify.otp_label')}
               </Label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -218,7 +223,7 @@ export function EmailVerificationDialog({
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={10}
-                  placeholder="123456"
+                  placeholder={t('verify.otp_placeholder')}
                   autoFocus
                   autoComplete="one-time-code"
                   value={code}
@@ -236,15 +241,15 @@ export function EmailVerificationDialog({
               {verifyMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Đang xác thực...
+                  {t('verify.btn_verifying')}
                 </>
               ) : (
-                'Xác nhận mã'
+                t('verify.btn_confirm')
               )}
             </Button>
 
             <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
-              <span>Chưa nhận được mã?</span>
+              <span>{t('verify.not_received')}</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -259,8 +264,8 @@ export function EmailVerificationDialog({
                   }`}
                 />
                 {cooldownSeconds > 0
-                  ? `Gửi lại sau (${cooldownSeconds}s)`
-                  : 'Gửi lại mã'}
+                  ? t('verify.resend_cooldown', { seconds: cooldownSeconds })
+                  : t('verify.btn_resend')}
               </Button>
             </div>
           </form>

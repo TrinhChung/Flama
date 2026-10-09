@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   BadgePercent,
   Coins,
@@ -11,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { WalletSummary } from '../types/wallet'
 
 export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
+  const { t } = useTranslation('wallet')
   const { earnings } = wallet
 
   return (
@@ -23,7 +25,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                 <Wallet className="size-4 text-primary" />
-                <span>Số dư khả dụng</span>
+                <span>{t('summary.available_balance')}</span>
               </div>
               <div className="flex flex-wrap items-baseline gap-3">
                 <span className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl md:text-5xl">
@@ -34,7 +36,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Doanh thu thực nhận sau khi khấu trừ phí nền tảng từ các bộ thẻ và học liệu đã bán.
+                {t('summary.balance_explanation')}
               </p>
             </div>
 
@@ -43,10 +45,10 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
                 <BadgePercent className="size-4 text-amber-500" />
                 <div className="text-xs">
                   <p className="font-semibold text-foreground">
-                    Phí nền tảng: {wallet.platform_fee_percent}%
+                    {t('summary.platform_fee_label', { percent: wallet.platform_fee_percent })}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    {wallet.is_custom_fee ? 'Biểu phí ưu đãi cá nhân' : 'Biểu phí tiêu chuẩn Flama'}
+                    {wallet.is_custom_fee ? t('summary.custom_fee_tier') : t('summary.standard_fee_tier')}
                   </p>
                 </div>
               </div>
@@ -60,7 +62,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
         <Card className="border-border/60 bg-card/60 shadow-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Tổng doanh thu gộp
+              {t('summary.total_gross_title')}
             </CardTitle>
             <Coins className="size-4 text-amber-500" />
           </CardHeader>
@@ -69,7 +71,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
               {earnings.total_gross_display}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Tổng giá trị người học đã thanh toán
+              {t('summary.total_gross_description')}
             </p>
           </CardContent>
         </Card>
@@ -77,7 +79,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
         <Card className="border-border/60 bg-card/60 shadow-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Doanh thu thực nhận
+              {t('summary.net_earnings_title')}
             </CardTitle>
             <TrendingUp className="size-4 text-emerald-500" />
           </CardHeader>
@@ -86,7 +88,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
               {earnings.total_net_display}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Số tiền đã được cộng vào số dư ví
+              {t('summary.net_earnings_description')}
             </p>
           </CardContent>
         </Card>
@@ -94,7 +96,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
         <Card className="border-border/60 bg-card/60 shadow-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Phí dịch vụ & hạ tầng
+              {t('summary.service_fee_title')}
             </CardTitle>
             <Percent className="size-4 text-muted-foreground" />
           </CardHeader>
@@ -103,7 +105,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
               {earnings.total_platform_fee_display}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Duy trì hệ thống và cổng thanh toán
+              {t('summary.service_fee_description')}
             </p>
           </CardContent>
         </Card>
@@ -111,7 +113,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
         <Card className="border-border/60 bg-card/60 shadow-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Đơn hàng đã bán
+              {t('summary.sales_count_title')}
             </CardTitle>
             <PackageCheck className="size-4 text-primary" />
           </CardHeader>
@@ -120,7 +122,7 @@ export function WalletSummaryCard({ wallet }: { wallet: WalletSummary }) {
               {earnings.total_sales_count}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Lượt mua bộ thẻ trên Marketplace
+              {t('summary.sales_count_description')}
             </p>
           </CardContent>
         </Card>

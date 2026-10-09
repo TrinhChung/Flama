@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,6 +21,7 @@ import {
 import { walletApi } from '../api/walletApi'
 
 export function WalletTransactionsTable() {
+  const { t, i18n } = useTranslation('wallet')
   const [page, setPage] = useState(1)
   const [filterType, setFilterType] = useState<string | undefined>(undefined)
 
@@ -35,7 +37,7 @@ export function WalletTransactionsTable() {
 
   const formatDate = (isoString: string | null) => {
     if (!isoString) return '—'
-    return new Date(isoString).toLocaleString('vi-VN', {
+    return new Date(isoString).toLocaleString(i18n.language === 'en' ? 'en-US' : 'vi-VN', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -50,10 +52,10 @@ export function WalletTransactionsTable() {
         <div className="space-y-1">
           <CardTitle className="flex items-center gap-2 text-base font-bold">
             <History className="size-4 text-primary" />
-            Lịch sử giao dịch số dư
+            {t('transactions.title')}
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Bảng kê chi tiết từng lượt mua học liệu và tiền thực nhận vào ví
+            {t('transactions.description')}
           </p>
         </div>
 
@@ -68,7 +70,7 @@ export function WalletTransactionsTable() {
             }}
             className="h-7 text-xs font-semibold"
           >
-            Tất cả
+            {t('transactions.filter_all')}
           </Button>
           <Button
             variant={filterType === 'deck_sale' ? 'default' : 'outline'}
@@ -79,7 +81,7 @@ export function WalletTransactionsTable() {
             }}
             className="h-7 text-xs font-semibold"
           >
-            Doanh thu Deck
+            {t('transactions.filter_deck_sale')}
           </Button>
         </div>
       </CardHeader>
@@ -87,20 +89,20 @@ export function WalletTransactionsTable() {
       <CardContent>
         {isPending ? (
           <div className="py-12 text-center text-xs text-muted-foreground">
-            Đang tải dữ liệu lịch sử giao dịch…
+            {t('transactions.loading')}
           </div>
         ) : error ? (
           <div className="py-8 text-center text-xs text-destructive">
-            Không thể tải lịch sử giao dịch. Vui lòng thử lại.
+            {t('transactions.error')}
           </div>
         ) : !data.items || data.items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Receipt className="size-10 text-muted-foreground/40 mb-3" />
             <p className="text-sm font-semibold text-foreground">
-              Chưa có giao dịch nào
+              {t('transactions.empty_title')}
             </p>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-              Khi có người học mua bộ thẻ hoặc học liệu của bạn trên Marketplace, các khoản doanh thu sẽ được hiển thị tại đây.
+              {t('transactions.empty_description')}
             </p>
           </div>
         ) : (
@@ -109,13 +111,13 @@ export function WalletTransactionsTable() {
               <Table>
                 <TableHeader className="bg-muted/40">
                   <TableRow>
-                    <TableHead className="text-xs font-semibold">Thời gian</TableHead>
-                    <TableHead className="text-xs font-semibold">Nội dung</TableHead>
-                    <TableHead className="text-xs font-semibold">Người mua</TableHead>
-                    <TableHead className="text-xs font-semibold text-right">Giá bán</TableHead>
-                    <TableHead className="text-xs font-semibold text-right">Phí sàn</TableHead>
-                    <TableHead className="text-xs font-semibold text-right">Thực nhận</TableHead>
-                    <TableHead className="text-xs font-semibold text-right">Số dư sau GD</TableHead>
+                    <TableHead className="text-xs font-semibold">{t('transactions.th_date')}</TableHead>
+                    <TableHead className="text-xs font-semibold">{t('transactions.th_description')}</TableHead>
+                    <TableHead className="text-xs font-semibold">{t('transactions.th_buyer')}</TableHead>
+                    <TableHead className="text-xs font-semibold text-right">{t('transactions.th_gross')}</TableHead>
+                    <TableHead className="text-xs font-semibold text-right">{t('transactions.th_platform_fee')}</TableHead>
+                    <TableHead className="text-xs font-semibold text-right">{t('transactions.th_net')}</TableHead>
+                    <TableHead className="text-xs font-semibold text-right">{t('transactions.th_balance_after')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -129,7 +131,7 @@ export function WalletTransactionsTable() {
                           <span className="text-foreground">{tx.description}</span>
                           {tx.merchant_order_code ? (
                             <span className="text-[11px] font-mono text-muted-foreground">
-                              Mã đơn: #{tx.merchant_order_code}
+                              {t('transactions.order_code_prefix', { code: tx.merchant_order_code })}
                             </span>
                           ) : null}
                         </div>
@@ -165,7 +167,11 @@ export function WalletTransactionsTable() {
             {data.pages > 1 ? (
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Trang {data.page} / {data.pages} (Tổng {data.total} giao dịch)
+                  {t('transactions.pagination_summary', {
+                    page: data.page,
+                    pages: data.pages,
+                    total: data.total,
+                  })}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -176,7 +182,7 @@ export function WalletTransactionsTable() {
                     className="h-8 gap-1 text-xs"
                   >
                     <ChevronLeft className="size-3.5" />
-                    Trang trước
+                    {t('transactions.btn_previous')}
                   </Button>
                   <Button
                     variant="outline"
@@ -185,7 +191,7 @@ export function WalletTransactionsTable() {
                     onClick={() => setPage((p) => p + 1)}
                     className="h-8 gap-1 text-xs"
                   >
-                    Trang sau
+                    {t('transactions.btn_next')}
                     <ChevronRight className="size-3.5" />
                   </Button>
                 </div>

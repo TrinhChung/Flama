@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   Award,
   GitPullRequest,
@@ -19,6 +20,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 }
 
 export function BadgesList({ badges }: { badges: ProfileBadge[] }) {
+  const { t } = useTranslation('profile')
   if (!badges || badges.length === 0) return null
 
   return (
@@ -26,7 +28,7 @@ export function BadgesList({ badges }: { badges: ProfileBadge[] }) {
       <CardHeader className="pb-2.5 pt-3.5 px-4 sm:px-5">
         <CardTitle className="flex items-center gap-2 text-xs sm:text-sm font-bold tracking-tight text-foreground">
           <Trophy className="size-4 text-amber-500" />
-          Huy hiệu & Thành tích trên Flama
+          {t('badges.title')}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 sm:px-5 pb-4">

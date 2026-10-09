@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { CheckCircle2, GitMerge, GitPullRequest } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -9,15 +10,17 @@ export function ContributionsTab({
 }: {
   contributions: ContributionItem[]
 }) {
+  const { t, i18n } = useTranslation('profile')
+
   if (!contributions || contributions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-8 sm:p-12 text-center">
         <GitPullRequest className="size-8 sm:size-10 text-muted-foreground/40 mb-3" />
         <p className="text-sm font-semibold text-foreground">
-          Chưa có đóng góp nào được ghi nhận
+          {t('contributions.empty_title')}
         </p>
         <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-          Các đóng góp sửa đổi thẻ hoặc cải tiến nội dung đã được hợp nhất (merged) sẽ xuất hiện tại đây.
+          {t('contributions.empty_description')}
         </p>
       </div>
     )
@@ -42,11 +45,11 @@ export function ContributionsTab({
                   </h4>
                   <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30 text-[10px] font-semibold dark:text-emerald-400">
                     <CheckCircle2 className="mr-1 size-3" />
-                    Đã hợp nhất
+                    {t('contributions.merged_badge')}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Bộ thẻ:{' '}
+                  {t('contributions.deck_label')}{' '}
                   {cr.deck_item_id ? (
                     <Link
                       to={`/marketplace/decks/${cr.deck_item_id}`}
@@ -68,7 +71,7 @@ export function ContributionsTab({
 
             {cr.merged_at ? (
               <span className="text-[11px] text-muted-foreground shrink-0 self-start sm:self-center">
-                {new Date(cr.merged_at).toLocaleDateString('vi-VN', {
+                {new Date(cr.merged_at).toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'vi-VN', {
                   year: 'numeric',
                   month: 'short',
                   day: 'numeric',
