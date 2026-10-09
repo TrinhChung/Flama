@@ -222,6 +222,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/session/contentPatchAdapter.test.ts",
             "src/features/study/session/contentPatchAdapter.adversarial.test.ts",
             "src/features/study/session/sessionRestore.test.ts",
+            "src/features/study/session/sessionStorageCodec.test.ts",
             "src/features/study/session/sessionStore.test.ts",
             "src/features/study/session/studySessionEngine.test.ts",
             "src/features/study/session/studySessionLease.test.ts",
@@ -398,6 +399,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/note-types/lib/templateErrors.test.ts",
             "src/features/note-types/pages/NoteTypeDetailPage.editor.test.tsx",
             "src/features/note-types/pages/NoteTypeDetailPage.draft.test.tsx",
+            "src/features/note-types/components/fields/FieldListCard.test.tsx",
             "src/features/note-types/components/fields/FieldEditorPreview.test.tsx",
             "src/features/note-types/hooks/useTemplateMappingDraft.test.ts",
             "src/features/note-types/pages/NoteTypeTemplateMappingPage.test.tsx",
@@ -460,6 +462,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/change_request/**",
             "app/services/deck_change_request*.py",
             "app/services/deck_install_rebase*.py",
+            "app/services/deck_publish_index.py",
             "app/services/flashcards_share*.py",
             "app/services/share/**",
             "app/repositories/deck_change_request*.py",
@@ -477,6 +480,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "backend_tests": [
             "tests/test_deck_change_request_flow.py",
             "tests/test_deck_install_rebase_flow.py",
+            "tests/test_deck_publish_index.py",
             "tests/test_batched_deck_clone.py",
             "tests/test_shared_deck_detail_ui.py",
             "tests/test_shared_state_services.py",
@@ -495,6 +499,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/bench_publish_options_mysql.py",
             "app/services/marketplace/**",
             "app/services/marketplace*.py",
+            "app/repositories/marketplace_list_repository.py",
             "app/repositories/marketplace_taxonomy_repository.py",
             "models/deck_marketplace_item.py",
             "models/marketplace_saved_item.py",
@@ -510,11 +515,13 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_marketplace_taxonomy_migration.py",
             "tests/test_market_counter_deletion.py",
             "tests/test_api_v1_marketplace_note_types.py",
+            "tests/test_marketplace_list_performance.py",
         ],
         "frontend_tests": [
             "src/features/marketplace/components/DeckCard.test.tsx",
             "src/features/marketplace/components/PublishDeckTree.test.tsx",
             "src/features/marketplace/publishApi.test.ts",
+            "src/features/marketplace/pages/MarketplacePages.test.tsx",
         ],
     },
     "connect_mcp": {
@@ -531,6 +538,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/anki_sync_service.py",
             "app/services/anki_content_normalizer.py",
             "app/api/v1/settings/**",
+            "app/repositories/connect_identity_repository.py",
             "app/repositories/mcp_access_token_repository.py",
             "app/repositories/oauth_repository.py",
             "app/routes/mcp.py",
@@ -695,6 +703,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "frontend_tests": [
             "src/features/audio/audioGenerator.test.ts",
+            "src/features/audio/components/FlamaAudioConnectionGate.test.tsx",
+            "src/features/audio/hooks/useLocalAudioEngine.test.tsx",
+            "src/features/audio/services/localAudioPolling.test.ts",
+            "src/lib/flamaAudioClient.test.ts",
         ],
     },
     "support": {
@@ -815,6 +827,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "frontend_tests": [
             "src/shared/config/i18n/i18n.test.ts",
             "src/shared/config/i18n/i18n.stress.test.tsx",
+            "src/shared/config/i18n/lazyLoading.test.tsx",
             "src/shared/config/i18n/translationKeys.test.ts",
             "src/shared/ui/LanguageSwitcher.test.tsx",
         ],
@@ -1455,16 +1468,16 @@ def run_frontend_tests(
         print(f"  * {tf}")
     print("-" * 60)
 
-    # Use npm run test -- <files>
-    cmd = ["npm", "--prefix", "frontend", "test", "--", "--run"]
+    npm_bin = shutil.which("npm.cmd") if sys.platform == "win32" else "npm"
+    cmd = [npm_bin or "npm", "--prefix", "frontend", "test", "--", "--run"]
     if failfast:
         cmd.append("--bail=1")
-    cmd.extend(existing_tests)
+    all_fe_tests = discover_all_frontend_tests()
+    if set(existing_tests) < set(all_fe_tests):
+        cmd.extend(existing_tests)
 
     start_time = time.time()
-    # On Windows npm requires shell=True if run via standard PATH or npm.cmd
-    use_shell = sys.platform == "win32"
-    res = subprocess.run(cmd, cwd=str(ROOT_DIR), shell=use_shell)
+    res = subprocess.run(cmd, cwd=str(ROOT_DIR), shell=False)
     elapsed = time.time() - start_time
 
     if res.returncode == 0:

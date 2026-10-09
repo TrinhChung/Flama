@@ -1,0 +1,301 @@
+{
+  "measured_at_utc": "2026-10-09T16:50:39.761240+00:00",
+  "source_head": "6d03826423b2fc726981515c48782066658f86a0",
+  "source_is_dirty": true,
+  "python": "3.12.6",
+  "scope": "SQLite-memory synthetic probe; single local timings are not production percentiles. BEFORE comes from preserved historical audit, not old-code reruns. JSON-equivalent bytes are not compressed HTTP/network bytes. No configured DB, env dump, MySQL EXPLAIN or browser timing.",
+  "baseline_reference": {
+    "path": "docs/architecture/artifacts/legacy_perf_audit_20261010/results.json",
+    "sha256": "a1f859d69d61f9d857628edff16eb23abf3a66d73fcfcafd8b3ba6d11f6bdd23",
+    "source_head": "8c3b8f03d8c4a68c202b0dbbb07367a4c5801874",
+    "source_is_dirty": true,
+    "audited_source_sha256": {
+      "app/settings.py": "73fc3721149361fba9755bb4c7c41c7955a4c97b04f43dcacc2485b547db8d17",
+      "app/repositories/deck_tree_query.py": "80603a7165fbebb07139b210683e52c4f5a4b4856cdea3425862e5f02be31605",
+      "app/services/connect/actions.py": "26fd560d9b5c16506297e86072fe8ea709149f39fb14e34828bdcbdec9d7f13f",
+      "app/services/marketplace_note_type_service.py": "347910c9a256f1dcf90049ef6372dff0f01cf1e132a6de756997fad6cb89b531",
+      "app/services/marketplace_query_service.py": "48725552a047cac6668378bf2adfd8327d6acd6bb186e3a6e3fa20cd5ebb5495",
+      "app/services/template_library_service.py": "19d566c2a8cde81b20d130ffc686835189ba75dc1f3d44670e13501a5807f349",
+      "frontend/src/features/study/session/sessionStore.ts": "f75aadcac848dd4e0ceec5248fdc462f0fc754e84367c453cb2681b543883e26",
+      "frontend/src/features/study/session/sessionRestore.ts": "d57867bc8cb15350d611c9f86713ac80cc5ae4f7f1f69613b9e0bc201f9b8c79",
+      "frontend/src/shared/config/i18n/index.ts": "64c30da52a40b0f74b23907f08b0e176471a4088e61e136d957d6292d289320a",
+      "frontend/src/features/marketplace/pages/MarketplacePages.tsx": "ea2355e3040be711a2fd8d8e4e1e1c2894597cb1aea4ec5218a28c04f3b1c873"
+    }
+  },
+  "fixture": {
+    "foreign_decks": 1000,
+    "note_types": 600,
+    "public_note_types": 100,
+    "public_template_source": "{{Word}} plus 8192 x + {{Word}} plus 8192 y, CSS empty",
+    "duplicate_notes": 1000,
+    "duplicate_body_bytes_each": 4096,
+    "connect_actual_transport_additions": "2 FieldDefs and, if absent, one matching Template, after all directly comparable probes"
+  },
+  "before": [
+    {
+      "case": "stats_empty_learner_1000_foreign_decks",
+      "select_count": 3,
+      "select_tables": {
+        "decks": 2,
+        "card_progress": 1
+      },
+      "orm_loaded": {
+        "Deck": 1000
+      },
+      "returned_rows": 0,
+      "json_equivalent_bytes": 2,
+      "elapsed_local_sqlite_ms": 25.119
+    },
+    {
+      "case": "legacy_market_list_no_match_600_total_100_public",
+      "select_count": 8,
+      "select_tables": {
+        "note_types": 1
+      },
+      "orm_loaded": {
+        "NoteType": 600
+      },
+      "returned_rows": 0,
+      "json_equivalent_bytes": 13,
+      "elapsed_local_sqlite_ms": 33.429
+    },
+    {
+      "case": "legacy_market_list_100_public",
+      "select_count": 403,
+      "select_tables": {
+        "note_types": 1,
+        "templates": 200,
+        "study_applications": 200
+      },
+      "orm_loaded": {
+        "NoteType": 600,
+        "User": 1,
+        "Template": 100,
+        "StudyApplication": 100
+      },
+      "returned_rows": 100,
+      "json_equivalent_bytes": 1854201,
+      "elapsed_local_sqlite_ms": 364.591
+    },
+    {
+      "case": "template_library_100_templates_16KiB_code_each",
+      "select_count": 3,
+      "select_tables": {
+        "note_types": 2,
+        "templates": 1,
+        "study_applications": 1
+      },
+      "orm_loaded": {
+        "NoteType": 100,
+        "Template": 100,
+        "StudyApplication": 100
+      },
+      "returned_rows": 100,
+      "json_equivalent_bytes": 1698842,
+      "elapsed_local_sqlite_ms": 40.421
+    },
+    {
+      "case": "connect_duplicate_check_1x1000_notes",
+      "select_count": 1,
+      "select_tables": {},
+      "orm_loaded": {
+        "Note": 1000
+      },
+      "returned_rows": 1,
+      "json_equivalent_bytes": 7,
+      "elapsed_local_sqlite_ms": 30.67
+    },
+    {
+      "case": "connect_duplicate_check_50x1000_notes",
+      "select_count": 50,
+      "select_tables": {},
+      "orm_loaded": {
+        "Note": 50000
+      },
+      "returned_rows": 50,
+      "json_equivalent_bytes": 350,
+      "elapsed_local_sqlite_ms": 1707.222
+    }
+  ],
+  "after": [
+    {
+      "case": "stats_empty_learner_1000_foreign_decks",
+      "select_count": 2,
+      "select_tables": {
+        "decks": 1,
+        "card_progress": 1,
+        "notes": 1
+      },
+      "orm_loaded": {},
+      "returned_rows": 0,
+      "json_equivalent_bytes": 2,
+      "elapsed_local_sqlite_ms": 7.21
+    },
+    {
+      "case": "legacy_market_list_no_match_600_total_100_public",
+      "select_count": 7,
+      "select_tables": {
+        "note_types": 1
+      },
+      "orm_loaded": {
+        "User": 1,
+        "NoteType": 100
+      },
+      "returned_rows": 0,
+      "json_equivalent_bytes": 13,
+      "elapsed_local_sqlite_ms": 19.696
+    },
+    {
+      "case": "legacy_market_list_100_public",
+      "select_count": 402,
+      "select_tables": {
+        "note_types": 1,
+        "field_defs": 100,
+        "templates": 200,
+        "study_applications": 200
+      },
+      "orm_loaded": {
+        "User": 1,
+        "NoteType": 100,
+        "Template": 100,
+        "StudyApplication": 100
+      },
+      "returned_rows": 100,
+      "json_equivalent_bytes": 1854201,
+      "elapsed_local_sqlite_ms": 163.987,
+      "notes": "Compatibility client still requests definitions; React uses compact pages below."
+    },
+    {
+      "case": "compact_market_list_page_24_of_100_public",
+      "select_count": 3,
+      "select_tables": {
+        "note_types": 2
+      },
+      "orm_loaded": {
+        "User": 1,
+        "NoteType": 24
+      },
+      "returned_rows": 24,
+      "json_equivalent_bytes": 41823,
+      "elapsed_local_sqlite_ms": 10.562,
+      "pagination": {
+        "page": 1,
+        "page_size": 24,
+        "total": 100,
+        "has_more": true
+      }
+    },
+    {
+      "case": "template_library_100_templates_16KiB_code_each",
+      "select_count": 3,
+      "select_tables": {
+        "note_types": 2,
+        "templates": 1,
+        "field_defs": 1,
+        "study_applications": 1
+      },
+      "orm_loaded": {
+        "NoteType": 100,
+        "Template": 100,
+        "StudyApplication": 100
+      },
+      "returned_rows": 100,
+      "json_equivalent_bytes": 1698842,
+      "elapsed_local_sqlite_ms": 25.049
+    },
+    {
+      "case": "compact_template_library_page_24_of_100_legacy_inputs",
+      "select_count": 5,
+      "select_tables": {
+        "note_types": 3,
+        "templates": 3,
+        "field_defs": 1,
+        "study_applications": 1
+      },
+      "orm_loaded": {
+        "NoteType": 24,
+        "Template": 24,
+        "StudyApplication": 24
+      },
+      "returned_rows": 24,
+      "json_equivalent_bytes": 12964,
+      "elapsed_local_sqlite_ms": 13.093,
+      "pagination": {
+        "page": 1,
+        "page_size": 24,
+        "total": 100,
+        "has_more": true
+      },
+      "notes": "Same original pre-attachment templates: empty/null input_schema inference intentionally reads page HTML in one batch."
+    },
+    {
+      "case": "connect_duplicate_check_1x1000_notes",
+      "select_count": 1,
+      "select_tables": {
+        "notes": 1
+      },
+      "orm_loaded": {},
+      "returned_rows": 1,
+      "json_equivalent_bytes": 7,
+      "elapsed_local_sqlite_ms": 9.141
+    },
+    {
+      "case": "connect_duplicate_check_50x1000_notes",
+      "select_count": 50,
+      "select_tables": {
+        "notes": 50
+      },
+      "orm_loaded": {},
+      "returned_rows": 50,
+      "json_equivalent_bytes": 350,
+      "elapsed_local_sqlite_ms": 383.623,
+      "notes": "Same original helper loop without a shared request lookup: 50 identity projections, zero Note hydration."
+    },
+    {
+      "case": "connect_duplicate_shared_lookup_50x1000_notes",
+      "select_count": 1,
+      "select_tables": {
+        "notes": 1
+      },
+      "orm_loaded": {},
+      "returned_rows": 50,
+      "json_equivalent_bytes": 350,
+      "elapsed_local_sqlite_ms": 7.734
+    },
+    {
+      "case": "connect_canAddNotes_actual_batch_50x1000_notes",
+      "select_count": 7,
+      "select_tables": {
+        "decks": 1,
+        "note_types": 1,
+        "templates": 1,
+        "study_applications": 1,
+        "field_defs": 1,
+        "notes": 1
+      },
+      "orm_loaded": {
+        "Deck": 1001,
+        "NoteType": 600,
+        "FieldDef": 2
+      },
+      "returned_rows": 50,
+      "json_equivalent_bytes": 300,
+      "elapsed_local_sqlite_ms": 38.225,
+      "notes": "Real dispatcher/check/parse path. Extra Word/Body FieldDef rows and possibly one template enable validation; no equivalent BEFORE transport timing exists. Includes accessible deck/model catalog resolution."
+    }
+  ],
+  "measured_source_sha256": {
+    "app/repositories/deck_tree_query.py": "0fd54d3334bcfad5ac80d6ec5ae1a3de41bae212faeb1764f98b85498519bfa6",
+    "app/repositories/marketplace_list_repository.py": "75cc39c8b04a3e12eb48f1deb7c8e6605b2640f5a9a4740bcc26251d7f825ab1",
+    "app/services/marketplace_list_service.py": "cf5c6f2d93681da4efed4e4835ae9cb2f5cff75c50ad2349619b47990e493597",
+    "app/services/marketplace_note_type_service.py": "3786f6079d495f1f5fb28b16476b36a8e77c2bd802286825d30776506185fca2",
+    "app/services/marketplace_query_service.py": "48725552a047cac6668378bf2adfd8327d6acd6bb186e3a6e3fa20cd5ebb5495",
+    "app/repositories/template_library_repository.py": "368226b16d7d00e727c914fe4646e78e832d8318f25c6d57607f4d18d2571845",
+    "app/services/template_library_service.py": "ff7372f72a43110b506c98047dcc3d899627b1674ec42b1a6543f1a8a0dbfa49",
+    "app/services/connect/actions.py": "339ac7f71707f7cec7f712f5f0e53e9d80fd14fab2e21934c0e5d992699a91fc",
+    "app/services/connect/dispatcher.py": "2554c7ab973b833fe2b02533073c56cbbb0a92899fcc57fe66295d6743831453",
+    "app/services/connect/identity_lookup.py": "12a7e9767eb3a1e39afee53fc8aabb9e53cca835a1d36f6718887430c85ebe09",
+    "app/repositories/connect_identity_repository.py": "911b478c9bfb40255bb6ea9f434e611d68bcecaf233dd89b89a55f55ca1dbd41"
+  },
+  "probe_sha256": "12cd9109808649dee50e4b8d411568442276b1e487f1e53e351d87a6f9cbca2d"
+}

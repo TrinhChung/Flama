@@ -5,6 +5,7 @@ from sqlalchemy import event
 
 from app import create_app
 from app.repositories import vocabulary_repository
+from app.repositories.deck_tree_query import query_accessible_stats_decks
 from models import db
 from models.card_progress import CardProgress
 from models.deck import Deck
@@ -52,6 +53,60 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
         db.session.remove()
         db.drop_all()
         self.context.pop()
+
+    def test_empty_stats_scope_does_not_hydrate_foreign_decks(self):
+        db.session.add_all([
+            Deck(name=f"Foreign {index}", owner_user_id=self.owner_id)
+            for index in range(100)
+        ])
+        db.session.commit()
+        db.session.expunge_all()
+        loaded = []
+
+        def capture(deck, _context):
+            loaded.append(deck.id)
+
+        event.listen(Deck, "load", capture)
+        try:
+            result = query_accessible_stats_decks(user_id=self.learner_id, admin_mode=False)
+        finally:
+            event.remove(Deck, "load", capture)
+        self.assertEqual(result, [])
+        self.assertEqual(loaded, [])
+
+    def test_stats_fallback_preserves_progress_scope_order_and_deleted_filter(self):
+        parent = Deck(name="Legacy parent", owner_user_id=None, position=10)
+        other = Deck(name="Progress deck", owner_user_id=self.owner_id, position=1)
+        deleted = Deck(name="Deleted", deleted_at=datetime(2026, 1, 1))
+        unrelated = Deck(name="Unrelated", owner_user_id=self.owner_id)
+        db.session.add_all([parent, other, deleted, unrelated])
+        db.session.flush()
+        child = Deck(name="Legacy child", parent_id=parent.id, owner_user_id=None, position=0)
+        db.session.add(child)
+        db.session.flush()
+        for deck in (parent, other, child, deleted):
+            note = Note(user_id=self.owner_id, deck_id=deck.id, note_type_id=self.note_type_id)
+            db.session.add(note)
+            db.session.flush()
+            card = Card(note_id=note.id, template_id=self.template_id)
+            db.session.add(card)
+            db.session.flush()
+            db.session.add(CardProgress(user_id=self.learner_id, card_id=card.id))
+        expected = [other.id, parent.id, child.id]
+        db.session.commit()
+        db.session.expunge_all()
+        loaded = []
+
+        def capture(deck, _context):
+            loaded.append(deck.id)
+
+        event.listen(Deck, "load", capture)
+        try:
+            result = query_accessible_stats_decks(user_id=self.learner_id, admin_mode=False)
+        finally:
+            event.remove(Deck, "load", capture)
+        self.assertEqual([deck.id for deck in result], expected)
+        self.assertCountEqual(loaded, expected)
 
     def test_batch_deck_tree_queries_and_counts_with_multiple_installs(self):
         # Create 5 source decks with notes and cards

@@ -7,7 +7,7 @@ import {
   RotateCcw,
   X,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { DeckCard } from '../components/DeckCard'
@@ -132,6 +132,16 @@ type MarketplaceItem = {
 }
 
 type SortView = 'recommended' | 'newest' | 'popular'
+
+type MarketplaceList = {
+  items: MarketplaceItem[]
+  pagination: { page: number; page_size: number; total: number; has_more: boolean }
+  curated_sections?: {
+    major_sections: { category: string; total: number; item_ids: string[] }[]
+    other_item_ids: string[]
+    other_total: number
+  } | null
+}
 
 const DECK_MAJOR_CATEGORIES = [
   'Tiếng Nhật',
@@ -275,7 +285,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const marketQuery = useQuery({
+  const marketPages = useInfiniteQuery({
     queryKey: [
       'marketplace',
       mode,
@@ -288,8 +298,18 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       pricingFilter,
       sort,
     ],
-    queryFn: () =>
-      appApi.get<{ items: MarketplaceItem[] }>(endpoint, {
+    initialPageParam: 1,
+    getNextPageParam: (lastPage: MarketplaceList) => lastPage.pagination.has_more
+      ? lastPage.pagination.page + 1
+      : undefined,
+    queryFn: ({ pageParam }): Promise<MarketplaceList> =>
+      appApi.get<MarketplaceList>(endpoint, {
+        compact: 1,
+        page: pageParam,
+        page_size: 24,
+        curated: mode === 'decks' && !debouncedQuery && !category &&
+          !selectedDomain && !selectedSubject && !selectedFrameworkLevel &&
+          !selectedDifficulty && pricingFilter === 'all' ? 1 : undefined,
         q: debouncedQuery,
         category: category || undefined,
         domain: selectedDomain || undefined,
@@ -300,6 +320,32 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
         sort,
       }),
   })
+  const marketData = useMemo(() => {
+    const pages = marketPages.data?.pages
+    if (!pages?.length) return undefined
+    return {
+      items: pages.flatMap((page) => page.items),
+      total: pages[0].pagination.total,
+      curated: pages[0].curated_sections
+        ? {
+            majorSections: pages.flatMap((page) => {
+              const byId = new Map(page.items.map((item) => [item.id, item]))
+              return (page.curated_sections?.major_sections ?? []).map((section) => ({
+                category: section.category,
+                total: section.total,
+                items: section.item_ids.flatMap((id) => byId.has(id) ? [byId.get(id)!] : []),
+              }))
+            }),
+            otherItems: pages.flatMap((page) => {
+              const ids = new Set(page.curated_sections?.other_item_ids ?? [])
+              return page.items.filter((item) => ids.has(item.id))
+            }),
+            otherTotal: pages[0].curated_sections.other_total,
+          }
+        : null,
+    }
+  }, [marketPages.data])
+  const marketQuery = { ...marketPages, data: marketData }
 
   // Subjects available under currently selected domain
   const availableSubjects = useMemo(() => {
@@ -335,7 +381,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   }, [selectedDomain, selectedSubject, selectedFrameworkLevel, selectedDifficulty, pricingFilter])
 
   const isFiltered = Boolean(queryText || category || activeFilterCount > 0)
-  const totalCount = marketQuery.data?.items.length ?? 0
+  const totalCount = marketQuery.data?.total ?? 0
 
   const handleResetFilters = () => {
     setQueryText('')
@@ -357,6 +403,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     if (isFiltered || mode !== 'decks' || !marketQuery.data?.items) {
       return null
     }
+    if (marketQuery.data.curated) return marketQuery.data.curated
     const items = marketQuery.data.items
     if (items.length < 5) {
       return null
@@ -389,7 +436,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       majorSections,
       otherItems,
     }
-  }, [isFiltered, mode, marketQuery.data?.items])
+  }, [isFiltered, mode, marketQuery.data])
 
   // Auto-launch marketplace spotlight tour for first-time visitors
   useEffect(() => {
@@ -649,6 +696,22 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             ))}
           </div>
         )
+      ) : null}
+
+      {marketPages.hasNextPage ? (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={marketPages.isFetchingNextPage}
+            onClick={() => marketPages.fetchNextPage()}
+            className="rounded-lg text-xs font-semibold"
+          >
+            {marketPages.isFetchingNextPage
+              ? t('common:pagination_loading', { defaultValue: 'Đang tải...' })
+              : t('common:pagination_load_more', { defaultValue: 'Xem thêm' })}
+          </Button>
+        </div>
       ) : null}
 
       {/* Interactive Spotlight Tour for Marketplace */}

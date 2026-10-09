@@ -162,15 +162,6 @@ def query_accessible_stats_decks(*, user_id: int, admin_mode: bool) -> list[Deck
         return decks
 
     # Backward-compatible fallback for decks created before owner_user_id was populated.
-    all_decks = (
-        Deck.query.filter(Deck.deleted_at.is_(None)).order_by(
-            Deck.parent_id.isnot(None),
-            Deck.position,
-            Deck.created_at,
-            Deck.id,
-        )
-        .all()
-    )
     note_deck_rows = (
         db.session.query(Note.deck_id)
         .select_from(CardProgress)
@@ -188,7 +179,18 @@ def query_accessible_stats_decks(*, user_id: int, admin_mode: bool) -> list[Deck
         for row in note_deck_rows
         if row and row[0] is not None
     }
-    return [deck for deck in all_decks if deck.id in visible_ids]
+    if not visible_ids:
+        return []
+    return (
+        Deck.query.filter(Deck.deleted_at.is_(None), Deck.id.in_(visible_ids))
+        .order_by(
+            Deck.parent_id.isnot(None),
+            Deck.position,
+            Deck.created_at,
+            Deck.id,
+        )
+        .all()
+    )
 
 
 def collect_subtree_ids(root_deck_id: int | None) -> list[int]:

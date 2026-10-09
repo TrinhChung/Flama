@@ -1,6 +1,6 @@
 import '@/shared/config/i18n'
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -33,10 +33,12 @@ function useAttachTemplateSelection(noteTypeId: string) {
     const timer = setTimeout(() => setQuery(search.trim()), 250)
     return () => clearTimeout(timer)
   }, [search, composing])
-  const params = useMemo<TemplateLibraryParams>(() => query ? { q: query } : {}, [query])
-  const library = useQuery({
-    queryKey: cardTemplateQueryKeys.library(params),
-    queryFn: ({ signal }) => fetchTemplateLibrary(params, signal),
+  const params = useMemo<TemplateLibraryParams>(() => ({ compact: true, page_size: 24, ...(query ? { q: query } : {}) }), [query])
+  const library = useInfiniteQuery({
+    queryKey: [...cardTemplateQueryKeys.library(params), 'infinite'],
+    initialPageParam: 1,
+    queryFn: ({ signal, pageParam }) => fetchTemplateLibrary({ ...params, page: pageParam }, signal),
+    getNextPageParam: (last) => last.pagination?.has_more ? last.pagination.page + 1 : undefined,
   })
   const detail = useQuery({
     queryKey: cardTemplateQueryKeys.libraryDetail(selectedId ?? ''),
@@ -51,6 +53,7 @@ function useAttachTemplateSelection(noteTypeId: string) {
   return {
     search, setSearch, setComposing, selectedId, setSelectedId, mapping, setMapping,
     occurrence, setOccurrence, library, detail, applications, existing,
+    libraryItems: library.data?.pages.flatMap((page) => page.items) ?? [],
   }
 }
 
@@ -59,6 +62,7 @@ function AttachTemplateContent({ noteTypeId, onOpenChange, onApplied, onPendingC
 }) {
   const { t } = useTranslation('template_mapping')
   const { t: legacyT } = useTranslation('card_templates')
+  const { t: commonT } = useTranslation('common')
   const state = useAttachTemplateSelection(noteTypeId)
   if (state.mapping && state.detail.data) return <ApplyTemplateForm
     key={`${state.detail.data.id}:${state.occurrence}`}
@@ -78,8 +82,8 @@ function AttachTemplateContent({ noteTypeId, onOpenChange, onApplied, onPendingC
     {state.library.isError && <Alert variant="destructive"><AlertDescription>{state.library.error.message}
       <Button variant="outline" size="sm" onClick={() => void state.library.refetch()}>{t('retry')}</Button>
     </AlertDescription></Alert>}
-    {state.library.isSuccess && <div className="max-h-64 space-y-2 overflow-y-auto" aria-label={t('select_template')}>
-      {state.library.data.items.filter((template) => !template.archived_at).map((template) => <button
+    {state.library.data && <div className="max-h-64 space-y-2 overflow-y-auto" aria-label={t('select_template')}>
+      {state.libraryItems.filter((template) => !template.archived_at).map((template) => <button
         key={template.id} type="button" aria-pressed={state.selectedId === template.id}
         className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${state.selectedId === template.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'}`}
         onClick={() => { state.setSelectedId(template.id); state.setOccurrence('compat') }}>
@@ -89,7 +93,8 @@ function AttachTemplateContent({ noteTypeId, onOpenChange, onApplied, onPendingC
         </span>
         <Badge variant="secondary" className="shrink-0">{t('input_count', { count: template.input_schema.length })}</Badge>
       </button>)}
-      {!state.library.data.items.some((template) => !template.archived_at) && <p className="py-6 text-center text-sm text-muted-foreground">{t('no_templates')}</p>}
+      {!state.libraryItems.some((template) => !template.archived_at) && <p className="py-6 text-center text-sm text-muted-foreground">{t('no_templates')}</p>}
+      {state.library.hasNextPage && <Button variant="outline" disabled={state.library.isFetchingNextPage} onClick={() => void state.library.fetchNextPage()}>{commonT(state.library.isFetchingNextPage ? 'pagination_loading' : 'pagination_load_more')}</Button>}
     </div>}
     {state.selectedId && state.detail.isPending && <p role="status" className="text-muted-foreground">{legacyT('detail.loading')}</p>}
     {state.detail.isError && <Alert variant="destructive"><AlertDescription>{state.detail.error.message}

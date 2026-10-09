@@ -119,7 +119,8 @@ class QuietHandler(WSGIRequestHandler):
 def run(arguments):
     url = local_url(arguments.env_file.resolve())
     source_paths = ["app/services/flashcards_share_service.py", "app/services/share/publish.py",
-                    "app/repositories/flashcards_share_repository.py", "app/services/share/helpers.py"]
+                    "app/repositories/flashcards_share_repository.py", "app/services/share/helpers.py",
+                    "app/services/deck_publish_index.py"]
     source_before = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in source_paths}
     app = create_audit_app({
         "SQLALCHEMY_DATABASE_URI": url.render_as_string(hide_password=False),

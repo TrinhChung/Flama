@@ -94,6 +94,7 @@ _QUERY_CLAUSE_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
 
 
 from app.services.connect.actions import (
+    CheckBatchContext,
     add_note,
     check_note,
     find_notes,
@@ -155,7 +156,8 @@ def dispatch(user_id: int, action: str, params: dict[str, Any]) -> Any:
         notes = params.get("notes")
         if not isinstance(notes, list) or len(notes) > MAX_NOTES_PER_REQUEST:
             raise ConnectError(f"notes must be an array with at most {MAX_NOTES_PER_REQUEST} entries")
-        checks = [check_note(user_id, note) for note in notes]
+        context = CheckBatchContext(user_id)
+        checks = [check_note(user_id, note, context=context) for note in notes]
         if action == "canAddNotes":
             return [allowed for allowed, _error in checks]
         return [{"canAdd": allowed, "error": error} for allowed, error in checks]

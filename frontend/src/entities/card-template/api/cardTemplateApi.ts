@@ -94,6 +94,9 @@ export function fetchTemplateLibrary(
   if (params.include_archived === true) {
     searchParams.append('include_archived', 'true')
   }
+  if (params.compact === true) searchParams.append('compact', '1')
+  if (params.page !== undefined) searchParams.append('page', String(params.page))
+  if (params.page_size !== undefined) searchParams.append('page_size', String(params.page_size))
   const qs = searchParams.toString()
   const url = qs ? `/api/card-templates?${qs}` : '/api/card-templates'
   return apiRequest<TemplateLibraryResponse>(url, { signal })

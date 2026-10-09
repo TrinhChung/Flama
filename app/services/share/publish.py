@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -37,6 +36,7 @@ from app.services import (
     note_sync_service,
     study_service,
 )
+from app.services.deck_publish_index import DeckPublishSummary, build_deck_publish_index
 from app.services.share.constants import (
     DECK_ACTIVE_REVIEW_THRESHOLD,
     DEFAULT_VISIBLE_PUBLISH_STATUSES,
@@ -139,11 +139,12 @@ def _deck_publish_context(*, user_id: int) -> tuple[dict[int, Deck], set[int], d
 
 @dataclass(frozen=True)
 class DeckPublishBatchContext:
-    """Precomputed in-memory structures for O(1) publish eligibility checks."""
-    subtree_ids_by_deck: dict[int, set[int]]       # Map deck_id -> set of subtree IDs (cycle-safe)
+    """Bounded summaries, with the original fields retained for old callers."""
+    subtree_ids_by_deck: dict[int, set[int]]       # Compatibility input; options leave this empty.
     deck_to_note_types: dict[int, set[str]]        # Map deck_id -> set of note_type IDs
     marketplace_installed_nt_ids: set[str]        # Set of note_type IDs installed from Marketplace
     active_template_nt_ids: set[str]               # Set of note_type IDs with ACTIVE templates
+    summaries_by_deck: dict[int, DeckPublishSummary] | None = None
 
 
 def get_deck_publish_eligibility(
@@ -178,16 +179,30 @@ def get_deck_publish_eligibility(
     # =========================================================================
     # NHÁNH 1: BATCH IN-MEMORY RESOLUTION (O(1) RAM - không sinh SQL)
     # =========================================================================
+    summary = None
     if batch_context is not None:
-        sub_ids = batch_context.subtree_ids_by_deck.get(deck_id, {deck_id})
-        subtree_nt_ids = {
-            nt for sid in sub_ids for nt in batch_context.deck_to_note_types.get(sid, set())
-        }
+        summaries = getattr(batch_context, "summaries_by_deck", None)
+        summary = summaries.get(deck_id) if summaries is not None else None
         inferred_note_type_id = None
-        if len(subtree_nt_ids) == 1:
-            candidate_nt_id = next(iter(subtree_nt_ids))
-            if candidate_nt_id in batch_context.active_template_nt_ids:
+        if summary is not None:
+            candidate_nt_id = summary.note_type_id
+            if not summary.mixed_note_types and candidate_nt_id in batch_context.active_template_nt_ids:
                 inferred_note_type_id = candidate_nt_id
+            descendant_ids = (
+                {summary.smallest_shared_descendant}
+                if summary.smallest_shared_descendant is not None else set()
+            )
+        else:
+            # Preserve callers that still construct the original batch context.
+            sub_ids = batch_context.subtree_ids_by_deck.get(deck_id, {deck_id})
+            subtree_nt_ids = {
+                nt for sid in sub_ids for nt in batch_context.deck_to_note_types.get(sid, set())
+            }
+            if len(subtree_nt_ids) == 1:
+                candidate_nt_id = next(iter(subtree_nt_ids))
+                if candidate_nt_id in batch_context.active_template_nt_ids:
+                    inferred_note_type_id = candidate_nt_id
+            descendant_ids = sub_ids - {deck_id}
 
         if inferred_note_type_id and (inferred_note_type_id in batch_context.marketplace_installed_nt_ids):
             return {
@@ -196,7 +211,6 @@ def get_deck_publish_eligibility(
                 "block_reason": "Bộ thẻ dùng Note Type cài từ Marketplace nên không thể chia sẻ lại.",
                 "shared_item_id": None,
             }
-        descendant_ids = sub_ids - {deck_id}
 
     # =========================================================================
     # NHÁNH 2: STANDALONE FALLBACK RESOLUTION (Bảo toàn 100% hợp đồng gọi đơn lẻ)
@@ -245,7 +259,7 @@ def get_deck_publish_eligibility(
         }
 
     seen: set[int] = {deck_id}
-    parent_id = deck.parent_id
+    parent_id = summary.nearest_shared_ancestor if summary is not None else deck.parent_id
     while parent_id is not None and int(parent_id) not in seen:
         current_parent_id = int(parent_id)
         seen.add(current_parent_id)
@@ -275,52 +289,16 @@ def get_deck_publish_eligibility(
 def build_deck_publish_options(*, user_id: int) -> dict[str, Any]:
     context = _deck_publish_context(user_id=user_id)
     deck_by_id, _installed_scope_ids, _shared_by_source = context
-    owned_decks = list(deck_by_id.values())
     deck_ids = list(deck_by_id.keys())
 
     if not deck_ids:
         return {"items": []}
 
-    # 1. In-memory cycle-safe tree index
-    children_by_parent: dict[int, list[int]] = defaultdict(list)
-    for deck in owned_decks:
-        if deck.parent_id is not None and int(deck.parent_id) != int(deck.id):
-            children_by_parent[int(deck.parent_id)].append(int(deck.id))
-
-    def compute_safe_subtree_ids(root_id: int) -> set[int]:
-        subtree: set[int] = {root_id}
-        queue: deque[int] = deque([root_id])
-        while queue:
-            curr = queue.popleft()
-            for child_id in children_by_parent.get(curr, []):
-                if child_id not in subtree:
-                    subtree.add(child_id)
-                    queue.append(child_id)
-        return subtree
-
-    subtree_ids_by_deck: dict[int, set[int]] = {
-        int(deck.id): compute_safe_subtree_ids(int(deck.id))
-        for deck in owned_decks
-    }
-
-    # 2. Batch lightweight card counts (1 SQL) + in-memory rollup
-    direct_card_count = flashcards_share_repository.batch_get_cards_count_by_deck_ids(
+    direct_card_count, deck_to_note_types = flashcards_share_repository.batch_get_deck_publish_facts(
         user_id=user_id,
         deck_ids=deck_ids,
     )
-    total_cards_by_deck: dict[int, int] = {
-        d_id: sum(direct_card_count.get(cid, 0) for cid in subtree_ids_by_deck.get(d_id, {d_id}))
-        for d_id in deck_ids
-    }
-
-    # 3. Batch note types for user decks (1 SQL)
-    deck_to_note_types: dict[int, set[str]] = (
-        flashcards_share_repository.batch_get_deck_note_types(
-            user_id=user_id,
-            deck_ids=deck_ids,
-        )
-    )
-    all_used_nt_ids: set[str] = {
+    all_used_nt_ids = {
         nt_id for nt_set in deck_to_note_types.values() for nt_id in nt_set
     }
 
@@ -338,11 +316,21 @@ def build_deck_publish_options(*, user_id: int) -> dict[str, Any]:
         else set()
     )
 
+    summaries_by_deck = build_deck_publish_index(
+        parent_ids={
+            deck_id: int(deck.parent_id) if deck.parent_id is not None else None
+            for deck_id, deck in deck_by_id.items()
+        },
+        direct_card_counts=direct_card_count,
+        deck_to_note_types=deck_to_note_types,
+        shared_deck_ids=set(_shared_by_source),
+    )
     batch_context = DeckPublishBatchContext(
-        subtree_ids_by_deck=subtree_ids_by_deck,
+        subtree_ids_by_deck={},  # Legacy context slot; no descendant sets are materialized.
         deck_to_note_types=deck_to_note_types,
         marketplace_installed_nt_ids=marketplace_installed_nt_ids,
         active_template_nt_ids=active_template_nt_ids,
+        summaries_by_deck=summaries_by_deck,
     )
 
     items = []
@@ -358,7 +346,7 @@ def build_deck_publish_options(*, user_id: int) -> dict[str, Any]:
                 "id": deck_id,
                 "name": deck.name,
                 "parent_id": int(deck.parent_id) if deck.parent_id is not None else None,
-                "card_count": int(total_cards_by_deck.get(deck_id, 0)),
+                "card_count": summaries_by_deck[deck_id].card_count,
                 **eligibility,
             }
         )

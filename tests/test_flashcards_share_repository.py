@@ -1,6 +1,8 @@
 """Unit tests for flashcards_share_repository batch methods."""
 
 import unittest
+from datetime import datetime
+from sqlalchemy import event
 from app import create_app
 from models import db
 from models.user import User
@@ -129,6 +131,81 @@ class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
             deck_ids=[],
         )
         self.assertEqual(counts, {})
+
+    def test_combined_publish_facts_match_separate_queries_and_preserve_zero_card_note_types(self):
+        extra_template = Template(id="extra_tpl", note_type_id=self.nt1.id, name="Extra presentation")
+        zero_card_deck = Deck(name="Zero card notes", owner_user_id=self.user_id)
+        empty_deck = Deck(name="Empty", owner_user_id=self.user_id)
+        deleted_deck = Deck(name="Deleted", owner_user_id=self.user_id, deleted_at=datetime.now())
+        db.session.add_all([extra_template, zero_card_deck, empty_deck, deleted_deck])
+        db.session.flush()
+        db.session.add_all([
+            Card(id="extra_card", note_id="note_1", template_id=extra_template.id),
+            Note(id="zero_mixed", user_id=self.user_id, deck_id=self.deck1.id, note_type_id=self.nt2.id),
+            Note(id="zero_only", user_id=self.user_id, deck_id=zero_card_deck.id, note_type_id=self.nt_installed.id),
+            Note(id="foreign_in_scope", user_id=self.other_user_id, deck_id=self.deck1.id, note_type_id=self.nt_installed.id),
+            Note(id="outside_scope", user_id=self.user_id, deck_id=deleted_deck.id, note_type_id=self.nt_installed.id),
+        ])
+        db.session.commit()
+        scope = [self.deck1.id, self.deck2.id, zero_card_deck.id, empty_deck.id, self.deck1.id, None]
+        counts, note_types = flashcards_share_repository.batch_get_deck_publish_facts(
+            user_id=self.user_id, deck_ids=scope,
+        )
+        self.assertEqual(counts, flashcards_share_repository.batch_get_cards_count_by_deck_ids(user_id=self.user_id, deck_ids=scope))
+        self.assertEqual(note_types, flashcards_share_repository.batch_get_deck_note_types(user_id=self.user_id, deck_ids=scope))
+        self.assertEqual(counts[self.deck1.id], 3)
+        self.assertEqual(note_types[self.deck1.id], {self.nt1.id, self.nt2.id})
+        self.assertEqual(note_types[zero_card_deck.id], {self.nt_installed.id})
+        self.assertNotIn(zero_card_deck.id, counts)
+        self.assertNotIn(empty_deck.id, note_types)
+        self.assertNotIn(deleted_deck.id, note_types)
+        self.assertNotIn(self.deck_other.id, counts)
+
+    def test_combined_publish_facts_empty_scope(self):
+        self.assertEqual(flashcards_share_repository.batch_get_deck_publish_facts(user_id=self.user_id, deck_ids=[]), ({}, {}))
+
+    def test_publish_options_thousand_decks_keep_sql_bounded_and_roll_up_deep_chain(self):
+        from app.services import flashcards_share_service
+        from app.services.share import publish
+
+        size = 1100
+        first_id = 10000
+        db.session.bulk_insert_mappings(Deck, [
+            {
+                "id": first_id + index, "owner_user_id": self.user_id,
+                "name": f"Deep deck {index}",
+                "parent_id": first_id + index - 1 if index else None,
+            }
+            for index in range(size)
+        ])
+        leaf_note = Note(
+            id="deep_leaf", user_id=self.user_id, deck_id=first_id + size - 1,
+            note_type_id=self.nt1.id,
+        )
+        db.session.add(leaf_note)
+        db.session.flush()
+        db.session.add(Card(id="deep_card", note_id=leaf_note.id, template_id=self.tpl1.id))
+        db.session.commit()
+        db.session.remove()
+        queries = []
+        engine = db.engine
+
+        def record_query(_connection, _cursor, statement, _parameters, _context, _executemany):
+            queries.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record_query)
+        try:
+            result = flashcards_share_service.build_deck_publish_options(user_id=self.user_id)
+        finally:
+            event.remove(engine, "before_cursor_execute", record_query)
+        self.assertLessEqual(len(queries), 7, queries)
+        self.assertTrue(all(sql.lstrip().upper().startswith("SELECT") for sql in queries))
+        self.assertEqual(sum("GROUP BY notes.deck_id, notes.note_type_id" in sql for sql in queries), 1)
+        items = {item["id"]: item for item in result["items"]}
+        self.assertEqual(len(items), size + 2)
+        self.assertEqual(items[first_id]["card_count"], 1)
+        self.assertEqual(items[first_id + size - 1]["card_count"], 1)
+        self.assertEqual(result, publish.build_deck_publish_options(user_id=self.user_id))
 
     def test_batch_get_deck_note_types(self):
         deck_nt_map = flashcards_share_repository.batch_get_deck_note_types(

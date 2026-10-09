@@ -591,6 +591,39 @@ def get_card_progress_rows_for_cutover(
     )
 
 
+def batch_get_deck_publish_facts(
+    *,
+    user_id: int,
+    deck_ids: list[int],
+) -> tuple[dict[int, int], dict[int, set[str]]]:
+    """Read direct card counts and NoteType membership in one note scan.
+
+    Callers supply the existing visible-owned deck scope. LEFT JOIN retains
+    NoteTypes on notes without cards; COUNT(Card.id) counts every presentation.
+    """
+    normalized_deck_ids = sorted({int(deck_id) for deck_id in deck_ids if deck_id is not None})
+    if not normalized_deck_ids:
+        return {}, {}
+    rows = db.session.query(
+        Note.deck_id, Note.note_type_id, db.func.count(Card.id),
+    ).select_from(Note).outerjoin(
+        Card, Card.note_id == Note.id,
+    ).filter(
+        Note.user_id == user_id,
+        Note.deck_id.in_(normalized_deck_ids),
+    ).group_by(Note.deck_id, Note.note_type_id).all()
+    card_counts: dict[int, int] = defaultdict(int)
+    note_types: dict[int, set[str]] = defaultdict(set)
+    for deck_id, note_type_id, card_count in rows:
+        if deck_id is not None:
+            # Keep the old card-count map's absence for zero-card decks.
+            if card_count:
+                card_counts[int(deck_id)] += int(card_count)
+            if note_type_id:
+                note_types[int(deck_id)].add(str(note_type_id))
+    return dict(card_counts), dict(note_types)
+
+
 def batch_get_cards_count_by_deck_ids(
     *,
     user_id: int,

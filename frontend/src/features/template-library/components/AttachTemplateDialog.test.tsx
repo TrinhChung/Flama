@@ -138,7 +138,7 @@ describe('AttachTemplateDialog', () => {
     await render()
     await setInput(document.querySelector('input[type="search"]')!, 'Vocabulary')
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 270)) }); await flush()
-    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/card-templates?q=Vocabulary')).toBe(true)
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/card-templates?q=Vocabulary&compact=1&page=1&page_size=24')).toBe(true)
     expect(document.body.textContent).not.toContain('Archived')
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('include_archived'))).toHaveLength(0)
   })
@@ -151,5 +151,34 @@ describe('AttachTemplateDialog', () => {
     await act(async () => button('Thử lại').click()); await flush()
     expect(button('Tiếp tục').disabled).toBe(false)
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0)
+  })
+  it('retains loaded choices and selection when the next page fails, then retries that page', async () => {
+    const fallback = fetchMock.getMockImplementation()!
+    const { front_html: _front, back_html: _back, shared_css: _css, ...summary } = template
+    let nextPageFails = true
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/card-templates?')) {
+        const page = new URL(String(url), 'http://example.test').searchParams.get('page')
+        if (page === '2' && nextPageFails) return json({ error: 'FAILED', message: 'Không tải được trang sau.' }, 500)
+        return json({
+          schema_version: 'template-library.v2',
+          items: [page === '2' ? { ...summary, id: 'next-page', name: 'Next design' } : summary],
+          pagination: { page: Number(page), page_size: 24, total: 25, has_more: page === '1' },
+        })
+      }
+      return (fallback as (url: string, init?: RequestInit) => any)(url, init)
+    })
+    await render(); await pickTemplate()
+    await act(async () => button('Xem thêm').click()); await flush()
+    expect(document.body.textContent).toContain('Không tải được trang sau.')
+    expect(document.body.textContent).toContain('Vocabulary Card')
+    expect(document.querySelector('button[aria-pressed="true"]')).not.toBeNull()
+    expect(button('Tiếp tục').disabled).toBe(false)
+    nextPageFails = false
+    await act(async () => button('Xem thêm').click()); await flush()
+    expect(document.body.textContent).toContain('Vocabulary Card')
+    expect(document.body.textContent).toContain('Next design')
+    expect(document.body.textContent).not.toContain('Không tải được trang sau.')
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('page=2'))).toHaveLength(2)
   })
 })

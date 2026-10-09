@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import and_, or_, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import defer, joinedload, undefer
 from models.card import Card
 from models.note import Note
 from models.note_type import NoteType
@@ -15,7 +15,7 @@ def owner_filter(user_id):
     return or_(Template.owner_user_id == int(user_id), and_(Template.owner_user_id.is_(None), Template.note_type.has(NoteType.user_id == int(user_id))))
 
 
-def library_query(session, user_id, *, include_archived=False, category=None, search=None, group="all"):
+def _library_statement(user_id, *, include_archived=False, category=None, search=None, group="all"):
     statement = select(Template).where(owner_filter(user_id))
     if not include_archived:
         statement = statement.where(Template.archived_at.is_(None))
@@ -36,8 +36,29 @@ def library_query(session, user_id, *, include_archived=False, category=None, se
         statement = statement.where(~active_usage)
     elif group == "in_use":
         statement = statement.where(active_usage)
+    return statement
+
+
+def library_query(session, user_id, *, include_archived=False, category=None, search=None, group="all", compact=False, page=None, page_size=24):
+    statement = _library_statement(user_id, include_archived=include_archived, category=category, search=search, group=group)
+    total = None
+    if page is not None:
+        total = session.scalar(select(func.count()).select_from(statement.subquery()))
+        statement = statement.offset((page - 1) * page_size).limit(page_size)
     statement = statement.options(joinedload(Template.note_type).selectinload(NoteType.field_defs))
-    return session.execute(statement.order_by(Template.name, Template.id)).scalars().all()
+    if compact:
+        statement = statement.options(defer(Template.front_html), defer(Template.back_html), defer(Template.shared_css))
+    items = session.execute(statement.order_by(Template.name, Template.id)).scalars().all()
+    if compact:
+        # Old definitions infer their inputs from source. Batch that compatibility
+        # read for this page rather than triggering a deferred query per item.
+        legacy_ids = [item.id for item in items if not item.input_schema]
+        if legacy_ids:
+            session.execute(select(Template).where(Template.id.in_(legacy_ids)).options(
+                undefer(Template.front_html), undefer(Template.back_html),
+                defer(Template.shared_css),
+            )).scalars().all()
+    return items, total
 
 
 def template_usage(session, user_id, template_ids):

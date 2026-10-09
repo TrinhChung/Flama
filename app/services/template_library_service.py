@@ -61,8 +61,11 @@ def _iso(value):
     return value.replace(tzinfo=timezone.utc).isoformat() if value is not None else None
 
 
-def serialize_template(template):
-    return {"id": template.id, "owner_user_id": template.owner_user_id, "name": template.name, "description": template.description or "", "primary_category": template.primary_category, "origin": template.origin, "source_template_id": template.source_template_id, "source_version_id": template.source_version_id, "current_version_id": template.current_version_id, "front_html": template.front_html, "back_html": template.back_html, "shared_css": template.shared_css, "input_schema": effective_input_schema(template, getattr(template.note_type, "field_defs", ())), "archived_at": _iso(template.archived_at), "created_at": _iso(template.created_at), "updated_at": _iso(template.updated_at)}
+def serialize_template(template, *, include_source=True):
+    result = {"id": template.id, "owner_user_id": template.owner_user_id, "name": template.name, "description": template.description or "", "primary_category": template.primary_category, "origin": template.origin, "source_template_id": template.source_template_id, "source_version_id": template.source_version_id, "current_version_id": template.current_version_id, "input_schema": effective_input_schema(template, getattr(template.note_type, "field_defs", ())), "archived_at": _iso(template.archived_at), "created_at": _iso(template.created_at), "updated_at": _iso(template.updated_at)}
+    if include_source:
+        result.update(front_html=template.front_html, back_html=template.back_html, shared_css=template.shared_css)
+    return result
 
 
 def serialize_application(application):
@@ -70,9 +73,9 @@ def serialize_application(application):
     return {"id": application.id, "application_id": application.id, "note_type_id": application.note_type_id, "template_id": application.template_id, "occurrence_key": application.occurrence_key, "status_code": application.status_code, "display_name": application.display_name, "position": application.position, "is_default": bool(application.is_default), "input_bindings": application.input_bindings or {}, "input_schema": schema, "warnings": binding_warnings(schema, application.input_bindings, application.note_type.field_defs), "template": serialize_template(application.template)}
 
 
-def _with_usage(template, usages, *, include_applications=False):
+def _with_usage(template, usages, *, include_applications=False, include_source=True):
     result = {
-        **serialize_template(template), "application_count": len(usages),
+        **serialize_template(template, include_source=include_source), "application_count": len(usages),
         "note_type_count": len({item["note_type_id"] for item in usages}),
     }
     if include_applications:
@@ -80,12 +83,22 @@ def _with_usage(template, usages, *, include_applications=False):
     return result
 
 
-def list_templates(*, user_id, include_archived=False, category=None, search=None, group="all"):
+def list_templates(*, user_id, include_archived=False, category=None, search=None, group="all", compact=False, page=None, page_size=None):
     if group not in {"all", "mine", "market", "standalone", "in_use"}:
         raise TemplateLibraryError("VALIDATION_ERROR", "Invalid library group.", field="group")
-    templates = repository.library_query(db.session, user_id, include_archived=include_archived, category=category, search=search, group=group)
+    paged = page is not None or page_size is not None
+    if paged:
+        for field, value in (("page", page if page is not None else 1), ("page_size", page_size if page_size is not None else 24)):
+            if isinstance(value, bool) or len(str(value)) > 10 or not str(value).isascii() or not str(value).isdigit() or not 1 <= int(value) <= 2_147_483_647:
+                raise TemplateLibraryError("VALIDATION_ERROR", f"{field} must be an integer between 1 and 2147483647.", field=field)
+        page = int(page if page is not None else 1)
+        page_size = min(int(page_size if page_size is not None else 24), 100)
+    templates, total = repository.library_query(db.session, user_id, include_archived=include_archived, category=category, search=search, group=group, compact=compact, page=page if paged else None, page_size=page_size or 24)
     usages = repository.template_usage(db.session, user_id, [item.id for item in templates])
-    return {"schema_version": "template-library.v2", "items": [_with_usage(item, usages.get(item.id, [])) for item in templates]}
+    result = {"schema_version": "template-library.v2", "items": [_with_usage(item, usages.get(item.id, []), include_source=not compact) for item in templates]}
+    if paged:
+        result["pagination"] = {"page": page, "page_size": page_size, "total": total, "has_more": page * page_size < total}
+    return result
 
 
 def get_template(*, user_id, template_id):

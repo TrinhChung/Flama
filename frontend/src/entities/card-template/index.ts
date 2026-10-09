@@ -21,6 +21,7 @@ export type {
   TemplateLibraryParams,
   TemplateLibraryPreview,
   TemplateLibraryResponse,
+  TemplateLibrarySummary,
   TemplateLibraryTemplate,
   TemplatePreviewBody,
   TemplateUpdateResponse,
