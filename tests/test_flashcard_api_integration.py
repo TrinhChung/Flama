@@ -1260,6 +1260,255 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertTrue(rows[nested_anki_deck_id]["is_selectable"])
         self.assertIsNone(rows[nested_anki_deck_id]["block_code"])
 
+    def test_shared_deck_publish_options_blocks_parent_when_child_is_shared(self):
+        with self.app.app_context():
+            parent_deck = Deck(name="Root Parent Deck", owner_user_id=self.user_id)
+            db.session.add(parent_deck)
+            db.session.flush()
+            child_deck = Deck(name="Active Child Deck", owner_user_id=self.user_id, parent_id=parent_deck.id)
+            db.session.add(child_deck)
+            db.session.flush()
+            shared_child = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=child_deck.id,
+                title="Child Shared Listing",
+                publish_status="published",
+            )
+            db.session.add(shared_child)
+            db.session.commit()
+            parent_deck_id = parent_deck.id
+
+        response = self.client.get("/api/shared/decks/publish-options")
+        self.assertEqual(response.status_code, 200)
+        options = {row["id"]: row for row in response.get_json()["items"]}
+        self.assertFalse(options[parent_deck_id]["is_selectable"])
+        self.assertEqual(options[parent_deck_id]["block_code"], "descendant_shared")
+        self.assertIn("Active Child Deck", options[parent_deck_id]["block_reason"])
+
+    def test_publish_options_query_count_benchmark(self):
+        # Create a hierarchy of 50 decks to benchmark O(1) query count
+        with self.app.app_context():
+            note_type = NoteType(id="nt_bench", user_id=self.user_id, name="Benchmark NT")
+            db.session.add(note_type)
+            db.session.flush()
+            tpl = Template(id="tpl_bench", note_type_id=note_type.id, name="Card 1")
+            db.session.add(tpl)
+            db.session.flush()
+
+            roots = []
+            for r in range(10):
+                root_d = Deck(name=f"Bench Root {r}", owner_user_id=self.user_id)
+                db.session.add(root_d)
+                db.session.flush()
+                roots.append(root_d)
+                for c in range(4):
+                    child_d = Deck(name=f"Bench Child {r}-{c}", owner_user_id=self.user_id, parent_id=root_d.id)
+                    db.session.add(child_d)
+                    db.session.flush()
+                    note = Note(id=f"bn_{r}_{c}", user_id=self.user_id, deck_id=child_d.id, note_type_id=note_type.id)
+                    db.session.add(note)
+                    db.session.flush()
+                    card = Card(id=f"bc_{r}_{c}", note_id=note.id, template_id=tpl.id)
+                    db.session.add(card)
+
+            db.session.commit()
+
+        queries = []
+        def record_query(conn, cursor, statement, parameters, context, executemany):
+            queries.append(statement)
+
+        with self.app.app_context():
+            engine = db.engine
+            event.listen(engine, "before_cursor_execute", record_query)
+        try:
+            response = self.client.get("/api/shared/decks/publish-options")
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            items = data.get("items", [])
+            # Assert query count <= 10 (O(1) constant SQL queries for 50+ decks)
+            self.assertLessEqual(len(queries), 10)
+            self.assertGreaterEqual(len(items), 50)
+            # Verify structure of all items
+            for item in items:
+                self.assertIn("id", item)
+                self.assertIn("name", item)
+                self.assertIn("parent_id", item)
+                self.assertIn("card_count", item)
+                self.assertIn("is_selectable", item)
+                self.assertIn("block_code", item)
+                self.assertIn("block_reason", item)
+                self.assertIn("shared_item_id", item)
+        finally:
+            with self.app.app_context():
+                event.remove(db.engine, "before_cursor_execute", record_query)
+
+    def test_build_deck_publish_options_edge_cases(self):
+        from app.services.share import publish as publish_service
+
+        with self.app.app_context():
+            # 1. Multi-level hierarchy rollup
+            r_deck = Deck(name="Rollup Root", owner_user_id=self.user_id)
+            db.session.add(r_deck)
+            db.session.flush()
+            m_deck = Deck(name="Rollup Middle", owner_user_id=self.user_id, parent_id=r_deck.id)
+            db.session.add(m_deck)
+            db.session.flush()
+            l_deck = Deck(name="Rollup Leaf", owner_user_id=self.user_id, parent_id=m_deck.id)
+            db.session.add(l_deck)
+            db.session.flush()
+
+            nt_a = NoteType(id="nt_edge_a", user_id=self.user_id, name="Edge NT A")
+            nt_b = NoteType(id="nt_edge_b", user_id=self.user_id, name="Edge NT B")
+            db.session.add_all([nt_a, nt_b])
+            db.session.flush()
+            tpl_a = Template(id="tpl_edge_a", note_type_id=nt_a.id, name="Card A")
+            tpl_b = Template(id="tpl_edge_b", note_type_id=nt_b.id, name="Card B")
+            db.session.add_all([tpl_a, tpl_b])
+            db.session.flush()
+
+            # Leaf has 1 note/card
+            n_leaf = Note(id="n_edge_l", user_id=self.user_id, deck_id=l_deck.id, note_type_id=nt_a.id)
+            c_leaf = Card(id="c_edge_l", note_id=n_leaf.id, template_id=tpl_a.id)
+            # Middle has 1 note/card
+            n_mid = Note(id="n_edge_m", user_id=self.user_id, deck_id=m_deck.id, note_type_id=nt_a.id)
+            c_mid = Card(id="c_edge_m", note_id=n_mid.id, template_id=tpl_a.id)
+            # Root has 1 note/card
+            n_root = Note(id="n_edge_r", user_id=self.user_id, deck_id=r_deck.id, note_type_id=nt_a.id)
+            c_root = Card(id="c_edge_r", note_id=n_root.id, template_id=tpl_a.id)
+
+            # 2. Empty deck (0 cards)
+            empty_deck = Deck(name="Empty Folder Deck", owner_user_id=self.user_id)
+            db.session.add(empty_deck)
+            db.session.flush()
+
+            # 3. Deck with multiple note types
+            multi_nt_deck = Deck(name="Multi NT Deck", owner_user_id=self.user_id)
+            db.session.add(multi_nt_deck)
+            db.session.flush()
+            n_m1 = Note(id="n_m1", user_id=self.user_id, deck_id=multi_nt_deck.id, note_type_id=nt_a.id)
+            c_m1 = Card(id="c_m1", note_id=n_m1.id, template_id=tpl_a.id)
+            n_m2 = Note(id="n_m2", user_id=self.user_id, deck_id=multi_nt_deck.id, note_type_id=nt_b.id)
+            c_m2 = Card(id="c_m2", note_id=n_m2.id, template_id=tpl_b.id)
+
+            # 4. Simulated cycle: C1 -> C2 -> C1
+            c1_deck = Deck(name="Cycle 1", owner_user_id=self.user_id)
+            db.session.add(c1_deck)
+            db.session.flush()
+            c2_deck = Deck(name="Cycle 2", owner_user_id=self.user_id, parent_id=c1_deck.id)
+            db.session.add(c2_deck)
+            db.session.flush()
+            c1_deck.parent_id = c2_deck.id  # Create cycle
+
+            # 5. Self-loop: S -> S
+            self_loop_deck = Deck(name="Self Loop", owner_user_id=self.user_id)
+            db.session.add(self_loop_deck)
+            db.session.flush()
+            self_loop_deck.parent_id = self_loop_deck.id
+
+            # 6. Cross-user parent reference
+            other_user = User(username="other_edge", email="other_edge@example.com")
+            other_user.set_password("pass")
+            db.session.add(other_user)
+            db.session.flush()
+            other_deck = Deck(name="Other User Deck", owner_user_id=other_user.id)
+            db.session.add(other_deck)
+            db.session.flush()
+
+            cross_parent_deck = Deck(name="Cross Parent Deck", owner_user_id=self.user_id, parent_id=other_deck.id)
+            db.session.add(cross_parent_deck)
+            db.session.flush()
+            n_cross = Note(id="n_cross", user_id=self.user_id, deck_id=cross_parent_deck.id, note_type_id=nt_a.id)
+            c_cross = Card(id="c_cross", note_id=n_cross.id, template_id=tpl_a.id)
+
+            db.session.add_all([n_leaf, c_leaf, n_mid, c_mid, n_root, c_root, n_m1, c_m1, n_m2, c_m2, n_cross, c_cross])
+            db.session.commit()
+
+            r_deck_id = r_deck.id
+            m_deck_id = m_deck.id
+            l_deck_id = l_deck.id
+            empty_deck_id = empty_deck.id
+            multi_nt_deck_id = multi_nt_deck.id
+            c1_deck_id = c1_deck.id
+            self_loop_deck_id = self_loop_deck.id
+            cross_parent_deck_id = cross_parent_deck.id
+
+            # Test both flashcards_share_service and share.publish produce identical results
+            res_monolith = flashcards_share_service.build_deck_publish_options(user_id=self.user_id)
+            res_modular = publish_service.build_deck_publish_options(user_id=self.user_id)
+            self.assertEqual(res_monolith, res_modular)
+
+            options = {row["id"]: row for row in res_monolith["items"]}
+
+            # Rollup checks
+            self.assertEqual(options[l_deck_id]["card_count"], 1)
+            self.assertEqual(options[m_deck_id]["card_count"], 2)
+            self.assertEqual(options[r_deck_id]["card_count"], 3)
+
+            # Empty deck check
+            self.assertEqual(options[empty_deck_id]["card_count"], 0)
+            self.assertTrue(options[empty_deck_id]["is_selectable"])
+
+            # Multi-NT deck check (selectable at publish options stage)
+            self.assertEqual(options[multi_nt_deck_id]["card_count"], 2)
+            self.assertTrue(options[multi_nt_deck_id]["is_selectable"])
+
+            # Cycle & self-loop decks executed without error
+            self.assertIn(c1_deck_id, options)
+            self.assertIn(self_loop_deck_id, options)
+
+            # Cross-user parent reference handled safely
+            self.assertIn(cross_parent_deck_id, options)
+            self.assertEqual(options[cross_parent_deck_id]["card_count"], 1)
+            self.assertTrue(options[cross_parent_deck_id]["is_selectable"])
+            self.assertIsNone(options[cross_parent_deck_id]["block_code"])
+
+            # Standalone fallback test
+            deck_obj = db.session.get(Deck, r_deck_id)
+            standalone_eligibility = flashcards_share_service.get_deck_publish_eligibility(
+                user_id=self.user_id,
+                deck=deck_obj,
+            )
+            self.assertTrue(standalone_eligibility["is_selectable"])
+            self.assertIsNone(standalone_eligibility["block_code"])
+
+            # Adversarial test: Self-loop deck when shared with allow_existing=True
+            self_loop_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self_loop_deck_id,
+                title="Shared Self Loop",
+                publish_status="published",
+            )
+            db.session.add(self_loop_item)
+            db.session.commit()
+
+            self_loop_obj = db.session.get(Deck, self_loop_deck_id)
+            self_loop_elig = flashcards_share_service.get_deck_publish_eligibility(
+                user_id=self.user_id,
+                deck=self_loop_obj,
+                allow_existing=True,
+            )
+            self.assertTrue(self_loop_elig["is_selectable"])
+            self.assertIsNone(self_loop_elig["block_code"])
+
+            # Adversarial test: Cycle deck C1 when shared with allow_existing=True
+            c1_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=c1_deck_id,
+                title="Shared Cycle 1",
+                publish_status="published",
+            )
+            db.session.add(c1_item)
+            db.session.commit()
+
+            c1_obj = db.session.get(Deck, c1_deck_id)
+            c1_elig = flashcards_share_service.get_deck_publish_eligibility(
+                user_id=self.user_id,
+                deck=c1_obj,
+                allow_existing=True,
+            )
+            self.assertTrue(c1_elig["is_selectable"])
+            self.assertIsNone(c1_elig["block_code"])
+
     def test_shared_deck_api_patch_updates_item_for_owner(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
