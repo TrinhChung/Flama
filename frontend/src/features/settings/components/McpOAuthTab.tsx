@@ -1,24 +1,19 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Bot,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Copy,
   ExternalLink,
   Eye,
   EyeOff,
-  Globe,
   Info,
   KeyRound,
   Pencil,
   Plus,
   RefreshCw,
-  Settings2,
   ShieldCheck,
-  SlidersHorizontal,
   Star,
   Trash2,
 } from 'lucide-react'
@@ -50,6 +45,33 @@ import { useMcpOAuth, type OAuthEndpointsInfo } from '../hooks/useMcpOAuth'
 
 interface McpOAuthTabProps {
   tabValue?: string
+}
+
+function SetupStep({
+  step,
+  title,
+  aside,
+  children,
+}: {
+  step: number
+  title: string
+  aside?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <li className="relative flex gap-3 sm:gap-4 pb-7 last:pb-0 before:absolute before:left-4 before:top-10 before:bottom-2 before:w-px before:-translate-x-1/2 before:bg-border last:before:hidden">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-sm font-semibold text-primary">
+        {step}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2.5 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-sm sm:text-base font-semibold text-foreground">{title}</h4>
+          {aside}
+        </div>
+        {children}
+      </div>
+    </li>
+  )
 }
 
 export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
@@ -130,20 +152,14 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
   return (
     <TabsContent value={tabValue} className="space-y-6">
       {/* 1. Header Card with Quick Action */}
-      <Card className="shadow-2xs border-primary/20 bg-linear-to-r from-primary/5 via-card to-card">
+      <Card className="shadow-2xs">
         <CardHeader className="p-4 sm:p-6 pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2.5 py-0.5">
-                  OAuth 2.1 An Toàn
-                </Badge>
-                <Badge variant="secondary" className="text-xs">
-                  ChatGPT Connector
-                </Badge>
+              <div className="text-xs font-medium text-muted-foreground">
+                ChatGPT Connector · OAuth 2.1
               </div>
-              <CardTitle className="text-lg sm:text-xl font-bold flex items-center gap-2 pt-1">
-                <Bot className="size-5 text-primary shrink-0" />
+              <CardTitle className="text-lg sm:text-xl font-bold">
                 Kết Nối ChatGPT Với Kho Flashcard Flama
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
@@ -157,15 +173,14 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
             {isAdmin ? (
               <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="shrink-0 gap-1.5 shadow-xs border-primary/30 hover:bg-primary/5 text-xs self-start sm:self-auto">
+                  <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs self-start sm:self-auto">
                     <Plus className="size-3.5" />
                     Đăng ký Connector mới (Admin)
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <ShieldCheck className="size-5 text-primary" />
+                    <DialogTitle>
                       Đăng ký OAuth Client cho ChatGPT
                     </DialogTitle>
                     <DialogDescription className="text-xs sm:text-sm">
@@ -255,11 +270,11 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
 
       {/* Newly Rotated Secret Notification */}
       {newRotatedSecret && (
-        <Card className="border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-950/30">
+        <Card className="border-primary/30 bg-primary/5">
           <CardHeader className="p-4 sm:p-5 pb-2">
-            <CardTitle className="text-sm sm:text-base font-bold text-emerald-950 dark:text-emerald-100 flex items-center justify-between">
+            <CardTitle className="text-sm sm:text-base font-bold flex items-center justify-between">
               <span className="flex items-center gap-2">
-                <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
+                <KeyRound className="size-4.5 text-primary" />
                 Client Secret mới cho "{newRotatedSecret.clientName}"
               </span>
               <Button
@@ -271,12 +286,12 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                 Đóng
               </Button>
             </CardTitle>
-            <CardDescription className="text-xs text-emerald-900 dark:text-emerald-200">
+            <CardDescription className="text-xs">
               Hãy sao chép chuỗi Client Secret này và cập nhật vào cấu hình ChatGPT của bạn. Chuỗi secret sẽ không hiển thị lại.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 pt-0 space-y-2">
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-400/60 bg-background/80 p-2 text-xs font-mono">
+            <div className="flex items-center gap-2 rounded-lg border bg-background p-2 text-xs font-mono">
               <span className="flex-1 break-all select-all">{newRotatedSecret.secret}</span>
               <Button
                 size="sm"
@@ -293,44 +308,36 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
       )}
 
       {/* Notice Banner: Plugin in Developer Preview */}
-      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5 space-y-2.5 shadow-2xs">
+      <div className="rounded-xl border bg-muted/40 p-4 sm:p-5">
         <div className="flex items-start gap-3">
-          <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
-            <Info className="size-5" />
-          </div>
+          <Info className="size-4.5 text-primary shrink-0 mt-0.5" />
           <div className="space-y-1.5 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm sm:text-base font-bold text-foreground">
+              <h4 className="text-sm sm:text-base font-semibold text-foreground">
                 Lưu ý quan trọng: Flama Plugin đang trong giai đoạn thử nghiệm
               </h4>
-              <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-800 dark:text-amber-200 border-amber-500/30 font-semibold">
+              <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">
                 Cần bật Chế độ nhà phát triển
               </Badge>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Do Flama Plugin chưa được OpenAI đưa lên kho Store chung của ChatGPT, bạn chỉ cần <strong>bật Chế độ Nhà phát triển (Developer Mode)</strong> trên ChatGPT một lần duy nhất và làm theo <strong>5 bước đơn giản bên dưới</strong> để hoàn tất kết nối.
+              Do Flama Plugin chưa được OpenAI đưa lên kho Store chung của ChatGPT, bạn chỉ cần <strong className="text-foreground">bật Chế độ Nhà phát triển (Developer Mode)</strong> trên ChatGPT một lần duy nhất và làm theo <strong className="text-foreground">5 bước đơn giản bên dưới</strong> để hoàn tất kết nối.
             </p>
-            <p className="text-[11px] sm:text-xs text-amber-800 dark:text-amber-300 font-medium">
-              • Yêu cầu: Tài khoản ChatGPT Plus, Team, Edu hoặc Pro (chính sách của OpenAI để kích hoạt Developer Mode).
+            <p className="text-[11px] sm:text-xs text-foreground/80 font-medium">
+              Yêu cầu: Tài khoản ChatGPT Plus, Team, Edu hoặc Pro (chính sách của OpenAI để kích hoạt Developer Mode).
             </p>
           </div>
         </div>
       </div>
 
       {/* 2. Primary Feature: 5-Step Visual Walkthrough for Non-Tech Users */}
-      <Card className="shadow-xs border-primary/25 bg-card overflow-hidden">
-        <CardHeader className="p-4 sm:p-6 pb-4 border-b bg-muted/20">
+      <Card className="shadow-2xs overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-4 border-b">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/25 text-xs font-semibold px-2 py-0.5">
-                  Dành cho người dùng
-                </Badge>
-                <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-                  <Bot className="size-5 text-primary shrink-0" />
-                  Hướng Dẫn 5 Bước Kết Nối ChatGPT
-                </CardTitle>
-              </div>
+              <CardTitle className="text-base sm:text-lg font-bold">
+                Hướng Dẫn 5 Bước Kết Nối ChatGPT
+              </CardTitle>
               <CardDescription className="text-xs sm:text-sm mt-1">
                 Thực hiện lần lượt các bước dưới đây trên giao diện ChatGPT để kích hoạt kết nối Flashcard:
               </CardDescription>
@@ -347,64 +354,37 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
           </div>
         </CardHeader>
 
-        <CardContent className="p-3.5 sm:p-6 space-y-4 sm:space-y-6">
-          {/* Bước 1 */}
-          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
-            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
-              1
-            </div>
-            <div className="space-y-2 flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
-                  <Settings2 className="size-4 text-primary shrink-0" />
-                  <span>Bật Chế độ Nhà phát triển (Developer Mode) trên ChatGPT</span>
-                </h4>
-                <Badge variant="secondary" className="text-[10px] shrink-0">Chỉ làm 1 lần duy nhất</Badge>
-              </div>
+        <CardContent className="p-4 sm:p-6">
+          <ol>
+            <SetupStep
+              step={1}
+              title="Bật Chế độ Nhà phát triển (Developer Mode) trên ChatGPT"
+              aside={<Badge variant="secondary" className="text-[10px] shrink-0">Chỉ làm 1 lần duy nhất</Badge>}
+            >
               <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
                 <li>Truy cập <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">chatgpt.com <ExternalLink className="size-3" /></a> và đăng nhập tài khoản của bạn.</li>
-                <li>Bấm vào tên tài khoản hoặc ảnh đại diện ở góc dưới cùng bên trái màn hình ➔ Chọn <strong>Cài đặt (Settings ⚙️)</strong>.</li>
-                <li>Trong hộp thoại cài đặt, bấm chọn mục <strong>Bảo mật &amp; Đăng nhập (Security &amp; login)</strong> (hoặc một số phiên bản là <em>Apps &amp; Connectors ➔ Advanced settings</em>).</li>
+                <li>Bấm vào tên tài khoản hoặc ảnh đại diện ở góc dưới cùng bên trái màn hình → Chọn <strong>Cài đặt (Settings)</strong>.</li>
+                <li>Trong hộp thoại cài đặt, bấm chọn mục <strong>Bảo mật &amp; Đăng nhập (Security &amp; login)</strong> (hoặc một số phiên bản là <em>Apps &amp; Connectors → Advanced settings</em>).</li>
                 <li>Gạt công tắc dòng <strong>Chế độ nhà phát triển (Developer mode)</strong> sang trạng thái <strong>Bật (On)</strong>.</li>
               </ol>
-            </div>
-          </div>
+            </SetupStep>
 
-          {/* Bước 2 */}
-          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
-            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
-              2
-            </div>
-            <div className="space-y-2 flex-1 min-w-0">
-              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
-                <ExternalLink className="size-4 text-primary shrink-0" />
-                <span>Mở kho Plugin và chọn "Tự tạo plugin của bạn"</span>
-              </h4>
+            <SetupStep step={2} title={'Mở kho Plugin và chọn "Tự tạo plugin của bạn"'}>
               <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
                 <li>Quay lại màn hình chat mới trên ChatGPT.</li>
-                <li>Bấm vào biểu tượng Plugin / Công cụ trên thanh chat (hoặc menu dấu <strong>+</strong> chọn <em>Apps / Plugins</em>) ➔ Chọn <strong>Duyệt Plugin (Browse Plugins)</strong>.</li>
+                <li>Bấm vào biểu tượng Plugin / Công cụ trên thanh chat (hoặc menu dấu <strong>+</strong> chọn <em>Apps / Plugins</em>) → Chọn <strong>Duyệt Plugin (Browse Plugins)</strong>.</li>
                 <li>Cuộn xuống dưới cùng của danh sách và bấm chọn <strong>"Tự tạo plugin của bạn" (Develop your own plugin)</strong> (hoặc <em>Create an app / Create connector</em>).</li>
               </ol>
-            </div>
-          </div>
+            </SetupStep>
 
-          {/* Bước 3 */}
-          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
-            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
-              3
-            </div>
-            <div className="space-y-3 flex-1 min-w-0">
-              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
-                <Globe className="size-4 text-primary shrink-0" />
-                <span>Dán Đường dẫn Máy chủ Flama (Server URL)</span>
-              </h4>
+            <SetupStep step={3} title="Dán Đường dẫn Máy chủ Flama (Server URL)">
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                 Tại ô yêu cầu nhập URL máy chủ của plugin trên ChatGPT, hãy dán đường dẫn máy chủ MCP của Flama dưới đây:
               </p>
-              
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border bg-background/90 p-2.5 sm:p-3 text-xs font-mono">
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border bg-muted/40 p-2.5 sm:p-3 text-xs font-mono">
                 <span className="text-muted-foreground font-sans text-[11px] font-semibold shrink-0">Server URL:</span>
-                <span className="flex-1 break-all select-all font-semibold text-primary text-xs sm:text-sm">{ep.resource_url}</span>
+                <span className="flex-1 break-all select-all font-semibold text-foreground text-xs sm:text-sm">{ep.resource_url}</span>
                 <Button
                   size="sm"
                   variant="outline"
@@ -419,25 +399,17 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Sau khi dán URL, bấm <strong>Tiếp tục (Find manifest / Next)</strong>. ChatGPT sẽ tự động quét và nhận diện Flama Flashcard.
               </p>
-            </div>
-          </div>
+            </SetupStep>
 
-          {/* Bước 4 */}
-          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border border-primary/25 bg-primary/5 transition-all">
-            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-primary text-primary-foreground font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
-              4
-            </div>
-            <div className="space-y-3 flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
-                  <KeyRound className="size-4 text-primary shrink-0" />
-                  <span>Cấu hình Nâng cao (Authentication: OAuth)</span>
-                </h4>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold">
+            <SetupStep
+              step={4}
+              title="Cấu hình Nâng cao (Authentication: OAuth)"
+              aside={
+                <Badge variant="secondary" className="text-[10px] shrink-0">
                   {isAdmin ? 'Quản lý bởi Admin' : 'Cấp sẵn cho bạn'}
                 </Badge>
-              </div>
-
+              }
+            >
               <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
                 <li>Khi màn hình xác thực xuất hiện trên ChatGPT, nhấp vào mục <strong>Nâng cao (Advanced)</strong>.</li>
                 <li>Tại mục <strong>Phương thức xác thực (Authentication)</strong>, chọn kiểu <strong>OAuth</strong>.</li>
@@ -446,7 +418,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 pt-1">
                 {/* Client ID */}
-                <div className="p-2.5 sm:p-3 rounded-xl border bg-background/90 flex items-center justify-between gap-2 shadow-2xs">
+                <div className="p-2.5 sm:p-3 rounded-lg border bg-muted/40 flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Client ID</div>
                     <div className="font-mono text-xs font-bold text-foreground truncate select-all">
@@ -465,7 +437,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                 </div>
 
                 {/* Client Secret */}
-                <div className="p-2.5 sm:p-3 rounded-xl border bg-background/90 flex items-center justify-between gap-2 shadow-2xs">
+                <div className="p-2.5 sm:p-3 rounded-lg border bg-muted/40 flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Client Secret</div>
@@ -478,7 +450,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                         <span>{showUserSecret ? 'Ẩn' : 'Hiện'}</span>
                       </button>
                     </div>
-                    <div className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate select-all">
+                    <div className="font-mono text-xs font-bold text-foreground truncate select-all">
                       {activeClientSecret
                         ? showUserSecret
                           ? activeClientSecret
@@ -500,19 +472,9 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                   </Button>
                 </div>
               </div>
-            </div>
-          </div>
+            </SetupStep>
 
-          {/* Bước 5 */}
-          <div className="flex items-start gap-3 sm:gap-4 p-3.5 sm:p-5 rounded-2xl border bg-muted/25 transition-all">
-            <div className="flex items-center justify-center size-8 sm:size-9 rounded-xl bg-emerald-600 text-white font-bold text-xs sm:text-sm shrink-0 mt-0.5 shadow-2xs">
-              5
-            </div>
-            <div className="space-y-3 flex-1 min-w-0">
-              <h4 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
-                <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                <span>Bấm Lưu &amp; Đồng ý Điều Khoản Cấp Quyền (Hoàn tất)</span>
-              </h4>
+            <SetupStep step={5} title="Bấm Lưu & Đồng ý Điều Khoản Cấp Quyền (Hoàn tất)">
               <ol className="list-decimal list-inside space-y-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed pl-0.5">
                 <li>Bấm nút <strong>Lưu (Save) / Tiếp tục (Continue)</strong> trên ChatGPT.</li>
                 <li>Trình duyệt sẽ tự động mở một cửa sổ đăng nhập Flama: Hãy bấm <strong>"Đồng ý điều khoản &amp; Cấp quyền" (Authorize / Consent)</strong> để xác nhận.</li>
@@ -520,36 +482,35 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
               </ol>
 
               {/* Sample Prompts Box with 1-click Tap to Copy */}
-              <div className="p-3 sm:p-3.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20 space-y-2 text-xs">
-                <div className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                  <Bot className="size-4 text-emerald-600 shrink-0" />
-                  <span>Mẫu câu lệnh thử nghiệm (Chạm vào để chép):</span>
+              <div className="p-3 sm:p-3.5 rounded-lg border bg-muted/40 space-y-2 text-xs">
+                <div className="font-medium text-muted-foreground">
+                  Mẫu câu lệnh thử nghiệm (Chạm vào để chép):
                 </div>
                 <div className="space-y-1.5 font-mono text-[11px] text-foreground">
                   <div
                     onClick={() => copy('prompt1', 'Hãy giải thích ngữ nghĩa từ 桜 (hoa anh đào) và tự động tạo 1 thẻ flashcard vào Flama cho tôi')}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background/90 border border-emerald-500/20 hover:border-emerald-500/50 cursor-pointer active:scale-[0.99] transition-all"
+                    className="flex items-center justify-between gap-2 p-2 rounded-md bg-background border hover:border-primary/40 cursor-pointer transition-colors"
                   >
                     <span className="line-clamp-2 select-all">"Hãy giải thích ngữ nghĩa từ 桜 (hoa anh đào) và tự động tạo 1 thẻ flashcard vào Flama cho tôi"</span>
-                    <Button variant="ghost" size="xs" className="h-6 px-1.5 shrink-0 text-muted-foreground hover:text-emerald-600">
+                    <Button variant="ghost" size="xs" className="h-6 px-1.5 shrink-0 text-muted-foreground hover:text-foreground">
                       {copiedKey === 'prompt1' ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
                       <span className="text-[10px] ml-1">{copiedKey === 'prompt1' ? 'Đã chép' : 'Chép'}</span>
                     </Button>
                   </div>
                   <div
                     onClick={() => copy('prompt2', 'Tra cứu xem trong kho flashcard của tôi đã có từ 勉強 chưa?')}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background/90 border border-emerald-500/20 hover:border-emerald-500/50 cursor-pointer active:scale-[0.99] transition-all"
+                    className="flex items-center justify-between gap-2 p-2 rounded-md bg-background border hover:border-primary/40 cursor-pointer transition-colors"
                   >
                     <span className="line-clamp-2 select-all">"Tra cứu xem trong kho flashcard của tôi đã có từ 勉強 chưa?"</span>
-                    <Button variant="ghost" size="xs" className="h-6 px-1.5 shrink-0 text-muted-foreground hover:text-emerald-600">
+                    <Button variant="ghost" size="xs" className="h-6 px-1.5 shrink-0 text-muted-foreground hover:text-foreground">
                       {copiedKey === 'prompt2' ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
                       <span className="text-[10px] ml-1">{copiedKey === 'prompt2' ? 'Đã chép' : 'Chép'}</span>
                     </Button>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </SetupStep>
+          </ol>
         </CardContent>
       </Card>
 
@@ -557,13 +518,9 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
       <Card className="shadow-2xs">
         <CardHeader className="p-4 sm:p-5 pb-2">
           <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
-              <Copy className="size-4 text-primary" />
+            <CardTitle className="text-sm sm:text-base font-bold">
               Bảng Tóm Tắt Nhanh 4 Thông Số
             </CardTitle>
-            <Badge variant="secondary" className="text-[10px]">
-              Sao chép nhanh
-            </Badge>
           </div>
           <CardDescription className="text-xs">
             Dành cho người dùng đã quen: chỉ cần bấm sao chép lần lượt để dán vào ChatGPT.
@@ -609,7 +566,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
             <div className="p-2.5 sm:p-3 rounded-xl border bg-muted/30 flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase">3. Connection URL</div>
-                <div className="text-xs font-mono font-bold text-primary truncate">{ep.resource_url}</div>
+                <div className="text-xs font-mono font-bold text-foreground truncate">{ep.resource_url}</div>
               </div>
               <Button
                 variant="outline"
@@ -648,8 +605,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
-                  <SlidersHorizontal className="size-4.5 text-primary" />
+                <CardTitle className="text-sm sm:text-base font-bold">
                   Thông Số Kỹ Thuật &amp; Đối Chiếu RFC 9728 (Dành Cho Lập Trình Viên)
                 </CardTitle>
                 <Badge variant="outline" className="text-[10px]">
@@ -742,7 +698,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                       <td className="p-3 font-semibold text-foreground whitespace-nowrap">
                         {row.field}
                       </td>
-                      <td className="p-3 font-mono text-[11px] text-primary select-all break-all">
+                      <td className="p-3 font-mono text-[11px] text-foreground select-all break-all">
                         {row.value}
                       </td>
                       <td className="p-3 text-muted-foreground">
@@ -784,8 +740,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
           <Card className="shadow-2xs">
             <CardHeader className="p-4 sm:p-6 pb-3">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
-                  <KeyRound className="size-4.5 text-primary" />
+                <CardTitle className="text-sm sm:text-base font-bold">
                   OAuth Clients ({clients.length})
                 </CardTitle>
                 <Badge variant="outline" className="text-[10px]">
@@ -807,7 +762,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                     key={c.id}
                     className={`p-3.5 rounded-xl border flex flex-col gap-2 text-xs transition-all ${
                       c.is_default
-                        ? 'border-emerald-500/40 bg-emerald-500/5 shadow-2xs'
+                        ? 'border-primary/40 bg-primary/5'
                         : 'bg-card hover:bg-muted/30'
                     }`}
                   >
@@ -819,7 +774,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                             {c.client_id}
                           </Badge>
                           {c.is_default ? (
-                            <Badge className="text-[10px] bg-emerald-600 dark:bg-emerald-700 text-white gap-1 font-semibold">
+                            <Badge className="text-[10px] gap-1 font-semibold">
                               <Star className="size-3 fill-current" />
                               Mặc định cho người dùng
                             </Badge>
@@ -845,7 +800,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                             disabled={setDefaultClientMutation.isPending}
                             title="Chọn làm bộ thông số mặc định cho tất cả người dùng"
                           >
-                            <Star className="size-3 text-amber-500" />
+                            <Star className="size-3" />
                             <span className="hidden sm:inline">Chọn mặc định</span>
                           </Button>
                         )}
@@ -865,7 +820,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-7 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40"
+                          className="size-7 text-muted-foreground hover:text-foreground"
                           onClick={() => {
                             setRotateClientTarget(c)
                             setCustomRotateSecret('')
@@ -930,15 +885,14 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
           </Card>
         ) : (
           /* Non-admin User View: Security & Connection Info Card */
-          <Card className="shadow-2xs border-primary/20 bg-linear-to-br from-primary/5 via-card to-card">
+          <Card className="shadow-2xs">
             <CardHeader className="p-4 sm:p-6 pb-3">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
-                  <ShieldCheck className="size-4.5 text-emerald-500" />
+                <CardTitle className="text-sm sm:text-base font-bold">
                   Bảo Mật OAuth 2.1 &amp; Quyền Riêng Tư
                 </CardTitle>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-semibold gap-1">
-                  <Check className="size-3" /> Chuẩn PKCE
+                <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">
+                  Chuẩn PKCE
                 </Badge>
               </div>
               <CardDescription className="text-xs leading-relaxed">
@@ -948,7 +902,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
             <CardContent className="p-4 sm:p-6 pt-0 space-y-3 text-xs leading-relaxed text-muted-foreground">
               <div className="p-3 rounded-xl border bg-muted/30 space-y-1.5">
                 <div className="font-semibold text-foreground flex items-center gap-1.5">
-                  <ShieldCheck className="size-3.5 text-primary" />
+                  <ShieldCheck className="size-3.5 text-muted-foreground" />
                   Xác thực danh tính trực tiếp
                 </div>
                 <p>
@@ -958,7 +912,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
 
               <div className="p-3 rounded-xl border bg-muted/30 space-y-1.5">
                 <div className="font-semibold text-foreground flex items-center gap-1.5">
-                  <KeyRound className="size-3.5 text-primary" />
+                  <KeyRound className="size-3.5 text-muted-foreground" />
                   Không tiết lộ mật khẩu cá nhân
                 </div>
                 <p>
@@ -972,8 +926,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
         {/* Connected Apps Table */}
         <Card className="shadow-2xs">
           <CardHeader className="p-4 sm:p-6 pb-3">
-            <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
-              <ShieldCheck className="size-4.5 text-emerald-500" />
+            <CardTitle className="text-sm sm:text-base font-bold">
               Ứng Dụng Đang Kết Nối ({connectedApps.length})
             </CardTitle>
             <CardDescription className="text-xs">
@@ -1016,8 +969,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
       <Dialog open={isEditOpen} onOpenChange={(open) => !open && setIsEditOpen(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="size-4.5 text-primary" />
+            <DialogTitle>
               Chỉnh sửa OAuth Client
             </DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
@@ -1095,8 +1047,7 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
       <Dialog open={rotateClientTarget !== null} onOpenChange={(open) => !open && setRotateClientTarget(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-              <RefreshCw className="size-5" />
+            <DialogTitle>
               Đổi Client Secret cho "{rotateClientTarget?.client_name}"
             </DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
@@ -1138,7 +1089,6 @@ export function McpOAuthTab({ tabValue = 'oauth' }: McpOAuthTabProps) {
               Hủy bỏ
             </Button>
             <Button
-              className="bg-amber-600 hover:bg-amber-700 text-white"
               disabled={rotateSecretMutation.isPending}
               onClick={() => {
                 if (rotateClientTarget) {

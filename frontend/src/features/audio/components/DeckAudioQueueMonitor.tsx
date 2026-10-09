@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Activity,
   AlertCircle,
@@ -43,6 +44,7 @@ export function DeckAudioQueueMonitor({
   onRemove,
   onClearCompleted,
 }: DeckAudioQueueMonitorProps) {
+  const { t } = useTranslation('audio')
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -69,7 +71,7 @@ export function DeckAudioQueueMonitor({
     return (
       <div className="rounded-2xl border border-dashed border-border/70 p-8 text-center bg-card/40">
         <ListOrdered className="mx-auto size-9 text-muted-foreground/60 mb-2.5" />
-        <h3 className="text-sm font-bold text-foreground">Hàng đợi đang trống</h3>
+        <h3 className="text-sm font-bold text-foreground">{t('queue.empty_queue')}</h3>
         <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1">
           Chọn một bộ thẻ (Deck) bên trên và bấm &ldquo;Bắt đầu tạo âm thanh&rdquo; hoặc &ldquo;Thêm vào hàng đợi&rdquo; để xếp lịch tạo tự động.
         </p>
@@ -114,16 +116,16 @@ export function DeckAudioQueueMonitor({
                       <LoaderCircle className="mr-1 size-3 animate-spin" />
                     )}
                     {displayedJob.status === 'running'
-                      ? 'Đang xử lý'
+                      ? t('queue.status_synthesizing')
                       : displayedJob.status === 'queued'
-                        ? 'Đang chờ trong hàng đợi'
+                        ? t('queue.status_pending')
                         : displayedJob.status === 'paused'
-                          ? 'Đang tạm dừng'
+                          ? t('queue.pause_button')
                           : displayedJob.status === 'completed'
-                            ? 'Hoàn tất 100%'
+                            ? t('queue.status_completed')
                             : displayedJob.status === 'cancelled'
-                              ? 'Đã hủy'
-                              : 'Thất bại'}
+                              ? t('queue.status_skipped')
+                              : t('queue.status_failed')}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -165,7 +167,7 @@ export function DeckAudioQueueMonitor({
                   className="h-8 text-xs gap-1.5"
                 >
                   <Pause className="size-3.5" />
-                  <span>Tạm dừng</span>
+                  <span>{t('queue.pause_button')}</span>
                 </Button>
               )}
 
@@ -177,7 +179,7 @@ export function DeckAudioQueueMonitor({
                   className="h-8 text-xs gap-1.5"
                 >
                   <Play className="size-3.5" />
-                  <span>Tiếp tục chạy</span>
+                  <span>{t('queue.resume_button')}</span>
                 </Button>
               )}
 
@@ -189,7 +191,7 @@ export function DeckAudioQueueMonitor({
                   className="h-8 text-xs text-destructive hover:bg-destructive/10"
                 >
                   <XCircle className="size-3.5 mr-1" />
-                  <span>Hủy</span>
+                  <span>{t('queue.cancel_all_button')}</span>
                 </Button>
               )}
             </div>
@@ -304,26 +306,26 @@ export function DeckAudioQueueMonitor({
                       {item.status === 'pending' && (
                         <Badge variant="outline" className="text-[10px] text-muted-foreground">
                           <Clock className="mr-1 size-2.5" />
-                          Chờ
+                          {t('queue.status_pending')}
                         </Badge>
                       )}
                       {item.status === 'synthesizing' && (
                         <Badge className="text-[10px] bg-primary/20 text-primary border-primary/30">
                           <LoaderCircle className="mr-1 size-2.5 animate-spin" />
-                          Đang tạo audio
+                          {t('queue.status_synthesizing')}
                         </Badge>
                       )}
                       {item.status === 'uploading' && (
                         <Badge className="text-[10px] bg-sky-500/20 text-sky-600 border-sky-500/30">
                           <LoaderCircle className="mr-1 size-2.5 animate-spin" />
-                          Đang tải lên
+                          {t('queue.status_uploading')}
                         </Badge>
                       )}
                       {item.status === 'done' && (
                         <div className="flex items-center gap-1.5">
                           <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
                             <CheckCircle2 className="mr-1 size-2.5" />
-                            Xong
+                            {t('queue.status_completed')}
                           </Badge>
                           {item.assetUrl && (
                             <Button
@@ -341,7 +343,7 @@ export function DeckAudioQueueMonitor({
                       {item.status === 'failed' && (
                         <Badge variant="destructive" className="text-[10px]" title={item.error}>
                           <AlertCircle className="mr-1 size-2.5" />
-                          Lỗi
+                          {t('queue.status_failed')}
                         </Badge>
                       )}
                     </div>
@@ -428,7 +430,7 @@ export function DeckAudioQueueMonitor({
                 onClick={onClearCompleted}
                 className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
               >
-                Dọn dẹp
+                {t('queue.clear_history_button')}
               </Button>
             )}
           </CardHeader>
@@ -465,7 +467,7 @@ export function DeckAudioQueueMonitor({
                         : 'bg-rose-500/10 text-rose-600 border-rose-500/30'
                     }`}
                   >
-                    {cJob.status === 'completed' ? 'Hoàn tất' : 'Hủy/Lỗi'}
+                    {cJob.status === 'completed' ? t('queue.status_completed') : t('queue.status_failed')}
                   </Badge>
                 </div>
               ))

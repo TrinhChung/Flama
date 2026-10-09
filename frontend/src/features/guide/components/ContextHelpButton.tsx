@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   AlertTriangle,
   BookOpen,
@@ -36,16 +37,20 @@ export interface ContextHelpButtonProps {
 
 export function ContextHelpButton({
   guidePath,
-  guideTitle = 'Xem tài liệu hướng dẫn',
+  guideTitle,
   troubleshootPath,
   troubleshootTitle = 'Khắc phục sự cố thường gặp',
-  label = 'Trợ giúp',
-  tooltip = 'Xem tài liệu hướng dẫn sử dụng',
+  label,
+  tooltip,
   variant = 'outline',
   size = 'sm',
   className = '',
   icon,
 }: ContextHelpButtonProps) {
+  const { t } = useTranslation('guide')
+  const resolvedLabel = label ?? t('context_help.default_label')
+  const resolvedGuideTitle = guideTitle ?? t('context_help.default_title')
+  const resolvedTooltip = tooltip ?? resolvedGuideTitle
   const IconComponent = icon || HelpCircle
 
   // If there's no troubleshootPath, render a direct link or tooltip button
@@ -61,13 +66,13 @@ export function ContextHelpButton({
                 size="icon"
                 className={`size-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all ${className}`}
               >
-                <Link to={guidePath} aria-label={tooltip}>
+                <Link to={guidePath} aria-label={resolvedTooltip}>
                   <IconComponent className="size-4" />
                 </Link>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs font-medium">
-              {tooltip}
+              {resolvedTooltip}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -85,7 +90,7 @@ export function ContextHelpButton({
       >
         <Link to={guidePath}>
           <IconComponent className="size-3.5" />
-          <span>{label}</span>
+          <span>{resolvedLabel}</span>
         </Link>
       </Button>
     )
@@ -100,7 +105,7 @@ export function ContextHelpButton({
             variant="ghost"
             size="icon"
             className={`size-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all ${className}`}
-            aria-label="Menu Trợ giúp"
+            aria-label={resolvedLabel}
           >
             <IconComponent className="size-4" />
           </Button>
@@ -113,7 +118,7 @@ export function ContextHelpButton({
             } ${className}`}
           >
             <IconComponent className="size-3.5 text-muted-foreground" />
-            <span>{label}</span>
+            <span>{resolvedLabel}</span>
           </Button>
         )}
       </DropdownMenuTrigger>
@@ -127,7 +132,7 @@ export function ContextHelpButton({
               <BookOpen className="size-3.5" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-foreground">{guideTitle}</div>
+              <div className="text-xs font-semibold text-foreground">{resolvedGuideTitle}</div>
               <div className="text-[11px] text-muted-foreground line-clamp-1">Quy trình & mẹo học chuẩn</div>
             </div>
           </Link>

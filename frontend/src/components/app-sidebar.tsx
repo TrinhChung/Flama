@@ -1,7 +1,6 @@
 import {
   AudioLines,
   BadgePercent,
-  Bot,
   ChartNoAxesColumn,
   CreditCard,
   Download,
@@ -15,6 +14,7 @@ import {
   MessageSquareHeart,
   NotebookTabs,
   PackageCheck,
+  Plug,
   Printer,
   Search,
   Shapes,
@@ -73,7 +73,7 @@ export function AppSidebar({
     { title: t('sidebar.item.deck_audio'), url: '/audio/generate', icon: AudioLines },
     { title: t('sidebar.item.flama_audio'), url: '/guide/flama-audio', icon: Download },
     { title: t('sidebar.item.yomitan'), url: '/settings/yomitan', icon: Key },
-    { title: t('sidebar.item.mcp_ai'), url: '/settings/mcp-tokens', icon: Bot },
+    { title: t('sidebar.item.mcp_ai'), url: '/settings/mcp-tokens', icon: Plug },
   ]
 
   const creator: AppNavigationItem[] = [

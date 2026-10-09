@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   AlertCircle,
   CheckCircle2,
@@ -19,6 +20,7 @@ type FlamaAudioConnectionGateProps = {
 }
 
 export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConnectionGateProps) {
+  const { t } = useTranslation('audio')
   const [serviceStatus, setServiceStatus] = useState<'checking' | 'offline' | 'online'>('checking')
   const [pairingChallengeId, setPairingChallengeId] = useState<string | null>(null)
   const [isPairingApproved, setIsPairingApproved] = useState<boolean>(false)
@@ -123,13 +125,13 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
                   className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px] font-semibold"
                 >
                   <CheckCircle2 className="mr-1 size-3" />
-                  Đã kết nối (v{appVersion})
+                  {t('gate.connected_title')} (v{appVersion})
                 </Badge>
               )}
               {serviceStatus === 'checking' && (
                 <Badge variant="outline" className="text-[11px]">
                   <LoaderCircle className="mr-1 size-3 animate-spin text-amber-500" />
-                  Đang kiểm tra
+                  {t('gate.checking_state')}
                 </Badge>
               )}
               {serviceStatus === 'offline' && (
@@ -137,12 +139,12 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
                   variant="destructive"
                   className="text-[11px] font-semibold"
                 >
-                  Chưa kết nối
+                  {t('gate.status_disconnected')}
                 </Badge>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Yêu cầu ứng dụng Flama Audio Desktop chạy ngầm để tổng hợp giọng phát âm VOICEVOX và Kokoro Offline.
+              {t('gate.description')}
             </p>
           </div>
         </div>
@@ -156,7 +158,7 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
             className="h-8 text-xs gap-1.5"
           >
             <RefreshCw className={`size-3.5 ${serviceStatus === 'checking' ? 'animate-spin' : ''}`} />
-            <span>Kiểm tra lại</span>
+            <span>{t('gate.retry_button')}</span>
           </Button>
 
           <Button
@@ -167,7 +169,7 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
           >
             <Link to="/guide/flama-audio" target="_blank">
               <Download className="size-3.5" />
-              <span>Tải ứng dụng Desktop</span>
+              <span>{t('gate.download_button')}</span>
             </Link>
           </Button>
         </div>
@@ -177,7 +179,7 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
       {serviceStatus === 'offline' && (
         <Alert variant="destructive" className="mt-4 rounded-xl">
           <AlertCircle className="size-4" />
-          <AlertTitle className="font-bold">Ứng dụng Flama Audio chưa được mở</AlertTitle>
+          <AlertTitle className="font-bold">{t('gate.disconnected_title')}</AlertTitle>
           <AlertDescription className="text-xs leading-relaxed space-y-2 mt-1">
             <p>
               Vui lòng khởi chạy phần mềm <strong>Flama Audio</strong> trên máy tính của bạn (cổng 4791). Sau khi mở app, bấm nút &ldquo;Kiểm tra lại&rdquo;.

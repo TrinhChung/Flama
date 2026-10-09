@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -244,6 +245,7 @@ const CATEGORY_FILTERS = [
 ]
 
 export function McpToolsExplorer() {
+  const { t } = useTranslation('guide')
   const [copiedName, setCopiedName] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -279,7 +281,7 @@ export function McpToolsExplorer() {
             <div>
               <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                 <Wrench className="size-5 text-primary shrink-0" />
-                <span>Danh Mục Toàn Bộ Công Cụ MCP & Prompts Mẫu</span>
+                <span>{t('mcp.catalog_title')}</span>
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm mt-1">
                 AI Assistant sẽ tự động gọi các công cụ này dựa trên câu hỏi hoặc yêu cầu tự nhiên của bạn.
@@ -289,7 +291,7 @@ export function McpToolsExplorer() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                 <Input
-                  placeholder="Tìm công cụ hoặc scope…"
+                  placeholder={t('mcp.search_tools')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 h-9 text-xs rounded-xl"
@@ -354,7 +356,7 @@ export function McpToolsExplorer() {
                     <div className="space-y-1.5 pt-2 border-t">
                       <div className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
                         <MessageSquareCode className="size-3 text-primary" />
-                        <span>Câu lệnh mẫu cho AI (Prompt):</span>
+                        <span>{t('mcp.sample_prompt')}:</span>
                       </div>
                       <div className="flex items-center justify-between gap-2 bg-muted/40 p-2 rounded-lg border text-xs text-foreground/90 italic">
                         <span className="line-clamp-2">"{tool.samplePrompt}"</span>
@@ -369,7 +371,7 @@ export function McpToolsExplorer() {
                           ) : (
                             <Copy className="size-3" />
                           )}
-                          <span>{copiedName === tool.name ? 'Đã chép' : 'Sao chép'}</span>
+                          <span>{copiedName === tool.name ? t('article.copied') : t('mcp.copy_prompt')}</span>
                         </Button>
                       </div>
                     </div>

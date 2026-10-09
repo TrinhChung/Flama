@@ -13,7 +13,7 @@ import { Page, PageHeader, StatCard } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 import { McpOAuthTab } from '@/features/settings/components/McpOAuthTab'
 import { McpTokensManager } from '@/features/mcp/components/McpTokensManager'
-import { Bot, Check, KeyRound, Search, ShieldAlert, ShieldCheck, Users } from 'lucide-react'
+import { Check, KeyRound, MessagesSquare, Search, ShieldAlert, ShieldCheck, Users } from 'lucide-react'
 
 type McpSummaryResponse = {
   total_tokens: number; active_tokens: number; revoked_tokens: number; expired_tokens: number
@@ -114,7 +114,7 @@ export function AdminMcpTokensPage() {
               <span>Danh sách Token & Secrets ({summary.total_tokens})</span>
             </TabsTrigger>
             <TabsTrigger value="oauth" className="flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5">
-              <Bot className="size-4 shrink-0" />
+              <MessagesSquare className="size-4 shrink-0" />
               <span>Tích hợp OAuth 2.1 & Clients</span>
             </TabsTrigger>
           </TabsList>
@@ -206,7 +206,7 @@ export function AdminMcpTokensPage() {
                               {u.is_disabled ? (
                                 <Badge variant="destructive" className="text-[10px]">Bị khóa</Badge>
                               ) : (
-                                <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px]">
+                                <Badge variant="outline" className="text-muted-foreground text-[10px]">
                                   Hoạt động
                                 </Badge>
                               )}
@@ -220,9 +220,9 @@ export function AdminMcpTokensPage() {
                             </TableCell>
                             <TableCell>
                               {u.is_admin ? (
-                                <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30 text-[11px]">Toàn quyền (Admin)</Badge>
+                                <Badge variant="secondary" className="text-[11px]">Toàn quyền (Admin)</Badge>
                               ) : isGranted ? (
-                                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[11px] gap-1">
+                                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] gap-1">
                                   <Check className="size-3" /> Tự quản lý Token
                                 </Badge>
                               ) : (
@@ -251,7 +251,7 @@ export function AdminMcpTokensPage() {
                                   >
                                     {isGranted ? (
                                       <>
-                                        <ShieldAlert className="size-3 text-amber-600 dark:text-amber-400" />
+                                        <ShieldAlert className="size-3" />
                                         <span>Thu hồi quyền quản lý</span>
                                       </>
                                     ) : (

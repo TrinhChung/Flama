@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface AudioAdvancedSettingsProps {
   volumeScale: number
@@ -23,12 +24,14 @@ export function AudioAdvancedSettings({
   setIntonationScale,
   isProcessing,
 }: AudioAdvancedSettingsProps) {
+  const { t } = useTranslation('audio')
+
   return (
     <div className="grid gap-3.5 sm:grid-cols-2 pt-1">
       {/* Volume Scale */}
       <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
         <div className="flex items-center justify-between text-xs font-medium text-foreground">
-          <span>Âm lượng</span>
+          <span>{t('rule_card.volume_label')}</span>
           <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
             {volumeScale.toFixed(2)}
           </span>
@@ -48,7 +51,7 @@ export function AudioAdvancedSettings({
       {/* Pitch */}
       <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
         <div className="flex items-center justify-between text-xs font-medium text-foreground">
-          <span>Cao độ</span>
+          <span>{t('rule_card.pitch_label')}</span>
           <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
             {pitch.toFixed(2)}
           </span>
@@ -68,7 +71,7 @@ export function AudioAdvancedSettings({
       {/* Speed */}
       <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
         <div className="flex items-center justify-between text-xs font-medium text-foreground">
-          <span>Tốc độ đọc</span>
+          <span>{t('rule_card.speed_label')}</span>
           <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
             {speed.toFixed(2)}
           </span>
@@ -88,7 +91,7 @@ export function AudioAdvancedSettings({
       {/* Intonation */}
       <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
         <div className="flex items-center justify-between text-xs font-medium text-foreground">
-          <span>Ngữ điệu</span>
+          <span>{t('rule_card.intonation_label')}</span>
           <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
             {intonationScale.toFixed(2)}
           </span>

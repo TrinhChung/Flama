@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { SpotlightTour, type TourStep } from '@/shared/components/SpotlightTour'
 
 interface DashboardSpotlightTourProps {
@@ -14,27 +15,26 @@ export function DashboardSpotlightTour({
   onComplete,
   hasDecks,
 }: DashboardSpotlightTourProps) {
+  const { t } = useTranslation('onboarding')
+
   const steps: TourStep[] = useMemo(() => {
     const list: TourStep[] = [
       {
         target: '[data-tour="dash-toolbar-nav"]',
-        title: '🧭 1. Thanh Công Cụ Điều Hướng',
-        content:
-          'Chuyển nhanh giữa danh sách bộ thẻ (Decks), phiên học ngắt quãng (Study), thống kê thời gian học (Stats), nhập dữ liệu từ Anki (Import), và tra cứu từ vựng (Browse).',
+        title: `🧭 ${t('tour.steps.header.title')}`,
+        content: t('tour.steps.header.description'),
         placement: 'bottom',
       },
       {
         target: '[data-tour="dash-create-btn"]',
-        title: '✨ 2. Tạo Bộ Thẻ Tùy Chỉnh',
-        content:
-          'Tự tạo bộ thẻ mới của riêng bạn. Bạn có thể xây dựng cây thư mục nhiều cấp cha-con (sub-decks) và tùy biến các trường dữ liệu theo ý muốn.',
+        title: `✨ ${t('tour.steps.create_deck.title')}`,
+        content: t('tour.steps.create_deck.description'),
         placement: 'bottom',
       },
       {
         target: '[data-tour="dash-deck-board"]',
-        title: '📊 3. Bảng Quản Lý Deck & 3 Chỉ Số',
-        content:
-          'Theo dõi tiến độ qua 3 cột: Xanh lá (New - thẻ mới chưa học), Đỏ (Learn - thẻ đang ghi nhớ ngắn hạn), và Cam (Due - thẻ đến hạn ôn tập hôm nay theo thuật toán Spaced Repetition).',
+        title: `📊 ${t('tour.steps.deck_grid.title')}`,
+        content: t('tour.steps.deck_grid.description'),
         placement: 'top',
       },
     ]
@@ -43,16 +43,14 @@ export function DashboardSpotlightTour({
       list.push(
         {
           target: '[data-tour="dash-deck-row-first"]',
-          title: '🎴 4. Chọn Bộ Thẻ Để Học',
-          content:
-            'Click vào bất kỳ bộ thẻ nào để chọn học hoặc nhấn icon bánh răng để đổi tên, đổi vị trí, xuất bản hoặc cài đặt lại tiến độ.',
+          title: `🎴 ${t('tour.steps.deck_grid.title')}`,
+          content: t('tour.steps.deck_grid.description'),
           placement: 'top',
         },
         {
           target: '[data-tour="dash-study-action"]',
-          title: '⚡ 5. Bắt Đầu Phiên Học Ngay',
-          content:
-            'Bấm nút Study để vào ngay phiên học Spaced Repetition. Sử dụng phím Space để lật mặt thẻ và các phím 1 (Again), 2 (Hard), 3 (Good), 4 (Easy) để đánh giá.',
+          title: `⚡ ${t('tour.steps.quick_study.title')}`,
+          content: t('tour.steps.quick_study.description'),
           placement: 'bottom',
         },
       )
@@ -61,29 +59,26 @@ export function DashboardSpotlightTour({
     list.push(
       {
         target: '[data-tour="dash-marketplace-link"]',
-        title: '📚 6. Khám Phá Thư Viện Marketplace',
-        content:
-          'Khám phá kho học liệu phong phú: Tiếng Nhật JLPT, Tiếng Anh TOEIC/IELTS, Tiếng Hàn TOPIK, Tiếng Trung HSK, CNTT & Lập trình với tính năng cài đặt 1-click.',
+        title: `📚 ${t('tour.steps.anki_sync.title')}`,
+        content: t('tour.steps.anki_sync.description'),
         placement: 'top',
       },
       {
         target: '[data-tour="dash-heatmap-section"]',
-        title: '🔥 7. Bản Đồ Nhiệt & Chuỗi Ngày Học (Streak)',
-        content:
-          'Theo dõi chuỗi ngày học liên tục (Streak), tổng thời gian ôn tập và số lượng thẻ đã hoàn thành theo từng ngày trong năm.',
+        title: `🔥 ${t('tour.steps.nav_stats.title')}`,
+        content: t('tour.steps.nav_stats.description'),
         placement: 'top',
       },
       {
         target: '[data-tour="dash-tour-btn"]',
-        title: '🎯 8. Hướng Dẫn & Thiết Lập Mục Tiêu',
-        content:
-          'Bạn có thể bấm vào đây để xem lại tour hoặc điều chỉnh mục tiêu học tập bất kỳ lúc nào. Chúc bạn học tập thật hiệu quả cùng Flama!',
+        title: `🎯 ${t('tour.steps.nav_settings.title')}`,
+        content: t('tour.steps.nav_settings.description'),
         placement: 'bottom',
       },
     )
 
     return list
-  }, [hasDecks])
+  }, [hasDecks, t])
 
   return (
     <SpotlightTour

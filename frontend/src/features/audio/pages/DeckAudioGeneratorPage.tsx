@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   AlertTriangle,
   AudioLines,
@@ -27,6 +28,7 @@ import { useDeckAudioQueue } from '../hooks/useDeckAudioQueue'
 import { useDeckAudioScanner } from '../hooks/useDeckAudioScanner'
 
 export function DeckAudioGeneratorPage() {
+  const { t } = useTranslation('audio')
   const [isAudioHelperConnected, setIsAudioHelperConnected] = useState<boolean>(false)
 
   const scanner = useDeckAudioScanner()
@@ -69,12 +71,12 @@ export function DeckAudioGeneratorPage() {
 
   const handleStartOrQueue = () => {
     if (!isAudioHelperConnected) {
-      toast.error('Vui lòng kết nối ứng dụng Flama Audio Desktop trước khi bắt đầu.')
+      toast.error(t('page.toast_connect_required'))
       return
     }
 
     if (!selectedDeckId) {
-      toast.error('Vui lòng chọn một bộ thẻ (Deck).')
+      toast.error(t('page.toast_select_deck_required'))
       return
     }
 
@@ -96,21 +98,21 @@ export function DeckAudioGeneratorPage() {
               <AudioLines className="size-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-              Studio Tạo Âm Thanh Deck
+              {t('page.title')}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Quét thông minh trường từ vựng và tự động tổng hợp phát âm hàng loạt cho bộ thẻ qua Flama Audio Desktop.
+            {t('page.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <ContextHelpButton
             guidePath="/guide/audio/batch-generation"
-            guideTitle="Hướng dẫn tạo âm thanh hàng loạt"
+            guideTitle={t('page.guide_title')}
             troubleshootPath="/guide/troubleshooting/flama-audio"
-            troubleshootTitle="Khắc phục lỗi phát âm / Flama Audio"
-            label="Hướng dẫn & Sửa lỗi"
+            troubleshootTitle={t('page.troubleshoot_title')}
+            label={t('page.help_label')}
           />
         </div>
       </div>
@@ -125,7 +127,7 @@ export function DeckAudioGeneratorPage() {
             <div className="flex items-center gap-2.5">
               <Layers className="size-4 text-primary" />
               <CardTitle className="text-sm sm:text-base font-bold text-foreground">
-                1. Chọn bộ thẻ (Deck) &amp; Quét phân tích
+                {t('page.section_status')}
               </CardTitle>
             </div>
 
@@ -138,12 +140,12 @@ export function DeckAudioGeneratorPage() {
                 className="h-8 text-xs gap-1.5"
               >
                 <RefreshCw className={`size-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>Quét lại Deck</span>
+                <span>{t('page.scan_button')}</span>
               </Button>
             )}
           </div>
           <CardDescription className="text-xs text-muted-foreground mt-1">
-            Chọn bộ thẻ bạn muốn tạo âm thanh từ cây danh mục Deck bên dưới. Hệ thống sẽ tự động quét các trường audio, đối soát trường gốc và kiểm tra file hỏng.
+            {t('page.section_deck_tree_desc')}
           </CardDescription>
         </CardHeader>
 
@@ -154,7 +156,7 @@ export function DeckAudioGeneratorPage() {
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <Folder className="size-3.5 text-amber-500" />
-                  Danh mục Deck
+                  {t('page.section_deck_tree_label')}
                 </Label>
                 {selectedDeck && (
                   <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold truncate max-w-[200px]">
@@ -185,7 +187,7 @@ export function DeckAudioGeneratorPage() {
                 <div className="flex flex-col items-center justify-center border border-primary/20 rounded-2xl p-8 text-center bg-primary/5 min-h-[260px] h-full space-y-3 animate-pulse">
                   <LoaderCircle className="size-8 text-primary animate-spin" />
                   <div className="space-y-1">
-                    <p className="text-sm font-bold text-primary">Đang quét phân tích Deck...</p>
+                    <p className="text-sm font-bold text-primary">{t('page.scanning_button')}</p>
                     <p className="text-xs text-muted-foreground max-w-sm">
                       Đang đọc cấu trúc các trường, đối soát liên kết âm thanh và kiểm tra tính toàn vẹn file trên ổ đĩa.
                     </p>
@@ -303,7 +305,7 @@ export function DeckAudioGeneratorPage() {
             <div className="space-y-0.5">
               <h2 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
                 <Volume2 className="size-4 text-primary" />
-                <span>2. Thiết lập cấu hình giọng đọc &amp; Ánh xạ trường</span>
+                <span>{t('page.section_rules')}</span>
               </h2>
               <p className="text-xs text-muted-foreground">
                 Tự động nhận diện từ đuôi &ldquo;Audio&rdquo; / &ldquo;_audio&rdquo;. Bạn có thể thêm cấu hình giọng đọc riêng cho từng trường (+ Thêm).
@@ -368,7 +370,7 @@ export function DeckAudioGeneratorPage() {
                 ) : (
                   <>
                     <Play className="size-4" />
-                    <span>Bắt đầu tạo âm thanh cho Deck này</span>
+                    <span>{t('page.start_generation_button')}</span>
                   </>
                 )}
               </Button>
@@ -382,7 +384,7 @@ export function DeckAudioGeneratorPage() {
         <div className="space-y-0.5">
           <h2 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
             <Radio className="size-4 text-primary" />
-            <span>3. Tiến trình &amp; Hàng đợi nhiều Deck (Queue Monitor)</span>
+            <span>{t('page.section_progress')}</span>
           </h2>
           <p className="text-xs text-muted-foreground">
             Hệ thống tự động xử lý lần lượt từng Deck trong hàng đợi. Tiến trình được lưu liên tục và có thể tiếp tục khi tải lại trang web.
