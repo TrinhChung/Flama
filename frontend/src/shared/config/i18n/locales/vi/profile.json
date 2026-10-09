@@ -1,0 +1,181 @@
+{
+  "loading": "Đang tải hồ sơ và thông tin đóng góp…",
+  "page_header": {
+    "title_own": "Hồ sơ cá nhân & Đóng góp",
+    "title_creator": "Hồ sơ Creator: {{name}}"
+  },
+  "tabs": {
+    "decks": "Học liệu đã tạo ({{count}})",
+    "note_types": "Loại thẻ ({{count}})",
+    "contributions": "Đóng góp cộng đồng ({{count}})"
+  },
+  "hero": {
+    "new_member": "Thành viên mới",
+    "change_avatar": "Đổi ảnh đại diện",
+    "admin_badge_title": "Quản trị viên hệ thống",
+    "creator_badge_title": "Nhà sáng tạo nội dung",
+    "role_admin": "Admin",
+    "role_creator": "Nhà sáng tạo",
+    "role_student_fallback": "Học viên",
+    "verified_student": "Sinh viên đã xác thực",
+    "verified_email": "Email đã xác thực",
+    "unverified_student": "Chưa xác thực SV",
+    "unverified_email": "Chưa xác thực email",
+    "verify_now": "Xác thực ngay",
+    "empty_bio": "Chưa có phần giới thiệu bản thân. Nhấn 'Chỉnh sửa hồ sơ' để thêm bio và liên kết mạng xã hội.",
+    "joined_date": "Gia nhập {{date}}",
+    "edit_profile": "Chỉnh sửa hồ sơ"
+  },
+  "stats": {
+    "created_decks": "Học liệu đã tạo",
+    "public_decks": "Bộ thẻ công khai",
+    "installs": "Lượt cài đặt",
+    "total_downloads": "Tổng lượt tải",
+    "avg_rating": "Đánh giá TB",
+    "content_reputation": "Uy tín nội dung",
+    "contributions": "Đóng góp",
+    "approved_changes": "Change request duyệt"
+  },
+  "badges": {
+    "title": "Huy hiệu & Thành tích trên Flama"
+  },
+  "contributions": {
+    "empty_title": "Chưa có đóng góp nào được ghi nhận",
+    "empty_description": "Các đóng góp sửa đổi thẻ hoặc cải tiến nội dung đã được hợp nhất (merged) sẽ xuất hiện tại đây.",
+    "merged_badge": "Đã hợp nhất",
+    "deck_label": "Bộ thẻ:"
+  },
+  "published_decks": {
+    "empty_title": "Chưa có học liệu nào được xuất bản",
+    "empty_description": "Tác giả chưa xuất bản bộ thẻ flashcard nào lên Marketplace cộng đồng.",
+    "default_category": "Tiếng Nhật",
+    "default_description": "Bộ thẻ flashcard học từ vựng và kiến trúc kiến thức.",
+    "rating_new": "Mới",
+    "view_details": "Chi tiết →"
+  },
+  "published_note_types": {
+    "empty_title": "Chưa có loại thẻ nào được xuất bản",
+    "empty_description": "Tác giả chưa chia sẻ mẫu loại thẻ / template nào lên Marketplace.",
+    "type_badge": "Loại thẻ / Mẫu",
+    "default_description": "Mẫu thiết kế thẻ ghi nhớ tùy biến.",
+    "rating_new": "Mới",
+    "view_details": "Chi tiết →"
+  },
+  "edit": {
+    "dialog_title": "Chỉnh sửa hồ sơ cá nhân",
+    "dialog_description": "Cập nhật tên hiển thị, bio giới thiệu, liên kết và cài đặt tài khoản của bạn.",
+    "tabs": {
+      "info": "Thông tin & Bio",
+      "links": "Liên kết ({{count}})",
+      "password": "Đổi mật khẩu"
+    },
+    "info": {
+      "display_name_label": "Tên hiển thị (Display Name)",
+      "display_name_placeholder": "Tên bạn muốn hiển thị",
+      "display_name_help": "Tên này sẽ hiển thị trên trang cá nhân và các bài đăng marketplace.",
+      "email_label": "Địa chỉ Email",
+      "email_placeholder": "email@example.com",
+      "email_student_active": "Email sinh viên ({{email}}) đã được kích hoạt ưu đãi.",
+      "email_reverify_notice": "Thay đổi địa chỉ email sẽ yêu cầu bạn xác thực lại email mới.",
+      "email_general_notice": "Email dùng để nhận thông báo và xác thực tài khoản.",
+      "bio_label": "Giới thiệu bản thân (Bio)",
+      "bio_placeholder": "Chia sẻ đôi nét về bạn, mục tiêu học tiếng Nhật hoặc các bộ thẻ bạn tạo...",
+      "bio_max_chars": "Tối đa 500 ký tự",
+      "timezone_label": "Múi giờ học tập",
+      "btn_save": "Lưu thông tin"
+    },
+    "links": {
+      "description": "Thêm các liên kết website, kênh YouTube, trang GitHub hoặc trang cá nhân của bạn.",
+      "btn_add": "Thêm link",
+      "empty": "Chưa có liên kết nào. Nhấn 'Thêm link' để bổ sung liên kết mạng xã hội.",
+      "btn_delete": "Xóa link",
+      "url_placeholder": "https://...",
+      "label_placeholder": "Nhãn (tùy chọn)",
+      "btn_save": "Lưu liên kết"
+    },
+    "platforms": {
+      "website": "Website cá nhân",
+      "github": "GitHub",
+      "youtube": "YouTube",
+      "facebook": "Facebook",
+      "x": "X (Twitter)",
+      "linkedin": "LinkedIn",
+      "discord": "Discord",
+      "other": "Khác"
+    },
+    "password": {
+      "current_label": "Mật khẩu hiện tại *",
+      "current_placeholder": "Nhập mật khẩu hiện tại để xác thực",
+      "new_label": "Mật khẩu mới *",
+      "new_placeholder": "Ít nhất 8 ký tự",
+      "confirm_label": "Xác nhận mật khẩu mới *",
+      "confirm_placeholder": "Nhập lại mật khẩu mới",
+      "hide_password": "Ẩn mật khẩu",
+      "show_password": "Hiện mật khẩu",
+      "btn_change": "Đổi mật khẩu",
+      "btn_changing": "Đang đổi mật khẩu…"
+    },
+    "btn_cancel": "Hủy",
+    "btn_saving": "Đang lưu…",
+    "toast": {
+      "password_success": "Mật khẩu đã được thay đổi thành công.",
+      "profile_success": "Đã cập nhật hồ sơ cá nhân thành công!",
+      "update_error_title": "Không thể cập nhật thông tin",
+      "max_links": "Tối đa 10 liên kết mạng xã hội."
+    }
+  },
+  "validation": {
+    "current_password_required": "Vui lòng nhập mật khẩu hiện tại.",
+    "new_password_required": "Vui lòng nhập mật khẩu mới.",
+    "new_password_min": "Mật khẩu mới phải có ít nhất {{min}} ký tự.",
+    "new_password_max": "Mật khẩu mới không được vượt quá {{max}} ký tự.",
+    "confirm_password_required": "Vui lòng xác nhận mật khẩu mới.",
+    "new_password_same_as_current": "Mật khẩu mới không được trùng với mật khẩu hiện tại.",
+    "passwords_mismatch": "Mật khẩu xác nhận không khớp với mật khẩu mới.",
+    "unknown_error": "Đã có lỗi xảy ra.",
+    "network_error": "Không thể kết nối đến máy chủ."
+  },
+  "avatar": {
+    "dialog_title": "Cập nhật ảnh đại diện",
+    "dialog_description": "Tải lên ảnh mới (tối đa 2MB, tự động cắt vuông và tối ưu định dạng WebP).",
+    "btn_choose_file": "Chọn ảnh từ máy",
+    "btn_remove": "Gỡ ảnh",
+    "btn_cancel": "Hủy",
+    "btn_processing": "Đang xử lý…",
+    "btn_save": "Lưu ảnh đại diện",
+    "toast": {
+      "invalid_file_type": "Vui lòng chọn tệp hình ảnh hợp lệ (PNG, JPG, WebP, GIF).",
+      "file_too_large": "Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.",
+      "upload_success": "Đã cập nhật ảnh đại diện thành công!",
+      "upload_failed": "Không thể tải lên ảnh đại diện.",
+      "delete_success": "Đã gỡ ảnh đại diện.",
+      "delete_failed": "Không thể gỡ ảnh đại diện."
+    }
+  },
+  "verify": {
+    "title_edu": "Xác thực Email Sinh viên",
+    "title_email": "Xác thực Địa chỉ Email",
+    "description_prompt": "Mã xác thực 6 chữ số sẽ được gửi tới hòm thư:",
+    "edu_banner": "Hệ thống phát hiện email trường học kết thúc bằng <strong class=\"text-primary font-semibold\">.edu.vn</strong>. Sau khi xác thực, tài khoản của bạn sẽ nhận ngay huy hiệu Sinh viên và tự động áp dụng các ưu đãi giảm giá hoặc tải miễn phí trên Marketplace!",
+    "send_instructions": "Bấm nút bên dưới để nhận mã xác thực qua email. Mã có hiệu lực trong vòng 15 phút.",
+    "btn_sending": "Đang gửi mã...",
+    "btn_send": "Gửi mã xác thực đến email",
+    "otp_label": "Nhập mã xác thực (6 chữ số)",
+    "otp_placeholder": "123456",
+    "btn_verifying": "Đang xác thực...",
+    "btn_confirm": "Xác nhận mã",
+    "not_received": "Chưa nhận được mã?",
+    "resend_cooldown": "Gửi lại sau ({{seconds}}s)",
+    "btn_resend": "Gửi lại mã",
+    "validation_error": "Vui lòng nhập mã xác thực gồm 6 chữ số.",
+    "toast": {
+      "already_verified": "Email của bạn đã được xác thực trước đó.",
+      "code_sent": "Mã xác thực đã được gửi đến email của bạn.",
+      "send_code_failed": "Không thể gửi mã xác thực. Vui lòng thử lại sau.",
+      "success": "Xác thực email thành công!",
+      "student_perk_success": "Chúc mừng! Bạn đã được kích hoạt ưu đãi Sinh viên thành công!",
+      "email_verified_success": "Xác thực địa chỉ email thành công!",
+      "invalid_code": "Mã xác thực không hợp lệ hoặc đã hết hạn."
+    }
+  }
+}

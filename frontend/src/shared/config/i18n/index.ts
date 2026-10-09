@@ -22,6 +22,12 @@ import viCollaboration from './locales/vi/collaboration.json'
 import viOrders from './locales/vi/orders.json'
 import viSupport from './locales/vi/support.json'
 import viWorksheets from './locales/vi/worksheets.json'
+import viProfile from './locales/vi/profile.json'
+import viWallet from './locales/vi/wallet.json'
+import viCardTemplates from './locales/vi/card_templates.json'
+import viAudio from './locales/vi/audio.json'
+import viGuide from './locales/vi/guide.json'
+import viOnboarding from './locales/vi/onboarding.json'
 
 import enCommon from './locales/en/common.json'
 import enShell from './locales/en/shell.json'
@@ -42,6 +48,12 @@ import enCollaboration from './locales/en/collaboration.json'
 import enOrders from './locales/en/orders.json'
 import enSupport from './locales/en/support.json'
 import enWorksheets from './locales/en/worksheets.json'
+import enProfile from './locales/en/profile.json'
+import enWallet from './locales/en/wallet.json'
+import enCardTemplates from './locales/en/card_templates.json'
+import enAudio from './locales/en/audio.json'
+import enGuide from './locales/en/guide.json'
+import enOnboarding from './locales/en/onboarding.json'
 
 export const resources = {
   vi: {
@@ -64,6 +76,12 @@ export const resources = {
     orders: viOrders,
     support: viSupport,
     worksheets: viWorksheets,
+    profile: viProfile,
+    wallet: viWallet,
+    card_templates: viCardTemplates,
+    audio: viAudio,
+    guide: viGuide,
+    onboarding: viOnboarding,
   },
   en: {
     common: enCommon,
@@ -85,6 +103,12 @@ export const resources = {
     orders: enOrders,
     support: enSupport,
     worksheets: enWorksheets,
+    profile: enProfile,
+    wallet: enWallet,
+    card_templates: enCardTemplates,
+    audio: enAudio,
+    guide: enGuide,
+    onboarding: enOnboarding,
   },
 } as const
 
@@ -130,6 +154,12 @@ void i18n
       'orders',
       'support',
       'worksheets',
+      'profile',
+      'wallet',
+      'card_templates',
+      'audio',
+      'guide',
+      'onboarding',
     ],
     defaultNS: 'common',
     interpolation: {

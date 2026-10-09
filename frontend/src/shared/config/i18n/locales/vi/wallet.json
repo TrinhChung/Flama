@@ -1,0 +1,48 @@
+{
+  "loading": "Đang tải thông tin số dư ví và doanh thu…",
+  "header": {
+    "title": "Ví cá nhân & Doanh thu",
+    "description": "Quản lý số dư, theo dõi doanh thu bán học liệu và lịch sử giao dịch trên Flama"
+  },
+  "summary": {
+    "available_balance": "Số dư khả dụng",
+    "balance_explanation": "Doanh thu thực nhận sau khi khấu trừ phí nền tảng từ các bộ thẻ và học liệu đã bán.",
+    "platform_fee_label": "Phí nền tảng: {{percent}}%",
+    "custom_fee_tier": "Biểu phí ưu đãi cá nhân",
+    "standard_fee_tier": "Biểu phí tiêu chuẩn Flama",
+    "total_gross_title": "Tổng doanh thu gộp",
+    "total_gross_description": "Tổng giá trị người học đã thanh toán",
+    "net_earnings_title": "Doanh thu thực nhận",
+    "net_earnings_description": "Số tiền đã được cộng vào số dư ví",
+    "service_fee_title": "Phí dịch vụ & hạ tầng",
+    "service_fee_description": "Duy trì hệ thống và cổng thanh toán",
+    "sales_count_title": "Đơn hàng đã bán",
+    "sales_count_description": "Lượt mua bộ thẻ trên Marketplace"
+  },
+  "payout": {
+    "title": "Bảo đảm an toàn số dư & Rút tiền",
+    "default_message": "Chức năng rút tiền trực tiếp về tài khoản ngân hàng đang được chuẩn bị. Toàn bộ doanh thu bán Deck được hạch toán minh bạch và bảo đảm an toàn trên hệ thống Flama.",
+    "auto_settlement": "Tự động kết toán"
+  },
+  "transactions": {
+    "title": "Lịch sử giao dịch số dư",
+    "description": "Bảng kê chi tiết từng lượt mua học liệu và tiền thực nhận vào ví",
+    "filter_all": "Tất cả",
+    "filter_deck_sale": "Doanh thu Deck",
+    "loading": "Đang tải dữ liệu lịch sử giao dịch…",
+    "error": "Không thể tải lịch sử giao dịch. Vui lòng thử lại.",
+    "empty_title": "Chưa có giao dịch nào",
+    "empty_description": "Khi có người học mua bộ thẻ hoặc học liệu của bạn trên Marketplace, các khoản doanh thu sẽ được hiển thị tại đây.",
+    "th_date": "Thời gian",
+    "th_description": "Nội dung",
+    "th_buyer": "Người mua",
+    "th_gross": "Giá bán",
+    "th_platform_fee": "Phí sàn",
+    "th_net": "Thực nhận",
+    "th_balance_after": "Số dư sau GD",
+    "order_code_prefix": "Mã đơn: #{{code}}",
+    "pagination_summary": "Trang {{page}} / {{pages}} (Tổng {{total}} giao dịch)",
+    "btn_previous": "Trang trước",
+    "btn_next": "Trang sau"
+  }
+}

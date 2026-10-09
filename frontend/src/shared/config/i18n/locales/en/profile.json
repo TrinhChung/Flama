@@ -1,0 +1,181 @@
+{
+  "loading": "Loading profile and contribution records…",
+  "page_header": {
+    "title_own": "Personal Profile & Contributions",
+    "title_creator": "Creator Profile: {{name}}"
+  },
+  "tabs": {
+    "decks": "Published Decks ({{count}})",
+    "note_types": "Note Types ({{count}})",
+    "contributions": "Community Contributions ({{count}})"
+  },
+  "hero": {
+    "new_member": "New member",
+    "change_avatar": "Change avatar",
+    "admin_badge_title": "System Administrator",
+    "creator_badge_title": "Content Creator",
+    "role_admin": "Admin",
+    "role_creator": "Creator",
+    "role_student_fallback": "Student",
+    "verified_student": "Verified Student",
+    "verified_email": "Verified Email",
+    "unverified_student": "Student unverified",
+    "unverified_email": "Email unverified",
+    "verify_now": "Verify Now",
+    "empty_bio": "No personal bio yet. Click 'Edit profile' to add a bio and social links.",
+    "joined_date": "Joined {{date}}",
+    "edit_profile": "Edit Profile"
+  },
+  "stats": {
+    "created_decks": "Created Materials",
+    "public_decks": "Public decks",
+    "installs": "Installs",
+    "total_downloads": "Total downloads",
+    "avg_rating": "Avg Rating",
+    "content_reputation": "Content reputation",
+    "contributions": "Contributions",
+    "approved_changes": "Approved changes"
+  },
+  "badges": {
+    "title": "Badges & Achievements on Flama"
+  },
+  "contributions": {
+    "empty_title": "No contributions recorded yet",
+    "empty_description": "Card edits and content improvement contributions that have been merged will appear here.",
+    "merged_badge": "Merged",
+    "deck_label": "Deck:"
+  },
+  "published_decks": {
+    "empty_title": "No published materials yet",
+    "empty_description": "The creator has not published any flashcard decks to the community Marketplace.",
+    "default_category": "Japanese",
+    "default_description": "Flashcard deck for learning vocabulary and knowledge structure.",
+    "rating_new": "New",
+    "view_details": "Details →"
+  },
+  "published_note_types": {
+    "empty_title": "No note types published yet",
+    "empty_description": "The creator has not shared any note type templates to the Marketplace.",
+    "type_badge": "Note Type / Template",
+    "default_description": "Customizable flashcard design template.",
+    "rating_new": "New",
+    "view_details": "Details →"
+  },
+  "edit": {
+    "dialog_title": "Edit Personal Profile",
+    "dialog_description": "Update your display name, bio, links, and account settings.",
+    "tabs": {
+      "info": "Info & Bio",
+      "links": "Links ({{count}})",
+      "password": "Change Password"
+    },
+    "info": {
+      "display_name_label": "Display Name",
+      "display_name_placeholder": "The name you want to display",
+      "display_name_help": "This name will appear on your profile and marketplace listings.",
+      "email_label": "Email Address",
+      "email_placeholder": "email@example.com",
+      "email_student_active": "Student email ({{email}}) has verified discounts active.",
+      "email_reverify_notice": "Changing your email address will require re-verifying the new address.",
+      "email_general_notice": "Email is used to receive notifications and authenticate your account.",
+      "bio_label": "About Me (Bio)",
+      "bio_placeholder": "Share a bit about yourself, Japanese study goals, or the decks you create...",
+      "bio_max_chars": "Max 500 characters",
+      "timezone_label": "Study Timezone",
+      "btn_save": "Save Information"
+    },
+    "links": {
+      "description": "Add links to your personal website, YouTube channel, GitHub, or social profiles.",
+      "btn_add": "Add link",
+      "empty": "No links yet. Click 'Add link' to add social links.",
+      "btn_delete": "Delete link",
+      "url_placeholder": "https://...",
+      "label_placeholder": "Label (optional)",
+      "btn_save": "Save Links"
+    },
+    "platforms": {
+      "website": "Personal Website",
+      "github": "GitHub",
+      "youtube": "YouTube",
+      "facebook": "Facebook",
+      "x": "X (Twitter)",
+      "linkedin": "LinkedIn",
+      "discord": "Discord",
+      "other": "Other"
+    },
+    "password": {
+      "current_label": "Current Password *",
+      "current_placeholder": "Enter current password to authenticate",
+      "new_label": "New Password *",
+      "new_placeholder": "At least 8 characters",
+      "confirm_label": "Confirm New Password *",
+      "confirm_placeholder": "Re-enter new password",
+      "hide_password": "Hide password",
+      "show_password": "Show password",
+      "btn_change": "Change Password",
+      "btn_changing": "Changing password…"
+    },
+    "btn_cancel": "Cancel",
+    "btn_saving": "Saving…",
+    "toast": {
+      "password_success": "Password changed successfully.",
+      "profile_success": "Personal profile updated successfully!",
+      "update_error_title": "Unable to update profile",
+      "max_links": "Maximum 10 social links allowed."
+    }
+  },
+  "validation": {
+    "current_password_required": "Please enter your current password.",
+    "new_password_required": "Please enter a new password.",
+    "new_password_min": "New password must be at least {{min}} characters.",
+    "new_password_max": "New password must not exceed {{max}} characters.",
+    "confirm_password_required": "Please confirm your new password.",
+    "new_password_same_as_current": "New password cannot be the same as your current password.",
+    "passwords_mismatch": "Confirm password does not match the new password.",
+    "unknown_error": "An error occurred.",
+    "network_error": "Unable to connect to the server."
+  },
+  "avatar": {
+    "dialog_title": "Update Avatar",
+    "dialog_description": "Upload a new photo (max 2MB, automatically cropped square and WebP optimized).",
+    "btn_choose_file": "Choose image from device",
+    "btn_remove": "Remove photo",
+    "btn_cancel": "Cancel",
+    "btn_processing": "Processing…",
+    "btn_save": "Save Avatar",
+    "toast": {
+      "invalid_file_type": "Please select a valid image file (PNG, JPG, WebP, GIF).",
+      "file_too_large": "Image size exceeds 2MB. Please choose a smaller image.",
+      "upload_success": "Avatar updated successfully!",
+      "upload_failed": "Unable to upload avatar.",
+      "delete_success": "Avatar removed.",
+      "delete_failed": "Unable to remove avatar."
+    }
+  },
+  "verify": {
+    "title_edu": "Verify Student Email",
+    "title_email": "Verify Email Address",
+    "description_prompt": "The 6-digit verification code will be sent to inbox:",
+    "edu_banner": "Detected school email ending in <strong class=\"text-primary font-semibold\">.edu.vn</strong>. Once verified, your account will immediately receive the Student badge and automatically apply discounts or free downloads on Marketplace!",
+    "send_instructions": "Click the button below to receive a verification code via email. The code is valid for 15 minutes.",
+    "btn_sending": "Sending code...",
+    "btn_send": "Send verification code to email",
+    "otp_label": "Enter verification code (6 digits)",
+    "otp_placeholder": "123456",
+    "btn_verifying": "Verifying...",
+    "btn_confirm": "Confirm Code",
+    "not_received": "Didn't receive code?",
+    "resend_cooldown": "Resend in ({{seconds}}s)",
+    "btn_resend": "Resend code",
+    "validation_error": "Please enter the 6-digit verification code.",
+    "toast": {
+      "already_verified": "Your email has already been verified.",
+      "code_sent": "Verification code has been sent to your email.",
+      "send_code_failed": "Unable to send verification code. Please try again later.",
+      "success": "Email verification successful!",
+      "student_perk_success": "Congratulations! Student perks have been successfully activated!",
+      "email_verified_success": "Email address verified successfully!",
+      "invalid_code": "Invalid or expired verification code."
+    }
+  }
+}

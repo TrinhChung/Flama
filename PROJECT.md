@@ -1,79 +1,96 @@
-# Project: Flama Brand SEO, GEO & MCP AI Search Integration
+# Project: Flama End-User i18n Localization (Remaining Modules)
 
 ## Architecture
-Flama is a full-stack Japanese language learning platform (Flask REST API on port 4789, Flama Connect Yomitan/MCP bridge on port 4790, React 19 SPA frontend, Flama Audio desktop companion).
+Flama is a full-stack Japanese language learning platform featuring a React 19 SPA frontend with Feature-Sliced Design (FSD) architecture, Flask REST backend, and Yomitan/MCP companion services.
 
-This project establishes Flama.vn as the authoritative brand entity across traditional search engines and AI generative engines (ChatGPT, Perplexity, Claude, Google AI Overviews), while exposing a secure, anti-scraping Model Context Protocol (MCP) public search endpoint for external AI agents.
+This project completes the bilingual internationalization (i18n) across all remaining end-user screens in the React SPA frontend, supporting Vietnamese (`vi`, default) and English (`en`) with 100% key parity, zero visual regression, TypeScript type safety, and automated stress testing.
 
 ### Subsystems:
-1. **SEO Strategy Subsystem (`docs/seo/`)**:
-   - Brand entity defense roadmap (`BRAND_ENTITY_SEO_STRATEGY.md`).
-   - Keyword research matrix (`KEYWORD_RESEARCH_MATRIX.md`) with 50+ keywords across Brand and 4 feature clusters (SRS/Anki, Yomitan Mining, Local TTS, Marketplace & JLPT).
-2. **Technical SEO & GEO Subsystem (`app/routes/seo.py`, `app/services/seo_service.py`, `app/spa.py`, `frontend/index.html`)**:
-   - `GET /robots.txt`: Optimized crawler rules for GPTBot, PerplexityBot, ClaudeBot, Google-Extended, disallowing private app routes, linking to `sitemap.xml` and `llms.txt`.
-   - `GET /sitemap.xml`: XML sitemap cataloging 38 authoritative public URLs with priority and change frequency.
-   - `GET /llms.txt`: Machine-readable overview adhering to llmstxt.org linking core features, docs, and MCP endpoint.
-   - `frontend/index.html`: Canonical link, OpenGraph, Twitter Cards, and Schema.org JSON-LD graph (`Organization`, `WebSite`, `SoftwareApplication` / `EducationalApplication`, `FAQPage`, `Course`).
-3. **Model Context Protocol (MCP) Subsystem (`app/services/mcp/`, `app/connect/mcp.py`, `app/routes/mcp.py`, `scripts/flama_mcp_server.py`)**:
-   - Public AI Search tools: `search_marketplace_decks`, `lookup_public_vocabulary`, `get_public_deck_preview` (sample preview only, max 5 cards), `get_flama_documentation`.
-   - Strict Privacy Fence: Zero access to private user notes, study logs, or unshared decks.
-   - Anti-Scraping Guardrail: Preview only (max 3-5 sample cards), strict pagination bounds (5-10 decks, max 20).
-   - Transports: HTTP POST on `/api/mcp` and Stdio CLI server `scripts/flama_mcp_server.py`.
-4. **E2E Testing & Verification Subsystem (`tests/`)**:
-   - `tests/test_seo_routes.py` (robots.txt, sitemap.xml, llms.txt, SPA bypass).
-   - `tests/test_mcp_public_search.py` (unauthenticated discovery, public deck queries, vocabulary lookups, docs, privacy leaks & anti-scraping bounds).
-   - `tests/test_seo_adversarial.py`, `tests/test_mcp_adversarial_challenge.py`, `tests/test_schema_jsonld.py`.
+1. **Central i18n Core (`frontend/src/shared/config/i18n/`)**:
+   - Central registration in `index.ts` and type-safety definitions in `types.ts`.
+   - Locales in `locales/vi/` and `locales/en/` across 6 new namespaces: `profile`, `wallet`, `card_templates`, `audio`, `guide`, `onboarding`.
+   - Comprehensive dictionary parity test suite: `translationKeys.test.ts` (static AST verification) and `i18n.stress.test.tsx` (runtime parity & non-empty assertion).
+2. **User Profile & Wallet Subsystem (`frontend/src/features/profile/`, `frontend/src/features/wallet/`)**:
+   - `features/profile/`: Profile page, hero card, badges, contributions, creator portfolio tabs, edit dialogs, avatar upload modal, email verification dialog, and Zod password validation schema.
+   - `features/wallet/`: Wallet overview, platform fees, summary cards, payout notices, and transaction history table with filters.
+3. **Card Template Ecosystem Subsystem (`frontend/src/features/template-library/`, `template-versions/`, `template-distribution/`)**:
+   - `features/template-library/`: Template library catalog, template details, create dialog, apply wizard, field mapping editor, template applications panel, and input schema editor.
+   - `features/template-versions/`: Template version history sheet and diff view.
+   - `features/template-distribution/`: Distribution panel integration.
+4. **Audio, Knowledge Base & Onboarding Subsystem (`frontend/src/features/audio/`, `guide/`, `onboarding/`)**:
+   - `features/audio/`: Deck audio generator page, local engine connection gate, generation dialogs, rule cards, queue monitor, and batch progress list.
+   - `features/guide/`: Knowledge base guides, navigation header, search, category sidebar, Yomitan marker explorer, MCP tools catalog, and reusable `ContextHelpButton`.
+   - `features/onboarding/`: Onboarding welcome modal, hero cards, spotlight tours, and curated study targets/subjects (eliminating settings leakage).
+
+---
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Brand Entity SEO Strategy | Roadmap for Organization schema, GSC, social linking, brand profile, entity defense | M1 | ORIGINAL_REQUEST §R1 |
-| 2 | Keyword Research Matrix | 50+ keywords across Brand and 4 feature clusters with Intent, Volume, Difficulty, Landing page | M1 | ORIGINAL_REQUEST §R1, R2 |
-| 3 | Core Feature Intent Mapping | Topic clustering across SRS, Yomitan, Local TTS, Marketplace & JLPT | M1 | ORIGINAL_REQUEST §R2 |
-| 4 | llms.txt Machine-Readable Spec | Standard llmstxt.org file serving overview, features, guide links, and MCP index | M2 | ORIGINAL_REQUEST §R3 |
-| 5 | robots.txt AI Bot Optimization | Robots.txt with explicit allow/disallow for GPTBot, PerplexityBot, ClaudeBot, Google-Extended | M2 | ORIGINAL_REQUEST §R3 |
-| 6 | Dynamic sitemap.xml | XML sitemap containing all 38 public indexable pages | M2 | ORIGINAL_REQUEST §R3 |
-| 7 | On-Page Metadata (OG/Twitter/Canonical) | Meta tags for rich social snippets and canonical domain defense | M2 | ORIGINAL_REQUEST §R3 |
-| 8 | Schema.org JSON-LD Structured Data | Validated JSON-LD (Organization, WebSite, SoftwareApplication, FAQPage, Course) | M2 | ORIGINAL_REQUEST §R3 |
-| 9 | Public MCP Search Endpoint | MCP tools for public marketplace decks and vocabulary lookups | M3 | ORIGINAL_REQUEST §R4 |
-| 10 | MCP Privacy Barrier | Strict isolation preventing access to private user notes or study logs | M3 | ORIGINAL_REQUEST Follow-up 1 |
-| 11 | MCP Anti-Scraping Guardrail | Limit deck card returns to 3-5 preview samples and bound query limits | M3 | ORIGINAL_REQUEST Follow-up 2 |
-| 12 | MCP Stdio CLI Transport | Standalone Python stdio server for desktop AI agents (Claude Desktop, Cursor) | M3 | ORIGINAL_REQUEST §R4 |
-| 13 | MCP Automated Test Suite | Automated tests verifying MCP query response and security boundaries | M3 | ORIGINAL_REQUEST §R4 |
-| 14 | E2E Integration Suite & Test Ready | Automated verification across SEO, GEO, Schema syntax, and MCP endpoints | M4 | ORIGINAL_REQUEST Acceptance Criteria |
+| 1 | Central Namespace Registration & Types | Register `profile`, `wallet`, `card_templates`, `audio`, `guide`, `onboarding` in `index.ts` and `types.ts` | M1 | ORIGINAL_REQUEST §R1 |
+| 2 | Profile Dictionary (`profile.json`) | 100% symmetric bilingual dictionaries for User Profile (~50 keys) | M1 | ORIGINAL_REQUEST §R1 |
+| 3 | Wallet Dictionary (`wallet.json`) | 100% symmetric bilingual dictionaries for Wallet & Balances (~25 keys) | M1 | ORIGINAL_REQUEST §R1 |
+| 4 | Card Templates Dictionary (`card_templates.json`) | 100% symmetric bilingual dictionaries for Template Ecosystem (126 keys) | M1 | ORIGINAL_REQUEST §R1 |
+| 5 | Audio Dictionary (`audio.json`) | 100% symmetric bilingual dictionaries for Deck Audio Generator (~40 keys) | M1 | ORIGINAL_REQUEST §R1 |
+| 6 | Guide Dictionary (`guide.json`) | 100% symmetric bilingual dictionaries for Knowledge Base (~50 keys) | M1 | ORIGINAL_REQUEST §R1 |
+| 7 | Onboarding Dictionary (`onboarding.json`) | 100% symmetric bilingual dictionaries for User Onboarding & Targets (~55 keys) | M1 | ORIGINAL_REQUEST §R1 |
+| 8 | i18n Stress & Parity Test Suite | Expand `i18n.stress.test.tsx` to assert 100% leaf parity and non-empty values across all 25 namespaces | M1 | ORIGINAL_REQUEST §R3 |
+| 9 | User Profile Localization | Connect `useTranslation('profile')` in all 10 components, modals, tabs, and Zod password schema | M2 | ORIGINAL_REQUEST §R1 |
+| 10 | ProfileEditDialog Pragmatic FSD Refactor | Decompose 670-line god-component into Info, Social, and Password sub-tabs | M2 | ORIGINAL_REQUEST §R2 |
+| 11 | Wallet & Balances Localization | Connect `useTranslation('wallet')` in `WalletPage`, `WalletSummaryCard`, `PayoutNoticeCard`, `WalletTransactionsTable` | M2 | ORIGINAL_REQUEST §R1 |
+| 12 | Template Library Localization | Connect `useTranslation('card_templates')` in library pages, search, filters, cards, and detail page | M3 | ORIGINAL_REQUEST §R1 |
+| 13 | Template Dialogs & Wizards Localization | Connect `useTranslation('card_templates')` in `CreateTemplateDialog`, `ApplyTemplateWizard`, `FieldMappingEditor` | M3 | ORIGINAL_REQUEST §R1 |
+| 14 | Template Applications & Versions Localization | Connect `useTranslation('card_templates')` in `TemplateApplicationsPanel`, `TemplateInputSchemaEditor`, `TemplateVersionHistorySheet` | M3 | ORIGINAL_REQUEST §R1 |
+| 15 | Deck Audio Generator Localization | Connect `useTranslation('audio')` in `DeckAudioGeneratorPage`, connection gate, rule cards, queue monitor | M4 | ORIGINAL_REQUEST §R1 |
+| 16 | Knowledge Base Guide Localization | Connect `useTranslation('guide')` in `GuidePage`, search, sidebar, Yomitan & MCP explorers, and `ContextHelpButton` | M4 | ORIGINAL_REQUEST §R1 |
+| 17 | User Onboarding & Settings Coupling Fix | Connect `useTranslation('onboarding')` in modal, hero card, tour, and localize `constants.ts` to prevent Settings leak | M4 | ORIGINAL_REQUEST §R1 |
+| 18 | Zero Visual Regression & Parity Verification | Ensure identical layout, padding, fonts, and instant language toggle without page reload | M5 | ORIGINAL_REQUEST §R2 |
+| 19 | Full E2E & Production Build Verification | Pass Vitest test runner (`npm test`), TypeScript check (`npm run typecheck`), and Vite build (`npm run build`) | M5 | ORIGINAL_REQUEST Acceptance Criteria |
+| 20 | Independent Victory Review & Forensic Audit | Multi-agent review (2 reviewers), adversarial challenge (2 challengers), and forensic audit (1 auditor) | M6 | ORIGINAL_REQUEST Coordination Rules |
+
+---
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status | Subagent / Outputs |
 |---|------|-------|-------------|--------|---------------------|
-| 1 | Strategy Deliverables | Create `docs/seo/BRAND_ENTITY_SEO_STRATEGY.md` and `docs/seo/KEYWORD_RESEARCH_MATRIX.md` | none | DONE | worker_m1: `docs/seo/BRAND_ENTITY_SEO_STRATEGY.md`, `docs/seo/KEYWORD_RESEARCH_MATRIX.md` (68 keywords) |
-| 2 | Technical SEO & GEO Standards | Implement `app/services/seo_service.py`, `app/routes/seo.py`, `app/spa.py` bypass, `frontend/index.html` tags & schema, and `tests/test_seo_routes.py` | none | DONE | worker_m2: `app/services/seo_service.py`, `app/routes/seo.py`, `app/spa.py`, `frontend/index.html`, `tests/test_seo_routes.py` (6/6 tests pass) |
-| 3 | MCP AI Search Integration | Implement `app/services/mcp/public_search_tools.py`, MCP registry update, auth bypass for public tools, anti-scraping limits, `scripts/flama_mcp_server.py`, and `tests/test_mcp_public_search.py` | none | DONE | worker_m3: `app/services/mcp/public_search_tools.py`, `app/connect/mcp.py`, `scripts/flama_mcp_server.py`, `tests/test_mcp_public_search.py` (10/10 tests pass) |
-| 4 | E2E Verification & Forensic Audit | Run comprehensive test suites, validate Schema.org syntax, challenge edge cases, and run Forensic Integrity Audit | M1, M2, M3 | DONE | reviewer_1 (APPROVE), reviewer_2 (APPROVE), challenger_1 (APPROVE), challenger_2 (APPROVE), auditor_1 (CLEAN). GATE: PASS |
+| 1 | Central i18n Foundation & All 6 Dictionaries | Create all 6 pairs of locale JSONs (`profile`, `wallet`, `card_templates`, `audio`, `guide`, `onboarding`), register in `index.ts` & `types.ts`, and expand `i18n.stress.test.tsx` | none | DONE | worker_o4_m1: 12 locale JSONs, index.ts, types.ts, i18n.stress.test.tsx (24/24 tests pass, typecheck 0 errors) |
+| 2 | Profile & Wallet Localization | Localize all components in `features/profile/` and `features/wallet/`, decompose `ProfileEditDialog`, update schemas | M1 | DONE | worker_o4_m2: 14 components localized, ProfileEditDialog decomposed into 3 FSD subcomponents, schemas backward-compatible (15/15 tests pass, typecheck 0 errors) |
+| 3 | Card Template Ecosystem Localization | Localize all components in `features/template-library/`, `features/template-versions/`, `features/template-distribution/` | M1 | DONE | worker_o4_m3: 10 components localized, new TemplateLocalization.test.tsx added (18 test files/233 tests pass, typecheck 0 errors) |
+| 4 | Audio, Guide & Onboarding Localization | Localize all components in `features/audio/`, `features/guide/`, `features/onboarding/`, resolve Settings data leak | M1 | DONE | worker_o4_m4: 17 components localized, reactive getters for constants.ts, new guide.test.tsx added (6 test files/36 tests pass, typecheck 0 errors) |
+| 5 | E2E Integration, Typecheck & Production Build | Run full Vitest test suites, full TypeScript typecheck, and Vite production build | M2, M3, M4 | DONE | worker_o4_m5: TEST_READY.md published, 185 tests passed across Tiers 1-4, typecheck 0 errors, Vite production build succeeded in 4.29s |
+| 6 | Independent Review, Challenge & Forensic Audit | Independent verification by 2 Reviewers, 2 Challengers, and 1 Forensic Auditor | M5 | IN_PROGRESS | reviewers, challengers, auditor |
+
+---
 
 ## Interface Contracts
-### Flask SEO Blueprint (`app/routes/seo.py` ↔ `app/spa.py`)
-- `GET /robots.txt` -> `text/plain; charset=utf-8`
-- `GET /sitemap.xml` -> `application/xml; charset=utf-8`
-- `GET /llms.txt` -> `text/plain; charset=utf-8`
-- `app/spa.py`: `route_frontend_navigation()` bypasses paths `("/robots.txt", "/sitemap.xml", "/llms.txt")`.
+### Central i18n Resource Map (`src/shared/config/i18n/`)
+- `index.ts`:
+  - `resources.vi`: { ..., profile, wallet, card_templates, audio, guide, onboarding }
+  - `resources.en`: { ..., profile, wallet, card_templates, audio, guide, onboarding }
+  - `ns`: ['common', ..., 'profile', 'wallet', 'card_templates', 'audio', 'guide', 'onboarding']
+- `types.ts`:
+  - `I18nResources` interface extends with `profile: typeof profile`, `wallet: typeof wallet`, `card_templates: typeof card_templates`, `audio: typeof audio`, `guide: typeof guide`, `onboarding: typeof onboarding`.
+  - Type-safe `useTranslation(namespace)` autocomplete for all feature components.
 
-### MCP Public Search (`app/services/mcp/public_search_tools.py` ↔ `app/connect/mcp.py`)
-- `search_marketplace_decks(query: str, jlpt_level: str, category: str, limit: int, offset: int) -> dict`:
-  - Returns `items`: list of deck metadata + `sample_preview` (strictly 3 to 5 sample cards).
-  - Limit: default 10, max 20.
-  - Queries strictly `DeckMarketplaceItem.publish_status == 'published'`.
-- `lookup_public_vocabulary(query: str, jlpt_level: str, limit: int) -> dict`:
-  - Returns matching words from published decks.
-  - Limit: default 10, max 20.
-- `get_flama_documentation(topic: str) -> dict`:
-  - Returns machine-readable markdown for `overview`, `srs`, `yomitan`, `tts`, `marketplace`, `faq`.
+### Feature Boundaries & File Ownership
+- **Milestone 1**: Owns `frontend/src/shared/config/i18n/` (all new locale JSONs, `index.ts`, `types.ts`, `i18n.stress.test.tsx`).
+- **Milestone 2**: Owns `frontend/src/features/profile/` and `frontend/src/features/wallet/`.
+- **Milestone 3**: Owns `frontend/src/features/template-library/`, `frontend/src/features/template-versions/`, `frontend/src/features/template-distribution/`.
+- **Milestone 4**: Owns `frontend/src/features/audio/`, `frontend/src/features/guide/`, `frontend/src/features/onboarding/`.
+- **Milestone 5**: Full repository validation across `frontend/`.
+
+---
 
 ## Code Layout
-- Strategy documents: `docs/seo/`
-- Backend SEO service & routes: `app/services/seo_service.py`, `app/routes/seo.py`
-- SPA bypass: `app/spa.py`
-- Frontend HTML & Schema: `frontend/index.html`
-- MCP public tools: `app/services/mcp/public_search_tools.py`
-- MCP registry & handler: `app/services/mcp_tool_registry.py`, `app/connect/mcp.py`
-- MCP CLI script: `scripts/flama_mcp_server.py`
-- Tests: `tests/test_seo_routes.py`, `tests/test_mcp_public_search.py`, `tests/test_schema_jsonld.py`, `tests/test_seo_adversarial.py`, `tests/test_mcp_adversarial_challenge.py`
+- Central i18n: `frontend/src/shared/config/i18n/`
+  - `locales/vi/*.json` and `locales/en/*.json`
+  - `index.ts`, `types.ts`, `translationKeys.test.ts`, `i18n.stress.test.tsx`
+- Features:
+  - `frontend/src/features/profile/`
+  - `frontend/src/features/wallet/`
+  - `frontend/src/features/template-library/`
+  - `frontend/src/features/template-versions/`
+  - `frontend/src/features/template-distribution/`
+  - `frontend/src/features/audio/`
+  - `frontend/src/features/guide/`
+  - `frontend/src/features/onboarding/`

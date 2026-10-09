@@ -284,6 +284,28 @@ describe('i18n Empirical Stress & Adversarial Suite', () => {
       }
     })
 
+    it('verifies 100% key parity between vi and en for remaining end-user namespaces (profile, wallet, card_templates, audio, guide, onboarding)', async () => {
+      const remainingNamespaces = [
+        'profile',
+        'wallet',
+        'card_templates',
+        'audio',
+        'guide',
+        'onboarding',
+      ]
+
+      for (const ns of remainingNamespaces) {
+        const viModule = await import(`./locales/vi/${ns}.json`)
+        const enModule = await import(`./locales/en/${ns}.json`)
+
+        const viKeys = getLeafPaths(viModule.default)
+        const enKeys = getLeafPaths(enModule.default)
+
+        expect(viKeys, `Discrepancy found in vi vs en for namespace "${ns}"`).toEqual(enKeys)
+        expect(viKeys.length).toBeGreaterThan(0)
+      }
+    })
+
     it('ensures no translation values are empty or undefined in vi and en', async () => {
       const checkNonEmpty = (obj: Record<string, unknown>, ns: string) => {
         for (const [key, value] of Object.entries(obj)) {
@@ -306,6 +328,12 @@ describe('i18n Empirical Stress & Adversarial Suite', () => {
         'orders',
         'support',
         'worksheets',
+        'profile',
+        'wallet',
+        'card_templates',
+        'audio',
+        'guide',
+        'onboarding',
       ]
 
       for (const ns of namespaces) {
