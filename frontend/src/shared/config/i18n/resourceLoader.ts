@@ -15,7 +15,7 @@ export function createLocaleBackend(importers: LocaleImporters = localeImporters
       const path = `./locales/${language}/${namespace}.json`
       const importer = importers[path]
       if (!importer) {
-        callback(null, {})
+        callback(new Error(`Unknown locale namespace: ${language}/${namespace}`), false)
         return
       }
       let request = pending.get(path)

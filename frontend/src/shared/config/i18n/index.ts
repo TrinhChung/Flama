@@ -2,6 +2,7 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { DEFAULT_LOCALE, STORAGE_KEY, SUPPORTED_LOCALES, type SupportedLocale } from './constants'
 import { createLocaleBackend } from './resourceLoader'
+import { guardNamespaceReadiness, requireTranslationBundles } from './loadGuard'
 import './types'
 
 const getInitialLocale = (): SupportedLocale => {
@@ -42,6 +43,10 @@ export const i18nReady = i18n
     react: {
       useSuspense: true,
     },
+  }).then((translate) => {
+    requireTranslationBundles(i18n, ['common', 'shell'])
+    guardNamespaceReadiness(i18n)
+    return translate
   })
 
 if (typeof window !== 'undefined') {

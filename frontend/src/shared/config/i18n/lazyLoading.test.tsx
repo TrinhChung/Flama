@@ -6,6 +6,8 @@ import { createInstance, type i18n } from 'i18next'
 import { initReactI18next, useTranslation } from 'react-i18next'
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 import { createLocaleBackend } from './resourceLoader'
+import { changeLanguageSafely, guardNamespaceReadiness, requireTranslationBundles, TranslationLoadError } from './loadGuard'
+import { TranslationLoadBoundary } from './TranslationLoadBoundary'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -126,5 +128,62 @@ describe('production locale delivery', () => {
     const instance = await initialize(loaders, 'en')
     await instance.loadNamespaces('browse')
     expect(instance.t('browse:card_table.status.new')).toBe('Mới')
+  })
+
+  it('rejects startup readiness when both locale and fallback shell bundles fail', async () => {
+    const loaders = importers()
+    loaders['./locales/en/shell.json'].mockRejectedValue(new Error('offline'))
+    loaders['./locales/vi/shell.json'].mockRejectedValue(new Error('offline'))
+    const instance = await initialize(loaders, 'en')
+    expect(() => requireTranslationBundles(instance, ['common', 'shell'])).toThrow(TranslationLoadError)
+  })
+
+  it('shows a retry state when both route dictionaries fail instead of rendering keys', async () => {
+    const loaders = importers()
+    loaders['./locales/en/browse.json'].mockRejectedValue(new Error('offline'))
+    loaders['./locales/vi/browse.json'].mockRejectedValue(new Error('offline'))
+    const instance = await initialize(loaders, 'en')
+    await instance.loadNamespaces('browse')
+    guardNamespaceReadiness(instance)
+    function FailedPage() {
+      const { t } = useTranslation('browse', { i18n: instance })
+      return <span>{t('card_table.status.new')}</span>
+    }
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await act(async () => root?.render(<TranslationLoadBoundary><Suspense fallback="Loading"><FailedPage /></Suspense></TranslationLoadBoundary>))
+      expect(container.querySelector('[role="alert"]')).toBeTruthy()
+      expect(container.textContent).toContain('Thử lại / Retry')
+      expect(container.textContent).not.toContain('card_table.status.new')
+    } finally { errors.mockRestore() }
+  })
+
+  it('preserves the old language and dictionaries when switching downloads fail', async () => {
+    const loaders = importers()
+    const instance = await initialize(loaders)
+    await instance.loadNamespaces('browse')
+    loaders['./locales/en/browse.json'].mockRejectedValue(new Error('offline'))
+    const changed = vi.fn()
+    instance.on('languageChanged', changed)
+    await expect(changeLanguageSafely(instance, 'en')).rejects.toBeInstanceOf(TranslationLoadError)
+    expect(instance.language).toBe('vi')
+    expect(instance.t('browse:card_table.status.new')).toBe('Mới')
+    expect(changed).not.toHaveBeenCalled()
+  })
+
+  it('retries a failed target dictionary when the connection recovers', async () => {
+    const loaders = importers()
+    const instance = await initialize(loaders)
+    await instance.loadNamespaces('browse')
+    loaders['./locales/en/browse.json'].mockRejectedValueOnce(new Error('offline'))
+    await expect(changeLanguageSafely(instance, 'en')).rejects.toBeInstanceOf(TranslationLoadError)
+    expect(instance.language).toBe('vi')
+    await changeLanguageSafely(instance, 'en')
+    expect(instance.language).toBe('en')
+    expect(instance.t('browse:card_table.status.new')).toBe('New')
+    expect(loaders['./locales/en/browse.json']).toHaveBeenCalledTimes(2)
   })
 })

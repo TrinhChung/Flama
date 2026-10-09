@@ -14,6 +14,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { changeLanguageSafely } from '@/shared/config/i18n/loadGuard'
+import { toast } from 'sonner'
 
 export type LanguageSwitcherProps = {
   /**
@@ -52,7 +54,9 @@ export function LanguageSwitcher({
 
   const handleSelectLanguage = (code: 'vi' | 'en') => {
     if (code !== currentLang) {
-      void i18n.changeLanguage(code)
+      void changeLanguageSafely(i18n, code).catch(() => {
+        toast.error(currentLang === 'vi' ? 'Không tải được ngôn ngữ. Vui lòng thử lại.' : 'Could not load this language. Please try again.')
+      })
     }
   }
 

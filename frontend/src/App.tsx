@@ -9,6 +9,8 @@ import { LandingPage } from './pages/LandingPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import i18n from './shared/config/i18n'
+import { loadRequiredNamespaces } from './shared/config/i18n/loadGuard'
+import { TranslationLoadBoundary } from './shared/config/i18n/TranslationLoadBoundary'
 import {
   MAINTENANCE_PATH,
   subscribeBackendUnavailable,
@@ -184,7 +186,7 @@ const StudyGoalsPage = lazy(() =>
   // Goal option getters use i18n.t directly rather than useTranslation.
   Promise.all([
     import('./features/settings/pages/StudyGoalsPage'),
-    i18n.loadNamespaces('onboarding'),
+    loadRequiredNamespaces(i18n, ['onboarding']),
   ]).then(([module]) => ({
     default: module.StudyGoalsPage,
   })),
@@ -342,6 +344,7 @@ const WalletPage = lazy(() =>
 
 function deferred(element: ReactNode) {
   return (
+    <TranslationLoadBoundary>
     <Suspense
       fallback={
         <div className="flex min-h-80 items-center justify-center">
@@ -352,6 +355,7 @@ function deferred(element: ReactNode) {
     >
       {element}
     </Suspense>
+    </TranslationLoadBoundary>
   )
 }
 
