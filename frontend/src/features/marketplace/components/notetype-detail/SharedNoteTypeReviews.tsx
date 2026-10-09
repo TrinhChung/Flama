@@ -92,7 +92,7 @@ export function SharedNoteTypeReviews({
             <Textarea
               placeholder={t(
                 'notetype_detail.review_placeholder',
-                'Viết nhận xét của bạn về thiết kế loại thẻ này...'
+                'Viết nhận xét của bạn về thiết kế cấu trúc thẻ này...'
               )}
               value={ratingComment}
               onChange={(e) => setRatingComment(e.target.value)}
@@ -149,7 +149,7 @@ export function SharedNoteTypeReviews({
           ) : (
             <EmptyState
               title={t('detail.reviews.empty_reviews_title', 'Chưa có nhận xét')}
-              description={t('notetype_detail.reviews_empty', 'Chưa có đánh giá nào cho loại thẻ này.')}
+              description={t('notetype_detail.reviews_empty', 'Chưa có đánh giá nào cho cấu trúc thẻ này.')}
             />
           )}
         </div>

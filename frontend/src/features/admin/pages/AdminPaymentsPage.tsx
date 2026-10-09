@@ -394,7 +394,7 @@ export function AdminPaymentsPage() {
   })
 
   return (
-    <Page>
+    <Page size="wide">
       <AdminHeader
         title="Quản lý Thanh toán & Đơn hàng"
         description="Tra cứu danh sách giao dịch, đối soát PayOS và cập nhật trạng thái đơn hàng."

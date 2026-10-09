@@ -342,7 +342,7 @@ export function InstalledDecksPage() {
   }
 
   return (
-    <Page className="relative min-h-screen px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+    <Page size="wide" className="relative min-h-screen px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
       <AmbientBackground intensity="subtle" />
       <div data-tour="decks-header">
         <PageHeader

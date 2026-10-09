@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { NoteTypeLivePreview } from '@/features/note-types/components/NoteTypeLivePreview'
+import { CardPreviewPanel } from '@/entities/flashcard'
 import type { AnkiConnectStatus } from '@/lib/ankiConnectClient'
 import type { AnkiModelDetail, PreviewResponse } from './types'
 
@@ -50,6 +50,11 @@ export const AnkiModelCodeViewer: React.FC<AnkiModelCodeViewerProps> = ({
 }) => {
   const { t } = useTranslation('import')
   const activeTemplate = activeModelDetail.templates[selectedTemplateIndex] || activeModelDetail.templates[0]
+  const codeSources = [
+    { tab: 'front', source: activeTemplate?.front || '', empty: t('anki_sync.notetypes_tab.code_viewer.no_front', '/* Không có mã Front HTML */') },
+    { tab: 'back', source: activeTemplate?.back || '', empty: t('anki_sync.notetypes_tab.code_viewer.no_back', '/* Không có mã Back HTML */') },
+    { tab: 'css', source: activeModelDetail.css || '', empty: t('anki_sync.notetypes_tab.code_viewer.no_css', '/* Không có quy tắc CSS tùy chỉnh */') },
+  ] as const
 
   return (
     <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
@@ -89,7 +94,7 @@ export const AnkiModelCodeViewer: React.FC<AnkiModelCodeViewerProps> = ({
         <div className="grid gap-4 lg:grid-cols-12 items-stretch">
           {/* Left Column: Live Card Previewer */}
           <div className="lg:col-span-6 flex flex-col">
-            <NoteTypeLivePreview
+            <CardPreviewPanel
               cardId={`anki-live-preview-${activeModelDetail.name}`}
               side={previewSide}
               onSideChange={onPreviewSideChange}
@@ -161,65 +166,27 @@ export const AnkiModelCodeViewer: React.FC<AnkiModelCodeViewerProps> = ({
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Code Container: Front HTML */}
-                <TabsContent value="front" className="flex-1 mt-0 relative">
-                  <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => onCopyCode(activeTemplate?.front || '', 'front')}
-                      className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
-                    >
-                      {copiedTab === 'front' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
-                      {copiedTab === 'front'
-                        ? t('anki_sync.notetypes_tab.code_viewer.copied', 'Đã chép')
-                        : t('anki_sync.notetypes_tab.code_viewer.copy', 'Sao chép')}
-                    </Button>
-                    <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
-                      {activeTemplate?.front || t('anki_sync.notetypes_tab.code_viewer.no_front', '/* Không có mã Front HTML */')}
-                    </pre>
-                  </div>
-                </TabsContent>
-
-                {/* Code Container: Back HTML */}
-                <TabsContent value="back" className="flex-1 mt-0 relative">
-                  <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => onCopyCode(activeTemplate?.back || '', 'back')}
-                      className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
-                    >
-                      {copiedTab === 'back' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
-                      {copiedTab === 'back'
-                        ? t('anki_sync.notetypes_tab.code_viewer.copied', 'Đã chép')
-                        : t('anki_sync.notetypes_tab.code_viewer.copy', 'Sao chép')}
-                    </Button>
-                    <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
-                      {activeTemplate?.back || t('anki_sync.notetypes_tab.code_viewer.no_back', '/* Không có mã Back HTML */')}
-                    </pre>
-                  </div>
-                </TabsContent>
-
-                {/* Code Container: Shared CSS */}
-                <TabsContent value="css" className="flex-1 mt-0 relative">
-                  <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => onCopyCode(activeModelDetail.css || '', 'css')}
-                      className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
-                    >
-                      {copiedTab === 'css' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
-                      {copiedTab === 'css'
-                        ? t('anki_sync.notetypes_tab.code_viewer.copied', 'Đã chép')
-                        : t('anki_sync.notetypes_tab.code_viewer.copy', 'Sao chép')}
-                    </Button>
-                    <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
-                      {activeModelDetail.css || t('anki_sync.notetypes_tab.code_viewer.no_css', '/* Không có quy tắc CSS tùy chỉnh */')}
-                    </pre>
-                  </div>
-                </TabsContent>
+                {/* Code Containers: Front HTML, Back HTML and shared CSS share one read-only block. */}
+                {codeSources.map(({ tab, source, empty }) => (
+                  <TabsContent key={tab} value={tab} className="flex-1 mt-0 relative">
+                    <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => onCopyCode(source, tab)}
+                        className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
+                      >
+                        {copiedTab === tab ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
+                        {copiedTab === tab
+                          ? t('anki_sync.notetypes_tab.code_viewer.copied', 'Đã chép')
+                          : t('anki_sync.notetypes_tab.code_viewer.copy', 'Sao chép')}
+                      </Button>
+                      <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
+                        {source || empty}
+                      </pre>
+                    </div>
+                  </TabsContent>
+                ))}
 
                 {/* Fields List Tab */}
                 <TabsContent value="fields" className="flex-1 mt-0">

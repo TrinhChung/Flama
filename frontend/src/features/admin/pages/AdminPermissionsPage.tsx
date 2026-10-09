@@ -337,7 +337,7 @@ export function AdminPermissionsPage() {
   }
 
   return (
-    <Page>
+    <Page size="wide">
       {/* Header */}
       <div className="space-y-3">
         <Badge variant="outline" className="gap-1 font-bold border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">

@@ -82,7 +82,7 @@ export function AdminMcpTokensPage() {
   if (summaryQuery.error) return <Page><PageError error={summaryQuery.error} /></Page>
 
   return (
-    <Page className="max-w-7xl mx-auto space-y-6 sm:space-y-8 pb-16 px-3 sm:px-6">
+    <Page size="wide" className="space-y-6 sm:space-y-8 pb-16 px-3 sm:px-6">
       <div className="space-y-3">
         <Badge variant="destructive" className="gap-1 font-semibold">
           <ShieldCheck className="size-3.5" /> Admin

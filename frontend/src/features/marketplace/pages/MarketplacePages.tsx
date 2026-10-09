@@ -405,7 +405,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   }, [marketQuery.isSuccess])
 
   return (
-    <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+    <Page size="wide" className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       <AmbientBackground intensity="subtle" />
 
       {/* Flama Header with Mode Switcher & Publish CTA */}

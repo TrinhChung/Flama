@@ -52,7 +52,7 @@ export function FileImportPage() {
   ]
 
   return (
-    <Page className="w-full max-w-6xl px-4 lg:px-8 py-3 space-y-6">
+    <Page size="wide" className="px-4 lg:px-8 py-3 space-y-6">
       <PageHeader
         title={t('file_import.page_title', { defaultValue: 'Import Note & Thẻ Flashcard' })}
         description={t('file_import.page_desc', { defaultValue: 'Nhập dữ liệu flashcard hàng loạt từ tệp CSV, TSV hoặc định dạng phân tách tùy chỉnh với quy trình rà soát an toàn.' })}

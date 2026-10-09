@@ -74,7 +74,7 @@ export function AdminTtsPage() {
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
   return (
-    <Page>
+    <Page size="wide">
       <AdminHeader
         title="TTS Provider"
         description="Cấu hình provider dùng chung cho tài khoản người học."
