@@ -962,6 +962,14 @@ export function useStudySession(deckId: string | null) {
         const active = sessionRef.current
         if (!active || finalizedSessionRef.current === active.snapshot.session_id) return
         if (usesNoteBatchTransport(active)) {
+          if (active.events.length === 0 && !active.in_flight_batches?.length) {
+            finalizedSessionRef.current = active.snapshot.session_id
+            await removeStudySessionIfMatches(
+              active.scope_key,
+              active.snapshot.session_id,
+            )
+            return
+          }
           await sendNoteBatchOnExit(active, {
             checkOwner: () => {
               if (controller.signal.aborted || !ownedLeaseControllersRef.current.has(controller)) {
@@ -976,7 +984,14 @@ export function useStudySession(deckId: string | null) {
           })
           return
         }
-        if (active.events.length === 0) return
+        if (active.events.length === 0) {
+          finalizedSessionRef.current = active.snapshot.session_id
+          await removeStudySessionIfMatches(
+            active.scope_key,
+            active.snapshot.session_id,
+          )
+          return
+        }
         const prepared = prepareCommit(active, {
           reason: active.status === 'pending_commit'
             ? active.commit_reason ?? undefined
@@ -1297,6 +1312,17 @@ export function useStudySession(deckId: string | null) {
     waitForMutation,
   ])
 
+  const discardSession = useCallback(async () => {
+    const active = sessionRef.current
+    if (!active) return
+    finalizedSessionRef.current = active.snapshot.session_id
+    await removeStudySessionIfMatches(
+      active.scope_key,
+      active.snapshot.session_id,
+    )
+    activateSession(null)
+  }, [activateSession])
+
   // Synchronize card content and template updates in real-time (from Browse, Note Modal, or other tabs)
   useEffect(() => {
     const handleCardSync = (detail: {
@@ -1425,5 +1451,6 @@ export function useStudySession(deckId: string | null) {
     templatePreparation,
     startPreparedSession,
     reloadSession,
+    discardSession,
   }
 }

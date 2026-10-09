@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { useImmersiveLayout } from '@/shared/hooks/useImmersiveLayout'
+import { AmbientBackground } from '@/components/ambient-background'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
@@ -32,7 +32,6 @@ export function StudyPage() {
   const navigate = useNavigate()
   const deckIdRaw = searchParams.get('deck_id')
   const study = useStudySession(deckIdRaw)
-  useImmersiveLayout(!study.awaitingCompositionSelection)
 
   const [revealedCardKey, setRevealedCardKey] = useState<string | null>(null)
   const [decisionState, setDecisionState] = useState<{
@@ -53,6 +52,7 @@ export function StudyPage() {
   } = useStudyNavigationBlocker({
     session: study.session,
     commit: study.commit,
+    discard: study.discardSession,
   })
 
   const card = study.view?.card ?? null
@@ -187,21 +187,25 @@ export function StudyPage() {
 
   if (!deckIdRaw) {
     return (
-      <div className="h-screen h-[100dvh] w-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-        <h2 className="text-2xl font-bold text-foreground">{t('page.session_title')}</h2>
-        <p className="text-muted-foreground max-w-sm">
-          {t('page.deck_required')}
-        </p>
-        <Button asChild>
-          <Link to="/dashboard">{t('page.back_to_dashboard')}</Link>
-        </Button>
+      <div className="relative min-h-[100dvh] w-full flex flex-col items-center justify-center p-6 text-center">
+        <AmbientBackground />
+        <div className="relative z-10 w-full max-w-md rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-6 sm:p-8 shadow-2xl shadow-primary/5 dark:shadow-none space-y-4">
+          <h2 className="text-2xl font-bold text-foreground">{t('page.session_title')}</h2>
+          <p className="text-muted-foreground text-sm">
+            {t('page.deck_required')}
+          </p>
+          <Button asChild className="rounded-xl">
+            <Link to="/dashboard">{t('page.back_to_dashboard')}</Link>
+          </Button>
+        </div>
       </div>
     )
   }
 
   if (study.isLoading) {
     return (
-      <div className="h-screen h-[100dvh] w-full flex items-center justify-center">
+      <div className="relative min-h-[100dvh] w-full flex items-center justify-center">
+        <AmbientBackground />
         <PageLoading label={t('page.creating_session')} />
       </div>
     )
@@ -209,7 +213,8 @@ export function StudyPage() {
 
   if (study.leaseConflict) {
     return (
-      <div className="flex h-screen h-[100dvh] w-full items-center justify-center overflow-y-auto bg-background p-4 text-foreground sm:p-6">
+      <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-y-auto p-4 text-foreground sm:p-6">
+        <AmbientBackground />
         <StudySessionConflict
           deckName={deckName}
           takeoverState={study.takeoverState}
@@ -240,7 +245,8 @@ export function StudyPage() {
 
   if (study.error && !study.session) {
     return (
-      <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-background text-foreground">
+      <div className="relative min-h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 overflow-y-auto text-foreground">
+        <AmbientBackground />
         <StudyScopeErrorCard
           error={study.error}
           deckName={deckName}
@@ -265,7 +271,8 @@ export function StudyPage() {
   // exhaustion is not a prerequisite for acknowledging a completed session.
   if (study.receipt && !isLeaving) {
     return (
-      <div className="min-h-[100dvh] w-full flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 bg-background text-foreground overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+      <div className="relative min-h-[100dvh] w-full flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 text-foreground overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+        <AmbientBackground />
         <StudyCompletionCard
           deckName={deckName}
           deckId={deckIdRaw}

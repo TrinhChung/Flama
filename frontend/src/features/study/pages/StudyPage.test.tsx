@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   undo: vi.fn(),
   commit: vi.fn(),
   reloadSession: vi.fn(),
+  discardSession: vi.fn(),
   prepareDecision: vi.fn(),
   updateCardContent: vi.fn(),
   startPreparedSession: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock('../hooks/useStudySession', () => ({
     undo: mocks.undo,
     commit: mocks.commit,
     reloadSession: mocks.reloadSession,
+    discardSession: mocks.discardSession,
     requestTakeover: mocks.requestTakeover,
     updateCardContent: mocks.updateCardContent,
     startPreparedSession: mocks.startPreparedSession,
@@ -660,6 +662,7 @@ describe('StudyPage exit confirmation and completion card gating', () => {
     })
 
     expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.discardSession).toHaveBeenCalledOnce()
     expect(mocks.blockerState.proceed).toHaveBeenCalledOnce()
   })
 

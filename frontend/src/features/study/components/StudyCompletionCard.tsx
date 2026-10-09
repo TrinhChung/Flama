@@ -161,10 +161,10 @@ export function StudyCompletionCard({
 
   return (
     <div className="w-full max-w-2xl mx-auto py-4 sm:py-6 px-3 sm:px-4 my-auto">
-      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-8 space-y-4 sm:space-y-6 text-center shadow-xs">
+      <div className="rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-5 sm:p-8 space-y-4 sm:space-y-6 text-center shadow-2xl shadow-primary/5 dark:shadow-none">
         {/* Header (Symmetrical & Centered) */}
         <div className="space-y-2 sm:space-y-3">
-          <div className="inline-flex items-center justify-center size-11 sm:size-12 rounded-xl bg-muted border border-border/60 text-foreground mx-auto">
+          <div className="inline-flex items-center justify-center size-11 sm:size-12 rounded-2xl bg-muted/60 border border-border/30 text-foreground mx-auto">
             {isCommitted ? (
               <CheckCircle2 className="size-5 sm:size-6 text-emerald-600 dark:text-emerald-400" />
             ) : (
@@ -173,7 +173,7 @@ export function StudyCompletionCard({
           </div>
 
           <div className="space-y-1">
-            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/60 max-w-full truncate">
+            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/30 max-w-full truncate">
               <span>{deckName || (deckId ? `Deck #${deckId}` : t('page.session_title'))}</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">

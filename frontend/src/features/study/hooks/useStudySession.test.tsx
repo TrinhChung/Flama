@@ -1442,6 +1442,24 @@ describe('useStudySession cross-tab ownership', () => {
     expect(mocks.quarantineSession).not.toHaveBeenCalled()
   })
 
+  it('removes an unstarted session with 0 events on page exit so next visit starts fresh with preparation', async () => {
+    await openReadySession()
+    expect(latest.session?.events).toHaveLength(0)
+
+    await act(async () => { window.dispatchEvent(new Event('pagehide')) })
+    await waitFor(() => expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1'))
+    expect(mocks.mutateKeepalive).not.toHaveBeenCalled()
+  })
+
+  it('discards an active session and removes it from storage', async () => {
+    await openReadySession()
+    expect(latest.session).not.toBeNull()
+
+    await act(async () => { await latest.discardSession() })
+    expect(mocks.removeSessionIfMatches).toHaveBeenCalledWith('user:7:deck:12', 'session-1')
+    expect(latest.session).toBeNull()
+  })
+
   it('pagehide waits for the answer owner and flushes the latest durable state', async () => {
     await openReadySession()
     const pendingSave = deferred<boolean>()

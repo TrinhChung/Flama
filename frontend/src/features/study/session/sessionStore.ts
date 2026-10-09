@@ -463,6 +463,9 @@ export async function removeStudySessionIfMatches(
   key: string,
   sessionId: string,
 ) {
+  if (memoryFallback.get(key)?.snapshot.session_id === sessionId) {
+    memoryFallback.delete(key)
+  }
   const current = await loadStudySession(key)
   if (current?.snapshot.session_id !== sessionId) return
   await removeStudySession(key)

@@ -54,8 +54,8 @@ export function StudySessionConflict({
       aria-labelledby="study-session-conflict-title"
       aria-describedby="study-session-conflict-description study-session-conflict-status"
     >
-      <div className="rounded-2xl border border-amber-200/80 bg-card p-6 text-center shadow-xs space-y-6 dark:border-amber-900/50 sm:p-8">
-        <div className="mx-auto inline-flex size-12 items-center justify-center rounded-xl border border-amber-200 bg-amber-500/10 text-amber-600 dark:border-amber-900/50 dark:text-amber-400">
+      <div className="rounded-3xl border border-amber-200/50 bg-card/90 backdrop-blur-md p-6 text-center shadow-2xl shadow-amber-500/5 space-y-6 dark:border-amber-900/40 sm:p-8">
+        <div className="mx-auto inline-flex size-12 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:border-amber-900/40 dark:text-amber-400">
           <MonitorSmartphone className="size-6" aria-hidden="true" />
         </div>
 

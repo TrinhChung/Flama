@@ -44,10 +44,10 @@ export function StudyModeSelector({
                   type="button"
                   disabled={disabled}
                   onClick={() => onSelectComposition(composition.composition_id)}
-                  className={`rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 disabled:cursor-not-allowed disabled:opacity-60 ${
+                  className={`rounded-xl border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 disabled:cursor-not-allowed disabled:opacity-60 ${
                     isSelected
-                      ? 'border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300'
-                      : 'border-border/80 bg-background text-foreground hover:border-orange-300 hover:bg-orange-500/5 dark:hover:border-orange-800'
+                      ? 'border-orange-500/80 bg-orange-500/10 text-orange-700 shadow-xs dark:text-orange-300'
+                      : 'border-border/40 bg-card/80 text-foreground hover:border-orange-400/60 hover:bg-orange-500/5 hover:shadow-xs dark:hover:border-orange-700/60'
                   }`}
                   aria-pressed={isSelected}
                 >
