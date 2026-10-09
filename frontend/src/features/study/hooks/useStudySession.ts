@@ -219,6 +219,8 @@ export function useStudySession(deckId: string | null) {
   const userId = bootstrapQuery.data?.user?.id ?? null
   const templatePreparation = useStudyTemplatePreparation(deckId)
   const loadTemplatePreparation = templatePreparation.load
+  const templateSelectionFor = templatePreparation.selectionFor
+  const saveTemplateBindings = templatePreparation.saveBindings
   const chosenBindingsRef = useRef<{ scopeKey: string; compositionId: string; inputBindings: Readonly<TemplateBindings> } | null>(null)
   const [session, setSession] = useState<PersistedStudySession | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -505,7 +507,7 @@ export function useStudySession(deckId: string | null) {
           }
           const { compositionId, inputBindings } = prepared.autoSelection
           setSelectedCompositionId(compositionId)
-          chosenBindingsRef.current = { scopeKey: key, compositionId, inputBindings }
+          chosenBindingsRef.current = inputBindings === undefined ? null : { scopeKey: key, compositionId, inputBindings }
           const opened = await openSnapshot(userId, deckId, compositionId, inputBindings)
           if (!isThisLease()) return
           active = createPersistedSession(opened)
@@ -1112,14 +1114,11 @@ export function useStudySession(deckId: string | null) {
     waitForMutation,
   ])
 
-  const startPreparedSession = useCallback(async () => {
-    const controller = leaseControllerRef.current
-    if (!controller || !isCurrentLease(controller) || !hasLeaseRef.current) return
-    const selection = await templatePreparation.submit()
-    if (selection && isCurrentLease(controller) && hasLeaseRef.current) {
-      await selectComposition(selection.compositionId, selection.inputBindings)
-    }
-  }, [hasLeaseRef, isCurrentLease, leaseControllerRef, selectComposition, templatePreparation])
+  // One click in the picker: open with the learner's saved field map, or the
+  // template defaults when none was saved.
+  const startComposition = useCallback(async (compositionId: string) => {
+    await selectComposition(compositionId, templateSelectionFor(compositionId).inputBindings)
+  }, [selectComposition, templateSelectionFor])
 
   useEffect(() => {
     const handlePageHide = (event: PageTransitionEvent) => {
@@ -1259,8 +1258,9 @@ export function useStudySession(deckId: string | null) {
           activateSession(null)
           return
         }
+        const { inputBindings } = prepared.autoSelection
         compositionId = prepared.autoSelection.compositionId
-        chosenBindingsRef.current = { scopeKey: key, compositionId: compositionId!, inputBindings: prepared.autoSelection.inputBindings }
+        chosenBindingsRef.current = inputBindings === undefined ? null : { scopeKey: key, compositionId: compositionId!, inputBindings }
       }
       setSelectedCompositionId(compositionId)
       setAwaitingCompositionSelection(false)
@@ -1296,6 +1296,21 @@ export function useStudySession(deckId: string | null) {
     userId,
     waitForMutation,
   ])
+
+  // Saves the field map of the template being studied, then reopens the lease
+  // with it; reloadSession commits any pending answers first and reports its
+  // own failures through `error`, so callers can close their dialog at once.
+  const applyTemplateBindings = useCallback(async (bindings: TemplateBindings | null) => {
+    const compositionId = sessionRef.current?.snapshot.selected_composition_id ?? selectedCompositionId
+    if (!compositionId || !currentScopeKey) return false
+    const selection = await saveTemplateBindings(compositionId, bindings)
+    if (!selection) return false
+    chosenBindingsRef.current = selection.inputBindings === undefined
+      ? null
+      : { scopeKey: currentScopeKey, compositionId, inputBindings: selection.inputBindings }
+    void reloadSession()
+    return true
+  }, [currentScopeKey, reloadSession, saveTemplateBindings, selectedCompositionId])
 
   // Synchronize card content and template updates in real-time (from Browse, Note Modal, or other tabs)
   useEffect(() => {
@@ -1423,7 +1438,8 @@ export function useStudySession(deckId: string | null) {
     updateTemplateContent,
     selectComposition,
     templatePreparation,
-    startPreparedSession,
+    startComposition,
+    applyTemplateBindings,
     reloadSession,
   }
 }

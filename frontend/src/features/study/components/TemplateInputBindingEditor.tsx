@@ -1,4 +1,7 @@
+import '@/shared/config/i18n'
 import { useId } from 'react'
+import { useTranslation } from 'react-i18next'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import type { TemplateBindings, TemplateInputSpec } from '@/entities/card-template'
 
 export type StudyTemplateFieldDef = {
@@ -14,38 +17,43 @@ export type TemplateInputBindingEditorProps = {
   fieldDefs: StudyTemplateFieldDef[]
   value: TemplateBindings
   onChange: (value: TemplateBindings) => void
+  staleInputs?: string[]
   disabled?: boolean
 }
 
-export function TemplateInputBindingEditor({ inputSchema, fieldDefs, value, onChange, disabled = false }: TemplateInputBindingEditorProps) {
+export function TemplateInputBindingEditor({ inputSchema, fieldDefs, value, onChange, staleInputs = [], disabled = false }: TemplateInputBindingEditorProps) {
+  const { t } = useTranslation('study')
   const id = useId()
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Input chưa ánh xạ sẽ hiển thị rỗng.</p>
+    <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
       {inputSchema.map((input, index) => {
         const candidates = fieldDefs.filter((field) => field.id && field.field_type === input.type)
         const target = value[input.key]
         const valid = Boolean(target && candidates.some((field) => field.id === target))
-        const stale = Boolean(target && !valid)
+        const stale = staleInputs.includes(input.key)
         const hintId = `${id}-${index}-hint`
         return (
-          <div key={input.key} className="space-y-1.5">
-            <label htmlFor={`${id}-${index}`} className="block text-sm font-medium">
-              {input.label || input.key}{input.label && input.label !== input.key ? ` (${input.key})` : ''}
+          <div key={input.key} className="min-w-0 space-y-1">
+            <label htmlFor={`${id}-${index}`} className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-foreground">
+              <span className="truncate" title={input.key}>{input.label || input.key}</span>
+              {input.required ? (
+                <span className="shrink-0 rounded bg-orange-500/10 px-1 py-px text-[10px] font-bold text-orange-600 dark:text-orange-400">
+                  {t('fields.recommended')}
+                </span>
+              ) : null}
+              <span className="ml-auto shrink-0 font-mono text-[10px] font-normal text-muted-foreground">{input.type}</span>
             </label>
-            <select id={`${id}-${index}`} value={valid ? target! : ''} disabled={disabled}
-              aria-describedby={stale || (!valid && input.required) ? hintId : undefined}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+            <NativeSelect id={`${id}-${index}`} size="sm" className="w-full" value={valid ? target! : ''} disabled={disabled}
+              aria-describedby={stale ? hintId : undefined}
               onChange={(event) => onChange({ ...value, [input.key]: event.target.value || null })}>
-              <option value="">Để trống</option>
+              <NativeSelectOption value="">{t('fields.empty_option')}</NativeSelectOption>
               {candidates.map((field, fieldIndex) => (
-                <option key={field.id} value={field.id}>
+                <NativeSelectOption key={field.id} value={field.id}>
                   {field.name}{candidates.filter((other) => other.name === field.name).length > 1 ? ` (${fieldIndex + 1})` : ''}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
-            {stale ? <p id={hintId} role="status" className="text-xs text-amber-700 dark:text-amber-400">Trường đã lưu không còn phù hợp. Hãy chọn lại hoặc để trống.</p>
-              : !valid && input.required ? <p id={hintId} className="text-xs text-muted-foreground">Input được khuyến nghị; bạn vẫn có thể để trống.</p> : null}
+            </NativeSelect>
+            {stale ? <p id={hintId} role="status" className="text-[11px] text-amber-700 dark:text-amber-400">{t('fields.stale')}</p> : null}
           </div>
         )
       })}

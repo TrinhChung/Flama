@@ -313,6 +313,32 @@ function compositionAvailability() {
   }
 }
 
+function twoCompositionAvailability() {
+  const first = snapshot().selected_composition!
+  const second = {
+    ...first,
+    composition_id: 'comp:notetype:type-1:template:template-2',
+    template_id: 'template-2',
+    template_name: 'Back -> Front',
+    is_default: false,
+  }
+  return {
+    first,
+    second,
+    availability: {
+      ...compositionAvailability(),
+      cardinality: 'many',
+      default_composition_id: null,
+      groups: [{ note_type_id: 'type-1', note_type_name: 'Basic', compositions: [first, second] }],
+      compositions: [first, second],
+    },
+  }
+}
+
+function lastOpenBody() {
+  return mocks.mutate.mock.calls.filter(([path]) => path === '/api/study/sessions').at(-1)?.[2]
+}
+
 function receipt(): StudySessionCommitReceipt {
   return {
     schema_version: 'study-commit-receipt.v1',
@@ -511,33 +537,92 @@ afterEach(async () => {
 })
 
 describe('useStudySession cross-tab ownership', () => {
-  it('prompts for a singleton and opens transient complete bindings without a preference write', async () => {
+  it('starts a single-template deck at once with template defaults even when the preset asks first', async () => {
     mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
-    mocks.bootstrap = { data: { user: { id: 7 } } }
-    await renderHarness(); await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
-    expect(mocks.mutate).not.toHaveBeenCalled()
-    await act(async () => latest.templatePreparation.changeBindings({ term: null }))
-    await act(async () => latest.startPreparedSession())
-    expect(mocks.mutate).toHaveBeenCalledWith('/api/study/sessions', 'POST', expect.objectContaining({ input_bindings: { term: null } }))
-    expect(mocks.saveTemplatePreset).not.toHaveBeenCalled(); expect(latest.session?.snapshot.session_id).toBe('session-1')
+    await openReadySession()
+    expect(latest.awaitingCompositionSelection).toBe(false)
+    expect(lastOpenBody()).not.toHaveProperty('input_bindings')
+    expect(mocks.saveTemplatePreset).not.toHaveBeenCalled()
   })
 
-  it('waits for a successful remembered map write and allows retry after preference failure', async () => {
-    mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
+  it('opens a single-template deck with the saved field map', async () => {
+    const choice = snapshot().selected_composition_id!
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [choice], input_bindings: { [choice]: { term: 'field-2' } }, ask_before_study: true, stale_compositions: [] })
+    await openReadySession()
+    expect(lastOpenBody()).toEqual(expect.objectContaining({ composition_id: choice, input_bindings: { term: 'field-2' } }))
+  })
+
+  it('replaces a saved target that no longer fits with the template default instead of blocking study', async () => {
+    const choice = snapshot().selected_composition_id!
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [choice], input_bindings: { [choice]: { term: 'deleted-field' } }, ask_before_study: true, stale_compositions: [] })
+    await openReadySession()
+    expect(lastOpenBody()?.input_bindings).toEqual({ term: 'field-1' })
+  })
+
+  it('still studies with template defaults when the preset request fails', async () => {
+    mocks.templatePreset.mockRejectedValue(new Error('preset unavailable'))
+    await openReadySession()
+    expect(lastOpenBody()).not.toHaveProperty('input_bindings')
+    expect(latest.error).toBeNull()
+  })
+
+  it('asks for one of several templates and starts the clicked one with its saved map', async () => {
+    const { second, availability } = twoCompositionAvailability()
+    mocks.get.mockImplementation((path: string) => path.endsWith('/compositions') ? Promise.resolve(availability) : Promise.resolve({ status: 'open' }))
+    // A remembered "do not ask" choice no longer hides the picker; one click starts.
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [second.composition_id], input_bindings: { [second.composition_id]: { term: 'field-2' } }, ask_before_study: false, stale_compositions: [] })
     mocks.bootstrap = { data: { user: { id: 7 } } }
     await renderHarness(); await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
-    await act(async () => { latest.templatePreparation.setRemember(true); latest.templatePreparation.changeBindings({ term: 'field-2' }); latest.templatePreparation.setAskBeforeStudy(false) })
-    mocks.saveTemplatePreset.mockRejectedValueOnce(new Error('Remember failed'))
-    await act(async () => latest.startPreparedSession())
-    expect(mocks.mutate).not.toHaveBeenCalled(); expect(latest.awaitingCompositionSelection).toBe(true)
-    expect(String(latest.templatePreparation.error)).toContain('Remember failed')
-    const pending = deferred<unknown>(); mocks.saveTemplatePreset.mockReturnValueOnce(pending.promise)
-    let start!: Promise<void>
-    await act(async () => { start = latest.startPreparedSession() })
     expect(mocks.mutate).not.toHaveBeenCalled()
-    pending.resolve({}); await act(async () => start)
-    expect(mocks.saveTemplatePreset).toHaveBeenLastCalledWith('12', { selected_compositions: [snapshot().selected_composition_id!], input_bindings: { [snapshot().selected_composition_id!]: { term: 'field-2' } }, ask_before_study: false })
-    expect(mocks.mutate).toHaveBeenCalledWith('/api/study/sessions', 'POST', expect.objectContaining({ input_bindings: { term: 'field-2' } }))
+    await act(async () => latest.startComposition(second.composition_id))
+    expect(lastOpenBody()).toEqual(expect.objectContaining({ composition_id: second.composition_id, input_bindings: { term: 'field-2' } }))
+    expect(latest.session?.snapshot.session_id).toBe('session-1'); expect(mocks.saveTemplatePreset).not.toHaveBeenCalled()
+  })
+
+  it('saves and resets one template map without dropping the other templates', async () => {
+    const { first, second, availability } = twoCompositionAvailability()
+    mocks.get.mockImplementation((path: string) => path.endsWith('/compositions') ? Promise.resolve(availability) : Promise.resolve({ status: 'open' }))
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [second.composition_id], input_bindings: { [second.composition_id]: { term: 'field-2' } }, ask_before_study: true, stale_compositions: [] })
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness(); await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+    expect(latest.templatePreparation.mappingOf(first.composition_id)).toEqual({ inputBindings: { term: 'field-1' }, staleInputs: [], customized: false })
+    await act(async () => { await latest.templatePreparation.saveBindings(first.composition_id, { term: null }) })
+    expect(mocks.saveTemplatePreset).toHaveBeenLastCalledWith('12', {
+      selected_compositions: [second.composition_id, first.composition_id],
+      input_bindings: { [second.composition_id]: { term: 'field-2' }, [first.composition_id]: { term: null } },
+      ask_before_study: true,
+    })
+    expect(latest.templatePreparation.mappingOf(first.composition_id)?.customized).toBe(true)
+    await act(async () => { await latest.templatePreparation.saveBindings(first.composition_id, null) })
+    expect(mocks.saveTemplatePreset).toHaveBeenLastCalledWith('12', {
+      selected_compositions: [second.composition_id],
+      input_bindings: { [second.composition_id]: { term: 'field-2' } },
+      ask_before_study: true,
+    })
+    await act(async () => latest.startComposition(first.composition_id))
+    expect(lastOpenBody()).not.toHaveProperty('input_bindings')
+  })
+
+  it('applies a new field map to the running session by saving it and reopening the lease', async () => {
+    const choice = snapshot().selected_composition_id!
+    await openReadySession()
+    let applied = false
+    await act(async () => { applied = await latest.applyTemplateBindings({ term: 'field-2' }) })
+    expect(applied).toBe(true)
+    expect(mocks.saveTemplatePreset).toHaveBeenCalledWith('12', { selected_compositions: [choice], input_bindings: { [choice]: { term: 'field-2' } }, ask_before_study: false })
+    await waitFor(() => expect(mocks.mutate.mock.calls.filter(([path]) => path === '/api/study/sessions')).toHaveLength(2))
+    expect(lastOpenBody()?.input_bindings).toEqual({ term: 'field-2' })
+  })
+
+  it('keeps the running session when saving a field map fails', async () => {
+    await openReadySession()
+    mocks.saveTemplatePreset.mockRejectedValueOnce(new Error('Save failed'))
+    let applied = true
+    await act(async () => { applied = await latest.applyTemplateBindings({ term: 'field-2' }) })
+    expect(applied).toBe(false)
+    expect(String(latest.templatePreparation.error)).toContain('Save failed')
+    expect(mocks.mutate.mock.calls.filter(([path]) => path === '/api/study/sessions')).toHaveLength(1)
+    expect(latest.session?.snapshot.session_id).toBe('session-1')
   })
 
   it('bypasses preparation for an existing active frozen lease', async () => {
@@ -546,19 +631,6 @@ describe('useStudySession cross-tab ownership', () => {
     await openReadySession()
     expect(mocks.templatePreset).not.toHaveBeenCalled(); expect(mocks.saveTemplatePreset).not.toHaveBeenCalled()
     expect(mocks.get.mock.calls.some(([path]) => String(path).includes('/compositions'))).toBe(false)
-  })
-
-  it('does not open a lease when ownership is lost during the remembered preference write', async () => {
-    mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
-    mocks.bootstrap = { data: { user: { id: 7 } } }
-    await renderHarness(); await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
-    await act(async () => latest.templatePreparation.setRemember(true))
-    const pending = deferred<unknown>(); mocks.saveTemplatePreset.mockReturnValueOnce(pending.promise)
-    let start!: Promise<void>
-    await act(async () => { start = latest.startPreparedSession() })
-    await act(async () => leaseRecords[0].handlers.onLost?.(new DOMException('Ownership changed', 'AbortError')))
-    pending.resolve({}); await act(async () => start)
-    expect(latest.leaseConflict).toBe(true); expect(mocks.mutate).not.toHaveBeenCalled(); expect(latest.session).toBeNull()
   })
 
   it('keeps a restored pending commit in its existing recovery flow without fetching preferences', async () => {
@@ -663,7 +735,6 @@ describe('useStudySession cross-tab ownership', () => {
         scope: 'deck',
         scope_id: '12',
         composition_id: 'comp:notetype:type-1:template:template-1',
-        input_bindings: { term: 'field-1' },
         accepted_session_schema_versions: [
           'study-session.v4',
           'study-session.v3',
