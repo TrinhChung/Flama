@@ -63,6 +63,8 @@ export type DeckCardType = {
   is_default: boolean
   context_kind?: CardTypeContextKind
   install_id?: string | null
+  application_id?: string
+  study_application_id?: string | null
 }
 
 export type DeckCardTypeGroup = {

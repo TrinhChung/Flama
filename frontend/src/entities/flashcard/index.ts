@@ -1,6 +1,10 @@
 /** Public UI entry. Headless updates and rendering have separate entry points. */
 export { CardRendererFrame } from './ui/CardRendererFrame'
 export { CardDisplay } from './ui/CardDisplay'
+export { CardPreviewPanel } from './ui/CardPreviewPanel'
+export type { CardPreviewPanelProps, CardPreviewTemplateOption } from './ui/CardPreviewPanel'
+export { CardSideToggle } from './ui/CardSideToggle'
+export type { CardSide, CardSideToggleProps } from './ui/CardSideToggle'
 export { MediaFieldPreview, resolveDisplayUrl } from './ui/MediaFieldPreview'
 export type { MediaFieldPreviewProps } from './ui/MediaFieldPreview'
 export type {
