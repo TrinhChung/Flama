@@ -11,6 +11,19 @@
   "or": "hoặc",
   "copy": "Sao chép",
   "copied": "Đã sao chép",
+  "card_preview": {
+    "title": "Xem Trước Trực Tiếp (Live Preview)",
+    "subtitle": "(Hiển thị mô phỏng dữ liệu thẻ mẫu)",
+    "updating": "Đang cập nhật…",
+    "preparing": "Đang chuẩn bị bản xem trước…",
+    "front": "Mặt trước",
+    "back": "Mặt sau",
+    "side_group": "Mặt thẻ đang xem trước",
+    "template_select": "Giao diện thẻ đang xem trước"
+  },
+  "layout": {
+    "resize_panels": "Kéo để thay đổi kích thước"
+  },
   "unsaved": {
     "title": "Thay đổi chưa được lưu",
     "discard": "Bỏ thay đổi và tiếp tục",

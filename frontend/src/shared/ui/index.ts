@@ -57,6 +57,8 @@ export type { ImageUploadDropzoneProps } from "./ImageUploadDropzone"
 // ---------------------------------------------------------------------------
 export { SplitPane, splitPaneHandleVariants } from "./SplitPane"
 export type { SplitPaneProps } from "./SplitPane"
+export { WorkspaceLayout } from "./WorkspaceLayout"
+export type { WorkspaceLayoutProps, WorkspacePane } from "./WorkspaceLayout"
 
 // ---------------------------------------------------------------------------
 // 8. CardFieldsForm (Domain UI Primitive 8)

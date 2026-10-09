@@ -95,6 +95,8 @@ a {
 }
 
 @theme inline {
+  /* Very wide screens (≥1800px): list grids can show an extra column. */
+  --breakpoint-3xl: 112.5rem;
   --font-heading:
     var(--font-sans);
   --font-sans:

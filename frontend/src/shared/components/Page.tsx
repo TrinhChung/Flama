@@ -2,15 +2,38 @@ import type { ReactNode } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
+const PAGE_SIZE_CLASSES = {
+  /** Reading and form pages. */
+  default: 'max-w-7xl',
+  /** Lists and dashboards that benefit from extra columns on large screens. */
+  wide: 'max-w-[120rem]',
+  /** Editors and workspaces that should use the whole content area. */
+  full: 'max-w-none',
+} as const
+
+export type PageSize = keyof typeof PAGE_SIZE_CLASSES
+
+/**
+ * Desktop pages that host a workspace fill the viewport below the 3.5rem app
+ * header, so their last child can take the remaining height with `flex-1`.
+ * Short screens keep a usable minimum (`--page-fill-min`, 48rem by default;
+ * pages with taller headers raise it) and scroll the page instead.
+ */
+const PAGE_FILL_CLASS = 'lg:flex lg:h-[max(calc(100svh-3.5rem),var(--page-fill-min,48rem))] lg:flex-col'
+
 export function Page({
   children,
   className,
+  size = 'default',
+  fill = false,
 }: {
   children: ReactNode
   className?: string
+  size?: PageSize
+  fill?: boolean
 }) {
   return (
-    <div className={cn('mx-auto w-full max-w-7xl space-y-6 px-4 py-6 md:px-6 md:py-8', className)}>
+    <div className={cn('mx-auto w-full space-y-6 px-4 py-6 md:px-6 md:py-8', PAGE_SIZE_CLASSES[size], fill && PAGE_FILL_CLASS, className)}>
       {children}
     </div>
   )
