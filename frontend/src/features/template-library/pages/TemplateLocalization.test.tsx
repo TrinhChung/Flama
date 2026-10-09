@@ -92,11 +92,11 @@ describe('Card Template Ecosystem Localization (vi & en)', () => {
     await flush()
 
     // Assert Vietnamese UI strings
-    expect(container.textContent).toContain('Mẫu thẻ')
+    expect(container.textContent).toContain('Giao diện thẻ')
     expect(container.textContent).toContain('Tạo mẫu mới')
     expect(container.textContent).toContain('Bản nhận')
     expect(container.textContent).toContain('Đã lưu trữ')
-    expect(container.textContent).toContain('Dùng ở 2 loại thẻ · 3 lần gắn')
+    expect(container.textContent).toContain('Dùng ở 2 cấu trúc thẻ · 3 lần gắn')
     expect(container.textContent).toContain('Tất cả')
     expect(container.textContent).toContain('Của tôi')
     expect(container.textContent).toContain('Mẫu độc lập')

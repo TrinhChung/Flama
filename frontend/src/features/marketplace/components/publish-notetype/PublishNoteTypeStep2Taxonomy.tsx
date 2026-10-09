@@ -281,7 +281,7 @@ export function PublishNoteTypeStep2Taxonomy({
 
         <div className="space-y-2">
           <Label htmlFor="nt-category" className="text-xs font-semibold">
-            Danh mục mẫu thẻ
+            Danh mục cấu trúc thẻ
           </Label>
           <NativeSelect
             id="nt-category"

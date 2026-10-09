@@ -10,6 +10,7 @@ import {
   Globe,
   Layers,
   Loader2,
+  Palette,
   Share2,
   Star,
 } from 'lucide-react'
@@ -24,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -121,12 +123,13 @@ export function SharedNoteTypeDetailPage() {
 
   const noteType = noteTypeQuery.data
   const templates = noteType?.templates || []
+  const firstTemplateId = noteType?.templates?.[0]?.id
 
   useEffect(() => {
-    if (templates.length > 0 && !selectedTemplateId) {
-      setSelectedTemplateId(templates[0].id)
+    if (firstTemplateId && !selectedTemplateId) {
+      setSelectedTemplateId(firstTemplateId)
     }
-  }, [templates, selectedTemplateId])
+  }, [firstTemplateId, selectedTemplateId])
 
   // Template Preview Query
   const previewQuery = useQuery({
@@ -505,6 +508,72 @@ export function SharedNoteTypeDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Attached Card Templates Relationship Card */}
+          {templates.length > 0 ? (
+            <Card className="border-border shadow-xs rounded-2xl">
+              <CardHeader className="p-4 sm:p-5 pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Palette className="size-4 text-primary" />
+                    <CardTitle className="text-base font-bold">
+                      {t('notetype_detail.templates_title', { defaultValue: 'Giao diện thẻ đi kèm (Card Templates)' })}
+                    </CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="text-xs font-semibold">
+                    {templates.length} {t('notetype_detail.template_unit', { defaultValue: 'giao diện' })}
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs text-muted-foreground mt-1">
+                  {t('notetype_detail.templates_desc', {
+                    defaultValue: 'Mỗi cấu trúc thẻ có thể chứa một hoặc nhiều giao diện hiển thị (Card Templates) độc lập.',
+                  })}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-5 pt-0">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {templates.map((tmpl) => (
+                    <div
+                      key={tmpl.id}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                        tmpl.id === selectedTemplateId
+                          ? 'border-primary/50 bg-primary/5'
+                          : 'border-border/80 bg-muted/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Layers className="size-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate">{tmpl.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {tmpl.id === selectedTemplateId
+                              ? t('notetype_detail.template_active_preview', { defaultValue: 'Đang xem trước' })
+                              : t('notetype_detail.template_available', { defaultValue: 'Giao diện hiển thị' })}
+                          </p>
+                        </div>
+                      </div>
+                      {tmpl.id !== selectedTemplateId ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] font-semibold text-primary shrink-0"
+                          onClick={() => setSelectedTemplateId(tmpl.id)}
+                        >
+                          {t('notetype_detail.btn_select_preview', { defaultValue: 'Xem' })}
+                        </Button>
+                      ) : (
+                        <Badge variant="default" className="text-[10px] px-2 py-0.5">
+                          {t('notetype_detail.badge_previewing', { defaultValue: 'Đang xem' })}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {/* Reviews Card */}
           <SharedNoteTypeReviews

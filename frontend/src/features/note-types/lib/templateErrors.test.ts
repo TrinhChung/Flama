@@ -6,7 +6,7 @@ describe('templateErrorMessage', () => {
   it('xử lý ApiError mã SHARED_SCHEMA_VERSIONING_REQUIRED', () => {
     const error = new ApiError('schema error', 409, 'SHARED_SCHEMA_VERSIONING_REQUIRED')
     expect(templateErrorMessage(error)).toBe(
-      'Template này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
+      'Giao diện thẻ này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
     )
   })
 
@@ -17,12 +17,12 @@ describe('templateErrorMessage', () => {
 
   it('xử lý ApiError Cannot delete default template.', () => {
     const error = new ApiError('Cannot delete default template.', 409, 'VALIDATION_ERROR')
-    expect(templateErrorMessage(error)).toBe('Không thể xóa template mặc định.')
+    expect(templateErrorMessage(error)).toBe('Không thể xóa giao diện thẻ mặc định.')
   })
 
   it('xử lý ApiError A note type requires at least one template.', () => {
     const error = new ApiError('A note type requires at least one template.', 409, 'VALIDATION_ERROR')
-    expect(templateErrorMessage(error)).toBe('Loại thẻ cần ít nhất một template.')
+    expect(templateErrorMessage(error)).toBe('Cấu trúc thẻ cần ít nhất một giao diện thẻ.')
   })
 
   it('xử lý ApiError thông thường giữ nguyên message', () => {

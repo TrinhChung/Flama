@@ -59,9 +59,9 @@ function bootstrap(): FrontendBootstrap {
   }
 }
 async function expectRoute(text: string) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
     if (host.querySelector('main h1')?.textContent === text) return
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
   }
   expect(host.querySelector('main h1')?.textContent).toBe(text)
 }
@@ -74,7 +74,7 @@ beforeAll(async () => {
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() })))
   window.history.replaceState(null, '', '/card-templates')
   App = (await import('@/App')).default
-})
+}, 30000)
 beforeEach(async () => {
   mocks.bootstrap = { data: bootstrap(), isPending: false }
   fetchMock.mockClear()

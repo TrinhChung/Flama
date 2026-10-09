@@ -58,7 +58,7 @@ This project completes the bilingual internationalization (i18n) across all rema
 | 3 | Card Template Ecosystem Localization | Localize all components in `features/template-library/`, `features/template-versions/`, `features/template-distribution/` | M1 | DONE | worker_o4_m3: 10 components localized, new TemplateLocalization.test.tsx added (18 test files/233 tests pass, typecheck 0 errors) |
 | 4 | Audio, Guide & Onboarding Localization | Localize all components in `features/audio/`, `features/guide/`, `features/onboarding/`, resolve Settings data leak | M1 | DONE | worker_o4_m4: 17 components localized, reactive getters for constants.ts, new guide.test.tsx added (6 test files/36 tests pass, typecheck 0 errors) |
 | 5 | E2E Integration, Typecheck & Production Build | Run full Vitest test suites, full TypeScript typecheck, and Vite production build | M2, M3, M4 | DONE | worker_o4_m5: TEST_READY.md published, 185 tests passed across Tiers 1-4, typecheck 0 errors, Vite production build succeeded in 4.29s |
-| 6 | Independent Review, Challenge & Forensic Audit | Independent verification by 2 Reviewers, 2 Challengers, and 1 Forensic Auditor | M5 | IN_PROGRESS | reviewers, challengers, auditor |
+| 6 | Independent Review, Challenge & Forensic Audit | Independent verification by 2 Reviewers, 2 Challengers, and 1 Forensic Auditor | M5 | DONE | Forensic Auditor CLEAN, Reviewer 1 APPROVE; Remediation Worker resolved all review items (Yomitan key collision, Onboarding modal/hero/constants, Audio page/gate, Guide dropdown/explorer); all test suites pass, typecheck 0 errors, build 0 errors |
 
 ---
 

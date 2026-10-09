@@ -11,6 +11,12 @@
   "or": "hoặc",
   "copy": "Sao chép",
   "copied": "Đã sao chép",
+  "unsaved": {
+    "title": "Thay đổi chưa được lưu",
+    "discard": "Bỏ thay đổi và tiếp tục",
+    "stay": "Tiếp tục chỉnh sửa",
+    "save_continue": "Lưu và tiếp tục"
+  },
   "language": {
     "vi": "Tiếng Việt",
     "en": "English",

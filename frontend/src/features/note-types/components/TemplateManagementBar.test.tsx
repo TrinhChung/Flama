@@ -126,7 +126,7 @@ describe('TemplateManagementBar', () => {
     ) as HTMLButtonElement
     expect(deleteBtn).toBeDefined()
     expect(deleteBtn.disabled).toBe(true)
-    expect(deleteBtn.getAttribute('title')).toBe('Không thể xóa template mặc định.')
+    expect(deleteBtn.getAttribute('title')).toBe('Không thể xóa giao diện thẻ mặc định.')
   })
 
   it('xóa bị khóa khi NoteType chỉ có 1 template duy nhất', async () => {
@@ -149,7 +149,7 @@ describe('TemplateManagementBar', () => {
     ) as HTMLButtonElement
     expect(deleteBtn).toBeDefined()
     expect(deleteBtn.disabled).toBe(true)
-    expect(deleteBtn.getAttribute('title')).toBe('Loại thẻ cần ít nhất một template.')
+    expect(deleteBtn.getAttribute('title')).toBe('Cấu trúc thẻ cần ít nhất một giao diện thẻ.')
   })
 
   it('đổi tên rỗng hiện thông báo lỗi và không gọi API', async () => {
@@ -307,7 +307,7 @@ describe('TemplateManagementBar', () => {
 
     expect(toast.error).toHaveBeenCalledWith('Không thể đổi tên template', {
       description:
-        'Template này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
+        'Giao diện thẻ này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
     })
     expect(document.querySelector('#template-name-input')).not.toBeNull()
   })
@@ -473,7 +473,7 @@ describe('TemplateManagementBar', () => {
     expect(deleteNoteTypeTemplate).toHaveBeenCalledWith('nt-1', 't-2')
     expect(toast.error).toHaveBeenCalledWith('Không thể xóa template', {
       description:
-        'Template này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
+        'Giao diện thẻ này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
     })
     expect(onDeleted).not.toHaveBeenCalled()
     // ConfirmDialog stays open
@@ -504,7 +504,7 @@ describe('TemplateManagementBar', () => {
     ) as HTMLButtonElement
     expect(deleteBtn).toBeDefined()
     expect(deleteBtn.disabled).toBe(true)
-    expect(deleteBtn.getAttribute('title')).toBe('Không thể xóa template mặc định.')
+    expect(deleteBtn.getAttribute('title')).toBe('Không thể xóa giao diện thẻ mặc định.')
   })
 
   it('không mở dialog và không gọi API khi noteTypeId rỗng hoặc chỉ có khoảng trắng', async () => {

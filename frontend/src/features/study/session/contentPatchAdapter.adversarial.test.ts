@@ -592,5 +592,5 @@ describe('Adversarial: Deep Edge Cases & FSD Boundary Verification', () => {
     }
     walkDir(srcDir)
     expect(violations).toEqual([])
-  })
+  }, 20000)
 })

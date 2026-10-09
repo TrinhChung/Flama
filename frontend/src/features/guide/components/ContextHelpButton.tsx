@@ -39,7 +39,7 @@ export function ContextHelpButton({
   guidePath,
   guideTitle,
   troubleshootPath,
-  troubleshootTitle = 'Khắc phục sự cố thường gặp',
+  troubleshootTitle,
   label,
   tooltip,
   variant = 'outline',
@@ -50,6 +50,7 @@ export function ContextHelpButton({
   const { t } = useTranslation('guide')
   const resolvedLabel = label ?? t('context_help.default_label')
   const resolvedGuideTitle = guideTitle ?? t('context_help.default_title')
+  const resolvedTroubleshootTitle = troubleshootTitle ?? t('context_help.default_troubleshoot_title')
   const resolvedTooltip = tooltip ?? resolvedGuideTitle
   const IconComponent = icon || HelpCircle
 
@@ -124,7 +125,7 @@ export function ContextHelpButton({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 p-1.5 rounded-xl shadow-lg border-border/80">
         <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">
-          Hỗ trợ & Hướng dẫn
+          {t('context_help.dropdown_section_title')}
         </DropdownMenuLabel>
         <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary">
           <Link to={guidePath} className="flex items-start gap-2.5 w-full">
@@ -133,7 +134,7 @@ export function ContextHelpButton({
             </div>
             <div className="min-w-0">
               <div className="text-xs font-semibold text-foreground">{resolvedGuideTitle}</div>
-              <div className="text-[11px] text-muted-foreground line-clamp-1">Quy trình & mẹo học chuẩn</div>
+              <div className="text-[11px] text-muted-foreground line-clamp-1">{t('context_help.standard_process_tip')}</div>
             </div>
           </Link>
         </DropdownMenuItem>
@@ -146,8 +147,8 @@ export function ContextHelpButton({
               <AlertTriangle className="size-3.5" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-foreground">{troubleshootTitle}</div>
-              <div className="text-[11px] text-muted-foreground line-clamp-1">Khắc phục sự cố nhanh</div>
+              <div className="text-xs font-semibold text-foreground">{resolvedTroubleshootTitle}</div>
+              <div className="text-[11px] text-muted-foreground line-clamp-1">{t('context_help.quick_troubleshoot_tip')}</div>
             </div>
           </Link>
         </DropdownMenuItem>

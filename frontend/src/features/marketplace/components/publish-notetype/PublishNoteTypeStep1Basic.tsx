@@ -81,7 +81,7 @@ export function PublishNoteTypeStep1Basic({
       {isSelectedInstalledCopy && (
         <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{t('publish_notetype.installed_warning', { defaultValue: 'Note Type cài từ Marketplace không thể chia sẻ lại' })}</span>
+          <span>{t('publish_notetype.installed_warning', { defaultValue: 'Cấu trúc thẻ cài từ Chợ không thể chia sẻ lại' })}</span>
         </div>
       )}
 
@@ -89,12 +89,12 @@ export function PublishNoteTypeStep1Basic({
         <div className="p-3.5 rounded-xl border border-primary/30 bg-primary/10 text-foreground text-xs flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-primary shrink-0" />
-            <span>{t('publish_notetype.already_published_warning', { defaultValue: 'NoteType này đã được xuất bản trên Marketplace' })}</span>
+            <span>{t('publish_notetype.already_published_warning', { defaultValue: 'Cấu trúc thẻ này đã được xuất bản lên Chợ' })}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button size="sm" variant="outline" asChild className="h-7 text-xs rounded-lg">
               <Link to={`/marketplace/note-types/${sourceNoteTypeId}`}>
-                {t('publish_notetype.btn_view_existing', { defaultValue: 'Xem mẫu thẻ trên Marketplace' })}
+                {t('publish_notetype.btn_view_existing', { defaultValue: 'Xem cấu trúc thẻ trên Chợ' })}
               </Link>
             </Button>
             <Button size="sm" asChild className="h-7 text-xs rounded-lg">
@@ -110,7 +110,7 @@ export function PublishNoteTypeStep1Basic({
       <div className="space-y-2">
         <Label htmlFor="nt-select" className="text-xs font-semibold flex items-center justify-between">
           <span>
-            {t('publish_notetype.select_notetype_label', { defaultValue: 'Chọn NoteType nguồn' })}{' '}
+            {t('publish_notetype.select_notetype_label', { defaultValue: 'Chọn Cấu trúc thẻ nguồn' })}{' '}
             <span className="text-destructive">*</span>
           </span>
           {selectedNoteType?.field_count !== undefined && (
@@ -158,11 +158,11 @@ export function PublishNoteTypeStep1Basic({
             {templates.length > 0 ? (
               templates.map((tItem, i) => (
                 <Badge key={i} variant="outline" className="text-[11px] bg-background border-primary/30 text-primary font-semibold">
-                  Thẻ: {tItem.name}
+                  Giao diện: {tItem.name}
                 </Badge>
               ))
             ) : (
-              <span className="text-muted-foreground">Không có mẫu mặt thẻ</span>
+              <span className="text-muted-foreground">Không có giao diện thẻ</span>
             )}
           </div>
         </div>
@@ -175,7 +175,7 @@ export function PublishNoteTypeStep1Basic({
         </Label>
         <Input
           id="nt-title"
-          placeholder="Ví dụ: Mẫu thẻ Kanji đa tầng có Furigana & Audio, Thẻ Code Syntax Highlight..."
+          placeholder="Ví dụ: Cấu trúc thẻ Kanji đa tầng có Furigana & Audio, Cấu trúc thẻ Code Syntax Highlight..."
           value={title}
           onChange={(e) => {
             setTitle(e.target.value)
@@ -195,7 +195,7 @@ export function PublishNoteTypeStep1Basic({
         </Label>
         <Input
           id="nt-preview"
-          placeholder="1 dòng tóm tắt thiết kế mẫu thẻ để người học xem nhanh trên danh sách"
+          placeholder="1 dòng tóm tắt thiết kế cấu trúc thẻ để người học xem nhanh trên danh sách"
           value={previewText}
           onChange={(e) => {
             setPreviewText(e.target.value)
@@ -215,7 +215,7 @@ export function PublishNoteTypeStep1Basic({
       {/* Description */}
       <div className="space-y-2">
         <Label htmlFor="nt-desc" className="text-xs font-semibold flex items-center justify-between">
-          <span>{t('publish_deck.step1.desc_label', { defaultValue: 'Mô tả chi tiết mẫu thẻ' })} <span className="text-destructive">*</span></span>
+          <span>{t('publish_deck.step1.desc_label', { defaultValue: 'Mô tả chi tiết cấu trúc thẻ' })} <span className="text-destructive">*</span></span>
         </Label>
         <Textarea
           id="nt-desc"

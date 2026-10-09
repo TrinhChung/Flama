@@ -54,9 +54,11 @@ interface MarketplaceFilterBarProps {
   category: string
   setCategory: (val: string) => void
   allCategories: string[]
+  mode?: 'decks' | 'note-types'
 }
 
 export function MarketplaceFilterBar({
+  mode = 'decks',
   queryText,
   setQueryText,
   searchInputRef,
@@ -103,7 +105,11 @@ export function MarketplaceFilterBar({
               ref={searchInputRef}
               id="marketplace-search"
               className="pl-9 pr-14 text-xs sm:text-sm h-10 rounded-lg bg-background border-border/80 focus-visible:ring-2 focus-visible:ring-primary/30"
-              placeholder={t('search_filter.placeholder_decks', { defaultValue: 'Tìm bộ thẻ, từ vựng, JLPT, tác giả…' })}
+              placeholder={
+                mode === 'note-types'
+                  ? t('search_filter.placeholder_notetypes', { defaultValue: 'Tìm kiếm theo tên cấu trúc thẻ, chủ đề, tác giả...' })
+                  : t('search_filter.placeholder_decks', { defaultValue: 'Tìm bộ thẻ, từ vựng, JLPT, tác giả…' })
+              }
               value={queryText}
               onChange={(event) => setQueryText(event.currentTarget.value)}
             />

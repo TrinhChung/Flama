@@ -68,7 +68,7 @@ export function PublishNoteTypeStep3Goals({
               <span className="text-destructive">*</span>
             </Label>
             <p className="text-[11px] text-muted-foreground">
-              Chọn các mục tiêu mẫu thẻ này hỗ trợ tốt nhất
+              Chọn các mục tiêu cấu trúc thẻ này hỗ trợ tốt nhất
             </p>
           </div>
           <Badge variant="secondary" className="text-[10px] font-mono shrink-0">

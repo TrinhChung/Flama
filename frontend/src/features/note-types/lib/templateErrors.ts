@@ -7,9 +7,9 @@ export function templateErrorMessage(error: unknown): string {
       return i18next.isInitialized
         ? i18next.t('note_types:errors.shared_schema_versioning', {
             defaultValue:
-              'Template này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
+              'Giao diện thẻ này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.',
           })
-        : 'Template này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.'
+        : 'Giao diện thẻ này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.'
     }
     if (error.code === 'TEMPLATE_COMPILE_ERROR') {
       return i18next.isInitialized
@@ -22,16 +22,16 @@ export function templateErrorMessage(error: unknown): string {
     if (error.message === 'Cannot delete default template.') {
       return i18next.isInitialized
         ? i18next.t('note_types:errors.cannot_delete_default', {
-            defaultValue: 'Không thể xóa template mặc định.',
+            defaultValue: 'Không thể xóa giao diện thẻ mặc định.',
           })
-        : 'Không thể xóa template mặc định.'
+        : 'Không thể xóa giao diện thẻ mặc định.'
     }
     if (error.message === 'A note type requires at least one template.') {
       return i18next.isInitialized
         ? i18next.t('note_types:errors.requires_at_least_one', {
-            defaultValue: 'Loại thẻ cần ít nhất một template.',
+            defaultValue: 'Cấu trúc thẻ cần ít nhất một giao diện thẻ.',
           })
-        : 'Loại thẻ cần ít nhất một template.'
+        : 'Cấu trúc thẻ cần ít nhất một giao diện thẻ.'
     }
     return (
       error.message?.trim() ||

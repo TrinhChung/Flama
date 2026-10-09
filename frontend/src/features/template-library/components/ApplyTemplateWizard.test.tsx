@@ -33,10 +33,6 @@ const flush = async () => { await act(async () => { await new Promise((resolve) 
 const button = (text: string) => Array.from(document.querySelectorAll('button')).find((item) => item.textContent === text)!
 const input = (labelText: string) => document.getElementById(Array.from(document.querySelectorAll('label')).find((label) => label.textContent === labelText)!.htmlFor) as HTMLInputElement
 const select = async (element: HTMLSelectElement, value: string) => { await act(async () => { element.value = value; element.dispatchEvent(new Event('change', { bubbles: true })) }); await flush() }
-const setInput = async (element: HTMLInputElement, value: string) => { await act(async () => {
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(element, value)
-  element.dispatchEvent(new Event('input', { bubbles: true }))
-}) }
 
 describe('ApplyTemplateWizard', () => {
   let root: Root
@@ -101,7 +97,10 @@ describe('ApplyTemplateWizard', () => {
     expect(document.body.textContent).toContain('Ánh xạ trường')
     expect(document.body.textContent).toContain('Bản cài từ marketplace')
     expect(document.body.textContent).toContain('vẫn có thể sử dụng')
-    const mapping = document.querySelectorAll('select')[1]
+    expect(document.body.textContent).not.toContain('Chọn loại thẻ')
+    expect(document.body.textContent).not.toContain('Mã lần gắn')
+    expect(button('Quay lại')).toBeUndefined()
+    const mapping = document.querySelectorAll('select')[0]
     expect(mapping.value).toBe('')
     expect(mapping.querySelector<HTMLOptionElement>('option[value="installed-image"]')!.disabled).toBe(true)
     expect(button('Gắn mẫu').disabled).toBe(false)
@@ -110,7 +109,9 @@ describe('ApplyTemplateWizard', () => {
     expect(JSON.parse(String(init.body)).input_bindings).toEqual({ Word: null, word: null })
   })
   it('clears previous NoteType IDs when changing selection and blocks incompatible selections', async () => {
-    props.initialNoteTypeId = 'nt/owned'; await render()
+    await render()
+    await select(document.querySelector('select')!, 'nt/owned')
+    await act(async () => button('Tiếp tục').click())
     await select(document.querySelector('select')!, 'nt/installed')
     expect(Array.from(document.querySelectorAll('select')).slice(1).map((item) => item.value)).toEqual(['', ''])
     await select(document.querySelectorAll('select')[1], 'installed-image')
@@ -118,20 +119,21 @@ describe('ApplyTemplateWizard', () => {
     expect(document.body.textContent).toContain('Kiểu trường không phù hợp.')
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0)
   })
-  it('keeps mapping after conflict and permits another occurrence', async () => {
+  it('keeps mapping after conflict and offers the existing server application without creating another occurrence', async () => {
     props.initialNoteTypeId = 'nt/owned'
     post = () => json({ error: 'APPLICATION_EXISTS', message: 'Conflict' }, 409)
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => init?.method === 'POST'
+      ? post(JSON.parse(String(init.body))) : String(url).includes('template-applications')
+        ? json({ schema_version: 'template-applications.v2', items: [application({ template_id: template.id, display_name: 'Existing use', occurrence_key: 'compat', input_bindings: {} })] })
+        : json(noteTypes))
     await render()
     await act(async () => button('Gắn mẫu').click()); await flush()
     expect(document.body.textContent).toContain('Lần gắn này đã tồn tại.')
-    expect(document.querySelectorAll('select')[1].value).toBe('owned-text')
+    expect(document.querySelectorAll('select')[0].value).toBe('owned-text')
     expect(props.onOpenChange).not.toHaveBeenCalled()
-    await setInput(input('Mã lần gắn'), ' listening ')
-    post = (body) => json(application(body), 201)
-    await act(async () => button('Gắn mẫu').click()); await flush()
-    expect(props.onOpenChange).toHaveBeenCalledWith(false)
-    const [, init] = fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST').at(-1)!
-    expect(JSON.parse(String(init.body)).occurrence_key).toBe('listening')
+    expect(document.querySelector('a[href="/flashcards/note-types/nt%2Fowned/templates/application-1"]')?.textContent).toContain('Mở lần dùng hiện có')
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+    expect(document.body.textContent).not.toContain('Mã lần gắn')
   })
   it('shows field-specific server scope errors without discarding mapping', async () => {
     props.initialNoteTypeId = 'nt/owned'
@@ -139,8 +141,8 @@ describe('ApplyTemplateWizard', () => {
     await render()
     await act(async () => button('Gắn mẫu').click()); await flush()
     expect(document.body.textContent).toContain('Field was removed')
-    expect(document.querySelectorAll('select')[1].value).toBe('owned-text')
-    expect(document.querySelectorAll('select')[1].getAttribute('aria-invalid')).toBe('true')
+    expect(document.querySelectorAll('select')[0].value).toBe('owned-text')
+    expect(document.querySelectorAll('select')[0].getAttribute('aria-invalid')).toBe('true')
   })
   it('resets on reopen and ignores a late response for a previous template', async () => {
     let resolvePost!: (response: Response) => void
@@ -150,17 +152,23 @@ describe('ApplyTemplateWizard', () => {
     await act(async () => button('Gắn mẫu').click())
     props = { ...props, open: false }; await render()
     props = { ...props, open: true, template: { ...template, id: 'other', name: 'Other' } }; await render()
-    expect(input('Tên hiển thị').value).toBe('Other')
+    expect(input('Tên lần dùng').value).toBe('Other')
     expect(button('Gắn mẫu').disabled).toBe(false)
     await act(async () => resolvePost(json(application(submitted), 201))); await flush()
     expect(props.onOpenChange).not.toHaveBeenCalled()
     expect(toast.success).not.toHaveBeenCalled()
-    expect(input('Tên hiển thị').value).toBe('Other')
+    expect(input('Tên lần dùng').value).toBe('Other')
   })
-  it('keeps invalid initial ID at selection and blocks archived templates', async () => {
-    props.initialNoteTypeId = 'foreign'; props.template = { ...template, archived_at: '2026-10-08' }
+  it('blocks an unavailable fixed Note Type without offering another context', async () => {
+    props.initialNoteTypeId = 'foreign'
     await render()
-    expect(document.body.textContent).toContain('Chọn loại thẻ')
+    expect(document.body.textContent).toContain('Note Type này không khả dụng.')
+    expect(document.querySelector('select')).toBeNull()
+    expect(button('Gắn mẫu').disabled).toBe(true)
+  })
+  it('blocks archived templates', async () => {
+    props.template = { ...template, archived_at: '2026-10-08' }
+    await render()
     await select(document.querySelector('select')!, 'nt/owned')
     await act(async () => button('Tiếp tục').click())
     expect(button('Gắn mẫu').disabled).toBe(true)
@@ -176,12 +184,39 @@ describe('ApplyTemplateWizard', () => {
     fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => init?.method === 'POST'
       ? post(JSON.parse(String(init.body))) : json(specialNoteTypes))
     await render()
-    expect(Array.from(document.querySelectorAll('select')).slice(1).map((select) => select.value)).toEqual(['field-0', 'field-1', 'field-2'])
+    expect(Array.from(document.querySelectorAll('select')).map((select) => select.value)).toEqual(['field-0', 'field-1', 'field-2'])
     expect(button('Gắn mẫu').disabled).toBe(false)
     await act(async () => button('Gắn mẫu').click()); await flush()
     const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === 'POST')!
     const bindings = JSON.parse(String(init.body)).input_bindings
     expect(Object.keys(bindings)).toEqual(keys)
     expect(bindings).toEqual(Object.fromEntries(keys.map((key, index) => [key, `field-${index}`])))
+  })
+  it('accepts an explicit generated occurrence without exposing technical input controls', async () => {
+    props.initialNoteTypeId = 'nt/owned'
+    props.initialOccurrenceKey = 'generated-occurrence'
+    await render()
+    expect(document.body.textContent).not.toContain('Mã lần gắn')
+    await act(async () => button('Gắn mẫu').click()); await flush()
+    const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === 'POST')!
+    expect(JSON.parse(String(init.body)).occurrence_key).toBe('generated-occurrence')
+  })
+  it('prevents dismissing or submitting again while the attachment is pending', async () => {
+    let resolvePost!: (response: Response) => void
+    let submitted!: Record<string, unknown>
+    props.initialNoteTypeId = 'nt/owned'
+    post = (body) => { submitted = body; return new Promise((resolve) => { resolvePost = resolve }) }
+    await render()
+    await act(async () => button('Gắn mẫu').click())
+    expect(button('Hủy').disabled).toBe(true)
+    expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull()
+    await act(async () => {
+      document.querySelector('[role="dialog"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    expect(props.onOpenChange).not.toHaveBeenCalled()
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+    await act(async () => resolvePost(json(application(submitted), 201))); await flush()
+    expect(props.onApplied).toHaveBeenCalledOnce()
   })
 })

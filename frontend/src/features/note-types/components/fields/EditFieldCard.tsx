@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, LoaderCircle, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -22,10 +23,14 @@ interface EditFieldCardProps {
   onDelete: () => void
   isUpdating: boolean
   isDeleting: boolean
+  isDirty?: boolean
+  error?: string | null
+  preview?: ReactNode
+  usage?: ReactNode
 }
 
 export function EditFieldCard({
-  selectedField: _selectedField,
+  selectedField,
   editName,
   onEditNameChange,
   editType,
@@ -38,6 +43,10 @@ export function EditFieldCard({
   onDelete,
   isUpdating,
   isDeleting,
+  isDirty,
+  error,
+  preview,
+  usage,
 }: EditFieldCardProps) {
   const { t } = useTranslation('note_types')
 
@@ -45,11 +54,12 @@ export function EditFieldCard({
     <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
       <CardHeader className="p-4 sm:p-5 pb-2">
         <CardTitle className="text-sm font-bold">
-          {t('fields.edit_card.title')}
+          {selectedField.name}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 sm:p-5 pt-0">
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4" aria-busy={isUpdating || isDeleting}>
+          <fieldset disabled={isUpdating || isDeleting} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="edit-field-name">{t('fields.edit_card.field_name')}</Label>
             <Input
@@ -57,6 +67,7 @@ export function EditFieldCard({
               value={editName}
               onChange={(e) => onEditNameChange(e.target.value)}
               className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
+              aria-invalid={Boolean(error)} aria-describedby={error ? 'edit-field-error' : undefined}
             />
           </div>
 
@@ -71,7 +82,7 @@ export function EditFieldCard({
             >
               {FIELD_TYPES.map((type) => (
                 <NativeSelectOption key={type} value={type}>
-                  {type}
+                  {t(`setup.types.${type}.label`)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -112,12 +123,16 @@ export function EditFieldCard({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t">
+          {preview}
+          {usage}
+          {error && <p id="edit-field-error" role="alert" className="text-xs text-destructive">{error}</p>}
+
+          <div className="flex flex-wrap gap-2 items-center justify-between pt-4 border-t">
             <Button
               type="button"
               variant="destructive"
               size="sm"
-              disabled={isDeleting || editIdentity}
+              disabled={isDeleting || editIdentity || selectedField.identity_role === 'primary'}
               onClick={onDelete}
               className="h-9 sm:h-10 px-4 text-xs sm:text-sm font-bold rounded-xl"
             >
@@ -134,7 +149,7 @@ export function EditFieldCard({
             <Button
               type="submit"
               size="sm"
-              disabled={isUpdating}
+              disabled={isUpdating || !isDirty}
               className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm rounded-xl shadow-xs"
             >
               {isUpdating ? (
@@ -142,11 +157,12 @@ export function EditFieldCard({
               ) : (
                 <>
                   <Check className="size-4 mr-1" />
-                  {t('fields.edit_card.save_btn')}
+                  {t('setup.save_field')}
                 </>
               )}
             </Button>
           </div>
+          </fieldset>
         </form>
       </CardContent>
     </Card>

@@ -181,9 +181,7 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
           <AlertCircle className="size-4" />
           <AlertTitle className="font-bold">{t('gate.disconnected_title')}</AlertTitle>
           <AlertDescription className="text-xs leading-relaxed space-y-2 mt-1">
-            <p>
-              Vui lòng khởi chạy phần mềm <strong>Flama Audio</strong> trên máy tính của bạn (cổng 4791). Sau khi mở app, bấm nút &ldquo;Kiểm tra lại&rdquo;.
-            </p>
+            <p>{t('gate.offline_instruction')}</p>
           </AlertDescription>
         </Alert>
       )}
@@ -193,16 +191,13 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
         <Alert className="mt-4 border-amber-500/30 bg-amber-500/5 rounded-xl">
           <Cpu className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <AlertTitle className="font-bold text-amber-900 dark:text-amber-200">
-            Chờ xác nhận ghép nối thiết bị
+            {t('gate.pairing_title')}
           </AlertTitle>
           <AlertDescription className="text-xs leading-relaxed mt-1.5 space-y-2">
-            <p>
-              Mở cửa sổ ứng dụng <strong>Flama Audio Desktop</strong> và bấm nút{' '}
-              <strong className="text-amber-700 dark:text-amber-300">Đồng ý ghép nối (Pair)</strong> cho mã xác nhận bên dưới:
-            </p>
+            <p>{t('gate.pairing_instruction')}</p>
             <div className="flex items-center gap-3">
               <code className="bg-amber-500/10 text-amber-800 dark:text-amber-300 px-3 py-1.5 rounded-lg font-mono text-sm font-bold border border-amber-500/20 select-all">
-                {pairingChallengeId || 'Đang tạo mã ghép nối...'}
+                {pairingChallengeId || t('gate.generating_challenge')}
               </code>
               <Button
                 variant="ghost"
@@ -210,7 +205,7 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
                 onClick={handleStartPairing}
                 className="text-amber-700 hover:bg-amber-500/10 h-8 text-xs"
               >
-                Gửi lại yêu cầu
+                {t('gate.resend_request')}
               </Button>
             </div>
           </AlertDescription>

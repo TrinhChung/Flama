@@ -18,7 +18,7 @@ describe('TemplateLibraryPage', () => {
   afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); document.body.innerHTML = '' })
   async function render() { await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><TemplateLibraryPage /></MemoryRouter></QueryClientProvider>)); await flush() }
   it('fetches defaults and shows distinct NoteType/application counts and four tokens', async () => {
-    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({}, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 loại thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(4); expect(container.textContent).toContain('+2'); expect(container.querySelector('a')?.getAttribute('href')).toBe('/card-templates/t%2F1')
+    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({}, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 cấu trúc thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(4); expect(container.textContent).toContain('+2'); expect(container.querySelector('a')?.getAttribute('href')).toBe('/card-templates/t%2F1')
   })
   it('supports all five groups', async () => {
     await render()
@@ -46,7 +46,7 @@ describe('TemplateLibraryPage', () => {
   it('renders errors with retry and empty results', async () => {
     vi.mocked(fetchTemplateLibrary).mockRejectedValueOnce(new Error('offline')); await render(); expect(container.textContent).toContain('offline')
     vi.mocked(fetchTemplateLibrary).mockResolvedValue({ schema_version: 'template-library.v2', items: [] })
-    await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Thử lại')!.click()); await flush(); expect(container.textContent).toContain('Chưa có mẫu thẻ nào.')
+    await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Thử lại')!.click()); await flush(); expect(container.textContent).toContain('Chưa có giao diện thẻ nào.')
   })
-  it('shows loading while the request remains pending', async () => { vi.mocked(fetchTemplateLibrary).mockReturnValue(new Promise(() => {})); await render(); expect(container.textContent).toContain('Đang tải mẫu thẻ…') })
+  it('shows loading while the request remains pending', async () => { vi.mocked(fetchTemplateLibrary).mockReturnValue(new Promise(() => {})); await render(); expect(container.textContent).toContain('Đang tải giao diện thẻ…') })
 })

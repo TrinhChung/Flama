@@ -413,12 +413,12 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
         title={
           mode === 'decks'
             ? t('header.title_decks', { defaultValue: 'Kho Bộ Thẻ Cộng Đồng' })
-            : t('header.title_notetypes', { defaultValue: 'Kho Mẫu Thẻ (Note Types)' })
+            : t('header.title_notetypes', { defaultValue: 'Chợ Cấu trúc thẻ' })
         }
         description={
           mode === 'decks'
             ? t('header.desc_decks', { defaultValue: 'Khám phá, chia sẻ và tải về các bộ flashcard tiếng Nhật chất lượng từ cộng đồng.' })
-            : t('header.desc_notetypes', { defaultValue: 'Các mẫu hiển thị Flashcard chuẩn đẹp, tối ưu hóa giao diện học Kanji, Từ vựng và Ngữ pháp.' })
+            : t('header.desc_notetypes', { defaultValue: 'Khám phá các cấu trúc thẻ Flashcard tối ưu cho học tập, hỗ trợ trường tùy biến và nhiều giao diện thẻ.' })
         }
         actions={
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
@@ -453,7 +453,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               >
                 <Link to="/marketplace/note-types">
                   <Layers className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
-                  {t('header.tab_notetypes', { defaultValue: 'Loại Thẻ' })}
+                  {t('header.tab_notetypes', { defaultValue: 'Cấu trúc thẻ' })}
                 </Link>
               </Button>
             </div>
@@ -466,8 +466,8 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             >
               <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
                 {mode === 'decks'
-                  ? t('card.installed', { defaultValue: 'Deck đã cài' })
-                  : t('header.tab_notetypes', { defaultValue: 'Loại thẻ của tôi' })}
+                  ? t('card.installed', { defaultValue: 'Bộ thẻ đã cài' })
+                  : t('header.my_notetypes', { defaultValue: 'Cấu trúc thẻ của tôi' })}
               </Link>
             </Button>
 
@@ -488,7 +488,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                 <Plus className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
                 {mode === 'decks'
                   ? t('header.btn_publish_deck', { defaultValue: 'Đăng tải bộ thẻ' })
-                  : t('header.btn_create_notetype', { defaultValue: 'Tạo loại thẻ' })}
+                  : t('header.btn_create_notetype', { defaultValue: 'Tạo Cấu trúc thẻ' })}
               </Link>
             </Button>
           </div>
@@ -497,6 +497,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
 
       {/* Streamlined Search & Filter Bar */}
       <MarketplaceFilterBar
+        mode={mode}
         queryText={queryText}
         setQueryText={setQueryText}
         searchInputRef={searchInputRef}
@@ -536,7 +537,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             <strong className="text-foreground font-semibold tabular-nums">
               {totalCount}
             </strong>{' '}
-            học liệu {isFiltered ? 'phù hợp với bộ lọc' : ''}
+            {mode === 'note-types' ? 'cấu trúc thẻ' : 'bộ thẻ'} {isFiltered ? 'phù hợp với bộ lọc' : ''}
           </span>
         </div>
       ) : null}
@@ -565,12 +566,16 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             title={
               isFiltered
                 ? t('search_filter.empty_search.title', { defaultValue: 'Không tìm thấy học liệu phù hợp' })
-                : 'Kho học liệu cộng đồng hiện đang trống'
+                : mode === 'note-types'
+                  ? 'Chợ Cấu trúc thẻ hiện đang trống'
+                  : 'Kho bộ thẻ cộng đồng hiện đang trống'
             }
             description={
               isFiltered
                 ? t('search_filter.empty_search.desc', { defaultValue: 'Thử thay đổi từ khóa tìm kiếm, chọn chủ đề khác hoặc sắp xếp lại danh sách.' })
-                : 'Hãy là người đầu tiên đóng góp và chia sẻ bộ thẻ tiếng Nhật cho cộng đồng Flama!'
+                : mode === 'note-types'
+                  ? 'Hãy là người đầu tiên chia sẻ cấu trúc thẻ Flashcard cho cộng đồng Flama!'
+                  : 'Hãy là người đầu tiên đóng góp và chia sẻ bộ thẻ tiếng Nhật cho cộng đồng Flama!'
             }
           />
           <div className="flex justify-center mt-4 gap-2">
@@ -602,7 +607,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                   <Plus className="mr-1.5 size-3.5" />
                   {mode === 'decks'
                     ? t('header.btn_publish_deck', { defaultValue: 'Đăng tải bộ thẻ ngay' })
-                    : t('header.btn_create_notetype', { defaultValue: 'Tạo loại thẻ ngay' })}
+                    : t('header.btn_create_notetype', { defaultValue: 'Tạo Cấu trúc thẻ ngay' })}
                 </Link>
               </Button>
             )}

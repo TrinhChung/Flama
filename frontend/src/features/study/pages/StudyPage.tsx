@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
+import { useImmersiveLayout } from '@/shared/hooks/useImmersiveLayout'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
@@ -31,6 +32,7 @@ export function StudyPage() {
   const navigate = useNavigate()
   const deckIdRaw = searchParams.get('deck_id')
   const study = useStudySession(deckIdRaw)
+  useImmersiveLayout(!study.awaitingCompositionSelection)
 
   const [revealedCardKey, setRevealedCardKey] = useState<string | null>(null)
   const [decisionState, setDecisionState] = useState<{

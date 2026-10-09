@@ -142,10 +142,16 @@ export function useTemplateLibraryEditor(id: string) {
   const canSave = Boolean(draft?.name.trim() && draft.name.trim().length <= 255 && draft.primary_category.length <= 120 && !schemaIssues.length && !saveMutation.isPending && !isReplacingDraft && !error?.stale && !refreshError)
   return {
     detailQuery, template: detailQuery.data?.id === id ? detailQuery.data : null, draft, dirty, schemaIssues,
+    persistedInputKeys: current?.baseline.input_schema.map((input) => input.key) ?? [],
+    resetSampleValues: () => setSamples({ id, values: {} }),
     sampleValues, setSampleValue: (key: string, value: string) => setSamples((old) => ({ id, values: { ...(old.id === id ? old.values : {}), [key]: value } })),
     updateDraft: (patch: Partial<TemplateLibraryDraft>) => setState((old) => old?.id === id && !isReplacingDraft ? { ...old, draft: { ...old.draft, ...patch } } : old),
     canSave, saveMutation, saveError: error?.message ?? null, isStale: error?.stale ?? false,
     save: () => { if (current && canSave) saveMutation.mutate({ ...capture(), body: { ...current.draft, name: current.draft.name.trim(), primary_category: current.draft.primary_category || null, expected_current_version_id: current.head } }) },
+    saveAsync: async () => {
+      if (!current || !canSave) throw new Error(error?.message ?? refreshError ?? t('editor.preview_schema_error'))
+      await saveMutation.mutateAsync({ ...capture(), body: { ...current.draft, name: current.draft.name.trim(), primary_category: current.draft.primary_category || null, expected_current_version_id: current.head } })
+    },
     archiveMutation, setArchived: (archived: boolean) => archiveMutation.mutate({ ...capture(), archived }),
     archive: (archived: boolean) => archiveMutation.mutateAsync({ ...capture(), archived }),
     refreshAndReplaceDraft, isReplacingDraft, refreshError,

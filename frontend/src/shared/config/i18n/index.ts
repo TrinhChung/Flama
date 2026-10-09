@@ -25,6 +25,7 @@ import viWorksheets from './locales/vi/worksheets.json'
 import viProfile from './locales/vi/profile.json'
 import viWallet from './locales/vi/wallet.json'
 import viCardTemplates from './locales/vi/card_templates.json'
+import viTemplateMapping from './locales/vi/template_mapping.json'
 import viAudio from './locales/vi/audio.json'
 import viGuide from './locales/vi/guide.json'
 import viOnboarding from './locales/vi/onboarding.json'
@@ -51,6 +52,7 @@ import enWorksheets from './locales/en/worksheets.json'
 import enProfile from './locales/en/profile.json'
 import enWallet from './locales/en/wallet.json'
 import enCardTemplates from './locales/en/card_templates.json'
+import enTemplateMapping from './locales/en/template_mapping.json'
 import enAudio from './locales/en/audio.json'
 import enGuide from './locales/en/guide.json'
 import enOnboarding from './locales/en/onboarding.json'
@@ -79,6 +81,7 @@ export const resources = {
     profile: viProfile,
     wallet: viWallet,
     card_templates: viCardTemplates,
+    template_mapping: viTemplateMapping,
     audio: viAudio,
     guide: viGuide,
     onboarding: viOnboarding,
@@ -106,6 +109,7 @@ export const resources = {
     profile: enProfile,
     wallet: enWallet,
     card_templates: enCardTemplates,
+    template_mapping: enTemplateMapping,
     audio: enAudio,
     guide: enGuide,
     onboarding: enOnboarding,
@@ -157,6 +161,7 @@ void i18n
       'profile',
       'wallet',
       'card_templates',
+      'template_mapping',
       'audio',
       'guide',
       'onboarding',

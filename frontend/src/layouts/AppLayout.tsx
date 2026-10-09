@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   BookOpen,
   Check,
@@ -42,6 +42,7 @@ import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
 import { Brand } from '@/shared/components/Brand'
 import { LanguageSwitcher } from '@/shared/ui/LanguageSwitcher'
 import type { FrontendBootstrap } from '@/shared/types/api'
+import { cn } from '@/lib/utils'
 
 const pageTitleKeyMap: Record<string, string> = {
   '/dashboard': 'page_titles.dashboard',
@@ -345,6 +346,8 @@ export function AppLayout() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
+  const [immersiveRequested, setImmersive] = useState(false)
+  const immersive = location.pathname === '/study' && immersiveRequested
   const currentLang = (i18n.resolvedLanguage || i18n.language || 'vi').startsWith('en') ? 'en' : 'vi'
 
   useEffect(() => {
@@ -412,7 +415,7 @@ export function AppLayout() {
     )
   }
 
-  if (location.pathname === '/study' || location.pathname === '/browse') {
+  if (location.pathname === '/browse') {
     return (
       <main className="h-screen h-[100dvh] w-full overflow-hidden bg-background text-foreground">
         <Outlet />
@@ -426,15 +429,15 @@ export function AppLayout() {
   const title = titleKey ? t(titleKey as any) : 'Flama'
 
   return (
-    <SidebarProvider>
-      <AppSidebar
+    <SidebarProvider className={immersive ? 'h-[100dvh] overflow-hidden' : undefined}>
+      {!immersive && <AppSidebar
         bootstrap={bootstrap}
         onLogout={() => logoutMutation.mutate()}
         logoutPending={logoutMutation.isPending}
-      />
-      <SidebarInset className="relative min-w-0 overflow-hidden">
-        <AmbientBackground intensity="normal" />
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 shadow-xs backdrop-blur-md md:px-6">
+      />}
+      <SidebarInset className={cn('relative min-w-0 overflow-hidden', immersive && 'h-[100dvh] m-0 rounded-none shadow-none')}>
+        {!immersive && <AmbientBackground intensity="normal" />}
+        <header hidden={immersive} className={cn('sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 shadow-xs backdrop-blur-md md:px-6', immersive && 'hidden')}>
           <div className="flex items-center gap-2.5">
             <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
             <Separator orientation="vertical" className="h-4" />
@@ -543,11 +546,11 @@ export function AppLayout() {
             <LanguageSwitcher />
           </div>
         </header>
-        <main className="min-h-[calc(100svh-3.5rem)] flex-1">
-          <Outlet />
+        <main className={immersive ? 'h-[100dvh] w-full overflow-hidden bg-background text-foreground' : 'min-h-[calc(100svh-3.5rem)] flex-1'}>
+          <Outlet context={{ setImmersive }} />
         </main>
-        <SiteFooter bootstrap={bootstrap} />
-        <SiteMascot />
+        {!immersive && <SiteFooter bootstrap={bootstrap} />}
+        {!immersive && <SiteMascot />}
       </SidebarInset>
     </SidebarProvider>
   )

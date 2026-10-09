@@ -38,7 +38,7 @@ export function getNoteTypeBlockInfo(
         : 'Từ Marketplace',
       reason: t
         ? t('publish_notetype.notetype_reason_marketplace')
-        : 'Mẫu thẻ được tải về từ Marketplace nên không thể chia sẻ lại.',
+        : 'Cấu trúc thẻ được tải về từ Chợ nên không thể chia sẻ lại.',
     }
   }
   if (noteType.publish_status === 'published' || noteType.publish_status === 'unlisted') {
@@ -49,7 +49,7 @@ export function getNoteTypeBlockInfo(
         : 'Đã xuất bản',
       reason: t
         ? t('publish_notetype.notetype_reason_published')
-        : 'Mẫu thẻ này đã được xuất bản lên Marketplace.',
+        : 'Cấu trúc thẻ này đã được xuất bản lên Chợ.',
     }
   }
   return {

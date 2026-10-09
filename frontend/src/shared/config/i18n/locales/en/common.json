@@ -11,6 +11,12 @@
   "or": "or",
   "copy": "Copy",
   "copied": "Copied",
+  "unsaved": {
+    "title": "Unsaved changes",
+    "discard": "Discard and continue",
+    "stay": "Continue editing",
+    "save_continue": "Save and continue"
+  },
   "language": {
     "vi": "Tiếng Việt",
     "en": "English",

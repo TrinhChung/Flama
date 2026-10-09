@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TemplateApplication } from '@/entities/card-template'
+import type { TemplateApplication, TemplateBindings } from '@/entities/card-template'
 import { TemplateApplicationsPanel, type TemplateApplicationsPanelProps } from './TemplateApplicationsPanel'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -23,13 +23,18 @@ const fields = [{ id: 'field/1', name: 'Renamed Word', field_type: 'text' }, { i
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } })
 const flush = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) }); await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) }) }
 const button = (text: string) => Array.from(document.querySelectorAll('button')).find((item) => item.textContent === text)!
-const choose = async (value: string) => { await act(async () => { const select = document.querySelector('select')!; select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })) }) }
+const openActions = async () => {
+  await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dropdown-menu-trigger"]')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })))
+  await flush()
+}
+const menuItem = (text: string) => Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) => item.textContent === text)!
 
 describe('TemplateApplicationsPanel', () => {
   let root: Root
   let container: HTMLDivElement
   let client: QueryClient
   let current: TemplateApplication
+  let additional: TemplateApplication[]
   let props: TemplateApplicationsPanelProps
   let fetchMock: ReturnType<typeof vi.fn>
   let failure: { error: string; message: string; field?: string } | null
@@ -40,13 +45,13 @@ describe('TemplateApplicationsPanel', () => {
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
     container = document.createElement('div'); document.body.append(container); root = createRoot(container)
-    current = structuredClone(row)
+    current = structuredClone(row); additional = []
     props = { noteTypeId: 'nt/1', onChanged: vi.fn() }
     failure = null
     fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'
       if (method === 'GET') return String(url).includes('template-applications')
-        ? json({ schema_version: 'template-applications.v2', items: [current] }) : json({ field_defs: fields })
+        ? json({ schema_version: 'template-applications.v2', items: [current, ...additional] }) : json({ field_defs: fields })
       if (failure) return json(failure, 400)
       if (method === 'PATCH') current = { ...current, ...JSON.parse(String(init?.body)) }
       if (method === 'DELETE') current = { ...current, status_code: 'RETIRED' }
@@ -56,36 +61,55 @@ describe('TemplateApplicationsPanel', () => {
     vi.stubGlobal('fetch', fetchMock)
   })
   afterEach(() => { act(() => root.unmount()); client.clear(); container.remove(); document.body.innerHTML = ''; vi.unstubAllGlobals() })
-  it('loads active/retired applications and links to canonical template identity', async () => {
+  it('opens the exact application mapping and keeps the use name separate from its design', async () => {
+    additional = [{ ...structuredClone(row), id: 'application/2', application_id: 'application/2', display_name: 'Luyện đọc', is_default: false }]
     await render()
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/note-types/nt%2F1/template-applications?include_retired=true'))).toBe(true)
-    expect(document.body.textContent).toContain('ACTIVE')
-    expect(document.body.textContent).toContain('Luyện nghe · listening')
-    expect(document.querySelector('a[href="/card-templates/template%2F1"]')?.textContent).toBe('Mẫu dùng chung')
-    current = { ...current, status_code: 'RETIRED' }
-    await act(async () => { await client.invalidateQueries({ queryKey: ['card-template'] }) }); await flush()
-    expect(document.body.textContent).toContain('RETIRED')
-    expect(button('Gắn lại')).toBeDefined()
+    expect(document.querySelector('a[href="/flashcards/note-types/nt%2F1/templates/application%2F1"]')?.textContent).toContain('Luyện nghe')
+    expect(document.querySelector('a[href="/flashcards/note-types/nt%2F1/templates/application%2F2"]')?.textContent).toContain('Luyện đọc')
+    expect(document.body.textContent).toContain('Thiết kế: Mẫu dùng chung')
+    expect(document.body.textContent).toContain('Đã ánh xạ 1/1 inputs')
+    expect(document.body.textContent).not.toContain('listening')
+    expect(document.querySelector('select')).toBeNull()
+    await openActions()
+    expect(document.querySelector('a[href="/card-templates/template%2F1"]')?.textContent).toBe('Sửa thiết kế')
   })
-  it('PATCHes only bindings/name, keeps stable IDs after rename, and permits recommended unbound', async () => {
+  it('counts current exact type bindings and marks stale IDs, wrong types or unknown keys for repair', async () => {
+    current.input_schema = [...row.input_schema, { key: 'Audio', label: 'Audio', type: 'audio', required: false }]
+    current.input_bindings = { Word: 'field/1', Audio: null }
     await render()
-    await act(async () => button('Sửa ánh xạ').click())
-    expect(document.querySelector('select')!.value).toBe('field/1')
-    expect(document.querySelector('select')!.textContent).toContain('Renamed Word')
-    await choose('')
-    expect(document.body.textContent).toContain('vẫn có thể sử dụng')
-    expect(button('Lưu ánh xạ').disabled).toBe(false)
-    await act(async () => button('Lưu ánh xạ').click()); await flush()
+    expect(document.body.textContent).toContain('Đã ánh xạ 1/2 inputs')
+    expect(document.body.textContent).toContain('Còn 1 input để trống')
+    const invalidBindings: TemplateBindings[] = [{ Word: 'foreign' }, { Word: 'field/2' }, { Word: 'field/1', Removed: 'field/1' }]
+    for (const bindings of invalidBindings) {
+      current.input_bindings = bindings
+      await act(async () => { await client.invalidateQueries({ queryKey: ['card-template'] }) }); await flush()
+      expect(document.body.textContent).toContain('Cần sửa mapping')
+    }
+  })
+  it('does not treat inherited prototype keys as mapped inputs', async () => {
+    current.input_schema = ['__proto__', 'constructor', 'toString'].map((key) => ({ key, label: key, type: 'text', required: true }))
+    current.input_bindings = {}
+    await render()
+    expect(document.body.textContent).toContain('Đã ánh xạ 0/3 inputs')
+    expect(document.body.textContent).toContain('Còn 3 input để trống')
+    expect(document.body.textContent).not.toContain('Cần sửa mapping')
+  })
+  it('PATCHes only the chosen default and preserves IDs, source and bindings', async () => {
+    current.is_default = false
+    await render(); await openActions()
+    await act(async () => menuItem('Đặt làm mặc định').click()); await flush()
     const [url, init] = fetchMock.mock.calls.find(([, options]) => options?.method === 'PATCH')!
     expect(String(url)).toContain('/api/note-types/nt%2F1/template-applications/application%2F1')
-    expect(JSON.parse(String(init.body))).toEqual({ input_bindings: { Word: null }, display_name: 'Luyện nghe' })
+    expect(JSON.parse(String(init.body))).toEqual({ is_default: true })
     expect(current.id).toBe(row.id)
+    expect(current.input_bindings).toEqual(row.input_bindings)
     expect(current.template).toEqual(row.template)
     expect(props.onChanged).toHaveBeenCalledOnce()
   })
-  it('retires through confirmation while preserving progress and reattaches the same occurrence/ID', async () => {
-    await render()
-    await act(async () => button('Gỡ mẫu').click())
+  it('retires through confirmation and restores the same occurrence/ID while preserving history', async () => {
+    await render(); await openActions()
+    await act(async () => menuItem('Gỡ mẫu').click()); await flush()
     expect(document.body.textContent).toContain('Tiến độ đã học được giữ lại.')
     const dialog = document.querySelector('[role="dialog"]')!
     await act(async () => Array.from(dialog.querySelectorAll('button')).find((item) => item.textContent === 'Gỡ mẫu')!.click()); await flush()
@@ -93,7 +117,10 @@ describe('TemplateApplicationsPanel', () => {
     expect(String(url)).toContain('/template-applications/application%2F1')
     expect(init.body).toBeUndefined()
     expect(current.status_code).toBe('RETIRED')
-    await act(async () => button('Gắn lại').click()); await flush()
+    const removed = document.querySelector('details')!
+    expect(removed.open).toBe(false)
+    expect(removed.querySelector('summary')?.textContent).toBe('Template đã gỡ · 1')
+    await act(async () => { removed.open = true; button('Gắn lại').click() }); await flush()
     const [, postInit] = fetchMock.mock.calls.find(([, options]) => options?.method === 'POST')!
     expect(JSON.parse(String(postInit.body))).toEqual({
       template_id: row.template_id, occurrence_key: row.occurrence_key, input_bindings: row.input_bindings,
@@ -102,50 +129,20 @@ describe('TemplateApplicationsPanel', () => {
     expect(current.id).toBe(row.id)
     expect(current.status_code).toBe('ACTIVE')
   })
-  it('keeps the editor mapping when the server rejects a scope change', async () => {
-    failure = { error: 'FIELD_OUT_OF_SCOPE', message: 'Trường vừa bị gỡ.', field: 'Word' }
-    await render()
-    await act(async () => button('Sửa ánh xạ').click())
-    await act(async () => button('Lưu ánh xạ').click()); await flush()
-    expect(document.body.textContent).toContain('Trường vừa bị gỡ.')
-    expect(document.querySelector('select')!.value).toBe('field/1')
-    expect(button('Lưu ánh xạ')).toBeDefined()
+  it('keeps the retire confirmation open on error and does not report a successful change', async () => {
+    failure = { error: 'FAILED', message: 'Không thể gỡ.' }
+    await render(); await openActions()
+    await act(async () => menuItem('Gỡ mẫu').click()); await flush()
+    const dialog = document.querySelector('[role="dialog"]')!
+    await act(async () => Array.from(dialog.querySelectorAll('button')).find((item) => item.textContent === 'Gỡ mẫu')!.click()); await flush()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Không thể gỡ.')
+    expect(current.status_code).toBe('ACTIVE')
     expect(props.onChanged).not.toHaveBeenCalled()
   })
-  it('does not replace an open mapping draft on application query refetch', async () => {
-    props.fields = fields; await render()
+  it('uses supplied field definitions without fetching another detail record', async () => {
+    props.fields = fields
+    await render()
     expect(fetchMock.mock.calls.filter(([url]) => !String(url).includes('template-applications'))).toHaveLength(0)
-    await act(async () => button('Sửa ánh xạ').click())
-    await choose('')
-    await act(async () => { await client.invalidateQueries({ queryKey: ['card-template'] }) }); await flush()
-    expect(document.querySelector('select')!.value).toBe('')
-    expect(button('Lưu ánh xạ').disabled).toBe(false)
-  })
-  it('blocks stale IDs and wrong field types instead of silently dropping them', async () => {
-    current = { ...current, input_bindings: { Word: 'foreign' } }
-    await render()
-    await act(async () => button('Sửa ánh xạ').click())
-    expect(document.querySelector('select')!.value).toBe('foreign')
-    expect(button('Lưu ánh xạ').disabled).toBe(true)
-    expect(document.body.textContent).toContain('Trường không thuộc loại thẻ đã chọn.')
-    await choose('field/2')
-    expect(button('Lưu ánh xạ').disabled).toBe(true)
-    expect(document.body.textContent).toContain('Kiểu trường không phù hợp.')
-  })
-  it('edits valid prototype-named inputs without treating inherited properties as bindings', async () => {
-    current = { ...current, input_bindings: {}, input_schema: ['__proto__', 'constructor', 'toString'].map((key) => ({
-      key, label: key, type: 'text', required: true,
-    })) }
-    await render()
-    await act(async () => button('Sửa ánh xạ').click())
-    expect(Array.from(document.querySelectorAll('select')).map((select) => select.value)).toEqual(['', '', ''])
-    expect(button('Lưu ánh xạ').disabled).toBe(false)
-    await choose('field/1')
-    await act(async () => button('Lưu ánh xạ').click()); await flush()
-    const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === 'PATCH')!
-    const bindings = JSON.parse(String(init.body)).input_bindings
-    expect(Object.hasOwn(bindings, '__proto__')).toBe(true)
-    expect(bindings.__proto__).toBe('field/1')
-    expect(Object.getPrototypeOf(bindings)).toBe(Object.prototype)
+    expect(document.body.textContent).toContain('Đã ánh xạ 1/1 inputs')
   })
 })

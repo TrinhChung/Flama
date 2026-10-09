@@ -60,9 +60,11 @@ export function AppSidebar({
     { title: t('sidebar.item.worksheets'), url: '/worksheets', icon: Printer },
   ]
   const library: AppNavigationItem[] = [
+    // Nhóm Học liệu cá nhân / Quản trị
+    { title: t('sidebar.item.installed_decks'), url: bootstrap.links.installed_decks, icon: PackageCheck },
     { title: t('sidebar.item.note_types'), url: bootstrap.links.note_types, icon: NotebookTabs },
     { title: t('sidebar.item.card_templates'), url: '/card-templates', icon: Layers },
-    { title: t('sidebar.item.installed_decks'), url: bootstrap.links.installed_decks, icon: PackageCheck },
+    // Nhóm Chợ / Chia sẻ cộng đồng
     { title: t('sidebar.item.shared_decks'), url: bootstrap.links.shared_decks, icon: Store },
     { title: t('sidebar.item.shared_note_types'), url: bootstrap.links.shared_note_types, icon: Shapes },
     { title: t('sidebar.item.publish_deck'), url: '/marketplace/decks/publish', icon: Upload },

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 import { act } from 'react'
@@ -7,107 +6,59 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/shared/config/i18n'
 import { NoteTypeDetailPage } from './NoteTypeDetailPage'
 
-vi.mock('@/app/api', () => ({
-  appApi: {
-    get: vi.fn().mockResolvedValue({
-      id: 'nt-1',
-      name: 'Từ vựng',
-      publish_status: 'private',
-      field_defs: [
-        { id: 'f1', name: 'Kanji', field_type: 'text', position: 0 },
-        { id: 'f2', name: 'Meaning', field_type: 'text', position: 1 },
-      ],
-      templates: [
-        {
-          id: 't1',
-          name: 'Card 1',
-          front_html: '{{Kanji}}',
-          back_html: '{{Meaning}}',
-          shared_css: '.card{}',
-        },
-      ],
-    }),
-    mutate: vi.fn().mockResolvedValue({}),
-  },
-}))
+const fields = [
+  { id: 'f1', name: 'Kanji', field_type: 'text', required: true, identity_role: 'primary', position: 0 },
+  { id: 'f2', name: 'Meaning', field_type: 'markdown', required: false, identity_role: null, position: 1 },
+]
+vi.mock('@/app/api', () => ({ appApi: { get: vi.fn(async (path: string) => path.endsWith('/fields') ? { items: fields } :
+  { id: 'nt-1', name: 'Từ vựng', publish_status: 'private', field_defs: fields }), mutate: vi.fn() } }))
+vi.mock('@/shared/api/client', async (original) => ({ ...await original<typeof import('@/shared/api/client')>(),
+  apiRequest: vi.fn().mockResolvedValue({ items: [] }), apiJson: vi.fn() }))
+vi.mock('@/components/ambient-background', () => ({ AmbientBackground: () => null }))
 
-vi.mock('../components/NoteTypeLivePreview', () => ({
-  NoteTypeLivePreview: () => null,
-}))
-
-vi.mock('@/components/ambient-background', () => ({
-  AmbientBackground: () => null,
-}))
-
-vi.mock('@/shared/api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api/client')>()
-  return {
-    ...actual,
-    apiRequest: vi.fn().mockResolvedValue({ items: [] }),
-  }
-})
-
-describe('NoteTypeDetailPage editor DOM specification', () => {
+describe('Note Type setup replaces the old card design editor', () => {
   let container: HTMLDivElement
   let root: Root
   let queryClient: QueryClient
+  beforeEach(async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+    await i18n.changeLanguage('vi')
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/flashcards/note-types/nt-1']}>
+      <Routes><Route path="/flashcards/note-types/:id" element={<NoteTypeDetailPage />} /></Routes>
+    </MemoryRouter></QueryClientProvider>))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)) })
+  })
+  afterEach(async () => { await act(async () => root.unmount()); queryClient.clear(); container.remove(); document.body.innerHTML = '' })
 
-  beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    })
-    container = document.createElement('div')
-    document.body.appendChild(container)
-    root = createRoot(container)
+  it('opens data fields by default with two route tabs and no duplicate HTML/CSS workspace', () => {
+    expect(container.querySelector('h1')?.textContent).toBe('Từ vựng')
+    const current = container.querySelector('nav a[aria-current="page"]')
+    expect(current?.textContent).toContain('Trường dữ liệu')
+    expect(current?.getAttribute('href')).toBe('/flashcards/note-types/nt-1/fields')
+    expect(container.querySelector('nav a[href$="/templates"]')?.textContent).toContain('Templates')
+    expect(container.querySelector('#edit-field-name')).not.toBeNull()
+    expect(container.textContent).not.toContain('Front HTML')
+    expect(container.textContent).not.toContain('Back HTML')
+    expect(container.querySelector('[data-slot="tabs-trigger"]')).toBeNull()
   })
 
-  afterEach(() => {
-    act(() => root.unmount())
-    container.remove()
+  it('exposes field search, input demo, share, help and rename in the new setup', () => {
+    expect(container.querySelector('input[aria-label="Tìm trường…"]')).not.toBeNull()
+    expect(container.textContent).toContain('Cách nhập liệu')
+    expect(container.querySelector('a[href="/marketplace/note-types/publish?id=nt-1"]')).not.toBeNull()
+    expect(container.querySelector('a[href="/flashcards/note-types/guide"]')).not.toBeNull()
+    expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Đổi tên')).toBe(true)
   })
 
-  it('renders template editor card matching baseline DOM snapshot', async () => {
-    await act(async () => {
-      root.render(
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={['/note-types/nt-1']}>
-            <Routes>
-              <Route path="/note-types/:id" element={<NoteTypeDetailPage />} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>,
-      )
-    })
-
-    let heading: HTMLElement | null = null
-    for (let i = 0; i < 10; i++) {
-      await act(async () => {
-        await Promise.resolve()
-      })
-      heading =
-        Array.from(container.querySelectorAll('h3')).find(
-          (el) => el.textContent?.trim() === 'Trình Soạn Thảo Template',
-        ) ?? null
-      if (heading) break
-    }
-
-    expect(heading).not.toBeNull()
-    const card = heading?.closest('[data-slot="card"]')
-    expect(card).not.toBeNull()
-    expect(card?.outerHTML).toMatchSnapshot()
-
-    const triggers = card?.querySelectorAll('[data-slot="tabs-trigger"]')
-    const backTrigger = Array.from(triggers ?? []).find(
-      (el) => el.textContent?.trim() === 'Back HTML',
-    ) as HTMLElement | undefined
-    expect(backTrigger).toBeDefined()
-
-    await act(async () => {
-      backTrigger?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-    })
-
-    expect(card?.outerHTML).toMatchSnapshot('back-tab')
+  it('keeps the primary identity field text, required and protected from deletion', () => {
+    expect((container.querySelector('#edit-field-type') as HTMLSelectElement).disabled).toBe(true)
+    expect(container.querySelector('#edit-field-required')?.getAttribute('aria-checked')).toBe('true')
+    const deleteButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Xóa trường'))
+    expect(deleteButton?.disabled).toBe(true)
   })
 })

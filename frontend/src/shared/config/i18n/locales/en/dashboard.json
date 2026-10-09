@@ -32,7 +32,7 @@
       "desc_line2_bold": "Marketplace",
       "desc_line2_suffix": " to find and install decks that fit your goals.",
       "btn_marketplace_decks": "Deck Marketplace",
-      "btn_marketplace_templates": "Template Library"
+      "btn_marketplace_templates": "Shared Note Types"
     }
   },
   "tree": {
@@ -77,11 +77,11 @@
       "name_label": "Deck name or path",
       "name_placeholder": "E.g.: SAA::deck10",
       "name_description": "Use :: for folder hierarchy (e.g. SAA::deck10)",
-      "notetype_label": "Card Template (Note Type)",
-      "notetype_loading": "Loading templates...",
-      "notetype_default": "Default",
+      "notetype_label": "Note Type",
+      "notetype_loading": "Loading note types...",
+      "notetype_default": "Default note type",
       "notetype_help_inherited": "Defaults to inheriting from the selected parent deck.",
-      "notetype_help_default": "Template will apply to cards created in this deck.",
+      "notetype_help_default": "Note type will apply to all flashcards created in this deck.",
       "btn_cancel": "Cancel",
       "btn_submit": "Create deck",
       "toast_success": "Deck created successfully."
