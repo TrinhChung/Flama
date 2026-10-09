@@ -1,6 +1,8 @@
+import '@/shared/config/i18n'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +25,7 @@ export type TemplateApplicationsPanelProps = {
 type ApplicationMutation = 'edit' | 'retire' | 'reattach'
 
 function useTemplateApplications({ noteTypeId, fields, onChanged }: TemplateApplicationsPanelProps) {
+  const { t } = useTranslation('card_templates')
   const queryClient = useQueryClient()
   const mounted = useRef(true)
   const submitting = useRef(false)
@@ -60,7 +63,7 @@ function useTemplateApplications({ noteTypeId, fields, onChanged }: TemplateAppl
             is_default: application.is_default,
           })
       if (result.id !== application.id || result.template_id !== application.template_id) {
-        throw new Error('Máy chủ trả về lần gắn không khớp. Hãy tải lại danh sách mẫu đã gắn.')
+        throw new Error(t('applications_panel.error_mismatch'))
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['card-template'] }),
@@ -70,7 +73,7 @@ function useTemplateApplications({ noteTypeId, fields, onChanged }: TemplateAppl
       onChanged?.()
       return true
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause : new Error('Không thể cập nhật lần gắn.'))
+      if (mounted.current) setError(cause instanceof Error ? cause : new Error(t('applications_panel.error_failed')))
       return false
     } finally {
       submitting.current = false
@@ -88,6 +91,7 @@ function ApplicationEditor({ application, fields, pending, error, onSave, onClos
   onSave: (bindings: TemplateBindings, name: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation('card_templates')
   const id = useId()
   const [bindings, setBindings] = useState(application.input_bindings)
   const [name, setName] = useState(application.display_name ?? application.template.name)
@@ -96,11 +100,11 @@ function ApplicationEditor({ application, fields, pending, error, onSave, onClos
   const serverField = error instanceof ApiError ? error.field : undefined
   return <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!invalid && !pending) onSave(bindings, name) }}>
     <DialogHeader>
-      <DialogTitle>Sửa ánh xạ mẫu</DialogTitle>
-      <DialogDescription>Chỉ đổi ánh xạ cho lần gắn này. Nội dung mẫu dùng chung được giữ nguyên.</DialogDescription>
+      <DialogTitle>{t('applications_panel.dialog_edit_title')}</DialogTitle>
+      <DialogDescription>{t('applications_panel.dialog_edit_desc')}</DialogDescription>
     </DialogHeader>
     <div className="space-y-2">
-      <Label htmlFor={`${id}-name`}>Tên hiển thị</Label>
+      <Label htmlFor={`${id}-name`}>{t('applications_panel.display_name_label')}</Label>
       <Input id={`${id}-name`} value={name} maxLength={255} disabled={pending}
         aria-invalid={serverField === 'display_name'} onChange={(event) => setName(event.target.value)} />
     </div>
@@ -110,33 +114,34 @@ function ApplicationEditor({ application, fields, pending, error, onSave, onClos
       {serverField && application.input_schema.some((input) => input.key === serverField) && <code>{`{{${serverField}}}: `}</code>}{error.message}
     </AlertDescription></Alert>}
     <DialogFooter>
-      <Button type="button" variant="outline" disabled={pending} onClick={onClose}>Hủy</Button>
-      <Button type="submit" disabled={invalid || pending}>{pending ? 'Đang lưu…' : 'Lưu ánh xạ'}</Button>
+      <Button type="button" variant="outline" disabled={pending} onClick={onClose}>{t('applications_panel.cancel')}</Button>
+      <Button type="submit" disabled={invalid || pending}>{pending ? t('applications_panel.saving') : t('applications_panel.save_mapping')}</Button>
     </DialogFooter>
   </form>
 }
 
 function TemplateApplicationsContent(props: TemplateApplicationsPanelProps) {
+  const { t } = useTranslation('card_templates')
   const state = useTemplateApplications(props)
   const [editing, setEditing] = useState<TemplateApplication | null>(null)
   const [retiring, setRetiring] = useState<TemplateApplication | null>(null)
   const fieldsUnavailable = props.fields === undefined && !state.detail.data
-  return <section aria-label="Mẫu đã gắn" className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+  return <section aria-label={t('applications_panel.section_aria')} className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="text-lg font-semibold">Mẫu đã gắn</h2>
-      <Button variant="outline" size="sm" asChild><Link to="/card-templates">Mở thư viện mẫu</Link></Button>
+      <h2 className="text-lg font-semibold">{t('applications_panel.section_title')}</h2>
+      <Button variant="outline" size="sm" asChild><Link to="/card-templates">{t('applications_panel.open_library')}</Link></Button>
     </div>
-    <p className="text-sm text-muted-foreground">Ánh xạ dùng ID trường và được giữ nguyên khi đổi tên trường.</p>
-    {state.applications.isPending && <p role="status">Đang tải mẫu đã gắn…</p>}
+    <p className="text-sm text-muted-foreground">{t('applications_panel.subtitle')}</p>
+    {state.applications.isPending && <p role="status">{t('applications_panel.loading')}</p>}
     {state.applications.isError && <Alert variant="destructive"><AlertDescription>
       {state.applications.error.message}
-      <Button variant="outline" size="sm" onClick={() => void state.applications.refetch()}>Thử lại</Button>
+      <Button variant="outline" size="sm" onClick={() => void state.applications.refetch()}>{t('applications_panel.retry')}</Button>
     </AlertDescription></Alert>}
     {state.detail.isError && props.fields === undefined && <Alert variant="destructive"><AlertDescription>
-      Không thể tải trường của loại thẻ. {state.detail.error.message}
-      <Button variant="outline" size="sm" onClick={() => void state.detail.refetch()}>Thử lại</Button>
+      {t('applications_panel.error_fields')} {state.detail.error.message}
+      <Button variant="outline" size="sm" onClick={() => void state.detail.refetch()}>{t('applications_panel.retry')}</Button>
     </AlertDescription></Alert>}
-    {state.applications.data?.items.length === 0 && <p className="text-sm text-muted-foreground">Chưa có mẫu được gắn.</p>}
+    {state.applications.data?.items.length === 0 && <p className="text-sm text-muted-foreground">{t('applications_panel.empty')}</p>}
     <div className="space-y-3">
       {state.applications.data?.items.map((application) => <article key={application.id} className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1">
@@ -146,9 +151,9 @@ function TemplateApplicationsContent(props: TemplateApplicationsPanelProps) {
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {application.status_code === 'ACTIVE' ? <>
-            <Button variant="outline" size="sm" disabled={Boolean(state.pendingId) || fieldsUnavailable} onClick={() => { state.setError(null); setEditing(application) }}>Sửa ánh xạ</Button>
-            <Button variant="outline" size="sm" disabled={Boolean(state.pendingId)} onClick={() => { state.setError(null); setRetiring(application) }}>Gỡ mẫu</Button>
-          </> : <Button variant="outline" size="sm" disabled={Boolean(state.pendingId)} onClick={() => void state.execute('reattach', application)}>Gắn lại</Button>}
+            <Button variant="outline" size="sm" disabled={Boolean(state.pendingId) || fieldsUnavailable} onClick={() => { state.setError(null); setEditing(application) }}>{t('applications_panel.btn_edit')}</Button>
+            <Button variant="outline" size="sm" disabled={Boolean(state.pendingId)} onClick={() => { state.setError(null); setRetiring(application) }}>{t('applications_panel.btn_retire')}</Button>
+          </> : <Button variant="outline" size="sm" disabled={Boolean(state.pendingId)} onClick={() => void state.execute('reattach', application)}>{t('applications_panel.btn_reattach')}</Button>}
         </div>
       </article>)}
     </div>
@@ -161,8 +166,8 @@ function TemplateApplicationsContent(props: TemplateApplicationsPanelProps) {
       </DialogContent>}
     </Dialog>
     <ConfirmDialog open={Boolean(retiring)} onOpenChange={(open) => { if (!open) setRetiring(null) }}
-      title="Gỡ mẫu khỏi loại thẻ?" description="Mẫu sẽ ngừng xuất hiện khi học. Tiến độ đã học được giữ lại."
-      variant="destructive" confirmText="Gỡ mẫu" isLoading={Boolean(state.pendingId)}
+      title={t('applications_panel.retire_confirm_title')} description={t('applications_panel.retire_confirm_desc')}
+      variant="destructive" confirmText={t('applications_panel.retire_confirm_btn')} isLoading={Boolean(state.pendingId)}
       onConfirm={async () => { if (retiring && await state.execute('retire', retiring)) setRetiring(null) }}>
       {state.error && retiring && <p role="alert" className="text-destructive">{state.error.message}</p>}
     </ConfirmDialog>

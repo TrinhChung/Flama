@@ -1,7 +1,9 @@
+import '@/shared/config/i18n'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,6 +32,7 @@ export type ApplyTemplateWizardProps = {
 }
 
 function useApplyTemplate({ template, initialNoteTypeId, onOpenChange, onApplied }: Omit<ApplyTemplateWizardProps, 'open'>) {
+  const { t } = useTranslation('card_templates')
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const mounted = useRef(true)
@@ -94,20 +97,20 @@ function useApplyTemplate({ template, initialNoteTypeId, onOpenChange, onApplied
         display_name: displayName,
         input_bindings: bindings,
       })
-      if (application.template_id !== template.id) throw new Error('Máy chủ trả về mẫu không khớp. Hãy tải lại danh sách mẫu đã gắn.')
+      if (application.template_id !== template.id) throw new Error(t('apply_wizard.error_mismatch'))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['card-template'] }),
         queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] }),
         queryClient.invalidateQueries({ queryKey: ['note-types'] }),
       ])
       if (!mounted.current) return
-      toast.success('Đã gắn mẫu vào loại thẻ.', {
-        action: { label: 'Mở loại thẻ', onClick: () => navigate(`/note-types/${encodeURIComponent(noteTypeId)}`) },
+      toast.success(t('apply_wizard.toast_success'), {
+        action: { label: t('apply_wizard.toast_action_open'), onClick: () => navigate(`/note-types/${encodeURIComponent(noteTypeId)}`) },
       })
       onApplied?.(application)
       onOpenChange(false)
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause : new Error('Không thể gắn mẫu.'))
+      if (mounted.current) setError(cause instanceof Error ? cause : new Error(t('apply_wizard.error_failed')))
     } finally {
       submitting.current = false
       if (mounted.current) setPending(false)
@@ -119,45 +122,46 @@ function useApplyTemplate({ template, initialNoteTypeId, onOpenChange, onApplied
 }
 
 function ApplyTemplateForm(props: Omit<ApplyTemplateWizardProps, 'open'>) {
+  const { t } = useTranslation('card_templates')
   const form = useApplyTemplate(props)
   const id = useId()
   const errorMessage = form.error instanceof ApiError && form.error.code === 'APPLICATION_EXISTS'
-    ? 'Lần gắn này đã tồn tại. Chọn mã lần gắn khác hoặc sửa ánh xạ hiện có.'
+    ? t('apply_wizard.error_conflict')
     : form.error?.message
   return <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (form.step === 2) void form.submit() }}>
     <DialogHeader>
-      <DialogTitle>{form.step === 1 ? 'Chọn loại thẻ' : 'Ánh xạ trường'}</DialogTitle>
-      <DialogDescription>Mẫu dùng chung giữ nguyên nội dung; ánh xạ chỉ áp dụng cho loại thẻ này.</DialogDescription>
+      <DialogTitle>{form.step === 1 ? t('apply_wizard.step1_title') : t('apply_wizard.step2_title')}</DialogTitle>
+      <DialogDescription>{t('apply_wizard.description')}</DialogDescription>
     </DialogHeader>
-    {form.noteTypes.isPending && <p role="status" className="text-muted-foreground">Đang tải loại thẻ…</p>}
+    {form.noteTypes.isPending && <p role="status" className="text-muted-foreground">{t('apply_wizard.loading_note_types')}</p>}
     {form.noteTypes.isError && <Alert variant="destructive"><AlertDescription>
       {form.noteTypes.error.message}
-      <Button type="button" variant="outline" className="mt-2" onClick={() => void form.noteTypes.refetch()}>Thử lại</Button>
+      <Button type="button" variant="outline" className="mt-2" onClick={() => void form.noteTypes.refetch()}>{t('apply_wizard.retry')}</Button>
     </AlertDescription></Alert>}
     {form.noteTypes.data?.items.length === 0 && <div className="space-y-2 text-muted-foreground">
-      <p>Chưa có loại thẻ để gắn mẫu.</p>
-      <Button type="button" variant="outline" onClick={() => void form.noteTypes.refetch()}>Tải lại</Button>
+      <p>{t('apply_wizard.empty_note_types')}</p>
+      <Button type="button" variant="outline" onClick={() => void form.noteTypes.refetch()}>{t('apply_wizard.reload')}</Button>
     </div>}
     {Boolean(form.noteTypes.data?.items.length) && <div className="space-y-2">
-      <Label htmlFor={`${id}-note-type`}>Loại thẻ</Label>
+      <Label htmlFor={`${id}-note-type`}>{t('apply_wizard.note_type_label')}</Label>
       <NativeSelect id={`${id}-note-type`} className="w-full" value={form.selectedId} disabled={form.pending}
         onChange={(event) => form.selectNoteType(event.target.value)}>
-        <NativeSelectOption value="">— Chọn loại thẻ —</NativeSelectOption>
+        <NativeSelectOption value="">{t('apply_wizard.select_placeholder')}</NativeSelectOption>
         {form.noteTypes.data!.items.map((item) => <NativeSelectOption key={item.id} value={item.id}>
-          {item.name}{item.is_marketplace_install ? ' · Bản cài từ marketplace' : ''}
+          {item.name}{item.is_marketplace_install ? t('apply_wizard.marketplace_suffix') : ''}
         </NativeSelectOption>)}
       </NativeSelect>
-      {form.selected?.is_marketplace_install && <Badge variant="secondary">Bản cài từ marketplace</Badge>}
+      {form.selected?.is_marketplace_install && <Badge variant="secondary">{t('apply_wizard.marketplace_badge')}</Badge>}
     </div>}
     {form.step === 2 && form.selected && <>
       <div className="space-y-2">
-        <Label htmlFor={`${id}-name`}>Tên hiển thị</Label>
+        <Label htmlFor={`${id}-name`}>{t('apply_wizard.display_name_label')}</Label>
         <Input id={`${id}-name`} value={form.displayName} maxLength={255} disabled={form.pending}
           aria-invalid={!form.displayName.trim() || (form.error instanceof ApiError && form.error.field === 'display_name')}
           onChange={(event) => form.setDisplayName(event.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label htmlFor={`${id}-occurrence`}>Mã lần gắn</Label>
+        <Label htmlFor={`${id}-occurrence`}>{t('apply_wizard.occurrence_key_label')}</Label>
         <Input id={`${id}-occurrence`} value={form.occurrence} maxLength={64} disabled={form.pending}
           aria-invalid={!form.occurrence.trim() || (form.error instanceof ApiError && form.error.field === 'occurrence_key')}
           onChange={(event) => form.setOccurrence(event.target.value)} />
@@ -165,18 +169,18 @@ function ApplyTemplateForm(props: Omit<ApplyTemplateWizardProps, 'open'>) {
       <FieldMappingEditor inputs={props.template.input_schema} fields={form.selected.field_defs}
         bindings={form.bindings} onChange={form.setBindings} issues={form.issues} disabled={form.pending} />
     </>}
-    {props.template.archived_at && <p className="text-muted-foreground">Bỏ lưu trữ để gắn mẫu.</p>}
+    {props.template.archived_at && <p className="text-muted-foreground">{t('apply_wizard.unarchive_warning')}</p>}
     {errorMessage && <Alert variant="destructive"><AlertDescription>{errorMessage}</AlertDescription></Alert>}
     <DialogFooter>
-      {form.step === 2 && <Button type="button" variant="outline" disabled={form.pending} onClick={() => form.setStep(1)}>Quay lại</Button>}
-      <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)}>Hủy</Button>
+      {form.step === 2 && <Button type="button" variant="outline" disabled={form.pending} onClick={() => form.setStep(1)}>{t('apply_wizard.back')}</Button>}
+      <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)}>{t('apply_wizard.cancel')}</Button>
       {form.step === 1
         ? <Button key="continue" type="button" disabled={!form.selected} onClick={(event) => {
           // Cancel native activation before React renders the submit button for step two.
           event.preventDefault()
           form.setStep(2)
-        }}>Tiếp tục</Button>
-        : <Button key="attach" type="submit" disabled={form.invalid || form.pending}>{form.pending ? 'Đang gắn…' : 'Gắn mẫu'}</Button>}
+        }}>{t('apply_wizard.continue')}</Button>
+        : <Button key="attach" type="submit" disabled={form.invalid || form.pending}>{form.pending ? t('apply_wizard.attaching') : t('apply_wizard.attach')}</Button>}
     </DialogFooter>
   </form>
 }

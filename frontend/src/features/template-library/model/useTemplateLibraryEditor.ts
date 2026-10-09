@@ -1,6 +1,8 @@
+import '@/shared/config/i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/shared/api/client'
 import {
   archiveLibraryTemplate, cardTemplateQueryKeys, fetchLibraryTemplate, previewLibraryTemplate, updateLibraryTemplate,
@@ -29,6 +31,7 @@ const isDirty = (state: EditorState) => JSON.stringify(state.draft) !== JSON.str
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Đã có lỗi xảy ra. Vui lòng thử lại.'
 
 export function useTemplateLibraryEditor(id: string) {
+  const { t } = useTranslation('card_templates')
   const client = useQueryClient()
   const identity = useRef({ id, generation: 0, mounted: true })
   if (identity.current.id !== id) identity.current = { id, generation: identity.current.generation + 1, mounted: true }
@@ -73,13 +76,13 @@ export function useTemplateLibraryEditor(id: string) {
       if (!stillCurrent(request)) return
       setState(fromTemplate(template)); setSaveError(null)
       client.setQueryData<TemplateLibraryDetail>(cardTemplateQueryKeys.libraryDetail(request.id), (old) => old && ({ ...old, ...template }))
-      toast.success('Đã lưu mẫu thẻ.')
+      toast.success(t('editor.toast_saved'))
       await invalidate()
     },
     onError: (error, request) => {
       if (!stillCurrent(request)) return
       const stale = error instanceof ApiError && (error.status === 409 || error.code === 'TEMPLATE_VERSION_STALE')
-      setSaveError({ id: request.id, stale, message: stale ? 'Mẫu thẻ đã thay đổi. Hãy tải lại trước khi lưu.' : errorMessage(error) })
+      setSaveError({ id: request.id, stale, message: stale ? t('editor.stale_error') : errorMessage(error) })
     },
   })
   const archiveMutation = useMutation({
@@ -89,7 +92,7 @@ export function useTemplateLibraryEditor(id: string) {
       client.setQueryData<TemplateLibraryDetail>(cardTemplateQueryKeys.libraryDetail(request.id), (old) => old && ({ ...old, ...template }))
       await invalidate()
     },
-    onError: (error, request) => { if (stillCurrent(request)) toast.error('Không thể đổi trạng thái lưu trữ', { description: errorMessage(error) }) },
+    onError: (error, request) => { if (stillCurrent(request)) toast.error(t('editor.archive_error_title'), { description: errorMessage(error) }) },
   })
 
   // Restore/distribution responses have intentionally different DTOs. Replace explicit
@@ -147,7 +150,7 @@ export function useTemplateLibraryEditor(id: string) {
     archive: (archived: boolean) => archiveMutation.mutateAsync({ ...capture(), archived }),
     refreshAndReplaceDraft, isReplacingDraft, refreshError,
     previewResult: preview?.key === previewKey ? preview.data : null,
-    previewError: schemaIssues.length ? 'Hãy sửa input trước khi xem trước.' : preview?.key === previewKey ? preview.error : null,
+    previewError: schemaIssues.length ? t('editor.preview_schema_error') : preview?.key === previewKey ? preview.error : null,
     isPreviewLoading: Boolean(previewBody && !schemaIssues.length && (preview?.key !== previewKey || preview?.loading)),
   }
 }

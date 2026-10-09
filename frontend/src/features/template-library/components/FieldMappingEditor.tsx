@@ -1,4 +1,6 @@
+import '@/shared/config/i18n'
 import { useId } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
@@ -14,18 +16,19 @@ export type FieldMappingEditorProps = {
   disabled?: boolean
 }
 
-function issueMessage(issue: MappingIssue): string {
+function issueMessage(issue: MappingIssue, t: (key: 'mapping_editor.issue_unbound_required' | 'mapping_editor.issue_unbound_optional' | 'mapping_editor.issue_field_out_of_scope' | 'mapping_editor.issue_type_mismatch' | 'mapping_editor.issue_unknown_input') => string): string {
   switch (issue.kind) {
     case 'unbound': return issue.required
-      ? 'Input được khuyến nghị chưa ánh xạ; vẫn có thể sử dụng.'
-      : 'Input này sẽ hiển thị rỗng.'
-    case 'field_out_of_scope': return 'Trường không thuộc loại thẻ đã chọn.'
-    case 'type_mismatch': return 'Kiểu trường không phù hợp.'
-    case 'unknown_input': return 'Input không còn trong mẫu thẻ.'
+      ? t('mapping_editor.issue_unbound_required')
+      : t('mapping_editor.issue_unbound_optional')
+    case 'field_out_of_scope': return t('mapping_editor.issue_field_out_of_scope')
+    case 'type_mismatch': return t('mapping_editor.issue_type_mismatch')
+    case 'unknown_input': return t('mapping_editor.issue_unknown_input')
   }
 }
 
 export function FieldMappingEditor({ inputs, fields, bindings, onChange, issues, disabled }: FieldMappingEditorProps) {
+  const { t } = useTranslation('card_templates')
   const prefix = useId()
   return <div className="space-y-4">
     {inputs.map((input, index) => {
@@ -37,30 +40,30 @@ export function FieldMappingEditor({ inputs, fields, bindings, onChange, issues,
         <Label htmlFor={id} className="flex flex-wrap items-center gap-2">
           <code>{`{{${input.key}}}`}</code>
           <span>{input.label}</span>
-          {input.required && <Badge variant="secondary">Khuyến nghị</Badge>}
+          {input.required && <Badge variant="secondary">{t('mapping_editor.badge_recommended')}</Badge>}
         </Label>
         <NativeSelect id={id} className="w-full" value={fieldId} disabled={disabled}
           aria-invalid={inputIssues.some((issue) => issue.blocking)}
           aria-describedby={inputIssues.length ? `${id}-issues` : undefined}
           onChange={(event) => { if (!disabled) onChange({ ...bindings, [input.key]: event.target.value || null }) }}>
-          <NativeSelectOption value="">— Không dùng —</NativeSelectOption>
-          {stale && <NativeSelectOption value={fieldId} disabled>Trường không còn tồn tại · {fieldId}</NativeSelectOption>}
+          <NativeSelectOption value="">{t('mapping_editor.select_unbound')}</NativeSelectOption>
+          {stale && <NativeSelectOption value={fieldId} disabled>{t('mapping_editor.stale_field', { id: fieldId })}</NativeSelectOption>}
           {fields.map((field) => <NativeSelectOption key={field.id} value={field.id}
             disabled={!isTypeCompatible(input.type, field.field_type)}>{field.name} · {field.field_type}</NativeSelectOption>)}
         </NativeSelect>
         {inputIssues.length > 0 && <div id={`${id}-issues`} className="space-y-1">
-          {inputIssues.map((issue) => <p key={issue.kind} className={`text-xs ${issue.blocking ? 'text-destructive' : 'text-muted-foreground'}`}>{issueMessage(issue)}</p>)}
+          {inputIssues.map((issue) => <p key={issue.kind} className={`text-xs ${issue.blocking ? 'text-destructive' : 'text-muted-foreground'}`}>{issueMessage(issue, t)}</p>)}
         </div>}
       </div>
     })}
     {issues.filter((issue) => issue.kind === 'unknown_input').map((issue) => <p key={issue.key} role="alert" className="text-xs text-destructive">
-      {`{{${issue.key}}}`} — {issueMessage(issue)}
+      {`{{${issue.key}}}`} — {issueMessage(issue, t)}
       <button type="button" disabled={disabled} className="ml-2 underline" onClick={() => {
         if (disabled) return
         const next = { ...bindings }
         delete next[issue.key]
         onChange(next)
-      }}>Bỏ ánh xạ</button>
+      }}>{t('mapping_editor.btn_unmap')}</button>
     </p>)}
   </div>
 }
