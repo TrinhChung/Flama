@@ -135,7 +135,7 @@ type SortView = 'recommended' | 'newest' | 'popular'
 
 type MarketplaceList = {
   items: MarketplaceItem[]
-  pagination: { page: number; page_size: number; total: number; has_more: boolean }
+  pagination?: { page: number; page_size: number; total: number; has_more: boolean }
   curated_sections?: {
     major_sections: { category: string; total: number; item_ids: string[] }[]
     other_item_ids: string[]
@@ -299,7 +299,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       sort,
     ],
     initialPageParam: 1,
-    getNextPageParam: (lastPage: MarketplaceList) => lastPage.pagination.has_more
+    getNextPageParam: (lastPage: MarketplaceList) => lastPage.pagination?.has_more
       ? lastPage.pagination.page + 1
       : undefined,
     queryFn: ({ pageParam }): Promise<MarketplaceList> =>
@@ -325,7 +325,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     if (!pages?.length) return undefined
     return {
       items: pages.flatMap((page) => page.items),
-      total: pages[0].pagination.total,
+      total: pages[0].pagination?.total ?? pages.reduce((total, page) => total + page.items.length, 0),
       curated: pages[0].curated_sections
         ? {
             majorSections: pages.flatMap((page) => {

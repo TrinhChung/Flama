@@ -43,3 +43,39 @@ file or production data is read. Local one-shot timings are diagnostics, not
 production p95 or browser timings. JSON bytes are uncompressed equivalents,
 not network transfers. These probes cover owned/direct paths; focused tests
 cover clone release/overlay correctness separately.
+
+## Additional measurements
+
+- `build_results.json`: current production manifest closure, per-file gzip level 9,
+  dynamic locale entries and source capture. Static imports exclude the common/shell
+  and route dictionary downloads; this is not LCP or transferred bytes.
+- `browser_persistence_before.json` / `browser_persistence_after.json`: real IndexedDB
+  checkpoint completion in isolated Chrome profiles, 3 warm-ups + 7 checkpoints,
+  NOTE/v4 with 1 KiB per note and no answer events. AFTER writer was enabled only
+  in the test Vite process. Initial save still writes the full immutable bundle.
+- `browser_durability_results.json`: upgrade, reload/undo, transactional abort,
+  content patch, quarantine/removal, flag-off rollback and two-tab cases. Browser
+  probes accept a Playwright `page` through `playwright-cli run-code --filename`;
+  durability starts with a fresh isolated profile; rollback uses the same origin
+  and profile with the new compatible reader and writer flag 0.
+- `connect_mysql_projection_results.json`: bounded read-only local MySQL JSON
+  projection parity; no note values, credentials or transport timing are exported.
+- `publish_mysql_summary.json`: aggregates from three read-only local MySQL runs,
+  exact payload parity and source provenance, plus rotating query-shape trials.
+  The final AFTER run captures the new tree helper too. Latency varies between
+  runs; User 1 has not consistently met the proposed 400/550 ms median/p95 gate.
+
+Collect the build/publish summaries from already-created measurements:
+
+```powershell
+.venv/Scripts/python.exe docs/architecture/artifacts/legacy_perf_implementation_20261010/collect_build_and_publish.py --build D:/Project/nihongo-legacy-implementation-final-build
+```
+
+This collector requires the three `output/publish_options_mysql_*_20261010.json`
+local reports. They are intentionally ignored; the sanitized summary is checked
+in with its input hashes. To regenerate those source reports, use
+`scripts/bench_publish_options_mysql.py` against an explicitly isolated/local
+benchmark database; it rejects non-loopback hosts and does not enable maintenance.
+
+Writer flag, limitations, verification and deployment order are documented in the
+[implementation report](../../../reports/LEGACY_PERFORMANCE_IMPLEMENTATION_2026-10-10.md).

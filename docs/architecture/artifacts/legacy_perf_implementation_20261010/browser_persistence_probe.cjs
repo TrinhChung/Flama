@@ -52,8 +52,20 @@ async (page) => {
             throw new Error('Durable restore differs from the normalized checkpoint');
           }
         }
+        const database = await new Promise((resolve, reject) => {
+          const request = indexedDB.open('flama-study');
+          request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+        });
+        const layout = await new Promise((resolve, reject) => {
+          const transaction = database.transaction('sessions', 'readonly');
+          const request = transaction.objectStore('sessions').get(session.scope_key);
+          transaction.oncomplete = () => { database.close(); resolve(request.result); };
+          transaction.onabort = () => { database.close(); reject(transaction.error); };
+        });
         results.push({ cards: count, first_save_ms: initialMs, checkpoint_median_browser_ms: median(samples),
           samples_ms: samples, session_json_bytes: new TextEncoder().encode(JSON.stringify(session)).length,
+          stored_checkpoint_json_bytes: new TextEncoder().encode(JSON.stringify(layout)).length,
+          split_writer_enabled: layout.storage_schema === 'study-session-storage.v1',
           durable_restore_parity: true });
       } finally { await removeStudySession(session.scope_key); }
     }

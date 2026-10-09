@@ -1,5 +1,7 @@
 # Rà soát legacy và hiệu năng toàn ứng dụng — 10/10/2026
 
+> Đây là snapshot trước triển khai. Trạng thái đã xử lý, số đo sau thay đổi và kế hoạch rollout/rollback nằm trong [báo cáo triển khai ngày 10/10](../reports/LEGACY_PERFORMANCE_IMPLEMENTATION_2026-10-10.md); các baseline bên dưới được giữ nguyên để đối chiếu.
+
 Các phần legacy có chi phí rõ nhất còn chạy là **API list Marketplace đang được React gọi, kiểm tra trùng của Flama Connect, fallback ownership của Statistics và cơ chế ghi nguyên phiên học offline**. Dashboard/Statistics còn có đường đọc raw mặc định dù summary/snapshot đã được triển khai. Không nên bắt đầu bằng xóa mọi file mang tên `legacy`: một số là thuật toán đang được hỗ trợ, decoder dữ liệu cũ hoặc facade không tạo thêm query.
 
 ## 1. Phạm vi và độ tin cậy

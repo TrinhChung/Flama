@@ -87,4 +87,15 @@ describe('Marketplace paged listing', () => {
       expect(container.querySelector(`a[href="/marketplace/decks/${card.id}"]`)).not.toBeNull()
     }
   })
+
+  it('continues to show legacy list responses during a mixed backend rollout', async () => {
+    vi.mocked(appApi.get).mockResolvedValue({ items: [item('legacy-response')] })
+    await act(async () => root.render(
+      <QueryClientProvider client={client}><MemoryRouter><SharedNoteTypesPage /></MemoryRouter></QueryClientProvider>,
+    ))
+    await settle()
+    expect(container.querySelector('a[href="/marketplace/note-types/legacy-response"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('Thử tải lại')
+    expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Xem thêm')).toBe(false)
+  })
 })

@@ -7,6 +7,7 @@ async (page) => {
     const { studySnapshotFixture } = await import('/src/features/study/session/studySessionTestFixture.ts');
     const engine = await import('/src/features/study/session/studySessionEngine.ts');
     const store = await import('/src/features/study/session/sessionStore.ts');
+    const { applyCardContentPatch } = await import('/src/features/study/session/contentPatchAdapter.ts');
     const snapshot = studySnapshotFixture();
     snapshot.session_id = crypto.randomUUID(); snapshot.scope.id = `durability-probe-${Date.now()}`;
     const session = engine.createPersistedSession(snapshot);
@@ -39,7 +40,7 @@ async (page) => {
       assert(await store.saveStudySession(answered), 'answer was not durable');
       assert(artifactPuts === 1, 'checkpoint rewrote immutable artifacts');
     } finally { IDBObjectStore.prototype.put = originalPut; }
-    const aborted = { ...answered, updated_at_ms: answered.updated_at_ms + 99 };
+    const aborted = { ...applyCardContentPatch(answered, answered.snapshot.cards[0].card_id, { Word: 'aborted-patch' }).nextSession, updated_at_ms: answered.updated_at_ms + 99 };
     let injected = false;
     IDBObjectStore.prototype.put = function (...args) {
       if (!injected && this.name === 'sessions') { injected = true; this.transaction.abort(); }
@@ -76,6 +77,7 @@ async (page) => {
     assert(loaded.session.snapshot.cards[0].state.reps > 0, 'answered state lost');
     const first = await readRows();
     assert(first.version === 3 && first.bundles.length === 1 && first.row.card_overrides.length === 1, 'v3 layout wrong');
+    assert(loaded.session.snapshot.contents[loaded.session.snapshot.cards[0].content_key].field_values.Word !== 'aborted-patch', 'aborted artifact write changed durable content');
     assert(await store.saveStudySession({ ...loaded.session, updated_at_ms: loaded.session.updated_at_ms + 1 }), 'resave after reload failed');
     loaded = await store.loadStudySessionWithDurability(key);
     assert(loaded.session.snapshot.cards[0].state.reps > 0, 'resave dropped restored override');
@@ -110,9 +112,18 @@ async (page) => {
     const snapshot = studySnapshotFixture(); snapshot.session_id = crypto.randomUUID(); snapshot.scope.id = 'durability-probe-rollback';
     const rollbackSession = engine.createPersistedSession(snapshot);
     assert(await store.saveStudySession(rollbackSession), 'rollback seed failed');
+    await store.removeStudySession(rollbackSession.scope_key);
+    const removalDb = await new Promise(resolve => { const req = indexedDB.open('flama-study'); req.onsuccess = () => resolve(req.result); });
+    await new Promise((resolve, reject) => {
+      const tx = removalDb.transaction(['sessions', 'session-artifacts'], 'readonly');
+      const active = tx.objectStore('sessions').get(rollbackSession.scope_key), artifacts = tx.objectStore('session-artifacts').index('scope_key').getAll(rollbackSession.scope_key);
+      tx.oncomplete = () => { removalDb.close(); try { assert(!active.result && artifacts.result.length === 0, 'remove left checkpoint or artifacts'); resolve(); } catch (error) { reject(error); } };
+      tx.onabort = () => reject(tx.error);
+    });
+    assert(await store.saveStudySession(rollbackSession), 'rollback reseed failed');
     sessionStorage.setItem('durability-probe-rollback', rollbackSession.scope_key);
     sessionStorage.setItem('durability-probe-rollback-session', canonicalJson(JSON.parse(JSON.stringify((await store.loadStudySessionWithDurability(rollbackSession.scope_key)).session))));
-    return { aborted_transaction_preserves_disk: true, reload_answer_and_undo: true, resave_preserves_override: true, content_patch_replaces_bundle: true, batch_and_commit_identity: true, missing_artifact_quarantine: true, removal_cleans_artifacts: true, rollback_fixture_ready: true };
+    return { aborted_artifact_and_checkpoint_transaction_preserves_disk: true, reload_answer_and_undo: true, resave_preserves_override: true, content_patch_replaces_bundle: true, batch_and_commit_identity: true, missing_artifact_quarantine: true, removal_cleans_artifacts: true, rollback_fixture_ready: true };
   });
   return { browser: await page.evaluate(() => navigator.userAgent), ...initial, ...restored };
 }
