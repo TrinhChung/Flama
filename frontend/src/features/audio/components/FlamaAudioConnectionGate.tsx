@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
+import { startLocalAudioPolling } from '../services/localAudioPolling'
 
 type FlamaAudioConnectionGateProps = {
   onConnectionChange?: (isReady: boolean) => void
@@ -25,10 +26,17 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
   const [pairingChallengeId, setPairingChallengeId] = useState<string | null>(null)
   const [isPairingApproved, setIsPairingApproved] = useState<boolean>(false)
   const [appVersion, setAppVersion] = useState<string>('')
+  const pairingRequestRef = useRef<AbortController | null>(null)
+  const healthRequestRef = useRef<AbortController | null>(null)
 
   const handleStartPairing = useCallback(async () => {
+    pairingRequestRef.current?.abort()
+    const controller = new AbortController()
+    pairingRequestRef.current = controller
+    const { signal } = controller
     try {
-      const challenge = await flamaAudioClient.startPairing(window.location.origin)
+      const challenge = await flamaAudioClient.startPairing(window.location.origin, signal)
+      if (signal.aborted) return
       setPairingChallengeId(challenge.pairing_id)
 
       if (challenge.approved && challenge.token) {
@@ -39,35 +47,37 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
         return
       }
 
-      let attempts = 0
-      const interval = setInterval(async () => {
-        attempts++
-        if (attempts > 40) {
-          clearInterval(interval)
+      startLocalAudioPolling({
+        signal,
+        intervalMs: 1500,
+        maxAttempts: 40,
+        request: (requestSignal) => flamaAudioClient.getPairingStatus(challenge.pairing_id, requestSignal),
+        onResult: (status) => {
+          if (!status.approved || !status.token) return false
+          flamaAudioClient.setToken(status.token)
+          setIsPairingApproved(true)
           setPairingChallengeId(null)
-          return
-        }
-
-        try {
-          const status = await flamaAudioClient.getPairingStatus(challenge.pairing_id)
-          if (status.approved && status.token) {
-            clearInterval(interval)
-            flamaAudioClient.setToken(status.token)
-            setIsPairingApproved(true)
-            setPairingChallengeId(null)
-            if (onConnectionChange) onConnectionChange(true)
-          }
-        } catch {}
-      }, 1500)
+          if (onConnectionChange) onConnectionChange(true)
+          return true
+        },
+        onExhausted: () => setPairingChallengeId(null),
+      })
     } catch {
+      if (signal.aborted) return
       setIsPairingApproved(false)
     }
   }, [onConnectionChange])
 
   const checkHealth = useCallback(async () => {
+    healthRequestRef.current?.abort()
+    pairingRequestRef.current?.abort()
+    const controller = new AbortController()
+    healthRequestRef.current = controller
+    const { signal } = controller
     setServiceStatus('checking')
     try {
-      const health = await flamaAudioClient.getHealth()
+      const health = await flamaAudioClient.getHealth(signal)
+      if (signal.aborted) return
       setServiceStatus('online')
       setAppVersion(health.version || '1.0.0')
 
@@ -80,15 +90,18 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
       }
 
       try {
-        await flamaAudioClient.getVoices('voicevox')
+        await flamaAudioClient.getVoices('voicevox', signal)
+        if (signal.aborted) return
         setIsPairingApproved(true)
         if (onConnectionChange) onConnectionChange(true)
       } catch {
+        if (signal.aborted) return
         setIsPairingApproved(false)
         if (onConnectionChange) onConnectionChange(false)
         handleStartPairing()
       }
     } catch {
+      if (signal.aborted) return
       setServiceStatus('offline')
       setIsPairingApproved(false)
       if (onConnectionChange) onConnectionChange(false)
@@ -97,6 +110,10 @@ export function FlamaAudioConnectionGate({ onConnectionChange }: FlamaAudioConne
 
   useEffect(() => {
     checkHealth()
+    return () => {
+      healthRequestRef.current?.abort()
+      pairingRequestRef.current?.abort()
+    }
   }, [checkHealth])
 
   return (
