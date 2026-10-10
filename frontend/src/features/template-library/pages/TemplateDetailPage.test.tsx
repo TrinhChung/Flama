@@ -6,11 +6,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/shared/api/client'
-import { archiveLibraryTemplate, fetchLibraryTemplate, fetchTemplateVersion, fetchTemplateVersions, previewLibraryTemplate, restoreTemplateVersion, updateLibraryTemplate, type TemplateLibraryDetail, type TemplateVersionDetail } from '@/entities/card-template'
+import { archiveLibraryTemplate, deleteLibraryTemplate, fetchLibraryTemplate, fetchTemplateVersion, fetchTemplateVersions, previewLibraryTemplate, restoreTemplateVersion, updateLibraryTemplate, type TemplateLibraryDetail, type TemplateVersionDetail } from '@/entities/card-template'
 import { TemplateDetailPage } from './TemplateDetailPage'
 const preview = vi.hoisted(() => vi.fn())
 const composition = vi.hoisted(() => ({ apply: vi.fn(), distribution: vi.fn() }))
-vi.mock('@/entities/card-template', async (original) => ({ ...await original<typeof import('@/entities/card-template')>(), fetchLibraryTemplate: vi.fn(), updateLibraryTemplate: vi.fn(), previewLibraryTemplate: vi.fn(), archiveLibraryTemplate: vi.fn(), fetchTemplateVersions: vi.fn(), fetchTemplateVersion: vi.fn(), restoreTemplateVersion: vi.fn() }))
+vi.mock('@/entities/card-template', async (original) => ({ ...await original<typeof import('@/entities/card-template')>(), fetchLibraryTemplate: vi.fn(), updateLibraryTemplate: vi.fn(), previewLibraryTemplate: vi.fn(), archiveLibraryTemplate: vi.fn(), deleteLibraryTemplate: vi.fn(), fetchTemplateVersions: vi.fn(), fetchTemplateVersion: vi.fn(), restoreTemplateVersion: vi.fn() }))
 vi.mock('@/entities/flashcard/ui/CardPreviewPanel', () => ({ CardPreviewPanel: preview }))
 vi.mock('@/features/template-distribution', () => ({ TemplateDistributionPanel: composition.distribution }))
 vi.mock('../components/ApplyTemplateWizard', () => ({ ApplyTemplateWizard: composition.apply }))
@@ -91,10 +91,10 @@ describe('TemplateDetailPage composes editor, sandbox preview, history and usage
     const applyItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.textContent?.trim() === 'Áp dụng vào cấu trúc thẻ')!
     expect(applyItem.getAttribute('data-disabled')).not.toBeNull(); await act(async () => applyItem.click()); expect(composition.apply).toHaveBeenLastCalledWith(expect.objectContaining({ open: false }), undefined)
   })
-  it('does not advertise the existing empty distribution feature', async () => {
-    await render(); expect(composition.distribution).not.toHaveBeenCalled()
-    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Thao tác khác với template"]')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })))
-    expect(document.body.textContent).not.toContain('Phân phối / cập nhật')
+  it('opens the distribution panel from the actions menu', async () => {
+    await render(); expect(composition.distribution).toHaveBeenLastCalledWith(expect.objectContaining({ open: false, templateId: 't1' }), undefined)
+    await menuAction('Phân phối / cập nhật')
+    expect(composition.distribution).toHaveBeenLastCalledWith(expect.objectContaining({ open: true, templateId: 't1', origin: 'authored', currentVersionId: 'v2' }), undefined)
   })
   it('locks the editor and save through both restore POST and full schema refetch', async () => {
     await render(); await text(container.querySelector('textarea')!, 'dirty')
@@ -136,5 +136,15 @@ describe('TemplateDetailPage composes editor, sandbox preview, history and usage
     await render(); await act(async () => findButton('Inputs · 1').click()); await act(async () => document.querySelector<HTMLButtonElement>('[aria-pressed="false"]')!.click()); await text(document.querySelector<HTMLInputElement>('input[maxlength="255"]')!, 'Local draft')
     const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); expect(event.defaultPrevented).toBe(true)
     await act(async () => findButton('Hủy').click()); const clean = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(clean); expect(clean.defaultPrevented).toBe(false)
+  })
+  it('deletes template after confirmation and navigates to library', async () => {
+    vi.mocked(deleteLibraryTemplate).mockResolvedValue({ success: true, id: 't1' })
+    await render()
+    await menuAction('Xóa template')
+    expect(document.body.textContent).toContain('Xóa mẫu thẻ này?')
+    const confirmBtn = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === 'Xóa template')!
+    await act(async () => confirmBtn.click())
+    await flush()
+    expect(deleteLibraryTemplate).toHaveBeenCalledWith('t1')
   })
 })

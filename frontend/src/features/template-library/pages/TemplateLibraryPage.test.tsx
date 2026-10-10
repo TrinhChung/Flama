@@ -17,8 +17,8 @@ describe('TemplateLibraryPage', () => {
   beforeEach(() => { vi.clearAllMocks(); vi.mocked(fetchTemplateLibrary).mockResolvedValue({ schema_version: 'template-library.v2', items: [template] }); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
   afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); document.body.innerHTML = '' })
   async function render() { await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><TemplateLibraryPage /></MemoryRouter></QueryClientProvider>)); await flush() }
-  it('fetches defaults and shows distinct NoteType/application counts and four tokens', async () => {
-    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({ compact: true, page: 1, page_size: 24 }, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 cấu trúc thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(4); expect(container.textContent).toContain('+2'); expect(container.querySelector('a')?.getAttribute('href')).toBe('/card-templates/t%2F1')
+  it('fetches defaults and shows distinct NoteType/application counts and details button', async () => {
+    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({ compact: true, page: 1, page_size: 24 }, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 cấu trúc thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(0); expect(container.textContent).toContain('Xem chi tiết'); expect(container.querySelector('a[href="/card-templates/t%2F1"]')).not.toBeNull(); expect(container.querySelector('a[href="/marketplace/note-types"]')).not.toBeNull()
   })
   it('supports all five groups', async () => {
     await render()
@@ -34,7 +34,7 @@ describe('TemplateLibraryPage', () => {
     await act(async () => container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()); await flush()
     expect(fetchTemplateLibrary).toHaveBeenLastCalledWith({ compact: true, page: 1, page_size: 24, include_archived: true }, expect.any(AbortSignal))
     expect(container.textContent).toContain('Đã lưu trữ')
-    expect(container.querySelector('a')?.getAttribute('href')).toBe('/card-templates/t%2F1')
+    expect(container.querySelector('a[href="/card-templates/t%2F1"]')).not.toBeNull()
   })
   it('debounces the final query and waits until Japanese IME composition ends', async () => {
     await render(); const input = container.querySelector('input')!

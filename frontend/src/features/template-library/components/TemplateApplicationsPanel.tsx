@@ -2,14 +2,15 @@ import '@/shared/config/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
-  attachLibraryTemplate, cardTemplateQueryKeys, fetchTemplateApplications, retireTemplateApplication, updateTemplateApplication,
+  attachLibraryTemplate, cardTemplateQueryKeys, deleteNoteTypeTemplate, fetchTemplateApplications, retireTemplateApplication, updateTemplateApplication,
   validateBindings, type MappingField, type TemplateApplication,
 } from '@/entities/card-template'
 import { apiRequest } from '@/shared/api/client'
@@ -21,7 +22,7 @@ export type TemplateApplicationsPanelProps = {
   onChanged?: () => void
 }
 
-type ApplicationMutation = 'default' | 'retire' | 'reattach'
+type ApplicationMutation = 'default' | 'retire' | 'reattach' | 'delete'
 
 function useTemplateApplications({ noteTypeId, fields, onChanged }: TemplateApplicationsPanelProps) {
   const { t } = useTranslation('card_templates')
@@ -49,20 +50,24 @@ function useTemplateApplications({ noteTypeId, fields, onChanged }: TemplateAppl
     setPendingId(application.id)
     setError(null)
     try {
-      const result = kind === 'retire'
-        ? await retireTemplateApplication(noteTypeId, application.id)
-        : kind === 'default'
-          ? await updateTemplateApplication(noteTypeId, application.id, { is_default: true })
-          : await attachLibraryTemplate(noteTypeId, {
-            template_id: application.template_id,
-            occurrence_key: application.occurrence_key,
-            input_bindings: application.input_bindings,
-            display_name: application.display_name,
-            position: application.position,
-            is_default: application.is_default,
-          })
-      if (result.id !== application.id || result.template_id !== application.template_id) {
-        throw new Error(t('applications_panel.error_mismatch'))
+      if (kind === 'delete') {
+        await deleteNoteTypeTemplate(noteTypeId, application.template_id)
+      } else {
+        const result = kind === 'retire'
+          ? await retireTemplateApplication(noteTypeId, application.id)
+          : kind === 'default'
+            ? await updateTemplateApplication(noteTypeId, application.id, { is_default: true })
+            : await attachLibraryTemplate(noteTypeId, {
+              template_id: application.template_id,
+              occurrence_key: application.occurrence_key,
+              input_bindings: application.input_bindings,
+              display_name: application.display_name,
+              position: application.position,
+              is_default: application.is_default,
+            })
+        if (result.id !== application.id || result.template_id !== application.template_id) {
+          throw new Error(t('applications_panel.error_mismatch'))
+        }
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['card-template'] }),
@@ -83,7 +88,7 @@ function useTemplateApplications({ noteTypeId, fields, onChanged }: TemplateAppl
   return { applications, detail, fields: fields ?? detail.data?.field_defs ?? [], pendingId, error, setError, execute }
 }
 
-function ApplicationRow({ application, noteTypeId, fields, fieldsUnavailable, pending, onDefault, onRetire, onReattach }: {
+function ApplicationRow({ application, noteTypeId, fields, fieldsUnavailable, pending, onDefault, onRetire, onReattach, onDelete }: {
   application: TemplateApplication
   noteTypeId: string
   fields: MappingField[]
@@ -92,6 +97,7 @@ function ApplicationRow({ application, noteTypeId, fields, fieldsUnavailable, pe
   onDefault: () => void
   onRetire: () => void
   onReattach: () => void
+  onDelete: () => void
 }) {
   const { t } = useTranslation('template_mapping')
   const { t: legacyT } = useTranslation('card_templates')
@@ -127,9 +133,20 @@ function ApplicationRow({ application, noteTypeId, fields, fieldsUnavailable, pe
             <DropdownMenuItem disabled={application.is_default} onSelect={onDefault}>{t('set_default')}</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={onRetire}>{legacyT('applications_panel.btn_retire')}</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" className="text-destructive focus:text-destructive" onSelect={onDelete}><Trash2 className="size-4" />{legacyT('applications_panel.btn_delete')}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </> : <Button variant="outline" size="sm" disabled={pending} onClick={onReattach}>{legacyT('applications_panel.btn_reattach')}</Button>}
+      </> : <>
+        <Button variant="outline" size="sm" disabled={pending} onClick={onReattach}>{legacyT('applications_panel.btn_reattach')}</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" disabled={pending} aria-label={t('actions', { name })}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-48">
+            <DropdownMenuItem asChild><Link to={`/card-templates/${encodeURIComponent(application.template_id)}`} state={{ returnTo: mappingPath }}>{t('edit_design')}</Link></DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" className="text-destructive focus:text-destructive" onSelect={onDelete}><Trash2 className="size-4" />{legacyT('applications_panel.btn_delete')}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>}
     </div>
   </article>
 }
@@ -139,6 +156,7 @@ function TemplateApplicationsContent(props: TemplateApplicationsPanelProps) {
   const { t: legacyT } = useTranslation('card_templates')
   const state = useTemplateApplications(props)
   const [retiring, setRetiring] = useState<TemplateApplication | null>(null)
+  const [deleting, setDeleting] = useState<TemplateApplication | null>(null)
   const fieldsUnavailable = props.fields === undefined && !state.detail.data
   const active = state.applications.data?.items.filter((application) => application.status_code === 'ACTIVE') ?? []
   const retired = state.applications.data?.items.filter((application) => application.status_code === 'RETIRED') ?? []
@@ -146,7 +164,8 @@ function TemplateApplicationsContent(props: TemplateApplicationsPanelProps) {
     fields={state.fields} fieldsUnavailable={fieldsUnavailable} pending={Boolean(state.pendingId)}
     onDefault={() => void state.execute('default', application)}
     onRetire={() => { state.setError(null); setRetiring(application) }}
-    onReattach={() => void state.execute('reattach', application)} />
+    onReattach={() => void state.execute('reattach', application)}
+    onDelete={() => { state.setError(null); setDeleting(application) }} />
   return <section aria-label={t('templates_title')} className="space-y-4">
     {state.applications.isPending && <p role="status">{legacyT('applications_panel.loading')}</p>}
     {state.applications.isError && <Alert variant="destructive"><AlertDescription>
@@ -163,12 +182,26 @@ function TemplateApplicationsContent(props: TemplateApplicationsPanelProps) {
       <summary className="cursor-pointer rounded-xl px-4 py-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{t('removed', { count: retired.length })}</summary>
       <div className="space-y-3 border-t border-border p-3">{retired.map(renderRow)}</div>
     </details>}
-    {state.error && !retiring && <Alert variant="destructive"><AlertDescription>{state.error.message}</AlertDescription></Alert>}
+    {state.error && !retiring && !deleting && <Alert variant="destructive"><AlertDescription>{state.error.message}</AlertDescription></Alert>}
     <ConfirmDialog open={Boolean(retiring)} onOpenChange={(open) => { if (!open) setRetiring(null) }}
       title={legacyT('applications_panel.retire_confirm_title')} description={legacyT('applications_panel.retire_confirm_desc')}
       variant="destructive" confirmText={legacyT('applications_panel.retire_confirm_btn')} cancelText={t('cancel')} isLoading={Boolean(state.pendingId)}
       onConfirm={async () => { if (retiring && await state.execute('retire', retiring)) setRetiring(null) }}>
       {state.error && retiring && <p role="alert" className="text-destructive">{state.error.message}</p>}
+    </ConfirmDialog>
+    <ConfirmDialog open={Boolean(deleting)} onOpenChange={(open) => { if (!open) setDeleting(null) }}
+      title={legacyT('applications_panel.delete_confirm_title')} description={legacyT('applications_panel.delete_confirm_desc')}
+      variant="destructive" confirmText={legacyT('applications_panel.delete_confirm_btn')} cancelText={t('cancel')} isLoading={Boolean(state.pendingId)}
+      onConfirm={async () => {
+        if (deleting) {
+          const success = await state.execute('delete', deleting)
+          if (success) {
+            toast.success(legacyT('applications_panel.delete_success'))
+            setDeleting(null)
+          }
+        }
+      }}>
+      {state.error && deleting && <p role="alert" className="text-destructive">{state.error.message}</p>}
     </ConfirmDialog>
   </section>
 }

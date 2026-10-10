@@ -54,7 +54,10 @@ describe('TemplateApplicationsPanel', () => {
         ? json({ schema_version: 'template-applications.v2', items: [current, ...additional] }) : json({ field_defs: fields })
       if (failure) return json(failure, 400)
       if (method === 'PATCH') current = { ...current, ...JSON.parse(String(init?.body)) }
-      if (method === 'DELETE') current = { ...current, status_code: 'RETIRED' }
+      if (method === 'DELETE') {
+        if (String(url).includes('/templates/')) return json({ success: true, deleted_id: 'template/1' })
+        current = { ...current, status_code: 'RETIRED' }
+      }
       if (method === 'POST') current = { ...current, ...JSON.parse(String(init?.body)), status_code: 'ACTIVE' }
       return json(current, method === 'POST' ? 201 : 200)
     })
@@ -138,6 +141,42 @@ describe('TemplateApplicationsPanel', () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Không thể gỡ.')
     expect(current.status_code).toBe('ACTIVE')
     expect(props.onChanged).not.toHaveBeenCalled()
+  })
+  it('deletes active template after confirmation', async () => {
+    await render(); await openActions()
+    await act(async () => menuItem('Xóa template').click()); await flush()
+    expect(document.body.textContent).toContain('Xóa template khỏi cấu trúc thẻ?')
+    const dialog = document.querySelector('[role="dialog"]')!
+    await act(async () => Array.from(dialog.querySelectorAll('button')).find((item) => item.textContent === 'Xóa template')!.click()); await flush()
+    const [url, init] = fetchMock.mock.calls.find(([callUrl, options]) => options?.method === 'DELETE' && String(callUrl).includes('/templates/'))!
+    expect(String(url)).toContain('/note-types/nt%2F1/templates/template%2F1')
+    expect(init.body).toBeUndefined()
+    expect(props.onChanged).toHaveBeenCalledOnce()
+  })
+  it('keeps delete confirmation open on error', async () => {
+    failure = { error: 'FAILED', message: 'Không thể xóa template mặc định.' }
+    await render(); await openActions()
+    await act(async () => menuItem('Xóa template').click()); await flush()
+    const dialog = document.querySelector('[role="dialog"]')!
+    await act(async () => Array.from(dialog.querySelectorAll('button')).find((item) => item.textContent === 'Xóa template')!.click()); await flush()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Không thể xóa template mặc định.')
+    expect(props.onChanged).not.toHaveBeenCalled()
+  })
+  it('allows deleting retired template from details section', async () => {
+    current.status_code = 'RETIRED'
+    await render()
+    const removed = document.querySelector('details')!
+    await act(async () => { removed.open = true })
+    const retiredTrigger = removed.querySelector<HTMLButtonElement>('[data-slot="dropdown-menu-trigger"]')!
+    await act(async () => retiredTrigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })))
+    await flush()
+    await act(async () => menuItem('Xóa template').click()); await flush()
+    expect(document.body.textContent).toContain('Xóa template khỏi cấu trúc thẻ?')
+    const dialog = document.querySelector('[role="dialog"]')!
+    await act(async () => Array.from(dialog.querySelectorAll('button')).find((item) => item.textContent === 'Xóa template')!.click()); await flush()
+    const [url] = fetchMock.mock.calls.find(([callUrl, options]) => options?.method === 'DELETE' && String(callUrl).includes('/templates/'))!
+    expect(String(url)).toContain('/note-types/nt%2F1/templates/template%2F1')
+    expect(props.onChanged).toHaveBeenCalledOnce()
   })
   it('uses supplied field definitions without fetching another detail record', async () => {
     props.fields = fields

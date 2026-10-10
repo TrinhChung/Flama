@@ -168,3 +168,20 @@ class TemplateLibraryTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"/api/card-templates/{self.template_id}").status_code, 404)
         self.assertEqual(self.client.patch(f"/api/card-templates/{self.template_id}", json={"name": "stolen"}).status_code, 404)
         self.assertEqual(self.client.post(f"/api/note-types/{self.types[0]['id']}/template-applications", json={"template_id": self.template_id}).status_code, 404)
+
+    def test_delete_template_success_and_in_use_error(self):
+        # 1. Cannot delete when in use by active application
+        self._attach(0)
+        res_in_use = self.client.delete(f"/api/card-templates/{self.template_id}")
+        self.assertEqual(res_in_use.status_code, 409)
+        self.assertEqual(res_in_use.get_json()["error"], "TEMPLATE_IN_USE")
+
+        # 2. Can delete a standalone template
+        created = self.client.post("/api/card-templates", json={"name": "Standalone", "front_html": "q", "back_html": "a"}).get_json()
+        standalone_id = created["id"]
+        res_delete = self.client.delete(f"/api/card-templates/{standalone_id}")
+        self.assertEqual(res_delete.status_code, 200)
+        self.assertTrue(res_delete.get_json()["success"])
+        # Verify it's gone
+        res_get = self.client.get(f"/api/card-templates/{standalone_id}")
+        self.assertEqual(res_get.status_code, 404)

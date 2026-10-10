@@ -100,6 +100,12 @@ def archive_definition(template_id):
     return _respond(template_library_service.archive_template, template_id=template_id, payload=_body())
 
 
+@card_templates_bp.delete("/card-templates/<template_id>")
+@login_required
+def delete_definition(template_id):
+    return _respond(template_library_service.delete_template, template_id=template_id)
+
+
 @card_templates_bp.get("/note-types/<note_type_id>/template-applications")
 @login_required
 def applications(note_type_id):

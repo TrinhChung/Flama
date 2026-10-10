@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from app.repositories import template_library_repository as repository
 from app.repositories import template_version_repository
 from app.validators.template_library import (TemplateLibraryError, body, text, validate_input_schema, infer_input_schema, validate_bindings, binding_warnings)
@@ -194,6 +194,96 @@ def archive_template(*, user_id, template_id, payload):
         template = _owned(user_id, template_id, lock=True)
         template.archived_at = datetime.utcnow() if payload["archived"] else None
         return lambda: serialize_template(template)
+    return _commit(operation)
+
+
+def delete_template(*, user_id, template_id):
+    def operation():
+        template = _owned(user_id, template_id, lock=True)
+        active_applications = list(
+            db.session.execute(
+                select(StudyApplication).where(
+                    StudyApplication.template_id == template.id,
+                    StudyApplication.status_code == "ACTIVE",
+                )
+            ).scalars()
+        )
+        if active_applications:
+            raise TemplateLibraryError(
+                "TEMPLATE_IN_USE",
+                f"Template is currently in use in {len(active_applications)} active note type(s). Retire or remove them first.",
+                status=409,
+            )
+        from models.template_release import TemplateRelease
+        if db.session.execute(select(TemplateRelease.id).where(TemplateRelease.template_id == template.id)).first():
+            raise TemplateLibraryError(
+                "TEMPLATE_HAS_RELEASES",
+                "Cannot delete a published template with releases. Please archive it instead.",
+                status=409,
+            )
+        from models.template_subscription import TemplateSubscription
+        if db.session.execute(select(TemplateSubscription.id).where(TemplateSubscription.source_template_id == template.id)).first():
+            raise TemplateLibraryError(
+                "TEMPLATE_HAS_SUBSCRIBERS",
+                "Cannot delete a template with active subscribers. Please archive it instead.",
+                status=409,
+            )
+        db.session.execute(
+            delete(TemplateSubscription).where(TemplateSubscription.local_template_id == template.id)
+        )
+        from models.template_publication import TemplatePublication
+        db.session.execute(
+            delete(TemplatePublication).where(TemplatePublication.template_id == template.id)
+        )
+        card_ids = [
+            str(row[0])
+            for row in db.session.query(Card.id)
+            .filter(Card.template_id == template.id)
+            .all()
+            if row and row[0]
+        ]
+        if card_ids:
+            from app.services import study_content_delete_service as content_delete
+            from models.card_progress import CardProgress
+            try:
+                authority_routes = content_delete.lock_content_delete_routes(
+                    db.session,
+                    actor_user_ids=(int(user_id),),
+                    card_ids=card_ids,
+                    deleted_note_ids=(),
+                )
+                lifecycle_plan = content_delete.prepare_content_delete(
+                    db.session,
+                    routes=authority_routes,
+                    card_ids=card_ids,
+                    note_ids=(),
+                    cancel_legacy_sessions=False,
+                )
+                content_delete.verify_content_delete_scope(
+                    db.session,
+                    routes=authority_routes,
+                    card_ids=card_ids,
+                    deleted_note_ids=(),
+                )
+                CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
+                    synchronize_session=False
+                )
+                content_delete.finalize_content_delete(
+                    lifecycle_plan,
+                    source_path="flashcards.template_library_delete",
+                    operation_key=f"template-library-delete:{template.id}",
+                )
+            except Exception as exc:
+                db.session.rollback()
+                raise TemplateLibraryError("DELETE_FAILED", str(exc), status=409) from exc
+            Card.query.filter_by(template_id=template.id).delete()
+
+        db.session.execute(
+            delete(StudyApplication).where(StudyApplication.template_id == template.id)
+        )
+        db.session.delete(template)
+        return lambda: {"success": True, "id": template_id}
+
     return _commit(operation)
 
 
