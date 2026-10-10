@@ -1,6 +1,6 @@
 # Phase 8 và Phase 9 — điều kiện bắt đầu và bằng chứng hiện tại
 
-> Phần Phase 9 dưới đây là ảnh chụp 2026-09-30. D9-02 đã thay quyết định giữ rollback D6-02 và Phase 9 đã tổng kết ở [INT-06](./P9_CLOSEOUT_2026-10-03.md). Phần Phase 8 vẫn hiện hành.
+> Phần Phase 9 dưới đây là ảnh chụp 2026-09-30. D9-02 đã thay quyết định giữ rollback D6-02 và Phase 9 đã tổng kết ở [INT-06](./P9_CLOSEOUT_2026-10-03.md). Phần Phase 8 vẫn hiện hành; cập nhật 2026-10-10: trắc nghiệm tạm hoãn (§2).
 
 > Lập 2026-09-30, sau khi Phase 6 chạy trên production và Phase 7 sẵn sàng. Scope gốc: [canonical plan §15 Phase 8, Phase 9](../../architecture/study-interaction-trigger-algorithm-plan.md#phase-8--add-new-interactions-algorithms-and-secondary-consumers). Ràng buộc của chủ sản phẩm: giữ hiệu năng, **không mất hoặc hỏng dữ liệu learner**.
 
@@ -15,7 +15,24 @@ Phần *tách* (decoupling) của kế hoạch đã xong: progress thuộc learn
 
 Canonical plan: thêm từng năng lực một, ví dụ (a) đánh giá trắc nghiệm, (b) Algorithm không lặp lại (non-repetition), (c) consumer analytics/XP từ commit. Mỗi năng lực phải định nghĩa: input, schema Action, ánh xạ trigger, schema Algorithm State, hợp đồng availability, mức tin cậy, giữ phiên bản, hành vi migration. Code tùy ý của người dùng, chuỗi nhiều trigger và automation ngoài vẫn đóng.
 
-Việc cần chủ sản phẩm: chọn năng lực đầu tiên và UX của nó. Sau khi chọn, lập `P8_EXECUTION_PLAN` theo mẫu P6 (quyết định, gate, work package, probe MySQL, runbook).
+**Trắc nghiệm tạm hoãn (chủ sản phẩm quyết định 2026-10-10).** Trắc nghiệm không được chọn làm năng lực P8 đầu tiên và không lập kế hoạch trong đợt này. Lý do:
+
+- Mọi chế độ dùng chung một tiến độ learner/Note ([canonical plan §16.1](../../architecture/study-interaction-trigger-algorithm-plan.md#161-resolved-product-decisions), quyết định 1). Trắc nghiệm chỉ đo khả năng *nhận ra* và có thể đoán trúng, còn scheduler tính khoảng ôn theo khả năng *tự nhớ lại*. Nếu ánh xạ "đúng" thành rating thường, khoảng ôn của Note sẽ dài quá mức cho mọi chế độ khác.
+- Chưa có nguồn phương án nhiễu. Note có field tùy ý, deck tự tạo, import từ Anki hoặc clone overlay. Phương án lấy ngẫu nhiên trong deck quá dễ đoán, deck nhỏ không đủ phương án, và phương án phải được đóng băng trong snapshot phiên để server chấm lại.
+- Phải có evaluator ở client, verifier ở server, golden vectors và màn đối soát ([canonical plan §6.3](../../architecture/study-interaction-trigger-algorithm-plan.md#63-evaluation-placement)). Chi phí này lớn so với quy mô hiện tại, và repo chưa có bằng chứng người dùng cần.
+
+Chỉ mở lại khi đủ cả bốn điều kiện:
+
+1. Có quyết định ánh xạ outcome → Trigger cho chế độ nhận diện (ví dụ "đúng" chỉ tương đương trigger yếu, hoặc chỉ dùng ở bước làm quen thẻ mới), kèm cách kiểm chứng không làm dài khoảng ôn của chế độ khác.
+2. Có hợp đồng nguồn phương án nhiễu: lấy từ field/deck/NoteType nào, số phương án tối thiểu, hành vi khi không đủ, cách đóng băng trong snapshot.
+3. Interaction host đã tách khỏi `StudyPage` và có bề mặt nhập liệu tin cậy ngoài iframe.
+4. Có tín hiệu nhu cầu từ người dùng.
+
+Quiz luyện tập **không ghi tiến độ** nằm ngoài Phase 8, và vẫn theo ranh giới hiện tại: iframe Template không có quyền ghi tiến độ.
+
+**Action/outcome tổng quát (mức 3, để dành).** Bỏ giả định bốn rating khỏi phần generic là nền cho mọi năng lực có input khác bốn rating. Kế hoạch, kiểm kê callsite và điều kiện kích hoạt: [P8_GENERIC_ACTION_OUTCOME_PLAN](./P8_GENERIC_ACTION_OUTCOME_PLAN_2026-10-10.md).
+
+Việc cần chủ sản phẩm: chọn năng lực đầu tiên trong các lựa chọn còn lại và UX của nó. Sau khi chọn, lập `P8_EXECUTION_PLAN` theo mẫu P6 (quyết định, gate, work package, probe MySQL, runbook).
 
 ## 3. Phase 9 — cổng và bằng chứng
 

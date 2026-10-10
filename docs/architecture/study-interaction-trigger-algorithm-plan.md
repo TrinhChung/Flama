@@ -1405,6 +1405,8 @@ Orders 2–6 were later closed or explicitly scoped by P0/P1/P2 acceptance. The 
 
 ### Phase 8 — Add new Interactions, Algorithms, and secondary consumers
 
+> Status 2026-10-10: not started; the first capability still awaits product-owner selection. Multiple choice evaluation is **deferred** by product-owner decision: it measures recognition and allows guessing, while decision 1 in §16.1 makes every mode share one recall-scheduled learner/Note progress; no distractor-source contract exists; and the evaluator/verifier cost is not justified at current scale. A practice-only quiz that writes no progress is outside Phase 8. Reasons and re-entry conditions: [P8/P9 readiness §2](../task/decoupling/P8_P9_READINESS_2026-09-30.md#2-phase-8--cần-chủ-sản-phẩm-chọn-năng-lực-đầu-tiên). Removing the four-rating assumption from generic types (Action/outcome envelope, generic Algorithm input) has a parked plan, not scheduled: [P8 generic Action/outcome plan](../task/decoupling/P8_GENERIC_ACTION_OUTCOME_PLAN_2026-10-10.md).
+
 Add one capability at a time: for example, multiple choice evaluation, then a non-repetition algorithm, then committed analytics/XP consumption. Each addition defines input requirements, Action schema, trigger mapping, Algorithm State schema, availability contract, trust level, version retention, and migration behavior.
 
 Arbitrary user code, multi-trigger chains, and external automation should remain behind explicit capability/security decisions.
@@ -1449,6 +1451,7 @@ Before destructive removal: take a verified backup, run production reconciliatio
 | Algorithm executable retirement | retain exact executables through active leases; exact key/version resolution fails closed instead of using latest |
 | External progress conflicts | external state mutations use the P1-02 typed revision/precondition contract; conflicts never silently overwrite newer native state |
 | Built-in Trigger/evaluator security | use the fixed versioned built-in dispatcher and server verification; untrusted Template/iframe code has no progress-write capability |
+| Phase 8 multiple choice (2026-10-10) | deferred; not the first Phase 8 capability. Re-entry needs an outcome→Trigger mapping that does not inflate shared intervals, a distractor-source contract, a trusted Interaction host and user demand ([P8/P9 readiness §2](../task/decoupling/P8_P9_READINESS_2026-09-30.md#2-phase-8--cần-chủ-sản-phẩm-chọn-năng-lực-đầu-tiên)) |
 
 ### 16.2 Priority 0 — required before physical state/runtime implementation
 
