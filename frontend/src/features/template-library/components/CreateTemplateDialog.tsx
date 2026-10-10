@@ -30,7 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 //       shared_css: TYPING_CSS,
 //       input_schema: [
 //         { key: 'Prompt', label: labels.prompt, type: 'text', required: true },
-//         { key: 'Answer', label: labels.answer, type: 'answers', required: true, typing: { ...defaultTypingOptions } },
+//         { key: 'Answer', label: labels.answer, type: 'array', required: true, typing: { ...defaultTypingOptions } },
 //       ],
 //     }
 //   }

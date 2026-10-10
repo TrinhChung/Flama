@@ -29,7 +29,7 @@ interface EditFieldCardProps {
   error?: string | null
   preview?: ReactNode
   usage?: ReactNode
-  /** Entry to the answers conversion tool, shown under the type selector. */
+  /** Entry to the array conversion tool, shown under the type selector. */
   typeConversion?: ReactNode
   className?: string
 }
@@ -96,11 +96,11 @@ export function EditFieldCard({
                   >
                     {FIELD_TYPES.map((type) => (
                       // Existing values must be split first, so switching to
-                      // answers goes through the conversion tool instead.
+                      // array goes through the conversion tool instead.
                       <NativeSelectOption
                         key={type}
                         value={type}
-                        disabled={type === 'answers' && selectedField.field_type !== 'answers'}
+                        disabled={type === 'array' && selectedField.field_type !== 'array'}
                       >
                         {t(`setup.types.${type}.label`)}
                       </NativeSelectOption>

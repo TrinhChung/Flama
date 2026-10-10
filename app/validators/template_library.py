@@ -5,13 +5,13 @@ from app.services.template_tokens import TemplateTokenError, extract_variable_na
 from models.field_types import FIELD_TYPES as _FIELD_TYPES
 
 FIELD_TYPES = set(_FIELD_TYPES)
-# An ``answers`` input takes a line-per-answer field; the template's own script
-# compares what the learner types with each line.
-ANSWERS_INPUT_TYPE = "answers"
-INPUT_TYPES = FIELD_TYPES | {ANSWERS_INPUT_TYPE}
+# An ``array`` input takes a list field, one item per line; the template's own
+# script decides what the items mean (e.g. accepted answers to compare with).
+ARRAY_INPUT_TYPE = "array"
+INPUT_TYPES = FIELD_TYPES | {ARRAY_INPUT_TYPE}
 TYPING_OPTION_DEFAULTS = {"show_length": True, "hints": True}
-# Plain text and line-per-answer fields display and type the same way.
-_TEXT_COMPATIBLE = {"text", ANSWERS_INPUT_TYPE}
+# Plain text and one-item-per-line fields display and type the same way.
+_TEXT_COMPATIBLE = {"text", ARRAY_INPUT_TYPE}
 
 
 def input_accepts_field_type(input_type, field_type):
@@ -41,9 +41,9 @@ def text(value, *, field, maximum=None, required=False):
 def _typing_options(item, kind):
     # Parked 2026-10-10: unused while the host typing mode is off.
     options = item.get("typing")
-    if kind != ANSWERS_INPUT_TYPE:
+    if kind != ARRAY_INPUT_TYPE:
         if options is not None:
-            raise TemplateLibraryError("VALIDATION_ERROR", "Typing options require an answers input.", field="input_schema")
+            raise TemplateLibraryError("VALIDATION_ERROR", "Typing options require an array input.", field="input_schema")
         return None
     if options is None:
         return dict(TYPING_OPTION_DEFAULTS)
@@ -67,10 +67,10 @@ def validate_input_schema(schema):
             raise TemplateLibraryError("VALIDATION_ERROR", "Invalid input type or recommendation.", field="input_schema")
         # Parked 2026-10-10 with the host typing mode (STUDY_TYPING_ANSWER_PLAN §12):
         # templates build and check their own answer boxes in HTML/JS, so any
-        # number of answers inputs is fine and typing options are not stored.
+        # number of array inputs is fine and typing options are not stored.
         # A "typing" key saved before is still accepted and dropped.
-        # if kind == ANSWERS_INPUT_TYPE and any(other["type"] == ANSWERS_INPUT_TYPE for other in result):
-        #     raise TemplateLibraryError("VALIDATION_ERROR", "A template can declare only one answers input.", field="input_schema")
+        # if kind == ARRAY_INPUT_TYPE and any(other["type"] == ARRAY_INPUT_TYPE for other in result):
+        #     raise TemplateLibraryError("VALIDATION_ERROR", "A template can declare only one array input.", field="input_schema")
         label = text(item.get("label", key), field="input_schema.label", maximum=255)
         normalized = {"key": key, "label": label, "type": kind, "required": item.get("required", False)}
         # typing = _typing_options(item, kind)
@@ -99,9 +99,9 @@ def infer_input_schema(front, back, field_defs=()):
             continue
         field = names.get(key)
         field_type = getattr(field, "field_type", "text")
-        # Displaying an answers field never turns a template into a typing mode;
-        # only an explicitly declared answers input does.
-        if field_type == ANSWERS_INPUT_TYPE:
+        # An inferred input for an array field stays text: only an explicitly
+        # declared array input would drive the (parked) host typing mode.
+        if field_type == ARRAY_INPUT_TYPE:
             field_type = "text"
         result.append({"key": key, "label": key, "type": field_type, "required": False})
     return validate_input_schema(result)

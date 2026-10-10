@@ -179,16 +179,16 @@ def template_version(context: EffectiveStudyCard) -> str:
 
 
 def typing_input_payload(template: Any) -> dict[str, Any] | None:
-    """Expose the template's answers input so the host can run a typing mode.
+    """Expose the template's array input so the host can run a typing mode.
 
     Parked 2026-10-10: not called while the host typing mode is off.
 
-    Only the key and display options travel; answers stay in the content
-    artifact and the frontend alone compares them. Templates without an
-    answers input keep their artifact (and version) unchanged.
+    Only the key and display options travel; the accepted answers stay in the
+    content artifact and the frontend alone compares them. Templates without an
+    array input keep their artifact (and version) unchanged.
     """
     for item in getattr(template, "input_schema", None) or []:
-        if not isinstance(item, Mapping) or item.get("type") != "answers":
+        if not isinstance(item, Mapping) or item.get("type") != "array":
             continue
         key = str(item.get("key") or "").strip()
         if not key:

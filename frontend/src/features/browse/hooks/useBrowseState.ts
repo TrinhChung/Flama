@@ -59,14 +59,14 @@ export type CardDetailField = {
   name: string
   position: number
   required?: boolean
-  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'answers'
+  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'array'
 }
 
 export type NoteTypeFieldDef = {
   name: string
   position: number
   required?: boolean
-  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'answers'
+  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'array'
 }
 
 export type NoteTypeSummary = {

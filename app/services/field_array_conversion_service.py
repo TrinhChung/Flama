@@ -1,6 +1,6 @@
-"""Convert an owned NoteType field to or from ``answers`` in one transaction.
+"""Convert an owned NoteType field to or from ``array`` in one transaction.
 
-The frontend fetches every Note value of the field, splits it into one answer
+The frontend fetches every Note value of the field, splits it into one item
 per line and sends the complete result back. This service only enforces the
 preconditions (owner, field kind, no concurrent change, every Note covered),
 checks the shape of the new values and applies type and values atomically, so
@@ -13,10 +13,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.services import deck_working_tree_service, marketplace_query_service
-from app.validators.field_answers_conversion import (
+from app.validators.field_array_conversion import (
     RESTORABLE_FIELD_TYPES,
-    AnswersConversionError,
-    answers_value_problem,
+    ArrayConversionError,
+    array_value_problem,
     parse_conversion_request,
 )
 from app.validators.flashcard_input import (
@@ -29,11 +29,11 @@ from models import db
 from models.audit_log import AuditLog
 from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
-from models.field_types import ANSWERS_FIELD_TYPE
+from models.field_types import ARRAY_FIELD_TYPE
 from models.note import Note
 from models.note_type import NoteType
 
-SCHEMA_VERSION = "field-answers-conversion.v1"
+SCHEMA_VERSION = "field-array-conversion.v1"
 _CONFLICT_SAMPLE = 20
 _RESTORE_SANITIZERS = {
     "text": sanitize_plain_text,
@@ -45,20 +45,20 @@ _RESTORE_SANITIZERS = {
 def _owned_field(*, user_id: int, note_type_id: str, field_id: str, lock: bool = False) -> tuple[NoteType, FieldDef]:
     note_type = NoteType.query.filter_by(id=note_type_id, user_id=user_id).first()
     if note_type is None:
-        raise AnswersConversionError("NOTE_TYPE_NOT_FOUND", "Note type not found.", status=404)
+        raise ArrayConversionError("NOTE_TYPE_NOT_FOUND", "Note type not found.", status=404)
     query = FieldDef.query.filter_by(id=field_id, note_type_id=note_type.id)
     if lock:
         query = query.with_for_update()
     field = query.first()
     if field is None:
-        raise AnswersConversionError("FIELD_NOT_FOUND", "Field not found.", status=404)
+        raise ArrayConversionError("FIELD_NOT_FOUND", "Field not found.", status=404)
     return note_type, field
 
 
 def _blocked_reason(field: FieldDef) -> str | None:
     if field.identity_role == "primary":
         return "PRIMARY_FIELD"
-    if field.field_type not in (*RESTORABLE_FIELD_TYPES, ANSWERS_FIELD_TYPE):
+    if field.field_type not in (*RESTORABLE_FIELD_TYPES, ARRAY_FIELD_TYPE):
         return "UNSUPPORTED_FIELD_TYPE"
     return None
 
@@ -101,19 +101,19 @@ def get_conversion_source(*, user_id: int, note_type_id: str, field_id: str) -> 
 
 
 def _new_value(request, field: FieldDef, item) -> str:
-    if request.to_answers:
-        problem = answers_value_problem(item.value)
+    if request.to_array:
+        problem = array_value_problem(item.value)
         if problem:
-            raise AnswersConversionError(
-                "INVALID_ANSWERS_VALUE",
-                "Answers must be plain text with one non-empty, unique answer per line.",
+            raise ArrayConversionError(
+                "INVALID_ARRAY_VALUE",
+                "Array values must be plain text with one non-empty, unique item per line.",
                 details={"note_id": item.note_id, "problem": problem},
             )
         return item.value
     try:
         return _RESTORE_SANITIZERS[request.target_type](item.value, field_name=field.name)
     except RequestValidationError as exc:
-        raise AnswersConversionError("INVALID_FIELD_VALUE", str(exc), details={"note_id": item.note_id}) from exc
+        raise ArrayConversionError("INVALID_FIELD_VALUE", str(exc), details={"note_id": item.note_id}) from exc
 
 
 def apply_conversion(*, user_id: int, note_type_id: str, field_id: str, payload: Any) -> dict[str, Any]:
@@ -122,14 +122,14 @@ def apply_conversion(*, user_id: int, note_type_id: str, field_id: str, payload:
         note_type, field = _owned_field(user_id=user_id, note_type_id=note_type_id, field_id=field_id, lock=True)
         blocked = _blocked_reason(field)
         if blocked:
-            raise AnswersConversionError("FIELD_NOT_CONVERTIBLE", "This field cannot be converted.", status=409, details={"reason": blocked})
+            raise ArrayConversionError("FIELD_NOT_CONVERTIBLE", "This field cannot be converted.", status=409, details={"reason": blocked})
         if field.field_type != request.expected_field_type:
-            raise AnswersConversionError(
+            raise ArrayConversionError(
                 "FIELD_CHANGED", "The field type changed since the preview.", status=409,
                 details={"field_type": field.field_type},
             )
         if _rename_in_progress(note_type.id):
-            raise AnswersConversionError("FIELD_RENAME_IN_PROGRESS", "Wait for the field rename to finish.", status=409)
+            raise ArrayConversionError("FIELD_RENAME_IN_PROGRESS", "Wait for the field rename to finish.", status=409)
 
         notes = _owner_notes(user_id=user_id, note_type_id=note_type.id, lock=True)
         by_id = {str(note.id): note for note in notes}
@@ -141,7 +141,7 @@ def apply_conversion(*, user_id: int, note_type_id: str, field_id: str, payload:
             if item.note_id in by_id and _value(by_id[item.note_id], field.name) != item.expected
         ]
         if missing or extra or changed:
-            raise AnswersConversionError(
+            raise ArrayConversionError(
                 "NOTES_CHANGED",
                 "Notes changed since the preview. Reload the preview and try again.",
                 status=409,
@@ -176,7 +176,7 @@ def apply_conversion(*, user_id: int, note_type_id: str, field_id: str, payload:
             deck_working_tree_service.mark_note_field_batches_changed(mutations=mutations)
         db.session.add(AuditLog(
             user_id=user_id,
-            action="field.convert_answers",
+            action="field.convert_array",
             payload={
                 "note_type_id": note_type.id,
                 "field_id": field.id,

@@ -1,8 +1,9 @@
 /**
- * The `answers` field type stores one accepted answer per line. Editors keep
- * that shape clean on save; the study typing mode reads each line as an answer.
+ * The `array` field type stores a list of plain-text items, one per line.
+ * Editors keep that shape clean on save; a template decides what the items mean
+ * (accepted answers, choices, …).
  */
-export const ANSWERS_FIELD_TYPE = 'answers'
+export const ARRAY_FIELD_TYPE = 'array'
 
 const NAMED_ENTITIES: Record<string, string> = {
   amp: '&',
@@ -38,12 +39,12 @@ export function fieldValueToText(raw: unknown): string {
   return decodeEntities(withoutMarkup)
 }
 
-export function isAnswersField(fieldType: string | null | undefined): boolean {
-  return (fieldType || '').toLowerCase() === ANSWERS_FIELD_TYPE
+export function isArrayField(fieldType: string | null | undefined): boolean {
+  return (fieldType || '').toLowerCase() === ARRAY_FIELD_TYPE
 }
 
 /** Trim lines, drop empty and duplicate ones (ignoring case), keep order. */
-export function normalizeAnswersValue(value: string): string {
+export function normalizeArrayValue(value: string): string {
   const seen = new Set<string>()
   const lines: string[] = []
   for (const raw of value.split(/\r\n|\r|\n/)) {
@@ -56,16 +57,16 @@ export function normalizeAnswersValue(value: string): string {
   return lines.join('\n')
 }
 
-/** Normalize only the values of `answers` fields; other fields pass through untouched. */
-export function normalizeAnswersFieldValues<T extends Record<string, string>>(
+/** Normalize only the values of `array` fields; other fields pass through untouched. */
+export function normalizeArrayFieldValues<T extends Record<string, string>>(
   values: T,
   fields: ReadonlyArray<{ name: string; field_type?: string | null }>,
 ): T {
-  const answerFields = fields.filter((field) => isAnswersField(field.field_type))
-  if (!answerFields.length) return values
+  const arrayFields = fields.filter((field) => isArrayField(field.field_type))
+  if (!arrayFields.length) return values
   const next: Record<string, string> = { ...values }
-  for (const field of answerFields) {
-    if (typeof next[field.name] === 'string') next[field.name] = normalizeAnswersValue(next[field.name])
+  for (const field of arrayFields) {
+    if (typeof next[field.name] === 'string') next[field.name] = normalizeArrayValue(next[field.name])
   }
   return next as T
 }

@@ -15,11 +15,11 @@ describe('template field mapping', () => {
     expect(isTypeCompatible(type, type === 'text' ? 'markdown' : 'text')).toBe(false)
   })
   it('lets typed-answer inputs and text fields bind to each other only', () => {
-    expect(isTypeCompatible('answers', 'text')).toBe(true)
-    expect(isTypeCompatible('answers', 'answers')).toBe(true)
-    expect(isTypeCompatible('text', 'answers')).toBe(true)
-    expect(isTypeCompatible('answers', 'richtext')).toBe(false)
-    expect(isTypeCompatible('image', 'answers')).toBe(false)
+    expect(isTypeCompatible('array', 'text')).toBe(true)
+    expect(isTypeCompatible('array', 'array')).toBe(true)
+    expect(isTypeCompatible('text', 'array')).toBe(true)
+    expect(isTypeCompatible('array', 'richtext')).toBe(false)
+    expect(isTypeCompatible('image', 'array')).toBe(false)
   })
   it('rejects unknown types and rich text interchange', () => {
     expect(isTypeCompatible('unknown', 'unknown')).toBe(false)

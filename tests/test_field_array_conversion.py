@@ -1,4 +1,4 @@
-"""Converting a NoteType field to or from answers: preview source, atomic apply, restore."""
+"""Converting a NoteType field to or from array: preview source, atomic apply, restore."""
 
 import unittest
 
@@ -11,7 +11,7 @@ from models.note import Note
 from models.user import User
 
 
-class FieldAnswersConversionTests(unittest.TestCase):
+class FieldArrayConversionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = create_app({
@@ -72,12 +72,12 @@ class FieldAnswersConversionTests(unittest.TestCase):
         self.client.post("/login", data={"email": email, "password": "password"})
 
     def _url(self, field="Meaning"):
-        return f"/api/note-types/{self.note_type['id']}/fields/{self.fields[field]}/answers-conversion"
+        return f"/api/note-types/{self.note_type['id']}/fields/{self.fields[field]}/array-conversion"
 
     def _split(self, value):
         return "\n".join(part.strip() for part in value.split(",") if part.strip())
 
-    def _payload(self, source, transform=None, target_type="answers"):
+    def _payload(self, source, transform=None, target_type="array"):
         transform = transform or self._split
         return {
             "target_type": target_type,
@@ -108,14 +108,14 @@ class FieldAnswersConversionTests(unittest.TestCase):
         response = self.client.post(self._url(), json=self._payload(source))
         self.assertEqual(response.status_code, 200, response.get_json())
         body = response.get_json()
-        self.assertEqual(body["field"]["field_type"], "answers")
+        self.assertEqual(body["field"]["field_type"], "array")
         self.assertEqual((body["note_count"], body["changed_note_count"]), (3, 1))
-        self.assertEqual(self._field_type(), "answers")
+        self.assertEqual(self._field_type(), "array")
         self.assertEqual(self._meaning(self.note_ids[0]), "ăn\ndùng bữa")
         self.assertEqual(self._meaning(self.note_ids[1]), "uống")
         self.assertEqual(self._meaning(self.foreign_note_id), "nhìn, xem")
         with self.app.app_context():
-            self.assertEqual(AuditLog.query.filter_by(action="field.convert_answers").count(), 1)
+            self.assertEqual(AuditLog.query.filter_by(action="field.convert_array").count(), 1)
 
     def test_any_change_since_the_preview_writes_nothing(self):
         source = self.client.get(self._url()).get_json()
@@ -133,13 +133,13 @@ class FieldAnswersConversionTests(unittest.TestCase):
         self.assertEqual(self._field_type(), "text")
         self.assertEqual(self._meaning(self.note_ids[0]), "ăn, dùng bữa")
 
-    def test_answers_values_must_be_clean_lines(self):
+    def test_array_values_must_be_clean_lines(self):
         source = self.client.get(self._url()).get_json()
         for bad in ("ăn\n\ndùng bữa", " ăn", "ăn\nĂN", "<b>ăn</b>", "ăn\r\nuống"):
             payload = self._payload(source, transform=lambda value, bad=bad: bad if value.startswith("ăn") else value)
             response = self.client.post(self._url(), json=payload)
             self.assertEqual(response.status_code, 400, (bad, response.get_json()))
-            self.assertEqual(response.get_json()["error"], "INVALID_ANSWERS_VALUE")
+            self.assertEqual(response.get_json()["error"], "INVALID_ARRAY_VALUE")
         self.assertEqual(self._field_type(), "text")
 
     def test_primary_media_and_changed_fields_are_refused(self):
@@ -158,7 +158,7 @@ class FieldAnswersConversionTests(unittest.TestCase):
         source = self.client.get(self._url()).get_json()
         same = self._payload(source, target_type="text")
         self.assertEqual(self.client.post(self._url(), json=same).status_code, 400)
-        self.assertEqual(self.client.post(self._url(), json={"target_type": "answers"}).status_code, 400)
+        self.assertEqual(self.client.post(self._url(), json={"target_type": "array"}).status_code, 400)
         duplicated = self._payload(source)
         duplicated["notes"].append(duplicated["notes"][0])
         self.assertEqual(self.client.post(self._url(), json=duplicated).status_code, 400)
@@ -202,7 +202,7 @@ class FieldAnswersConversionTests(unittest.TestCase):
     def test_other_users_cannot_read_or_convert(self):
         self._login("other@example.com")
         self.assertEqual(self.client.get(self._url()).status_code, 404)
-        self.assertEqual(self.client.post(self._url(), json={"target_type": "answers", "expected_field_type": "text", "notes": []}).status_code, 404)
+        self.assertEqual(self.client.post(self._url(), json={"target_type": "array", "expected_field_type": "text", "notes": []}).status_code, 404)
 
 
 if __name__ == "__main__":

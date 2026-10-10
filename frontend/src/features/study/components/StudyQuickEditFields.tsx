@@ -10,7 +10,7 @@ export type StudyQuickEditFieldDef = {
   name: string
   position: number
   required: boolean
-  field_type: 'image' | 'audio' | 'diagram' | 'text' | 'answers'
+  field_type: 'image' | 'audio' | 'diagram' | 'text' | 'array'
 }
 
 export type StudyQuickEditFieldsProps = {
@@ -75,9 +75,9 @@ export function StudyQuickEditFields({
           )
         }
 
-        const isAnswers = ft === 'answers'
+        const isArray = ft === 'array'
         const isMultiline =
-          isAnswers ||
+          isArray ||
           val.length > 60 ||
           val.includes('\n') ||
           field.name.toLowerCase().includes('meaning') ||
@@ -101,7 +101,7 @@ export function StudyQuickEditFields({
               <Textarea
                 value={val}
                 onChange={(e) => onFieldValueChange(field.name, e.target.value)}
-                placeholder={isAnswers ? t('quick_edit.answers_placeholder') : t('quick_edit.enter_field', { fieldName: field.name })}
+                placeholder={isArray ? t('quick_edit.array_placeholder') : t('quick_edit.enter_field', { fieldName: field.name })}
                 className="min-h-20 text-base sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50 focus:bg-background transition-colors"
               />
             ) : (

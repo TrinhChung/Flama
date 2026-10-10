@@ -1,4 +1,4 @@
-"""Answers inputs, template-authored answer boxes, bindings and study artifacts.
+"""Array inputs, template-authored answer boxes, bindings and study artifacts.
 
 The host typing mode is parked (STUDY_TYPING_ANSWER_PLAN §12): templates check
 typed answers in their own HTML/JS. Tests of the parked behavior are skipped
@@ -33,52 +33,52 @@ from models.user import User
 PARKED = "Parked 2026-10-10 with the host typing mode (STUDY_TYPING_ANSWER_PLAN §12)."
 
 
-class AnswersInputSchemaTests(unittest.TestCase):
-    def test_answers_inputs_store_no_typing_options_and_are_not_limited(self):
+class ArrayInputSchemaTests(unittest.TestCase):
+    def test_array_inputs_store_no_typing_options_and_are_not_limited(self):
         schema = validate_input_schema([
-            {"key": "first", "type": "answers", "typing": {"hints": False}},
-            {"key": "second", "type": "answers"},
+            {"key": "first", "type": "array", "typing": {"hints": False}},
+            {"key": "second", "type": "array"},
         ])
         self.assertEqual(schema, [
-            {"key": "first", "label": "first", "type": "answers", "required": False},
-            {"key": "second", "label": "second", "type": "answers", "required": False},
+            {"key": "first", "label": "first", "type": "array", "required": False},
+            {"key": "second", "label": "second", "type": "array", "required": False},
         ])
 
     @unittest.skip(PARKED)
-    def test_answers_input_gets_default_typing_options(self):
-        schema = validate_input_schema([{"key": "answer", "type": "answers"}])
+    def test_array_input_gets_default_typing_options(self):
+        schema = validate_input_schema([{"key": "answer", "type": "array"}])
         self.assertEqual(schema, [{
-            "key": "answer", "label": "answer", "type": "answers", "required": False,
+            "key": "answer", "label": "answer", "type": "array", "required": False,
             "typing": {"show_length": True, "hints": True},
         }])
 
     @unittest.skip(PARKED)
     def test_typing_options_are_kept_and_completed(self):
-        schema = validate_input_schema([{"key": "answer", "type": "answers", "typing": {"hints": False}}])
+        schema = validate_input_schema([{"key": "answer", "type": "array", "typing": {"hints": False}}])
         self.assertEqual(schema[0]["typing"], {"show_length": True, "hints": False})
 
     @unittest.skip(PARKED)
     def test_invalid_typing_definitions_are_rejected(self):
         for schema in (
             [{"key": "answer", "type": "text", "typing": {"hints": True}}],
-            [{"key": "answer", "type": "answers", "typing": {"hints": "yes"}}],
-            [{"key": "answer", "type": "answers", "typing": {"autosubmit": True}}],
-            [{"key": "answer", "type": "answers", "typing": []}],
-            [{"key": "a", "type": "answers"}, {"key": "b", "type": "answers"}],
+            [{"key": "answer", "type": "array", "typing": {"hints": "yes"}}],
+            [{"key": "answer", "type": "array", "typing": {"autosubmit": True}}],
+            [{"key": "answer", "type": "array", "typing": []}],
+            [{"key": "a", "type": "array"}, {"key": "b", "type": "array"}],
         ):
             with self.assertRaises(TemplateLibraryError, msg=schema):
                 validate_input_schema(schema)
 
-    def test_text_and_answers_bind_to_each_other_only(self):
-        self.assertTrue(input_accepts_field_type("answers", "text"))
-        self.assertTrue(input_accepts_field_type("answers", "answers"))
-        self.assertTrue(input_accepts_field_type("text", "answers"))
-        self.assertFalse(input_accepts_field_type("answers", "richtext"))
-        self.assertFalse(input_accepts_field_type("answers", "image"))
+    def test_text_and_array_bind_to_each_other_only(self):
+        self.assertTrue(input_accepts_field_type("array", "text"))
+        self.assertTrue(input_accepts_field_type("array", "array"))
+        self.assertTrue(input_accepts_field_type("text", "array"))
+        self.assertFalse(input_accepts_field_type("array", "richtext"))
+        self.assertFalse(input_accepts_field_type("array", "image"))
         self.assertFalse(input_accepts_field_type("image", "text"))
 
     def test_inferred_schema_never_creates_a_typing_input(self):
-        fields = [SimpleNamespace(name="Meaning", field_type="answers")]
+        fields = [SimpleNamespace(name="Meaning", field_type="array")]
         schema = infer_input_schema("{{Meaning}}", "", fields)
         self.assertEqual(schema, [{"key": "Meaning", "label": "Meaning", "type": "text", "required": False}])
 
@@ -136,12 +136,12 @@ class TypingTemplateArtifactTests(unittest.TestCase):
         )
 
     def _typing_schema(self, typing=None):
-        answer = {"key": "answer", "label": "Answer", "type": "answers", "required": True}
+        answer = {"key": "answer", "label": "Answer", "type": "array", "required": True}
         if typing is not None:
             answer["typing"] = typing
         return [{"key": "prompt", "label": "Prompt", "type": "text", "required": True}, answer]
 
-    def test_answers_input_binds_to_text_field_and_reaches_the_content_artifact(self):
+    def test_array_input_binds_to_text_field_and_reaches_the_content_artifact(self):
         template = self._template(self._typing_schema({"show_length": False}))
         self.assertNotIn("typing", template["input_schema"][1])
         response = self._attach(template["id"], {"prompt": self.fields["Meaning"], "answer": self.fields["Word"]})
@@ -161,14 +161,14 @@ class TypingTemplateArtifactTests(unittest.TestCase):
             content = build_content_artifact(context)
             self.assertEqual(content["field_values"]["answer"], "食べる\nたべる")
 
-    def test_answers_input_rejects_incompatible_fields(self):
+    def test_array_input_rejects_incompatible_fields(self):
         template = self._template(self._typing_schema())
         for field in ("Picture",):
             response = self._attach(template["id"], {"prompt": self.fields["Meaning"], "answer": self.fields[field]})
             self.assertEqual(response.status_code, 400, response.get_json())
 
-    def test_answers_field_type_is_created_saved_and_bound_but_never_switched_bare(self):
-        created = self.client.post(f"/api/note-types/{self.note_type['id']}/fields", json={"name": "Accepted", "field_type": "answers"})
+    def test_array_field_type_is_created_saved_and_bound_but_never_switched_bare(self):
+        created = self.client.post(f"/api/note-types/{self.note_type['id']}/fields", json={"name": "Accepted", "field_type": "array"})
         self.assertEqual(created.status_code, 201, created.get_json())
         accepted_id = created.get_json()["id"]
         note = self.client.post("/api/notes", json={
@@ -186,13 +186,13 @@ class TypingTemplateArtifactTests(unittest.TestCase):
 
         bare = self.client.patch(
             f"/api/note-types/{self.note_type['id']}/fields/{self.fields['Meaning']}",
-            json={"field_type": "answers"},
+            json={"field_type": "array"},
         )
         self.assertEqual(bare.status_code, 409, bare.get_json())
         back = self.client.patch(f"/api/note-types/{self.note_type['id']}/fields/{accepted_id}", json={"field_type": "text"})
         self.assertEqual(back.status_code, 200, back.get_json())
 
-    def test_templates_without_answers_input_keep_their_artifact(self):
+    def test_templates_without_array_input_keep_their_artifact(self):
         template = self._template([{"key": "prompt", "label": "Prompt", "type": "text", "required": True}])
         response = self._attach(template["id"], {"prompt": self.fields["Word"]})
         self.assertEqual(response.status_code, 201, response.get_json())
@@ -212,21 +212,21 @@ class TemplateAnswerBoxTests(unittest.TestCase):
         '<label for="guess">Đáp án</label>'
         '<input id="guess" type="text" placeholder="Gõ đáp án" autocomplete="off" spellcheck="false">'
         '<button type="button" id="check">Kiểm tra</button>'
-        '<div id="answers" hidden>{{Answer}}</div>'
+        '<div id="array" hidden>{{Answer}}</div>'
         '<script>document.getElementById("check").addEventListener("click", function () {});</script>'
     )
 
     def setUp(self):
         self.fields = [
             SimpleNamespace(id="f-prompt", name="Prompt", field_type="text", position=0, required=False),
-            SimpleNamespace(id="f-answer", name="Answer", field_type="answers", position=1, required=False),
+            SimpleNamespace(id="f-answer", name="Answer", field_type="array", position=1, required=False),
         ]
 
     def test_study_template_source_keeps_the_answer_box_and_script(self):
         prepared = prepare_client_template_source(self.FRONT, self.fields)
         self.assertIn('<label for="guess">Đáp án</label>', prepared["source"])
         self.assertIn('<input id="guess" type="text" placeholder="Gõ đáp án" autocomplete="off" spellcheck="false">', prepared["source"])
-        self.assertIn('<div id="answers" hidden="">{{Answer}}</div>', prepared["source"])
+        self.assertIn('<div id="array" hidden="">{{Answer}}</div>', prepared["source"])
         self.assertEqual(len(prepared["inline_scripts"]), 1)
 
     def test_server_render_keeps_the_answer_box_and_answer_lines(self):

@@ -2,7 +2,7 @@
 
 > **Trạng thái (2026-10-10): T-01..T-08 đã triển khai cho NoteType người dùng sở hữu**, trên nhánh `refactor/frontend-fsd-renderer-boundary`, chưa push: `24d879f5` và `f0f90946` (T-01..T-03, commit gộp cùng việc khác), `851c1302` (T-04), `3e51c94b` (T-05), `8c914a85` (T-06), `94849c42` (T-07), `d93b40b2` (T-08). R-01 (kiểm tra trên trình duyệt với dữ liệu thật) xong, các lỗi tìm được sửa ở `d763043e`. Còn lại: nạp code vào Flask local (R-03), kiểm tra production trước deploy (R-04); chuyển đổi cho deck đã cài để dành (R-02). Xem [§10](#10-việc-còn-lại-sau-triển-khai).
 >
-> **Đổi hướng 2026-10-10:** ô gõ do Flama vẽ đã được comment lại. Gõ đáp án nay viết trong HTML/JS của chính template; kiểu field `answers` và công cụ chuyển đổi vẫn giữ. Xem [§12](#12-đổi-hướng-2026-10-10-tạm-cất-ô-gõ-của-flama-template-tự-viết-htmljs).
+> **Đổi hướng 2026-10-10:** ô gõ do Flama vẽ đã được comment lại. Gõ đáp án nay viết trong HTML/JS của chính template; kiểu field (nay là `array`, "Mảng") và công cụ chuyển đổi vẫn giữ. Xem [§12](#12-đổi-hướng-2026-10-10-tạm-cất-ô-gõ-của-flama-template-tự-viết-htmljs).
 >
 > Khác với [mức 3](./P8_GENERIC_ACTION_OUTCOME_PLAN_2026-10-10.md): server không chấm, contract bốn rating giữ nguyên. Mức 3 chỉ cần khi muốn kết quả gõ tự ghi tiến độ mà người học không xác nhận.
 
@@ -38,7 +38,7 @@ Lý do lưu chuỗi thay vì mảng JSON: các đường đọc hiện có (rend
 
 | | Thay đổi |
 |---|---|
-| Schema | Thêm giá trị `answers` (7 ký tự). Cột `field_type` của `field_defs` và `deck_clone_added_field_defs` là `varchar(8)`, không có CHECK constraint (đo trên MySQL local 2026-10-10, SQLAlchemy 2.0 Enum không native). **Không cần migration.** Phải đo lại trên production bằng principal SELECT-only trước khi deploy ([R-04](#r-04--kiểm-tra-production-trước-deploy)) |
+| Schema | Thêm giá trị `answers` (7 ký tự). Cột `field_type` của `field_defs` và `deck_clone_added_field_defs` là `varchar(8)`, không có CHECK constraint (đo trên MySQL local 2026-10-10, SQLAlchemy 2.0 Enum không native). **Không cần migration.** Production đo ngày 2026-10-10: cũng `varchar(8)`, không CHECK. Từ 2026-10-10 giá trị là `array` ([§13](#13-đổi-tên-kiểu-answers-thành-array-2026-10-10)) |
 | Dữ liệu | Chỉ các field người dùng chủ động chuyển |
 | Khi học | Không có gì mới. `review_events` vẫn là event rating bình thường |
 
@@ -264,6 +264,8 @@ Lưu ý: dùng thử công cụ chuyển đổi trên MySQL local sẽ sửa d�
 
 ### R-04 — Kiểm tra production trước deploy
 
+**Trạng thái (2026-10-10):** PR #225 đã merge và deploy trước khi chạy bước này. Phần 1 (đo cột) đã chạy sau đó: `varchar(8)`, không CHECK, không có dòng `answers` nào (chi tiết ở §13). Còn lại: deploy các commit sau PR #225 rồi smoke test.
+
 **1. Đo cấu trúc cột** (đọc-only, principal SELECT-only theo quy trình hiện có: `/etc/flama/phase9-audit.env` qua một `--defaults-extra-file` tạm, xóa ngay sau khi dùng):
 
 ```sql
@@ -478,3 +480,32 @@ CSS dùng chung:
 - Chưa kiểm bằng mắt (pane trình duyệt đang ẩn nên không chụp được) và chưa gõ thật bằng bàn phím trong iframe.
 
 **Cách mở lại ô gõ của Flama:** bỏ comment các chỗ trong bảng trên, khôi phục `useMemo` trong `StudyPage.tsx`, rồi bỏ skip các test.
+
+## 13. Đổi tên kiểu `answers` thành `array` (2026-10-10)
+
+**Quyết định của chủ sản phẩm:** kiểu field này là một danh sách tổng quát, không riêng cho việc gõ đáp án. Giá trị lưu đổi từ `answers` thành `array`. Tên hiển thị là "Mảng" (vi) và "Array" (en), mô tả "mỗi dòng một phần tử". Template tự quyết định các phần tử nghĩa là gì: đáp án được chấp nhận, lựa chọn, v.v.
+
+**Hiện trạng production lúc quyết định:** PR #225 đã merge vào master lúc 13:50 cùng ngày, nên kiểu `answers`, endpoint chuyển đổi và ô gõ của Flama đã lên production trước khi chạy R-04. Kết quả đọc bằng principal SELECT-only tối 2026-10-10:
+
+- Revision Alembic là `20261007_000055`.
+- Cột `field_type` của `field_defs` và `deck_clone_added_field_defs` là `varchar(8)`, không có CHECK constraint. Phân bố `field_defs`: richtext 180, text 181, image 36, audio 60, markdown 5.
+- Không có dòng nào dùng `answers` trong `field_defs`, `deck_clone_added_field_defs`, `input_schema` của `templates`/`template_versions`, `deck_clone_field_def_overrides`, `deck_release_changes`, `deck_change_request_items`, `template_subscriptions`, `deck_release_template_pins`. Không có AuditLog chuyển đổi nào.
+
+**Những gì đã đổi:**
+
+| Phần | Trước | Sau |
+|---|---|---|
+| Giá trị field và input | `answers` | `array` (`ARRAY_FIELD_TYPE` trong `models/field_types.py`, `ARRAY_INPUT_TYPE` trong `app/validators/template_library.py`) |
+| Endpoint | `.../fields/<field_id>/answers-conversion` | `.../fields/<field_id>/array-conversion` |
+| Schema | `field-answers-conversion.v1`, `flama-answers-backup.v1` | `field-array-conversion.v1`, `flama-array-backup.v1` |
+| AuditLog | `field.convert_answers` | `field.convert_array` |
+| Mã lỗi | `INVALID_ANSWERS_VALUE` | `INVALID_ARRAY_VALUE` |
+| File backend | `field_answers_conversion*.py` | `field_array_conversion*.py`, test `tests/test_field_array_conversion.py` |
+| File frontend | `lib/answersField.ts`, `answersConversion.ts`, `useAnswersConversion.ts`, `FieldAnswers*` | `lib/arrayField.ts`, `arrayConversion.ts`, `useArrayConversion.ts`, `FieldArray*` |
+| i18n | `setup.types.answers`, `fields.answers_conversion.*`, `*.answers_placeholder` | `setup.types.array`, `fields.array_conversion.*`, `*.array_placeholder` |
+
+Code của ô gõ đã cất (§12) vẫn dùng chữ "answers" theo nghĩa *đáp án được chấp nhận*; chỉ các chỗ nói về kiểu field được đổi.
+
+**Migration `20261010_000056_rename_answers_field_type_to_array`:** đổi `field_type` ở hai bảng field và `type` trong `input_schema` của `templates`/`template_versions`. Chạy lại nhiều lần không sao; downgrade đổi ngược. Không cần DDL. Hash của phiên bản template chỉ tính mặt trước, mặt sau và CSS, nên không bị ảnh hưởng. Đã chạy trên MySQL local (2 field, 3 template, 6 phiên bản đều là dữ liệu thử) và có test `tests/test_array_field_type_migration.py`.
+
+**Deploy:** code backend mới không đọc được giá trị `answers` nữa, nên migration phải chạy cùng lần deploy (deploy.yml chạy `flask db upgrade`). Production hiện không có dòng `answers` nào, nên dù frontend hay backend lên trước thì chỉ công cụ chuyển đổi báo 404 trong vài phút.

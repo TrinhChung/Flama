@@ -84,9 +84,9 @@ export type DeckCardTypesResponse = {
   note_counts: Record<string, number>
 }
 
-export type TemplateInputType = 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'answers'
+export type TemplateInputType = 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'array'
 
-/** Display options of a typing-answer input (only on `answers` inputs). */
+/** Display options of a typing-answer input (only on `array` inputs). */
 export type TemplateTypingOptions = {
   show_length: boolean
   hints: boolean

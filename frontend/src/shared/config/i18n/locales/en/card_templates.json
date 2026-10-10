@@ -63,7 +63,7 @@
       "image": "Image",
       "audio": "Audio",
       "diagram": "Diagram",
-      "answers": "Typed answer"
+      "array": "Array"
     },
     "typing": {
       "title": "Typing mode",

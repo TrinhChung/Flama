@@ -25,7 +25,7 @@ import { FieldListCard } from '../components/fields/FieldListCard'
 import { AddFieldCard } from '../components/fields/AddFieldCard'
 import { EditFieldCard } from '../components/fields/EditFieldCard'
 import { FieldEditorPreview } from '../components/fields/FieldEditorPreview'
-import { FieldAnswersConversionEntry } from '../components/fields/FieldAnswersConversionEntry'
+import { FieldArrayConversionEntry } from '../components/fields/FieldArrayConversionEntry'
 
 export function NoteTypeFieldsPage() {
   const { t } = useTranslation('note_types')
@@ -176,7 +176,7 @@ export function NoteTypeFieldsPage() {
               editType={editor.editType} onEditTypeChange={editor.setEditType} editRequired={editor.editRequired} onEditRequiredChange={editor.setEditRequired}
               editIdentity={editor.editIdentity} onEditIdentityChange={editor.setEditIdentity}
               preview={preview} usage={usage} error={editor.formError} isDirty={editor.canSave}
-              typeConversion={noteTypeId ? <FieldAnswersConversionEntry noteTypeId={noteTypeId} field={selectedField} dirty={editor.isDirty}
+              typeConversion={noteTypeId ? <FieldArrayConversionEntry noteTypeId={noteTypeId} field={selectedField} dirty={editor.isDirty}
                 onChanged={() => { void editor.refreshFields() }} /> : undefined}
               isUpdating={isBusy} isDeleting={editor.deleteMutation.isPending}
               onDelete={() => requestAction(() => setDeleteOpen(true))}

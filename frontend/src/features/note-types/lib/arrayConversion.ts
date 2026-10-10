@@ -1,7 +1,7 @@
-import { fieldValueToText, normalizeAnswersValue } from '@/lib/answersField'
+import { fieldValueToText, normalizeArrayValue } from '@/lib/arrayField'
 
 /**
- * Splitting existing field values into one answer per line, entirely on the
+ * Splitting existing field values into one item per line, entirely on the
  * frontend. The server only validates the shape of what is sent and applies it.
  */
 
@@ -25,17 +25,17 @@ export const DEFAULT_SPLIT_PRESETS: ReadonlySet<SplitPresetId> = new Set(
 /** Reasons a converted value deserves a look before applying. */
 export type ConversionFlag = 'html' | 'sound' | 'empty' | 'duplicates' | 'long' | 'brackets'
 
-export const LONG_ANSWER_LENGTH = 80
+export const LONG_ITEM_LENGTH = 80
 /** Same cap as the server (MAX_CONVERSION_NOTES); bigger NoteTypes need a chunked design. */
 export const MAX_CONVERSION_NOTES = 20_000
 
-export type SplitResult = { value: string; answers: string[]; flags: ConversionFlag[] }
+export type SplitResult = { value: string; items: string[]; flags: ConversionFlag[] }
 
 const OPENING = '(（[［【「『{｛'
 const CLOSING = ')）]］】」』}｝'
 const BRACKETS = /[(（[［【「『{｛]/u
 
-/** Split on separators outside brackets only: "số tấm (giấy, ảnh, vé)" stays one answer. */
+/** Split on separators outside brackets only: "số tấm (giấy, ảnh, vé)" stays one item. */
 function splitOutsideBrackets(line: string, separator: RegExp | null): string[] {
   if (!separator) return [line]
   const parts: string[] = []
@@ -62,7 +62,7 @@ function splitOutsideBrackets(line: string, separator: RegExp | null): string[] 
   return parts
 }
 
-export function splitToAnswers(raw: unknown, presets: ReadonlySet<SplitPresetId>): SplitResult {
+export function splitToArray(raw: unknown, presets: ReadonlySet<SplitPresetId>): SplitResult {
   const source = typeof raw === 'string' ? raw : ''
   let text = fieldValueToText(source)
   if (!presets.has('newline')) text = text.replace(/\n+/g, ' ')
@@ -71,25 +71,25 @@ export function splitToAnswers(raw: unknown, presets: ReadonlySet<SplitPresetId>
   const separator = patterns.length ? new RegExp(patterns.join('|'), 'uy') : null
   const parts = text.split('\n').flatMap((line) => splitOutsideBrackets(line, separator))
   const kept = parts.map((part) => part.normalize('NFC').replace(/\s+/g, ' ').trim()).filter(Boolean)
-  const value = normalizeAnswersValue(kept.join('\n'))
-  const answers = value ? value.split('\n') : []
+  const value = normalizeArrayValue(kept.join('\n'))
+  const items = value ? value.split('\n') : []
   const flags: ConversionFlag[] = []
   if (/<[a-z/][^>]*>/i.test(source)) flags.push('html')
   if (/\[sound:[^\]]*\]/i.test(source)) flags.push('sound')
-  if (source.trim() && !answers.length) flags.push('empty')
-  if (kept.length > answers.length) flags.push('duplicates')
-  if (answers.some((answer) => Array.from(answer).length > LONG_ANSWER_LENGTH)) flags.push('long')
-  // A learner would have to type the bracketed note too; worth a look.
-  if (answers.some((answer) => BRACKETS.test(answer))) flags.push('brackets')
-  return { value, answers, flags }
+  if (source.trim() && !items.length) flags.push('empty')
+  if (kept.length > items.length) flags.push('duplicates')
+  if (items.some((item) => Array.from(item).length > LONG_ITEM_LENGTH)) flags.push('long')
+  // A bracketed note stays inside its item (a learner would have to type it too); worth a look.
+  if (items.some((item) => BRACKETS.test(item))) flags.push('brackets')
+  return { value, items, flags }
 }
 
 export type ConversionNote = { note_id: string; value: string }
 
 export type RestorableFieldType = 'text' | 'richtext' | 'markdown'
 
-export type AnswersBackup = {
-  schema_version: 'flama-answers-backup.v1'
+export type ArrayBackup = {
+  schema_version: 'flama-array-backup.v1'
   note_type_id: string
   field_id: string
   field_name: string
@@ -98,16 +98,16 @@ export type AnswersBackup = {
   notes: ConversionNote[]
 }
 
-export function buildAnswersBackup(input: {
+export function buildArrayBackup(input: {
   noteTypeId: string
   fieldId: string
   fieldName: string
   originalType: RestorableFieldType
   notes: ReadonlyArray<ConversionNote>
   now?: Date
-}): AnswersBackup {
+}): ArrayBackup {
   return {
-    schema_version: 'flama-answers-backup.v1',
+    schema_version: 'flama-array-backup.v1',
     note_type_id: input.noteTypeId,
     field_id: input.fieldId,
     field_name: input.fieldName,
@@ -120,15 +120,15 @@ export function buildAnswersBackup(input: {
 export type BackupParseError = 'invalid' | 'other_field'
 
 /** Read a backup file; it must belong to this NoteType field and restore a text-like type. */
-export function parseAnswersBackup(
+export function parseArrayBackup(
   raw: unknown,
   expected: { noteTypeId: string; fieldId: string },
-): { ok: true; backup: AnswersBackup } | { ok: false; error: BackupParseError } {
+): { ok: true; backup: ArrayBackup } | { ok: false; error: BackupParseError } {
   if (typeof raw !== 'object' || raw === null) return { ok: false, error: 'invalid' }
   const value = raw as Record<string, unknown>
   const notes = value.notes
   if (
-    value.schema_version !== 'flama-answers-backup.v1'
+    value.schema_version !== 'flama-array-backup.v1'
     || typeof value.note_type_id !== 'string'
     || typeof value.field_id !== 'string'
     || typeof value.field_name !== 'string'
@@ -144,7 +144,7 @@ export function parseAnswersBackup(
   if (value.note_type_id !== expected.noteTypeId || value.field_id !== expected.fieldId) {
     return { ok: false, error: 'other_field' }
   }
-  return { ok: true, backup: value as unknown as AnswersBackup }
+  return { ok: true, backup: value as unknown as ArrayBackup }
 }
 
 /** Offer a JSON file to the browser; nothing is stored on the server. */

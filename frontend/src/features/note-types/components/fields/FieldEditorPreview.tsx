@@ -18,7 +18,7 @@ const EXAMPLES: Record<string, string> = {
   image: '/media/proxy/sample-image',
   audio: '/media/proxy/sample-audio',
   diagram: '/media/proxy/sample-diagram',
-  answers: 'ăn\ndùng bữa',
+  array: 'ăn\ndùng bữa',
 }
 type FieldPreviewResult = { front_html: string; front_renderer_payload?: unknown }
 

@@ -37,7 +37,7 @@ describe('CreateTemplateDialog', () => {
       front_html: '<div class="flama-typing-prompt">{{Prompt}}</div>',
       input_schema: [
         { key: 'Prompt', label: 'Câu hỏi', type: 'text', required: true },
-        { key: 'Answer', label: 'Đáp án', type: 'answers', required: true, typing: { show_length: true, hints: true } },
+        { key: 'Answer', label: 'Đáp án', type: 'array', required: true, typing: { show_length: true, hints: true } },
       ],
     }))
   })

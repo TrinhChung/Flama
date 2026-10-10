@@ -1,29 +1,29 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { appApi } from '@/app/api'
-import { normalizeAnswersValue } from '@/lib/answersField'
+import { normalizeArrayValue } from '@/lib/arrayField'
 import {
   DEFAULT_SPLIT_PRESETS,
-  buildAnswersBackup,
+  buildArrayBackup,
   downloadJson,
-  splitToAnswers,
-  type AnswersBackup,
+  splitToArray,
+  type ArrayBackup,
   type ConversionFlag,
   type ConversionNote,
   type SplitPresetId,
-} from '../lib/answersConversion'
+} from '../lib/arrayConversion'
 import type { FieldDefItem } from './useNoteTypeFields'
 
-export type AnswersConversionSource = {
-  schema_version: 'field-answers-conversion.v1'
+export type ArrayConversionSource = {
+  schema_version: 'field-array-conversion.v1'
   field: FieldDefItem
   convertible: boolean
   blocked_reason: string | null
   notes: ConversionNote[]
 }
 
-export type AnswersConversionResult = {
-  schema_version: 'field-answers-conversion.v1'
+export type ArrayConversionResult = {
+  schema_version: 'field-array-conversion.v1'
   field: FieldDefItem
   note_count: number
   changed_note_count: number
@@ -39,42 +39,42 @@ export type ConversionRow = {
   noteId: string
   original: string
   value: string
-  answers: string[]
+  items: string[]
   flags: ConversionFlag[]
   edited: boolean
   unchanged: boolean
 }
 
 const conversionPath = (noteTypeId: string, fieldId: string) =>
-  `/note-types/${encodeURIComponent(noteTypeId)}/fields/${encodeURIComponent(fieldId)}/answers-conversion`
+  `/note-types/${encodeURIComponent(noteTypeId)}/fields/${encodeURIComponent(fieldId)}/array-conversion`
 
-export const answersConversionQueryKey = (noteTypeId: string, fieldId: string) =>
-  ['field-answers-conversion', noteTypeId, fieldId] as const
+export const arrayConversionQueryKey = (noteTypeId: string, fieldId: string) =>
+  ['field-array-conversion', noteTypeId, fieldId] as const
 
 function useConversionSource(noteTypeId: string, fieldId: string, enabled: boolean) {
   return useQuery({
-    queryKey: answersConversionQueryKey(noteTypeId, fieldId),
-    queryFn: () => appApi.get<AnswersConversionSource>(conversionPath(noteTypeId, fieldId)),
+    queryKey: arrayConversionQueryKey(noteTypeId, fieldId),
+    queryFn: () => appApi.get<ArrayConversionSource>(conversionPath(noteTypeId, fieldId)),
     enabled,
     staleTime: 0,
     gcTime: 0,
   })
 }
 
-function useConversionWrite(noteTypeId: string, fieldId: string, onDone: (result: AnswersConversionResult) => void) {
+function useConversionWrite(noteTypeId: string, fieldId: string, onDone: (result: ArrayConversionResult) => void) {
   return useMutation({
     mutationFn: (body: ConversionWrite) =>
-      appApi.mutate<AnswersConversionResult>(conversionPath(noteTypeId, fieldId), 'POST', body),
+      appApi.mutate<ArrayConversionResult>(conversionPath(noteTypeId, fieldId), 'POST', body),
     onSuccess: onDone,
   })
 }
 
 /** Split every Note value on the frontend, preview, back up, then apply in one request. */
-export function useAnswersConversion({ noteTypeId, field, enabled, onDone }: {
+export function useArrayConversion({ noteTypeId, field, enabled, onDone }: {
   noteTypeId: string
   field: FieldDefItem
   enabled: boolean
-  onDone: (result: AnswersConversionResult) => void
+  onDone: (result: ArrayConversionResult) => void
 }) {
   const source = useConversionSource(noteTypeId, field.id, enabled)
   const [presets, setPresets] = useState<ReadonlySet<SplitPresetId>>(() => new Set(DEFAULT_SPLIT_PRESETS))
@@ -84,13 +84,13 @@ export function useAnswersConversion({ noteTypeId, field, enabled, onDone }: {
 
   const rows = useMemo<ConversionRow[]>(() => (source.data?.notes ?? []).map((note) => {
     const override = overrides[note.note_id]
-    const split = override === undefined ? splitToAnswers(note.value, presets) : null
-    const value = split ? split.value : normalizeAnswersValue(override)
+    const split = override === undefined ? splitToArray(note.value, presets) : null
+    const value = split ? split.value : normalizeArrayValue(override)
     return {
       noteId: note.note_id,
       original: note.value,
       value,
-      answers: value ? value.split('\n') : [],
+      items: value ? value.split('\n') : [],
       flags: split ? split.flags : [],
       edited: override !== undefined,
       unchanged: value === note.value,
@@ -122,7 +122,7 @@ export function useAnswersConversion({ noteTypeId, field, enabled, onDone }: {
   const downloadBackup = () => {
     const originalType = source.data?.field.field_type
     if (!source.data || (originalType !== 'text' && originalType !== 'richtext' && originalType !== 'markdown')) return
-    const backup = buildAnswersBackup({
+    const backup = buildArrayBackup({
       noteTypeId,
       fieldId: field.id,
       fieldName: source.data.field.name,
@@ -135,7 +135,7 @@ export function useAnswersConversion({ noteTypeId, field, enabled, onDone }: {
   const apply = () => {
     if (!source.data) return
     write.mutate({
-      target_type: 'answers',
+      target_type: 'array',
       expected_field_type: source.data.field.field_type,
       notes: rows.map((row) => ({ note_id: row.noteId, expected: row.original, value: row.value })),
     })
@@ -157,15 +157,15 @@ export function useAnswersConversion({ noteTypeId, field, enabled, onDone }: {
 }
 
 /** Restore a converted field from its backup file, keeping Notes created since then as they are. */
-export function useAnswersRestore({ noteTypeId, field, enabled, onDone }: {
+export function useArrayRestore({ noteTypeId, field, enabled, onDone }: {
   noteTypeId: string
   field: FieldDefItem
   enabled: boolean
-  onDone: (result: AnswersConversionResult) => void
+  onDone: (result: ArrayConversionResult) => void
 }) {
   const source = useConversionSource(noteTypeId, field.id, enabled)
   const write = useConversionWrite(noteTypeId, field.id, onDone)
-  const plan = (backup: AnswersBackup) => {
+  const plan = (backup: ArrayBackup) => {
     const saved = new Map(backup.notes.map((note) => [note.note_id, note.value]))
     const current = source.data?.notes ?? []
     return {

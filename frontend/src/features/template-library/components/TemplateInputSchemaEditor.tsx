@@ -33,7 +33,7 @@ export function TemplateInputSchemaEditor({ value, onChange, disabled = false, p
     if (!disabled && selected !== null) onChange(value.map((item, index) => index === selected ? next(item) : item))
   }
   const update = (patch: Partial<TemplateInputSpec>) => replaceSelected((item) => ({ ...item, ...patch }))
-  // const typing = input?.type === 'answers' ? { ...defaultTypingOptions, ...input.typing } : null
+  // const typing = input?.type === 'array' ? { ...defaultTypingOptions, ...input.typing } : null
   const sides = input ? [references.front.has(input.key) && t('setup.front'), references.back.has(input.key) && t('setup.back')].filter(Boolean) : []
   const used = sides.length > 0
   const filtered = value.map((item, index) => ({ item, index })).filter(({ item }) => `${item.label} ${item.key}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))

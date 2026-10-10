@@ -321,7 +321,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_counter_logic.py",
             "tests/test_api_strokes.py",
             "tests/test_stroke_service.py",
-            "tests/test_field_answers_conversion.py",
+            "tests/test_field_array_conversion.py",
         ],
         "frontend_tests": [
             "src/lib/ankiHtmlSanitizer.test.ts",
@@ -421,9 +421,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/session/wireContract.test.ts",
             "src/features/study/session/sessionRestore.test.ts",
             "src/features/study/components/StudyQuickEditDialog.test.tsx",
-            "src/lib/answersField.test.ts",
-            "src/features/note-types/lib/answersConversion.test.ts",
-            "src/features/note-types/components/fields/FieldAnswersConversionDialog.test.tsx",
+            "src/lib/arrayField.test.ts",
+            "src/features/note-types/lib/arrayConversion.test.ts",
+            "src/features/note-types/components/fields/FieldArrayConversionDialog.test.tsx",
         ]
     },
     "decks": {
