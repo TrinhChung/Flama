@@ -13,7 +13,7 @@ Hiện mọi tầng học đều giả định đúng bốn rating `again/hard/g
 - Bốn rating trở thành **một adapter built-in**, hành vi giữ nguyên từng byte (golden vectors không đổi).
 - Event, thống kê và màn hoàn thành tính theo outcome của chế độ, không ép vào bốn ô.
 
-Ngoài phạm vi: evaluator/verifier cho trắc nghiệm và gõ có chấm tự động (§6.3 canonical plan; trắc nghiệm đang hoãn), chuỗi trigger nối tiếp (§7.5), code tùy ý của người dùng, đơn vị tiến độ theo mục kiến thức (cách C), thuật toán mới (FSRS thật). Các năng lực này *dùng* mức 3 nhưng có kế hoạch riêng.
+Ngoài phạm vi: evaluator/verifier cho trắc nghiệm và gõ có chấm tự động (§6.3 canonical plan; trắc nghiệm đang hoãn), chuỗi trigger nối tiếp (§7.5), code tùy ý của người dùng, đơn vị tiến độ theo mục kiến thức (cách C), thuật toán mới (FSRS thật). Các năng lực này *dùng* mức 3 nhưng có kế hoạch riêng. Chế độ gõ đáp án mà frontend so sánh rồi người học xác nhận rating **không cần mức 3**: xem [kế hoạch chế độ gõ](./STUDY_TYPING_ANSWER_PLAN_2026-10-10.md).
 
 ## 2. Ba mức nới contract bốn nút
 
