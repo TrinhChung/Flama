@@ -1,7 +1,6 @@
 import {
   AudioLines,
   BadgePercent,
-  Bot,
   ChartNoAxesColumn,
   CreditCard,
   Download,
@@ -15,6 +14,7 @@ import {
   MessageSquareHeart,
   NotebookTabs,
   PackageCheck,
+  Plug,
   Printer,
   Search,
   Shapes,
@@ -60,9 +60,11 @@ export function AppSidebar({
     { title: t('sidebar.item.worksheets'), url: '/worksheets', icon: Printer },
   ]
   const library: AppNavigationItem[] = [
+    // Nhóm Học liệu cá nhân / Quản trị
+    { title: t('sidebar.item.installed_decks'), url: bootstrap.links.installed_decks, icon: PackageCheck },
     { title: t('sidebar.item.note_types'), url: bootstrap.links.note_types, icon: NotebookTabs },
     { title: t('sidebar.item.card_templates'), url: '/card-templates', icon: Layers },
-    { title: t('sidebar.item.installed_decks'), url: bootstrap.links.installed_decks, icon: PackageCheck },
+    // Nhóm Chợ / Chia sẻ cộng đồng
     { title: t('sidebar.item.shared_decks'), url: bootstrap.links.shared_decks, icon: Store },
     { title: t('sidebar.item.shared_note_types'), url: bootstrap.links.shared_note_types, icon: Shapes },
     { title: t('sidebar.item.publish_deck'), url: '/marketplace/decks/publish', icon: Upload },
@@ -73,7 +75,7 @@ export function AppSidebar({
     { title: t('sidebar.item.deck_audio'), url: '/audio/generate', icon: AudioLines },
     { title: t('sidebar.item.flama_audio'), url: '/guide/flama-audio', icon: Download },
     { title: t('sidebar.item.yomitan'), url: '/settings/yomitan', icon: Key },
-    { title: t('sidebar.item.mcp_ai'), url: '/settings/mcp-tokens', icon: Bot },
+    { title: t('sidebar.item.mcp_ai'), url: '/settings/mcp-tokens', icon: Plug },
   ]
 
   const creator: AppNavigationItem[] = [

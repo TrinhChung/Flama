@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
   ArrowRight,
@@ -42,6 +43,7 @@ export function OnboardingModal({
   onboarding,
   onStartDashboardTour,
 }: OnboardingModalProps) {
+  const { t } = useTranslation('onboarding')
   const {
     isOpen,
     step,
@@ -97,13 +99,13 @@ export function OnboardingModal({
               </div>
               <div>
                 <DialogTitle className="text-lg sm:text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                  <span>Chào Mừng Bạn Đến Với Flama!</span>
+                  <span>{t('hero.title')}</span>
                   <Badge variant="outline" className="text-[10px] font-bold border-primary/40 text-primary">
-                    BƯỚC {step}/4
+                    {t('modal.step_badge', { step, total: 4 })}
                   </Badge>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  Thiết lập mục tiêu và cá nhân hóa lộ trình học thông minh dành riêng cho bạn
+                  {t('modal.title')}
                 </DialogDescription>
               </div>
             </div>
@@ -112,7 +114,7 @@ export function OnboardingModal({
               type="button"
               onClick={closeOnboarding}
               className="size-8 rounded-lg text-muted-foreground hover:text-foreground flex items-center justify-center hover:bg-muted/80 transition-colors"
-              title="Đóng"
+              title={t('modal.close_button')}
             >
               <X className="size-4" />
             </button>
@@ -121,10 +123,10 @@ export function OnboardingModal({
           {/* Progress Indicator Steps */}
           <div className="grid grid-cols-4 gap-2 pt-5">
             {[
-              { num: 1, label: 'Mục Tiêu' },
-              { num: 2, label: 'Thói Quen' },
-              { num: 3, label: 'Nhận Thẻ' },
-              { num: 4, label: 'Hoàn Tất' },
+              { num: 1, label: t('modal.step_1_tab') },
+              { num: 2, label: t('modal.step_2_tab') },
+              { num: 3, label: t('modal.step_3_tab') },
+              { num: 4, label: t('modal.step_4_tab') },
             ].map((s) => {
               const isPast = s.num < step
               const isCurrent = s.num === step
@@ -166,10 +168,10 @@ export function OnboardingModal({
             <div className="space-y-5 animate-in fade-in-50 duration-200">
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                  <Target className="size-4 text-primary" /> Bạn muốn tập trung học ngôn ngữ hoặc kỹ năng nào?
+                  <Target className="size-4 text-primary" /> {t('modal.step_1_title')}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Chọn chủ đề chính để Flama đề xuất các bộ flashcard và lộ trình học tập phù hợp nhất.
+                  {t('modal.step_1_subtitle')}
                 </p>
               </div>
 
@@ -212,7 +214,7 @@ export function OnboardingModal({
               <div className="space-y-2.5 pt-2 border-t border-border/60">
                 <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <GraduationCap className="size-3.5 text-primary" />
-                  Trình độ hoặc mục tiêu của bạn trong {selectedSubjectConfig.title}:
+                  {t('modal.step_1_level_prompt', { subject: selectedSubjectConfig.title })}
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {selectedSubjectConfig.levels.map((lvl) => {
@@ -242,10 +244,10 @@ export function OnboardingModal({
             <div className="space-y-5 animate-in fade-in-50 duration-200">
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                  <Zap className="size-4 text-primary" /> Bạn muốn học bao nhiêu thẻ mới mỗi ngày?
+                  <Zap className="size-4 text-primary" /> {t('modal.step_2_title')}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Thuật toán Spaced Repetition sẽ phân bổ thẻ mới và thẻ ôn tập (Due) theo nhịp học bền vững của bạn.
+                  {t('modal.step_2_subtitle')}
                 </p>
               </div>
 
@@ -304,7 +306,7 @@ export function OnboardingModal({
               {/* Preferred Study Time */}
               <div className="space-y-2.5 pt-3 border-t border-border/60">
                 <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Clock className="size-3.5 text-primary" /> Khung giờ bạn thường dành để học:
+                  <Clock className="size-3.5 text-primary" /> {t('modal.step_2_time_prompt')}
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {STUDY_TIME_OPTIONS.map((timeOpt) => {
@@ -339,14 +341,14 @@ export function OnboardingModal({
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                    <Download className="size-4 text-primary" /> Bộ thẻ khởi đầu đề xuất cho bạn
+                    <Download className="size-4 text-primary" /> {t('modal.step_3_title')}
                   </h3>
                   <Badge variant="outline" className="text-[11px] font-semibold border-primary/30 text-primary">
                     {selectedSubjectConfig.title}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Dựa trên mục tiêu đã chọn, đây là các bộ flashcard cộng đồng được tối ưu cho người mới bắt đầu.
+                  {t('modal.step_3_subtitle')}
                 </p>
               </div>
 
@@ -355,13 +357,13 @@ export function OnboardingModal({
                 <div className="flex flex-col items-center justify-center p-8 space-y-2 text-center">
                   <Loader2 className="size-7 animate-spin text-primary" />
                   <p className="text-xs text-muted-foreground font-medium">
-                    Đang tìm kiếm các bộ thẻ chất lượng cao từ Thư viện...
+                    {t('modal.searching_decks')}
                   </p>
                 </div>
               ) : recommendedDecks.length === 0 ? (
                 <div className="text-center p-6 border rounded-xl border-dashed border-border/80 bg-muted/20 space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Chưa có bộ thẻ mẫu trực tiếp cho cấp độ này. Bạn có thể tự tạo bộ thẻ đầu tiên trên Dashboard!
+                    {t('modal.no_decks_for_level')}
                   </p>
                 </div>
               ) : (
@@ -411,11 +413,11 @@ export function OnboardingModal({
                           <div className="pt-2 border-t border-border/50 space-y-2">
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                               <span className="flex items-center gap-1 font-medium">
-                                <Layers className="size-3 text-primary" /> {deck.card_count || deck.note_count || 100} thẻ
+                                <Layers className="size-3 text-primary" /> {deck.card_count || deck.note_count || 100} {t('modal.card_count_unit')}
                               </span>
                               {deck.author?.username && (
                                 <span className="truncate max-w-[100px]">
-                                  Tác giả: {deck.author.username}
+                                  {t('modal.deck_author', { author: deck.author.username })}
                                 </span>
                               )}
                             </div>
@@ -428,7 +430,7 @@ export function OnboardingModal({
                                 className="w-full h-8 text-xs font-bold text-emerald-600 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10"
                               >
                                 <CheckCircle2 className="size-3.5 mr-1.5 text-emerald-500" />
-                                Đã cài đặt
+                                {t('modal.installed_deck_badge')}
                               </Button>
                             ) : (
                               <Button
@@ -440,12 +442,12 @@ export function OnboardingModal({
                                 {isInstalling ? (
                                   <>
                                     <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-                                    Đang cài đặt…
+                                    {t('modal.installing_state')}
                                   </>
                                 ) : (
                                   <>
                                     <Download className="size-3.5 mr-1.5" />
-                                    Thêm vào bộ thẻ
+                                    {t('modal.install_deck_button')}
                                   </>
                                 )}
                               </Button>
@@ -462,10 +464,10 @@ export function OnboardingModal({
               <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 text-xs space-y-1">
                 <div className="font-bold text-orange-700 dark:text-orange-300 flex items-center gap-1.5">
                   <BookOpen className="size-3.5 text-orange-600 dark:text-orange-400" />
-                  Ghi nhớ ngắt quãng (Spaced Repetition System):
+                  {t('modal.srs_note_title')}
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Bạn không cần học hết tất cả thẻ trong một lần. Hãy học đúng số thẻ mục tiêu mỗi ngày, thuật toán của Flama sẽ tự động xếp lịch ôn tập trước khi bạn quên!
+                  {t('modal.srs_note_body')}
                 </p>
               </div>
             </div>
@@ -480,50 +482,50 @@ export function OnboardingModal({
 
               <div className="space-y-1.5 max-w-md mx-auto">
                 <h3 className="text-xl font-bold text-foreground">
-                  Chúc mừng bạn! Lộ trình đã sẵn sàng 🎉
+                  {t('modal.step_4_title')}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Tài khoản của bạn đã được cá nhân hóa hoàn tất. Giờ hãy cùng khám phá các tính năng chính trên Dashboard nhé!
+                  {t('modal.step_4_description')}
                 </p>
               </div>
 
               {/* Summary Profile Box */}
               <div className="max-w-md mx-auto p-4 rounded-xl border border-border/80 bg-muted/30 text-left space-y-2.5">
                 <div className="text-xs font-bold text-foreground border-b border-border/60 pb-1.5 flex items-center justify-between">
-                  <span>Mục Tiêu Cá Nhân Của Bạn:</span>
+                  <span>{t('modal.summary_title')}</span>
                   <Badge variant="default" className="text-[10px] font-bold">
-                    Hoạt Động
+                    {t('modal.summary_status_active')}
                   </Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-muted-foreground text-[11px]">Chủ đề:</span>
+                    <span className="text-muted-foreground text-[11px]">{t('modal.summary_subject')}</span>
                     <p className="font-bold text-foreground">
                       {selectedSubjectConfig.flag} {selectedSubjectConfig.title}
                     </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-[11px]">Mục tiêu ngày:</span>
+                    <span className="text-muted-foreground text-[11px]">{t('modal.summary_daily_target')}</span>
                     <p className="font-bold text-foreground">
-                      ⚡ {preferences.dailyNewCards} thẻ mới / ngày
+                      {t('modal.summary_daily_target_cards', { count: preferences.dailyNewCards })}
                     </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-[11px]">Khung giờ học:</span>
+                    <span className="text-muted-foreground text-[11px]">{t('modal.summary_study_time')}</span>
                     <p className="font-bold text-foreground capitalize">
                       {preferences.preferredStudyTime === 'morning'
-                        ? '🌅 Buổi sáng'
+                        ? t('modal.time_morning')
                         : preferences.preferredStudyTime === 'afternoon'
-                        ? '☀️ Buổi trưa'
-                        : '🌙 Buổi tối'}
+                        ? t('modal.time_afternoon')
+                        : t('modal.time_evening')}
                     </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-[11px]">Bộ thẻ đã cài:</span>
+                    <span className="text-muted-foreground text-[11px]">{t('modal.summary_installed_decks')}</span>
                     <p className="font-bold text-foreground">
                       {installedDeckIds.size > 0
-                        ? `📚 ${installedDeckIds.size} bộ thẻ khởi đầu`
-                        : 'Sẵn sàng tạo mới'}
+                        ? t('modal.summary_installed_count', { count: installedDeckIds.size })
+                        : t('modal.summary_ready_to_create')}
                     </p>
                   </div>
                 </div>
@@ -543,7 +545,7 @@ export function OnboardingModal({
                 className="h-9 px-3 text-xs font-semibold rounded-xl"
               >
                 <ArrowLeft className="size-3.5 mr-1.5" />
-                Quay lại
+                {t('modal.back_button')}
               </Button>
             )}
             {step === 1 && (
@@ -553,7 +555,7 @@ export function OnboardingModal({
                 onClick={closeOnboarding}
                 className="h-9 px-3 text-xs font-medium text-muted-foreground hover:text-foreground rounded-xl"
               >
-                Để sau
+                {t('modal.skip_for_later')}
               </Button>
             )}
           </div>
@@ -565,7 +567,7 @@ export function OnboardingModal({
                 onClick={nextStep}
                 className="h-9 px-4 text-xs font-bold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs"
               >
-                Tiếp tục
+                {t('modal.next_button')}
                 <ArrowRight className="size-3.5 ml-1.5" />
               </Button>
             ) : (
@@ -575,7 +577,7 @@ export function OnboardingModal({
                 className="h-9 px-5 text-xs font-bold rounded-xl bg-gradient-to-r from-primary to-orange-500 text-primary-foreground hover:opacity-95 shadow-md shadow-primary/20"
               >
                 <Play className="size-3.5 mr-1.5 fill-current" />
-                Vào Dashboard & Bắt Đầu Tour
+                {t('modal.start_dashboard_tour')}
               </Button>
             )}
           </div>

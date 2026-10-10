@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   Compass,
   Download,
@@ -28,6 +29,7 @@ export function OnboardingHeroCard({
   onStartTour,
   hasDecks,
 }: OnboardingHeroCardProps) {
+  const { t } = useTranslation('onboarding')
   const currentSubject =
     SUBJECT_OPTIONS.find((s) => s.id === preferences.targetSubject) || SUBJECT_OPTIONS[0]
   const currentLevel =
@@ -46,19 +48,19 @@ export function OnboardingHeroCard({
                 variant="default"
                 className="text-[11px] font-bold bg-gradient-to-r from-primary to-orange-500 text-primary-foreground shadow-xs px-2.5 py-0.5"
               >
-                <Target className="size-3 mr-1" /> Mục Tiêu Học Tập
+                <Target className="size-3 mr-1" /> {t('hero_card.badge')}
               </Badge>
               <Badge variant="outline" className="text-[11px] font-semibold border-primary/30 text-primary">
                 {currentSubject.flag} {currentSubject.title} • {currentLevel}
               </Badge>
               <Badge variant="secondary" className="text-[11px] font-semibold bg-muted text-muted-foreground">
-                ⚡ {preferences.dailyNewCards} thẻ mới / ngày
+                ⚡ {t('hero.daily_target_cards', { count: preferences.dailyNewCards })}
               </Badge>
             </div>
             <h2 className="text-base sm:text-lg font-bold text-foreground tracking-tight pt-0.5">
               {hasDecks
-                ? 'Tiếp tục duy trì nhịp học thông minh hôm nay! 🔥'
-                : 'Khám phá hoặc tạo bộ thẻ đầu tiên để bắt đầu học! 📚'}
+                ? t('hero_card.motivation_continue')
+                : t('hero_card.motivation_start')}
             </h2>
           </div>
 
@@ -70,7 +72,7 @@ export function OnboardingHeroCard({
               className="h-8 px-3 text-xs font-semibold rounded-xl border-border/80 hover:border-primary/40 bg-card hover:bg-muted"
             >
               <Target className="size-3.5 mr-1.5 text-primary" />
-              Đổi mục tiêu
+              {t('hero_card.change_goal_button')}
             </Button>
             <Button
               variant="outline"
@@ -79,7 +81,7 @@ export function OnboardingHeroCard({
               className="h-8 px-3 text-xs font-semibold rounded-xl border-border/80 hover:border-primary/40 bg-card hover:bg-muted"
             >
               <Compass className="size-3.5 mr-1.5 text-orange-500" />
-              Tour Hướng Dẫn
+              {t('hero_card.tour_button')}
             </Button>
           </div>
         </div>
@@ -94,7 +96,7 @@ export function OnboardingHeroCard({
           >
             <Link to="/marketplace/decks">
               <Download className="size-3.5 mr-1.5 text-primary" />
-              <span>Thư viện Decks</span>
+              <span>{t('hero_card.deck_library_button')}</span>
             </Link>
           </Button>
 
@@ -105,7 +107,7 @@ export function OnboardingHeroCard({
             className="h-9 justify-start text-xs font-semibold rounded-xl border-border/70 bg-card/80 hover:bg-card hover:border-primary/50 text-foreground"
           >
             <PlusLg className="size-3.5 mr-1.5 text-orange-500" />
-            <span>Tạo Deck Mới</span>
+            <span>{t('hero_card.create_deck_button')}</span>
           </Button>
 
           <Button
@@ -116,7 +118,7 @@ export function OnboardingHeroCard({
           >
             <Link to="/sync">
               <Upload className="size-3.5 mr-1.5 text-emerald-500" />
-              <span>Đồng bộ Anki</span>
+              <span>{t('hero_card.anki_sync_button')}</span>
             </Link>
           </Button>
 
@@ -128,7 +130,7 @@ export function OnboardingHeroCard({
           >
             <Link to="/browse">
               <Search className="size-3.5 mr-1.5 text-blue-500" />
-              <span>Duyệt Thẻ (Browse)</span>
+              <span>{t('hero_card.browse_button')}</span>
             </Link>
           </Button>
         </div>

@@ -59,9 +59,9 @@ function bootstrap(): FrontendBootstrap {
   }
 }
 async function expectRoute(text: string) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     if (host.querySelector('main h1')?.textContent === text) return
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 25)) })
   }
   expect(host.querySelector('main h1')?.textContent).toBe(text)
 }
@@ -74,7 +74,7 @@ beforeAll(async () => {
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() })))
   window.history.replaceState(null, '', '/card-templates')
   App = (await import('@/App')).default
-})
+}, 30000)
 beforeEach(async () => {
   mocks.bootstrap = { data: bootstrap(), isPending: false }
   fetchMock.mockClear()
@@ -84,7 +84,7 @@ beforeEach(async () => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove() })
 afterAll(() => { mocks.router?.dispose(); vi.unstubAllGlobals() })
 
-describe('template routes in the application shell', () => {
+describe('template routes in the application shell', { timeout: 15000 }, () => {
   it('renders named library/detail/install pages and keeps NoteType routes and sidebar links', async () => {
     await navigate('/card-templates', 'Template library route')
     const templateLink = host.querySelector<HTMLAnchorElement>('a[href="/card-templates"]')

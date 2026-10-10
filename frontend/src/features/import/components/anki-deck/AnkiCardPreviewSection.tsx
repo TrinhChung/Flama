@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { NativeSelect } from '@/components/ui/native-select'
-import { NoteTypeLivePreview } from '@/features/note-types/components/NoteTypeLivePreview'
+import { CardPreviewPanel } from '@/entities/flashcard'
 
 interface AnkiCardPreviewSectionProps {
   showPreviewSection: boolean
@@ -62,7 +62,7 @@ export function AnkiCardPreviewSection({
           Ẩn
         </Button>
       </div>
-      <NoteTypeLivePreview
+      <CardPreviewPanel
         cardId={`anki-deck-preview-${activePreviewNote?.noteId || 'empty'}`}
         side={previewSide}
         onSideChange={setPreviewSide}

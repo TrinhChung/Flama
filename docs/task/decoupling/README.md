@@ -223,7 +223,7 @@ PR #175 deploy `1e14106`; lần chạy đầu xóa 15.072 dòng membership của
 
 ### Phase 8 / Phase 9
 
-Phase 8 chờ chủ sản phẩm chọn năng lực đầu tiên ([điều kiện](./P8_P9_READINESS_2026-09-30.md)).
+Phase 8 chờ chủ sản phẩm chọn năng lực đầu tiên ([điều kiện](./P8_P9_READINESS_2026-09-30.md)). Trắc nghiệm tạm hoãn từ 2026-10-10, điều kiện mở lại ở [readiness §2](./P8_P9_READINESS_2026-09-30.md#2-phase-8--cần-chủ-sản-phẩm-chọn-năng-lực-đầu-tiên). Action/outcome tổng quát (bỏ giả định bốn rating) có [kế hoạch để dành](./P8_GENERIC_ACTION_OUTCOME_PLAN_2026-10-10.md), chưa lên lịch.
 
 Phase 9 ([kế hoạch](./P9_EXECUTION_PLAN_2026-09-30.md), [tracker](./P9_PROGRESS_2026-10-02.md), [cutover](./P9_06_CUTOVER_REPORT_2026-10-02.md), [tổng kết INT-06](./P9_CLOSEOUT_2026-10-03.md)):
 

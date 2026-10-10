@@ -69,6 +69,7 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 |---|---|
 | [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
+| [`TEMPLATE_NOTE_TYPE_SETUP_UX_DESIGN_2026-10-09.md`](plans/proposals/TEMPLATE_NOTE_TYPE_SETUP_UX_DESIGN_2026-10-09.md) | Thiết kế và kết quả triển khai UI/UX: Template tập trung mặt trước/mặt sau/CSS, input trong modal; Note Type khai báo field và mapping từng lần gắn template. Có kiểm chứng và giới hạn triển khai. |
 | [`TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md`](plans/proposals/TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md) | Kế hoạch triển khai template tách riêng, nhiều kiểu thẻ/deck, phiên bản và bản riêng cho deck đã cài; chia task Claude/Gemini, spec ở [`task/template-features/`](task/template-features/README.md). Chờ duyệt. |
 | [`Study Decoupling Task Backlog`](task/decoupling/README.md) | Tracker task Phase 0–4 và entry Phase 5; P4-11/INT-02 đã đóng cho phát triển, production gate vẫn mở. |
 | [`P5 execution plan — 2026-09-20`](task/decoupling/P5_EXECUTION_PLAN_2026-09-20.md) | Kế hoạch P5-00..P5-10/INT-03, gate, test, production canary và rollback; schema foundation LEGACY-only đang triển khai. |

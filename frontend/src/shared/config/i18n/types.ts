@@ -17,6 +17,13 @@ import type collaboration from './locales/vi/collaboration.json'
 import type orders from './locales/vi/orders.json'
 import type support from './locales/vi/support.json'
 import type worksheets from './locales/vi/worksheets.json'
+import type profile from './locales/vi/profile.json'
+import type wallet from './locales/vi/wallet.json'
+import type card_templates from './locales/vi/card_templates.json'
+import type template_mapping from './locales/vi/template_mapping.json'
+import type audio from './locales/vi/audio.json'
+import type guide from './locales/vi/guide.json'
+import type onboarding from './locales/vi/onboarding.json'
 
 export interface I18nResources {
   common: typeof common
@@ -38,6 +45,13 @@ export interface I18nResources {
   orders: typeof orders
   support: typeof support
   worksheets: typeof worksheets
+  profile: typeof profile
+  wallet: typeof wallet
+  card_templates: typeof card_templates
+  template_mapping: typeof template_mapping
+  audio: typeof audio
+  guide: typeof guide
+  onboarding: typeof onboarding
 }
 
 declare module 'i18next' {

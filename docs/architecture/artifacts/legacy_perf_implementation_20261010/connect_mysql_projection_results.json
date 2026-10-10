@@ -1,0 +1,14 @@
+{
+  "measured_at_utc": "2026-10-09T23:29:43.143564+00:00",
+  "rows": 128,
+  "fields": 3,
+  "normalized_identity_comparisons": 384,
+  "json_projection_parity": true,
+  "db_transactions_read_only": true,
+  "startup_maintenance": false,
+  "scope": "Bounded existing local data, JSON value type plus Connect Unicode/whitespace normalization. Not transport latency or production coverage.",
+  "source_sha256": {
+    "app/repositories/connect_identity_repository.py": "911b478c9bfb40255bb6ea9f434e611d68bcecaf233dd89b89a55f55ca1dbd41",
+    "app/services/connect/base.py": "3481988ca969121facdd59150c2c3ae4f59496c4d2d99f4f81d546d01b15da60"
+  }
+}

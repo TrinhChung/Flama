@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 import { ContextHelpButton } from '@/features/guide'
-import { SpotlightTour } from '../components/SpotlightTour'
+import { SpotlightTour } from '@/shared/components/SpotlightTour'
 import { useNoteTypeManager, type NoteTypeItem } from '../hooks/useNoteTypeManager'
 import { CreateNoteTypeBar } from '../components/manager/CreateNoteTypeBar'
 import { NoteTypeCard } from '../components/manager/NoteTypeCard'
@@ -62,7 +62,7 @@ export function NoteTypeManagerPage() {
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
   return (
-    <Page className="w-full max-w-7xl px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+    <Page size="wide" className="px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
       <AmbientBackground intensity="subtle" />
 
       <PageHeader
@@ -120,7 +120,7 @@ export function NoteTypeManagerPage() {
           />
         </div>
       ) : (
-        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5">
           {noteTypes.map((item, index) => (
             <NoteTypeCard
               key={item.id}

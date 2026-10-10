@@ -143,7 +143,6 @@ export function McpTokenTable({
 
                   <TableCell className="font-medium text-xs sm:text-sm">
                     <div className="flex items-center gap-2">
-                      <Key className="size-3.5 text-primary shrink-0" />
                       <span className="font-semibold">{token.name || 'MCP Token'}</span>
                       {token.client_name && (
                         <Badge variant="outline" className="text-[10px] py-0 px-1 text-muted-foreground">
@@ -175,12 +174,12 @@ export function McpTokenTable({
                         <span>{t('table.scopes_count', { count: tokenScopes.length })}</span>
                       </Button>
                       {isFullAccess && (
-                        <Badge variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-500/30 py-0">
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground py-0">
                           {t('table.full_access')}
                         </Badge>
                       )}
                       {isReadOnly && (
-                        <Badge variant="outline" className="text-[10px] text-sky-600 dark:text-sky-400 border-sky-500/30 py-0">
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground py-0">
                           {t('table.read_only')}
                         </Badge>
                       )}
@@ -198,7 +197,7 @@ export function McpTokenTable({
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="size-8 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-950/40"
+                            className="size-8 text-muted-foreground hover:text-foreground"
                             title={t('table.actions_tooltip.permissions')}
                             onClick={() => onPermissionsEdit?.(token)}
                           >
@@ -219,7 +218,7 @@ export function McpTokenTable({
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="size-8 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40"
+                          className="size-8 text-muted-foreground hover:text-foreground"
                           title={mode === 'admin' ? t('table.actions_tooltip.rotate_admin') : t('table.actions_tooltip.rotate_user')}
                           onClick={() => onRotate(token)}
                         >
@@ -230,7 +229,7 @@ export function McpTokenTable({
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="size-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
+                            className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             title={t('table.actions_tooltip.revoke')}
                             onClick={() => onRevoke(token.id)}
                           >
@@ -256,7 +255,7 @@ export function McpTokenTable({
                         title={t('table.actions_tooltip.view_scopes_details')}
                         onClick={() => onViewScopes(token)}
                       >
-                        <Shield className="size-3.5 text-primary" />
+                        <Shield className="size-3.5" />
                         <span>{t('table.view_scopes')}</span>
                       </Button>
                     )}

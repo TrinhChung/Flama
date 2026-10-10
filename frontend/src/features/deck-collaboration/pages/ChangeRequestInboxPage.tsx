@@ -29,7 +29,7 @@ export function ChangeRequestInboxPage() {
   }
   if (query.error) {
     return (
-      <Page>
+      <Page size="wide">
         <PageError error={query.error} />
       </Page>
     )

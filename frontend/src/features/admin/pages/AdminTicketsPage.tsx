@@ -135,7 +135,7 @@ export function AdminTicketsPage() {
     query.data || {}
 
   return (
-    <Page className="space-y-8 py-4 pb-16">
+    <Page size="wide" className="space-y-8 py-4 pb-16">
       <PageHeader
         title="Quản lý Ticket & Báo lỗi"
         description="Theo dõi các yêu cầu hỗ trợ, phân loại bug, cập nhật trạng thái và phản hồi người dùng."

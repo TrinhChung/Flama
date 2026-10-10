@@ -1,0 +1,36 @@
+{
+  "node": "v22.22.2",
+  "limitation": "Synthetic NOTE/v4 initial sessions, no events and 1 KiB Body/Note. Node CPU and structuredClone only; no browser or IndexedDB timing. Frozen composition contract is absent in this minimal accepted fixture.",
+  "cases": [
+    {
+      "cards": 100,
+      "wire": "study-session.v4",
+      "validation_status": "restored",
+      "json_equivalent_bytes": 231141,
+      "normalize_median_node_ms": 0.6903999999999542,
+      "structured_clone_median_node_ms": 1.704200000000128,
+      "build_session_view_median_node_ms": 0.14480000000003201,
+      "measured_iterations": 7
+    },
+    {
+      "cards": 1000,
+      "wire": "study-session.v4",
+      "validation_status": "restored",
+      "json_equivalent_bytes": 2296641,
+      "normalize_median_node_ms": 4.200900000000047,
+      "structured_clone_median_node_ms": 13.885500000000093,
+      "build_session_view_median_node_ms": 0.35750000000007276,
+      "measured_iterations": 7
+    },
+    {
+      "cards": 5000,
+      "wire": "study-session.v4",
+      "validation_status": "restored",
+      "json_equivalent_bytes": 11484641,
+      "normalize_median_node_ms": 27.52469999999994,
+      "structured_clone_median_node_ms": 73.03480000000013,
+      "build_session_view_median_node_ms": 0.9646000000000186,
+      "measured_iterations": 7
+    }
+  ]
+}

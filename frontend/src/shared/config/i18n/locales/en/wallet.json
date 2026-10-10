@@ -1,0 +1,48 @@
+{
+  "loading": "Loading wallet balance and revenue details…",
+  "header": {
+    "title": "Personal Wallet & Revenue",
+    "description": "Manage balance, track study material sales revenue, and view transaction history on Flama"
+  },
+  "summary": {
+    "available_balance": "Available Balance",
+    "balance_explanation": "Net revenue credited after platform fee deduction from sold decks and study materials.",
+    "platform_fee_label": "Platform fee: {{percent}}%",
+    "custom_fee_tier": "Custom partner rate",
+    "standard_fee_tier": "Standard Flama rate",
+    "total_gross_title": "Total Gross Revenue",
+    "total_gross_description": "Total amount paid by learners",
+    "net_earnings_title": "Net Revenue",
+    "net_earnings_description": "Amount credited to wallet balance",
+    "service_fee_title": "Service & Platform Fee",
+    "service_fee_description": "System maintenance and payment gateway",
+    "sales_count_title": "Orders Sold",
+    "sales_count_description": "Deck purchases on Marketplace"
+  },
+  "payout": {
+    "title": "Balance Security & Payouts",
+    "default_message": "Direct bank account payout feature is currently in preparation. All deck sales revenue is accounted for transparently and protected securely on Flama.",
+    "auto_settlement": "Auto-Settlement"
+  },
+  "transactions": {
+    "title": "Balance Transaction History",
+    "description": "Detailed breakdown of each study material purchase and net revenue credited to wallet",
+    "filter_all": "All",
+    "filter_deck_sale": "Deck Revenue",
+    "loading": "Loading transaction history…",
+    "error": "Unable to load transaction history. Please try again.",
+    "empty_title": "No transactions yet",
+    "empty_description": "When learners purchase your decks or study materials on Marketplace, the revenue will appear here.",
+    "th_date": "Date",
+    "th_description": "Description",
+    "th_buyer": "Buyer",
+    "th_gross": "Price",
+    "th_platform_fee": "Platform Fee",
+    "th_net": "Net Received",
+    "th_balance_after": "Balance After",
+    "order_code_prefix": "Order code: #{{code}}",
+    "pagination_summary": "Page {{page}} / {{pages}} (Total {{total}} transactions)",
+    "btn_previous": "Previous",
+    "btn_next": "Next"
+  }
+}

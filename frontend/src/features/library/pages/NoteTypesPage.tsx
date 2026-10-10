@@ -45,7 +45,7 @@ export function NoteTypesPage() {
   }
 
   return (
-    <Page className="relative min-h-screen px-2.5 sm:px-6 py-4 sm:py-6">
+    <Page size="wide" className="relative min-h-screen px-2.5 sm:px-6 py-4 sm:py-6">
       <AmbientBackground />
       <PageHeader
         title={t('note_types_page.title', { defaultValue: 'Loại thẻ' })}
@@ -57,7 +57,7 @@ export function NoteTypesPage() {
           description={t('note_types_page.empty_desc', { defaultValue: 'Tạo note type đầu tiên hoặc cài một mẫu từ marketplace.' })}
         />
       ) : (
-        <div className="grid gap-3 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5">
           {query.data.items.map((item) => (
             <Card
               key={item.id}

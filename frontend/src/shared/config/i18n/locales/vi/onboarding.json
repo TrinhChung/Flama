@@ -1,0 +1,197 @@
+{
+  "hero": {
+    "badge": "Khởi đầu hành trình",
+    "title": "Chào Mừng Bạn Đến Với Flama!",
+    "subtitle": "Bạn đã thiết lập mục tiêu học {{subject}} cấp độ {{level}}. Hãy bắt đầu học những từ vựng đầu tiên ngay hôm nay.",
+    "daily_target_label": "Mục tiêu hàng ngày",
+    "daily_target_cards": "{{count}} thẻ mới / ngày",
+    "preferred_time_label": "Thời gian học ưu tiên",
+    "start_study_button": "Bắt đầu học ngay",
+    "explore_marketplace_button": "Khám phá chợ bộ thẻ",
+    "download_companion_link": "Tải Yomitan Companion",
+    "quick_guide_link": "Xem hướng dẫn nhanh",
+    "retake_tour_button": "Xem lại hướng dẫn giao diện"
+  },
+  "hero_card": {
+    "badge": "Mục Tiêu Học Tập",
+    "motivation_continue": "Tiếp tục duy trì nhịp học thông minh hôm nay! 🔥",
+    "motivation_start": "Khám phá hoặc tạo bộ thẻ đầu tiên để bắt đầu học! 📚",
+    "change_goal_button": "Đổi mục tiêu",
+    "tour_button": "Tour Hướng Dẫn",
+    "deck_library_button": "Thư viện Decks",
+    "create_deck_button": "Tạo Deck Mới",
+    "anki_sync_button": "Đồng bộ Anki",
+    "browse_button": "Duyệt Thẻ (Browse)"
+  },
+  "modal": {
+    "title": "Thiết Lập Mục Tiêu Học Tập",
+    "step_badge": "BƯỚC {{step}}/{{total}}",
+    "close_button": "Đóng",
+    "step_1_tab": "Mục Tiêu",
+    "step_2_tab": "Thói Quen",
+    "step_3_tab": "Nhận Thẻ",
+    "step_4_tab": "Hoàn Tất",
+    "step_1_title": "Bạn muốn tập trung học ngôn ngữ hoặc kỹ năng nào?",
+    "step_1_subtitle": "Chọn chủ đề chính để Flama đề xuất các bộ flashcard và lộ trình học tập phù hợp nhất.",
+    "step_1_level_prompt": "Trình độ hoặc mục tiêu của bạn trong {{subject}}:",
+    "step_2_title": "Bạn muốn học bao nhiêu thẻ mới mỗi ngày?",
+    "step_2_subtitle": "Thuật toán Spaced Repetition sẽ phân bổ thẻ mới và thẻ ôn tập (Due) theo nhịp học bền vững của bạn.",
+    "step_2_time_prompt": "Khung giờ bạn thường dành để học:",
+    "step_3_title": "Bộ thẻ khởi đầu đề xuất cho bạn",
+    "step_3_subtitle": "Dựa trên mục tiêu đã chọn, đây là các bộ flashcard cộng đồng được tối ưu cho người mới bắt đầu.",
+    "searching_decks": "Đang tìm kiếm các bộ thẻ chất lượng cao từ Thư viện...",
+    "no_decks_for_level": "Chưa có bộ thẻ mẫu trực tiếp cho cấp độ này. Bạn có thể tự tạo bộ thẻ đầu tiên trên Dashboard!",
+    "card_count_unit": "thẻ",
+    "deck_author": "Tác giả: {{author}}",
+    "install_deck_button": "Thêm vào bộ thẻ",
+    "installed_deck_badge": "Đã cài đặt",
+    "installing_state": "Đang cài đặt…",
+    "skip_step_button": "Bỏ qua bước này",
+    "srs_note_title": "Ghi nhớ ngắt quãng (Spaced Repetition System):",
+    "srs_note_body": "Bạn không cần học hết tất cả thẻ trong một lần. Hãy học đúng số thẻ mục tiêu mỗi ngày, thuật toán của Flama sẽ tự động xếp lịch ôn tập trước khi bạn quên!",
+    "step_4_title": "Chúc mừng bạn! Lộ trình đã sẵn sàng 🎉",
+    "step_4_description": "Tài khoản của bạn đã được cá nhân hóa hoàn tất. Giờ hãy cùng khám phá các tính năng chính trên Dashboard nhé!",
+    "summary_title": "Mục Tiêu Cá Nhân Của Bạn:",
+    "summary_status_active": "Hoạt Động",
+    "summary_subject": "Chủ đề:",
+    "summary_daily_target": "Mục tiêu ngày:",
+    "summary_daily_target_cards": "⚡ {{count}} thẻ mới / ngày",
+    "summary_study_time": "Khung giờ học:",
+    "time_morning": "🌅 Buổi sáng",
+    "time_afternoon": "☀️ Buổi trưa",
+    "time_evening": "🌙 Buổi tối",
+    "summary_installed_decks": "Bộ thẻ đã cài:",
+    "summary_installed_count": "📚 {{count}} bộ thẻ khởi đầu",
+    "summary_ready_to_create": "Sẵn sàng tạo mới",
+    "skip_for_later": "Để sau",
+    "start_dashboard_tour": "Vào Dashboard & Bắt Đầu Tour",
+    "start_tour_button": "Bắt đầu khám phá giao diện (Tour)",
+    "go_study_button": "Vào bàn học ngay",
+    "back_button": "Quay lại",
+    "next_button": "Tiếp tục",
+    "finish_button": "Hoàn thành"
+  },
+  "tour": {
+    "skip_button": "Bỏ qua",
+    "prev_button": "Quay lại",
+    "next_button": "Tiếp theo",
+    "finish_button": "Hoàn tất",
+    "step_count": "Bước {{current}} / {{total}}",
+    "steps": {
+      "header": {
+        "title": "Thanh Điều Hướng & Tìm Kiếm",
+        "description": "Truy cập nhanh bộ thẻ, tìm kiếm từ vựng, quản lý tài khoản và xem thông báo tại đây."
+      },
+      "deck_grid": {
+        "title": "Danh Sách Bộ Thẻ Của Bạn",
+        "description": "Nơi hiển thị toàn bộ các bộ thẻ bạn đang sở hữu. Bạn có thể bấm trực tiếp để vào học hoặc quản lý chi tiết."
+      },
+      "quick_study": {
+        "title": "Ôn Tập Thẻ Đến Hạn (SRS)",
+        "description": "Hệ thống tự động tính toán thẻ cần ôn hôm nay theo thuật toán ngắt quãng. Bấm vào đây để hoàn thành mục tiêu ngày!"
+      },
+      "create_deck": {
+        "title": "Tạo & Tùy Biến Bộ Thẻ",
+        "description": "Dễ dàng tạo bộ thẻ mới, thiết kế loại thẻ (Note Types) và các trường dữ liệu tùy biến theo nhu cầu."
+      },
+      "anki_sync": {
+        "title": "Đồng Bộ Anki & Yomitan",
+        "description": "Kết nối hai chiều với Anki Desktop và khai thác từ vựng siêu tốc từ trình duyệt bằng Yomitan."
+      },
+      "nav_stats": {
+        "title": "Biểu Đồ Thống Kê & Heatmap",
+        "description": "Theo dõi chuỗi ngày học liên tục (streak), số thẻ ghi nhớ và dự báo khối lượng ôn tập tương lai."
+      },
+      "nav_browse": {
+        "title": "Trình Duyệt Từ Vựng Chuyên Sâu",
+        "description": "Tra cứu, chỉnh sửa hàng loạt và lọc thẻ với bộ lọc tag, trạng thái ghi nhớ mạnh mẽ."
+      },
+      "nav_settings": {
+        "title": "Cá Nhân Hóa Trải Nghiệm",
+        "description": "Điều chỉnh phím tắt, giao diện sáng/tối, âm thanh và các thông số thuật toán ôn tập."
+      }
+    }
+  },
+  "subjects": {
+    "japanese": { "title": "Tiếng Nhật", "subtitle": "JLPT N5 - N1, Kanji, Giao tiếp Kaiwa, IT Nihongo" },
+    "english": { "title": "Tiếng Anh", "subtitle": "IELTS, TOEIC, VSTEP, Oxford 3000/5000, Giao tiếp" },
+    "chinese": { "title": "Tiếng Trung", "subtitle": "HSK 1 - 6, HSK 3.0, HSKK Khẩu ngữ, TOCFL" },
+    "korean": { "title": "Tiếng Hàn", "subtitle": "TOPIK I & II, Tiếng Hàn tổng hợp, EPS-TOPIK" },
+    "it_tech": { "title": "CNTT & Lập trình", "subtitle": "Frontend, Backend, DevOps, LeetCode, System Design" },
+    "aws": { "title": "Cloud & Chứng chỉ", "subtitle": "AWS CCP / SAA, Azure AZ-900 / AZ-104, PMP, CFA" },
+    "thpt_qg": { "title": "Luyện thi THPT QG", "subtitle": "Toán, Vật lý, Hóa học, Sinh học, Lịch sử, Địa lý" },
+    "medicine": { "title": "Y Dược & Chuyên ngành", "subtitle": "Thuật ngữ Y khoa tiếng Anh, Giải phẫu, Dược lý, Luật" },
+    "law": { "title": "Luật Học", "subtitle": "Điều luật, Án lệ, Thuật ngữ pháp lý" },
+    "other": { "title": "Lĩnh Vực Khác", "subtitle": "Tự do thiết kế theo nhu cầu cá nhân" },
+    "levels": {
+      "basic": "Cơ bản",
+      "intermediate": "Trung cấp",
+      "advanced": "Nâng cao",
+      "fresher": "Fresher",
+      "junior": "Junior",
+      "senior": "Senior",
+      "general": "Đại cương",
+      "specialized": "Chuyên ngành",
+      "in_depth": "Chuyên sâu",
+      "all_levels": "Tất cả cấp độ"
+    },
+    "level_labels": {
+      "n5": "N5 (Nhập môn / Sơ cấp 1)",
+      "n4": "N4 (Sơ cấp 2)",
+      "n3": "N3 (Trung cấp)",
+      "n2": "N2 (Trung cao cấp)",
+      "n1": "N1 (Cao cấp)",
+      "kanji_n5_n4": "Hán tự Kanji cơ bản",
+      "kaiwa_basic": "Giao tiếp đời sống Kaiwa",
+      "toeic_450": "TOEIC 250 - 450 (Cơ bản)",
+      "toeic_600": "TOEIC 500 - 650 (Tiêu chuẩn)",
+      "toeic_750": "TOEIC 700 - 850 (Nâng cao)",
+      "ielts_5_5": "IELTS 5.0 - 6.0",
+      "ielts_6_5": "IELTS 6.5 - 7.5+",
+      "vstep_b1": "VSTEP B1 - B2",
+      "oxford_3000": "Từ vựng cốt lõi Oxford",
+      "topik_1": "TOPIK I (Cấp 1 - Nhập môn)",
+      "topik_2": "TOPIK I (Cấp 2 - Đời sống)",
+      "topik_3": "TOPIK II (Cấp 3 - Trung cấp)",
+      "topik_4": "TOPIK II (Cấp 4 - Nâng cao)",
+      "korean_beginner": "Tiếng Hàn Tổng hợp Sơ cấp",
+      "eps_manufacturing": "EPS-TOPIK (Xuất khẩu LĐ)",
+      "hsk1": "HSK 1 (150 từ cơ bản)",
+      "hsk2": "HSK 2 (300 từ)",
+      "hsk3": "HSK 3 (600 từ - Giao tiếp)",
+      "hsk4": "HSK 4 (1200 từ)",
+      "hsk5": "HSK 5 (2500 từ cao cấp)",
+      "tocfl_band_a": "TOCFL Phồn thể (Band A)",
+      "frontend": "Frontend (React, TS, Next.js)",
+      "backend": "Backend (Node, Python, Go, SQL)",
+      "dsa_leetcode": "Cấu trúc dữ liệu & LeetCode",
+      "devops": "DevOps & Cloud (Docker, K8s)",
+      "database": "Database & SQL Queries",
+      "foundational": "AWS Cloud Practitioner (CCP)",
+      "associate": "AWS Solutions Architect (SAA)",
+      "az_900": "Azure Fundamentals (AZ-900)",
+      "az_104": "Azure Administrator (AZ-104)",
+      "pmp_agile": "PMP & Agile Project Management",
+      "thpt_math": "Công thức Toán học 12",
+      "thpt_physics": "Định luật & Công thức Vật lý",
+      "thpt_chemistry": "Phản ứng & Phương trình Hóa học",
+      "thpt_biology": "Quy luật Sinh học & Di truyền",
+      "thpt_history_geo": "Sự kiện Lịch sử & Địa lý",
+      "med_terms": "Thuật ngữ Y khoa tiếng Anh",
+      "anatomy": "Giải phẫu học (Anatomy)",
+      "pharmacology": "Dược lý & Tác dụng thuốc",
+      "civil_law": "Luật Dân sự & Doanh nghiệp"
+    }
+  },
+  "daily_targets": {
+    "5": { "label": "5 thẻ / ngày", "time": "~5 phút mỗi ngày", "description": "Thong thả, dễ dàng duy trì thói quen học tập bền bỉ." },
+    "10": { "label": "10 thẻ / ngày", "time": "~10 - 15 phút mỗi ngày", "description": "Mức học tiêu chuẩn cân bằng, tiến bộ rõ rệt mà không áp lực." },
+    "20": { "label": "20 thẻ / ngày", "time": "~25 - 30 phút mỗi ngày", "description": "Chăm chỉ, tăng tốc chuẩn bị cho các kỳ thi sắp tới." },
+    "30": { "label": "30+ thẻ / ngày", "time": "~45+ phút mỗi ngày", "description": "Cấp tốc, đạt mục tiêu từ vựng lớn trong thời gian ngắn." }
+  },
+  "study_times": {
+    "morning": { "label": "Buổi sáng", "schedule": "06:00 - 08:00 (Tỉnh táo)", "description": "Khởi động ngày mới với trí nhớ tỉnh táo" },
+    "afternoon": { "label": "Buổi trưa / Chiều", "schedule": "12:00 - 14:00 (Nghỉ ngơi)", "description": "Tranh thủ giờ nghỉ trưa hoặc giải lao" },
+    "evening": { "label": "Buổi tối", "schedule": "19:00 - 22:00 (Tập trung)", "description": "Ôn tập sâu trước khi đi ngủ giúp củng cố trí nhớ dài hạn" }
+  }
+}

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 from datetime import datetime
+from collections import defaultdict
 
 from sqlalchemy.orm import joinedload
 
@@ -588,3 +589,118 @@ def get_card_progress_rows_for_cutover(
         .with_for_update()
         .all()
     )
+
+
+def batch_get_deck_publish_facts(
+    *,
+    user_id: int,
+    deck_ids: list[int],
+) -> tuple[dict[int, int], dict[int, set[str]]]:
+    """Read direct card counts and NoteType membership in one note scan.
+
+    Callers supply the existing visible-owned deck scope. LEFT JOIN retains
+    NoteTypes on notes without cards; COUNT(Card.id) counts every presentation.
+    """
+    normalized_deck_ids = sorted({int(deck_id) for deck_id in deck_ids if deck_id is not None})
+    if not normalized_deck_ids:
+        return {}, {}
+    rows = db.session.query(
+        Note.deck_id, Note.note_type_id, db.func.count(Card.id),
+    ).select_from(Note).outerjoin(
+        Card, Card.note_id == Note.id,
+    ).filter(
+        Note.user_id == user_id,
+        Note.deck_id.in_(normalized_deck_ids),
+    ).group_by(Note.deck_id, Note.note_type_id).all()
+    card_counts: dict[int, int] = defaultdict(int)
+    note_types: dict[int, set[str]] = defaultdict(set)
+    for deck_id, note_type_id, card_count in rows:
+        if deck_id is not None:
+            # Keep the old card-count map's absence for zero-card decks.
+            if card_count:
+                card_counts[int(deck_id)] += int(card_count)
+            if note_type_id:
+                note_types[int(deck_id)].add(str(note_type_id))
+    return dict(card_counts), dict(note_types)
+
+
+def batch_get_cards_count_by_deck_ids(
+    *,
+    user_id: int,
+    deck_ids: list[int],
+) -> dict[int, int]:
+    """Retrieve direct card counts grouped by deck_id for a given user."""
+    normalized_deck_ids = sorted({int(d) for d in deck_ids if d is not None})
+    if not normalized_deck_ids:
+        return {}
+    rows = (
+        db.session.query(
+            Note.deck_id,
+            db.func.count(Card.id),
+        )
+        .select_from(Card)
+        .join(Note, Card.note_id == Note.id)
+        .filter(
+            Note.user_id == user_id,
+            Note.deck_id.in_(normalized_deck_ids),
+        )
+        .group_by(Note.deck_id)
+        .all()
+    )
+    return {int(row[0]): int(row[1] or 0) for row in rows if row and row[0] is not None}
+
+
+def batch_get_deck_note_types(
+    *,
+    user_id: int,
+    deck_ids: list[int],
+) -> dict[int, set[str]]:
+    """Retrieve mapping of deck_id to set of note_type_ids used by notes in each deck."""
+    normalized_deck_ids = sorted({int(d) for d in deck_ids if d is not None})
+    if not normalized_deck_ids:
+        return {}
+    rows = (
+        db.session.query(Note.deck_id, Note.note_type_id)
+        .filter(
+            Note.user_id == user_id,
+            Note.deck_id.in_(normalized_deck_ids),
+        )
+        .distinct()
+        .all()
+    )
+    result: dict[int, set[str]] = defaultdict(set)
+    for row in rows:
+        if row and row[0] is not None and row[1]:
+            result[int(row[0])].add(str(row[1]))
+    return dict(result)
+
+
+def batch_get_installed_note_type_ids(note_type_ids: set[str] | list[str]) -> set[str]:
+    """Filter note_type_ids to those that were installed from Marketplace."""
+    normalized_nt_ids = sorted({str(nt) for nt in note_type_ids if nt})
+    if not normalized_nt_ids:
+        return set()
+    rows = (
+        db.session.query(NoteTypeInstall.installed_note_type_id)
+        .filter(NoteTypeInstall.installed_note_type_id.in_(normalized_nt_ids))
+        .all()
+    )
+    return {str(row[0]) for row in rows if row and row[0]}
+
+
+def batch_get_active_template_note_type_ids(note_type_ids: set[str] | list[str]) -> set[str]:
+    """Filter note_type_ids to those having active templates in study_applications."""
+    normalized_nt_ids = sorted({str(nt) for nt in note_type_ids if nt})
+    if not normalized_nt_ids:
+        return set()
+    rows = (
+        db.session.query(StudyApplication.note_type_id)
+        .join(Template, StudyApplication.template_id == Template.id)
+        .filter(
+            StudyApplication.note_type_id.in_(normalized_nt_ids),
+            StudyApplication.status_code == "ACTIVE",
+        )
+        .distinct()
+        .all()
+    )
+    return {str(row[0]) for row in rows if row and row[0]}

@@ -77,7 +77,7 @@ export function DeckChangeRequestPage() {
   }
 
   return (
-    <Page className="max-w-[96rem]">
+    <Page size="wide">
       <PageHeader
         title={t('request.title', 'Đóng góp thay đổi')}
         description={t(

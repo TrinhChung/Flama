@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 import { act } from 'react'
@@ -7,222 +6,194 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/shared/config/i18n'
 import { NoteTypeDetailPage } from './NoteTypeDetailPage'
+import type { FieldDefItem } from '../hooks/useNoteTypeFields'
 
-type TemplateContent = { front_html: string; back_html: string; shared_css: string }
-type TemplateFixture = TemplateContent & { id: string; name: string; is_default: boolean }
-
-const state = vi.hoisted(() => ({
-  templates: [] as TemplateFixture[],
-  resetContent: {} as TemplateContent,
-  get: vi.fn(),
-  mutate: vi.fn(),
-  rename: vi.fn(),
-}))
-
+const state = vi.hoisted(() => ({ fields: [] as FieldDefItem[], noteName: 'Vocabulary', get: vi.fn(), mutate: vi.fn() }))
 vi.mock('@/app/api', () => ({ appApi: { get: state.get, mutate: state.mutate } }))
-vi.mock('@/shared/api/client', async (original) => ({
-  ...await original<typeof import('@/shared/api/client')>(),
-  apiRequest: vi.fn().mockResolvedValue({ items: [] }),
-  apiJson: state.rename,
-}))
-vi.mock('../components/NoteTypeLivePreview', () => ({ NoteTypeLivePreview: () => null }))
+vi.mock('@/shared/api/client', async (original) => ({ ...await original<typeof import('@/shared/api/client')>(),
+  apiRequest: vi.fn().mockResolvedValue({ items: [] }), apiJson: vi.fn() }))
 vi.mock('@/components/ambient-background', () => ({ AmbientBackground: () => null }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-const saved: TemplateContent = {
-  front_html: '{{Kanji}}',
-  back_html: '{{Meaning}}',
-  shared_css: '.card { color: black; }',
-}
-const second: TemplateContent = {
-  front_html: '<h2>{{Meaning}}</h2>',
-  back_html: '<p>{{Kanji}}</p>',
-  shared_css: '.card { color: blue; }',
-}
-const draft: TemplateContent = {
-  front_html: '<b>UNSAVED FRONT</b>',
-  back_html: '<i>UNSAVED BACK</i>',
-  shared_css: '.card { color: red; }',
-}
-const tabs = [
-  ['Front HTML', 'front_html'],
-  ['Back HTML', 'back_html'],
-  ['Shared CSS', 'shared_css'],
-] as const
-
-function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
-  Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')!.set!.call(element, value)
-  element.dispatchEvent(new Event('input', { bubbles: true }))
+function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
+  const prototype = element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value)
+  element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
 }
 
-function button(label: string) {
-  const found = [...document.querySelectorAll('button')].find(
-    (element) => element.textContent?.trim() === label,
-  )
-  expect(found, `button ${label}`).toBeDefined()
-  return found!
-}
-
-async function flush() {
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
-}
-
-describe('NoteTypeDetailPage template drafts', () => {
+describe('Note Type field draft lifecycle', () => {
   let container: HTMLDivElement
   let root: Root
   let queryClient: QueryClient
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    state.templates = [
-      { id: 't1', name: 'Card 1', is_default: true, ...saved },
-      { id: 't2', name: 'Card 2', is_default: false, ...second },
+  const flush = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 25)) })
+  const fieldName = () => container.querySelector('#edit-field-name') as HTMLInputElement
+  const button = (text: string, scope: ParentNode = document.body) => {
+    const found = Array.from(scope.querySelectorAll('button')).find((item) => item.textContent?.trim() === text)
+    expect(found, `Button ${text}`).toBeDefined()
+    return found!
+  }
+  const click = async (text: string, scope?: ParentNode) => { await act(async () => button(text, scope).click()); await flush() }
+  const editName = async (value: string) => { await act(async () => setValue(fieldName(), value)) }
+  const selectMeaning = async () => {
+    const selected = Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')).find((item) => item.textContent?.startsWith('Meaning'))!
+    await act(async () => selected.click()); await flush()
+  }
+  beforeEach(async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+    await i18n.changeLanguage('vi')
+    state.noteName = 'Vocabulary'
+    state.fields = [
+      { id: 'f1', name: 'Word', field_type: 'text', required: true, identity_role: 'primary', position: 0 },
+      { id: 'f2', name: 'Meaning', field_type: 'markdown', required: false, identity_role: null, position: 1 },
     ]
-    state.resetContent = { ...saved }
-    state.get.mockImplementation(async () => ({
-      id: 'nt-1', name: 'Vocabulary', publish_status: 'private', field_defs: [],
-      templates: state.templates.map((template) => ({ ...template })),
-    }))
-    state.rename.mockImplementation(async (_url: string, _method: string, body: { name: string }) => {
-      state.templates[0].name = body.name
-      return { ...state.templates[0] }
+    state.get.mockReset(); state.mutate.mockReset()
+    state.get.mockImplementation(async (path: string) => path.endsWith('/fields') ? { items: structuredClone(state.fields) } :
+      { id: 'nt-1', name: state.noteName, publish_status: 'private', field_defs: structuredClone(state.fields) })
+    state.mutate.mockImplementation(async (path: string, method: string, payload: Partial<FieldDefItem>) => {
+      if (path.endsWith('/reorder')) {
+        for (const item of payload as unknown as Array<{ id: string; position: number }>) state.fields.find((field) => field.id === item.id)!.position = item.position
+        return { success: true }
+      }
+      if (path.endsWith('/fields') && method === 'POST') {
+        const field = { id: 'f3', position: 2, ...payload } as FieldDefItem
+        state.fields.push(field); return structuredClone(field)
+      }
+      if (path === '/note-types/nt-1') { state.noteName = payload.name!; return { id: 'nt-1', name: payload.name } }
+      const field = state.fields.find((item) => path.endsWith(`/${item.id}`))!
+      if (method === 'DELETE') { state.fields = state.fields.filter((item) => item.id !== field.id); return { success: true } }
+      Object.assign(field, payload); return { field: structuredClone(field) }
     })
-    state.mutate.mockImplementation(async (path: string, method: string, body?: TemplateContent) => {
-      if (path.endsWith('/preview')) return {}
-      const template = state.templates.find((item) => path.includes(`/templates/${item.id}`))!
-      if (method === 'PATCH') Object.assign(template, body)
-      if (path.endsWith('/reset')) Object.assign(template, state.resetContent)
-      return { ...template }
-    })
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    })
-    container = document.createElement('div')
-    document.body.append(container)
-    root = createRoot(container)
-  })
-
-  afterEach(async () => {
-    await act(async () => root.unmount())
-    queryClient.clear()
-    container.remove()
-    document.body.innerHTML = ''
-    vi.restoreAllMocks()
-  })
-
-  async function renderPage() {
-    await act(async () => root.render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/note-types/nt-1']}>
-          <Routes><Route path="/note-types/:id" element={<NoteTypeDetailPage />} /></Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    ))
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    container = document.createElement('div'); document.body.append(container); root = createRoot(container)
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/flashcards/note-types/nt-1']}>
+      <Routes><Route path="/flashcards/note-types/:id" element={<NoteTypeDetailPage />} />
+        <Route path="/flashcards/note-types/:id/templates" element={<p>Templates destination</p>} /></Routes>
+    </MemoryRouter></QueryClientProvider>))
     await flush()
-    expect(container.querySelector('textarea')?.value).toBe(saved.front_html)
-  }
+    expect(fieldName().value).toBe('Word')
+  })
+  afterEach(async () => { await act(async () => root.unmount()); queryClient.clear(); container.remove(); document.body.innerHTML = ''; vi.restoreAllMocks() })
 
-  async function activateTab(label: string) {
-    // Radix selects tabs on focus; a bare jsdom click does not dispatch mousedown/focus.
-    await act(async () => button(label).focus())
-    expect(button(label).getAttribute('aria-selected')).toBe('true')
-  }
+  it('preserves the current field draft through metadata rename and field refetch', async () => {
+    await editName('Unfinished word')
+    await click('Đổi tên')
+    await act(async () => setValue(document.querySelector('#note-type-name') as HTMLInputElement, 'Renamed vocabulary'))
+    await click('Lưu tên')
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ['note-type-fields', 'nt-1'] }) })
+    await flush()
+    expect(container.querySelector('h1')?.textContent).toBe('Renamed vocabulary')
+    expect(fieldName().value).toBe('Unfinished word')
+    expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1', 'PATCH', { name: 'Renamed vocabulary' })
+  })
 
-  async function editContent(content: TemplateContent) {
-    for (const [label, key] of tabs) {
-      await activateTab(label)
-      await act(async () => setValue(container.querySelector('textarea')!, content[key]))
-      expect(container.querySelector('textarea')!.value).toBe(content[key])
-    }
-  }
+  it('does not replace a dirty draft with changed server data', async () => {
+    await editName('Local draft')
+    state.fields[0].name = 'Server word'
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ['note-type-fields', 'nt-1'] }) })
+    await flush()
+    expect(fieldName().value).toBe('Local draft')
+  })
 
-  async function expectContent(content: TemplateContent) {
-    for (const [label, key] of tabs) {
-      await activateTab(label)
-      expect(container.querySelector('textarea')!.value).toBe(content[key])
-    }
-  }
+  it('refreshes a pristine field when its saved content changes', async () => {
+    state.fields[0].name = 'Server word'
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ['note-type-fields', 'nt-1'] }) })
+    await flush()
+    expect(fieldName().value).toBe('Server word')
+  })
 
-  async function selectTemplate(id: string) {
+  it('offers stay, discard and save before selecting another field', async () => {
+    await editName('Renamed word')
+    await selectMeaning()
+    expect(fieldName().value).toBe('Renamed word')
+    await click('Tiếp tục chỉnh sửa')
+    expect(fieldName().value).toBe('Renamed word')
+    await selectMeaning()
+    await click('Lưu và tiếp tục')
+    expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1/fields/f1', 'PATCH', {
+      name: 'Renamed word', field_type: 'text', required: true, identity_role: 'primary',
+    })
+    expect(fieldName().value).toBe('Meaning')
+  })
+
+  it('discards only the unsaved field draft before a tab change', async () => {
+    await editName('Discard me')
+    await act(async () => (container.querySelector('nav a[href$="/templates"]') as HTMLAnchorElement).click())
+    await click('Bỏ thay đổi và tiếp tục')
+    expect(container.textContent).toContain('Templates destination')
+    expect(state.mutate).not.toHaveBeenCalled()
+  })
+
+  it('keeps draft and server error when save fails during navigation', async () => {
+    state.mutate.mockRejectedValueOnce(new Error('Name already exists'))
+    await editName('Duplicate')
+    await selectMeaning()
+    await click('Lưu và tiếp tục')
+    expect(fieldName().value).toBe('Duplicate')
+    expect(document.body.textContent).toContain('Name already exists')
+    expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
+  })
+
+  it('protects an unsaved field before reorder and only commits positions upon explicit save', async () => {
+    await editName('Saved identity')
+    const down = container.querySelector('button[aria-label="Di chuyển xuống"]') as HTMLButtonElement
+    await act(async () => down.click())
+    await click('Lưu và tiếp tục')
+    expect(state.fields.find((field) => field.id === 'f1')?.name).toBe('Saved identity')
+    expect(fieldName().value).toBe('Saved identity')
+    // Moving field does not auto-save to server
+    expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
+    // Explicitly click "Lưu trường" (unified save button) to persist
+    await click('Lưu trường')
+    expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', [{ id: 'f2', position: 0 }, { id: 'f1', position: 1 }])
+  })
+
+  it('activates save upon reorder and allows discarding without server call', async () => {
+    const down = container.querySelector('button[aria-label="Di chuyển xuống"]') as HTMLButtonElement
+    await act(async () => down.click())
+    expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
+    expect(button('Lưu trường', container).disabled).toBe(false)
+    await act(async () => (container.querySelector('nav a[href$="/templates"]') as HTMLAnchorElement).click())
+    await click('Bỏ thay đổi và tiếp tục')
+    expect(container.textContent).toContain('Templates destination')
+    expect(state.mutate).not.toHaveBeenCalledWith('/note-types/nt-1/fields/reorder', 'POST', expect.anything())
+  })
+
+  it('creates a typed field without storing samples or editor options', async () => {
+    await click('Thêm')
     await act(async () => {
-      const select = container.querySelector('select')!
-      select.value = id
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      setValue(container.querySelector('#new-field-name') as HTMLInputElement, 'Picture')
+      setValue(container.querySelector('#new-field-type') as HTMLSelectElement, 'image')
     })
-  }
-
-  it('preserves Front, Back and CSS drafts after metadata-only rename and refetch', async () => {
-    await renderPage()
-    await editContent(draft)
-    await act(async () => button('Đổi tên').click())
-    await act(async () => setValue(document.querySelector('#template-name-input')!, 'Renamed'))
-    await act(async () => button('Lưu tên').click())
-    await flush()
-
-    expect(state.rename).toHaveBeenCalledWith(
-      '/api/note-types/nt-1/templates/t1', 'PATCH', { name: 'Renamed' },
-    )
-    expect(state.get.mock.calls.length).toBeGreaterThanOrEqual(2)
-    expect(container.querySelector('option[value="t1"]')?.textContent).toBe('Renamed')
-    await expectContent(draft)
+    await click('Dùng mẫu')
+    const submit = container.querySelector('form button[type="submit"]') as HTMLButtonElement
+    await act(async () => submit.click()); await flush()
+    expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1/fields', 'POST', { name: 'Picture', field_type: 'image', required: false, identity_role: null })
+    expect(fieldName().value).toBe('Picture')
+    expect(state.fields.find((field) => field.id === 'f3')?.field_type).toBe('image')
   })
 
-  it('loads the selected template content when switching away from an unsaved draft', async () => {
-    await renderPage()
-    await editContent(draft)
-    await selectTemplate('t2')
-    await expectContent(second)
-    await selectTemplate('t1')
-    await expectContent(saved)
+  it('blocks browser reload only while a field draft is dirty', async () => {
+    await editName('Changed')
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    await click('Lưu trường')
+    const clean = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(clean)
+    expect(clean.defaultPrevented).toBe(false)
   })
 
-  it('syncs on template ID change even when both templates have identical saved content', async () => {
-    Object.assign(state.templates[1], saved)
-    await renderPage()
-    await editContent(draft)
-    await selectTemplate('t2')
-    await expectContent(saved)
-  })
-
-  it('syncs genuine server content changes for the same template after refetch', async () => {
-    await renderPage()
-    await editContent(draft)
-    Object.assign(state.templates[0], second)
-    await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ['note-type-detail', 'nt-1'] })
-    })
-    await flush()
-    await expectContent(second)
-  })
-
-  it('saves all draft fields and reloads the persisted content when reselected', async () => {
-    await renderPage()
-    await editContent(draft)
-    await act(async () => button('Lưu Template').click())
-    await flush()
-
-    expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1/templates/t1', 'PATCH', draft)
-    expect(state.get.mock.calls.length).toBeGreaterThanOrEqual(2)
-    await expectContent(draft)
-    await selectTemplate('t2')
-    await selectTemplate('t1')
-    await expectContent(draft)
-  })
-
-  it.each([
-    ['unchanged saved defaults', saved],
-    ['different defaults', second],
-  ])('resets every draft field to %s', async (_label, defaults) => {
-    state.resetContent = { ...defaults }
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    await renderPage()
-    await editContent(draft)
-    await act(async () => button('Reset').click())
-    await flush()
-
-    expect(state.mutate).toHaveBeenCalledWith('/note-types/nt-1/templates/t1/reset', 'POST')
-    expect(state.get.mock.calls.length).toBeGreaterThanOrEqual(2)
-    await expectContent(defaults)
+  it('keeps sample values per field without making field configuration dirty', async () => {
+    await selectMeaning()
+    await click('Dùng mẫu')
+    const sample = (container.querySelector('#field-editor-sample') as HTMLTextAreaElement).value
+    const word = Array.from(container.querySelectorAll('button[aria-pressed]')).find((item) => item.textContent?.startsWith('Word')) as HTMLButtonElement
+    await act(async () => word.click()); await flush()
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
+    await selectMeaning()
+    expect((container.querySelector('#field-editor-sample') as HTMLTextAreaElement).value).toBe(sample)
+    expect(button('Lưu trường', container).disabled).toBe(true)
+    expect(state.mutate).not.toHaveBeenCalled()
   })
 })

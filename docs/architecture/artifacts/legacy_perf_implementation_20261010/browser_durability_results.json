@@ -1,0 +1,31 @@
+{
+  "durability": {
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "v2_inline_upgrade": true,
+    "checkpoint_artifact_puts": 1,
+    "abort_reports_non_durable": true,
+    "abort_keeps_newer_memory": true,
+    "aborted_artifact_and_checkpoint_transaction_preserves_disk": true,
+    "reload_answer_and_undo": true,
+    "resave_preserves_override": true,
+    "content_patch_replaces_bundle": true,
+    "batch_and_commit_identity": true,
+    "missing_artifact_quarantine": true,
+    "removal_cleans_artifacts": true,
+    "rollback_fixture_ready": true
+  },
+  "rollback": {
+    "writer_off_reads_db3": true,
+    "hydration_parity": true,
+    "writer_off_saves_inline": true,
+    "obsolete_artifact_removed": true,
+    "requires_new_compatible_reader": true
+  },
+  "cross_tab": {
+    "cache_eviction_in_other_tab": true,
+    "cached_bundle_reinserted_atomically": true,
+    "v4_answer_sibling_and_pins": true,
+    "v4_batch_and_receipt_restore": true
+  },
+  "scope": "Synthetic IndexedDB rows only; isolated Chrome profiles. Storage-level last-writer compatibility; lease concurrency is validated by existing engine tests. Artifacts/checkpoint abort injected after new content bundle put; no disk partial commit."
+}

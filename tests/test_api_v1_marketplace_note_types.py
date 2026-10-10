@@ -138,6 +138,20 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
         self.assertIn("back_html", preview)
         self.assertIn("Word", preview["front_html"])
 
+    def test_compact_list_keeps_definitions_in_detail_only(self):
+        self._login("learner@example.com")
+        response = self.client.get("/api/shared/note-types?compact=1&page=1&page_size=24")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["pagination"]["total"], 1)
+        self.assertEqual(data["items"][0]["id"], self.note_type_id)
+        self.assertNotIn("templates", data["items"][0])
+        self.assertNotIn("field_defs", data["items"][0])
+        detail = self.client.get(f"/api/shared/note-types/{self.note_type_id}")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(len(detail.get_json()["templates"]), 1)
+        self.assertEqual(len(detail.get_json()["field_defs"]), 2)
+
     def test_save_and_install_note_type(self):
         self._login("learner@example.com")
 

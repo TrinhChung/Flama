@@ -1,0 +1,197 @@
+{
+  "hero": {
+    "badge": "Start Your Journey",
+    "title": "Welcome to Flama!",
+    "subtitle": "You have set your learning goal for {{subject}} at level {{level}}. Start mastering your first vocabulary cards today.",
+    "daily_target_label": "Daily Target",
+    "daily_target_cards": "{{count}} new cards / day",
+    "preferred_time_label": "Preferred Study Time",
+    "start_study_button": "Start studying now",
+    "explore_marketplace_button": "Explore marketplace",
+    "download_companion_link": "Download Yomitan Companion",
+    "quick_guide_link": "View quick guide",
+    "retake_tour_button": "Retake interface tour"
+  },
+  "hero_card": {
+    "badge": "Learning Goals",
+    "motivation_continue": "Keep up your smart learning pace today! 🔥",
+    "motivation_start": "Discover or create your first deck to start learning! 📚",
+    "change_goal_button": "Change Goal",
+    "tour_button": "Guide Tour",
+    "deck_library_button": "Deck Library",
+    "create_deck_button": "Create New Deck",
+    "anki_sync_button": "Anki Sync",
+    "browse_button": "Browse Cards"
+  },
+  "modal": {
+    "title": "Set Up Your Learning Goals",
+    "step_badge": "STEP {{step}}/{{total}}",
+    "close_button": "Close",
+    "step_1_tab": "Goals",
+    "step_2_tab": "Habits",
+    "step_3_tab": "Starter Decks",
+    "step_4_tab": "Complete",
+    "step_1_title": "Which language or skill would you like to focus on?",
+    "step_1_subtitle": "Select your primary subject so Flama can recommend the most suitable decks and learning path.",
+    "step_1_level_prompt": "Your level or target in {{subject}}:",
+    "step_2_title": "How many new cards do you want to learn each day?",
+    "step_2_subtitle": "The Spaced Repetition algorithm schedules new and review cards to fit your sustainable learning rhythm.",
+    "step_2_time_prompt": "When are you most focused to study:",
+    "step_3_title": "Recommended starter decks for you",
+    "step_3_subtitle": "Based on your target, here are curated community decks optimized for beginners.",
+    "searching_decks": "Searching for high-quality starter decks from Library...",
+    "no_decks_for_level": "No direct starter decks for this level yet. You can create your first deck on the Dashboard!",
+    "card_count_unit": "cards",
+    "deck_author": "Author: {{author}}",
+    "install_deck_button": "Add to decks",
+    "installed_deck_badge": "Installed",
+    "installing_state": "Installing…",
+    "skip_step_button": "Skip this step",
+    "srs_note_title": "Spaced Repetition System (SRS):",
+    "srs_note_body": "You don't need to learn all cards at once. Hit your daily target, and Flama's algorithm will schedule reviews before you forget!",
+    "step_4_title": "Congratulations! Your roadmap is ready 🎉",
+    "step_4_description": "Your account personalization is complete. Let's explore the key features on your Dashboard!",
+    "summary_title": "Your Personal Learning Goals:",
+    "summary_status_active": "Active",
+    "summary_subject": "Subject:",
+    "summary_daily_target": "Daily target:",
+    "summary_daily_target_cards": "⚡ {{count}} new cards / day",
+    "summary_study_time": "Study time:",
+    "time_morning": "🌅 Morning",
+    "time_afternoon": "☀️ Afternoon",
+    "time_evening": "🌙 Evening",
+    "summary_installed_decks": "Installed decks:",
+    "summary_installed_count": "📚 {{count}} starter decks",
+    "summary_ready_to_create": "Ready to create",
+    "skip_for_later": "Maybe later",
+    "start_dashboard_tour": "Enter Dashboard & Start Tour",
+    "start_tour_button": "Start interface tour",
+    "go_study_button": "Go straight to study",
+    "back_button": "Back",
+    "next_button": "Continue",
+    "finish_button": "Finish"
+  },
+  "tour": {
+    "skip_button": "Skip",
+    "prev_button": "Previous",
+    "next_button": "Next",
+    "finish_button": "Finish",
+    "step_count": "Step {{current}} / {{total}}",
+    "steps": {
+      "header": {
+        "title": "Navigation & Search Bar",
+        "description": "Quickly access decks, search vocabulary, manage your account, and view notifications here."
+      },
+      "deck_grid": {
+        "title": "Your Decks",
+        "description": "Displays all decks you own. Click any deck directly to study or view details."
+      },
+      "quick_study": {
+        "title": "Review Due Cards (SRS)",
+        "description": "The system automatically schedules due cards using spaced repetition. Click here to hit your daily goal!"
+      },
+      "create_deck": {
+        "title": "Create & Customize Decks",
+        "description": "Easily create new decks, design note types, and configure custom fields tailored to your needs."
+      },
+      "anki_sync": {
+        "title": "Anki & Yomitan Synchronization",
+        "description": "Two-way sync with Anki Desktop and 1-click lightning-fast browser vocabulary mining via Yomitan."
+      },
+      "nav_stats": {
+        "title": "Analytics & Heatmap",
+        "description": "Track your study streaks, retention rate, mastered cards, and future review forecast."
+      },
+      "nav_browse": {
+        "title": "Advanced Vocabulary Browser",
+        "description": "Search, batch edit, and inspect cards with powerful tag and retention status filters."
+      },
+      "nav_settings": {
+        "title": "Personalize Experience",
+        "description": "Configure shortcuts, dark/light theme, audio companion settings, and SRS algorithm parameters."
+      }
+    }
+  },
+  "subjects": {
+    "japanese": { "title": "Japanese", "subtitle": "JLPT N5 - N1, Kanji, Kaiwa Conversation, IT Nihongo" },
+    "english": { "title": "English", "subtitle": "IELTS, TOEIC, VSTEP, Oxford 3000/5000, Conversation" },
+    "chinese": { "title": "Chinese", "subtitle": "HSK 1 - 6, HSK 3.0, HSKK Speaking, TOCFL" },
+    "korean": { "title": "Korean", "subtitle": "TOPIK I & II, Integrated Korean, EPS-TOPIK" },
+    "it_tech": { "title": "IT & Programming", "subtitle": "Frontend, Backend, DevOps, LeetCode, System Design" },
+    "aws": { "title": "Cloud & Certifications", "subtitle": "AWS CCP / SAA, Azure AZ-900 / AZ-104, PMP, CFA" },
+    "thpt_qg": { "title": "High School Exam Prep", "subtitle": "Math, Physics, Chemistry, Biology, History, Geography" },
+    "medicine": { "title": "Medicine & Specialized", "subtitle": "Medical English Terminology, Anatomy, Pharmacology, Law" },
+    "law": { "title": "Law", "subtitle": "Statutes, Case law, Legal terminology" },
+    "other": { "title": "Other Fields", "subtitle": "Freely create custom content" },
+    "levels": {
+      "basic": "Basic",
+      "intermediate": "Intermediate",
+      "advanced": "Advanced",
+      "fresher": "Fresher",
+      "junior": "Junior",
+      "senior": "Senior",
+      "general": "General",
+      "specialized": "Specialized",
+      "in_depth": "In-depth",
+      "all_levels": "All levels"
+    },
+    "level_labels": {
+      "n5": "N5 (Introductory / Beginner 1)",
+      "n4": "N4 (Beginner 2)",
+      "n3": "N3 (Intermediate)",
+      "n2": "N2 (Upper-Intermediate)",
+      "n1": "N1 (Advanced)",
+      "kanji_n5_n4": "Basic Kanji",
+      "kaiwa_basic": "Daily Kaiwa Conversation",
+      "toeic_450": "TOEIC 250 - 450 (Basic)",
+      "toeic_600": "TOEIC 500 - 650 (Standard)",
+      "toeic_750": "TOEIC 700 - 850 (Advanced)",
+      "ielts_5_5": "IELTS 5.0 - 6.0",
+      "ielts_6_5": "IELTS 6.5 - 7.5+",
+      "vstep_b1": "VSTEP B1 - B2",
+      "oxford_3000": "Oxford Core Vocabulary",
+      "topik_1": "TOPIK I (Level 1 - Introductory)",
+      "topik_2": "TOPIK I (Level 2 - Daily Life)",
+      "topik_3": "TOPIK II (Level 3 - Intermediate)",
+      "topik_4": "TOPIK II (Level 4 - Advanced)",
+      "korean_beginner": "Integrated Korean Beginner",
+      "eps_manufacturing": "EPS-TOPIK (Labor Export)",
+      "hsk1": "HSK 1 (150 Core Words)",
+      "hsk2": "HSK 2 (300 Words)",
+      "hsk3": "HSK 3 (600 Words - Conversation)",
+      "hsk4": "HSK 4 (1200 Words)",
+      "hsk5": "HSK 5 (2500 Advanced Words)",
+      "tocfl_band_a": "TOCFL Traditional (Band A)",
+      "frontend": "Frontend (React, TS, Next.js)",
+      "backend": "Backend (Node, Python, Go, SQL)",
+      "dsa_leetcode": "Data Structures & LeetCode",
+      "devops": "DevOps & Cloud (Docker, K8s)",
+      "database": "Database & SQL Queries",
+      "foundational": "AWS Cloud Practitioner (CCP)",
+      "associate": "AWS Solutions Architect (SAA)",
+      "az_900": "Azure Fundamentals (AZ-900)",
+      "az_104": "Azure Administrator (AZ-104)",
+      "pmp_agile": "PMP & Agile Project Management",
+      "thpt_math": "Grade 12 Math Formulas",
+      "thpt_physics": "Physics Laws & Formulas",
+      "thpt_chemistry": "Chemistry Reactions & Equations",
+      "thpt_biology": "Biology Laws & Genetics",
+      "thpt_history_geo": "History & Geography Facts",
+      "med_terms": "Medical English Terminology",
+      "anatomy": "Anatomy",
+      "pharmacology": "Pharmacology & Drug Effects",
+      "civil_law": "Civil & Corporate Law"
+    }
+  },
+  "daily_targets": {
+    "5": { "label": "5 cards / day", "time": "~5 minutes daily", "description": "Gentle start to build daily habit." },
+    "10": { "label": "10 cards / day", "time": "~10 - 15 minutes daily", "description": "Standard pace with steady progress." },
+    "20": { "label": "20 cards / day", "time": "~25 - 30 minutes daily", "description": "Accelerated exam prep, moderate intensity." },
+    "30": { "label": "30+ cards / day", "time": "~45+ minutes daily", "description": "High intensity, rapid breakthrough." }
+  },
+  "study_times": {
+    "morning": { "label": "Morning", "schedule": "06:00 - 08:00 (Sharp focus)", "description": "Start fresh with sharp morning focus" },
+    "afternoon": { "label": "Afternoon", "schedule": "12:00 - 14:00 (Break time)", "description": "Take advantage of lunch break or intervals" },
+    "evening": { "label": "Evening", "schedule": "19:00 - 22:00 (Focused review)", "description": "Deep evening review for long-term memory consolidation" }
+  }
+}

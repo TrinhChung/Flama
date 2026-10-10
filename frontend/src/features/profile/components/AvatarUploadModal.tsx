@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Camera, Image as ImageIcon, LoaderCircle, Trash2, Upload } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -23,6 +24,7 @@ export function AvatarUploadModal({
   onOpenChange: (open: boolean) => void
   currentAvatarUrl?: string | null
 }) {
+  const { t } = useTranslation('profile')
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -33,12 +35,12 @@ export function AvatarUploadModal({
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
-      toast.error('Vui lòng chọn tệp hình ảnh hợp lệ (PNG, JPG, WebP, GIF).')
+      toast.error(t('avatar.toast.invalid_file_type'))
       return
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      toast.error('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
+      toast.error(t('avatar.toast.file_too_large'))
       return
     }
 
@@ -53,13 +55,13 @@ export function AvatarUploadModal({
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
-      toast.success('Đã cập nhật ảnh đại diện thành công!')
+      toast.success(t('avatar.toast.upload_success'))
       onOpenChange(false)
       setSelectedFile(null)
       setPreviewUrl(null)
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Không thể tải lên ảnh đại diện.')
+      toast.error(err?.message || t('avatar.toast.upload_failed'))
     },
   })
 
@@ -69,13 +71,13 @@ export function AvatarUploadModal({
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
-      toast.success('Đã gỡ ảnh đại diện.')
+      toast.success(t('avatar.toast.delete_success'))
       onOpenChange(false)
       setSelectedFile(null)
       setPreviewUrl(null)
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Không thể gỡ ảnh đại diện.')
+      toast.error(err?.message || t('avatar.toast.delete_failed'))
     },
   })
 
@@ -95,10 +97,10 @@ export function AvatarUploadModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold">
             <Camera className="size-5 text-primary" />
-            Cập nhật ảnh đại diện
+            {t('avatar.dialog_title')}
           </DialogTitle>
           <DialogDescription className="text-xs sm:text-sm">
-            Tải lên ảnh mới (tối đa 2MB, tự động cắt vuông và tối ưu định dạng WebP).
+            {t('avatar.dialog_description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -132,7 +134,7 @@ export function AvatarUploadModal({
               className="gap-1.5 text-xs font-semibold rounded-lg h-9 px-4 active:scale-98 cursor-pointer"
             >
               <Upload className="size-3.5" />
-              Chọn ảnh từ máy
+              {t('avatar.btn_choose_file')}
             </Button>
 
             {currentAvatarUrl && !selectedFile ? (
@@ -149,7 +151,7 @@ export function AvatarUploadModal({
                 ) : (
                   <Trash2 className="size-3.5" />
                 )}
-                Gỡ ảnh
+                {t('avatar.btn_remove')}
               </Button>
             ) : null}
           </div>
@@ -163,7 +165,7 @@ export function AvatarUploadModal({
             disabled={uploadMutation.isPending || deleteMutation.isPending}
             className="w-full sm:w-auto"
           >
-            Hủy
+            {t('avatar.btn_cancel')}
           </Button>
           <Button
             type="button"
@@ -174,10 +176,10 @@ export function AvatarUploadModal({
             {uploadMutation.isPending ? (
               <>
                 <LoaderCircle className="mr-2 size-4 animate-spin" />
-                Đang xử lý…
+                {t('avatar.btn_processing')}
               </>
             ) : (
-              'Lưu ảnh đại diện'
+              t('avatar.btn_save')
             )}
           </Button>
         </DialogFooter>

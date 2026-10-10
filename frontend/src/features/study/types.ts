@@ -129,6 +129,7 @@ export type AppliedComposition = {
   install_id?: string | null
   definition_id?: string
   application_id?: string
+  study_application_id?: string | null
   interaction_key: string
   trigger_key: string
   trigger_contract_version: string

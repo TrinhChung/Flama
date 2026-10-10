@@ -58,6 +58,7 @@ from app.services.share.note_types import (
     validate_note_type_publish_requirements,
 )
 from app.services.share.publish import (
+    DeckPublishBatchContext,
     apply_deck_marketplace_payload,
     build_deck_publish_options,
     build_shared_deck_item_payload,

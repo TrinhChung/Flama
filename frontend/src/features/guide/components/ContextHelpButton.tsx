@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   AlertTriangle,
   BookOpen,
@@ -36,16 +37,21 @@ export interface ContextHelpButtonProps {
 
 export function ContextHelpButton({
   guidePath,
-  guideTitle = 'Xem tài liệu hướng dẫn',
+  guideTitle,
   troubleshootPath,
-  troubleshootTitle = 'Khắc phục sự cố thường gặp',
-  label = 'Trợ giúp',
-  tooltip = 'Xem tài liệu hướng dẫn sử dụng',
+  troubleshootTitle,
+  label,
+  tooltip,
   variant = 'outline',
   size = 'sm',
   className = '',
   icon,
 }: ContextHelpButtonProps) {
+  const { t } = useTranslation('guide')
+  const resolvedLabel = label ?? t('context_help.default_label')
+  const resolvedGuideTitle = guideTitle ?? t('context_help.default_title')
+  const resolvedTroubleshootTitle = troubleshootTitle ?? t('context_help.default_troubleshoot_title')
+  const resolvedTooltip = tooltip ?? resolvedGuideTitle
   const IconComponent = icon || HelpCircle
 
   // If there's no troubleshootPath, render a direct link or tooltip button
@@ -61,13 +67,13 @@ export function ContextHelpButton({
                 size="icon"
                 className={`size-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all ${className}`}
               >
-                <Link to={guidePath} aria-label={tooltip}>
+                <Link to={guidePath} aria-label={resolvedTooltip}>
                   <IconComponent className="size-4" />
                 </Link>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs font-medium">
-              {tooltip}
+              {resolvedTooltip}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -85,7 +91,7 @@ export function ContextHelpButton({
       >
         <Link to={guidePath}>
           <IconComponent className="size-3.5" />
-          <span>{label}</span>
+          <span>{resolvedLabel}</span>
         </Link>
       </Button>
     )
@@ -100,7 +106,7 @@ export function ContextHelpButton({
             variant="ghost"
             size="icon"
             className={`size-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all ${className}`}
-            aria-label="Menu Trợ giúp"
+            aria-label={resolvedLabel}
           >
             <IconComponent className="size-4" />
           </Button>
@@ -113,13 +119,13 @@ export function ContextHelpButton({
             } ${className}`}
           >
             <IconComponent className="size-3.5 text-muted-foreground" />
-            <span>{label}</span>
+            <span>{resolvedLabel}</span>
           </Button>
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 p-1.5 rounded-xl shadow-lg border-border/80">
         <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">
-          Hỗ trợ & Hướng dẫn
+          {t('context_help.dropdown_section_title')}
         </DropdownMenuLabel>
         <DropdownMenuItem asChild className="rounded-lg p-2 cursor-pointer focus:bg-primary/10 focus:text-primary">
           <Link to={guidePath} className="flex items-start gap-2.5 w-full">
@@ -127,8 +133,8 @@ export function ContextHelpButton({
               <BookOpen className="size-3.5" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-foreground">{guideTitle}</div>
-              <div className="text-[11px] text-muted-foreground line-clamp-1">Quy trình & mẹo học chuẩn</div>
+              <div className="text-xs font-semibold text-foreground">{resolvedGuideTitle}</div>
+              <div className="text-[11px] text-muted-foreground line-clamp-1">{t('context_help.standard_process_tip')}</div>
             </div>
           </Link>
         </DropdownMenuItem>
@@ -141,8 +147,8 @@ export function ContextHelpButton({
               <AlertTriangle className="size-3.5" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-foreground">{troubleshootTitle}</div>
-              <div className="text-[11px] text-muted-foreground line-clamp-1">Khắc phục sự cố nhanh</div>
+              <div className="text-xs font-semibold text-foreground">{resolvedTroubleshootTitle}</div>
+              <div className="text-[11px] text-muted-foreground line-clamp-1">{t('context_help.quick_troubleshoot_tip')}</div>
             </div>
           </Link>
         </DropdownMenuItem>

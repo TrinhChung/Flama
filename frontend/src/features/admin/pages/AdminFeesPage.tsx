@@ -322,7 +322,7 @@ export function AdminFeesPage() {
   const simCreatorNet = Math.max(0, simPrice - simFeeAmount)
 
   return (
-    <Page>
+    <Page size="wide">
       <AdminHeader
         title="Thiết lập Phí & Chiết khấu Nền tảng"
         description="Quản lý biểu phí sàn Marketplace theo vai trò, chính sách thu phí tính năng Creator, và danh sách ngoại lệ phí của người dùng."

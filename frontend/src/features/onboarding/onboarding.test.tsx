@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '@/shared/config/i18n'
 import {
   DEFAULT_ONBOARDING_PREFERENCES,
   SUBJECT_OPTIONS,
@@ -80,18 +81,20 @@ describe('OnboardingHeroCard Component', () => {
   let container: HTMLDivElement
   let root: Root
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('vi')
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await i18n.changeLanguage('vi')
     act(() => root.unmount())
     container.remove()
   })
 
-  it('renders target information and action buttons', async () => {
+  it('renders target information and action buttons in Vietnamese and English', async () => {
     const onOpenPreferences = vi.fn()
     const onOpenCreateDeck = vi.fn()
     const onStartTour = vi.fn()
@@ -113,6 +116,8 @@ describe('OnboardingHeroCard Component', () => {
     expect(container.textContent).toContain('Mục Tiêu Học Tập')
     expect(container.textContent).toContain('Tiếng Nhật')
     expect(container.textContent).toContain('10 thẻ mới / ngày')
+    expect(container.textContent).toContain('Đổi mục tiêu')
+    expect(container.textContent).toContain('Tour Hướng Dẫn')
 
     // Click on "Đổi mục tiêu"
     const changeGoalBtn = Array.from(container.querySelectorAll('button')).find((b) =>
@@ -124,13 +129,23 @@ describe('OnboardingHeroCard Component', () => {
     })
     expect(onOpenPreferences).toHaveBeenCalledTimes(1)
 
-    // Click on "Tour Hướng Dẫn"
-    const tourBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Tour Hướng Dẫn'),
-    )
-    expect(tourBtn).toBeDefined()
+    // Switch to English and verify dynamic localization
     await act(async () => {
-      tourBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await i18n.changeLanguage('en')
+    })
+
+    expect(container.textContent).toContain('Learning Goals')
+    expect(container.textContent).toContain('Japanese')
+    expect(container.textContent).toContain('10 new cards / day')
+    expect(container.textContent).toContain('Change Goal')
+    expect(container.textContent).toContain('Guide Tour')
+
+    const tourBtnEn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Guide Tour'),
+    )
+    expect(tourBtnEn).toBeDefined()
+    await act(async () => {
+      tourBtnEn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     expect(onStartTour).toHaveBeenCalledTimes(1)
   })
@@ -187,7 +202,8 @@ describe('OnboardingModal Component & Step Flow', () => {
   let root: Root
   let queryClient: QueryClient
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('vi')
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -196,12 +212,13 @@ describe('OnboardingModal Component & Step Flow', () => {
     root = createRoot(container)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await i18n.changeLanguage('vi')
     act(() => root.unmount())
     container.remove()
   })
 
-  it('renders step 1 with subjects and advances to next step', async () => {
+  it('renders step 1 with subjects and advances to next step in Vietnamese and English', async () => {
     const mockOnboarding: any = {
       isOpen: true,
       step: 1,
@@ -238,10 +255,21 @@ describe('OnboardingModal Component & Step Flow', () => {
     expect(document.body.textContent).toContain('Chào Mừng Bạn Đến Với Flama!')
     expect(document.body.textContent).toContain('Tiếng Nhật')
     expect(document.body.textContent).toContain('Tiếng Anh')
+    expect(document.body.textContent).toContain('Tiếp tục')
 
-    // Click "Tiếp tục"
+    // Switch language to English and verify step 1 localization
+    await act(async () => {
+      await i18n.changeLanguage('en')
+    })
+
+    expect(document.body.textContent).toContain('Welcome to Flama!')
+    expect(document.body.textContent).toContain('Japanese')
+    expect(document.body.textContent).toContain('English')
+    expect(document.body.textContent).toContain('Continue')
+
+    // Click "Continue"
     const nextBtn = Array.from(document.body.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Tiếp tục'),
+      b.textContent?.includes('Continue'),
     )
     expect(nextBtn).toBeDefined()
     await act(async () => {
@@ -250,7 +278,7 @@ describe('OnboardingModal Component & Step Flow', () => {
     expect(mockOnboarding.nextStep).toHaveBeenCalledTimes(1)
   })
 
-  it('renders step 4 completion screen and starts dashboard tour', async () => {
+  it('renders step 4 completion screen and starts dashboard tour in Vietnamese and English', async () => {
     const onStartTour = vi.fn()
     const mockOnboarding: any = {
       isOpen: true,
@@ -285,11 +313,19 @@ describe('OnboardingModal Component & Step Flow', () => {
       )
     })
 
-    expect(document.body.textContent).toContain('Chúc mừng bạn! Lộ trình đã sẵn sàng')
+    expect(document.body.textContent).toContain('Chúc mừng bạn! Lộ trình đã sẵn sàng 🎉')
     expect(document.body.textContent).toContain('Vào Dashboard & Bắt Đầu Tour')
 
+    // Switch language to English and verify step 4 localization
+    await act(async () => {
+      await i18n.changeLanguage('en')
+    })
+
+    expect(document.body.textContent).toContain('Congratulations! Your roadmap is ready 🎉')
+    expect(document.body.textContent).toContain('Enter Dashboard & Start Tour')
+
     const finishBtn = Array.from(document.body.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Vào Dashboard & Bắt Đầu Tour'),
+      b.textContent?.includes('Enter Dashboard & Start Tour'),
     )
     expect(finishBtn).toBeDefined()
     await act(async () => {

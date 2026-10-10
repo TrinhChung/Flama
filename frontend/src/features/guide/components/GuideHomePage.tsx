@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faBolt,
@@ -48,6 +49,7 @@ interface GuideHomePageProps {
 }
 
 export function GuideHomePage({ searchQuery: externalQuery, onSearchChange: externalOnChange }: GuideHomePageProps) {
+  const { t } = useTranslation('guide')
   const [localQuery, setLocalQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<CategoryFilter>('all')
   const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({})
@@ -115,7 +117,7 @@ export function GuideHomePage({ searchQuery: externalQuery, onSearchChange: exte
           />
           <Input
             type="search"
-            placeholder="Tìm trong mục lục..."
+            placeholder={t('header.search_placeholder')}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-8 pr-7 h-9 text-xs rounded-xl bg-card border-border/80 focus-visible:ring-primary shadow-2xs"
@@ -145,7 +147,7 @@ export function GuideHomePage({ searchQuery: externalQuery, onSearchChange: exte
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Tất cả ({totalArticleCount})
+              {t('header.all_categories')} ({totalArticleCount})
             </button>
             <button
               type="button"
@@ -220,7 +222,7 @@ export function GuideHomePage({ searchQuery: externalQuery, onSearchChange: exte
 
           {searchResults.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/80 p-8 text-center text-muted-foreground space-y-1 bg-card/40">
-              <p className="text-xs sm:text-sm font-semibold text-foreground">Không tìm thấy tài liệu phù hợp</p>
+              <p className="text-xs sm:text-sm font-semibold text-foreground">{t('header.search_empty', { query: searchQuery })}</p>
               <p className="text-xs">Thử tìm bằng các từ khóa ngắn như: deck, SRS, phím tắt, yomitan, audio, payos...</p>
             </div>
           ) : (
@@ -257,7 +259,7 @@ export function GuideHomePage({ searchQuery: externalQuery, onSearchChange: exte
                     <div className="flex items-center gap-2 shrink-0 pt-0.5">
                       {art.readTimeMinutes && (
                         <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                          {art.readTimeMinutes} phút
+                          {t('header.read_time', { minutes: art.readTimeMinutes })}
                         </span>
                       )}
                       <FontAwesomeIcon icon={faChevronRight} className="text-[10px] text-muted-foreground/60 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />

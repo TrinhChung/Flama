@@ -96,7 +96,7 @@ export function InstalledDeckUpdatePage() {
   }
 
   return (
-    <Page className="max-w-[96rem]">
+    <Page size="wide">
       <PageHeader
         title={t('update.title', 'Xem bản cập nhật deck')}
         description={t(

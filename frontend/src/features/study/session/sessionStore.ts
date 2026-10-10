@@ -3,6 +3,7 @@ import type {
   StudyBatchPayload,
   StudyMediaArtifact,
   StudySessionEvent,
+  StudySessionCard,
   StudySessionSnapshot,
 } from '../types'
 import {
@@ -11,12 +12,22 @@ import {
 import type { StudySessionQuarantine } from './sessionRestore'
 import { applyCardContentPatch } from './contentPatchAdapter'
 import { dispatchStudyCardUpdate } from '@/entities/flashcard/model/studySyncEvents'
+import {
+  artifactKeyForCheckpoint, artifactsForRestoredSession, hydrateStoredCheckpoint,
+  splitSessionCheckpoint, type StoredSessionArtifacts,
+} from './sessionStorageCodec'
 
 const DB_NAME = 'flama-study'
-const DB_VERSION = 2
+// Roll out the writer separately; the reader always understands both layouts.
+const SPLIT_STORAGE_ENABLED = import.meta.env.VITE_STUDY_SPLIT_STORAGE_ENABLED === '1'
+const DB_VERSION = SPLIT_STORAGE_ENABLED ? 3 : 2
 const STORE_NAME = 'sessions'
 const QUARANTINE_STORE_NAME = 'session-quarantine'
+const ARTIFACT_STORE_NAME = 'session-artifacts'
+const durableArtifacts = new Map<string, StoredSessionArtifacts>()
 const memoryFallback = new Map<string, PersistedStudySession>()
+// A failed write must not be replaced by an older durable row in this tab.
+const dirtyMemoryScopes = new Set<string>()
 const memoryQuarantine = new Map<string, QuarantinedStudySessionRow>()
 
 export type StudyCommitReason =
@@ -130,45 +141,98 @@ function openDatabase(): Promise<IDBDatabase> {
       reject(new Error('IndexedDB is unavailable.'))
       return
     }
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const database = request.result
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME, { keyPath: 'scope_key' })
+    const connect = (version?: number) => {
+      const request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version)
+      let blocked = false
+      request.onupgradeneeded = () => {
+        const database = request.result
+        if (!database.objectStoreNames.contains(STORE_NAME)) {
+          database.createObjectStore(STORE_NAME, { keyPath: 'scope_key' })
+        }
+        if (!database.objectStoreNames.contains(QUARANTINE_STORE_NAME)) {
+          database.createObjectStore(
+            QUARANTINE_STORE_NAME,
+            { keyPath: 'scope_key' },
+          )
+        }
+        if (SPLIT_STORAGE_ENABLED && !database.objectStoreNames.contains(ARTIFACT_STORE_NAME)) {
+          const store = database.createObjectStore(ARTIFACT_STORE_NAME, { keyPath: 'id' })
+          store.createIndex('scope_key', 'scope_key')
+        }
       }
-      if (!database.objectStoreNames.contains(QUARANTINE_STORE_NAME)) {
-        database.createObjectStore(
-          QUARANTINE_STORE_NAME,
-          { keyPath: 'scope_key' },
-        )
+      request.onsuccess = () => {
+        const database = request.result
+        database.onversionchange = () => database.close()
+        if (blocked) database.close()
+        else resolve(database)
+      }
+      request.onerror = () => {
+        // Turning the writer off cannot downgrade IndexedDB. Reopen the current
+        // version and keep the split reader so already saved answers remain usable.
+        if (request.error?.name === 'VersionError' && version === 2) connect()
+        else reject(request.error)
+      }
+      request.onblocked = () => {
+        blocked = true
+        reject(new Error('Study storage upgrade is blocked by another tab.'))
       }
     }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+    connect(DB_VERSION)
   })
 }
 
-function transact<T>(
-  mode: IDBTransactionMode,
-  operation: (store: IDBObjectStore) => IDBRequest<T>,
-) {
-  return openDatabase().then((database) => new Promise<T>((resolve, reject) => {
-    const transaction = database.transaction(STORE_NAME, mode)
-    const request = operation(transaction.objectStore(STORE_NAME))
-    let result: T
+function sessionStores(database: IDBDatabase, includeQuarantine = false) {
+  return [STORE_NAME, ...(includeQuarantine ? [QUARANTINE_STORE_NAME] : []),
+    ...(database.objectStoreNames.contains(ARTIFACT_STORE_NAME) ? [ARTIFACT_STORE_NAME] : [])]
+}
+
+function deleteArtifactsForScope(store: IDBObjectStore, key: string, retainedId?: string) {
+  const request = store.index('scope_key').getAllKeys(key)
+  request.onsuccess = () => {
+    for (const id of request.result) if (id !== retainedId) store.delete(id)
+  }
+}
+
+async function writeStoredSession(session: PersistedStudySession) {
+  const database = await openDatabase()
+  if (!SPLIT_STORAGE_ENABLED) {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(sessionStores(database), 'readwrite')
+      transaction.objectStore(STORE_NAME).put(session)
+      if (transaction.objectStoreNames.contains(ARTIFACT_STORE_NAME)) {
+        deleteArtifactsForScope(transaction.objectStore(ARTIFACT_STORE_NAME), session.scope_key)
+      }
+      transaction.oncomplete = () => { database.close(); durableArtifacts.delete(session.scope_key); resolve() }
+      transaction.onabort = () => { database.close(); reject(transaction.error) }
+      transaction.onerror = () => reject(transaction.error)
+    })
+    return
+  }
+  const { checkpoint, artifacts } = splitSessionCheckpoint(session, durableArtifacts.get(session.scope_key))
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction([STORE_NAME, ARTIFACT_STORE_NAME], 'readwrite')
+    const artifactStore = transaction.objectStore(ARTIFACT_STORE_NAME)
+    const checkpointStore = transaction.objectStore(STORE_NAME)
+    // A different tab may have replaced this scope since our last save. Check
+    // the immutable row's key, without reading/copying its large payload.
+    const request = artifactStore.getKey(artifacts.id)
     request.onsuccess = () => {
-      result = request.result
+      if (request.result === undefined) artifactStore.put(artifacts)
+      checkpointStore.put(checkpoint)
+      deleteArtifactsForScope(artifactStore, session.scope_key, artifacts.id)
     }
-    request.onerror = () => reject(request.error)
+    request.onerror = () => transaction.abort()
     transaction.oncomplete = () => {
       database.close()
-      resolve(result)
+      durableArtifacts.set(session.scope_key, artifacts)
+      resolve()
     }
     transaction.onabort = () => {
       database.close()
       reject(transaction.error)
     }
-  }))
+    transaction.onerror = () => reject(transaction.error)
+  })
 }
 
 export function scopeKey(userId: number, scope: string, scopeId: string) {
@@ -196,12 +260,14 @@ async function moveSessionToQuarantine(
     ...evidence,
   }
   memoryFallback.delete(key)
+  dirtyMemoryScopes.delete(key)
+  durableArtifacts.delete(key)
   rememberQuarantine(row)
 
   const database = await openDatabase()
   await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction(
-      [STORE_NAME, QUARANTINE_STORE_NAME],
+      sessionStores(database, true),
       'readwrite',
     )
     const quarantineStore = transaction.objectStore(QUARANTINE_STORE_NAME)
@@ -215,6 +281,9 @@ async function moveSessionToQuarantine(
         : row
       quarantineStore.put(retained)
       activeStore.delete(key)
+      if (transaction.objectStoreNames.contains(ARTIFACT_STORE_NAME)) {
+        deleteArtifactsForScope(transaction.objectStore(ARTIFACT_STORE_NAME), key)
+      }
 
       const boundedRows = [
         ...existingRows.filter((candidate) => candidate.scope_key !== key),
@@ -247,17 +316,35 @@ async function readStoredSessionRows(key: string) {
   return new Promise<{
     active: unknown | undefined
     quarantine: QuarantinedStudySessionRow | undefined
+    artifactKey: string | null
+    artifactCards: StudySessionCard[] | null
   }>((resolve, reject) => {
     const transaction = database.transaction(
-      [STORE_NAME, QUARANTINE_STORE_NAME],
+      sessionStores(database, true),
       'readonly',
     )
     const activeRequest = transaction.objectStore(STORE_NAME).get(key)
     const quarantineRequest = transaction.objectStore(QUARANTINE_STORE_NAME).get(key)
+    let active: unknown
+    let artifactKey: string | null = null
+    let artifactCards: StudySessionCard[] | null = null
+    activeRequest.onsuccess = () => {
+      active = activeRequest.result
+      artifactKey = artifactKeyForCheckpoint(active)
+      if (artifactKey && transaction.objectStoreNames.contains(ARTIFACT_STORE_NAME)) {
+        const artifactsRequest = transaction.objectStore(ARTIFACT_STORE_NAME).get(artifactKey)
+        artifactsRequest.onsuccess = () => {
+          active = hydrateStoredCheckpoint(active, artifactsRequest.result)
+          artifactCards = artifactsRequest.result?.cards ?? null
+        }
+      }
+    }
     transaction.oncomplete = () => {
       database.close()
       resolve({
-        active: activeRequest.result,
+        active,
+        artifactKey,
+        artifactCards,
         quarantine: quarantineRequest.result,
       })
     }
@@ -277,6 +364,8 @@ export async function loadStudySessionWithDurability(
     const row = stored.active
     if (stored.quarantine && stored.quarantine.resolved_at_ms === undefined) {
       memoryFallback.delete(key)
+      dirtyMemoryScopes.delete(key)
+      durableArtifacts.delete(key)
       rememberQuarantine(stored.quarantine)
       if (row) {
         try {
@@ -297,13 +386,15 @@ export async function loadStudySessionWithDurability(
     }
     const memoryBlocked = memoryQuarantine.get(key)
     if (memoryBlocked) {
+      durableArtifacts.delete(key)
       return {
         session: null,
         durable: false,
         quarantine: quarantineResult(memoryBlocked),
       }
     }
-    const restored = row ?? memoryFallback.get(key) ?? null
+    const dirtyFallback = dirtyMemoryScopes.has(key) ? memoryFallback.get(key) : undefined
+    const restored = dirtyFallback ?? row ?? memoryFallback.get(key) ?? null
     if (!restored) return { session: null, durable: true }
     const result = normalizePersistedStudySession(restored, key)
     if (result.status === 'quarantine') {
@@ -321,18 +412,23 @@ export async function loadStudySessionWithDurability(
     }
     const normalized = result.session
     memoryFallback.set(key, normalized)
-    let durable = Boolean(row)
-    if (row && result.migrated) {
+    if (!dirtyFallback && row && stored.artifactKey && stored.artifactCards) {
+      durableArtifacts.set(key, artifactsForRestoredSession(normalized, stored.artifactKey, stored.artifactCards))
+    } else if (!dirtyFallback) durableArtifacts.delete(key)
+    let durable = Boolean(row) && !dirtyFallback
+    if (!dirtyFallback && row && result.migrated) {
       try {
-        await transact<IDBValidKey>('readwrite', (store) => store.put(normalized))
+        await writeStoredSession(normalized)
       } catch {
         durable = false
+        dirtyMemoryScopes.add(key)
       }
     }
     return { session: normalized, durable }
   } catch {
     const blocked = memoryQuarantine.get(key)
     if (blocked) {
+      durableArtifacts.delete(key)
       return {
         session: null,
         durable: false,
@@ -344,6 +440,8 @@ export async function loadStudySessionWithDurability(
     const result = normalizePersistedStudySession(fallback, key)
     if (result.status === 'quarantine') {
       memoryFallback.delete(key)
+      dirtyMemoryScopes.delete(key)
+      durableArtifacts.delete(key)
       const quarantinedAtMs = Date.now()
       const evidence = quarantineEvidence(fallback)
       const row: QuarantinedStudySessionRow = {
@@ -415,8 +513,12 @@ export async function saveStudySession(session: PersistedStudySession) {
   }
   const normalized = result.session
   memoryFallback.set(normalized.scope_key, normalized)
+  dirtyMemoryScopes.add(normalized.scope_key)
   try {
-    await transact<IDBValidKey>('readwrite', (store) => store.put(normalized))
+    await writeStoredSession(normalized)
+    if (memoryFallback.get(normalized.scope_key) === normalized) {
+      dirtyMemoryScopes.delete(normalized.scope_key)
+    }
     return true
   } catch {
     // In private or quota-constrained contexts the in-memory copy still keeps
@@ -427,8 +529,20 @@ export async function saveStudySession(session: PersistedStudySession) {
 
 export async function removeStudySession(key: string) {
   memoryFallback.delete(key)
+  dirtyMemoryScopes.delete(key)
+  durableArtifacts.delete(key)
   try {
-    await transact<undefined>('readwrite', (store) => store.delete(key))
+    const database = await openDatabase()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(sessionStores(database), 'readwrite')
+      transaction.objectStore(STORE_NAME).delete(key)
+      if (transaction.objectStoreNames.contains(ARTIFACT_STORE_NAME)) {
+        deleteArtifactsForScope(transaction.objectStore(ARTIFACT_STORE_NAME), key)
+      }
+      transaction.oncomplete = () => { database.close(); resolve() }
+      transaction.onabort = () => { database.close(); reject(transaction.error) }
+      transaction.onerror = () => reject(transaction.error)
+    })
   } catch {
     // Already removed from the current tab fallback.
   }
@@ -463,6 +577,9 @@ export async function removeStudySessionIfMatches(
   key: string,
   sessionId: string,
 ) {
+  if (memoryFallback.get(key)?.snapshot.session_id === sessionId) {
+    memoryFallback.delete(key)
+  }
   const current = await loadStudySession(key)
   if (current?.snapshot.session_id !== sessionId) return
   await removeStudySession(key)

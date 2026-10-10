@@ -5,8 +5,9 @@ import { DeckCard } from './DeckCard'
 
 interface MarketplaceCuratedSectionProps {
   curatedSections: {
-    majorSections: Array<{ category: string; items: any[] }>
+    majorSections: Array<{ category: string; items: any[]; total?: number }>
     otherItems: any[]
+    otherTotal?: number
   }
   getCategoryBadgeStyle: (categoryName: string | null | undefined) => string
   onSelectCategory: (cat: string) => void
@@ -32,7 +33,7 @@ export function MarketplaceCuratedSection({
                 {section.category}
               </Badge>
               <span className="text-xs font-semibold text-muted-foreground">
-                ({section.items.length} bộ thẻ)
+                ({section.total ?? section.items.length} bộ thẻ)
               </span>
             </div>
             <Button
@@ -65,7 +66,7 @@ export function MarketplaceCuratedSection({
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-foreground">Học liệu & Chủ đề khác</h3>
               <span className="text-xs font-semibold text-muted-foreground">
-                ({curatedSections.otherItems.length} bộ thẻ)
+                ({curatedSections.otherTotal ?? curatedSections.otherItems.length} bộ thẻ)
               </span>
             </div>
           </div>

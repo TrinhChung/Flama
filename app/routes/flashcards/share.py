@@ -354,57 +354,10 @@ def shared_note_type_recommendations():
 @flashcards_bp.route("/api/shared/decks", methods=["GET"])
 @login_required
 def list_shared_decks():
-
-    query_text = (request.args.get("q") or "").strip()
-    category = (request.args.get("category") or "").strip()
-    tags = {item.lower() for item in _normalize_marketplace_tags(request.args.get("tags"))}
-    pricing_mode = (request.args.get("pricing_mode") or request.args.get("pricing") or "").strip().lower()
-    sort_key = (request.args.get("sort") or "popular").strip().lower()
-    min_price_amount_minor = _parse_query_price_amount_minor("min_price")
-    max_price_amount_minor = _parse_query_price_amount_minor("max_price")
-    domain = (request.args.get("domain") or "").strip()
-    subject = (request.args.get("subject") or "").strip()
-    framework = (request.args.get("framework") or "").strip()
-    framework_level = (request.args.get("framework_level") or "").strip()
-    difficulty_band = (request.args.get("difficulty_band") or request.args.get("level") or "").strip()
-    learning_goals = {item.lower() for item in _normalize_marketplace_tags(request.args.get("learning_goals") or request.args.get("goal") or request.args.get("goals"))}
-    primary_topics = {item.lower() for item in _normalize_marketplace_tags(request.args.get("primary_topics") or request.args.get("topic") or request.args.get("topics"))}
-    format_features = {item.lower() for item in _normalize_marketplace_tags(request.args.get("format_features") or request.args.get("feature") or request.args.get("features"))}
-
-    visible_items = [
-        item for item in DeckMarketplaceItem.query.order_by(DeckMarketplaceItem.updated_at.desc()).all()
-        if _is_deck_item_visible_for_shared(item, current_user.id)
-    ]
-    filtered = _filter_deck_items(
-        visible_items,
-        query_text=query_text,
-        category=category,
-        tags=tags,
-        pricing_mode=pricing_mode,
-        min_price_amount_minor=min_price_amount_minor,
-        max_price_amount_minor=max_price_amount_minor,
-        domain=domain,
-        subject=subject,
-        framework=framework,
-        framework_level=framework_level,
-        difficulty_band=difficulty_band,
-        learning_goals=learning_goals,
-        primary_topics=primary_topics,
-        format_features=format_features,
-    )
-    sorted_items = _sort_deck_items(filtered, sort_key)
-    installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
-    install_map = {row.deck_item_id: row for row in installs}
-    stats_map = marketplace_query_service.batch_compute_deck_items_stats(sorted_items)
-    payload_items = []
-    for item in sorted_items:
-        row = _serialize_deck_marketplace_item(item, stats=stats_map.get(item.id))
-        install = install_map.get(item.id)
-        row["is_installed"] = install is not None
-        row["installed_deck_id"] = install.local_deck_id if install else None
-        row["is_owner"] = item.owner_user_id == current_user.id
-        payload_items.append(row)
-    return jsonify({"items": payload_items})
+    from app.services import marketplace_list_service
+    return jsonify(marketplace_list_service.list_shared_decks(
+        user_id=current_user.id, args=request.args,
+    ))
 
 
 @flashcards_bp.route("/api/shared/decks/publish-options", methods=["GET"])

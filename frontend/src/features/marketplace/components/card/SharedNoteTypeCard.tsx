@@ -28,7 +28,7 @@ interface SharedNoteTypeCardProps {
 
 export function SharedNoteTypeCard({ item, index, getCategoryBadgeStyle }: SharedNoteTypeCardProps) {
   const { t } = useTranslation('marketplace')
-  const itemTitle = item.name || item.title || t('card.no_title_notetype', { defaultValue: 'Mẫu thẻ không tên' })
+  const itemTitle = item.name || item.title || t('card.no_title_notetype', { defaultValue: 'Cấu trúc thẻ không tên' })
   const detailUrl = `/marketplace/note-types/${item.id}`
   const authorName =
     item.author?.account_name || item.author?.username || t('card.community_author', { defaultValue: 'Cộng đồng Flama' })
@@ -93,7 +93,7 @@ export function SharedNoteTypeCard({ item, index, getCategoryBadgeStyle }: Share
         )}
 
         <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">
-          {item.description || t('card.no_desc_notetype', { defaultValue: 'Chưa có mô tả chi tiết cho loại thẻ này.' })}
+          {item.description || t('card.no_desc_notetype', { defaultValue: 'Chưa có mô tả chi tiết cho cấu trúc thẻ này.' })}
         </p>
       </div>
 

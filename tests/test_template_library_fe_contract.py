@@ -1,6 +1,7 @@
 """Library filters, usage and standalone preview consumed by the React editor."""
 
 import unittest
+from sqlalchemy import event
 
 from app import create_app
 from models import db
@@ -62,6 +63,63 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["schema_version"], "template-library.v2")
         return {item["id"]: item for item in response.get_json()["items"]}
+
+    def test_compact_pages_omit_source_and_preserve_detail_and_usage(self):
+        self._attach(0)
+        self._attach(0, "reverse")
+        with self.app.app_context():
+            owner = User.query.filter_by(username="owner").one()
+            other = User.query.filter_by(username="other").one()
+            db.session.add_all([
+                Template(owner_user_id=owner.id, name=f"Paged {index:03}",
+                         front_html="x" * 16000, back_html="{{term}}", shared_css="css",
+                         input_schema=[{"key": "term", "type": "text"}])
+                for index in range(30)
+            ])
+            db.session.add(Template(owner_user_id=other.id, name="Foreign", front_html="private"))
+            db.session.commit()
+            loaded = []
+
+            def capture(template, _context):
+                loaded.append(template.id)
+
+            event.listen(Template, "load", capture)
+            try:
+                response = self.client.get("/api/card-templates?compact=1&page=1&page_size=3")
+            finally:
+                event.remove(Template, "load", capture)
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["pagination"], {"page": 1, "page_size": 3, "total": 33, "has_more": True})
+        self.assertEqual(len(data["items"]), 3)
+        self.assertEqual(len(loaded), 3)
+        for item in data["items"]:
+            self.assertFalse({"front_html", "back_html", "shared_css"} & item.keys())
+        reusable = next(item for item in data["items"] if item["id"] == self.template["id"])
+        self.assertEqual(reusable["id"], self.template["id"])
+        self.assertEqual((reusable["application_count"], reusable["note_type_count"]), (2, 1))
+        detail = self.client.get(self.path).get_json()
+        self.assertEqual(detail["front_html"], "<b>{{term}}</b>")
+        self.assertEqual(detail["input_schema"], reusable["input_schema"])
+        second = self.client.get("/api/card-templates?compact=1&page=2&page_size=3").get_json()
+        self.assertFalse({item["id"] for item in data["items"]} & {item["id"] for item in second["items"]})
+
+    def test_compact_list_preserves_legacy_input_inference(self):
+        with self.app.app_context():
+            legacy = Template(note_type_id=self.note_types[0]["id"], name="Legacy", front_html="{{Word}}", back_html="{{FrontSide}}", input_schema=[])
+            db.session.add(legacy)
+            db.session.commit()
+            template_id = legacy.id
+        full = self.client.get("/api/card-templates?q=Legacy").get_json()["items"][0]
+        compact = self.client.get("/api/card-templates?q=Legacy&compact=1&page=1").get_json()["items"][0]
+        self.assertEqual(compact["id"], template_id)
+        self.assertEqual(compact["input_schema"], full["input_schema"])
+        self.assertEqual(compact["input_schema"][0]["key"], "Word")
+
+    def test_invalid_pagination_returns_validation_error(self):
+        for query in ("page=0", "page=-1", "page=oops", "page_size=0", "page=" + "9" * 5000):
+            response = self.client.get(f"/api/card-templates?{query}")
+            self.assertEqual(response.status_code, 400, response.get_json())
 
     def test_groups_count_active_occurrences_and_distinct_note_types(self):
         template_id = self.template["id"]

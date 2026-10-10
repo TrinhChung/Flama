@@ -21,6 +21,7 @@ export type {
   TemplateLibraryParams,
   TemplateLibraryPreview,
   TemplateLibraryResponse,
+  TemplateLibrarySummary,
   TemplateLibraryTemplate,
   TemplatePreviewBody,
   TemplateUpdateResponse,
@@ -67,3 +68,11 @@ export { diffLines, summarizeDiff } from './lib/lineDiff'
 export type { DiffLine, DiffLineKind } from './lib/lineDiff'
 export { TemplateDiffView } from './ui/TemplateDiffView'
 export type { TemplateDiffViewProps, TemplateSources } from './ui/TemplateDiffView'
+export { FieldMappingEditor } from './ui/FieldMappingEditor'
+export type { FieldMappingEditorProps } from './ui/FieldMappingEditor'
+export { SampleValuesSheet } from './ui/SampleValuesSheet'
+export type { SampleValueItem, SampleValuesSheetProps } from './ui/SampleValuesSheet'
+export { isTypeCompatible, suggestBindings, validateBindings } from './lib/fieldMapping'
+export type { MappingField, MappingInput, MappingIssue } from './lib/fieldMapping'
+export { inputSchemaPreviewFields } from './lib/previewFields'
+export type { PreviewFieldDef } from './lib/previewFields'

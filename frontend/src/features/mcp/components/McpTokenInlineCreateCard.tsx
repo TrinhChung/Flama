@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
-import { KeyRound, Key, Shield, AlertCircle, ShieldCheck, BookOpen, FolderTree, Brain } from 'lucide-react'
+import { Key, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,10 +49,9 @@ export function McpTokenInlineCreateCard({ tokens, onCreateToken, isCreating = f
   }
 
   return (
-    <Card className="shadow-2xs border-primary/20">
+    <Card className="shadow-2xs">
       <CardHeader className="p-4 sm:p-6 pb-3">
-        <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-          <KeyRound className="size-5 text-primary shrink-0" />
+        <CardTitle className="text-base sm:text-lg font-bold">
           {t('inline_create.title')}
         </CardTitle>
         <CardDescription className="text-xs sm:text-sm">
@@ -94,19 +93,14 @@ export function McpTokenInlineCreateCard({ tokens, onCreateToken, isCreating = f
 
         <div className="space-y-3 pt-2 border-t">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="text-xs font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
-              <Shield className="size-4 text-primary shrink-0" />
-              <span>{t('inline_create.scopes_header', { count: selectedScopes.length, total: ALL_MCP_SCOPES.length })}</span>
+            <div className="text-xs font-semibold text-foreground">
+              {t('inline_create.scopes_header', { count: selectedScopes.length, total: ALL_MCP_SCOPES.length })}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] text-muted-foreground font-medium mr-1">{t('inline_create.presets_label')}</span>
               {SCOPE_PRESETS.map((preset) => (
-                <Button key={preset.key} type="button" variant="outline" size="xs" className="text-[11px] h-6 px-2 gap-1 rounded-md" onClick={() => handlePreset(preset.key)}>
-                  {preset.key === 'all' && <ShieldCheck className="size-3" />}
-                  {preset.key === 'readonly' && <BookOpen className="size-3" />}
-                  {preset.key === 'manager' && <FolderTree className="size-3" />}
-                  {preset.key === 'study' && <Brain className="size-3" />}
-                  <span>{t(`scopes.presets.${preset.key}.label`, preset.label)}</span>
+                <Button key={preset.key} type="button" variant="outline" size="xs" className="text-[11px] h-6 px-2 rounded-md" onClick={() => handlePreset(preset.key)}>
+                  {t(`scopes.presets.${preset.key}.label`, preset.label)}
                 </Button>
               ))}
             </div>
@@ -115,9 +109,9 @@ export function McpTokenInlineCreateCard({ tokens, onCreateToken, isCreating = f
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 pt-1 max-h-48 overflow-y-auto">
             {SCOPE_CATEGORIES.map((cat) => (
               <div key={cat.key} className="rounded-lg border bg-muted/20 p-2 space-y-1 text-xs">
-                <span className="font-semibold text-primary block">{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
+                <span className="font-semibold text-foreground block">{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
                 {ALL_MCP_SCOPES.filter((s) => s.category === cat.key).map((sc) => (
-                  <label key={sc.key} className="flex items-center gap-1.5 cursor-pointer py-0.5 hover:text-primary">
+                  <label key={sc.key} className="flex items-center gap-1.5 cursor-pointer py-0.5">
                     <Checkbox checked={selectedScopes.includes(sc.key)} onCheckedChange={() => toggleScope(sc.key)} />
                     <span className="truncate text-[11px]">{t(`scopes.items.${sc.key.replace(/[-:]/g, '_')}.label`, sc.label)}</span>
                   </label>

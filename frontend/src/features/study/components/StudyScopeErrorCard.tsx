@@ -52,8 +52,8 @@ export function StudyScopeErrorCard({
   if (isAccessDenied) {
     return (
       <div className="w-full max-w-xl mx-auto py-6 px-4">
-        <div className="rounded-2xl border border-amber-200/80 dark:border-amber-900/50 bg-card p-6 sm:p-8 space-y-6 text-center shadow-xs">
-          <div className="inline-flex items-center justify-center size-12 rounded-xl bg-amber-500/10 border border-amber-200 dark:border-amber-900/50 text-amber-600 dark:text-amber-400 mx-auto">
+        <div className="rounded-3xl border border-amber-200/50 dark:border-amber-900/40 bg-card/90 backdrop-blur-md p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-amber-500/5">
+          <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 mx-auto">
             <ShieldAlert className="size-6" />
           </div>
 
@@ -91,8 +91,8 @@ export function StudyScopeErrorCard({
   if (isDeckNotFound) {
     return (
       <div className="w-full max-w-xl mx-auto py-6 px-4">
-        <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-8 space-y-6 text-center shadow-xs">
-          <div className="inline-flex items-center justify-center size-12 rounded-xl bg-muted border border-border text-muted-foreground mx-auto">
+        <div className="rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-primary/5 dark:shadow-none">
+          <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-muted border border-border/40 text-muted-foreground mx-auto">
             <FileQuestion className="size-6" />
           </div>
 
@@ -130,8 +130,8 @@ export function StudyScopeErrorCard({
   if (isNoCards) {
     return (
       <div className="w-full max-w-xl mx-auto py-6 px-4">
-        <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-8 space-y-6 text-center shadow-xs">
-          <div className="inline-flex items-center justify-center size-12 rounded-xl bg-muted border border-border text-muted-foreground mx-auto">
+        <div className="rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-primary/5 dark:shadow-none">
+          <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-muted border border-border/40 text-muted-foreground mx-auto">
             <Layers className="size-6" />
           </div>
 
@@ -174,8 +174,8 @@ export function StudyScopeErrorCard({
 
   return (
     <div className="w-full max-w-xl mx-auto py-6 px-4">
-      <div className="rounded-2xl border border-destructive/30 bg-card p-6 sm:p-8 space-y-6 text-center shadow-xs">
-        <div className="inline-flex items-center justify-center size-12 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive mx-auto">
+      <div className="rounded-3xl border border-destructive/25 bg-card/90 backdrop-blur-md p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-destructive/5">
+        <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive mx-auto">
           <AlertCircle className="size-6" />
         </div>
 

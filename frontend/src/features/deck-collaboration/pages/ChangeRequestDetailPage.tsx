@@ -70,7 +70,7 @@ export function ChangeRequestDetailPage() {
   }
 
   return (
-    <Page className="max-w-[96rem]">
+    <Page size="wide">
       <PageHeader
         title={request.title}
         description={`${request.deck_item?.title || 'Shared deck'} · ${request.requester.username} → ${request.owner.username}`}

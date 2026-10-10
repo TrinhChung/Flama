@@ -85,7 +85,7 @@ export function AdminAnalyticsPage() {
   const cohortsData = retentionCohortsQuery.data
 
   return (
-    <Page>
+    <Page size="wide">
       <PageHeader
         title="Tổng quan & Tăng trưởng Quản trị"
         description="Theo dõi thời gian học trung bình, lịch sử tăng trưởng người dùng, tải nội dung và sức khỏe hệ sinh thái Flama."

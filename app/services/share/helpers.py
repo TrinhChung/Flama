@@ -274,6 +274,11 @@ def make_unique_note_type_name(user_id: int, base_name: str) -> str:
         counter += 1
 
 
+def _active_note_type_templates(note_type_id: str):
+    from app.repositories.template_release_repository import active_templates
+    return active_templates(db.session, note_type_id)
+
+
 def resolve_single_note_type_for_deck(
     *,
     deck_id: int,
@@ -294,7 +299,7 @@ def resolve_single_note_type_for_deck(
     resolved_note_type = db.session.get(NoteType, resolved_note_type_id)
     if not resolved_note_type:
         return None, "Deck source note type not found."
-    if not resolved_note_type.templates:
+    if not _active_note_type_templates(resolved_note_type.id):
         return None, "Deck source note type has no templates."
     return resolved_note_type.id, None
 

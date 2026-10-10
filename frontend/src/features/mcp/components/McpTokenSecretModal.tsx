@@ -91,8 +91,8 @@ export function McpTokenSecretModal({
     <Dialog open={showModal} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-            <KeyRound className="size-5" />
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="size-5 text-primary" />
             {t('secret_modal.title')}
           </DialogTitle>
           <DialogDescription>

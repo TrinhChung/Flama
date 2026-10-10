@@ -34,7 +34,7 @@ export function AnkiSyncPage() {
   }
 
   return (
-    <Page className="w-full max-w-6xl px-3 sm:px-6 lg:px-8 py-3 space-y-4 sm:space-y-6">
+    <Page size="wide" className="px-3 sm:px-6 lg:px-8 py-3 space-y-4 sm:space-y-6">
       <PageHeader
         title={t('anki_sync.page_title', { defaultValue: 'Đồng bộ Anki Desktop (AnkiConnect)' })}
         description={t('anki_sync.page_desc', { defaultValue: 'Nhập và đồng bộ bộ thẻ (Deck), loại thẻ (NoteType), nội dung HTML, hình ảnh và âm thanh trực tiếp từ Anki Desktop lên Flama.' })}

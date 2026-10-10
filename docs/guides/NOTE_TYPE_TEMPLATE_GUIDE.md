@@ -10,7 +10,7 @@ Flama sử dụng kiến trúc thẻ hiện đại, bảo mật và tương thí
 
 | Thành phần | Công nghệ / Chuẩn | Ý nghĩa & Cách thức hoạt động |
 | :--- | :--- | :--- |
-| **Template Engine** | **Mustache** | Cú pháp đặt chỗ dữ liệu `{{Tên_Trường}}`. Tự động điền dữ liệu của từng từ vựng vào giao diện. |
+| **Template Engine** | **Mustache** | Cú pháp đặt chỗ `{{InputKey}}`. Mapping tại Note Type cấp dữ liệu field cho input của Template. |
 | **Ngôn ngữ hiển thị** | **HTML5 & CSS3** | Cho phép tùy biến mọi giao diện: màu sắc, font chữ, bố cục dạng hàng/cột (Flexbox, Grid), đổ bóng, bo góc. |
 | **Logic & Tương tác** | **JavaScript (ES6+)** | Chạy các hiệu ứng lật thẻ, hiển thị ẩn/hiện nội dung, tự động phát âm thanh tuần tự. |
 | **Môi trường hiển thị** | **Iframe Sandbox** | Đảm bảo an toàn, cách ly phong cách CSS giữa thẻ và ứng dụng Flama, giúp thẻ co giãn mượt mà trên cả điện thoại và máy tính. |
@@ -21,6 +21,8 @@ Flama sử dụng kiến trúc thẻ hiện đại, bảo mật và tương thí
 ## 2. Các Loại Trường Dữ Liệu (Field Types) Được Hỗ Trợ
 
 Khi tạo một Note Type, bạn có thể tạo nhiều trường dữ liệu với các kiểu sau:
+
+**Field** thuộc Note Type, xác định dữ liệu mỗi note lưu và kiểu nhập liệu. **Input** thuộc Template, xác định dữ liệu giao diện cần nhận. Một Template có một bộ input gồm nhiều trường. Tên field và input không cần giống nhau; mapping nối bằng ID field và key input.
 
 1. **`text`** (Chữ thuần): Dùng cho từ vựng, kanji, nghĩa ngắn, phiên âm romaji, tên tác giả...
 2. **`richtext`** (Văn bản có định dạng): Hỗ trợ bôi đậm, in nghiêng, đổi màu chữ, gạch chân, danh sách gạch đầu dòng.
@@ -33,18 +35,18 @@ Khi tạo một Note Type, bạn có thể tạo nhiều trường dữ liệu v
 
 ## 3. Cú Pháp Mustache Cần Biết
 
-* `{{Tên_Trường}}`: Hiển thị nội dung trường dữ liệu (tự động mã hóa an toàn).
-* `{{{Tên_Trường}}}`: Hiển thị nội dung trường dạng HTML (dùng cho trường `richtext`).
-* `{{#Tên_Trường}} ... {{/Tên_Trường}}`: **Điều kiện CÓ dữ liệu** (Nếu trường đó có chữ/audio thì mới hiển thị khối bên trong, nếu rỗng thì ẩn đi).
-* `{{^Tên_Trường}} ... {{/Tên_Trường}}`: **Điều kiện KHÔNG có dữ liệu** (Hiển thị nội dung mặc định khi trường bị bỏ trống).
+* `{{InputKey}}`: Hiển thị nội dung input (tự động mã hóa an toàn).
+* `{{{InputKey}}}`: Hiển thị nội dung input dạng HTML (dùng cho input `richtext`).
+* `{{#InputKey}} ... {{/InputKey}}`: **Điều kiện CÓ dữ liệu** (nếu input có dữ liệu thì hiển thị khối bên trong).
+* `{{^InputKey}} ... {{/InputKey}}`: **Điều kiện KHÔNG có dữ liệu** (hiển thị nội dung mặc định khi input bị bỏ trống).
 
 ---
 
 ## 4. 4 Quy Tắc Vàng Khi Thiết Kế Template (Tránh Lỗi)
 
-1. **Quy tắc đặt tên trường**:
+1. **Quy tắc đặt key input**:
    * Nên dùng chữ cái không dấu, viết thường và nối bằng dấu gạch dưới `_` (VD: `word`, `kanji`, `audio_word`, `vi_du_jp`, `vi_du_vi`).
-   * Không đặt tên trường chứa khoảng trắng hoặc ký tự đặc biệt lạ.
+   * Không đặt key input chứa khoảng trắng hoặc ký tự đặc biệt lạ. Nhãn hiển thị và tên field có thể dùng tiếng Việt.
 2. **Quy tắc đóng/mở thẻ HTML trong Mustache**:
    * Nếu mở thẻ `<div>` bên trong `{{#Tên_Trường}}` thì **bắt buộc** phải đóng `</div>` trước khi kết thúc `{{/Tên_Trường}}`.
 3. **Quy tắc chiều cao (Tránh tràn khung)**:
@@ -64,14 +66,16 @@ Bạn là một chuyên gia thiết kế Flashcard học ngôn ngữ trên nền
 
 Nhiệm vụ của bạn là dựa vào [YÊU CẦU CỦA TÔI], hãy thiết kế:
 1. Danh sách các Trường dữ liệu (Field Definitions) cần tạo trong Note Type.
-2. Mã Front HTML (Mặt trước).
-3. Mã Back HTML (Mặt sau).
-4. Mã Shared CSS (Định dạng kiểu dáng chung).
+2. Bộ input của Template (key, nhãn, kiểu) và bảng mapping field → input.
+3. Mã Front HTML (Mặt trước).
+4. Mã Back HTML (Mặt sau).
+5. Mã Shared CSS (Định dạng kiểu dáng chung).
 
 YÊU CẦU KỸ THUẬT BẮT BUỘC ĐỂ KHÔNG BỊ LỖI:
-- Đặt tên trường dữ liệu theo chuẩn snake_case chữ thường (ví dụ: word, reading, meaning, audio_word, example_jp, example_vi).
-- Sử dụng cú pháp Mustache {{Tên_Trường}} hoặc {{{Tên_Trường}}} (nếu là richtext).
-- Mọi khối có điều kiện ẩn hiện bắt buộc dùng: {{#Tên_Trường}} ... {{/Tên_Trường}}.
+- Đặt key input theo chuẩn snake_case chữ thường (ví dụ: word, reading, meaning, audio_word, example_jp, example_vi).
+- Dùng cùng kiểu dữ liệu cho input và field được mapping; không đổi text thành markdown hoặc richtext ngầm.
+- Sử dụng cú pháp Mustache {{InputKey}} hoặc {{{InputKey}}} (nếu là richtext).
+- Mọi khối có điều kiện ẩn hiện bắt buộc dùng: {{#InputKey}} ... {{/InputKey}}.
 - Đóng mở thẻ HTML chuẩn xác: Mọi thẻ HTML mở bên trong block Mustache {{#...}} PHẢI ĐƯỢC ĐÓNG trước {{/...}}.
 - Khung thẻ mặt trước căn giữa bằng Flexbox (không dùng style height: 100vh).
 - Các trường Audio phải tạo thẻ <audio id="..." src="{{Tên_Trường}}"></audio> và nút bấm loa 🔊 tương ứng.
@@ -122,7 +126,7 @@ YÊU CẦU KỸ THUẬT BẮT BUỘC ĐỂ KHÔNG BỊ LỖI:
 
 ## 7. Các Bước Thao Tác Trên Giao Diện Flama
 
-Sau khi AI đã sinh cho bạn 4 thành phần (Fields, Front HTML, Back HTML, Shared CSS), bạn chỉ cần làm theo 4 bước:
+Sau khi AI sinh danh sách field, bộ input, mapping và mã giao diện, thực hiện các bước sau:
 
 ### Bước 1: Tạo Loại Thẻ (Note Type) Mới
 1. Vào mục **Quản lý NoteTypes** (hoặc truy cập `/flashcards/note-types`).
@@ -130,39 +134,45 @@ Sau khi AI đã sinh cho bạn 4 thành phần (Fields, Front HTML, Back HTML, S
 3. Điền Tên loại thẻ (Ví dụ: *Ngữ pháp N1 Pro*) và bấm Tạo.
 
 ### Bước 2: Tạo Danh Sách Trường (Field Definitions)
-1. Bấm nút **Quản lý Trường** (biểu tượng thanh trượt 🎚️).
-2. Thêm lần lượt các trường theo bảng danh sách mà AI đã tạo (chọn đúng Tên trường và Loại trường như `text`, `richtext`, `audio`...).
-3. Sắp xếp thứ tự các trường bằng cách kéo thả vị trí nếu muốn.
+1. Mở Note Type: tab **Trường dữ liệu** hiển thị mặc định.
+2. Chọn **Thêm trường**, khai báo tên, kiểu, bắt buộc và định danh chính khi phù hợp, rồi lưu. Danh sách ở trái; cấu hình một field ở phải.
+3. Thử editor mẫu theo kiểu field. Ảnh/audio có thể chọn tệp cục bộ để xem thử; dữ liệu mẫu không được lưu vào note và tệp thử không được upload.
+4. Sắp xếp thứ tự bằng kéo thả hoặc nút lên/xuống. Khi chuyển field/tab còn thay đổi chưa lưu, chọn lưu, bỏ thay đổi hoặc ở lại.
 
-### Bước 3: Dán Mã Template
-1. Bấm quay lại trang **Chi tiết Template** của NoteType.
-2. Ở cột bên trái:
-   * Chọn tab **Front HTML** $\rightarrow$ Dán mã Front HTML từ AI.
-   * Chọn tab **Back HTML** $\rightarrow$ Dán mã Back HTML từ AI.
-   * Chọn tab **Shared CSS** $\rightarrow$ Dán mã Shared CSS từ AI.
-3. Bấm **Lưu Template**.
+### Bước 3: Thiết Kế Template
+1. Mở **Thư viện giao diện thẻ** (`/card-templates`) và tạo hoặc chọn Template.
+2. Bấm **Inputs** để khai báo bộ input trong hộp thoại riêng. Chọn từng input để sửa nhãn và kiểu; key nằm ở **Nâng cao**. Key đã lưu được giữ cố định.
+3. Bấm **Áp dụng vào bản nháp**. Nút này chưa ghi lên máy chủ; **Hủy** bỏ các chỉnh sửa riêng trong hộp thoại.
+4. Dán mã vào ba tab **Mặt trước**, **Mặt sau**, **CSS**. Dùng **Chèn input** để chọn token trong hai tab HTML.
+5. Bấm **Lưu thay đổi** để lưu thiết kế và bộ input.
 
 ### Bước 4: Kiểm Tra Trực Tiếp Trên Live Preview
 1. Nhìn sang cột bên phải **Xem Trước Trực Tiếp (Live Preview)**.
 2. Bấm chuyển đổi giữa **Mặt trước** và **Mặt sau** để kiểm tra giao diện mô phỏng.
 3. Thử bấm nút loa 🔊 và kiểm tra màu sắc, bố cục đã đúng ý chưa.
-4. Xong! Bạn đã có thể bắt đầu tạo thẻ mới hoặc import file Excel/Anki theo Note Type vừa tạo.
+4. Mở **Dữ liệu mẫu** để thay giá trị thử. Các giá trị này chỉ dùng xem trước.
+
+### Bước 5: Gắn Template Và Mapping
+1. Tại Note Type, mở tab **Templates** → **Gắn template**.
+2. Chọn thiết kế, ghép các input với field cùng kiểu và xác nhận gắn.
+3. Bấm một template trong danh sách để mở trang mapping riêng. Sửa tên lần gắn, mapping, xem trước rồi **Lưu mapping**.
+4. **Sửa thiết kế** dẫn đến Template Detail; đường quay lại giữ đúng lần gắn đang cấu hình. Sau khi lưu, bạn có thể tạo note hoặc import dữ liệu theo Note Type.
 
 ## 8. Thư viện Mẫu thẻ và ánh xạ dữ liệu
 
-Vào **Học liệu → Mẫu thẻ** (`/card-templates`), chọn **Tạo mẫu mới**, nhập tên rồi bấm **Tạo mẫu**. Trang chi tiết cho phép sửa metadata, **Input của mẫu**, **Front HTML**, **Back HTML**, **Shared CSS** và **Dữ liệu xem trước**. Bấm **Lưu thay đổi** để lưu cùng mẫu hiện tại.
+Vào **Thư viện giao diện thẻ** (`/card-templates`), chọn **Tạo mẫu mới**, nhập tên rồi tạo. Trang chi tiết tập trung editor và preview; **Inputs**, **Dữ liệu mẫu**, thông tin và lịch sử mở riêng khi cần. Bấm **Lưu thay đổi** để lưu cùng mẫu hiện tại.
 
 Input là tên đặt chỗ trong HTML, ví dụ `{{term}}`; field là trường dữ liệu của loại thẻ. Hai tên không cần giống nhau. Bấm **Áp dụng vào loại thẻ**, chọn loại thẻ, bấm **Tiếp tục**, ánh xạ từng input rồi xác nhận **Gắn mẫu**. Chỉ input và field cùng kiểu được ghép; `text`, `richtext` và `markdown` là ba kiểu khác nhau. Nhiều input có thể dùng cùng một field.
 
 Ánh xạ lưu theo ID trường: đổi tên field không yêu cầu sửa HTML. **Khuyến nghị ánh xạ** chỉ là lời nhắc; input chưa ánh xạ vẫn được lưu và hiển thị rỗng. Trường của loại thẻ khác hoặc sai kiểu không được chấp nhận.
 
-Một mẫu có thể dùng chung cho nhiều loại thẻ. Mục **Đang dùng ở** cho biết nơi đang gắn; sửa nội dung mẫu ảnh hưởng tất cả những nơi đó. Trên trang loại thẻ, mục **Mẫu đã gắn** có **Sửa ánh xạ**, **Gỡ mẫu** và **Gắn lại**. Gỡ chỉ ngừng sử dụng lần gắn đó khi học, giữ thẻ và tiến độ. Dùng **Mã lần gắn** khác để gắn cùng mẫu thêm lần nữa vào một loại thẻ.
+Một mẫu có thể dùng chung cho nhiều loại thẻ. Mục **Đang dùng ở** dẫn đến từng lần gắn; sửa nội dung mẫu ảnh hưởng tất cả những nơi đó. Tab **Templates** tại Note Type có mapping riêng cho từng hàng cùng menu đặt mặc định, gỡ và gắn lại. Gỡ giữ thẻ và tiến độ. Để dùng cùng thiết kế nhiều lần, chọn tạo lần gắn khác trong hộp thoại; hệ thống tạo mã nội bộ.
 
 **Lưu trữ** ẩn mẫu khỏi thư viện mặc định và chặn lần gắn mới; các nơi đang dùng vẫn hoạt động. Bật **Hiện mẫu lưu trữ** trong thư viện để tìm lại, rồi **Bỏ lưu trữ** nếu muốn gắn thêm. Lưu trữ không khóa việc sửa nội dung hiện có và không tự phát hành mẫu độc lập.
 
 ## 9. Lịch sử và khôi phục
 
-Bấm **Lịch sử** trên trang mẫu hoặc trình soạn loại thẻ. Chọn một phiên bản để so sánh với nội dung đang soạn; **Khôi phục phiên bản này → Khôi phục** thay bản nháp bằng nội dung cũ và tạo một phiên bản mới. Lịch sử trước đó, thẻ và tiến độ được giữ lại. Đổi nội dung hoặc schema tạo phiên bản; chỉ đổi tên hoặc lưu nội dung không đổi thì không tạo thêm phiên bản.
+Mở menu trang Template → **Lịch sử**. Chọn phiên bản để so sánh với nội dung đang soạn; **Khôi phục phiên bản này → Khôi phục** thay bản nháp bằng nội dung cũ và tạo phiên bản mới. Lịch sử trước đó, thẻ và tiến độ được giữ lại. Đổi nội dung hoặc schema tạo phiên bản; chỉ đổi tên hoặc lưu nội dung không đổi thì không tạo thêm phiên bản.
 
 Nếu có người hoặc tab khác vừa sửa mẫu, lưu có thể báo mẫu đã thay đổi. Giữ lại nội dung cần thiết trước khi chọn **Tải lại**; hệ thống không tự ghi đè bằng bản nháp cũ.
 

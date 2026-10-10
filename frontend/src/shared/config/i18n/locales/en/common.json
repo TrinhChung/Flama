@@ -11,6 +11,27 @@
   "or": "or",
   "copy": "Copy",
   "copied": "Copied",
+  "card_preview": {
+    "title": "Live Preview",
+    "subtitle": "(Simulating sample card data)",
+    "updating": "Updating…",
+    "preparing": "Preparing preview…",
+    "front": "Front Side",
+    "back": "Back Side",
+    "side_group": "Card side to preview",
+    "template_select": "Card template to preview"
+  },
+  "layout": {
+    "resize_panels": "Drag to resize panels"
+  },
+  "unsaved": {
+    "title": "Unsaved changes",
+    "discard": "Discard and continue",
+    "stay": "Continue editing",
+    "save_continue": "Save and continue"
+  },
+  "pagination_load_more": "Load more",
+  "pagination_loading": "Loading...",
   "language": {
     "vi": "Tiếng Việt",
     "en": "English",

@@ -1,6 +1,7 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faChevronRight, faListUl } from '@fortawesome/free-solid-svg-icons'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import type { GuideCategory, GuideArticle } from '../types'
 
 interface GuideBreadcrumbProps {
@@ -9,6 +10,8 @@ interface GuideBreadcrumbProps {
 }
 
 export function GuideBreadcrumb({ category, article }: GuideBreadcrumbProps) {
+  const { t } = useTranslation('guide')
+
   return (
     <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-4 flex-wrap" aria-label="Breadcrumb">
       <Link
@@ -16,7 +19,7 @@ export function GuideBreadcrumb({ category, article }: GuideBreadcrumbProps) {
         className="flex items-center gap-1.5 hover:text-primary transition-colors py-0.5 font-semibold text-foreground/80 hover:text-foreground"
       >
         <FontAwesomeIcon icon={faListUl} className="text-[11px] text-primary" />
-        <span>Mục Lục Hướng Dẫn</span>
+        <span>{t('sidebar.guide_home')}</span>
       </Link>
 
       {category && (

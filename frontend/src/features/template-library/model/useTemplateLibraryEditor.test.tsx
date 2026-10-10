@@ -40,7 +40,7 @@ describe('useTemplateLibraryEditor preserves versioned drafts and request identi
   })
   it('refuses stale writes without changing the draft or retrying with a new head', async () => {
     vi.mocked(updateLibraryTemplate).mockRejectedValue(new ApiError('stale', 409, 'TEMPLATE_VERSION_STALE')); await render(); await act(async () => editor.updateDraft({ front_html: 'dirty' })); await act(async () => editor.save()); await flush()
-    expect(editor.draft?.front_html).toBe('dirty'); expect(editor.saveError).toBe('Mẫu thẻ đã thay đổi. Hãy tải lại trước khi lưu.'); expect(editor.canSave).toBe(false); expect(updateLibraryTemplate).toHaveBeenCalledTimes(1)
+    expect(editor.draft?.front_html).toBe('dirty'); expect(editor.saveError).toBe('Giao diện thẻ đã thay đổi. Hãy tải lại trước khi lưu.'); expect(editor.canSave).toBe(false); expect(updateLibraryTemplate).toHaveBeenCalledTimes(1)
   })
   it('accepts required unbound inputs while blocking invalid schema draft saves', async () => {
     await render(); expect(editor.canSave).toBe(true)
@@ -64,6 +64,15 @@ describe('useTemplateLibraryEditor preserves versioned drafts and request identi
     await render(); await act(async () => editor.updateDraft({ front_html: 'dirty' })); vi.mocked(fetchLibraryTemplate).mockRejectedValueOnce(new Error('network'))
     await act(async () => { await expect(editor.refreshAndReplaceDraft()).rejects.toThrow('network') }); expect(editor.draft?.front_html).toBe('dirty'); expect(editor.refreshError).toBe('network'); expect(editor.canSave).toBe(false)
     await act(async () => { await editor.refreshAndReplaceDraft() }); await flush(); expect(editor.draft?.front_html).toBe('{{Front}}'); expect(editor.refreshError).toBeNull()
+  })
+  it('explicitly replaces dirty sources and full schema after a source update with unchanged cached HTML', async () => {
+    await render(); await act(async () => editor.updateDraft({ front_html: 'dirty draft' }))
+    server.input_schema = [{ key: 'Audio', label: 'Received audio', type: 'audio', required: false }]
+    server.current_version_id = 'v-from-source-update'
+    await act(async () => { await editor.refreshAndReplaceDraft() }); await flush()
+    expect(editor.draft?.front_html).toBe('{{Front}}'); expect(editor.draft?.input_schema).toEqual(server.input_schema); expect(editor.dirty).toBe(false)
+    await act(async () => editor.updateDraft({ front_html: 'new draft' })); await act(async () => editor.save()); await flush()
+    expect(updateLibraryTemplate).toHaveBeenLastCalledWith('t1', expect.objectContaining({ expected_current_version_id: 'v-from-source-update' }))
   })
   it('debounces preview, aborts obsolete calls, keeps empty samples and accepts only the latest response', async () => {
     const first = deferred<TemplateLibraryPreview>(); const second = deferred<TemplateLibraryPreview>(); vi.mocked(previewLibraryTemplate).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)

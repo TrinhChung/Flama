@@ -22,7 +22,7 @@ import { PublishNoteTypeStep4Pricing } from '../components/publish-notetype/Publ
 import { PublishNoteTypeSummaryFooter } from '../components/publish-notetype/PublishNoteTypeSummaryFooter'
 
 const WIZARD_STEPS = [
-  { id: 1, title: 'Mẫu thẻ & Mô tả', sub: 'Chọn NoteType và giới thiệu' },
+  { id: 1, title: 'Cấu trúc thẻ & Mô tả', sub: 'Chọn Cấu trúc thẻ và giới thiệu' },
   { id: 2, title: 'Phân loại & Trình độ', sub: 'Chứng chỉ & Môn học' },
   { id: 3, title: 'Mục tiêu & Kỹ năng', sub: 'Goals & Chủ đề trọng tâm' },
   { id: 4, title: 'Giá bán & Đăng tải', sub: 'Thiết lập giá và xuất bản' },
@@ -186,13 +186,13 @@ export function MarketplacePublishNoteTypePage() {
       const serverErrs: Record<string, string> = {}
 
       if (field === 'source_note_type_id' || msg.includes('source_note_type_id')) {
-        serverErrs.sourceNoteTypeId = 'Vui lòng chọn loại thẻ cần xuất bản.'
+        serverErrs.sourceNoteTypeId = 'Vui lòng chọn cấu trúc thẻ cần xuất bản.'
       }
       if (field === 'title' || msg.includes('Title')) {
         serverErrs.title = 'Vui lòng nhập tiêu đề hiển thị.'
       }
       if (field === 'description' || msg.includes('Description')) {
-        serverErrs.description = 'Vui lòng nhập mô tả chi tiết mẫu thẻ.'
+        serverErrs.description = 'Vui lòng nhập mô tả chi tiết cấu trúc thẻ.'
       }
       if (field === 'preview_text' || msg.includes('Preview text')) {
         serverErrs.previewText = 'Vui lòng nhập xem trước ngắn (Preview Text).'
@@ -364,13 +364,13 @@ export function MarketplacePublishNoteTypePage() {
       <div className="flex items-center justify-between gap-4 pt-1">
         <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
           {isEditMode
-            ? t('publish_notetype.title_edit', { defaultValue: 'Chỉnh sửa thông tin Mẫu Thẻ trên Marketplace' })
-            : t('publish_notetype.title_create', { defaultValue: 'Chia sẻ Mẫu Thẻ (Note Type) vào Marketplace' })}
+            ? t('publish_notetype.title_edit', { defaultValue: 'Chỉnh sửa thông tin Cấu trúc thẻ trên Chợ' })
+            : t('publish_notetype.title_create', { defaultValue: 'Đăng Cấu trúc thẻ lên Chợ' })}
         </h1>
         <Button variant="outline" size="sm" asChild className="h-8 px-3 text-xs font-semibold rounded-xl shrink-0">
           <Link to="/marketplace/note-types">
             <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-            {t('publish_notetype.back_btn', { defaultValue: 'Quay lại NoteTypes' })}
+            {t('publish_notetype.back_btn', { defaultValue: 'Quay lại Cấu trúc thẻ' })}
           </Link>
         </Button>
       </div>

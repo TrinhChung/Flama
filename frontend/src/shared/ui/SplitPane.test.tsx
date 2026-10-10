@@ -168,4 +168,64 @@ describe("SplitPane Primitive", () => {
 
     expect(localStorage.getItem("test:split:drag")).toBe("350")
   })
+
+  it("sizes panes in percent of the container and shields iframes while dragging", async () => {
+    await act(async () => {
+      root?.render(
+        <SplitPane
+          sizeUnit="percent"
+          collapseBelow="lg"
+          handleAppearance="gutter"
+          primaryPane={<div>Editor</div>}
+          secondaryPane={<iframe title="preview" />}
+          defaultSize={50}
+          minSize={30}
+          maxSize={70}
+          storageKey="test:split:percent"
+        />
+      )
+    })
+
+    const splitRoot = container?.querySelector('[data-slot="split-pane"]') as HTMLElement
+    const handle = container?.querySelector('[role="separator"]') as HTMLElement
+    vi.spyOn(splitRoot, "getBoundingClientRect").mockReturnValue({ width: 1000, height: 600 } as DOMRect)
+    expect(splitRoot.style.getPropertyValue("--split-pane-size")).toBe("50%")
+    expect(splitRoot.className).toContain("lg:flex-row")
+    expect(container?.querySelector('[data-slot="split-pane-primary"]')?.className).toContain("lg:w-(--split-pane-size)")
+    expect(handle.className).toContain("hidden lg:flex")
+    expect(handle.querySelector("span")).not.toBeNull()
+
+    await act(async () => {
+      handle.dispatchEvent(new MouseEvent("mousedown", { clientX: 500, bubbles: true, cancelable: true }))
+    })
+    expect(document.querySelector('[data-slot="split-pane-drag-shield"]')).not.toBeNull()
+
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent("mousemove", { clientX: 600 }))
+    })
+    expect(handle.getAttribute("aria-valuenow")).toBe("60")
+    expect(handle.getAttribute("aria-valuetext")).toBe("60%")
+    expect(splitRoot.style.getPropertyValue("--split-pane-size")).toBe("60%")
+
+    // Dragging past the bounds clamps to maxSize.
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent("mouseup", { clientX: 900 }))
+    })
+    expect(handle.getAttribute("aria-valuenow")).toBe("70")
+    expect(localStorage.getItem("test:split:percent")).toBe("70")
+    expect(document.querySelector('[data-slot="split-pane-drag-shield"]')).toBeNull()
+  })
+
+  it("ignores non-primary mouse buttons", async () => {
+    await act(async () => {
+      root?.render(<SplitPane primaryPane={<div>Left</div>} secondaryPane={<div>Right</div>} defaultSize={300} />)
+    })
+    const handle = container?.querySelector('[role="separator"]') as HTMLElement
+    await act(async () => {
+      handle.dispatchEvent(new MouseEvent("mousedown", { button: 2, clientX: 300, bubbles: true, cancelable: true }))
+      window.dispatchEvent(new MouseEvent("mousemove", { clientX: 400 }))
+    })
+    expect(handle.getAttribute("aria-valuenow")).toBe("300")
+    expect(document.querySelector('[data-slot="split-pane-drag-shield"]')).toBeNull()
+  })
 })

@@ -22,6 +22,8 @@ from app.services import (
     payment_service,
 )
 from app.repositories import flashcards_share_repository, template_release_repository
+from app.repositories.marketplace_list_repository import ordered_items_query, visible_items_query
+from app.services.marketplace_list_service import enabled_arg, has_inferred_filters, list_page, pagination
 from app.services.flashcard_renderer import (
     PREVIEW_MEDIA_AUDIO_TOKEN,
     PREVIEW_MEDIA_DIAGRAM_TOKEN,
@@ -175,38 +177,45 @@ def list_shared_note_types(
         )
     }
 
-    visible_note_types = [
-        item
-        for item in NoteType.query.order_by(NoteType.updated_at.desc()).all()
-        if _is_note_type_visible_for_shared(item, user_id)
-    ]
-    filtered = marketplace_query_service.filter_note_type_items(
-        visible_note_types,
-        query_text=query_text,
-        category=category,
-        tags=tags,
-        pricing_mode=pricing_mode,
-        min_price_amount_minor=min_price_amount_minor,
-        max_price_amount_minor=max_price_amount_minor,
-        domain=domain,
-        subject=subject,
-        framework=framework,
-        framework_level=framework_level,
-        difficulty_band=difficulty_band,
-        learning_goals=learning_goals,
-        primary_topics=primary_topics,
-        format_features=format_features,
+    page = list_page(args)
+    compact = enabled_arg(args.get("compact"))
+    query = visible_items_query(
+        NoteType, user_id=user_id, owner_column=NoteType.user_id,
+        pricing_mode=pricing_mode, min_price=min_price_amount_minor,
+        max_price=max_price_amount_minor,
     )
-    sorted_items = marketplace_query_service.sort_note_type_items(
-        filtered, sort_key
+    query = ordered_items_query(query, NoteType, sort_key)
+    filters = dict(
+        query_text=query_text, category=category, tags=tags,
+        pricing_mode=pricing_mode, min_price_amount_minor=min_price_amount_minor,
+        max_price_amount_minor=max_price_amount_minor, domain=domain,
+        subject=subject, framework=framework, framework_level=framework_level,
+        difficulty_band=difficulty_band, learning_goals=learning_goals,
+        primary_topics=primary_topics, format_features=format_features,
     )
+    if page is not None and not has_inferred_filters(filters):
+        total = query.order_by(None).count()
+        number, size = page
+        offset = (number - 1) * size
+        sorted_items = query.offset(offset).limit(size).all() if offset < total else []
+    else:
+        filtered = marketplace_query_service.filter_note_type_items(query.all(), **filters)
+        sorted_items = marketplace_query_service.sort_note_type_items(filtered, sort_key)
+        total = len(sorted_items)
+        if page is not None:
+            number, size = page
+            sorted_items = sorted_items[(number - 1) * size:number * size]
 
-    installs = NoteTypeInstall.query.filter_by(user_id=user_id).all()
+    ids = [item.id for item in sorted_items]
+    installs = NoteTypeInstall.query.filter(
+        NoteTypeInstall.user_id == user_id,
+        NoteTypeInstall.source_note_type_id.in_(ids),
+    ).all() if ids else []
     install_map = {row.source_note_type_id: row for row in installs}
     payload_items = []
     for note_type in sorted_items:
         row = marketplace_query_service.serialize_note_type_marketplace_card(
-            note_type
+            note_type, include_definition=not compact
         )
         install = install_map.get(note_type.id)
         row["is_installed"] = install is not None
@@ -216,7 +225,10 @@ def list_shared_note_types(
         row["is_owner"] = note_type.user_id == user_id
         payload_items.append(row)
 
-    return {"items": payload_items}
+    payload = {"items": payload_items}
+    if page is not None:
+        payload["pagination"] = pagination(page, total)
+    return payload
 
 
 def get_shared_note_type_detail(

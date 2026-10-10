@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faBolt,
@@ -53,6 +54,7 @@ export function GuideSidebar({
   onSearchChange,
   onItemClick,
 }: GuideSidebarProps) {
+  const { t } = useTranslation('guide')
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {}
     GUIDE_CATEGORIES.forEach((c) => {
@@ -93,7 +95,7 @@ export function GuideSidebar({
         />
         <Input
           type="search"
-          placeholder="Tìm trong mục lục..."
+          placeholder={t('header.search_placeholder')}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-8 pr-7 h-9 text-xs rounded-xl bg-background border-border/80 focus-visible:ring-primary"
@@ -122,7 +124,7 @@ export function GuideSidebar({
             }`}
           >
             <FontAwesomeIcon icon={faBook} className="text-xs shrink-0" />
-            <span>Mục Lục &amp; Trang Chủ</span>
+            <span>{t('sidebar.guide_home')}</span>
           </Link>
 
           {filteredCategories.map((cat) => {

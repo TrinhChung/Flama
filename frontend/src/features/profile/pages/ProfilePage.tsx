@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BookOpen, GitPullRequest, Shapes } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -13,6 +14,7 @@ import { PublishedDecksTab } from '../components/PublishedDecksTab'
 import { PublishedNoteTypesTab } from '../components/PublishedNoteTypesTab'
 
 export function ProfilePage() {
+  const { t } = useTranslation('profile')
   const { username } = useParams<{ username?: string }>()
   const [activeTab, setActiveTab] = useState<'decks' | 'noteTypes' | 'contributions'>('decks')
 
@@ -49,7 +51,7 @@ export function ProfilePage() {
     : privateQuery.error || ownPortfolioQuery.error
 
   if (isPending) {
-    return <PageLoading label="Đang tải hồ sơ và thông tin đóng góp…" />
+    return <PageLoading label={t('loading')} />
   }
 
   if (error) {
@@ -103,7 +105,13 @@ export function ProfilePage() {
   return (
     <Page>
       <PageHeader
-        title={isOwnProfile ? 'Hồ sơ cá nhân & Đóng góp' : `Hồ sơ Creator: ${user.display_name || user.username}`}
+        title={
+          isOwnProfile
+            ? t('page_header.title_own')
+            : t('page_header.title_creator', {
+                name: user.display_name || user.username,
+              })
+        }
         description=""
       />
 
@@ -130,7 +138,7 @@ export function ProfilePage() {
               }`}
             >
               <BookOpen className="size-3.5" />
-              <span>Học liệu đã tạo ({publishedDecks.length})</span>
+              <span>{t('tabs.decks', { count: publishedDecks.length })}</span>
             </button>
 
             <button
@@ -143,7 +151,7 @@ export function ProfilePage() {
               }`}
             >
               <Shapes className="size-3.5" />
-              <span>Loại thẻ ({publishedNoteTypes.length})</span>
+              <span>{t('tabs.note_types', { count: publishedNoteTypes.length })}</span>
             </button>
 
             <button
@@ -156,7 +164,7 @@ export function ProfilePage() {
               }`}
             >
               <GitPullRequest className="size-3.5" />
-              <span>Đóng góp cộng đồng ({contributions.length})</span>
+              <span>{t('tabs.contributions', { count: contributions.length })}</span>
             </button>
           </div>
 

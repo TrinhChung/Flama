@@ -2,18 +2,19 @@
   "header": {
     "title_decks": "Community Deck Marketplace",
     "desc_decks": "Discover, share, and download high-quality Japanese flashcard decks crafted by the community.",
-    "title_notetypes": "Note Types Marketplace",
+    "title_notetypes": "Shared Note Types",
     "desc_notetypes": "Clean, beautifully styled flashcard templates optimized for Kanji, Vocabulary, and Grammar study.",
     "tour_btn": "Guided Tour",
     "tour_btn_prefix": "Tour ",
     "tab_decks": "Decks",
     "tab_notetypes": "Note Types",
     "btn_publish_deck": "Publish Deck",
-    "btn_create_notetype": "Create Note Type"
+    "btn_create_notetype": "Create Note Type",
+    "my_notetypes": "My Note Types"
   },
   "search_filter": {
     "placeholder_decks": "Search by deck name, keyword, author... (Press '/' to focus)",
-    "placeholder_notetypes": "Search by template name, category, author... (Press '/' to focus)",
+    "placeholder_notetypes": "Search by note type name, category, author... (Press '/' to focus)",
     "filter_btn": "Filters",
     "clear_search": "Clear search query",
     "clear_all": "Clear all filters",
@@ -104,7 +105,7 @@
   },
   "detail": {
     "back_to_market": "Back to Marketplace",
-    "back_to_notetypes": "Back to Note Types",
+    "back_to_notetypes": "Back to Shared Note Types",
     "install_btn": "Install deck",
     "install_notetype_btn": "Install Note Type",
     "installed_badge": "Installed",
@@ -235,7 +236,7 @@
     "tab_back": "Back",
     "fields_title": "Fields List",
     "templates_title": "Card Templates",
-    "other_notetypes": "Other note types by this author",
+    "other_notetypes": "Other note types by author",
     "field_col_name": "Field Name",
     "field_col_type": "Data Type",
     "template_col_name": "Template Name",
@@ -269,7 +270,13 @@
     "toast_republished": "Note Type republished on the Marketplace.",
     "loading": "Loading Note Type information…",
     "not_found": "Note Type not found",
-    "header_desc": "Note Type template details on Flama Marketplace."
+    "header_desc": "Note Type template details on Flama Marketplace.",
+    "template_unit": "templates",
+    "templates_desc": "Each note type can include one or more independent card templates.",
+    "template_active_preview": "Previewing",
+    "template_available": "Card template",
+    "btn_select_preview": "Preview",
+    "badge_previewing": "Previewing"
   },
   "keys_manager": {
     "title": "Course Access Keys Management",
@@ -478,15 +485,15 @@
     "btn_back_detail": "Back to details"
   },
   "publish_notetype": {
-    "title_create": "Share Note Type to Marketplace",
-    "title_edit": "Edit Marketplace Note Type Info",
+    "title_create": "Publish Note Type to Marketplace",
+    "title_edit": "Edit Shared Note Type",
     "back_btn": "Back to Note Types",
     "installed_warning": "Note Types installed from Marketplace cannot be re-shared",
     "already_published_warning": "This Note Type has already been published to Marketplace",
-    "btn_view_existing": "View template on Marketplace",
-    "btn_edit_existing": "Edit template info",
+    "btn_view_existing": "View note type on Marketplace",
+    "btn_edit_existing": "Edit note type info",
     "missing_fields_warning": "Publication details incomplete ({{count}} missing fields)",
-    "step1_title": "1. Template & Description",
+    "step1_title": "1. Note Type & Description",
     "step1_sub": "Select NoteType and overview",
     "step2_title": "2. Taxonomy & Level",
     "step2_sub": "Certificate & Subject",
@@ -500,12 +507,12 @@
     "select_option_title": "Select note type {{name}}",
     "fields_unit": "fields",
     "template_unit": "template",
-    "empty_no_notetypes": "You do not have any note types yet. Create or edit a note type before publishing.",
+    "empty_no_notetypes": "You do not have any note types to publish yet.",
     "empty_no_matches": "No matching note types found.",
     "notetype_badge_published": "Published",
     "notetype_badge_marketplace": "From Marketplace",
-    "notetype_reason_marketplace": "This template was installed from Marketplace and cannot be re-shared.",
-    "notetype_reason_published": "This template is already published on Marketplace."
+    "notetype_reason_marketplace": "This note type was installed from Marketplace and cannot be reshared.",
+    "notetype_reason_published": "This note type is already published to Marketplace."
   },
   "payment_result": {
     "title": "Transaction Result",

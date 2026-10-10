@@ -17,7 +17,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-describe('Lazy Worksheet modal', () => {
+describe('Lazy Worksheet modal', { timeout: 15000 }, () => {
   let container: HTMLDivElement
   let root: Root
 

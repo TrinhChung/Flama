@@ -5,11 +5,13 @@ import type { PersistedStudySession } from '../session/sessionStore'
 export type UseStudyNavigationBlockerOptions = {
   session: PersistedStudySession | null
   commit: (options: { reason: 'manual_exit' }) => Promise<unknown>
+  discard?: () => Promise<unknown> | unknown
 }
 
 export function useStudyNavigationBlocker({
   session,
   commit,
+  discard,
 }: UseStudyNavigationBlockerOptions) {
   const uncommittedCount = session?.events?.length ?? 0
   const isSessionActive = session?.status === 'active'
@@ -50,9 +52,15 @@ export function useStudyNavigationBlocker({
     }
   }, [blocker, commit, session])
 
-  const handleDiscardAndExit = useCallback(() => {
-    blocker.proceed?.()
-  }, [blocker])
+  const handleDiscardAndExit = useCallback(async () => {
+    try {
+      await discard?.()
+    } catch (err) {
+      console.error('Failed to discard study session before exit:', err)
+    } finally {
+      blocker.proceed?.()
+    }
+  }, [blocker, discard])
 
   const handleContinueStudy = useCallback(() => {
     blocker.reset?.()

@@ -71,6 +71,7 @@ class AppliedComposition:
     trigger_contract_version: str = REVIEW_TRIGGER_CONTRACT_VERSION
     algorithm_key: str = DEFAULT_ALGORITHM_IDENTITY.key
     algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version
+    study_application_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -174,6 +175,7 @@ def build_compatibility_composition(
         trigger_contract_version=trigger_contract_version,
         algorithm_key=algorithm_key,
         algorithm_version=algorithm_version,
+        study_application_id=str(application.id) if application is not None and getattr(application, "id", None) else None,
     )
 
 
@@ -205,10 +207,13 @@ def resolve_compatibility_composition_for_card(
     if template is None:
         raise ValueError(f"Card {card.id} references missing template {card.template_id}")
     context_kind = _card_context_kind(card, clone_scope)
+    application = getattr(card, "application", None)
+    if application is None and getattr(card, "application_id", None):
+        application = db.session.get(StudyApplication, card.application_id)
     return build_compatibility_composition(
         template,
         note_type=getattr(getattr(card, "note", None), "note_type", None),
-        application=getattr(card, "application", None),
+        application=application,
         context_kind=context_kind,
         install_id=(str(clone_scope.install.id) if clone_scope is not None else None),
     )
@@ -327,6 +332,18 @@ def list_available_compositions_for_query(
         template_id: int(template.position or 0)
         for template_id, template in templates.items()
     }
+    fallback_apps: dict[tuple[str, str], StudyApplication] = {}
+    if any(not key[2] for key in samples):
+        for offset in range(0, len(template_ids), 500):
+            batch_apps = (
+                StudyApplication.query.filter(
+                    StudyApplication.template_id.in_(template_ids[offset:offset + 500]),
+                    StudyApplication.status_code == "ACTIVE",
+                ).all()
+            )
+            for app in batch_apps:
+                fallback_apps.setdefault((str(app.note_type_id), str(app.template_id)), app)
+
     compositions: list[AppliedComposition] = []
     for (note_type_id, template_id, application_id, context_kind), row in samples.items():
         card_id = row.sample_card_id
@@ -335,7 +352,7 @@ def list_available_compositions_for_query(
             raise ValueError(f"Card {card_id} references missing template {template_id}")
         application = (SimpleNamespace(id=application_id, occurrence_key=row.occurrence_key,
                         display_name=row.display_name, position=row.position, is_default=row.is_default)
-                       if application_id else None)
+                       if application_id else fallback_apps.get((str(note_type_id), str(template_id))))
         composition = build_compatibility_composition(
                 template,
                 note_type=SimpleNamespace(id=note_type_id, name=row.note_type_name),

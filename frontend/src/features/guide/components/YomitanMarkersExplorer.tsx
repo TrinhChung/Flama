@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -88,6 +89,7 @@ export const YOMITAN_MARKERS: MarkerItem[] = [
 ]
 
 export function YomitanMarkersExplorer() {
+  const { t } = useTranslation('guide')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'term' | 'kanji' | 'both'>('all')
   const [copied, setCopied] = useState<string | null>(null)
@@ -96,7 +98,7 @@ export function YomitanMarkersExplorer() {
     await navigator.clipboard.writeText(value)
     setCopied(label)
     window.setTimeout(() => setCopied(null), 1800)
-    toast.success(`Đã sao chép ${label.startsWith('{') ? label : ''} vào bộ nhớ tạm.`)
+    toast.success(t('yomitan.template_copied'))
   }
 
   const filteredMarkers = YOMITAN_MARKERS.filter((m) => {
@@ -121,7 +123,7 @@ export function YomitanMarkersExplorer() {
         <CardHeader className="p-4 sm:p-5 pb-2">
           <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2 text-foreground">
             <LayoutTemplate className="size-4.5 text-purple-600 dark:text-purple-400" />
-            <span>Mẫu Ánh Xạ Khuyên Dùng Cho Mẫu Thẻ Cơ Bản (Anki / Flama)</span>
+            <span>{t('yomitan.template_header')}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
@@ -216,7 +218,7 @@ export function YomitanMarkersExplorer() {
           <div>
             <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
               <Code className="size-5 text-purple-500 shrink-0" />
-              <span>Tra Cứu & Sao Chép Nhanh 55 Field Markers</span>
+              <span>{t('yomitan.explorer_title')}</span>
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               Nhấp vào bất kỳ thẻ marker nào dưới đây để sao chép nhanh mã thẻ vào bộ nhớ tạm.
@@ -227,7 +229,7 @@ export function YomitanMarkersExplorer() {
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Tìm kiếm marker ({expression}, furigana, audio, pitch, nghĩa...)"
+                placeholder={t('yomitan.search_placeholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 h-10 rounded-xl text-xs sm:text-sm w-full"
@@ -240,7 +242,7 @@ export function YomitanMarkersExplorer() {
                 onClick={() => setSelectedCategory('all')}
                 className="rounded-xl text-xs h-9 px-3 shrink-0"
               >
-                Tất cả ({YOMITAN_MARKERS.length})
+                {t('yomitan.category_all')} ({YOMITAN_MARKERS.length})
               </Button>
               <Button
                 size="sm"
@@ -248,7 +250,7 @@ export function YomitanMarkersExplorer() {
                 onClick={() => setSelectedCategory('term')}
                 className="rounded-xl text-xs h-9 px-3 shrink-0"
               >
-                Từ vựng ({countTerm})
+                {t('yomitan.category_term', { count: countTerm })}
               </Button>
               <Button
                 size="sm"
@@ -256,7 +258,7 @@ export function YomitanMarkersExplorer() {
                 onClick={() => setSelectedCategory('kanji')}
                 className="rounded-xl text-xs h-9 px-3 shrink-0"
               >
-                Chữ Hán ({countKanji})
+                {t('yomitan.category_kanji', { count: countKanji })}
               </Button>
               <Button
                 size="sm"
@@ -264,7 +266,7 @@ export function YomitanMarkersExplorer() {
                 onClick={() => setSelectedCategory('both')}
                 className="rounded-xl text-xs h-9 px-3 shrink-0"
               >
-                Dùng chung ({countBoth})
+                {t('yomitan.category_both', { count: countBoth })}
               </Button>
             </div>
           </div>
@@ -273,14 +275,14 @@ export function YomitanMarkersExplorer() {
         <CardContent className="p-4 sm:p-6 pt-0 min-w-0">
           {!filteredMarkers.length ? (
             <EmptyState
-              title="Không tìm thấy marker phù hợp"
-              description="Hãy thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác."
+              title={t('yomitan.empty_title')}
+              description={t('yomitan.empty_desc')}
             />
           ) : (
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
               {filteredMarkers.map((marker) => (
                 <div
-                  key={marker.name}
+                  key={`${marker.category}-${marker.name}`}
                   onClick={() => copy(marker.name, marker.name)}
                   className="group relative flex flex-col justify-between gap-3 rounded-2xl border bg-card p-3.5 sm:p-4 transition-all hover:border-purple-500/50 hover:shadow-md cursor-pointer active:scale-[0.99] min-w-0 overflow-hidden"
                 >
@@ -296,10 +298,10 @@ export function YomitanMarkersExplorer() {
                         className="text-[10px] uppercase font-semibold tracking-wide shrink-0 self-start mt-0.5"
                       >
                         {marker.category === 'term'
-                          ? 'Từ vựng'
+                          ? t('yomitan.badge_term')
                           : marker.category === 'kanji'
-                          ? 'Chữ Hán'
-                          : 'Dùng chung'}
+                          ? t('yomitan.badge_kanji')
+                          : t('yomitan.badge_both')}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed break-words">{marker.description}</p>
@@ -307,17 +309,17 @@ export function YomitanMarkersExplorer() {
 
                   {marker.example ? (
                     <div className="pt-2 border-t flex items-center justify-between text-[11px] text-muted-foreground min-w-0 gap-2">
-                      <span className="truncate min-w-0 flex-1">Ví dụ: <code className="text-foreground bg-muted px-1.5 py-0.5 rounded font-mono break-all">{marker.example}</code></span>
+                      <span className="truncate min-w-0 flex-1">{t('yomitan.example_label')} <code className="text-foreground bg-muted px-1.5 py-0.5 rounded font-mono break-all">{marker.example}</code></span>
                       <span className="text-xs opacity-80 group-hover:opacity-100 transition-opacity text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1 shrink-0">
                         {copied === marker.name ? <Check className="size-3 text-green-600" /> : <Copy className="size-3" />}
-                        {copied === marker.name ? 'Đã chép' : 'Sao chép'}
+                        {copied === marker.name ? t('article.copied') : t('article.copy_code')}
                       </span>
                     </div>
                   ) : (
                     <div className="flex justify-end text-[11px] pt-1">
                       <span className="text-xs opacity-80 group-hover:opacity-100 transition-opacity text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1">
                         {copied === marker.name ? <Check className="size-3 text-green-600" /> : <Copy className="size-3" />}
-                        {copied === marker.name ? 'Đã chép' : 'Sao chép'}
+                        {copied === marker.name ? t('article.copied') : t('article.copy_code')}
                       </span>
                     </div>
                   )}

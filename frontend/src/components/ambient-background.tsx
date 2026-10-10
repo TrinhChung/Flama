@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils'
+
 type AmbientBackgroundProps = {
   className?: string
   intensity?: 'normal' | 'subtle' | 'vibrant'
@@ -19,7 +21,7 @@ export function AmbientBackground({
   return (
     <div
       aria-hidden="true"
-      className={`pointer-events-none fixed inset-0 -z-10 overflow-hidden ${className}`}
+      className={cn('pointer-events-none fixed inset-0 -z-10 overflow-hidden', className)}
     >
       {/* Ambient background glow (Pushed to bottom corners to keep top header clean and clear) */}
       <div

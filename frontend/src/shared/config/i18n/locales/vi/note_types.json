@@ -1,26 +1,83 @@
 {
+  "setup": {
+    "back": "Note Types",
+    "description": "Khai báo cấu trúc dữ liệu cho các note và kết nối với template thẻ.",
+    "navigation": "Thiết lập Note Type",
+    "fields_tab": "Trường dữ liệu",
+    "templates_tab": "Templates",
+    "search_fields": "Tìm trường…",
+    "no_field_results": "Không có trường khớp với tìm kiếm.",
+    "required_badge": "Bắt buộc",
+    "save_field": "Lưu trường",
+    "back_to_fields": "Về danh sách trường",
+    "editor_preview": "Cách nhập liệu",
+    "sample_editor": "Nhập thử",
+    "sample_result": "Xem kết quả",
+    "use_sample": "Dùng mẫu",
+    "clear_sample": "Xóa mẫu",
+    "sample_value": "Giá trị nhập thử",
+    "sample_placeholder": "Nhập thử một giá trị…",
+    "media_reference": "Tham chiếu media mẫu",
+    "media_reference_advanced": "Nâng cao: nhập tham chiếu media có sẵn",
+    "choose_media": "Chọn tệp xem thử",
+    "replace_media": "Thay tệp mẫu",
+    "invalid_local_media": "Chọn tệp đúng kiểu media của trường này.",
+    "format_source": "Hỗ trợ định dạng HTML",
+    "format_bold": "Chèn chữ đậm",
+    "format_italic": "Chèn chữ nghiêng",
+    "format_text": "nội dung",
+    "sample_empty": "Nhập dữ liệu mẫu để xem kết quả.",
+    "preview_loading": "Đang dựng mẫu…",
+    "media_empty": "Chưa chọn mẫu. Dùng mẫu có sẵn hoặc nhập tham chiếu media.",
+    "invalid_media_sample": "Tham chiếu media này chưa hợp lệ.",
+    "audio_sample": "Âm thanh mẫu",
+    "sample_ephemeral": "Dữ liệu nhập thử chỉ dùng để xem tại đây, không lưu vào note hay làm giá trị mặc định của trường.",
+    "used_by": "Dùng bởi templates",
+    "unused_field": "Trường này chưa được ánh xạ vào template đã gắn.",
+    "usage_loading": "Đang đọc ánh xạ templates…",
+    "usage_error": "Không tải được ánh xạ templates.",
+    "type_change_warning": "Đổi kiểu dữ liệu có thể làm ánh xạ hiện tại không còn tương thích. Kiểm tra lại mapping sau khi lưu.",
+    "unsaved_field": "Trường này có thay đổi chưa lưu. Lưu trường, bỏ thay đổi hoặc ở lại để tiếp tục sửa.",
+    "delete_title": "Xóa trường dữ liệu?",
+    "rename": "Đổi tên",
+    "rename_title": "Đổi tên Note Type",
+    "rename_description": "Thay đổi tên hiển thị của Note Type này.",
+    "name": "Tên Note Type",
+    "rename_required": "Nhập tên Note Type.",
+    "rename_save": "Lưu tên",
+    "rename_success": "Đã đổi tên Note Type.",
+    "operation_pending": "Đợi thao tác hiện tại hoàn tất trước khi tiếp tục.",
+    "types": {
+      "text": { "label": "Văn bản", "hint": "Dùng cho từ, cách đọc và nội dung không cần định dạng." },
+      "richtext": { "label": "Văn bản có định dạng", "hint": "Nhập nội dung HTML như editor note hiện tại, rồi xem kết quả có định dạng." },
+      "markdown": { "label": "Markdown", "hint": "Viết giải thích, ví dụ bằng cú pháp Markdown rồi xem kết quả được dựng." },
+      "image": { "label": "Hình ảnh", "hint": "Lưu tham chiếu media hình ảnh. Dùng ảnh mẫu hoặc nhập tham chiếu có sẵn để xem thử." },
+      "audio": { "label": "Âm thanh", "hint": "Lưu tham chiếu audio. Phát thử mẫu tại đây; thiết lập tạo TTS nằm trong luồng Audio." },
+      "diagram": { "label": "Sơ đồ", "hint": "Lưu tham chiếu ảnh hoặc SVG theo editor sơ đồ hiện tại. Dùng mẫu hoặc tham chiếu có sẵn để xem thử." }
+    }
+  },
   "manager": {
     "loading": "Đang tải danh sách NoteTypes…",
     "header": {
-      "title": "Quản lý Loại Thẻ (Note Types)",
-      "description": "Định nghĩa cấu trúc các trường dữ liệu và tùy chỉnh mẫu hiển thị Flashcard.",
+      "title": "Quản lý Cấu trúc thẻ (Note Types)",
+      "description": "Định nghĩa cấu trúc các trường dữ liệu và liên kết giao diện hiển thị Flashcard.",
       "tour_btn": "Tour Hướng Dẫn",
       "ai_prompt_btn": "Prompt AI",
       "guide_concept": "Kiến trúc 1 Note sinh nhiều Cards",
-      "troubleshoot_import": "Khắc phục lỗi trường & mẫu thẻ",
+      "troubleshoot_import": "Khắc phục lỗi trường & giao diện thẻ",
       "docs_btn": "Tài liệu",
       "ai_prompt_banner_title": "Tạo Template Bằng AI Trong 1 Phút",
       "ai_prompt_banner_desc": "Không cần biết lập trình! Dùng Prompt chuẩn cho ChatGPT / Claude để tự thiết kế mẫu thẻ Flashcard đúng ý bạn.",
       "ai_prompt_banner_btn": "Mở Hướng Dẫn & Prompt AI"
     },
     "create": {
-      "title": "Tạo loại thẻ mới",
+      "title": "Tạo cấu trúc thẻ mới",
       "description": "Khởi tạo cấu trúc dữ liệu và template tùy chỉnh.",
       "placeholder": "Ví dụ: Từ vựng Tiếng Nhật, Ngữ pháp JLPT N2, Kanji Hán Tự…",
       "submit_btn": "Tạo NoteType"
     },
     "empty": {
-      "title": "Chưa có Loại thẻ nào",
+      "title": "Chưa có Cấu trúc thẻ nào",
       "description": "Nhập tên ở biểu mẫu trên để tạo NoteType mới."
     },
     "card": {
@@ -37,7 +94,7 @@
       "title": "Xác nhận xóa NoteType",
       "description": "Xóa NoteType “{{name}}”? Hành động này có thể không hoàn tác được.",
       "purge_label": "Xóa sạch hoàn toàn dữ liệu (Purge)",
-      "purge_warning": "Cảnh báo: Chức năng này chỉ dùng để xóa các bộ note type lỗi trong quá trình phát triển. Nó sẽ xóa sạch toàn bộ note type cùng với các trường (fields), templates, note/card, tiến trình học và các thay đổi liên quan khỏi hệ thống và không thể hoàn tác.",
+      "purge_warning": "Cảnh báo: Chức năng này chỉ dùng để xóa các bộ cấu trúc thẻ lỗi trong quá trình phát triển. Nó sẽ xóa sạch toàn bộ cấu trúc thẻ cùng với các trường (fields), giao diện thẻ (templates), note/card, tiến trình học và các thay đổi liên quan khỏi hệ thống và không thể hoàn tác.",
       "cancel": "Hủy",
       "delete_btn": "Xóa NoteType",
       "purge_btn": "Xóa sạch dữ liệu"
@@ -61,6 +118,9 @@
       "title": "Danh sách trường",
       "add_btn": "Thêm",
       "reorder_hint": "Kéo thả hoặc bấm ▲/▼ để đổi vị trí",
+      "order_changed": "Thứ tự trường đã đổi",
+      "save_order": "Lưu thứ tự",
+      "discard_order": "Hủy",
       "move_up": "Di chuyển lên",
       "move_down": "Di chuyển xuống",
       "empty": "Chưa có trường nào. Bấm Nút Thêm để tạo trường mới.",
@@ -93,6 +153,7 @@
       "update_error": "Không thể cập nhật trường",
       "delete_success": "Đã xóa trường.",
       "delete_error": "Không thể xóa trường",
+      "reorder_success": "Đã lưu thứ tự trường.",
       "reorder_error": "Không thể sắp xếp lại vị trí",
       "name_required": "Tên trường là bắt buộc",
       "name_empty": "Tên trường không được trống"
@@ -131,8 +192,8 @@
     "note_count_loading": "… note",
     "rename_btn": "Đổi tên",
     "delete_btn": "Xóa",
-    "cannot_delete_default": "Không thể xóa template mặc định.",
-    "cannot_delete_single": "Loại thẻ cần ít nhất một template.",
+    "cannot_delete_default": "Không thể xóa giao diện thẻ mặc định.",
+    "cannot_delete_single": "Cấu trúc thẻ cần ít nhất một giao diện thẻ.",
     "rename_dialog": {
       "title": "Đổi tên template",
       "label": "Tên template",
@@ -155,15 +216,6 @@
       "delete_error": "Không thể xóa template"
     }
   },
-  "live_preview": {
-    "title": "Xem Trước Trực Tiếp (Live Preview)",
-    "subtitle": "(Hiển thị mô phỏng dữ liệu thẻ mẫu)",
-    "updating": "Đang cập nhật…",
-    "front_side": "Mặt trước",
-    "back_side": "Mặt sau",
-    "preparing": "Đang chuẩn bị bản xem trước…",
-    "error": "Lỗi tải xem trước template."
-  },
   "guide": {
     "header": {
       "title": "Hướng Dẫn Tạo Note Type & Prompt AI",
@@ -184,7 +236,7 @@
       "copy_master": "Sao chép Master Prompt",
       "copied_master": "Đã sao chép Prompt",
       "quick_tip_title": "Mẹo nhanh:",
-      "quick_tip_text": "Sau khi AI phản hồi, bạn sẽ nhận được: (1) Danh sách trường để nhập vào trang Quản lý Trường, và (2) Mã Front/Back/CSS để dán vào trang Template.",
+      "quick_tip_text": "Yêu cầu AI cung cấp field cho Note Type, bộ input và mã Mặt trước/Mặt sau/CSS cho Template, cùng bảng mapping field → input. Hai bộ dữ liệu được thiết lập riêng.",
       "ex1_badge": "Ví Dụ 1: Từ Vựng JLPT",
       "ex1_title": "Thẻ từ vựng có Kanji, Furigana, Hán Việt & Audio câu ví dụ",
       "ex2_badge": "Ví Dụ 2: Ngữ Pháp Nâng Cao",
@@ -219,26 +271,26 @@
       "step1_title": "Tạo Loại Thẻ (Note Type)",
       "step1_desc": "Truy cập Quản lý NoteTypes, nhập tên loại thẻ mới (ví dụ: Từ vựng N3) và bấm Tạo NoteType.",
       "step2_title": "Tạo Các Trường Dữ Liệu",
-      "step2_desc": "Bấm vào Quản lý Trường, thêm các trường theo bảng do AI cung cấp (chọn đúng tên trường và loại trường).",
+      "step2_desc": "Mở Note Type → Trường dữ liệu. Chọn Thêm trường, khai báo tên và kiểu, thử cách nhập liệu rồi lưu. Field thuộc Note Type, không phải input của Template.",
       "step3_title": "Dán Mã Front / Back / CSS",
-      "step3_desc": "Vào trang Chi tiết Template, dán lần lượt Front HTML, Back HTML, Shared CSS rồi bấm Lưu Template.",
-      "step4_title": "Xem Trước Trực Tiếp (Live Preview)",
-      "step4_desc": "Khung bên phải sẽ tự động hiển thị mẫu thẻ mô phỏng. Bấm lật Mặt trước / Mặt sau và kiểm tra nút loa 🔊 để nghiệm thu."
+      "step3_desc": "Mở Thư viện giao diện thẻ. Bấm Inputs để khai báo bộ input trong hộp thoại và áp dụng vào bản nháp. Dán mã vào Mặt trước, Mặt sau, CSS; xem trước rồi Lưu thay đổi.",
+      "step4_title": "Gắn Template Và Mapping",
+      "step4_desc": "Tại Note Type → Templates, chọn Gắn template và ghép field cùng kiểu với input. Bấm từng template để sửa mapping và xem trước riêng; Sửa thiết kế mở Template Detail."
     },
     "rules_tab": {
       "rule1_title": "⚠️ 1. Đóng/Mở thẻ HTML cân xứng trong Mustache",
       "rule1_desc": "Khi mở thẻ <div> bên trong điều kiện {{#field}}, bắt buộc phải đóng </div> trước khi đóng {{/field}}.",
-      "rule2_title": "💡 2. Quy tắc đặt tên trường dữ liệu",
-      "rule2_desc": "Nên dùng chữ thường không dấu, nối bằng dấu gạch dưới (VD: word, audio_word, example_vi) để đảm bảo tính tương thích cao nhất.",
+      "rule2_title": "💡 2. Quy tắc đặt key input",
+      "rule2_desc": "Key input dùng trong HTML nên là chữ không dấu, nối bằng dấu gạch dưới (VD: word, audio_word, example_vi). Nhãn input và tên field có thể dùng tiếng Việt; mapping nối hai bộ dữ liệu.",
       "rule3_title": "✨ 3. Tránh style height: 100vh",
       "rule3_desc": "Ở Mặt trước, dùng Flexbox căn giữa: style=\"min-height: 200px; display: flex; align-items: center; justify-content: center;\" giúp giao diện co giãn mượt trên cả điện thoại và máy tính."
     }
   },
   "errors": {
-    "shared_schema_versioning": "Template này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.",
+    "shared_schema_versioning": "Giao diện thẻ này đang dùng trong bộ thẻ đã chia sẻ nên chưa thể thêm, xóa hoặc đặt lại. Bạn vẫn có thể sửa nội dung HTML/CSS.",
     "compile_error": "Template có lỗi cú pháp: {{message}}",
-    "cannot_delete_default": "Không thể xóa template mặc định.",
-    "requires_at_least_one": "Loại thẻ cần ít nhất một template.",
+    "cannot_delete_default": "Không thể xóa giao diện thẻ mặc định.",
+    "requires_at_least_one": "Cấu trúc thẻ cần ít nhất một giao diện thẻ.",
     "generic": "Đã có lỗi xảy ra. Vui lòng thử lại."
   },
   "tour": {

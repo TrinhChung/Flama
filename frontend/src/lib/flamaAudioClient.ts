@@ -31,25 +31,26 @@ export class FlamaAudioClient {
     return this.token
   }
 
-  public async getHealth(): Promise<LocalAudioServiceStatus> {
-    const res = await fetch(`${this.baseUrl}/health`, { credentials: 'omit' })
+  public async getHealth(signal?: AbortSignal): Promise<LocalAudioServiceStatus> {
+    const res = await fetch(`${this.baseUrl}/health`, { credentials: 'omit', signal })
     if (!res.ok) throw new Error(`Flama Audio Service returned HTTP ${res.status}`)
     return res.json()
   }
 
-  public async startPairing(origin: string = window.location.origin): Promise<PairingChallenge> {
+  public async startPairing(origin: string = window.location.origin, signal?: AbortSignal): Promise<PairingChallenge> {
     const res = await fetch(`${this.baseUrl}/v1/pairing/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ origin }),
       credentials: 'omit',
+      signal,
     })
     if (!res.ok) throw new Error(`Start pairing failed with HTTP ${res.status}`)
     return res.json()
   }
 
-  public async getPairingStatus(pairingId: string): Promise<PairingChallenge> {
-    const res = await fetch(`${this.baseUrl}/v1/pairing/${pairingId}`, { credentials: 'omit' })
+  public async getPairingStatus(pairingId: string, signal?: AbortSignal): Promise<PairingChallenge> {
+    const res = await fetch(`${this.baseUrl}/v1/pairing/${pairingId}`, { credentials: 'omit', signal })
     if (!res.ok) throw new Error(`Get pairing status failed with HTTP ${res.status}`)
     return res.json()
   }
@@ -63,30 +64,33 @@ export class FlamaAudioClient {
     return res.json()
   }
 
-  public async getVoices(engineId: string = 'voicevox'): Promise<VoiceDescriptor[]> {
+  public async getVoices(engineId: string = 'voicevox', signal?: AbortSignal): Promise<VoiceDescriptor[]> {
     const res = await fetch(`${this.baseUrl}/v1/voices?engine_id=${encodeURIComponent(engineId)}`, {
       headers: this.getAuthHeaders(),
       credentials: 'omit',
+      signal,
     })
     if (!res.ok) throw new Error(`Get voices failed with HTTP ${res.status}`)
     return res.json()
   }
 
-  public async installEngine(engineId: string = 'voicevox'): Promise<{ status: string; message: string }> {
+  public async installEngine(engineId: string = 'voicevox', signal?: AbortSignal): Promise<{ status: string; message: string }> {
     const res = await fetch(`${this.baseUrl}/v1/engines/${encodeURIComponent(engineId)}/install`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       credentials: 'omit',
+      signal,
     })
     if (!res.ok) throw new Error(`Install engine failed with HTTP ${res.status}`)
     return res.json()
   }
 
-  public async launchEngine(engineId: string = 'voicevox'): Promise<{ status: string; message: string }> {
+  public async launchEngine(engineId: string = 'voicevox', signal?: AbortSignal): Promise<{ status: string; message: string }> {
     const res = await fetch(`${this.baseUrl}/v1/engines/${encodeURIComponent(engineId)}/launch`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       credentials: 'omit',
+      signal,
     })
     if (!res.ok) throw new Error(`Launch engine failed with HTTP ${res.status}`)
     return res.json()

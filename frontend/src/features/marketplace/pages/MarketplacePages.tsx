@@ -7,7 +7,7 @@ import {
   RotateCcw,
   X,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { DeckCard } from '../components/DeckCard'
@@ -132,6 +132,16 @@ type MarketplaceItem = {
 }
 
 type SortView = 'recommended' | 'newest' | 'popular'
+
+type MarketplaceList = {
+  items: MarketplaceItem[]
+  pagination?: { page: number; page_size: number; total: number; has_more: boolean }
+  curated_sections?: {
+    major_sections: { category: string; total: number; item_ids: string[] }[]
+    other_item_ids: string[]
+    other_total: number
+  } | null
+}
 
 const DECK_MAJOR_CATEGORIES = [
   'Tiếng Nhật',
@@ -275,7 +285,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const marketQuery = useQuery({
+  const marketPages = useInfiniteQuery({
     queryKey: [
       'marketplace',
       mode,
@@ -288,8 +298,18 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       pricingFilter,
       sort,
     ],
-    queryFn: () =>
-      appApi.get<{ items: MarketplaceItem[] }>(endpoint, {
+    initialPageParam: 1,
+    getNextPageParam: (lastPage: MarketplaceList) => lastPage.pagination?.has_more
+      ? lastPage.pagination.page + 1
+      : undefined,
+    queryFn: ({ pageParam }): Promise<MarketplaceList> =>
+      appApi.get<MarketplaceList>(endpoint, {
+        compact: 1,
+        page: pageParam,
+        page_size: 24,
+        curated: mode === 'decks' && !debouncedQuery && !category &&
+          !selectedDomain && !selectedSubject && !selectedFrameworkLevel &&
+          !selectedDifficulty && pricingFilter === 'all' ? 1 : undefined,
         q: debouncedQuery,
         category: category || undefined,
         domain: selectedDomain || undefined,
@@ -300,6 +320,32 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
         sort,
       }),
   })
+  const marketData = useMemo(() => {
+    const pages = marketPages.data?.pages
+    if (!pages?.length) return undefined
+    return {
+      items: pages.flatMap((page) => page.items),
+      total: pages[0].pagination?.total ?? pages.reduce((total, page) => total + page.items.length, 0),
+      curated: pages[0].curated_sections
+        ? {
+            majorSections: pages.flatMap((page) => {
+              const byId = new Map(page.items.map((item) => [item.id, item]))
+              return (page.curated_sections?.major_sections ?? []).map((section) => ({
+                category: section.category,
+                total: section.total,
+                items: section.item_ids.flatMap((id) => byId.has(id) ? [byId.get(id)!] : []),
+              }))
+            }),
+            otherItems: pages.flatMap((page) => {
+              const ids = new Set(page.curated_sections?.other_item_ids ?? [])
+              return page.items.filter((item) => ids.has(item.id))
+            }),
+            otherTotal: pages[0].curated_sections.other_total,
+          }
+        : null,
+    }
+  }, [marketPages.data])
+  const marketQuery = { ...marketPages, data: marketData }
 
   // Subjects available under currently selected domain
   const availableSubjects = useMemo(() => {
@@ -335,7 +381,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   }, [selectedDomain, selectedSubject, selectedFrameworkLevel, selectedDifficulty, pricingFilter])
 
   const isFiltered = Boolean(queryText || category || activeFilterCount > 0)
-  const totalCount = marketQuery.data?.items.length ?? 0
+  const totalCount = marketQuery.data?.total ?? 0
 
   const handleResetFilters = () => {
     setQueryText('')
@@ -357,6 +403,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     if (isFiltered || mode !== 'decks' || !marketQuery.data?.items) {
       return null
     }
+    if (marketQuery.data.curated) return marketQuery.data.curated
     const items = marketQuery.data.items
     if (items.length < 5) {
       return null
@@ -389,7 +436,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       majorSections,
       otherItems,
     }
-  }, [isFiltered, mode, marketQuery.data?.items])
+  }, [isFiltered, mode, marketQuery.data])
 
   // Auto-launch marketplace spotlight tour for first-time visitors
   useEffect(() => {
@@ -405,7 +452,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   }, [marketQuery.isSuccess])
 
   return (
-    <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+    <Page size="wide" className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       <AmbientBackground intensity="subtle" />
 
       {/* Flama Header with Mode Switcher & Publish CTA */}
@@ -413,12 +460,12 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
         title={
           mode === 'decks'
             ? t('header.title_decks', { defaultValue: 'Kho Bộ Thẻ Cộng Đồng' })
-            : t('header.title_notetypes', { defaultValue: 'Kho Mẫu Thẻ (Note Types)' })
+            : t('header.title_notetypes', { defaultValue: 'Chợ Cấu trúc thẻ' })
         }
         description={
           mode === 'decks'
             ? t('header.desc_decks', { defaultValue: 'Khám phá, chia sẻ và tải về các bộ flashcard tiếng Nhật chất lượng từ cộng đồng.' })
-            : t('header.desc_notetypes', { defaultValue: 'Các mẫu hiển thị Flashcard chuẩn đẹp, tối ưu hóa giao diện học Kanji, Từ vựng và Ngữ pháp.' })
+            : t('header.desc_notetypes', { defaultValue: 'Khám phá các cấu trúc thẻ Flashcard tối ưu cho học tập, hỗ trợ trường tùy biến và nhiều giao diện thẻ.' })
         }
         actions={
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
@@ -453,7 +500,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               >
                 <Link to="/marketplace/note-types">
                   <Layers className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
-                  {t('header.tab_notetypes', { defaultValue: 'Loại Thẻ' })}
+                  {t('header.tab_notetypes', { defaultValue: 'Cấu trúc thẻ' })}
                 </Link>
               </Button>
             </div>
@@ -466,8 +513,8 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             >
               <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
                 {mode === 'decks'
-                  ? t('card.installed', { defaultValue: 'Deck đã cài' })
-                  : t('header.tab_notetypes', { defaultValue: 'Loại thẻ của tôi' })}
+                  ? t('card.installed', { defaultValue: 'Bộ thẻ đã cài' })
+                  : t('header.my_notetypes', { defaultValue: 'Cấu trúc thẻ của tôi' })}
               </Link>
             </Button>
 
@@ -488,7 +535,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                 <Plus className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
                 {mode === 'decks'
                   ? t('header.btn_publish_deck', { defaultValue: 'Đăng tải bộ thẻ' })
-                  : t('header.btn_create_notetype', { defaultValue: 'Tạo loại thẻ' })}
+                  : t('header.btn_create_notetype', { defaultValue: 'Tạo Cấu trúc thẻ' })}
               </Link>
             </Button>
           </div>
@@ -497,6 +544,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
 
       {/* Streamlined Search & Filter Bar */}
       <MarketplaceFilterBar
+        mode={mode}
         queryText={queryText}
         setQueryText={setQueryText}
         searchInputRef={searchInputRef}
@@ -536,7 +584,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             <strong className="text-foreground font-semibold tabular-nums">
               {totalCount}
             </strong>{' '}
-            học liệu {isFiltered ? 'phù hợp với bộ lọc' : ''}
+            {mode === 'note-types' ? 'cấu trúc thẻ' : 'bộ thẻ'} {isFiltered ? 'phù hợp với bộ lọc' : ''}
           </span>
         </div>
       ) : null}
@@ -565,12 +613,16 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             title={
               isFiltered
                 ? t('search_filter.empty_search.title', { defaultValue: 'Không tìm thấy học liệu phù hợp' })
-                : 'Kho học liệu cộng đồng hiện đang trống'
+                : mode === 'note-types'
+                  ? 'Chợ Cấu trúc thẻ hiện đang trống'
+                  : 'Kho bộ thẻ cộng đồng hiện đang trống'
             }
             description={
               isFiltered
                 ? t('search_filter.empty_search.desc', { defaultValue: 'Thử thay đổi từ khóa tìm kiếm, chọn chủ đề khác hoặc sắp xếp lại danh sách.' })
-                : 'Hãy là người đầu tiên đóng góp và chia sẻ bộ thẻ tiếng Nhật cho cộng đồng Flama!'
+                : mode === 'note-types'
+                  ? 'Hãy là người đầu tiên chia sẻ cấu trúc thẻ Flashcard cho cộng đồng Flama!'
+                  : 'Hãy là người đầu tiên đóng góp và chia sẻ bộ thẻ tiếng Nhật cho cộng đồng Flama!'
             }
           />
           <div className="flex justify-center mt-4 gap-2">
@@ -602,7 +654,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                   <Plus className="mr-1.5 size-3.5" />
                   {mode === 'decks'
                     ? t('header.btn_publish_deck', { defaultValue: 'Đăng tải bộ thẻ ngay' })
-                    : t('header.btn_create_notetype', { defaultValue: 'Tạo loại thẻ ngay' })}
+                    : t('header.btn_create_notetype', { defaultValue: 'Tạo Cấu trúc thẻ ngay' })}
                 </Link>
               </Button>
             )}
@@ -644,6 +696,22 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             ))}
           </div>
         )
+      ) : null}
+
+      {marketPages.hasNextPage ? (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={marketPages.isFetchingNextPage}
+            onClick={() => marketPages.fetchNextPage()}
+            className="rounded-lg text-xs font-semibold"
+          >
+            {marketPages.isFetchingNextPage
+              ? t('common:pagination_loading', { defaultValue: 'Đang tải...' })
+              : t('common:pagination_load_more', { defaultValue: 'Xem thêm' })}
+          </Button>
+        </div>
       ) : null}
 
       {/* Interactive Spotlight Tour for Marketplace */}

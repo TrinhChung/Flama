@@ -964,6 +964,14 @@ export function useStudySession(deckId: string | null) {
         const active = sessionRef.current
         if (!active || finalizedSessionRef.current === active.snapshot.session_id) return
         if (usesNoteBatchTransport(active)) {
+          if (active.events.length === 0 && !active.in_flight_batches?.length) {
+            finalizedSessionRef.current = active.snapshot.session_id
+            await removeStudySessionIfMatches(
+              active.scope_key,
+              active.snapshot.session_id,
+            )
+            return
+          }
           await sendNoteBatchOnExit(active, {
             checkOwner: () => {
               if (controller.signal.aborted || !ownedLeaseControllersRef.current.has(controller)) {
@@ -978,7 +986,14 @@ export function useStudySession(deckId: string | null) {
           })
           return
         }
-        if (active.events.length === 0) return
+        if (active.events.length === 0) {
+          finalizedSessionRef.current = active.snapshot.session_id
+          await removeStudySessionIfMatches(
+            active.scope_key,
+            active.snapshot.session_id,
+          )
+          return
+        }
         const prepared = prepareCommit(active, {
           reason: active.status === 'pending_commit'
             ? active.commit_reason ?? undefined
@@ -1297,6 +1312,17 @@ export function useStudySession(deckId: string | null) {
     waitForMutation,
   ])
 
+  const discardSession = useCallback(async () => {
+    const active = sessionRef.current
+    if (!active) return
+    finalizedSessionRef.current = active.snapshot.session_id
+    await removeStudySessionIfMatches(
+      active.scope_key,
+      active.snapshot.session_id,
+    )
+    activateSession(null)
+  }, [activateSession])
+
   // Saves the field map of the template being studied, then reopens the lease
   // with it; reloadSession commits any pending answers first and reports its
   // own failures through `error`, so callers can close their dialog at once.
@@ -1441,5 +1467,6 @@ export function useStudySession(deckId: string | null) {
     startComposition,
     applyTemplateBindings,
     reloadSession,
+    discardSession,
   }
 }

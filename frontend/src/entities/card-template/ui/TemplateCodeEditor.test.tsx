@@ -20,7 +20,13 @@ describe('TemplateCodeEditor', () => {
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
+    document.body.innerHTML = ''
   })
+
+  async function chooseInput(name: string) {
+    await act(async () => [...container.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Chèn input')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })))
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.includes(`{{${name}}}`))!.click())
+  }
 
   const baseProps = {
     fields: [
@@ -42,7 +48,7 @@ describe('TemplateCodeEditor', () => {
       root.render(<TemplateCodeEditor {...baseProps} />)
     })
     const heading = container.querySelector('h3')
-    expect(heading?.textContent).toBe('Trình Soạn Thảo Template')
+    expect(heading?.textContent).toBe('Thiết kế thẻ')
 
     await act(async () => {
       root.render(<TemplateCodeEditor {...baseProps} title="Tiêu Đề Tùy Chỉnh" />)
@@ -62,7 +68,7 @@ describe('TemplateCodeEditor', () => {
     })
     const actionEl = container.querySelector('[data-testid="custom-action"]')
     expect(actionEl).not.toBeNull()
-    expect(actionEl?.closest('.overflow-x-auto')).not.toBeNull()
+    expect(actionEl?.parentElement?.className).toContain('justify-between')
 
     const footerEl = container.querySelector('[data-testid="custom-footer"]')
     expect(footerEl).not.toBeNull()
@@ -116,14 +122,8 @@ function setNativeTextareaValue(element: HTMLTextAreaElement, value: string) {
     textarea.selectionStart = 1
     textarea.selectionEnd = 1
 
-    const kanjiBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('{{Kanji}}'),
-    )
-    expect(kanjiBtn).toBeDefined()
-
-    await act(async () => {
-      kanjiBtn?.click()
-    })
+    expect(container.textContent).not.toContain('{{Kanji}}')
+    await chooseInput('Kanji')
     expect(onFrontChange).toHaveBeenCalledWith('a{{Kanji}}b')
   })
 
@@ -143,18 +143,11 @@ function setNativeTextareaValue(element: HTMLTextAreaElement, value: string) {
     textarea.selectionStart = 2
     textarea.selectionEnd = 2
 
-    const meaningBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('{{Meaning}}'),
-    )
-    expect(meaningBtn).toBeDefined()
-
-    await act(async () => {
-      meaningBtn?.click()
-    })
+    await chooseInput('Meaning')
     expect(onBackChange).toHaveBeenCalledWith('xy{{Meaning}}z')
   })
 
-  it('chèn ở tab css nối chuỗi comment vào sharedCss', async () => {
+  it('disables input insertion in CSS and leaves its contents unchanged', async () => {
     const onCssChange = vi.fn()
     await act(async () => {
       root.render(
@@ -166,22 +159,18 @@ function setNativeTextareaValue(element: HTMLTextAreaElement, value: string) {
         />,
       )
     })
-    const kanjiBtn = Array.from(container.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('{{Kanji}}'),
-    )
-    expect(kanjiBtn).toBeDefined()
-
-    await act(async () => {
-      kanjiBtn?.click()
-    })
-    expect(onCssChange).toHaveBeenCalledWith('.a{}/* {{Kanji}} */')
+    const insert = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Chèn input')!
+    expect(insert.disabled).toBe(true)
+    await act(async () => insert.click())
+    expect(onCssChange).not.toHaveBeenCalled()
+    expect(container.querySelector('textarea')?.value).toBe('.a{}')
   })
 
   it('không có field hiện "Chưa có trường nào"', async () => {
     await act(async () => {
       root.render(<TemplateCodeEditor {...baseProps} fields={[]} />)
     })
-    expect(container.textContent).toContain('Chưa có trường nào')
+    expect(container.textContent).toContain('Chưa khai báo input.')
   })
 
   it('khi readOnly=true, textarea có thuộc tính readonly và không có nút placeholder', async () => {

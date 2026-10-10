@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { BookOpen, DownloadCloud, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -10,15 +11,17 @@ export function PublishedDecksTab({
   decks: PublishedDeck[]
   authorUsername?: string
 }) {
+  const { t } = useTranslation('profile')
+
   if (!decks || decks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-8 sm:p-12 text-center">
         <BookOpen className="size-8 sm:size-10 text-muted-foreground/40 mb-3" />
         <p className="text-sm font-semibold text-foreground">
-          Chưa có học liệu nào được xuất bản
+          {t('published_decks.empty_title')}
         </p>
         <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-          Tác giả chưa xuất bản bộ thẻ flashcard nào lên Marketplace cộng đồng.
+          {t('published_decks.empty_description')}
         </p>
       </div>
     )
@@ -35,7 +38,7 @@ export function PublishedDecksTab({
             <div className="space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <Badge variant="secondary" className="text-[11px] font-medium">
-                  {deck.primary_category || 'Tiếng Nhật'}
+                  {deck.primary_category || t('published_decks.default_category')}
                 </Badge>
                 <span className="text-xs font-bold text-primary">
                   {deck.price_display}
@@ -49,7 +52,7 @@ export function PublishedDecksTab({
               </h3>
 
               <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                {deck.description || 'Bộ thẻ flashcard học từ vựng và kiến trúc kiến thức.'}
+                {deck.description || t('published_decks.default_description')}
               </p>
             </div>
 
@@ -57,7 +60,7 @@ export function PublishedDecksTab({
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center gap-1 font-semibold text-foreground">
                   <Star className="size-3.5 fill-amber-400 text-amber-500" />
-                  {deck.rating_avg > 0 ? deck.rating_avg.toFixed(1) : 'Mới'}
+                  {deck.rating_avg > 0 ? deck.rating_avg.toFixed(1) : t('published_decks.rating_new')}
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <DownloadCloud className="size-3.5" />
@@ -69,7 +72,7 @@ export function PublishedDecksTab({
                 to={`/marketplace/decks/${deck.id}`}
                 className="text-xs font-semibold text-primary hover:underline"
               >
-                Chi tiết →
+                {t('published_decks.view_details')}
               </Link>
             </div>
           </CardContent>

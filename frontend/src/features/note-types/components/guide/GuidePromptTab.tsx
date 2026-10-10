@@ -5,8 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   MASTER_PROMPT,
+  MASTER_PROMPT_EN,
   EXAMPLE_VOCAB_PROMPT,
+  EXAMPLE_VOCAB_PROMPT_EN,
   EXAMPLE_GRAMMAR_PROMPT,
+  EXAMPLE_GRAMMAR_PROMPT_EN,
 } from './guidePrompts'
 
 interface GuidePromptTabProps {
@@ -22,7 +25,11 @@ export function GuidePromptTab({
   copiedVocab,
   copiedGrammar,
 }: GuidePromptTabProps) {
-  const { t } = useTranslation('note_types')
+  const { t, i18n } = useTranslation('note_types')
+  const english = i18n.language.startsWith('en')
+  const masterPrompt = english ? MASTER_PROMPT_EN : MASTER_PROMPT
+  const vocabPrompt = english ? EXAMPLE_VOCAB_PROMPT_EN : EXAMPLE_VOCAB_PROMPT
+  const grammarPrompt = english ? EXAMPLE_GRAMMAR_PROMPT_EN : EXAMPLE_GRAMMAR_PROMPT
 
   return (
     <div className="space-y-6">
@@ -38,7 +45,7 @@ export function GuidePromptTab({
               </CardDescription>
             </div>
             <Button
-              onClick={() => onCopy(MASTER_PROMPT, 'master')}
+              onClick={() => onCopy(masterPrompt, 'master')}
               className="h-9 px-4 text-xs font-bold rounded-xl shadow-xs shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {copiedMaster ? <Check className="size-3.5 mr-1.5 text-emerald-300" /> : <Copy className="size-3.5 mr-1.5" />}
@@ -49,7 +56,7 @@ export function GuidePromptTab({
         <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
           <div className="relative">
             <pre className="p-4 rounded-xl bg-muted/60 border border-border/80 font-mono text-xs leading-relaxed text-foreground select-all whitespace-pre-wrap max-h-96 overflow-y-auto">
-              {MASTER_PROMPT}
+              {masterPrompt}
             </pre>
           </div>
 
@@ -74,7 +81,7 @@ export function GuidePromptTab({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onCopy(EXAMPLE_VOCAB_PROMPT, 'vocab')}
+                onClick={() => onCopy(vocabPrompt, 'vocab')}
                 className="h-7 px-2.5 text-xs font-medium rounded-lg hover:bg-muted"
               >
                 {copiedVocab ? <Check className="size-3 mr-1 text-emerald-500" /> : <Copy className="size-3 mr-1" />}
@@ -87,7 +94,7 @@ export function GuidePromptTab({
           </CardHeader>
           <CardContent className="p-4 sm:p-5 pt-0">
             <pre className="p-3 rounded-xl bg-muted/40 border border-border/60 font-mono text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
-              {EXAMPLE_VOCAB_PROMPT}
+              {vocabPrompt}
             </pre>
           </CardContent>
         </Card>
@@ -101,7 +108,7 @@ export function GuidePromptTab({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onCopy(EXAMPLE_GRAMMAR_PROMPT, 'grammar')}
+                onClick={() => onCopy(grammarPrompt, 'grammar')}
                 className="h-7 px-2.5 text-xs font-medium rounded-lg hover:bg-muted"
               >
                 {copiedGrammar ? <Check className="size-3 mr-1 text-emerald-500" /> : <Copy className="size-3 mr-1" />}
@@ -114,7 +121,7 @@ export function GuidePromptTab({
           </CardHeader>
           <CardContent className="p-4 sm:p-5 pt-0">
             <pre className="p-3 rounded-xl bg-muted/40 border border-border/60 font-mono text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap">
-              {EXAMPLE_GRAMMAR_PROMPT}
+              {grammarPrompt}
             </pre>
           </CardContent>
         </Card>

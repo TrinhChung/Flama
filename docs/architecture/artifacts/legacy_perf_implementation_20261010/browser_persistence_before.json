@@ -1,0 +1,11 @@
+{
+  "browser": "HeadlessChrome/154.0.0.0, Windows 10 x64",
+  "profile": "C:/Users/chung/.codex/chrome-profiles/flama-legacy-perf-20261010",
+  "source_commit": "6d03826",
+  "measurement": "Synthetic NOTE/v4 initial sessions, 1KiB Body per note, no answer events. Real save and IndexedDB completion. 3 warmups, 7 checkpoints. No production latency claim.",
+  "cases": [
+    {"cards": 100, "first_save_ms": 51.8, "checkpoint_median_browser_ms": 2.7, "samples_ms": [2.7, 3, 2.6, 2.3, 2.4, 2.7, 3.6], "session_json_bytes": 231181, "durable_restore_parity": true},
+    {"cards": 1000, "first_save_ms": 39.9, "checkpoint_median_browser_ms": 20.8, "samples_ms": [22, 22.8, 20.2, 20.5, 20.8, 18.9, 21.6], "session_json_bytes": 2296683, "durable_restore_parity": true},
+    {"cards": 5000, "first_save_ms": 114.5, "checkpoint_median_browser_ms": 84.6, "samples_ms": [84.6, 71.4, 74, 68.9, 97.3, 94.3, 107.3], "session_json_bytes": 11484683, "durable_restore_parity": true}
+  ]
+}

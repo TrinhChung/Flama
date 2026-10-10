@@ -560,7 +560,7 @@ export function AdminTaxonomyPage() {
   }
 
   return (
-    <Page className="space-y-6">
+    <Page size="wide" className="space-y-6">
       {/* Header */}
       <PageHeader
         title="Quản lý Phân loại & Metadata (Taxonomy)"

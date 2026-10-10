@@ -9,7 +9,10 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime, timedelta
+
+from sqlalchemy import event
 
 from app.connect import create_connect_app
 from app.services.anki_content_normalizer import backfill_anki_note_entities
@@ -23,6 +26,7 @@ from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
 from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
+from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
@@ -44,6 +48,27 @@ _MIN_PNG_BYTES = (
     b"\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3"
     b"\x00\x00\x00\x00IEND\xaeB`\x82"
 )
+
+
+@contextmanager
+def _connect_read_metrics():
+    metrics = {"selects": [], "loaded_notes": []}
+    engine = db.engine
+
+    def record_sql(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            metrics["selects"].append(statement)
+
+    def record_note(note, _context):
+        metrics["loaded_notes"].append(note.id)
+
+    event.listen(engine, "before_cursor_execute", record_sql)
+    event.listen(Note, "load", record_note)
+    try:
+        yield metrics
+    finally:
+        event.remove(engine, "before_cursor_execute", record_sql)
+        event.remove(Note, "load", record_note)
 
 
 class FlamaConnectTests(unittest.TestCase):
@@ -1285,6 +1310,225 @@ class FlamaConnectTests(unittest.TestCase):
             self.assertEqual(Note.query.filter_by(user_id=self.user_id, deck_id=self.inbox_id).count(), 1)
             self.assertEqual(Card.query.count(), 1)
 
+    def test_can_add_batch_reads_only_identity_once_and_preserves_normalization(self):
+        from app.services.connect.dispatcher import dispatch
+
+        with self.app.app_context():
+            db.session.add_all([
+                Note(
+                    user_id=self.user_id, deck_id=self.inbox_id,
+                    note_type_id=self.note_type_id,
+                    field_values={"Word": f"existing-{index}", "Meaning": "x" * 4096},
+                )
+                for index in range(1000)
+            ])
+            db.session.add(Note(
+                user_id=self.user_id, deck_id=self.inbox_id,
+                note_type_id=self.note_type_id,
+                field_values={"Word": "Ａ\u3000Ｂ\r\nC", "Meaning": "large body" * 1000},
+            ))
+            db.session.commit()
+            db.session.remove()
+            notes = [self._note(word="A B C"), self._note(word="a B C")]
+            notes.extend(self._note(word=f"existing-{index}") for index in range(24))
+            notes.extend(self._note(word=f"new-{index}") for index in range(24))
+            with _connect_read_metrics() as metrics:
+                result = dispatch(self.user_id, "canAddNotes", {"notes": notes})
+            self.assertEqual(result, [False, True] + [False] * 24 + [True] * 24)
+            note_reads = [sql for sql in metrics["selects"] if "FROM notes" in sql]
+            self.assertEqual(len(note_reads), 1, metrics["selects"])
+            self.assertIn("JSON_EXTRACT", note_reads[0])
+            self.assertNotIn("notes.tags", note_reads[0])
+            self.assertEqual(metrics["loaded_notes"], [])
+            self.assertLessEqual(len(metrics["selects"]), 10, metrics["selects"])
+
+            # A fresh action must observe a write made since the previous
+            # batch. There is deliberately no process/global identity cache.
+            db.session.add(Note(
+                user_id=self.user_id, deck_id=self.inbox_id,
+                note_type_id=self.note_type_id, field_values={"Word": "new-0"},
+            ))
+            db.session.commit()
+            self.assertEqual(dispatch(self.user_id, "canAddNotes", {"notes": [self._note(word="new-0")]}), [False])
+
+    def test_check_batch_cache_preserves_raw_model_and_deck_validation(self):
+        model_too_long = self._note()
+        model_too_long["modelName"] += " " * 256
+        deck_too_long = self._note()
+        deck_too_long["deckName"] += " " * 2049
+        payload = self._call("canAddNotesWithErrorDetail", {
+            "notes": [self._note(), model_too_long, deck_too_long],
+        }).get_json()
+        self.assertTrue(payload[0]["canAdd"])
+        self.assertEqual(payload[1], {"canAdd": False, "error": "modelName is required"})
+        self.assertFalse(payload[2]["canAdd"])
+        self.assertTrue(payload[2]["error"].startswith("Thiếu deckName"))
+
+    def test_add_duplicate_reuses_projection_and_loads_only_matched_note(self):
+        from app.services.connect.actions import add_note
+
+        with self.app.app_context():
+            db.session.add_all([
+                Note(
+                    user_id=self.user_id, deck_id=self.inbox_id,
+                    note_type_id=self.note_type_id,
+                    field_values={"Word": f"word-{index}", "Meaning": "old"},
+                )
+                for index in range(100)
+            ])
+            db.session.commit()
+            matched_id = Note.query.filter(
+                Note.field_values["Word"].as_string() == "word-50",
+            ).one().id
+            db.session.remove()
+            payload = self._note(word="word-50")
+            payload["fields"]["Meaning"] = "updated"
+            with _connect_read_metrics() as metrics:
+                ref_id = add_note(self.user_id, payload)
+            self.assertIsInstance(ref_id, int)
+            identity_reads = [sql for sql in metrics["selects"] if "FROM notes" in sql and "JSON_EXTRACT" in sql]
+            self.assertEqual(len(identity_reads), 1)
+            self.assertEqual(set(metrics["loaded_notes"]), {matched_id})
+            self.assertEqual(db.session.get(Note, matched_id).field_values["Meaning"], "updated")
+            self.assertEqual(Note.query.count(), 100)
+
+    def test_duplicate_detection_checks_all_models_but_updates_only_target_model(self):
+        foreign_id = None
+        with self.app.app_context():
+            another_model = NoteType(user_id=self.user_id, name="Another model")
+            db.session.add(another_model)
+            db.session.flush()
+            foreign = Note(
+                user_id=self.user_id, deck_id=self.inbox_id,
+                note_type_id=another_model.id,
+                field_values={"Word": "shared-identity", "Meaning": "keep other model"},
+            )
+            db.session.add(foreign)
+            db.session.commit()
+            foreign_id = foreign.id
+        candidate = self._note(word="shared-identity")
+        self.assertFalse(self._call("canAddNotes", {"notes": [candidate]}).get_json()[0])
+        rejected = self._call("addNote", {"note": candidate}).get_json()
+        self.assertIn("duplicate in the target deck", rejected["error"])
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Note, foreign_id).field_values["Meaning"], "keep other model")
+            target = Note(
+                user_id=self.user_id, deck_id=self.inbox_id,
+                note_type_id=self.note_type_id,
+                field_values={"Word": "shared-identity", "Meaning": "replace me"},
+            )
+            db.session.add(target)
+            db.session.commit()
+            target_id = target.id
+        self.assertIsInstance(self._call("addNote", {"note": candidate}).get_json(), int)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Note, target_id).field_values["Meaning"], "cat")
+            self.assertEqual(db.session.get(Note, foreign_id).field_values["Meaning"], "keep other model")
+
+    def test_find_notes_projects_identity_and_keeps_model_field_matching(self):
+        from app.services.connect.actions import find_notes
+
+        with self.app.app_context():
+            db.session.add_all([
+                Note(
+                    user_id=self.user_id, deck_id=self.inbox_id,
+                    note_type_id=self.note_type_id,
+                    field_values={"Word": f"word-{index}", "Meaning": "x" * 4096},
+                )
+                for index in range(100)
+            ])
+            db.session.commit()
+            db.session.remove()
+            with _connect_read_metrics() as metrics:
+                result = find_notes(self.user_id, '"deck:Inbox" "wOrD:word-50"')
+            self.assertEqual(len(result), 1)
+            self.assertEqual(metrics["loaded_notes"], [])
+            self.assertEqual(find_notes(self.user_id, '"deck:Inbox" "Meaning:word-50"'), [])
+
+    def test_clone_checks_batch_pinned_release_and_overlay_without_source_live(self):
+        from app.services import deck_release_service
+        from app.services.connect.actions import find_notes
+        from app.services.connect.dispatcher import dispatch
+
+        with self.app.app_context():
+            source_type = NoteType(user_id=self.other_user_id, name="Pinned Source")
+            db.session.add(source_type)
+            db.session.flush()
+            source_field = FieldDef(
+                note_type_id=source_type.id, name="Word", field_type="text",
+                required=True, identity_role="primary",
+            )
+            source_template = Template(
+                note_type_id=source_type.id, name="Card 1", front_html="{{Word}}", back_html="{{Word}}",
+            )
+            source_deck = Deck(owner_user_id=self.other_user_id, note_type_id=source_type.id, name="Pinned Source")
+            local_deck = Deck(owner_user_id=self.user_id, note_type_id=self.note_type_id, name="Pinned Clone")
+            db.session.add_all([source_field, source_template, source_deck, local_deck])
+            db.session.flush()
+            source_notes = [Note(
+                user_id=self.other_user_id, note_type_id=source_type.id, deck_id=source_deck.id,
+                field_values={"Word": f"published-{index}"},
+            ) for index in range(600)]
+            db.session.add_all(source_notes)
+            item = DeckMarketplaceItem(
+                owner_user_id=self.other_user_id, source_deck_id=source_deck.id,
+                source_note_type_id=source_type.id, title="Pinned Source",
+            )
+            db.session.add(item)
+            db.session.flush()
+            release = deck_release_service.publish_release(
+                deck_item_id=item.id, user_id=self.other_user_id, version_label="1.0.0",
+                changelog=None, expected_current_release_id=None,
+                expected_working_revision=item.working_revision, idempotency_key="connect-perf-release",
+            ).release
+            # The applied release may contain notes created after the old
+            # install timestamp. Membership is authoritative in release mode.
+            install = DeckInstall(
+                deck_item_id=item.id, user_id=self.user_id, local_deck_id=local_deck.id,
+                clone_mode="logical_overlay", source_deck_id=source_deck.id,
+                source_note_type_id=source_type.id, source_owner_user_id=self.other_user_id,
+                base_snapshot_at=datetime.utcnow() - timedelta(days=1),
+                version_mode="release", applied_release_id=release.id,
+            )
+            db.session.add(install)
+            db.session.flush()
+            db.session.add(DeckCloneDeckMap(
+                deck_install_id=install.id, local_deck_id=local_deck.id, source_deck_id=source_deck.id,
+            ))
+            source_notes[0].field_values = {"Word": "owner-draft"}
+            db.session.add(DeckCloneNoteFieldOverride(
+                deck_install_id=install.id, source_note_id=source_notes[1].id,
+                source_field_def_id=source_field.id, field_name="Word", value="local-overlay",
+            ))
+            unpublished = Note(
+                user_id=self.other_user_id, note_type_id=source_type.id, deck_id=source_deck.id,
+                field_values={"Word": "not-in-release"},
+            )
+            db.session.add(unpublished)
+            db.session.flush()
+            db.session.add(DeckCloneNoteFieldOverride(
+                deck_install_id=install.id, source_note_id=unpublished.id,
+                source_field_def_id=source_field.id, field_name="Word", value="hidden-overlay",
+            ))
+            db.session.commit()
+            db.session.remove()
+            words = ["published-0", "owner-draft", "local-overlay", "published-1", "not-in-release", "hidden-overlay"]
+            words.extend(f"published-{index}" for index in range(2, 46))
+            with _connect_read_metrics() as metrics:
+                checks = dispatch(self.user_id, "canAddNotes", {
+                    "notes": [self._note("Pinned Clone", word) for word in words],
+                })
+            self.assertEqual(checks, [False, True, False, True, True, True] + [False] * 44)
+            self.assertEqual(metrics["loaded_notes"], [])
+            self.assertLessEqual(len(metrics["selects"]), 25, metrics["selects"])
+            source_reads = [sql for sql in metrics["selects"] if "FROM notes" in sql and "JSON_EXTRACT" not in sql]
+            self.assertEqual(len(source_reads), 1)
+            self.assertNotIn("notes.field_values", source_reads[0].split("FROM")[0])
+            self.assertEqual(len(find_notes(self.user_id, '"deck:Pinned Clone" "Word:local-overlay"')), 1)
+            self.assertEqual(find_notes(self.user_id, '"deck:Pinned Clone" "Word:owner-draft"'), [])
+            self.assertEqual(find_notes(self.user_id, '"deck:Pinned Clone" "Word:hidden-overlay"'), [])
+            self.assertEqual(Note.query.filter_by(user_id=self.user_id).count(), 0)
+
     def test_add_note_normalizes_anki_apostrophe_entities_only(self):
         note = self._note(word="entity-normalization")
         note["fields"]["Meaning"] = (
@@ -1568,6 +1812,16 @@ class FlamaConnectTests(unittest.TestCase):
                     source_deck_id=source_deck.id,
                 )
             )
+            # Legacy installs keep the timestamp visibility fence even
+            # though release installs now use their membership instead.
+            late_source = Note(
+                user_id=self.other_user_id, note_type_id=source_type.id,
+                deck_id=source_deck.id, field_values={"Word": "late-source"},
+                created_at=snapshot + timedelta(seconds=1),
+            )
+            db.session.add(late_source)
+            db.session.flush()
+            db.session.add(Card(note_id=late_source.id, template_id=source_template.id))
             db.session.commit()
             install_id = install.id
             local_deck_id = local_deck.id
@@ -1575,6 +1829,9 @@ class FlamaConnectTests(unittest.TestCase):
         duplicate_note = self._note("Installed Clone", "既存")
         duplicate = self._call("canAddNotesWithErrorDetail", {"notes": [duplicate_note]}).get_json()[0]
         self.assertFalse(duplicate["canAdd"])
+        late_check = self._call("canAddNotes", {"notes": [self._note("Installed Clone", "late-source")]}).get_json()
+        self.assertEqual(late_check, [True])
+        self.assertEqual(self._call("findNotes", {"query": '"deck:Installed Clone" "Word:late-source"'}).get_json(), [])
         added_id = self._call("addNote", {"note": self._note("Installed Clone", "追加")}).get_json()
         self.assertIsInstance(added_id, int)
         with self.app.app_context():

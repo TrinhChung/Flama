@@ -10,6 +10,7 @@ import {
   Globe,
   Layers,
   Loader2,
+  Palette,
   Share2,
   Star,
 } from 'lucide-react'
@@ -24,10 +25,11 @@ import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { NoteTypeLivePreview } from '@/features/note-types/components/NoteTypeLivePreview'
+import { CardPreviewPanel } from '@/entities/flashcard'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { SharedNoteTypeSidebar } from '../components/notetype-detail/SharedNoteTypeSidebar'
@@ -121,19 +123,22 @@ export function SharedNoteTypeDetailPage() {
 
   const noteType = noteTypeQuery.data
   const templates = noteType?.templates || []
+  const firstTemplateId = noteType?.templates?.[0]?.id
 
   useEffect(() => {
-    if (templates.length > 0 && !selectedTemplateId) {
-      setSelectedTemplateId(templates[0].id)
+    if (firstTemplateId && !selectedTemplateId) {
+      setSelectedTemplateId(firstTemplateId)
     }
-  }, [templates, selectedTemplateId])
+  }, [firstTemplateId, selectedTemplateId])
 
   // Template Preview Query
   const previewQuery = useQuery({
     queryKey: ['shared-note-type-preview', id, selectedTemplateId],
+    // The preview endpoint renders server-side and only accepts POST.
     queryFn: () =>
-      appApi.get<PreviewResponse>(
-        `/api/shared/note-types/${id}/templates/${selectedTemplateId}/preview`
+      appApi.mutate<PreviewResponse>(
+        `/api/shared/note-types/${id}/templates/${selectedTemplateId}/preview`,
+        'POST'
       ),
     enabled: Boolean(id && selectedTemplateId),
   })
@@ -226,7 +231,7 @@ export function SharedNoteTypeDetailPage() {
   if (noteTypeQuery.isPending) {
     return (
       <Page>
-        <PageLoading label={t('notetype_detail.loading', 'Đang tải thông tin loại thẻ…')} />
+        <PageLoading label={t('notetype_detail.loading', 'Đang tải thông tin cấu trúc thẻ…')} />
       </Page>
     )
   }
@@ -234,12 +239,12 @@ export function SharedNoteTypeDetailPage() {
   if (noteTypeQuery.isError || !noteType) {
     return (
       <Page>
-        <PageError error={noteTypeQuery.error || new Error(t('notetype_detail.not_found', 'Không tìm thấy loại thẻ'))} />
+        <PageError error={noteTypeQuery.error || new Error(t('notetype_detail.not_found', 'Không tìm thấy cấu trúc thẻ'))} />
       </Page>
     )
   }
 
-  const titleName = noteType.title || noteType.name || t('card.no_title', 'Loại thẻ không tên')
+  const titleName = noteType.title || noteType.name || t('card.no_title', 'Cấu trúc thẻ không tên')
   const authorName =
     noteType.author_profile?.username || noteType.author?.username || t('card.community_author', 'Cộng đồng Flama')
   const tagsList = noteType.display_tags || noteType.tags || []
@@ -252,7 +257,7 @@ export function SharedNoteTypeDetailPage() {
 
       <PageHeader
         title={titleName}
-        description={noteType.preview_text || noteType.description || t('notetype_detail.header_desc', 'Chi tiết mẫu note type trên marketplace Flama.')}
+        description={noteType.preview_text || noteType.description || t('notetype_detail.header_desc', 'Chi tiết cấu trúc thẻ trên marketplace Flama.')}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -441,7 +446,7 @@ export function SharedNoteTypeDetailPage() {
                 </div>
               ) : noteType.is_installed ? (
                 <Button className="w-full h-10 font-bold text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
-                  <CheckCircle className="mr-1.5 size-4" /> {t('notetype_detail.btn_installed', 'Đã cài đặt loại thẻ')}
+                  <CheckCircle className="mr-1.5 size-4" /> {t('notetype_detail.btn_installed', 'Đã cài đặt cấu trúc thẻ')}
                 </Button>
               ) : (
                 <Button
@@ -452,12 +457,12 @@ export function SharedNoteTypeDetailPage() {
                   {installMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 size-4 animate-spin" />
-                      {noteType.pricing_mode === 'paid' ? t('detail.creating_payment', 'Đang tạo thanh toán…') : t('detail.installing', 'Đang cài đặt loại thẻ…')}
+                      {noteType.pricing_mode === 'paid' ? t('detail.creating_payment', 'Đang tạo thanh toán…') : t('detail.installing', 'Đang cài đặt cấu trúc thẻ…')}
                     </>
                   ) : (
                     <>
                       <Download className="mr-2 size-4" />
-                      {noteType.pricing_mode === 'paid' ? t('notetype_detail.btn_buy', 'Mua Note Type') : t('notetype_detail.btn_install', 'Tải xuống & Cài đặt')}
+                      {noteType.pricing_mode === 'paid' ? t('notetype_detail.btn_buy', 'Mua Cấu trúc thẻ') : t('notetype_detail.btn_install', 'Tải xuống & Cài đặt')}
                     </>
                   )}
                 </Button>
@@ -466,7 +471,7 @@ export function SharedNoteTypeDetailPage() {
           </div>
 
           {/* Live Preview Section */}
-          <NoteTypeLivePreview
+          <CardPreviewPanel
             cardId={`note-type-preview-${id}`}
             side={previewSide}
             onSideChange={setPreviewSide}
@@ -480,8 +485,8 @@ export function SharedNoteTypeDetailPage() {
             scope="shared_note_type_preview"
             scopeId={id}
             isLoading={previewQuery.isPending}
-            title={t('notetype_detail.title_preview', 'Xem trước Template (Live Previewer)')}
-            subtitle={t('detail.preview.subtitle', 'Mô phỏng hiển thị mặt trước và mặt sau dựa trên mẫu loại thẻ')}
+            title={t('notetype_detail.title_preview', 'Xem trước Cấu trúc thẻ (Live Previewer)')}
+            subtitle={t('detail.preview.subtitle', 'Mô phỏng hiển thị mặt trước và mặt sau dựa trên giao diện thẻ')}
             containerHeightClass="h-[clamp(20rem,50vh,32rem)] min-h-[250px]"
           />
 
@@ -505,6 +510,83 @@ export function SharedNoteTypeDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Attached Card Templates Relationship Card */}
+          {templates.length > 0 ? (
+            <Card className="border-border shadow-xs rounded-2xl">
+              <CardHeader className="p-4 sm:p-5 pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Palette className="size-4 text-primary" />
+                    <CardTitle className="text-base font-bold">
+                      {t('notetype_detail.templates_title', { defaultValue: 'Giao diện thẻ đi kèm (Card Templates)' })}
+                    </CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="text-xs font-semibold">
+                    {templates.length} {t('notetype_detail.template_unit', { defaultValue: 'giao diện' })}
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs text-muted-foreground mt-1">
+                  {t('notetype_detail.templates_desc', {
+                    defaultValue: 'Mỗi cấu trúc thẻ có thể chứa một hoặc nhiều giao diện hiển thị (Card Templates) độc lập.',
+                  })}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-5 pt-0">
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  {templates.map((tmpl, idx) => (
+                    <div
+                      key={tmpl.id}
+                      className={`flex items-center justify-between p-3 sm:p-3.5 rounded-xl border transition-all ${
+                        tmpl.id === selectedTemplateId
+                          ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-2xs'
+                          : 'border-border/80 bg-muted/20 hover:bg-muted/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                            tmpl.id === selectedTemplateId
+                              ? 'bg-primary text-primary-foreground shadow-2xs'
+                              : 'bg-primary/10 text-primary'
+                          }`}
+                        >
+                          <Layers className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-foreground truncate">{tmpl.name}</p>
+                            <span className="text-[10px] text-muted-foreground font-mono">#{idx + 1}</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {tmpl.id === selectedTemplateId
+                              ? t('notetype_detail.template_active_preview', { defaultValue: 'Đang xem trước' })
+                              : t('notetype_detail.template_available', { defaultValue: 'Giao diện hiển thị' })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {tmpl.id !== selectedTemplateId ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2.5 text-[11px] font-semibold text-primary hover:text-primary hover:bg-primary/10 rounded-lg shrink-0 cursor-pointer"
+                            onClick={() => setSelectedTemplateId(tmpl.id)}
+                          >
+                            {t('notetype_detail.btn_select_preview', { defaultValue: 'Xem' })}
+                          </Button>
+                        ) : (
+                          <Badge variant="default" className="text-[10px] px-2 py-0.5 rounded-md font-semibold">
+                            {t('notetype_detail.badge_previewing', { defaultValue: 'Đang xem' })}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {/* Reviews Card */}
           <SharedNoteTypeReviews

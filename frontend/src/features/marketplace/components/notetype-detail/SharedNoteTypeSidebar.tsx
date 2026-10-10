@@ -119,7 +119,7 @@ export function SharedNoteTypeSidebar({
                     disabled={isPublishStatusPending}
                   >
                     <EyeOff className="size-3.5" />
-                    {t('notetype_detail.btn_revoke', 'Thu hồi loại thẻ')}
+                    {t('notetype_detail.btn_revoke', 'Thu hồi cấu trúc thẻ')}
                   </Button>
                 ) : (
                   <Button
@@ -130,7 +130,7 @@ export function SharedNoteTypeSidebar({
                     disabled={isPublishStatusPending}
                   >
                     <Globe className="size-3.5" />
-                    {t('notetype_detail.btn_republish', 'Xuất bản lại loại thẻ')}
+                    {t('notetype_detail.btn_republish', 'Xuất bản lại cấu trúc thẻ')}
                   </Button>
                 )}
 
@@ -150,7 +150,7 @@ export function SharedNoteTypeSidebar({
           ) : isInstalled ? (
             <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
               <CheckCircle className="mr-1.5 size-4" />
-              {t('notetype_detail.btn_installed', 'Đã cài đặt loại thẻ')}
+              {t('notetype_detail.btn_installed', 'Đã cài đặt cấu trúc thẻ')}
             </Button>
           ) : (
             <Button
@@ -164,13 +164,13 @@ export function SharedNoteTypeSidebar({
                   <Loader2 className="mr-2 size-5 animate-spin" />
                   {pricingMode === 'paid'
                     ? t('detail.creating_payment', 'Đang tạo thanh toán…')
-                    : t('detail.installing', 'Đang cài đặt loại thẻ…')}
+                    : t('detail.installing', 'Đang cài đặt cấu trúc thẻ…')}
                 </>
               ) : (
                 <>
                   <Download className="mr-2 size-5" />
                   {pricingMode === 'paid'
-                    ? t('notetype_detail.btn_buy', 'Mua Note Type')
+                    ? t('notetype_detail.btn_buy', 'Mua Cấu trúc thẻ')
                     : t('notetype_detail.btn_install', 'Tải xuống & Cài đặt')}
                 </>
               )}
@@ -192,7 +192,7 @@ export function SharedNoteTypeSidebar({
               />
               {isSaved
                 ? t('notetype_detail.btn_saved', 'Đã lưu')
-                : t('notetype_detail.btn_save', 'Lưu loại thẻ')}
+                : t('notetype_detail.btn_save', 'Lưu cấu trúc thẻ')}
             </Button>
           ) : null}
 

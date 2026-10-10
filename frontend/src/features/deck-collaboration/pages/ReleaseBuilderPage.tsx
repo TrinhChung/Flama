@@ -78,7 +78,7 @@ export function ReleaseBuilderPage() {
   const defaultNoReleaseText = t('release.badge_no_release', 'Chưa có release')
 
   return (
-    <Page className="max-w-[96rem]">
+    <Page size="wide">
       <PageHeader
         title={t('release.title', 'Phát hành phiên bản mới')}
         description={pageDescription}

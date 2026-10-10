@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { CardDisplay } from '@/entities/flashcard'
+import { CardDisplay, CardSideToggle } from '@/entities/flashcard'
 import { EmptyState } from '@/shared/components/PageState'
 import { useTranslation } from 'react-i18next'
 
@@ -113,25 +113,14 @@ export function DeckCardPreviewSection({
               </NativeSelect>
             ) : null}
 
-            {/* Segment Switch */}
-            <div className="inline-flex rounded-lg border bg-card p-0.5 shadow-2xs">
-              <Button
-                size="sm"
-                variant={previewSide === 'front' ? 'default' : 'ghost'}
-                className="h-8 px-3.5 text-xs font-bold rounded-md transition-all"
-                onClick={() => setPreviewSide('front')}
-              >
-                {t('detail.preview.tab_front', 'Mặt trước')}
-              </Button>
-              <Button
-                size="sm"
-                variant={previewSide === 'back' ? 'default' : 'ghost'}
-                className="h-8 px-3.5 text-xs font-bold rounded-md transition-all"
-                onClick={() => setPreviewSide('back')}
-              >
-                {t('detail.preview.tab_back', 'Mặt sau')}
-              </Button>
-            </div>
+            <CardSideToggle
+              size="default"
+              showFlipIcon={false}
+              side={previewSide}
+              onSideChange={setPreviewSide}
+              frontLabel={t('detail.preview.tab_front', 'Mặt trước')}
+              backLabel={t('detail.preview.tab_back', 'Mặt sau')}
+            />
 
             <div className="flex items-center gap-1">
               <Button

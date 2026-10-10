@@ -32,7 +32,7 @@
       "desc_line2_bold": "Thư viện",
       "desc_line2_suffix": " để tìm và cài bộ thẻ phù hợp với bạn.",
       "btn_marketplace_decks": "Thư viện Deck",
-      "btn_marketplace_templates": "Thư viện Template"
+      "btn_marketplace_templates": "Chợ Cấu trúc thẻ"
     }
   },
   "tree": {
@@ -77,11 +77,11 @@
       "name_label": "Tên hoặc đường dẫn Deck",
       "name_placeholder": "Ví dụ: SAA::deck10",
       "name_description": "Dùng dấu :: để phân cấp thư mục (ví dụ: SAA::deck10)",
-      "notetype_label": "Mẫu thẻ (Note Type)",
-      "notetype_loading": "Đang tải mẫu thẻ...",
-      "notetype_default": "Mặc định",
-      "notetype_help_inherited": "Mặc định kế thừa từ deck cha đã chọn.",
-      "notetype_help_default": "Mẫu thẻ sẽ áp dụng cho các thẻ thuộc deck này.",
+      "notetype_label": "Cấu trúc thẻ (Note Type)",
+      "notetype_loading": "Đang tải cấu trúc thẻ...",
+      "notetype_default": "Cấu trúc thẻ mặc định",
+      "notetype_help_inherited": "Mặc định kế thừa từ bộ thẻ cha đã chọn.",
+      "notetype_help_default": "Cấu trúc thẻ sẽ áp dụng cho tất cả flashcard tạo trong bộ thẻ này.",
       "btn_cancel": "Hủy",
       "btn_submit": "Tạo deck",
       "toast_success": "Deck đã được tạo."

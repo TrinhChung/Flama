@@ -1,0 +1,72 @@
+{
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "measurement": "Synthetic NOTE/v4, initial content 1KiB/note, no answer events. Real save + IndexedDB transaction completion; 3 warmups and 7 checkpoints, browser profile isolated. No production/network latency claim.",
+  "cases": [
+    {
+      "cards": 100,
+      "first_save_ms": 18.899999998509884,
+      "checkpoint_median_browser_ms": 1.7000000029802322,
+      "samples_ms": [
+        1.6000000014901161,
+        1.7000000029802322,
+        1.7999999970197678,
+        1.2999999970197678,
+        2.4000000059604645,
+        2.0999999940395355,
+        1.3000000044703484
+      ],
+      "session_json_bytes": 231181,
+      "stored_checkpoint_json_bytes": 1108,
+      "split_writer_enabled": true,
+      "durable_restore_parity": true
+    },
+    {
+      "cards": 1000,
+      "first_save_ms": 41.5,
+      "checkpoint_median_browser_ms": 6.100000001490116,
+      "samples_ms": [
+        5.899999998509884,
+        6.100000001490116,
+        6.299999997019768,
+        6.600000001490116,
+        6.299999997019768,
+        5.5,
+        4.700000002980232
+      ],
+      "session_json_bytes": 2296683,
+      "stored_checkpoint_json_bytes": 1110,
+      "split_writer_enabled": true,
+      "durable_restore_parity": true
+    },
+    {
+      "cards": 5000,
+      "first_save_ms": 124.69999999552965,
+      "checkpoint_median_browser_ms": 19,
+      "samples_ms": [
+        35.20000000298023,
+        48.600000001490116,
+        19,
+        18,
+        18.299999997019768,
+        24.30000000447035,
+        18.799999997019768
+      ],
+      "session_json_bytes": 11484683,
+      "stored_checkpoint_json_bytes": 1110,
+      "split_writer_enabled": true,
+      "durable_restore_parity": true
+    }
+  ],
+  "source_unchanged_during_measurement": true,
+  "git_head": "50d0883dfc074f6134ed75f64e9db721458a5089",
+  "source_sha256": {
+    "frontend/src/features/study/session/sessionStore.ts": "c60523bdfd31d691521983b21381c113673bd6c7b1602358f1611d8e64b84e91",
+    "frontend/src/features/study/session/sessionStorageCodec.ts": "97c2948295561187b82d80eca3ab3ee09f16e5fc11b25091911e4b4b46a6f75c",
+    "frontend/src/features/study/session/sessionRestore.ts": "d57867bc8cb15350d611c9f86713ac80cc5ae4f7f1f69613b9e0bc201f9b8c79",
+    "frontend/src/features/study/session/studySessionTestFixture.ts": "3e8b17c6c46ea6cd926f6cb3c7dce429dde9f63283695c468af362d0bc84dcc5",
+    "docs/architecture/artifacts/legacy_perf_implementation_20261010/browser_persistence_probe.cjs": "5fc44a87044bb065d5d5f165d21b614498cf56f4c411d18e955dc2fb56f0b6ce"
+  },
+  "measured_at_utc": "2026-10-09 23:24:57 UTC",
+  "writer_flag": "VITE_STUDY_SPLIT_STORAGE_ENABLED=1 in the isolated test Vite process only",
+  "profile": "C:/Users/chung/.codex/chrome-profiles/flama-durability-20261010"
+}

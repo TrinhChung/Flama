@@ -305,7 +305,7 @@ export function AdminUsersPage() {
   }
 
   return (
-    <Page>
+    <Page size="wide">
       <AdminHeader
         title="Quản lý Người dùng"
         description="Danh sách thành viên hệ thống, gán vai trò và quản trị trạng thái tài khoản."

@@ -414,7 +414,7 @@ export function AppLayout() {
 
   if (location.pathname === '/study' || location.pathname === '/browse') {
     return (
-      <main className="h-screen h-[100dvh] w-full overflow-hidden bg-background text-foreground">
+      <main className="h-screen h-[100dvh] w-full overflow-hidden text-foreground">
         <Outlet />
       </main>
     )

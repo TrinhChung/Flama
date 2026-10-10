@@ -36,6 +36,7 @@ from app.services import (
     note_sync_service,
     study_service,
 )
+from app.services.deck_publish_index import DeckPublishSummary, build_deck_publish_index
 from app.services.share.constants import (
     DECK_ACTIVE_REVIEW_THRESHOLD,
     DEFAULT_VISIBLE_PUBLISH_STATUSES,
@@ -101,6 +102,7 @@ from app.services.share.note_types import (
     get_note_type_publish_eligibility,
     is_installed_note_type_copy,
 )
+from app.services.share.install import _installed_local_deck_ids
 
 
 
@@ -135,12 +137,23 @@ def _deck_publish_context(*, user_id: int) -> tuple[dict[int, Deck], set[int], d
 
 
 
+@dataclass(frozen=True)
+class DeckPublishBatchContext:
+    """Bounded summaries, with the original fields retained for old callers."""
+    subtree_ids_by_deck: dict[int, set[int]]       # Compatibility input; options leave this empty.
+    deck_to_note_types: dict[int, set[str]]        # Map deck_id -> set of note_type IDs
+    marketplace_installed_nt_ids: set[str]        # Set of note_type IDs installed from Marketplace
+    active_template_nt_ids: set[str]               # Set of note_type IDs with ACTIVE templates
+    summaries_by_deck: dict[int, DeckPublishSummary] | None = None
+
+
 def get_deck_publish_eligibility(
     *,
     user_id: int,
     deck: Deck,
     allow_existing: bool = False,
     context: tuple[dict[int, Deck], set[int], dict[int, DeckMarketplaceItem]] | None = None,
+    batch_context: DeckPublishBatchContext | None = None,
 ) -> dict[str, Any]:
     if deck.deleted_at is not None or deck.owner_user_id != user_id:
         return {
@@ -163,17 +176,58 @@ def get_deck_publish_eligibility(
             "shared_item_id": None,
         }
 
-    inferred_note_type_id, _ = resolve_single_note_type_for_deck(
-        deck_id=deck_id,
-        owner_user_id=user_id,
-    )
-    if inferred_note_type_id and is_installed_note_type_copy(inferred_note_type_id):
-        return {
-            "is_selectable": False,
-            "block_code": "marketplace_note_type",
-            "block_reason": "Bộ thẻ dùng Note Type cài từ Marketplace nên không thể chia sẻ lại.",
-            "shared_item_id": None,
-        }
+    # =========================================================================
+    # NHÁNH 1: BATCH IN-MEMORY RESOLUTION (O(1) RAM - không sinh SQL)
+    # =========================================================================
+    summary = None
+    if batch_context is not None:
+        summaries = getattr(batch_context, "summaries_by_deck", None)
+        summary = summaries.get(deck_id) if summaries is not None else None
+        inferred_note_type_id = None
+        if summary is not None:
+            candidate_nt_id = summary.note_type_id
+            if not summary.mixed_note_types and candidate_nt_id in batch_context.active_template_nt_ids:
+                inferred_note_type_id = candidate_nt_id
+            descendant_ids = (
+                {summary.smallest_shared_descendant}
+                if summary.smallest_shared_descendant is not None else set()
+            )
+        else:
+            # Preserve callers that still construct the original batch context.
+            sub_ids = batch_context.subtree_ids_by_deck.get(deck_id, {deck_id})
+            subtree_nt_ids = {
+                nt for sid in sub_ids for nt in batch_context.deck_to_note_types.get(sid, set())
+            }
+            if len(subtree_nt_ids) == 1:
+                candidate_nt_id = next(iter(subtree_nt_ids))
+                if candidate_nt_id in batch_context.active_template_nt_ids:
+                    inferred_note_type_id = candidate_nt_id
+            descendant_ids = sub_ids - {deck_id}
+
+        if inferred_note_type_id and (inferred_note_type_id in batch_context.marketplace_installed_nt_ids):
+            return {
+                "is_selectable": False,
+                "block_code": "marketplace_note_type",
+                "block_reason": "Bộ thẻ dùng Note Type cài từ Marketplace nên không thể chia sẻ lại.",
+                "shared_item_id": None,
+            }
+
+    # =========================================================================
+    # NHÁNH 2: STANDALONE FALLBACK RESOLUTION (Bảo toàn 100% hợp đồng gọi đơn lẻ)
+    # =========================================================================
+    else:
+        inferred_note_type_id, _ = resolve_single_note_type_for_deck(
+            deck_id=deck_id,
+            owner_user_id=user_id,
+        )
+        if inferred_note_type_id and is_installed_note_type_copy(inferred_note_type_id):
+            return {
+                "is_selectable": False,
+                "block_code": "marketplace_note_type",
+                "block_reason": "Bộ thẻ dùng Note Type cài từ Marketplace nên không thể chia sẻ lại.",
+                "shared_item_id": None,
+            }
+        descendant_ids = set(collect_subtree_ids(deck_id)) - {deck_id}
 
     existing_item = shared_by_source.get(deck_id)
     if existing_item is not None and not allow_existing:
@@ -184,7 +238,6 @@ def get_deck_publish_eligibility(
             "shared_item_id": existing_item.id,
         }
 
-    descendant_ids = set(collect_subtree_ids(deck_id)) - {deck_id}
     descendant_items = [
         (descendant_id, shared_by_source[descendant_id])
         for descendant_id in sorted(descendant_ids)
@@ -205,8 +258,8 @@ def get_deck_publish_eligibility(
             "shared_item_id": descendant_item.id,
         }
 
-    seen: set[int] = set()
-    parent_id = deck.parent_id
+    seen: set[int] = {deck_id}
+    parent_id = summary.nearest_shared_ancestor if summary is not None else deck.parent_id
     while parent_id is not None and int(parent_id) not in seen:
         current_parent_id = int(parent_id)
         seen.add(current_parent_id)
@@ -233,38 +286,67 @@ def get_deck_publish_eligibility(
     }
 
 
-
 def build_deck_publish_options(*, user_id: int) -> dict[str, Any]:
-    from app.services import browse_card_service
-
     context = _deck_publish_context(user_id=user_id)
     deck_by_id, _installed_scope_ids, _shared_by_source = context
-    browse_payload = browse_card_service.build_browse_decks(
+    deck_ids = list(deck_by_id.keys())
+
+    if not deck_ids:
+        return {"items": []}
+
+    direct_card_count, deck_to_note_types = flashcards_share_repository.batch_get_deck_publish_facts(
         user_id=user_id,
-        admin_mode=False,
-        timezone_name="UTC",
+        deck_ids=deck_ids,
     )
-    browse_by_id = {
-        int(row["id"]): row
-        for row in browse_payload.get("decks", [])
-        if row.get("id") is not None
+    all_used_nt_ids = {
+        nt_id for nt_set in deck_to_note_types.values() for nt_id in nt_set
     }
+
+    # 4. Batch marketplace installed note types (1 SQL)
+    marketplace_installed_nt_ids: set[str] = (
+        flashcards_share_repository.batch_get_installed_note_type_ids(all_used_nt_ids)
+        if all_used_nt_ids
+        else set()
+    )
+
+    # 5. Batch active templates (1 SQL)
+    active_template_nt_ids: set[str] = (
+        flashcards_share_repository.batch_get_active_template_note_type_ids(all_used_nt_ids)
+        if all_used_nt_ids
+        else set()
+    )
+
+    summaries_by_deck = build_deck_publish_index(
+        parent_ids={
+            deck_id: int(deck.parent_id) if deck.parent_id is not None else None
+            for deck_id, deck in deck_by_id.items()
+        },
+        direct_card_counts=direct_card_count,
+        deck_to_note_types=deck_to_note_types,
+        shared_deck_ids=set(_shared_by_source),
+    )
+    batch_context = DeckPublishBatchContext(
+        subtree_ids_by_deck={},  # Legacy context slot; no descendant sets are materialized.
+        deck_to_note_types=deck_to_note_types,
+        marketplace_installed_nt_ids=marketplace_installed_nt_ids,
+        active_template_nt_ids=active_template_nt_ids,
+        summaries_by_deck=summaries_by_deck,
+    )
 
     items = []
     for deck_id, deck in deck_by_id.items():
-        browse_row = browse_by_id.get(deck_id, {})
-        counts = browse_row.get("counts") if isinstance(browse_row.get("counts"), dict) else {}
         eligibility = get_deck_publish_eligibility(
             user_id=user_id,
             deck=deck,
             context=context,
+            batch_context=batch_context,
         )
         items.append(
             {
                 "id": deck_id,
                 "name": deck.name,
                 "parent_id": int(deck.parent_id) if deck.parent_id is not None else None,
-                "card_count": int((counts or {}).get("total") or 0),
+                "card_count": summaries_by_deck[deck_id].card_count,
                 **eligibility,
             }
         )

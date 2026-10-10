@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.repositories import (
+    connect_identity_repository,
     flashcards_share_repository,
     study_repository,
     vocabulary_repository,
@@ -111,6 +112,22 @@ from app.services.connect.resolvers import (
     _resolve_deck,
     _resolve_note_type,
 )
+from app.services.connect.identity_lookup import NoteIdentityLookup, NoteIdentityMatch
+
+
+@dataclass
+class CheckBatchContext:
+    """Read-only lookups for one canAddNotes transport batch, without locks."""
+
+    user_id: int
+    decks_by_name: dict[str, Deck] = field(default_factory=dict)
+    note_types_by_name: dict[str, NoteType] = field(default_factory=dict)
+    clone_maps_by_deck_id: dict[int, DeckCloneDeckMap | None] = field(default_factory=dict)
+    model_has_template: dict[str, bool] = field(default_factory=dict)
+    identities: NoteIdentityLookup = field(init=False)
+
+    def __post_init__(self):
+        self.identities = NoteIdentityLookup(self.user_id)
 
 def _parse_note(
     user_id: int,
@@ -121,6 +138,7 @@ def _parse_note(
     allow_mixed_model: bool = False,
     import_session_id: str | None = None,
     batch_context: ImportBatchContext | None = None,
+    check_context: CheckBatchContext | None = None,
     existing_note: Note | None = None,
 ) -> PreparedNote:
     if not isinstance(raw_note, dict):
@@ -135,6 +153,8 @@ def _parse_note(
     deck_name = raw_note.get("deckName")
     normalized_deck_name = deck_name.strip() if isinstance(deck_name, str) else ""
     deck = batch_context.decks_by_path.get(normalized_deck_name) if batch_context else None
+    if deck is None and check_context is not None and isinstance(deck_name, str) and len(deck_name) <= 2048:
+        deck = check_context.decks_by_name.get(normalized_deck_name)
     if deck is None:
         deck = _resolve_deck(
             user_id,
@@ -142,17 +162,26 @@ def _parse_note(
             lock=lock_deck,
             allow_create=allow_create_deck,
         )
+        if check_context is not None:
+            check_context.decks_by_name[normalized_deck_name] = deck
 
     model_name = raw_note.get("modelName")
     normalized_model_name = model_name.strip() if isinstance(model_name, str) else ""
     note_type = batch_context.note_types_by_id.get(normalized_model_name) if batch_context else None
+    if note_type is None and check_context is not None and isinstance(model_name, str) and len(model_name) <= 255:
+        note_type = check_context.note_types_by_name.get(normalized_model_name)
     if note_type is None:
         note_type = _resolve_note_type(user_id, model_name)
+        if check_context is not None:
+            check_context.note_types_by_name[normalized_model_name] = note_type
     if not allow_mixed_model and deck.note_type_id is not None and deck.note_type_id != note_type.id:
         raise ConnectError("deck is bound to a different model")
-    from app.repositories.template_release_repository import active_templates
-
-    if not active_templates(db.session, note_type.id):
+    has_template = check_context.model_has_template.get(note_type.id) if check_context is not None else None
+    if has_template is None:
+        has_template = connect_identity_repository.has_active_template(note_type.id)
+        if check_context is not None:
+            check_context.model_has_template[note_type.id] = has_template
+    if not has_template:
         raise ConnectError("model has no card template")
 
     fields = raw_note.get("fields")
@@ -252,6 +281,14 @@ def _parse_note(
     identity_value = _normalized_identity(validated.field_values.get(identity.name))
     if not identity_value:
         raise ConnectError("the primary identity field cannot be empty")
+    if batch_context is not None:
+        clone_map = batch_context.clone_maps_by_deck_id.get(deck.id)
+    elif check_context is not None:
+        if deck.id not in check_context.clone_maps_by_deck_id:
+            check_context.clone_maps_by_deck_id[deck.id] = _clone_map_for_deck(user_id, deck.id)
+        clone_map = check_context.clone_maps_by_deck_id[deck.id]
+    else:
+        clone_map = _clone_map_for_deck(user_id, deck.id)
     return PreparedNote(
         deck=deck,
         note_type=note_type,
@@ -260,53 +297,21 @@ def _parse_note(
         identity_field=identity,
         identity_value=identity_value,
         allow_duplicate=bool(options.get("allowDuplicate", False)),
-        clone_map=(
-            batch_context.clone_maps_by_deck_id.get(deck.id)
-            if batch_context is not None
-            else _clone_map_for_deck(user_id, deck.id)
-        ),
+        clone_map=clone_map,
         pending_audio=pending_audio,
         pending_import_media=pending_import_media,
     )
 
 
 
-def _is_duplicate(user_id: int, prepared: PreparedNote) -> bool:
-    local_notes = Note.query.filter_by(user_id=user_id, deck_id=prepared.deck.id).all()
-    for note in local_notes:
-        if _normalized_identity((note.field_values or {}).get(prepared.identity_field.name)) == prepared.identity_value:
-            return True
-
-    clone_map = prepared.clone_map
-    if clone_map is None:
-        return False
-    install = clone_map.deck_install
-    source_deck = db.session.get(Deck, clone_map.source_deck_id)
-    if source_deck is None:
-        return False
-    schema = flashcards_share_service.build_clone_schema_view(
-        install=install,
-        source_note_type_id=source_deck.note_type_id,
-    )
-    identity_name = prepared.identity_field.name
-    source_query = Note.query.filter(Note.deck_id == clone_map.source_deck_id)
-    if install.source_owner_user_id is not None:
-        source_query = source_query.filter(Note.user_id == install.source_owner_user_id)
-    if install.base_snapshot_at or install.installed_at:
-        source_query = source_query.filter(Note.created_at <= (install.base_snapshot_at or install.installed_at))
-    for source_note in source_query.all():
-        values = flashcards_share_service.apply_clone_note_field_overrides(
-            install=install,
-            source_note=source_note,
-            schema_view=schema,
-        )
-        if _normalized_identity(values.get(identity_name)) == prepared.identity_value:
-            return True
-    return False
+def _is_duplicate(
+    user_id: int, prepared: PreparedNote, *, lookup: NoteIdentityLookup | None = None,
+) -> bool:
+    return (lookup or NoteIdentityLookup(user_id)).is_duplicate(prepared)
 
 
 
-def _ensure_note_ref(note: Note, user_id: int) -> ConnectNoteRef:
+def _ensure_note_ref(note: Note | NoteIdentityMatch, user_id: int) -> ConnectNoteRef:
     row = ConnectNoteRef.query.filter_by(
         note_id=note.id,
         user_id=user_id,
@@ -329,10 +334,14 @@ def _ensure_note_ref(note: Note, user_id: int) -> ConnectNoteRef:
 
 
 
-def check_note(user_id: int, raw_note: object) -> tuple[bool, str | None]:
+def check_note(
+    user_id: int, raw_note: object, *, context: CheckBatchContext | None = None,
+) -> tuple[bool, str | None]:
     try:
-        prepared = _parse_note(user_id, raw_note, lock_deck=False)
-        if not prepared.allow_duplicate and _is_duplicate(user_id, prepared):
+        prepared = _parse_note(user_id, raw_note, lock_deck=False, check_context=context)
+        if not prepared.allow_duplicate and _is_duplicate(
+            user_id, prepared, lookup=context.identities if context is not None else None,
+        ):
             return False, "cannot create note because it is a duplicate in the target deck"
         return True, None
     except ConnectError as exc:
@@ -342,8 +351,9 @@ def check_note(user_id: int, raw_note: object) -> tuple[bool, str | None]:
 
 def add_note(user_id: int, raw_note: object) -> int:
     prepared = _parse_note(user_id, raw_note, lock_deck=True)
-    if not prepared.allow_duplicate and _is_duplicate(user_id, prepared):
-        existing_note = _find_existing_note(user_id, prepared)
+    identities = NoteIdentityLookup(user_id)
+    if not prepared.allow_duplicate and _is_duplicate(user_id, prepared, lookup=identities):
+        existing_note = _find_existing_note(user_id, prepared, lookup=identities)
         if existing_note:
             # Update fields if new content is present
             updated = False
@@ -400,8 +410,8 @@ def add_note(user_id: int, raw_note: object) -> int:
                 note_type_id=prepared.note_type.id,
                 name="Card 1",
                 position=0,
-                front_format="{{Front}}",
-                back_format="{{Back}}",
+                front_html="{{Front}}",
+                back_html="{{Back}}",
             )
             db.session.add(tmpl)
             db.session.flush()
@@ -476,21 +486,21 @@ def find_notes(user_id: int, query: object) -> list[int]:
     deck = _resolve_deck(user_id, deck_name)
     expected = _normalized_identity(field_value)
     results: list[int] = []
-    for note in Note.query.filter_by(user_id=user_id, deck_id=deck.id).all():
-        note_type = db.session.get(NoteType, note.note_type_id)
-        if note_type is None:
-            continue
+    identities = NoteIdentityLookup(user_id)
+    for note_type in connect_identity_repository.local_note_types(user_id=user_id, deck_id=deck.id):
         try:
             identity = _identity_field(note_type)
         except ConnectError:
             continue
         if identity.name.casefold() != field_name.casefold():
             continue
-        if _normalized_identity((note.field_values or {}).get(identity.name)) == expected:
-            results.append(int(_ensure_note_ref(note, user_id).id))
+        for match in identities.local_matches(
+            deck_id=deck.id, field_name=identity.name, identity_value=expected,
+        ):
+            if match.note_type_id == note_type.id:
+                results.append(int(_ensure_note_ref(match, user_id).id))
     clone_map = _clone_map_for_deck(user_id, deck.id)
     if clone_map is not None:
-        install = clone_map.deck_install
         source_deck = db.session.get(Deck, clone_map.source_deck_id)
         local_note_type = db.session.get(NoteType, deck.note_type_id) if deck.note_type_id else None
         if source_deck is not None and local_note_type is not None:
@@ -499,25 +509,11 @@ def find_notes(user_id: int, query: object) -> list[int]:
             except ConnectError:
                 local_identity = None
             if local_identity is not None and local_identity.name.casefold() == field_name.casefold():
-                schema = flashcards_share_service.build_clone_schema_view(
-                    install=install,
-                    source_note_type_id=source_deck.note_type_id,
-                )
-                source_query = Note.query.filter(Note.deck_id == clone_map.source_deck_id)
-                if install.source_owner_user_id is not None:
-                    source_query = source_query.filter(Note.user_id == install.source_owner_user_id)
-                if install.base_snapshot_at or install.installed_at:
-                    source_query = source_query.filter(
-                        Note.created_at <= (install.base_snapshot_at or install.installed_at)
-                    )
-                for source_note in source_query.all():
-                    values = flashcards_share_service.apply_clone_note_field_overrides(
-                        install=install,
-                        source_note=source_note,
-                        schema_view=schema,
-                    )
-                    if _normalized_identity(values.get(local_identity.name)) == expected:
-                        results.append(int(_ensure_note_ref(source_note, user_id).id))
+                for match in identities.clone_matches(
+                    clone_map=clone_map, field_name=local_identity.name,
+                    identity_value=expected,
+                ):
+                    results.append(int(_ensure_note_ref(match, user_id).id))
     return sorted(set(results))
 
 

@@ -18,13 +18,13 @@ describe('TemplateLibraryPage', () => {
   afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); document.body.innerHTML = '' })
   async function render() { await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter><TemplateLibraryPage /></MemoryRouter></QueryClientProvider>)); await flush() }
   it('fetches defaults and shows distinct NoteType/application counts and four tokens', async () => {
-    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({}, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 loại thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(4); expect(container.textContent).toContain('+2'); expect(container.querySelector('a')?.getAttribute('href')).toBe('/card-templates/t%2F1')
+    await render(); expect(fetchTemplateLibrary).toHaveBeenCalledWith({ compact: true, page: 1, page_size: 24 }, expect.any(AbortSignal)); expect(container.textContent).toContain('Dùng ở 1 cấu trúc thẻ · 2 lần gắn'); expect(container.querySelectorAll('code')).toHaveLength(4); expect(container.textContent).toContain('+2'); expect(container.querySelector('a')?.getAttribute('href')).toBe('/card-templates/t%2F1')
   })
   it('supports all five groups', async () => {
     await render()
     for (const [label, group] of [['Của tôi', 'mine'], ['Marketplace', 'market'], ['Mẫu độc lập', 'standalone'], ['Đang dùng', 'in_use'], ['Tất cả', 'all']]) {
       await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === label)!.click()); await flush()
-      expect(fetchTemplateLibrary).toHaveBeenCalledWith(group === 'all' ? {} : { group }, expect.any(AbortSignal))
+      expect(fetchTemplateLibrary).toHaveBeenCalledWith({ compact: true, page: 1, page_size: 24, ...(group === 'all' ? {} : { group }) }, expect.any(AbortSignal))
     }
   })
   it('makes archived templates discoverable without including them by default', async () => {
@@ -32,7 +32,7 @@ describe('TemplateLibraryPage', () => {
     await render()
     expect(container.querySelector('a[href="/card-templates/t%2F1"]')).toBeNull()
     await act(async () => container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()); await flush()
-    expect(fetchTemplateLibrary).toHaveBeenLastCalledWith({ include_archived: true }, expect.any(AbortSignal))
+    expect(fetchTemplateLibrary).toHaveBeenLastCalledWith({ compact: true, page: 1, page_size: 24, include_archived: true }, expect.any(AbortSignal))
     expect(container.textContent).toContain('Đã lưu trữ')
     expect(container.querySelector('a')?.getAttribute('href')).toBe('/card-templates/t%2F1')
   })
@@ -41,12 +41,30 @@ describe('TemplateLibraryPage', () => {
     const enter = async (value: string) => act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })) })
     await act(async () => input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))); await enter('に'); await flush(330); expect(fetchTemplateLibrary).toHaveBeenCalledTimes(1)
     await enter('日本語'); await act(async () => input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }))); await flush(330)
-    expect(fetchTemplateLibrary).toHaveBeenLastCalledWith({ q: '日本語' }, expect.any(AbortSignal))
+    expect(fetchTemplateLibrary).toHaveBeenLastCalledWith({ compact: true, page: 1, page_size: 24, q: '日本語' }, expect.any(AbortSignal))
+  })
+  it('appends compact pages and resets the page when a filter changes', async () => {
+    const { front_html: _front, back_html: _back, shared_css: _css, ...summary } = template
+    vi.mocked(fetchTemplateLibrary).mockImplementation(async (params) => ({
+      schema_version: 'template-library.v2',
+      items: [{ ...summary, id: `${params?.group ?? 'all'}-${params?.page}`, name: `Template ${params?.page}` }],
+      pagination: { page: params?.page ?? 1, page_size: 24, total: 25, has_more: params?.page === 1 },
+    }))
+    await render()
+    await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Xem thêm')!.click())
+    await flush()
+    expect(container.querySelector('a[href="/card-templates/all-1"]')).not.toBeNull()
+    expect(container.querySelector('a[href="/card-templates/all-2"]')).not.toBeNull()
+    expect([...container.querySelectorAll('button')].some((el) => el.textContent === 'Xem thêm')).toBe(false)
+    await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Của tôi')!.click())
+    await flush()
+    expect(fetchTemplateLibrary).toHaveBeenLastCalledWith({ compact: true, page: 1, page_size: 24, group: 'mine' }, expect.any(AbortSignal))
+    expect(container.querySelector('a[href="/card-templates/all-2"]')).toBeNull()
   })
   it('renders errors with retry and empty results', async () => {
     vi.mocked(fetchTemplateLibrary).mockRejectedValueOnce(new Error('offline')); await render(); expect(container.textContent).toContain('offline')
     vi.mocked(fetchTemplateLibrary).mockResolvedValue({ schema_version: 'template-library.v2', items: [] })
-    await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Thử lại')!.click()); await flush(); expect(container.textContent).toContain('Chưa có mẫu thẻ nào.')
+    await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Thử lại')!.click()); await flush(); expect(container.textContent).toContain('Chưa có giao diện thẻ nào.')
   })
-  it('shows loading while the request remains pending', async () => { vi.mocked(fetchTemplateLibrary).mockReturnValue(new Promise(() => {})); await render(); expect(container.textContent).toContain('Đang tải mẫu thẻ…') })
+  it('shows loading while the request remains pending', async () => { vi.mocked(fetchTemplateLibrary).mockReturnValue(new Promise(() => {})); await render(); expect(container.textContent).toContain('Đang tải giao diện thẻ…') })
 })

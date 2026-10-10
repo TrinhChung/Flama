@@ -81,7 +81,7 @@ export function McpTokensManager({
                 variant="outline"
                 size="sm"
                 onClick={() => setIsCleanupOpen(true)}
-                className="gap-1.5 text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400"
+                className="gap-1.5 text-xs"
               >
                 <Trash2 className="size-3.5" />
                 <span>{t('manager.cleanup_btn', { count: inactiveCount })}</span>
@@ -109,7 +109,7 @@ export function McpTokensManager({
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">{t('manager.stats.total')}</span>
-            <Key className="size-3.5 text-primary" />
+            <Key className="size-3.5 text-muted-foreground" />
           </div>
           <div className="text-xl font-bold mt-1">{totalItems}</div>
         </Card>
@@ -117,17 +117,17 @@ export function McpTokensManager({
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">{t('manager.stats.active')}</span>
-            <ShieldCheck className="size-3.5 text-emerald-600" />
+            <ShieldCheck className="size-3.5 text-muted-foreground" />
           </div>
-          <div className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{activeCount}</div>
+          <div className="text-xl font-bold mt-1">{activeCount}</div>
         </Card>
 
         <Card className="p-3 bg-card/60">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">{t('manager.stats.inactive')}</span>
-            <ShieldAlert className="size-3.5 text-amber-600" />
+            <ShieldAlert className="size-3.5 text-muted-foreground" />
           </div>
-          <div className="text-xl font-bold mt-1 text-amber-600 dark:text-amber-400">{inactiveCount}</div>
+          <div className="text-xl font-bold mt-1">{inactiveCount}</div>
         </Card>
       </div>
 

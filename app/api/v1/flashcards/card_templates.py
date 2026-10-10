@@ -61,7 +61,7 @@ def _body():
 @card_templates_bp.get("/card-templates")
 @login_required
 def library():
-    return _respond(template_library_service.list_templates, include_archived=request.args.get("include_archived") == "true", category=request.args.get("category"), search=request.args.get("q"), group=request.args.get("group", "all"))
+    return _respond(template_library_service.list_templates, include_archived=request.args.get("include_archived") == "true", category=request.args.get("category"), search=request.args.get("q"), group=request.args.get("group", "all"), compact=request.args.get("compact") in {"1", "true"}, page=request.args.get("page"), page_size=request.args.get("page_size"))
 
 
 @card_templates_bp.post("/card-templates")

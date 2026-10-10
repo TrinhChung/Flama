@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 
 const WIZARD_STEPS = [
-  { id: 1, title: 'Mẫu thẻ & Mô tả' },
+  { id: 1, title: 'Cấu trúc thẻ & Mô tả' },
   { id: 2, title: 'Phân loại & Trình độ' },
   { id: 3, title: 'Mục tiêu & Kỹ năng' },
   { id: 4, title: 'Giá bán & Đăng tải' },
@@ -88,7 +88,7 @@ export function PublishNoteTypeSummaryFooter({
                   ? t('publish_deck.step4.submitting', { defaultValue: 'Đang lưu…' })
                   : isEditMode
                     ? t('publish_deck.step4.btn_submit_edit', { defaultValue: 'Cập nhật cấu hình chia sẻ' })
-                    : 'Xuất bản Loại thẻ ngay'}
+                    : 'Xuất bản Cấu trúc thẻ ngay'}
           </span>
         </Button>
       )}

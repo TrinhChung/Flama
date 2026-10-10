@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app.services import study_content_delete_service as content_topology
+from app.repositories import template_library_repository
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.validators.flashcard_input import RequestValidationError
 from models.card import Card
@@ -131,9 +132,17 @@ def stage_note_template_changes(session, *, routes, note_type, changes, operatio
             now_utc=now, provenance_code="NATIVE_MCP")
         new_templates.append(template)
 
-    if removed:
+    # A definition also used by another NoteType is only detached here, so the
+    # other NoteType keeps its Cards and progress.
+    shared = {template_id for template_id in removed
+              if template_library_repository.template_used_outside(session, template_id, note_type.id)}
+    for template in current:
+        if template.id in shared:
+            template_library_repository.detach_template(session, note_type.id, template)
+    deleted = removed - shared
+    if deleted:
         removed_card_ids = tuple(str(value) for value in session.execute(select(Card.id)
-            .where(Card.template_id.in_(sorted(removed))).order_by(Card.note_id, Card.id).with_for_update()).scalars())
+            .where(Card.template_id.in_(sorted(deleted))).order_by(Card.note_id, Card.id).with_for_update()).scalars())
         removal = content_topology.prepare_content_delete(session, routes=routes,
             card_ids=removed_card_ids, note_ids=(), now_utc=now, cancel_legacy_sessions=False)
         content_topology.verify_content_delete_scope(session, routes=routes,
@@ -143,9 +152,9 @@ def stage_note_template_changes(session, *, routes, note_type, changes, operatio
         # Detach evidence while Card identities still exist, as in REST deletion.
         content_topology.finalize_content_delete(removal,
             source_path="mcp.note_type_template_update", operation_key=operation_key, now_utc=now)
-        session.query(Card).filter(Card.template_id.in_(sorted(removed))).delete(synchronize_session=False)
+        session.query(Card).filter(Card.template_id.in_(sorted(deleted))).delete(synchronize_session=False)
         for template in current:
-            if template.id in removed:
+            if template.id in deleted:
                 session.delete(template)
 
     for template, data in updates:

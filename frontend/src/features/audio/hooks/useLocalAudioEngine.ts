@@ -16,6 +16,7 @@ import {
 } from '../services/localAudioStorage'
 import { scanDeckAudio } from '../services/audioScanService'
 import { cleanTextForTts } from '../services/ttsTextNormalizer'
+import { startLocalAudioPolling } from '../services/localAudioPolling'
 import type { VoiceDescriptor, DeckScanResponse } from '../types'
 
 export type ProcessItemStatus = 'pending' | 'synthesizing' | 'uploading' | 'done' | 'failed' | 'skipped'
@@ -529,6 +530,18 @@ export function useLocalAudioEngine(options: {
   // Engine Install & Action State
   const [engineOffline, setEngineOffline] = useState<boolean>(false)
   const [engineActionState, setEngineActionState] = useState<'idle' | 'installing' | 'launching'>('idle')
+  const engineRequestRef = useRef<AbortController | null>(null)
+  const pairingRequestRef = useRef<AbortController | null>(null)
+  const healthRequestRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    setEngineActionState('idle')
+    return () => {
+      engineRequestRef.current?.abort()
+      pairingRequestRef.current?.abort()
+      healthRequestRef.current?.abort()
+    }
+  }, [isOpen, engineId])
 
   // Backend Voices Fallback Fetch
   useEffect(() => {
@@ -608,69 +621,75 @@ export function useLocalAudioEngine(options: {
   }, [voiceOptions, selectedVoiceId, setSelectedVoiceId])
 
   const handleInstallEngine = async () => {
+    engineRequestRef.current?.abort()
+    const controller = new AbortController()
+    engineRequestRef.current = controller
+    const { signal } = controller
     setEngineActionState('installing')
     const targetEngine = engineId || 'voicevox'
     const engineLabel = isKokoro ? 'Kokoro-82M' : 'VOICEVOX'
     try {
       toast.info(`Đang gửi yêu cầu tải & cài đặt ${engineLabel} Engine... Vui lòng chờ trong giây lát.`)
-      const res = await flamaAudioClient.installEngine(targetEngine)
+      const res = await flamaAudioClient.installEngine(targetEngine, signal)
+      if (signal.aborted) return
       toast.success(res.message || `Đã gửi lệnh cài đặt ${engineLabel} thành công. Đang chờ Engine khởi động...`)
 
-      let count = 0
-      const timer = setInterval(async () => {
-        count++
-        try {
-          const voiceList = await flamaAudioClient.getVoices(targetEngine)
-          if (voiceList.length > 0) {
-            clearInterval(timer)
-            setVoices(voiceList)
-            setEngineOffline(false)
-            setEngineActionState('idle')
-            toast.success(`${engineLabel} Engine đã sẵn sàng!`)
-          }
-        } catch {
-          if (count >= 15) {
-            clearInterval(timer)
-            setEngineActionState('idle')
-            toast.error('Quá thời gian chờ Engine khởi động. Vui lòng kiểm tra lại ứng dụng Desktop.')
-          }
-        }
-      }, 2000)
+      startLocalAudioPolling({
+        signal,
+        intervalMs: 2000,
+        maxAttempts: 15,
+        request: (requestSignal) => flamaAudioClient.getVoices(targetEngine, requestSignal),
+        onResult: (voiceList) => {
+          if (voiceList.length === 0) return false
+          setVoices(voiceList)
+          setEngineOffline(false)
+          setEngineActionState('idle')
+          toast.success(`${engineLabel} Engine đã sẵn sàng!`)
+          return true
+        },
+        onExhausted: () => {
+          setEngineActionState('idle')
+          toast.error('Quá thời gian chờ Engine khởi động. Vui lòng kiểm tra lại ứng dụng Desktop.')
+        },
+      })
     } catch (err) {
+      if (signal.aborted) return
       setEngineActionState('idle')
       toast.error(err instanceof Error ? err.message : 'Tải Engine thất bại.')
     }
   }
 
   const handleLaunchEngine = async () => {
+    engineRequestRef.current?.abort()
+    const controller = new AbortController()
+    engineRequestRef.current = controller
+    const { signal } = controller
     setEngineActionState('launching')
     const targetEngine = engineId || 'voicevox'
     const engineLabel = isKokoro ? 'Kokoro-82M' : 'VOICEVOX'
     try {
       toast.info(`Đang kích hoạt ${engineLabel} Engine local...`)
-      const res = await flamaAudioClient.launchEngine(targetEngine)
+      const res = await flamaAudioClient.launchEngine(targetEngine, signal)
+      if (signal.aborted) return
       toast.success(res.message || 'Đã phát lệnh mở Engine.')
 
-      let count = 0
-      const timer = setInterval(async () => {
-        count++
-        try {
-          const voiceList = await flamaAudioClient.getVoices(targetEngine)
-          if (voiceList.length > 0) {
-            clearInterval(timer)
-            setVoices(voiceList)
-            setEngineOffline(false)
-            setEngineActionState('idle')
-            toast.success(`${engineLabel} Engine đã kết nối!`)
-          }
-        } catch {
-          if (count >= 8) {
-            clearInterval(timer)
-            setEngineActionState('idle')
-          }
-        }
-      }, 1500)
+      startLocalAudioPolling({
+        signal,
+        intervalMs: 1500,
+        maxAttempts: 8,
+        request: (requestSignal) => flamaAudioClient.getVoices(targetEngine, requestSignal),
+        onResult: (voiceList) => {
+          if (voiceList.length === 0) return false
+          setVoices(voiceList)
+          setEngineOffline(false)
+          setEngineActionState('idle')
+          toast.success(`${engineLabel} Engine đã kết nối!`)
+          return true
+        },
+        onExhausted: () => setEngineActionState('idle'),
+      })
     } catch (err) {
+      if (signal.aborted) return
       setEngineActionState('idle')
       toast.error(err instanceof Error ? err.message : 'Khởi chạy Engine thất bại.')
     }
@@ -700,8 +719,13 @@ export function useLocalAudioEngine(options: {
   }
 
   const handleStartPairing = useCallback(async () => {
+    pairingRequestRef.current?.abort()
+    const controller = new AbortController()
+    pairingRequestRef.current = controller
+    const { signal } = controller
     try {
-      const challenge = await flamaAudioClient.startPairing(window.location.origin)
+      const challenge = await flamaAudioClient.startPairing(window.location.origin, signal)
+      if (signal.aborted) return
       setPairingChallengeId(challenge.pairing_id)
 
       if (challenge.approved && challenge.token) {
@@ -709,45 +733,48 @@ export function useLocalAudioEngine(options: {
         setIsPairingApproved(true)
         toast.success('Ghép nối với Flama Audio thành công!')
         try {
-          const voiceList = await flamaAudioClient.getVoices(engineId)
+          const voiceList = await flamaAudioClient.getVoices(engineId, signal)
+          if (signal.aborted) return
           if (voiceList.length > 0) setVoices(voiceList)
         } catch {}
         return
       }
 
-      let attempts = 0
-      const interval = setInterval(async () => {
-        attempts++
-        if (attempts > 40) {
-          clearInterval(interval)
+      startLocalAudioPolling({
+        signal,
+        intervalMs: 1500,
+        maxAttempts: 40,
+        request: (requestSignal) => flamaAudioClient.getPairingStatus(challenge.pairing_id, requestSignal),
+        onResult: async (status) => {
+          if (!status.approved || !status.token) return false
+          flamaAudioClient.setToken(status.token)
+          setIsPairingApproved(true)
           setPairingChallengeId(null)
-          return
-        }
-
-        try {
-          const status = await flamaAudioClient.getPairingStatus(challenge.pairing_id)
-          if (status.approved && status.token) {
-            clearInterval(interval)
-            flamaAudioClient.setToken(status.token)
-            setIsPairingApproved(true)
-            setPairingChallengeId(null)
-            toast.success('Đã phê duyệt ghép nối Flama Audio!')
-            try {
-              const voiceList = await flamaAudioClient.getVoices(engineId)
-              if (voiceList.length > 0) setVoices(voiceList)
-            } catch {}
-          }
-        } catch {}
-      }, 1500)
+          toast.success('Đã phê duyệt ghép nối Flama Audio!')
+          try {
+            const voiceList = await flamaAudioClient.getVoices(engineId, signal)
+            if (!signal.aborted && voiceList.length > 0) setVoices(voiceList)
+          } catch {}
+          return true
+        },
+        onExhausted: () => setPairingChallengeId(null),
+      })
     } catch {
+      if (signal.aborted) return
       toast.error('Không thể gửi yêu cầu ghép nối tới local service.')
     }
   }, [engineId])
 
   const checkHealthAndInit = useCallback(async () => {
+    healthRequestRef.current?.abort()
+    pairingRequestRef.current?.abort()
+    const controller = new AbortController()
+    healthRequestRef.current = controller
+    const { signal } = controller
     setServiceStatus('checking')
     try {
-      await flamaAudioClient.getHealth()
+      await flamaAudioClient.getHealth(signal)
+      if (signal.aborted) return
       setServiceStatus('online')
 
       const token = flamaAudioClient.getToken()
@@ -758,16 +785,19 @@ export function useLocalAudioEngine(options: {
       }
 
       try {
-        const voiceList = await flamaAudioClient.getVoices(engineId)
+        const voiceList = await flamaAudioClient.getVoices(engineId, signal)
+        if (signal.aborted) return
         if (voiceList.length > 0) {
           setVoices(voiceList)
         }
         setIsPairingApproved(true)
       } catch {
+        if (signal.aborted) return
         setIsPairingApproved(false)
         handleStartPairing()
       }
     } catch {
+      if (signal.aborted) return
       setServiceStatus('offline')
     }
   }, [engineId, handleStartPairing])

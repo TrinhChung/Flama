@@ -213,12 +213,12 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
         shortDescription: 'Tạo mẫu độc lập, gắn vào loại thẻ, xem lịch sử và chọn dữ liệu cho phiên học.',
         categorySlug: 'study',
         readTimeMinutes: 5,
-        updatedAt: '2026-10-08',
-        intro: 'Mở Học liệu → Mẫu thẻ để quản lý mẫu dùng chung. Một mẫu có thể được gắn vào nhiều loại thẻ; mỗi nơi gắn có ánh xạ dữ liệu riêng.',
+        updatedAt: '2026-10-09',
+        intro: 'Mở Thư viện giao diện thẻ để thiết kế mặt trước, mặt sau và CSS. Note Type khai báo field dữ liệu; mỗi template được gắn có ánh xạ field → input riêng.',
         steps: [
-          { title: 'Tạo và sửa mẫu', description: 'Chọn Tạo mẫu mới, nhập tên rồi Tạo mẫu. Sửa Input của mẫu, Front HTML, Back HTML, Shared CSS và dữ liệu xem trước; bấm Lưu thay đổi. Input trong {{key}} là tên đặt chỗ, không cần trùng tên field.' },
-          { title: 'Gắn và ánh xạ', description: 'Chọn Áp dụng vào loại thẻ → chọn loại thẻ → Tiếp tục. Ghép input với field cùng kiểu rồi bấm Gắn mẫu. Ánh xạ giữ nguyên khi đổi tên field; nhiều input có thể dùng cùng field.', tip: 'Input chưa ánh xạ hiển thị rỗng. Khuyến nghị ánh xạ chỉ cảnh báo, không chặn sử dụng. Sửa mẫu ảnh hưởng mọi nơi đang gắn.' },
-          { title: 'Xem lịch sử và quản lý nơi dùng', description: 'Lịch sử cho phép so sánh và Khôi phục phiên bản này. Khôi phục thay nội dung chưa lưu, tạo phiên bản mới và giữ lịch sử. Mẫu đã gắn trên trang loại thẻ có Sửa ánh xạ, Gỡ mẫu và Gắn lại; tiến độ được giữ.' },
+          { title: 'Thiết kế và khai báo input', description: 'Trang mẫu mở ngay editor Mặt trước, Mặt sau và CSS cùng xem trước. Bấm Inputs để thêm hoặc sửa từng input trong hộp thoại, Áp dụng vào bản nháp rồi Lưu thay đổi. Dữ liệu mẫu có panel riêng. Input trong {{key}} không cần trùng tên field.' },
+          { title: 'Gắn và ánh xạ', description: 'Mở Note Type → Templates → Gắn template. Chọn mẫu rồi ghép input với field cùng kiểu. Bấm một template đã gắn để sửa mapping riêng của lần gắn đó. Ánh xạ giữ nguyên khi đổi tên field; nhiều input có thể dùng cùng field.', tip: 'Input chưa ánh xạ hiển thị rỗng. Khuyến nghị ánh xạ chỉ cảnh báo. Sửa thiết kế mở lại Template và ảnh hưởng mọi nơi đang gắn.' },
+          { title: 'Xem lịch sử và quản lý nơi dùng', description: 'Menu của trang Template có Lịch sử để so sánh và khôi phục phiên bản. Đang dùng ở dẫn đến mapping của từng lần gắn. Menu ở Note Type cho phép đặt mặc định, gỡ và gắn lại; tiến độ được giữ.' },
           { title: 'Nhận cập nhật', description: 'Bản nhận marketplace dùng chung qua các bộ của bạn. Xem cập nhật → chọn Giữ bản của tôi hoặc Lấy bản của tác giả cho từng xung đột → Áp dụng cập nhật. Dùng lại bản đã nhận lấy bản phát hành đang áp dụng, giữ lịch sử. Các thao tác này thay nội dung chưa lưu trong trình soạn.', tip: 'Tự động đăng bản mới và Tự động kế thừa mặc định tắt. Bản nhận có thể dùng ở loại thẻ khác của bạn, nhưng không thể phát hành lại nguồn marketplace.' },
           { title: 'Chuẩn bị phiên học', description: 'Chọn Template cho phiên này và Ánh xạ dữ liệu. Để trống input không dùng, rồi Bắt đầu học. Ghi nhớ cho bộ thẻ này lưu lựa chọn cá nhân; tắt Luôn hỏi trước khi học để tự dùng lại một lựa chọn hợp lệ. Không ghi nhớ thì cài đặt cũ được giữ.', tip: 'Phiên đang học hoặc được khôi phục dùng nội dung và ánh xạ đã chốt khi mở phiên. Lỗi lưu tùy chọn giữ form để Thử lại.' },
         ],
@@ -397,29 +397,29 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
         shortDescription: 'Thêm, sửa, sắp xếp các trường văn bản, âm thanh, hình ảnh và gợi ý trong Loại ghi chú.',
         categorySlug: 'note-types',
         readTimeMinutes: 3,
-        updatedAt: '2026-08-28',
+        updatedAt: '2026-10-09',
         steps: [
           {
             title: 'Bước 1: Vào trang Quản lý Loại thẻ',
-            description: 'Truy cập menu Loại thẻ (/note-types) và bấm vào nút "Quản lý trường" của Loại ghi chú bạn muốn sửa.',
+            description: 'Mở Note Type từ /note-types. Trang chi tiết mặc định mở tab Trường dữ liệu: danh sách ở trái, thiết lập một field ở phải.',
           },
           {
             title: 'Bước 2: Thêm hoặc sắp xếp lại các trường',
-            description: 'Đặt tên trường rõ ràng (ví dụ: Kanji, Reading, Meaning, Audio, Example, Image). Bạn có thể kéo thả để thay đổi thứ tự nhập liệu.',
+            description: 'Chọn Thêm trường, đặt tên và kiểu dữ liệu rồi lưu. Thử editor mẫu cho text, richtext, Markdown, ảnh hoặc audio; dữ liệu thử không được ghi vào note. Kéo thả hoặc dùng nút lên/xuống để đổi thứ tự. Thay đổi chưa lưu được hỏi trước khi chuyển field hoặc tab.',
           },
         ],
       },
       {
         slug: 'templates',
         title: 'Tùy Biến Mẫu Thẻ Bằng HTML, Mustache Tags & CSS',
-        shortDescription: 'Trang trí giao diện thẻ học với Mustache tags {{Field}}, {{FrontSide}}, Dark Mode và CSS tùy chỉnh.',
+        shortDescription: 'Thiết kế mặt trước, mặt sau và CSS với input độc lập; ánh xạ dữ liệu tại Note Type.',
         categorySlug: 'note-types',
         readTimeMinutes: 5,
-        updatedAt: '2026-08-28',
+        updatedAt: '2026-10-09',
         detailedSections: [
           {
             title: 'Cú Pháp Mustache Tags Thường Dùng',
-            content: '• `{{Tên_Trường}}`: Hiển thị nội dung của trường.\n• `{{FrontSide}}`: Hiển thị lại toàn bộ nội dung mặt trước ở mặt sau.\n• `{{#Tên_Trường}} ... {{/Tên_Trường}}`: Thẻ điều kiện — chỉ hiển thị khối nội dung bên trong nếu trường đó có dữ liệu.\n• `{{^Tên_Trường}} ... {{/Tên_Trường}}`: Chỉ hiển thị nếu trường đó để trống.',
+            content: '• `{{InputKey}}`: Hiển thị input nhận dữ liệu qua mapping của Note Type.\n• `{{FrontSide}}`: Hiển thị lại nội dung mặt trước ở mặt sau.\n• `{{#InputKey}} ... {{/InputKey}}`: Chỉ hiển thị khi input có dữ liệu.\n• `{{^InputKey}} ... {{/InputKey}}`: Hiển thị khi input để trống.\nDùng Chèn input trong editor; quản lý key, nhãn và kiểu ở hộp thoại Inputs.',
           },
           {
             title: 'Tùy Biến Giao Diện CSS',

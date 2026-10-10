@@ -46,6 +46,7 @@ from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
+from models.study_application import StudyApplication
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 
@@ -966,24 +967,47 @@ def delete_template(
     note_type_id: str,
     template_id: str,
 ) -> dict[str, bool]:
+    from app.repositories import template_library_repository as library_repository
+
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     template = _template(note_type_id=note_type.id, template_id=template_id)
     _ensure_version_safe_template_mutation(
         note_type=note_type,
         owner_user_id=user_id,
     )
-    if template.is_default:
+    # Membership, default and the last-template rule come from this NoteType's
+    # active occurrences, as listed by the editor.
+    active = library_repository.applications(db.session, note_type.id)
+    own = [row for row in active if row.template_id == template.id]
+    if any(row.is_default for row in own) if own else template.is_default:
         raise ContentApiError(
             "VALIDATION_ERROR",
             "Cannot delete default template.",
             status=409,
         )
-    if Template.query.filter_by(note_type_id=note_type.id).count() <= 1:
+    remaining = [row for row in active if row.template_id != template.id] or [
+        row for row in library_repository.legacy_fallback_templates(db.session, note_type.id)
+        if row.id != template.id
+    ]
+    if not remaining:
         raise ContentApiError(
             "VALIDATION_ERROR",
             "A note type requires at least one template.",
             status=409,
         )
+    if str(template.note_type_id or "") != str(note_type.id) or library_repository.template_used_outside(
+        db.session, template.id, note_type.id,
+    ):
+        # A shared definition is only removed from this NoteType. Deleting it
+        # would erase other NoteTypes' Cards and progress.
+        library_repository.detach_template(db.session, note_type.id, template)
+        _audit(
+            user_id,
+            "template.detach",
+            {"note_type_id": note_type.id, "template_id": template.id},
+        )
+        db.session.commit()
+        return {"success": True}
     from app.services import study_content_delete_service as content_delete
 
     card_ids = [
@@ -1101,10 +1125,29 @@ def preview_template(
         values = note.field_values or {} if note else {}
         media_assets = note.media_assets if note else []
         preview_key = note.id if note else "empty-note"
+    field_defs = note_type.field_defs
+    application = (
+        StudyApplication.query.filter_by(
+            note_type_id=note_type.id, template_id=template.id, status_code="ACTIVE",
+        )
+        .order_by(StudyApplication.position, StudyApplication.id)
+        .first()
+    )
+    if application is not None and isinstance(application.input_bindings, Mapping):
+        # Same input projection as study rendering; unset (legacy) bindings,
+        # identity bindings and schemaless templates keep the original fields.
+        from app.services.template_binding_service import prepare_bound_fields
+
+        field_defs, values = prepare_bound_fields(
+            SimpleNamespace(id=template.id, input_schema=template.input_schema),
+            field_defs,
+            values,
+            input_bindings=application.input_bindings,
+        )
     try:
         return render_template_pair(
             template=preview_template_obj,
-            field_defs=note_type.field_defs,
+            field_defs=field_defs,
             field_values=values,
             media_assets=media_assets,
             preview_note_key=preview_key,
@@ -1635,6 +1678,18 @@ def _template(*, note_type_id: str, template_id: str) -> Template:
         id=template_id,
         note_type_id=note_type_id,
     ).first()
+    if row is None:
+        # Reusable definitions and received copies belong to this NoteType
+        # through an ACTIVE occurrence, not through their legacy origin.
+        row = Template.query.filter(
+            Template.id == template_id,
+            Template.id.in_(
+                db.session.query(StudyApplication.template_id).filter(
+                    StudyApplication.note_type_id == note_type_id,
+                    StudyApplication.status_code == "ACTIVE",
+                )
+            ),
+        ).first()
     if row is None:
         raise ContentApiError(
             "FIELD_NOT_FOUND",

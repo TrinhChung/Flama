@@ -8,13 +8,12 @@ import unicodedata
 from datetime import datetime
 from typing import Any
 
-from app.repositories import vocabulary_repository
+from app.repositories import template_library_repository, vocabulary_repository
 from app.services import deck_working_tree_service
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.services.flashcard_renderer import is_field_empty
 from app.validators.flashcard_input import RequestValidationError
 from models import db
-from models.card import Card
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
 from models.field_def import FieldDef
@@ -253,7 +252,7 @@ def preview_sync_notes(
         note_type_id=note_type_id,
         note_type_name=note_type_name,
     )
-    if not note_type.templates:
+    if not template_library_repository.card_slots(db.session, note_type.id):
         raise RequestValidationError(
             f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
             field="note_type_id",
@@ -497,8 +496,9 @@ def execute_sync_notes(
         note_type_name=note_type_name,
     )
     field_defs = sorted(note_type.field_defs, key=lambda f: f.position)
-    templates = list(note_type.templates)
-    if not templates:
+    # Cards follow active occurrences, including reusable/received templates.
+    card_slots = template_library_repository.card_slots(db.session, note_type.id)
+    if not card_slots:
         raise RequestValidationError(
             f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
             field="note_type_id",
@@ -668,9 +668,7 @@ def execute_sync_notes(
             )
 
             # Create Cards
-            for tmpl in templates:
-                card = Card(note_id=new_note.id, template_id=tmpl.id)
-                db.session.add(card)
+            db.session.add_all(template_library_repository.build_cards([new_note.id], card_slots))
 
             # Create ConnectSourceNoteRef if ext_id present
             if ext_id:

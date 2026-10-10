@@ -63,6 +63,8 @@ export type DeckCardType = {
   is_default: boolean
   context_kind?: CardTypeContextKind
   install_id?: string | null
+  application_id?: string
+  study_application_id?: string | null
 }
 
 export type DeckCardTypeGroup = {
@@ -100,6 +102,9 @@ export type TemplateLibraryParams = {
   group?: TemplateLibraryGroup
   category?: string
   include_archived?: boolean
+  compact?: boolean
+  page?: number
+  page_size?: number
 }
 
 export type TemplateLibraryTemplate = {
@@ -141,9 +146,12 @@ export type TemplateLibraryDetail = TemplateLibraryItem & {
   applications: TemplateApplicationUsage[]
 }
 
+export type TemplateLibrarySummary = Omit<TemplateLibraryItem, 'front_html' | 'back_html' | 'shared_css'>
+
 export type TemplateLibraryResponse = {
   schema_version: 'template-library.v2'
-  items: TemplateLibraryItem[]
+  items: TemplateLibrarySummary[]
+  pagination?: { page: number; page_size: number; total: number; has_more: boolean }
 }
 
 export type TemplateWriteBody = {

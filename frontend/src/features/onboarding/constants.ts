@@ -1,3 +1,4 @@
+import i18n from '@/shared/config/i18n'
 import type {
   DailyTargetOption,
   OnboardingPreferences,
@@ -38,138 +39,184 @@ export interface SubjectOptionConfig {
   }>
 }
 
+const makeLevel = (
+  id: string,
+  defaultLabel: string,
+  difficulty_band: 'beginner' | 'intermediate' | 'advanced',
+  tag: string
+) => ({
+  id,
+  get label() {
+    return i18n.t(`onboarding:subjects.level_labels.${id}`, { defaultValue: defaultLabel })
+  },
+  difficulty_band,
+  tag,
+})
+
 export const SUBJECT_OPTIONS: SubjectOptionConfig[] = [
   {
     id: 'japanese',
-    title: 'Tiếng Nhật',
-    subtitle: 'JLPT N5 - N1, Kanji, Giao tiếp Kaiwa, IT Nihongo',
+    get title() {
+      return i18n.t('onboarding:subjects.japanese.title', { defaultValue: 'Tiếng Nhật' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.japanese.subtitle', { defaultValue: 'JLPT N5 - N1, Kanji, Giao tiếp Kaiwa, IT Nihongo' })
+    },
     flag: '🇯🇵',
     gradient: 'from-red-500/10 via-rose-500/5 to-transparent',
     borderHover: 'hover:border-rose-500/50 hover:bg-rose-500/5',
     defaultLevel: 'n5',
     levels: [
-      { id: 'n5', label: 'N5 (Nhập môn / Sơ cấp 1)', difficulty_band: 'beginner', tag: 'JLPT N5' },
-      { id: 'n4', label: 'N4 (Sơ cấp 2)', difficulty_band: 'beginner', tag: 'JLPT N4' },
-      { id: 'n3', label: 'N3 (Trung cấp)', difficulty_band: 'intermediate', tag: 'JLPT N3' },
-      { id: 'n2', label: 'N2 (Trung cao cấp)', difficulty_band: 'advanced', tag: 'JLPT N2' },
-      { id: 'n1', label: 'N1 (Cao cấp)', difficulty_band: 'advanced', tag: 'JLPT N1' },
-      { id: 'kanji_n5_n4', label: 'Hán tự Kanji cơ bản', difficulty_band: 'beginner', tag: 'Kanji' },
-      { id: 'kaiwa_basic', label: 'Giao tiếp đời sống Kaiwa', difficulty_band: 'beginner', tag: 'Kaiwa' },
+      makeLevel('n5', 'N5 (Nhập môn / Sơ cấp 1)', 'beginner', 'JLPT N5'),
+      makeLevel('n4', 'N4 (Sơ cấp 2)', 'beginner', 'JLPT N4'),
+      makeLevel('n3', 'N3 (Trung cấp)', 'intermediate', 'JLPT N3'),
+      makeLevel('n2', 'N2 (Trung cao cấp)', 'advanced', 'JLPT N2'),
+      makeLevel('n1', 'N1 (Cao cấp)', 'advanced', 'JLPT N1'),
+      makeLevel('kanji_n5_n4', 'Hán tự Kanji cơ bản', 'beginner', 'Kanji'),
+      makeLevel('kaiwa_basic', 'Giao tiếp đời sống Kaiwa', 'beginner', 'Kaiwa'),
     ],
   },
   {
     id: 'english',
-    title: 'Tiếng Anh',
-    subtitle: 'IELTS, TOEIC, VSTEP, Oxford 3000/5000, Giao tiếp',
+    get title() {
+      return i18n.t('onboarding:subjects.english.title', { defaultValue: 'Tiếng Anh' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.english.subtitle', { defaultValue: 'IELTS, TOEIC, VSTEP, Oxford 3000/5000, Giao tiếp' })
+    },
     flag: '🇬🇧',
     gradient: 'from-blue-500/10 via-indigo-500/5 to-transparent',
     borderHover: 'hover:border-blue-500/50 hover:bg-blue-500/5',
     defaultLevel: 'toeic_600',
     levels: [
-      { id: 'toeic_450', label: 'TOEIC 250 - 450 (Cơ bản)', difficulty_band: 'beginner', tag: 'TOEIC 450' },
-      { id: 'toeic_600', label: 'TOEIC 500 - 650 (Tiêu chuẩn)', difficulty_band: 'intermediate', tag: 'TOEIC 650' },
-      { id: 'toeic_750', label: 'TOEIC 700 - 850 (Nâng cao)', difficulty_band: 'intermediate', tag: 'TOEIC 850' },
-      { id: 'ielts_5_5', label: 'IELTS 5.0 - 6.0', difficulty_band: 'intermediate', tag: 'IELTS 5.5' },
-      { id: 'ielts_6_5', label: 'IELTS 6.5 - 7.5+', difficulty_band: 'advanced', tag: 'IELTS 7.0' },
-      { id: 'vstep_b1', label: 'VSTEP B1 - B2', difficulty_band: 'intermediate', tag: 'VSTEP' },
-      { id: 'oxford_3000', label: 'Từ vựng cốt lõi Oxford', difficulty_band: 'beginner', tag: 'Oxford' },
+      makeLevel('toeic_450', 'TOEIC 250 - 450 (Cơ bản)', 'beginner', 'TOEIC 450'),
+      makeLevel('toeic_600', 'TOEIC 500 - 650 (Tiêu chuẩn)', 'intermediate', 'TOEIC 650'),
+      makeLevel('toeic_750', 'TOEIC 700 - 850 (Nâng cao)', 'intermediate', 'TOEIC 850'),
+      makeLevel('ielts_5_5', 'IELTS 5.0 - 6.0', 'intermediate', 'IELTS 5.5'),
+      makeLevel('ielts_6_5', 'IELTS 6.5 - 7.5+', 'advanced', 'IELTS 7.0'),
+      makeLevel('vstep_b1', 'VSTEP B1 - B2', 'intermediate', 'VSTEP'),
+      makeLevel('oxford_3000', 'Từ vựng cốt lõi Oxford', 'beginner', 'Oxford'),
     ],
   },
   {
     id: 'korean',
-    title: 'Tiếng Hàn',
-    subtitle: 'TOPIK I & II, Tiếng Hàn tổng hợp, EPS-TOPIK',
+    get title() {
+      return i18n.t('onboarding:subjects.korean.title', { defaultValue: 'Tiếng Hàn' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.korean.subtitle', { defaultValue: 'TOPIK I & II, Tiếng Hàn tổng hợp, EPS-TOPIK' })
+    },
     flag: '🇰🇷',
     gradient: 'from-purple-500/10 via-fuchsia-500/5 to-transparent',
     borderHover: 'hover:border-purple-500/50 hover:bg-purple-500/5',
     defaultLevel: 'topik_1',
     levels: [
-      { id: 'topik_1', label: 'TOPIK I (Cấp 1 - Nhập môn)', difficulty_band: 'beginner', tag: 'TOPIK 1' },
-      { id: 'topik_2', label: 'TOPIK I (Cấp 2 - Đời sống)', difficulty_band: 'beginner', tag: 'TOPIK 2' },
-      { id: 'topik_3', label: 'TOPIK II (Cấp 3 - Trung cấp)', difficulty_band: 'intermediate', tag: 'TOPIK 3' },
-      { id: 'topik_4', label: 'TOPIK II (Cấp 4 - Nâng cao)', difficulty_band: 'intermediate', tag: 'TOPIK 4' },
-      { id: 'korean_beginner', label: 'Tiếng Hàn Tổng hợp Sơ cấp', difficulty_band: 'beginner', tag: 'Sơ cấp' },
-      { id: 'eps_manufacturing', label: 'EPS-TOPIK (Xuất khẩu LĐ)', difficulty_band: 'beginner', tag: 'EPS' },
+      makeLevel('topik_1', 'TOPIK I (Cấp 1 - Nhập môn)', 'beginner', 'TOPIK 1'),
+      makeLevel('topik_2', 'TOPIK I (Cấp 2 - Đời sống)', 'beginner', 'TOPIK 2'),
+      makeLevel('topik_3', 'TOPIK II (Cấp 3 - Trung cấp)', 'intermediate', 'TOPIK 3'),
+      makeLevel('topik_4', 'TOPIK II (Cấp 4 - Nâng cao)', 'intermediate', 'TOPIK 4'),
+      makeLevel('korean_beginner', 'Tiếng Hàn Tổng hợp Sơ cấp', 'beginner', 'Sơ cấp'),
+      makeLevel('eps_manufacturing', 'EPS-TOPIK (Xuất khẩu LĐ)', 'beginner', 'EPS'),
     ],
   },
   {
     id: 'chinese',
-    title: 'Tiếng Trung',
-    subtitle: 'HSK 1 - 6, HSK 3.0, HSKK Khẩu ngữ, TOCFL',
+    get title() {
+      return i18n.t('onboarding:subjects.chinese.title', { defaultValue: 'Tiếng Trung' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.chinese.subtitle', { defaultValue: 'HSK 1 - 6, HSK 3.0, HSKK Khẩu ngữ, TOCFL' })
+    },
     flag: '🇨🇳',
     gradient: 'from-amber-500/10 via-orange-500/5 to-transparent',
     borderHover: 'hover:border-amber-500/50 hover:bg-amber-500/5',
     defaultLevel: 'hsk1',
     levels: [
-      { id: 'hsk1', label: 'HSK 1 (150 từ cơ bản)', difficulty_band: 'beginner', tag: 'HSK 1' },
-      { id: 'hsk2', label: 'HSK 2 (300 từ)', difficulty_band: 'beginner', tag: 'HSK 2' },
-      { id: 'hsk3', label: 'HSK 3 (600 từ - Giao tiếp)', difficulty_band: 'intermediate', tag: 'HSK 3' },
-      { id: 'hsk4', label: 'HSK 4 (1200 từ)', difficulty_band: 'intermediate', tag: 'HSK 4' },
-      { id: 'hsk5', label: 'HSK 5 (2500 từ cao cấp)', difficulty_band: 'advanced', tag: 'HSK 5' },
-      { id: 'tocfl_band_a', label: 'TOCFL Phồn thể (Band A)', difficulty_band: 'beginner', tag: 'TOCFL' },
+      makeLevel('hsk1', 'HSK 1 (150 từ cơ bản)', 'beginner', 'HSK 1'),
+      makeLevel('hsk2', 'HSK 2 (300 từ)', 'beginner', 'HSK 2'),
+      makeLevel('hsk3', 'HSK 3 (600 từ - Giao tiếp)', 'intermediate', 'HSK 3'),
+      makeLevel('hsk4', 'HSK 4 (1200 từ)', 'intermediate', 'HSK 4'),
+      makeLevel('hsk5', 'HSK 5 (2500 từ cao cấp)', 'advanced', 'HSK 5'),
+      makeLevel('tocfl_band_a', 'TOCFL Phồn thể (Band A)', 'beginner', 'TOCFL'),
     ],
   },
   {
     id: 'it_coding',
-    title: 'CNTT & Lập trình',
-    subtitle: 'Frontend, Backend, DevOps, LeetCode, System Design',
+    get title() {
+      return i18n.t('onboarding:subjects.it_tech.title', { defaultValue: 'CNTT & Lập trình' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.it_tech.subtitle', { defaultValue: 'Frontend, Backend, DevOps, LeetCode, System Design' })
+    },
     flag: '💻',
     gradient: 'from-emerald-500/10 via-teal-500/5 to-transparent',
     borderHover: 'hover:border-emerald-500/50 hover:bg-emerald-500/5',
     defaultLevel: 'frontend',
     levels: [
-      { id: 'frontend', label: 'Frontend (React, TS, Next.js)', difficulty_band: 'intermediate', tag: 'Frontend' },
-      { id: 'backend', label: 'Backend (Node, Python, Go, SQL)', difficulty_band: 'intermediate', tag: 'Backend' },
-      { id: 'dsa_leetcode', label: 'Cấu trúc dữ liệu & LeetCode', difficulty_band: 'advanced', tag: 'LeetCode' },
-      { id: 'devops', label: 'DevOps & Cloud (Docker, K8s)', difficulty_band: 'advanced', tag: 'DevOps' },
-      { id: 'database', label: 'Database & SQL Queries', difficulty_band: 'intermediate', tag: 'SQL' },
+      makeLevel('frontend', 'Frontend (React, TS, Next.js)', 'intermediate', 'Frontend'),
+      makeLevel('backend', 'Backend (Node, Python, Go, SQL)', 'intermediate', 'Backend'),
+      makeLevel('dsa_leetcode', 'Cấu trúc dữ liệu & LeetCode', 'advanced', 'LeetCode'),
+      makeLevel('devops', 'DevOps & Cloud (Docker, K8s)', 'advanced', 'DevOps'),
+      makeLevel('database', 'Database & SQL Queries', 'intermediate', 'SQL'),
     ],
   },
   {
     id: 'aws',
-    title: 'Cloud & Chứng chỉ',
-    subtitle: 'AWS CCP / SAA, Azure AZ-900 / AZ-104, PMP, CFA',
+    get title() {
+      return i18n.t('onboarding:subjects.aws.title', { defaultValue: 'Cloud & Chứng chỉ' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.aws.subtitle', { defaultValue: 'AWS CCP / SAA, Azure AZ-900 / AZ-104, PMP, CFA' })
+    },
     flag: '☁️',
     gradient: 'from-cyan-500/10 via-sky-500/5 to-transparent',
     borderHover: 'hover:border-cyan-500/50 hover:bg-cyan-500/5',
     defaultLevel: 'foundational',
     levels: [
-      { id: 'foundational', label: 'AWS Cloud Practitioner (CCP)', difficulty_band: 'beginner', tag: 'AWS CCP' },
-      { id: 'associate', label: 'AWS Solutions Architect (SAA)', difficulty_band: 'intermediate', tag: 'AWS SAA' },
-      { id: 'az_900', label: 'Azure Fundamentals (AZ-900)', difficulty_band: 'beginner', tag: 'AZ-900' },
-      { id: 'az_104', label: 'Azure Administrator (AZ-104)', difficulty_band: 'intermediate', tag: 'AZ-104' },
-      { id: 'pmp_agile', label: 'PMP & Agile Project Management', difficulty_band: 'advanced', tag: 'PMP' },
+      makeLevel('foundational', 'AWS Cloud Practitioner (CCP)', 'beginner', 'AWS CCP'),
+      makeLevel('associate', 'AWS Solutions Architect (SAA)', 'intermediate', 'AWS SAA'),
+      makeLevel('az_900', 'Azure Fundamentals (AZ-900)', 'beginner', 'AZ-900'),
+      makeLevel('az_104', 'Azure Administrator (AZ-104)', 'intermediate', 'AZ-104'),
+      makeLevel('pmp_agile', 'PMP & Agile Project Management', 'advanced', 'PMP'),
     ],
   },
   {
     id: 'thpt_qg',
-    title: 'Luyện thi THPT QG',
-    subtitle: 'Toán, Vật lý, Hóa học, Sinh học, Lịch sử, Địa lý',
+    get title() {
+      return i18n.t('onboarding:subjects.thpt_qg.title', { defaultValue: 'Luyện thi THPT QG' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.thpt_qg.subtitle', { defaultValue: 'Toán, Vật lý, Hóa học, Sinh học, Lịch sử, Địa lý' })
+    },
     flag: '🎓',
     gradient: 'from-amber-500/10 via-yellow-500/5 to-transparent',
     borderHover: 'hover:border-amber-500/50 hover:bg-amber-500/5',
     defaultLevel: 'thpt_math',
     levels: [
-      { id: 'thpt_math', label: 'Công thức Toán học 12', difficulty_band: 'intermediate', tag: 'Toán THPT' },
-      { id: 'thpt_physics', label: 'Định luật & Công thức Vật lý', difficulty_band: 'intermediate', tag: 'Vật lý' },
-      { id: 'thpt_chemistry', label: 'Phản ứng & Phương trình Hóa học', difficulty_band: 'intermediate', tag: 'Hóa học' },
-      { id: 'thpt_biology', label: 'Quy luật Sinh học & Di truyền', difficulty_band: 'intermediate', tag: 'Sinh học' },
-      { id: 'thpt_history_geo', label: 'Sự kiện Lịch sử & Địa lý', difficulty_band: 'intermediate', tag: 'Sử - Địa' },
+      makeLevel('thpt_math', 'Công thức Toán học 12', 'intermediate', 'Toán THPT'),
+      makeLevel('thpt_physics', 'Định luật & Công thức Vật lý', 'intermediate', 'Vật lý'),
+      makeLevel('thpt_chemistry', 'Phản ứng & Phương trình Hóa học', 'intermediate', 'Hóa học'),
+      makeLevel('thpt_biology', 'Quy luật Sinh học & Di truyền', 'intermediate', 'Sinh học'),
+      makeLevel('thpt_history_geo', 'Sự kiện Lịch sử & Địa lý', 'intermediate', 'Sử - Địa'),
     ],
   },
   {
     id: 'medical',
-    title: 'Y Dược & Chuyên ngành',
-    subtitle: 'Thuật ngữ Y khoa tiếng Anh, Giải phẫu, Dược lý, Luật',
+    get title() {
+      return i18n.t('onboarding:subjects.medicine.title', { defaultValue: 'Y Dược & Chuyên ngành' })
+    },
+    get subtitle() {
+      return i18n.t('onboarding:subjects.medicine.subtitle', { defaultValue: 'Thuật ngữ Y khoa tiếng Anh, Giải phẫu, Dược lý, Luật' })
+    },
     flag: '🩺',
     gradient: 'from-teal-500/10 via-emerald-500/5 to-transparent',
     borderHover: 'hover:border-teal-500/50 hover:bg-teal-500/5',
     defaultLevel: 'med_terms',
     levels: [
-      { id: 'med_terms', label: 'Thuật ngữ Y khoa tiếng Anh', difficulty_band: 'intermediate', tag: 'Medical' },
-      { id: 'anatomy', label: 'Giải phẫu học (Anatomy)', difficulty_band: 'intermediate', tag: 'Anatomy' },
-      { id: 'pharmacology', label: 'Dược lý & Tác dụng thuốc', difficulty_band: 'advanced', tag: 'Dược lý' },
-      { id: 'civil_law', label: 'Luật Dân sự & Doanh nghiệp', difficulty_band: 'intermediate', tag: 'Luật học' },
+      makeLevel('med_terms', 'Thuật ngữ Y khoa tiếng Anh', 'intermediate', 'Medical'),
+      makeLevel('anatomy', 'Giải phẫu học (Anatomy)', 'intermediate', 'Anatomy'),
+      makeLevel('pharmacology', 'Dược lý & Tác dụng thuốc', 'advanced', 'Dược lý'),
+      makeLevel('civil_law', 'Luật Dân sự & Doanh nghiệp', 'intermediate', 'Luật học'),
     ],
   },
 ]
@@ -188,17 +235,29 @@ export interface DailyTargetConfig {
 export const DAILY_TARGET_OPTIONS: DailyTargetConfig[] = [
   {
     value: 5,
-    label: '5 thẻ / ngày',
-    timeEstimate: '~5 phút mỗi ngày',
-    description: 'Thong thả, dễ dàng duy trì thói quen học tập bền bỉ.',
+    get label() {
+      return i18n.t('onboarding:daily_targets.5.label', { defaultValue: '5 thẻ / ngày' })
+    },
+    get timeEstimate() {
+      return i18n.t('onboarding:daily_targets.5.time', { defaultValue: '~5 phút mỗi ngày' })
+    },
+    get description() {
+      return i18n.t('onboarding:daily_targets.5.description', { defaultValue: 'Thong thả, dễ dàng duy trì thói quen học tập bền bỉ.' })
+    },
     icon: '🌱',
     color: 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5',
   },
   {
     value: 10,
-    label: '10 thẻ / ngày',
-    timeEstimate: '~10 - 15 phút mỗi ngày',
-    description: 'Mức học tiêu chuẩn cân bằng, tiến bộ rõ rệt mà không áp lực.',
+    get label() {
+      return i18n.t('onboarding:daily_targets.10.label', { defaultValue: '10 thẻ / ngày' })
+    },
+    get timeEstimate() {
+      return i18n.t('onboarding:daily_targets.10.time', { defaultValue: '~10 - 15 phút mỗi ngày' })
+    },
+    get description() {
+      return i18n.t('onboarding:daily_targets.10.description', { defaultValue: 'Mức học tiêu chuẩn cân bằng, tiến bộ rõ rệt mà không áp lực.' })
+    },
     badge: 'Khuyên Dùng ⭐',
     badgeVariant: 'default',
     icon: '⚡',
@@ -206,17 +265,29 @@ export const DAILY_TARGET_OPTIONS: DailyTargetConfig[] = [
   },
   {
     value: 20,
-    label: '20 thẻ / ngày',
-    timeEstimate: '~25 - 30 phút mỗi ngày',
-    description: 'Chăm chỉ, tăng tốc chuẩn bị cho các kỳ thi sắp tới.',
+    get label() {
+      return i18n.t('onboarding:daily_targets.20.label', { defaultValue: '20 thẻ / ngày' })
+    },
+    get timeEstimate() {
+      return i18n.t('onboarding:daily_targets.20.time', { defaultValue: '~25 - 30 phút mỗi ngày' })
+    },
+    get description() {
+      return i18n.t('onboarding:daily_targets.20.description', { defaultValue: 'Chăm chỉ, tăng tốc chuẩn bị cho các kỳ thi sắp tới.' })
+    },
     icon: '🔥',
     color: 'border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-500/5',
   },
   {
     value: 30,
-    label: '30+ thẻ / ngày',
-    timeEstimate: '~45+ phút mỗi ngày',
-    description: 'Cấp tốc, đạt mục tiêu từ vựng lớn trong thời gian ngắn.',
+    get label() {
+      return i18n.t('onboarding:daily_targets.30.label', { defaultValue: '30+ thẻ / ngày' })
+    },
+    get timeEstimate() {
+      return i18n.t('onboarding:daily_targets.30.time', { defaultValue: '~45+ phút mỗi ngày' })
+    },
+    get description() {
+      return i18n.t('onboarding:daily_targets.30.description', { defaultValue: 'Cấp tốc, đạt mục tiêu từ vựng lớn trong thời gian ngắn.' })
+    },
     icon: '🚀',
     color: 'border-rose-500/30 text-rose-600 dark:text-rose-400 bg-rose-500/5',
   },
@@ -230,10 +301,41 @@ export interface StudyTimeConfig {
 }
 
 export const STUDY_TIME_OPTIONS: StudyTimeConfig[] = [
-  { value: 'morning', label: 'Buổi sáng', sub: '06:00 - 08:00 (Tỉnh táo)', icon: '🌅' },
-  { value: 'afternoon', label: 'Buổi trưa / Chiều', sub: '12:00 - 14:00 (Nghỉ ngơi)', icon: '☀️' },
-  { value: 'evening', label: 'Buổi tối', sub: '19:00 - 22:00 (Tập trung)', icon: '🌙' },
+  {
+    value: 'morning',
+    get label() {
+      return i18n.t('onboarding:study_times.morning.label', { defaultValue: 'Buổi sáng' })
+    },
+    get sub() {
+      return i18n.t('onboarding:study_times.morning.schedule', { defaultValue: '06:00 - 08:00 (Tỉnh táo)' })
+    },
+    icon: '🌅',
+  },
+  {
+    value: 'afternoon',
+    get label() {
+      return i18n.t('onboarding:study_times.afternoon.label', { defaultValue: 'Buổi trưa / Chiều' })
+    },
+    get sub() {
+      return i18n.t('onboarding:study_times.afternoon.schedule', { defaultValue: '12:00 - 14:00 (Nghỉ ngơi)' })
+    },
+    icon: '☀️',
+  },
+  {
+    value: 'evening',
+    get label() {
+      return i18n.t('onboarding:study_times.evening.label', { defaultValue: 'Buổi tối' })
+    },
+    get sub() {
+      return i18n.t('onboarding:study_times.evening.schedule', { defaultValue: '19:00 - 22:00 (Tập trung)' })
+    },
+    icon: '🌙',
+  },
 ]
+
+export const STUDY_SUBJECTS = SUBJECT_OPTIONS
+export const DAILY_TARGETS = DAILY_TARGET_OPTIONS
+export const STUDY_TIMES = STUDY_TIME_OPTIONS
 
 export const CURATED_STARTER_DECKS: Record<string, RecommendedDeckItem[]> = {
   japanese: [

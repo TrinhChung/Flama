@@ -109,11 +109,9 @@ REST route -> application service (transaction owner) -> repository -> model
 
 ## Startup và dữ liệu
 
-`create_app()` khởi tạo extension, đăng ký model/blueprint/CLI và chạy startup maintenance:
-- `db.create_all()`
-- `ensure_user_management_schema()` và `_ensure_backward_compatible_schema()`
-- Seed roles mặc định và TTS providers
-- Logical-overlay clone cutover tự động cho các bản cài cũ thông qua `flashcards_share.cutover_clone_model_to_overlay_only(...)`
+`create_app()` khởi tạo extension, đăng ký model/blueprint/CLI và gọi `run_startup_maintenance()` trong `app/startup.py`. Ngoài testing, `STARTUP_RUN_MAINTENANCE` mặc định tắt; schema được quản lý bằng Alembic. Kiểm tra kết nối DB là bước riêng (`STARTUP_CHECK_DB_CONNECTIVITY`).
+
+Khi bật maintenance, các cờ con điều khiển `db.create_all()`, sửa schema tương thích, seed roles/taxonomy/TTS và clone cutover. TTS seed và clone cutover mặc định tắt; không xem chúng là chi phí bắt buộc mỗi lần boot. Xác minh effective config của process trước khi đánh giá startup hoặc chạy maintenance.
 
 ## Chạy và kiểm tra
 
@@ -122,4 +120,4 @@ REST route -> application service (transaction owner) -> repository -> model
 - **Flama Audio Companion**: Chạy `flama-audio/publish/release/FlamaAudio-Portable.exe` hoặc debug WPF app (Port 4791)
 - **Production Server**: `gunicorn --bind 0.0.0.0:4789 wsgi:app`
 - **Frontend Check**: `cd frontend && npm run check`
-- **Backend Tests**: `python -m unittest discover -s tests -p "test_*.py"`
+- **Focused Tests**: `python scripts/run_tests.py --changed` hoặc `--module study,marketplace`; dùng `--all` cho CI/pre-release.

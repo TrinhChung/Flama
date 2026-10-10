@@ -2,17 +2,19 @@ export const MASTER_PROMPT = `Bạn là một chuyên gia thiết kế Flashcard
 
 Nhiệm vụ của bạn là dựa vào [YÊU CẦU CỦA TÔI], hãy thiết kế:
 1. Danh sách các Trường dữ liệu (Field Definitions) cần tạo trong Note Type (gồm Tên trường và Loại trường: text / richtext / audio / image / markdown...).
-2. Mã Front HTML (Mặt trước).
-3. Mã Back HTML (Mặt sau).
-4. Mã Shared CSS (Định dạng kiểu dáng chung).
+2. Bộ input của Template (key, nhãn, kiểu dữ liệu) và bảng mapping field → input.
+3. Mã Front HTML (Mặt trước).
+4. Mã Back HTML (Mặt sau).
+5. Mã Shared CSS (Định dạng kiểu dáng chung).
 
 YÊU CẦU KỸ THUẬT BẮT BUỘC ĐỂ KHÔNG BỊ LỖI:
-- Đặt tên trường dữ liệu theo chuẩn snake_case chữ thường (ví dụ: word, reading, meaning, audio_word, example_jp, example_vi).
-- Sử dụng cú pháp Mustache {{Tên_Trường}} hoặc {{{Tên_Trường}}} (nếu là richtext).
-- Mọi khối có điều kiện ẩn hiện bắt buộc dùng: {{#Tên_Trường}} ... {{/Tên_Trường}}.
+- Field thuộc Note Type; input thuộc Template. Tên field và input không cần giống nhau; mapping phải ghép cùng kiểu dữ liệu.
+- Đặt key input theo chuẩn snake_case chữ thường (ví dụ: word, reading, meaning, audio_word, example_jp, example_vi).
+- Sử dụng cú pháp Mustache {{InputKey}} hoặc {{{InputKey}}} (nếu là richtext).
+- Mọi khối có điều kiện ẩn hiện bắt buộc dùng: {{#InputKey}} ... {{/InputKey}}.
 - Đóng mở thẻ HTML chuẩn xác: Mọi thẻ HTML mở bên trong block Mustache {{#...}} PHẢI ĐƯỢC ĐÓNG trước {{/...}}.
 - Khung thẻ mặt trước căn giữa bằng Flexbox (không dùng style height: 100vh).
-- Các trường Audio phải tạo thẻ <audio id="..." src="{{Tên_Trường}}"></audio> và nút bấm loa 🔊 tương ứng.
+- Các input Audio phải tạo thẻ <audio id="..." src="{{InputKey}}"></audio> và nút bấm loa 🔊 tương ứng.
 - Nếu có script tự động phát âm tuần tự trong thẻ <script>, phải kiểm tra phần tử tồn tại trước khi phát (safePlay).
 - Thiết kế giao diện hiện đại, tinh tế, font chữ rõ ràng, phân cấp thị giác đẹp mắt, hỗ trợ hiển thị đẹp trên cả mobile và desktop.
 
@@ -50,17 +52,19 @@ export const MASTER_PROMPT_EN = `You are an expert language flashcard designer o
 
 Your task is to design based on [MY REQUIREMENTS]:
 1. A list of Field Definitions to create in the Note Type (Field Name and Field Type: text / richtext / audio / image / markdown...).
-2. Front HTML code.
-3. Back HTML code.
-4. Shared CSS code.
+2. The Template input schema (key, label, type) and a field → input mapping table.
+3. Front HTML code.
+4. Back HTML code.
+5. Shared CSS code.
 
 MANDATORY TECHNICAL REQUIREMENTS TO PREVENT ERRORS:
-- Name fields using lowercase snake_case (e.g. word, reading, meaning, audio_word, example_jp, example_vi).
-- Use Mustache syntax {{Field_Name}} or {{{Field_Name}}} (if richtext).
-- All conditional visibility blocks must use: {{#Field_Name}} ... {{/Field_Name}}.
+- Fields belong to the Note Type; inputs belong to the Template. Their names may differ, but mapped types must match exactly.
+- Name input keys using lowercase snake_case (e.g. word, reading, meaning, audio_word, example_jp, example_vi).
+- Use Mustache syntax {{InputKey}} or {{{InputKey}}} (if richtext).
+- All conditional visibility blocks must use: {{#InputKey}} ... {{/InputKey}}.
 - Precise HTML tag pairing: Any HTML tag opened inside {{#...}} MUST BE CLOSED before {{/...}}.
 - Center the front card with Flexbox (do not use style height: 100vh).
-- Audio fields must generate an <audio id="..." src="{{Field_Name}}"></audio> tag and a matching speaker button 🔊.
+- Audio inputs must generate an <audio id="..." src="{{InputKey}}"></audio> tag and a matching speaker button 🔊.
 - If sequential audio playback scripts exist inside <script>, ensure element existence before playing (safePlay).
 - Clean, modern, responsive design with clear typography, supporting both mobile and desktop.
 

@@ -5,16 +5,16 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
-import type { TemplateVersionDetail, TemplateVersionList } from '@/entities/card-template'
+import type { TemplateLibraryDetail, TemplateVersionDetail, TemplateVersionList } from '@/entities/card-template'
 import { TemplateVersionHistorySheet } from './TemplateVersionHistorySheet'
 import type { TemplateVersionSource } from '../model/types'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { NoteTypeDetailPage } from '@/features/note-types/pages/NoteTypeDetailPage'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { TemplateDetailPage } from '@/features/template-library/pages/TemplateDetailPage'
 
 const api = vi.hoisted(() => ({ get: vi.fn(), mutate: vi.fn(), request: vi.fn(), json: vi.fn() }))
 vi.mock('@/app/api', () => ({ appApi: { get: api.get, mutate: api.mutate } }))
 vi.mock('@/shared/api/client', async (original) => ({ ...await original<typeof import('@/shared/api/client')>(), apiRequest: api.request, apiJson: api.json }))
-vi.mock('@/features/note-types/components/NoteTypeLivePreview', () => ({ NoteTypeLivePreview: () => null }))
+vi.mock('@/entities/flashcard/ui/CardPreviewPanel', () => ({ CardPreviewPanel: () => null }))
 vi.mock('@/components/ambient-background', () => ({ AmbientBackground: () => null }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -96,30 +96,44 @@ describe('TemplateVersionHistorySheet', () => {
   })
 })
 
-describe('NoteType history applies explicit restore to the current draft', () => {
+describe('Template workspace history applies explicit restore to the current draft', () => {
   let root: Root
   let container: HTMLDivElement
   let client: QueryClient
-  const item = (id: string, front = 'saved') => ({ id, name: id, ...current, front_html: front, is_default: false })
+  let navigate: ReturnType<typeof useNavigate>
+  const item = (id: string, front = 'saved'): TemplateLibraryDetail => ({
+    id, owner_user_id: 1, name: id, description: '', primary_category: null, origin: 'authored',
+    source_template_id: null, source_version_id: null, current_version_id: 'v3',
+    ...current, front_html: front, input_schema: [], archived_at: null, created_at: null, updated_at: null,
+    application_count: 0, note_type_count: 0, applications: [],
+  })
+  function Navigation() { navigate = useNavigate(); return null }
   beforeEach(() => {
     vi.clearAllMocks()
     client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
     container = document.createElement('div'); document.body.append(container); root = createRoot(container)
-    api.get.mockResolvedValue({ id: 'nt1', name: 'Note type', field_defs: [], templates: [item('t1'), item('t2', 'second')] })
-    api.mutate.mockResolvedValue({})
-    api.request.mockImplementation(async (url: string) => url.endsWith('/versions') ? { schema_version: 'template-versions.v2', template_id: 't1', current_version_id: 'v3', items: versions } : url.includes('/versions/') ? versions[1] : { items: [] })
-    api.json.mockResolvedValue({ ...item('t1'), note_type_id: 'nt1', position: 0, updated_at: null, current_version_id: 'v4' })
+    api.request.mockImplementation(async (url: string) => {
+      if (url.endsWith('/versions')) return { schema_version: 'template-versions.v2', template_id: 't1', current_version_id: 'v3', items: versions }
+      if (url.includes('/versions/')) return versions[1]
+      if (url.endsWith('/preview')) return { front_html: 'preview front', back_html: 'preview back', front_renderer_payload: null, back_renderer_payload: null }
+      if (url === '/api/card-templates/t1') return item('t1')
+      if (url === '/api/card-templates/t2') return item('t2', 'second')
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    api.json.mockResolvedValue({ id: 't1', name: 't1', ...current, note_type_id: null, position: 0, is_default: false, updated_at: null, current_version_id: 'v4' })
   })
   afterEach(async () => { await act(async () => root.unmount()); client.clear(); container.remove(); document.body.innerHTML = '' })
   async function start() {
-    await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/note-types/nt1']}><Routes><Route path="/note-types/:id" element={<NoteTypeDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>))
+    await act(async () => root.render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/card-templates/t1']}><Navigation /><Routes><Route path="/card-templates/:id" element={<TemplateDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>))
     await flush()
     await act(async () => {
       const textarea = container.querySelector('textarea')!
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'dirty draft')
       textarea.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    await act(async () => button('Lịch sử').click()); await flush()
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Thao tác khác với template"]')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })))
+    await flush()
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.textContent?.trim() === 'Lịch sử')!.click()); await flush()
     await act(async () => [...document.querySelectorAll('button')].find((el) => el.getAttribute('aria-pressed') !== null && el.textContent?.includes('Phiên bản 2'))!.click()); await flush()
     await act(async () => button('Khôi phục phiên bản này').click())
     await act(async () => button('Khôi phục').click()); await flush()
@@ -127,18 +141,24 @@ describe('NoteType history applies explicit restore to the current draft', () =>
   it('replaces dirty sources even if restored sources equal the cached server baseline', async () => {
     await start(); expect(container.querySelector('textarea')?.value).toBe('saved')
     expect(api.json).toHaveBeenCalledWith('/api/card-templates/t1/versions/v2/restore', 'POST', {})
+    expect(api.request.mock.calls.filter(([url]) => url === '/api/card-templates/t1').length).toBeGreaterThanOrEqual(2)
   })
   it('keeps dirty sources on restore errors', async () => {
     api.json.mockRejectedValue(new Error('restore denied')); await start()
     expect(container.querySelector('textarea')?.value).toBe('dirty draft')
+    expect(toast.error).toHaveBeenCalledWith('Không thể khôi phục', { description: 'restore denied' })
   })
-  it('ignores a late restore after selecting another template', async () => {
+  it('ignores a late restore after navigating to another template workspace', async () => {
     let resolve!: (value: unknown) => void
     api.json.mockImplementation(() => new Promise((done) => { resolve = done }))
     await start()
-    await act(async () => { const select = container.querySelector('select')!; select.value = 't2'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+    await act(async () => navigate('/card-templates/t2'))
     await flush()
-    await act(async () => resolve({ ...item('t1'), note_type_id: 'nt1', position: 0, updated_at: null }))
     expect(container.querySelector('textarea')?.value).toBe('second')
+    expect(document.body.textContent).not.toContain('Lịch sử phiên bản')
+    await act(async () => resolve({ id: 't1', name: 't1', ...current, note_type_id: null, position: 0, is_default: false, updated_at: null }))
+    await flush()
+    expect(container.querySelector('textarea')?.value).toBe('second')
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })

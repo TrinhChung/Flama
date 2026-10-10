@@ -193,7 +193,7 @@ export function McpTokenActionModals({
                       key={scopeKey}
                       className="p-2 rounded-lg border bg-muted/30 flex items-start gap-2.5 text-xs"
                     >
-                      <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <Check className="size-4 text-primary shrink-0 mt-0.5" />
                       <div>
                         <div className="font-semibold text-foreground">
                           {t(`scopes.items.${scopeKey.replace(/[-:]/g, '_')}.label`, scopeMeta?.label || scopeKey)}

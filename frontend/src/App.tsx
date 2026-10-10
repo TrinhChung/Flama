@@ -8,6 +8,9 @@ import { RequireCreator } from './features/auth/components/RequireCreator'
 import { LandingPage } from './pages/LandingPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import i18n from './shared/config/i18n'
+import { loadRequiredNamespaces } from './shared/config/i18n/loadGuard'
+import { TranslationLoadBoundary } from './shared/config/i18n/TranslationLoadBoundary'
 import {
   MAINTENANCE_PATH,
   subscribeBackendUnavailable,
@@ -87,6 +90,12 @@ const NoteTypeGuidePage = lazy(() =>
   import('./features/note-types/pages/NoteTypeGuidePage').then((module) => ({
     default: module.NoteTypeGuidePage,
   })),
+)
+const NoteTypeTemplatesPage = lazy(() =>
+  import('./features/note-types/pages/NoteTypeTemplatesPage').then((module) => ({ default: module.NoteTypeTemplatesPage })),
+)
+const NoteTypeTemplateMappingPage = lazy(() =>
+  import('./features/note-types/pages/NoteTypeTemplateMappingPage').then((module) => ({ default: module.NoteTypeTemplateMappingPage })),
 )
 const InstalledDecksPage = lazy(() =>
   import('./features/library/pages/LibraryPages').then((module) => ({
@@ -174,7 +183,11 @@ const AdminMcpTokensPage = lazy(() =>
   })),
 )
 const StudyGoalsPage = lazy(() =>
-  import('./features/settings/pages/StudyGoalsPage').then((module) => ({
+  // Goal option getters use i18n.t directly rather than useTranslation.
+  Promise.all([
+    import('./features/settings/pages/StudyGoalsPage'),
+    loadRequiredNamespaces(i18n, ['onboarding']),
+  ]).then(([module]) => ({
     default: module.StudyGoalsPage,
   })),
 )
@@ -331,6 +344,7 @@ const WalletPage = lazy(() =>
 
 function deferred(element: ReactNode) {
   return (
+    <TranslationLoadBoundary>
     <Suspense
       fallback={
         <div className="flex min-h-80 items-center justify-center">
@@ -341,13 +355,14 @@ function deferred(element: ReactNode) {
     >
       {element}
     </Suspense>
+    </TranslationLoadBoundary>
   )
 }
 
 const router = createBrowserRouter([
   {
     path: MAINTENANCE_PATH,
-    element: <MaintenancePage />,
+    element: deferred(<MaintenancePage />),
   },
   {
     path: 'oauth/consent',
@@ -356,7 +371,7 @@ const router = createBrowserRouter([
   {
     element: <AppLayout />,
     children: [
-      { index: true, element: <LandingPage /> },
+      { index: true, element: deferred(<LandingPage />) },
       { path: 'login', element: deferred(<LoginPage />) },
       { path: 'register', element: deferred(<RegisterPage />) },
       { path: 'forgot-password', element: deferred(<ForgotPasswordPage />) },
@@ -436,6 +451,10 @@ const router = createBrowserRouter([
           { path: 'note-types', element: deferred(<NoteTypeManagerPage />) },
           { path: 'card-templates', element: deferred(<TemplateLibraryPage />) },
           { path: 'card-templates/:id', element: deferred(<TemplateDetailPage />) },
+          { path: 'flashcards/note-types/:id/templates', element: deferred(<NoteTypeTemplatesPage />) },
+          { path: 'flashcards/note-types/:id/templates/:applicationId', element: deferred(<NoteTypeTemplateMappingPage />) },
+          { path: 'note-types/:id/templates', element: deferred(<NoteTypeTemplatesPage />) },
+          { path: 'note-types/:id/templates/:applicationId', element: deferred(<NoteTypeTemplateMappingPage />) },
           {
             path: 'note-types/guide',
             element: deferred(<NoteTypeGuidePage />),
@@ -651,7 +670,7 @@ const router = createBrowserRouter([
         ],
       },
       { path: 'home', element: <Navigate to="/dashboard" replace /> },
-      { path: '*', element: <NotFoundPage /> },
+      { path: '*', element: deferred(<NotFoundPage />) },
     ],
   },
 ])

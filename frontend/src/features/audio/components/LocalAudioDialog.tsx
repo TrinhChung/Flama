@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   AlertCircle,
   Cpu,
@@ -43,6 +44,7 @@ type LocalAudioDialogProps = {
 }
 
 export function LocalAudioDialog(props: LocalAudioDialogProps) {
+  const { t } = useTranslation('audio')
   const { isOpen, onClose, selectedCardIds, activeCardId, deckId, deckName } = props
   const engine = useLocalAudioEngine(props)
   
@@ -94,7 +96,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold text-foreground">
               <Volume2 className="size-4 sm:size-5 text-primary shrink-0" />
-              <span>Tạo âm thanh &gt; {isKokoro ? 'Đa ngôn ngữ Offline' : 'Tiếng Nhật Offline'}</span>
+              <span>{t('dialog.title')} &gt; {isKokoro ? 'Đa ngôn ngữ Offline' : 'Tiếng Nhật Offline'}</span>
             </DialogTitle>
             <div className="flex items-center gap-2">
               <Button
@@ -117,7 +119,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
             </div>
           </div>
           <DialogDescription className="text-xs text-muted-foreground mt-1">
-            Tổng hợp giọng phát âm tự nhiên trực tiếp không cần mạng Internet thông qua ứng dụng Flama Audio Desktop.
+            {t('dialog.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -126,7 +128,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
           {/* Target Card Scope Banner */}
           <div className="p-4 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-between shadow-xs">
             <span className="font-semibold text-foreground text-xs">
-              Phạm vi áp dụng:{' '}
+              {t('dialog.scope_label')}:{' '}
               <strong className="text-primary font-bold ml-1">
                 {selectedCardIds.length > 0
                   ? `${selectedCardIds.length} thẻ đã tick chọn`
@@ -215,7 +217,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
               <div className="grid gap-3.5 sm:grid-cols-2">
                 {/* Voice Selection */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Giọng phát âm ({isKokoro ? 'Kokoro' : 'VOICEVOX'})</Label>
+                  <Label className="text-xs font-semibold">{t('rule_card.voice_label')} ({isKokoro ? 'Kokoro' : 'VOICEVOX'})</Label>
                   <NativeSelect
                     value={selectedVoiceId}
                     onChange={(e) => setSelectedVoiceId(e.target.value)}
@@ -237,7 +239,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                 {/* Fields Selection Mapping */}
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Cột nguồn từ</Label>
+                    <Label className="text-xs font-semibold">{t('dialog.source_field_label')}</Label>
                     <NativeSelect
                       value={sourceField}
                       onChange={(e) => setSourceField(e.target.value)}
@@ -254,7 +256,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                     </NativeSelect>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Ghi file audio vào</Label>
+                    <Label className="text-xs font-semibold">{t('dialog.target_field_label')}</Label>
                     <NativeSelect
                       value={destinationField}
                       onChange={(e) => setDestinationField(e.target.value)}
@@ -321,7 +323,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                     onClick={handleResetDefaults}
                     disabled={isProcessing}
                   >
-                    Khôi phục mặc định
+                    {t('rule_card.reset_default')}
                   </Button>
                 </div>
 
@@ -358,7 +360,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
         {/* Modal Footer */}
         <DialogFooter className="px-4 sm:px-6 pt-4 pb-6 sm:pb-7 mb-0 border-t bg-muted/20 shrink-0 flex items-center justify-between gap-3">
           <Button variant="outline" size="sm" onClick={onClose} disabled={isProcessing}>
-            Đóng
+            {t('dialog.cancel_button')}
           </Button>
 
           <div className="flex items-center gap-2">
@@ -373,7 +375,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                   disabled={isPreviewing || isProcessing}
                 >
                   {isPreviewing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-                  <span>Nghe thử phát âm</span>
+                  <span>{t('rule_card.preview_voice')}</span>
                 </Button>
 
                 <Button
@@ -395,7 +397,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                   ) : (
                     <Volume2 className="size-3.5" />
                   )}
-                  <span>Tạo audio ({targetCardIds.length} thẻ)</span>
+                  <span>{t('dialog.proceed_button')} ({targetCardIds.length} thẻ)</span>
                 </Button>
               </>
             )}

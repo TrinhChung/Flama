@@ -65,7 +65,7 @@ export function StatisticsPage() {
   const overview = overviewQuery.data
 
   return (
-    <Page className="space-y-4 sm:space-y-6">
+    <Page size="wide" className="space-y-4 sm:space-y-6">
       <PageHeader
         title={t('header.title')}
         description={t('header.description')}

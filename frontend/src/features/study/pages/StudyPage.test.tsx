@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   undo: vi.fn(),
   commit: vi.fn(),
   reloadSession: vi.fn(),
+  discardSession: vi.fn(),
   prepareDecision: vi.fn(),
   updateCardContent: vi.fn(),
   startComposition: vi.fn(),
@@ -66,6 +67,7 @@ vi.mock('../hooks/useStudySession', () => ({
     undo: mocks.undo,
     commit: mocks.commit,
     reloadSession: mocks.reloadSession,
+    discardSession: mocks.discardSession,
     requestTakeover: mocks.requestTakeover,
     updateCardContent: mocks.updateCardContent,
     startComposition: mocks.startComposition,
@@ -147,7 +149,7 @@ afterEach(async () => {
 })
 
 describe('StudyPage session conflict keyboard behavior', () => {
-  it('shows the template picker in the study shell and starts a template with one click', async () => {
+  it('starts a template with one click and keeps field setup separate from studying', async () => {
     const first = { composition_id: 'c1', template_name: 'Card A', context_kind: 'owned' }
     const second = { composition_id: 'c2', template_name: 'Card B', context_kind: 'owned' }
     mocks.saveBindings.mockResolvedValue({ compositionId: 'c1', inputBindings: { term: 'f1' } })
@@ -165,7 +167,7 @@ describe('StudyPage session conflict keyboard behavior', () => {
     expect(container.textContent).toContain('Chọn template để học')
     expect(container.textContent).toContain('5 thẻ')
     expect(container.querySelector('.study-page')).toBeNull()
-    expect(container.querySelector('.study-header-container')).not.toBeNull()
+    expect(container.querySelector('a[href="/dashboard"]')).not.toBeNull()
     expect(container.textContent).not.toContain('Bắt đầu học')
 
     // Only templates with inputs offer field setup; the map is not shown inline.
@@ -702,6 +704,7 @@ describe('StudyPage exit confirmation and completion card gating', () => {
     })
 
     expect(mocks.commit).not.toHaveBeenCalled()
+    expect(mocks.discardSession).toHaveBeenCalledOnce()
     expect(mocks.blockerState.proceed).toHaveBeenCalledOnce()
   })
 

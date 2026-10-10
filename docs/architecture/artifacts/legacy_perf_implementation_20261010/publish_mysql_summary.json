@@ -1,0 +1,461 @@
+{
+  "runs": [
+    {
+      "source_artifact": "output\\publish_options_mysql_before_20261010.json",
+      "source_artifact_sha256": "e3e59c5e7475231d8ec330f664931c08e472d924388ac876ee3f95d8acbb3d51",
+      "measured_at_utc": "2026-10-09T16:28:18.492954+00:00",
+      "git_head": "6d03826423b2fc726981515c48782066658f86a0",
+      "source_sha256": {
+        "app/services/flashcards_share_service.py": "2347639c887ec25b6613f1b780d93371a28e06c8094c87dfe7940155694d03cb",
+        "app/services/share/publish.py": "6fe8292b2238ec16071ed96b9af08a5b1d0add5ea0814c91c3765b0c5c75c0d6",
+        "app/repositories/flashcards_share_repository.py": "65f4652f87c1fdc5a68737ac5fabd4cbe8036928398decd123d6f714a32f4a2c",
+        "app/services/share/helpers.py": "782749e3b65e2c716f67aada2556a89bec7f24c6446a01668f668b5596edb262"
+      },
+      "method": {
+        "warmups": 3,
+        "repetitions": 30,
+        "db_transactions_read_only": true,
+        "startup_maintenance": false,
+        "latency_tracemalloc_enabled": false,
+        "first_request_is_cold_buffer_pool": false,
+        "sql_cursor_ms_includes_fetch_and_server_execution": true,
+        "http_ms_includes_auth_json_and_transfer": true
+      },
+      "source_unchanged_during_measurement": true,
+      "passed": true,
+      "mysql": {
+        "version": "8.0.40",
+        "buffer_pool_MiB": 128.0
+      },
+      "users": [
+        {
+          "user_id": 4,
+          "live_decks": 1852,
+          "owned_cards": 2108,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 150.758,
+            "p95_ms": 250.848,
+            "min_ms": 128.291,
+            "max_ms": 271.081
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 135.209,
+            "p95_ms": 237.773,
+            "min_ms": 114.244,
+            "max_ms": 260.789
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 79.094,
+            "p95_ms": 85.16,
+            "min_ms": 69.902,
+            "max_ms": 88.292
+          },
+          "sql_statements_range": [
+            9,
+            9
+          ],
+          "service_peak_allocations_MiB": 3.579,
+          "payload_bytes": 313063,
+          "payload_sha256": "74dd8e571f4040944e491f8cf15cb81a828007eac0b6dec28f902457bf427099",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        },
+        {
+          "user_id": 1,
+          "live_decks": 1528,
+          "owned_cards": 39325,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 518.007,
+            "p95_ms": 638.158,
+            "min_ms": 421.392,
+            "max_ms": 758.378
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 504.337,
+            "p95_ms": 616.442,
+            "min_ms": 413.23,
+            "max_ms": 749.124
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 441.186,
+            "p95_ms": 514.832,
+            "min_ms": 375.167,
+            "max_ms": 522.233
+          },
+          "sql_statements_range": [
+            8,
+            8
+          ],
+          "service_peak_allocations_MiB": 3.999,
+          "payload_bytes": 461099,
+          "payload_sha256": "653f06c276f6e2bc67af7446037f55f53890663d5ed5c748ec6026e6fdd5cad6",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        },
+        {
+          "user_id": 15,
+          "live_decks": 224,
+          "owned_cards": 0,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 24.39,
+            "p95_ms": 34.972,
+            "min_ms": 22.182,
+            "max_ms": 41.96
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 18.86,
+            "p95_ms": 21.774,
+            "min_ms": 17.393,
+            "max_ms": 22.046
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 12.426,
+            "p95_ms": 14.036,
+            "min_ms": 11.212,
+            "max_ms": 15.243
+          },
+          "sql_statements_range": [
+            7,
+            7
+          ],
+          "service_peak_allocations_MiB": 0.422,
+          "payload_bytes": 60218,
+          "payload_sha256": "4878511753c408277e0fd837728bb472ef5a3bc50352328f8b1fef066c85099b",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        }
+      ]
+    },
+    {
+      "source_artifact": "output\\publish_options_mysql_after_20261010.json",
+      "source_artifact_sha256": "642f64c72c83b6f3d54f7adea05ed5b71f9f96ffd90855b75ed122ee3f2e5a60",
+      "measured_at_utc": "2026-10-09T16:37:25.118674+00:00",
+      "git_head": "6d03826423b2fc726981515c48782066658f86a0",
+      "source_sha256": {
+        "app/services/flashcards_share_service.py": "121455956a35e9d1ceb7116c5e58eaaa463ce569a843a8222ae59b029325c42d",
+        "app/services/share/publish.py": "9414053af9135a1272d9bf01142528f8086106eede0ebec3e6b7be98adaa3de9",
+        "app/repositories/flashcards_share_repository.py": "b0a57a9beffad3ac4d9bc69885dc5934fa3f99725f921f5fd6721862a54262cf",
+        "app/services/share/helpers.py": "782749e3b65e2c716f67aada2556a89bec7f24c6446a01668f668b5596edb262"
+      },
+      "method": {
+        "warmups": 3,
+        "repetitions": 30,
+        "db_transactions_read_only": true,
+        "startup_maintenance": false,
+        "latency_tracemalloc_enabled": false,
+        "first_request_is_cold_buffer_pool": false,
+        "sql_cursor_ms_includes_fetch_and_server_execution": true,
+        "http_ms_includes_auth_json_and_transfer": true
+      },
+      "source_unchanged_during_measurement": true,
+      "passed": true,
+      "mysql": {
+        "version": "8.0.40",
+        "buffer_pool_MiB": 128.0
+      },
+      "users": [
+        {
+          "user_id": 4,
+          "live_decks": 1852,
+          "owned_cards": 2108,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 122.013,
+            "p95_ms": 241.268,
+            "min_ms": 106.91,
+            "max_ms": 304.834
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 107.414,
+            "p95_ms": 230.534,
+            "min_ms": 95.054,
+            "max_ms": 292.6
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 66.098,
+            "p95_ms": 77.692,
+            "min_ms": 62.039,
+            "max_ms": 83.634
+          },
+          "sql_statements_range": [
+            8,
+            8
+          ],
+          "service_peak_allocations_MiB": 2.736,
+          "payload_bytes": 313063,
+          "payload_sha256": "74dd8e571f4040944e491f8cf15cb81a828007eac0b6dec28f902457bf427099",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        },
+        {
+          "user_id": 1,
+          "live_decks": 1528,
+          "owned_cards": 39325,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 390.132,
+            "p95_ms": 515.135,
+            "min_ms": 368.499,
+            "max_ms": 518.352
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 373.868,
+            "p95_ms": 503.736,
+            "min_ms": 358.648,
+            "max_ms": 508.83
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 337.36,
+            "p95_ms": 377.379,
+            "min_ms": 323.257,
+            "max_ms": 386.901
+          },
+          "sql_statements_range": [
+            7,
+            7
+          ],
+          "service_peak_allocations_MiB": 3.391,
+          "payload_bytes": 461099,
+          "payload_sha256": "653f06c276f6e2bc67af7446037f55f53890663d5ed5c748ec6026e6fdd5cad6",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        },
+        {
+          "user_id": 15,
+          "live_decks": 224,
+          "owned_cards": 0,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 27.661,
+            "p95_ms": 42.788,
+            "min_ms": 23.552,
+            "max_ms": 48.406
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 20.686,
+            "p95_ms": 27.573,
+            "min_ms": 18.039,
+            "max_ms": 28.019
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 13.93,
+            "p95_ms": 18.237,
+            "min_ms": 11.34,
+            "max_ms": 18.661
+          },
+          "sql_statements_range": [
+            6,
+            6
+          ],
+          "service_peak_allocations_MiB": 0.364,
+          "payload_bytes": 60218,
+          "payload_sha256": "4878511753c408277e0fd837728bb472ef5a3bc50352328f8b1fef066c85099b",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        }
+      ]
+    },
+    {
+      "source_artifact": "output\\publish_options_mysql_after_final_20261010.json",
+      "source_artifact_sha256": "72fa908d15c7d627eb5345a24ab67ad04c6da8aee82dc8dd61c7a5d2e424f6e6",
+      "measured_at_utc": "2026-10-09T23:22:36.257303+00:00",
+      "git_head": "50d0883dfc074f6134ed75f64e9db721458a5089",
+      "source_sha256": {
+        "app/services/flashcards_share_service.py": "121455956a35e9d1ceb7116c5e58eaaa463ce569a843a8222ae59b029325c42d",
+        "app/services/share/publish.py": "9414053af9135a1272d9bf01142528f8086106eede0ebec3e6b7be98adaa3de9",
+        "app/repositories/flashcards_share_repository.py": "b0a57a9beffad3ac4d9bc69885dc5934fa3f99725f921f5fd6721862a54262cf",
+        "app/services/share/helpers.py": "782749e3b65e2c716f67aada2556a89bec7f24c6446a01668f668b5596edb262",
+        "app/services/deck_publish_index.py": "4457369b615ee40782351804412891012a3cacd3132791ff76f4d4ea8e7846bd"
+      },
+      "method": {
+        "warmups": 3,
+        "repetitions": 30,
+        "db_transactions_read_only": true,
+        "startup_maintenance": false,
+        "latency_tracemalloc_enabled": false,
+        "first_request_is_cold_buffer_pool": false,
+        "sql_cursor_ms_includes_fetch_and_server_execution": true,
+        "http_ms_includes_auth_json_and_transfer": true
+      },
+      "source_unchanged_during_measurement": true,
+      "passed": true,
+      "mysql": {
+        "version": "8.0.40",
+        "buffer_pool_MiB": 128.0
+      },
+      "users": [
+        {
+          "user_id": 1,
+          "live_decks": 1528,
+          "owned_cards": 39325,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 430.931,
+            "p95_ms": 626.016,
+            "min_ms": 343.752,
+            "max_ms": 656.316
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 420.108,
+            "p95_ms": 596.011,
+            "min_ms": 335.67,
+            "max_ms": 640.48
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 351.777,
+            "p95_ms": 477.752,
+            "min_ms": 302.88,
+            "max_ms": 533.332
+          },
+          "sql_statements_range": [
+            7,
+            7
+          ],
+          "service_peak_allocations_MiB": 3.391,
+          "payload_bytes": 461099,
+          "payload_sha256": "653f06c276f6e2bc67af7446037f55f53890663d5ed5c748ec6026e6fdd5cad6",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        },
+        {
+          "user_id": 4,
+          "live_decks": 1852,
+          "owned_cards": 2108,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 107.893,
+            "p95_ms": 202.429,
+            "min_ms": 97.556,
+            "max_ms": 235.691
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 93.798,
+            "p95_ms": 186.921,
+            "min_ms": 89.164,
+            "max_ms": 224.695
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 60.648,
+            "p95_ms": 66.326,
+            "min_ms": 58.162,
+            "max_ms": 71.538
+          },
+          "sql_statements_range": [
+            8,
+            8
+          ],
+          "service_peak_allocations_MiB": 2.736,
+          "payload_bytes": 313063,
+          "payload_sha256": "74dd8e571f4040944e491f8cf15cb81a828007eac0b6dec28f902457bf427099",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        },
+        {
+          "user_id": 15,
+          "live_decks": 224,
+          "owned_cards": 0,
+          "warm_http": {
+            "samples": 30,
+            "median_ms": 25.253,
+            "p95_ms": 40.969,
+            "min_ms": 22.567,
+            "max_ms": 46.425
+          },
+          "warm_service": {
+            "samples": 30,
+            "median_ms": 18.765,
+            "p95_ms": 23.913,
+            "min_ms": 16.646,
+            "max_ms": 24.697
+          },
+          "warm_sql_cursor": {
+            "samples": 30,
+            "median_ms": 12.584,
+            "p95_ms": 14.655,
+            "min_ms": 10.701,
+            "max_ms": 14.707
+          },
+          "sql_statements_range": [
+            6,
+            6
+          ],
+          "service_peak_allocations_MiB": 0.364,
+          "payload_bytes": 60218,
+          "payload_sha256": "4878511753c408277e0fd837728bb472ef5a3bc50352328f8b1fef066c85099b",
+          "stable_payload": true,
+          "modular_payload_parity": true
+        }
+      ]
+    }
+  ],
+  "provenance_note": "First AFTER run omitted the new deck_publish_index.py from its source capture. Final AFTER rerun includes it and verifies all captured sources remained unchanged. Runs use the same configured local MySQL dump, without source/data writes; order/time differ and latency varies. No production SLO claim.",
+  "sql_variants": {
+    "source_artifact_sha256": "adad9fc3409f893b88a4ac8277e0c0f2a388bbabcebd4219aef10813662f51b0",
+    "read_only": true,
+    "repetitions": 10,
+    "passed": true,
+    "queries": {
+      "baseline_count": {
+        "samples": 10,
+        "median_ms": 239.159,
+        "p95_ms": 244.723,
+        "rows": 1465,
+        "payload_parity": true
+      },
+      "baseline_note_types": {
+        "samples": 10,
+        "median_ms": 125.367,
+        "p95_ms": 135.466,
+        "rows": 1465,
+        "payload_parity": true
+      },
+      "combined_in": {
+        "samples": 10,
+        "median_ms": 278.206,
+        "p95_ms": 343.379,
+        "rows": 1465,
+        "payload_parity": true
+      },
+      "combined_visible_join": {
+        "samples": 10,
+        "median_ms": 321.527,
+        "p95_ms": 335.296,
+        "rows": 1465,
+        "payload_parity": true
+      },
+      "count_visible_join": {
+        "samples": 10,
+        "median_ms": 287.159,
+        "p95_ms": 294.104,
+        "rows": 1465,
+        "payload_parity": true
+      },
+      "note_types_visible_join": {
+        "samples": 10,
+        "median_ms": 174.336,
+        "p95_ms": 181.541,
+        "rows": 1465,
+        "payload_parity": true
+      }
+    }
+  }
+}

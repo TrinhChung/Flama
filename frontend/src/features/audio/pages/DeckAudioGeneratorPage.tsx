@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   AlertTriangle,
   AudioLines,
@@ -27,6 +28,7 @@ import { useDeckAudioQueue } from '../hooks/useDeckAudioQueue'
 import { useDeckAudioScanner } from '../hooks/useDeckAudioScanner'
 
 export function DeckAudioGeneratorPage() {
+  const { t } = useTranslation('audio')
   const [isAudioHelperConnected, setIsAudioHelperConnected] = useState<boolean>(false)
 
   const scanner = useDeckAudioScanner()
@@ -69,12 +71,12 @@ export function DeckAudioGeneratorPage() {
 
   const handleStartOrQueue = () => {
     if (!isAudioHelperConnected) {
-      toast.error('Vui lòng kết nối ứng dụng Flama Audio Desktop trước khi bắt đầu.')
+      toast.error(t('page.toast_connect_required'))
       return
     }
 
     if (!selectedDeckId) {
-      toast.error('Vui lòng chọn một bộ thẻ (Deck).')
+      toast.error(t('page.toast_select_deck_required'))
       return
     }
 
@@ -96,21 +98,21 @@ export function DeckAudioGeneratorPage() {
               <AudioLines className="size-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-              Studio Tạo Âm Thanh Deck
+              {t('page.title')}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Quét thông minh trường từ vựng và tự động tổng hợp phát âm hàng loạt cho bộ thẻ qua Flama Audio Desktop.
+            {t('page.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <ContextHelpButton
             guidePath="/guide/audio/batch-generation"
-            guideTitle="Hướng dẫn tạo âm thanh hàng loạt"
+            guideTitle={t('page.guide_title')}
             troubleshootPath="/guide/troubleshooting/flama-audio"
-            troubleshootTitle="Khắc phục lỗi phát âm / Flama Audio"
-            label="Hướng dẫn & Sửa lỗi"
+            troubleshootTitle={t('page.troubleshoot_title')}
+            label={t('page.help_label')}
           />
         </div>
       </div>
@@ -125,7 +127,7 @@ export function DeckAudioGeneratorPage() {
             <div className="flex items-center gap-2.5">
               <Layers className="size-4 text-primary" />
               <CardTitle className="text-sm sm:text-base font-bold text-foreground">
-                1. Chọn bộ thẻ (Deck) &amp; Quét phân tích
+                {t('page.section_status')}
               </CardTitle>
             </div>
 
@@ -138,12 +140,12 @@ export function DeckAudioGeneratorPage() {
                 className="h-8 text-xs gap-1.5"
               >
                 <RefreshCw className={`size-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>Quét lại Deck</span>
+                <span>{t('page.scan_button')}</span>
               </Button>
             )}
           </div>
           <CardDescription className="text-xs text-muted-foreground mt-1">
-            Chọn bộ thẻ bạn muốn tạo âm thanh từ cây danh mục Deck bên dưới. Hệ thống sẽ tự động quét các trường audio, đối soát trường gốc và kiểm tra file hỏng.
+            {t('page.section_deck_tree_desc')}
           </CardDescription>
         </CardHeader>
 
@@ -154,7 +156,7 @@ export function DeckAudioGeneratorPage() {
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <Folder className="size-3.5 text-amber-500" />
-                  Danh mục Deck
+                  {t('page.section_deck_tree_label')}
                 </Label>
                 {selectedDeck && (
                   <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold truncate max-w-[200px]">
@@ -176,18 +178,18 @@ export function DeckAudioGeneratorPage() {
                   <div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground/60 mb-3">
                     <Layers className="size-6" />
                   </div>
-                  <p className="text-sm font-bold text-foreground">Chưa chọn bộ thẻ</p>
+                  <p className="text-sm font-bold text-foreground">{t('page.no_deck_selected_title')}</p>
                   <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                    Nhấp chọn một bộ thẻ trong cây danh mục bên trái để bắt đầu phân tích dữ liệu và thiết lập âm thanh.
+                    {t('page.no_deck_selected_desc')}
                   </p>
                 </div>
               ) : isScanning ? (
                 <div className="flex flex-col items-center justify-center border border-primary/20 rounded-2xl p-8 text-center bg-primary/5 min-h-[260px] h-full space-y-3 animate-pulse">
                   <LoaderCircle className="size-8 text-primary animate-spin" />
                   <div className="space-y-1">
-                    <p className="text-sm font-bold text-primary">Đang quét phân tích Deck...</p>
+                    <p className="text-sm font-bold text-primary">{t('page.scanning_button')}</p>
                     <p className="text-xs text-muted-foreground max-w-sm">
-                      Đang đọc cấu trúc các trường, đối soát liên kết âm thanh và kiểm tra tính toàn vẹn file trên ổ đĩa.
+                      {t('page.scanning_detail_desc')}
                     </p>
                   </div>
                 </div>
@@ -196,11 +198,11 @@ export function DeckAudioGeneratorPage() {
                   {/* Selected Deck Overview Info */}
                   <div className="flex items-center justify-between p-3.5 bg-muted/30 border border-border/60 rounded-2xl">
                     <div className="min-w-0">
-                      <div className="text-[11px] text-muted-foreground font-medium">Bộ thẻ đang xử lý:</div>
+                      <div className="text-[11px] text-muted-foreground font-medium">{t('page.selected_deck_processing')}</div>
                       <div className="text-sm font-bold text-foreground truncate">{scanData.deck.name}</div>
                     </div>
                     <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold shrink-0">
-                      {scanData.total_notes} thẻ
+                      {t('page.card_count_badge', { count: scanData.total_notes })}
                     </Badge>
                   </div>
 
@@ -208,7 +210,7 @@ export function DeckAudioGeneratorPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {/* Total Notes */}
                     <div className="p-3 rounded-xl bg-muted/30 border border-border/50 space-y-0.5">
-                      <span className="text-[10px] font-medium text-muted-foreground">Tổng số từ</span>
+                      <span className="text-[10px] font-medium text-muted-foreground">{t('page.stat_total_notes')}</span>
                       <p className="text-base font-black text-foreground font-mono">
                         {scanData.total_notes}
                       </p>
@@ -218,7 +220,7 @@ export function DeckAudioGeneratorPage() {
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
                       <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
                         <AudioLines className="size-2.5" />
-                        Cần tạo âm
+                        {t('page.stat_needs_audio')}
                       </span>
                       <p className="text-base font-black text-amber-700 dark:text-amber-300 font-mono">
                         {scanData.summary.needs_audio_count}
@@ -229,7 +231,7 @@ export function DeckAudioGeneratorPage() {
                     <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-0.5">
                       <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-1">
                         <Volume2 className="size-2.5" />
-                        Chưa có âm
+                        {t('page.stat_missing_audio')}
                       </span>
                       <p className="text-base font-black text-rose-700 dark:text-rose-300 font-mono">
                         {scanData.summary.missing_field_count}
@@ -240,7 +242,7 @@ export function DeckAudioGeneratorPage() {
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
                       <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
                         <AlertTriangle className="size-2.5" />
-                        File hỏng
+                        {t('page.stat_broken_audio')}
                       </span>
                       <p className="text-base font-black text-amber-700 dark:text-amber-300 font-mono">
                         {scanData.summary.broken_field_count}
@@ -250,7 +252,7 @@ export function DeckAudioGeneratorPage() {
 
                   {/* Mode Selector */}
                   <div className="p-3.5 rounded-2xl border border-border/60 bg-card space-y-2">
-                    <Label className="text-xs font-semibold">Chế độ áp dụng</Label>
+                    <Label className="text-xs font-semibold">{t('page.mode_label')}</Label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
                         type="button"
@@ -262,11 +264,11 @@ export function DeckAudioGeneratorPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold">Chỉ bù thiếu &amp; hỏng</span>
+                          <span className="text-xs font-bold">{t('page.mode_missing_broken_title')}</span>
                           {generationMode === 'missing_and_broken' && <CheckCircle2 className="size-3.5 text-primary" />}
                         </div>
                         <span className="text-[11px] text-muted-foreground mt-1">
-                          Tạo cho {scanData.summary.needs_audio_count} từ chưa có âm hoặc file lỗi (Nhanh &amp; tiết kiệm).
+                          {t('page.mode_missing_broken_desc', { count: scanData.summary.needs_audio_count })}
                         </span>
                       </button>
 
@@ -280,11 +282,11 @@ export function DeckAudioGeneratorPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold">Tạo lại tất cả (Ghi đè)</span>
+                          <span className="text-xs font-bold">{t('page.mode_all_title')}</span>
                           {generationMode === 'all' && <CheckCircle2 className="size-3.5 text-primary" />}
                         </div>
                         <span className="text-[11px] text-muted-foreground mt-1">
-                          Tạo mới toàn bộ {scanData.total_notes} từ trong Deck.
+                          {t('page.mode_all_desc', { count: scanData.total_notes })}
                         </span>
                       </button>
                     </div>
@@ -303,10 +305,10 @@ export function DeckAudioGeneratorPage() {
             <div className="space-y-0.5">
               <h2 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
                 <Volume2 className="size-4 text-primary" />
-                <span>2. Thiết lập cấu hình giọng đọc &amp; Ánh xạ trường</span>
+                <span>{t('page.section_rules')}</span>
               </h2>
               <p className="text-xs text-muted-foreground">
-                Tự động nhận diện từ đuôi &ldquo;Audio&rdquo; / &ldquo;_audio&rdquo;. Bạn có thể thêm cấu hình giọng đọc riêng cho từng trường (+ Thêm).
+                {t('page.rule_section_desc')}
               </p>
             </div>
 
@@ -318,7 +320,7 @@ export function DeckAudioGeneratorPage() {
               className="h-8 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
             >
               <Plus className="size-3.5" />
-              <span>Thêm cấu hình giọng đọc</span>
+              <span>{t('page.add_voice_rule_button')}</span>
             </Button>
           </div>
 
@@ -348,7 +350,7 @@ export function DeckAudioGeneratorPage() {
                 {scanData.deck.name}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                Sẵn sàng tạo âm thanh với {rules.length} cấu hình giọng đọc
+                {t('page.ready_to_generate_status', { count: rules.length })}
               </span>
             </div>
 
@@ -363,12 +365,12 @@ export function DeckAudioGeneratorPage() {
                 {activeJob ? (
                   <>
                     <ListPlus className="size-4" />
-                    <span>Thêm Deck này vào hàng đợi</span>
+                    <span>{t('page.add_to_queue_button')}</span>
                   </>
                 ) : (
                   <>
                     <Play className="size-4" />
-                    <span>Bắt đầu tạo âm thanh cho Deck này</span>
+                    <span>{t('page.start_generation_button')}</span>
                   </>
                 )}
               </Button>
@@ -382,10 +384,10 @@ export function DeckAudioGeneratorPage() {
         <div className="space-y-0.5">
           <h2 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
             <Radio className="size-4 text-primary" />
-            <span>3. Tiến trình &amp; Hàng đợi nhiều Deck (Queue Monitor)</span>
+            <span>{t('page.section_progress')}</span>
           </h2>
           <p className="text-xs text-muted-foreground">
-            Hệ thống tự động xử lý lần lượt từng Deck trong hàng đợi. Tiến trình được lưu liên tục và có thể tiếp tục khi tải lại trang web.
+            {t('page.queue_section_desc')}
           </p>
         </div>
 

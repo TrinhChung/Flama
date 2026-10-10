@@ -260,16 +260,10 @@ def _clone_map_for_deck(user_id: int, deck_id: int) -> DeckCloneDeckMap | None:
 
 
 
-def _find_existing_note(user_id: int, prepared: PreparedNote) -> Note | None:
-    local_notes = Note.query.filter_by(
-        user_id=user_id,
-        deck_id=prepared.deck.id,
-        note_type_id=prepared.note_type.id,
-    ).all()
-    for note in local_notes:
-        if _normalized_identity((note.field_values or {}).get(prepared.identity_field.name)) == prepared.identity_value:
-            return note
-    return None
+def _find_existing_note(user_id: int, prepared: PreparedNote, *, lookup=None) -> Note | None:
+    from app.services.connect.identity_lookup import NoteIdentityLookup
+
+    return (lookup or NoteIdentityLookup(user_id)).existing_local_note(prepared)
 
 
 

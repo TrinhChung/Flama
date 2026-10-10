@@ -174,7 +174,7 @@ export function AdminImageLibraryPage() {
   const totalPages = query.data.pages || 1
 
   return (
-    <Page>
+    <Page size="wide">
       <div className="space-y-3">
         <Badge variant="outline" className="gap-1 font-bold border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
           <ShieldCheck className="size-3.5" /> Admin
@@ -333,7 +333,7 @@ export function AdminImageLibraryPage() {
           description="Thử đổi từ khóa tìm kiếm hoặc upload ảnh mới."
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6">
           {assets.map((asset) => {
             const assetId = asset.id || asset.asset_id || ''
             const rawUrl =

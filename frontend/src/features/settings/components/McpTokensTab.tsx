@@ -5,16 +5,14 @@ import '@/shared/config/i18n'
 import {
   ArrowRight,
   BookOpen,
-  Bot,
-  Brain,
+  ChartNoAxesColumn,
   Check,
   Copy,
   FolderTree,
-  Globe,
   Image,
   Info,
   Layers,
-  ShieldCheck,
+  MessagesSquare,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -40,7 +38,7 @@ function getCategoryIcon(key: string) {
     case 'note_types':
       return Layers
     case 'study_stats':
-      return Brain
+      return ChartNoAxesColumn
     case 'media':
       return Image
     default:
@@ -73,11 +71,9 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
   return (
     <TabsContent value="tokens" className="space-y-6">
       {onSwitchToChatGPT && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl border bg-muted/40">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-              <Bot className="size-5" />
-            </div>
+            <MessagesSquare className="size-5 text-muted-foreground shrink-0" />
             <div className="space-y-0.5">
               <div className="text-xs sm:text-sm font-bold text-foreground">
                 {t('tokens_tab.chatgpt_banner.question')}
@@ -91,7 +87,7 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
             variant="outline"
             size="sm"
             onClick={onSwitchToChatGPT}
-            className="h-8 text-xs gap-1.5 shrink-0 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 w-full sm:w-auto justify-center"
+            className="h-8 text-xs gap-1.5 shrink-0 w-full sm:w-auto justify-center"
           >
             <span>{t('tokens_tab.chatgpt_banner.button')}</span>
             <ArrowRight className="size-3.5" />
@@ -99,26 +95,21 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
         </div>
       )}
 
-      <Card className="shadow-2xs border-primary/20 bg-linear-to-r from-primary/5 via-card to-card">
+      <Card className="shadow-2xs">
         <CardHeader className="p-4 sm:p-5 pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-                <Globe className="size-5" />
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle className="text-base sm:text-lg font-bold">
+                  {t('tokens_tab.endpoint_card.title')}
+                </CardTitle>
+                <Badge variant="outline" className="text-[10px] text-muted-foreground font-mono">
+                  {t('tokens_tab.endpoint_card.badge')}
+                </Badge>
               </div>
-              <div className="space-y-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <CardTitle className="text-base sm:text-lg font-bold">
-                    {t('tokens_tab.endpoint_card.title')}
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[10px] text-primary border-primary/30 font-mono">
-                    {t('tokens_tab.endpoint_card.badge')}
-                  </Badge>
-                </div>
-                <CardDescription className="text-xs sm:text-sm">
-                  {t('tokens_tab.endpoint_card.desc')}
-                </CardDescription>
-              </div>
+              <CardDescription className="text-xs sm:text-sm">
+                {t('tokens_tab.endpoint_card.desc')}
+              </CardDescription>
             </div>
             <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
               <Link
@@ -146,10 +137,10 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
             </Button>
           </div>
 
-          <div className="flex items-start gap-2.5 p-2.5 rounded-xl border bg-amber-500/5 border-amber-500/20 text-xs text-amber-900 dark:text-amber-200">
-            <Info className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+          <div className="flex items-start gap-2.5 p-2.5 rounded-lg border bg-muted/40 text-xs text-muted-foreground">
+            <Info className="size-4 shrink-0 text-muted-foreground mt-0.5" />
             <div className="leading-relaxed text-[11px] sm:text-xs">
-              <span className="font-bold">{t('tokens_tab.endpoint_card.claude_notice.label')} </span>
+              <span className="font-semibold text-foreground">{t('tokens_tab.endpoint_card.claude_notice.label')} </span>
               {t('tokens_tab.endpoint_card.claude_notice.text')}
             </div>
           </div>
@@ -157,37 +148,31 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
       </Card>
 
       {!canManageTokens && (
-        <Card className="shadow-2xs border-primary/20 bg-linear-to-r from-primary/5 via-card to-card">
+        <Card className="shadow-2xs">
           <CardHeader className="p-4 sm:p-5 pb-3">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-                <ShieldCheck className="size-5" />
-              </div>
-              <div className="space-y-1">
-                <CardTitle className="text-base sm:text-lg font-bold">
-                  {t('tokens_tab.managed_card.title')}
-                </CardTitle>
-                <CardDescription className="text-xs sm:text-sm leading-relaxed">
-                  {t('tokens_tab.managed_card.desc')}
-                </CardDescription>
-              </div>
+            <div className="space-y-1">
+              <CardTitle className="text-base sm:text-lg font-bold">
+                {t('tokens_tab.managed_card.title')}
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm leading-relaxed">
+                {t('tokens_tab.managed_card.desc')}
+              </CardDescription>
             </div>
           </CardHeader>
         </Card>
       )}
 
       {!canManageTokens && (
-        <Card className="shadow-2xs border-emerald-500/20">
+        <Card className="shadow-2xs">
           <CardHeader className="p-4 sm:p-6 pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-                    <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CardTitle className="text-base sm:text-lg font-bold">
                     {t('tokens_tab.all_scopes_card.title', { count: ALL_MCP_SCOPES.length })}
                   </CardTitle>
-                  <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-semibold gap-1">
-                    <Check className="size-3" /> {t('tokens_tab.all_scopes_card.granted_badge')}
+                  <Badge variant="secondary" className="text-[10px] font-medium">
+                    {t('tokens_tab.all_scopes_card.granted_badge')}
                   </Badge>
                 </div>
                 <CardDescription className="text-xs sm:text-sm">
@@ -208,30 +193,26 @@ export function McpTokensTab({ onSwitchToChatGPT }: McpTokensTabProps) {
                 return (
                   <div
                     key={cat.key}
-                    className="rounded-xl border bg-muted/20 p-3 space-y-2.5 flex flex-col justify-between"
+                    className="rounded-lg border p-3 space-y-2.5 flex flex-col justify-between"
                   >
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border/50">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-                            <CatIcon className="size-3.5" />
-                          </div>
+                          <CatIcon className="size-3.5 text-muted-foreground shrink-0" />
                           <span className="font-semibold text-xs text-foreground truncate">{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
                         </div>
-                        <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/5 font-semibold">
+                        <span className="text-[10px] font-medium text-muted-foreground shrink-0">
                           {t('tokens_tab.all_scopes_card.permissions_count', { count: catScopes.length, total: catScopes.length })}
-                        </Badge>
+                        </span>
                       </div>
 
                       <div className="space-y-1.5">
                         {catScopes.map((scope) => (
                           <div
                             key={scope.key}
-                            className="flex items-start gap-2 p-1.5 rounded-lg border border-border/40 bg-background/80 text-xs shadow-2xs"
+                            className="flex items-start gap-2 py-0.5 text-xs"
                           >
-                            <div className="mt-0.5 rounded-full p-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-                              <Check className="size-3" />
-                            </div>
+                            <Check className="size-3.5 text-primary shrink-0 mt-0.5" />
                             <div className="min-w-0 flex-1">
                               <div className="font-medium text-[11px] leading-tight text-foreground">
                                 {t(`scopes.items.${scope.key.replace(/[-:]/g, '_')}.label`, scope.label)}

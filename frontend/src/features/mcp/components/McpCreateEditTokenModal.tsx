@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
-import { Shield, ShieldCheck, BookOpen, FolderTree, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -201,10 +200,7 @@ export function McpCreateEditTokenModal({
 
           <div className="space-y-2 pt-2 border-t">
             <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-semibold">
-              <div className="flex items-center gap-1.5">
-                <Shield className="size-4 text-primary shrink-0" />
-                <span>{t('modal.scopes_count', { count: scopes.length, total: ALL_MCP_SCOPES.length })}</span>
-              </div>
+              <span>{t('modal.scopes_count', { count: scopes.length, total: ALL_MCP_SCOPES.length })}</span>
               <div className="flex items-center gap-1">
                 <Button type="button" variant="ghost" size="xs" onClick={() => setScopes(ALL_MCP_SCOPES.map((s) => s.key))} className="h-6 px-1.5 text-[11px]">
                   {t('modal.select_all')}
@@ -223,13 +219,9 @@ export function McpCreateEditTokenModal({
                   variant="outline"
                   size="xs"
                   onClick={() => handleApplyPreset(preset.key)}
-                  className="h-6 px-2 text-[11px] gap-1"
+                  className="h-6 px-2 text-[11px]"
                 >
-                  {preset.key === 'all' && <ShieldCheck className="size-3" />}
-                  {preset.key === 'readonly' && <BookOpen className="size-3" />}
-                  {preset.key === 'manager' && <FolderTree className="size-3" />}
-                  {preset.key === 'study' && <Brain className="size-3" />}
-                  <span>{t(`scopes.presets.${preset.key}.label`, preset.label)}</span>
+                  {t(`scopes.presets.${preset.key}.label`, preset.label)}
                 </Button>
               ))}
             </div>
@@ -237,7 +229,7 @@ export function McpCreateEditTokenModal({
             <div className="space-y-2 max-h-56 overflow-y-auto border rounded-lg p-2.5 bg-muted/20">
               {SCOPE_CATEGORIES.map((cat) => (
                 <div key={cat.key} className="space-y-1 pb-2 border-b last:border-b-0">
-                  <div className="flex items-center justify-between text-xs font-semibold text-primary">
+                  <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                     <span>{t(`scopes.categories.${cat.key}.name`, cat.name)}</span>
                     <div className="flex gap-1 text-[10px]">
                       <button type="button" onClick={() => handleToggleCategory(cat.scopes, true)} className="hover:underline text-muted-foreground">{t('modal.category_select_all')}</button>
