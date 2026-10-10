@@ -96,9 +96,12 @@ class FieldAnswersConversionTests(unittest.TestCase):
     def test_source_lists_only_the_owner_notes(self):
         source = self.client.get(self._url()).get_json()
         self.assertTrue(source["convertible"])
-        self.assertEqual([note["note_id"] for note in source["notes"]], self.note_ids)
-        self.assertNotIn(self.foreign_note_id, [note["note_id"] for note in source["notes"]])
-        self.assertEqual(source["notes"][0]["value"], "ăn, dùng bữa")
+        # Notes come in (created_at, id) order; Notes created in the same instant
+        # tie on created_at, so compare by id rather than position.
+        values = {note["note_id"]: note["value"] for note in source["notes"]}
+        self.assertEqual(sorted(values), sorted(self.note_ids))
+        self.assertNotIn(self.foreign_note_id, values)
+        self.assertEqual(values[self.note_ids[0]], "ăn, dùng bữa")
 
     def test_conversion_applies_type_and_values_atomically(self):
         source = self.client.get(self._url()).get_json()
