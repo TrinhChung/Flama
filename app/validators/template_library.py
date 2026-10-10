@@ -2,8 +2,9 @@
 
 from copy import deepcopy
 from app.services.template_tokens import TemplateTokenError, extract_variable_names
+from models.field_types import FIELD_TYPES as _FIELD_TYPES
 
-FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
+FIELD_TYPES = set(_FIELD_TYPES)
 # An ``answers`` input is the typed-answer source of a typing Study mode: the
 # frontend compares the learner's input with each line of the bound field.
 ANSWERS_INPUT_TYPE = "answers"

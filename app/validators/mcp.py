@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from models.field_types import FIELD_TYPES
+
 from .flashcard_input import RequestValidationError
 
 
@@ -126,7 +128,7 @@ def validate_get_note_type_schema_arguments(arguments: Any) -> dict[str, Any]:
     }
 
 
-VALID_FIELD_TYPES = frozenset({"text", "richtext", "markdown", "image", "audio", "diagram"})
+VALID_FIELD_TYPES = frozenset(FIELD_TYPES)
 
 
 def _extract_taxonomy_from_dict(arguments: dict[str, Any]) -> dict[str, Any]:

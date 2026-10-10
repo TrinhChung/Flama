@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm.attributes import set_committed_value
 
+from models.field_types import FIELD_TYPES
 from app.repositories import template_library_repository
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services import flashcard_content_service
@@ -108,7 +109,7 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
             "default": None,
             "editable": is_owner,
             "validation_constraints": {
-                "allowed_types": ["text", "richtext", "markdown", "image", "audio", "diagram"],
+                "allowed_types": list(FIELD_TYPES),
                 "required": bool(f.required),
                 "is_primary_identity": f.identity_role == "primary",
                 "max_length": 100000,

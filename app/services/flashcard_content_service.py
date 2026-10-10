@@ -42,6 +42,7 @@ from models.audit_log import AuditLog
 from models.card import Card
 from models.card_progress import CardProgress
 from models.field_def import FieldDef
+from models.field_types import FIELD_TYPES
 from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.note_type import NoteType
@@ -52,7 +53,6 @@ from models.template import Template
 
 
 logger = logging.getLogger(__name__)
-FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
 ALLOWED_TEMPLATE_HOTFIX_FIELDS = frozenset(
     {"name", "front_html", "back_html", "shared_css", "change_note"}
 )
