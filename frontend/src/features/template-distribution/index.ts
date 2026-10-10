@@ -1,10 +1,11 @@
-export type TemplateDistributionProps = {
-  templateId: string
-  origin?: string | null
-  currentVersionId?: string | null
-  onSourceChanged?: () => void
-}
+export { TemplateDistributionPanel } from './ui/TemplateDistributionPanel'
+export type { TemplateDistributionPanelProps, TemplateDistributionPanelProps as TemplateDistributionProps } from './ui/TemplateDistributionPanel'
+export { PublishReleaseDialog } from './ui/PublishReleaseDialog'
+export { ConflictResolutionDialog } from './ui/ConflictResolutionDialog'
+export { AuthorPublicationView } from './ui/AuthorPublicationView'
+export { SubscriberUpdateView } from './ui/SubscriberUpdateView'
 
-export function TemplateDistributionPanel(_props: TemplateDistributionProps) {
-  return null
-}
+export { distributionApi } from './api/distributionApi'
+export { useTemplatePublication } from './hooks/useTemplatePublication'
+export { useTemplateSubscription } from './hooks/useTemplateSubscription'
+export * from './model/types'
