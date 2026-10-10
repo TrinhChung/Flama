@@ -138,7 +138,14 @@
     "cancel": "Hủy",
     "creating": "Đang tạo…",
     "create": "Tạo giao diện",
-    "toast_success": "Đã tạo giao diện thẻ."
+    "toast_success": "Đã tạo giao diện thẻ.",
+    "preset_label": "Điểm xuất phát",
+    "preset_basic": "Lật thẻ cơ bản",
+    "preset_basic_desc": "Mặt trước và mặt sau, người học tự chấm.",
+    "preset_typing": "Gõ đáp án",
+    "preset_typing_desc": "Người học gõ đáp án, Flama so với field được gắn rồi mới lật thẻ.",
+    "typing_prompt_label": "Câu hỏi",
+    "typing_answer_label": "Đáp án"
   },
   "apply_wizard": {
     "step1_title": "Chọn loại thẻ",

@@ -138,7 +138,14 @@
     "cancel": "Cancel",
     "creating": "Creating…",
     "create": "Create template",
-    "toast_success": "Card template created."
+    "toast_success": "Card template created.",
+    "preset_label": "Starting point",
+    "preset_basic": "Basic flip card",
+    "preset_basic_desc": "Front and back; the learner grades themselves.",
+    "preset_typing": "Typed answer",
+    "preset_typing_desc": "The learner types the answer and Flama checks it against the bound field before flipping.",
+    "typing_prompt_label": "Prompt",
+    "typing_answer_label": "Answer"
   },
   "apply_wizard": {
     "step1_title": "Select Note Type",

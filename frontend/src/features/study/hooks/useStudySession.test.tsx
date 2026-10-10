@@ -66,6 +66,7 @@ vi.mock('@/entities/card-template', () => ({
   },
   fetchStudyTemplatePreset: mocks.templatePreset,
   saveStudyTemplatePreset: mocks.saveTemplatePreset,
+  isTypeCompatible: (inputType: string, fieldType: string) => inputType === fieldType,
 }))
 
 vi.mock('../session/sessionStore', () => ({
