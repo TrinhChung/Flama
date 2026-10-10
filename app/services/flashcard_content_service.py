@@ -42,7 +42,7 @@ from models.audit_log import AuditLog
 from models.card import Card
 from models.card_progress import CardProgress
 from models.field_def import FieldDef
-from models.field_types import FIELD_TYPES
+from models.field_types import ANSWERS_FIELD_TYPE, FIELD_TYPES
 from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.note_type import NoteType
@@ -570,6 +570,15 @@ def update_field(
         raise ContentApiError(
             "VALIDATION_ERROR",
             "Unsupported field_type.",
+            field="field_type",
+        )
+    if new_type == ANSWERS_FIELD_TYPE and field.field_type != ANSWERS_FIELD_TYPE:
+        # Existing values must be split into lines first; only the answers
+        # conversion changes the type together with every Note's value.
+        raise ContentApiError(
+            "FIELD_TYPE_REQUIRES_CONVERSION",
+            "Use the answers conversion to switch an existing field to answers.",
+            status=409,
             field="field_type",
         )
     conflict = FieldDef.query.filter(

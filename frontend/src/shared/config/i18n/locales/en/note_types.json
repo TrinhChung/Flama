@@ -53,7 +53,8 @@
       "markdown": { "label": "Markdown", "hint": "Write explanations and examples in Markdown, then preview the rendered result." },
       "image": { "label": "Image", "hint": "Stores an image media reference. Try a sample image or enter an existing reference." },
       "audio": { "label": "Audio", "hint": "Stores an audio media reference. Play a sample here; TTS generation is configured in Audio." },
-      "diagram": { "label": "Diagram", "hint": "Stores image or SVG references, as in the current diagram editor. Try a sample or an existing reference." }
+      "diagram": { "label": "Diagram", "hint": "Stores image or SVG references, as in the current diagram editor. Try a sample or an existing reference." },
+      "answers": { "label": "Typed answers", "hint": "Each line is one accepted answer in a typing mode. Empty and duplicate lines are dropped on save." }
     }
   },
   "manager": {

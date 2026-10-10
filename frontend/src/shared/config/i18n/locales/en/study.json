@@ -70,6 +70,7 @@
     "configure_fields_for": "Field setup for {{name}}"
   },
   "quick_edit": {
+    "answers_placeholder": "One answer per line",
     "title": "Quick Edit Card",
     "description": "Edit vocabulary fields and contents without interrupting your study session.",
     "generate_stroke": "Stroke Diagram",

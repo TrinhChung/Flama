@@ -17,6 +17,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { isAnswersField, normalizeAnswersFieldValues } from '@/lib/answersField'
 import { MediaFieldPreview } from './MediaFieldPreview'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import type { useBrowseState } from '../hooks/useBrowseState'
@@ -67,8 +68,10 @@ export function BrowseCardEditForm({
 
   const submitUpdateCard = () => {
     if (!isDirty || updateMutation.isPending) return
+    const fieldValues = normalizeAnswersFieldValues(editFieldValues, detail.fields)
+    if (fieldValues !== editFieldValues) setEditFieldValues(fieldValues)
     void updateMutation.mutate({
-      field_values: editFieldValues,
+      field_values: fieldValues,
       deck_id: editDeckId || undefined,
       tags: editTags,
     })
@@ -170,7 +173,8 @@ export function BrowseCardEditForm({
             )
           }
 
-          const isMultiline = val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
+          const isAnswers = isAnswersField(ft)
+          const isMultiline = isAnswers || val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
 
           return (
             <div key={field.name} className="space-y-1.5">
@@ -183,6 +187,7 @@ export function BrowseCardEditForm({
                   onChange={(e) =>
                     setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
                   }
+                  placeholder={isAnswers ? t('editor.answers_placeholder') : undefined}
                   className="min-h-20 text-xs sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50"
                 />
               ) : (

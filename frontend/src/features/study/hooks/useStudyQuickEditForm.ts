@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { appApi } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
+import { normalizeAnswersFieldValues } from '@/lib/answersField'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
 
@@ -18,9 +19,9 @@ export function inferFieldType(
   rawFieldType?: string | null,
   fieldName?: string,
   fieldValue?: string,
-): 'image' | 'audio' | 'diagram' | 'text' {
+): 'image' | 'audio' | 'diagram' | 'text' | 'answers' {
   const ft = (rawFieldType || '').trim().toLowerCase()
-  if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
+  if (ft === 'image' || ft === 'audio' || ft === 'diagram' || ft === 'answers') {
     return ft
   }
 
@@ -264,15 +265,6 @@ export function useStudyQuickEditForm({
     },
   })
 
-  const handleSubmit = useCallback(() => {
-    if (!isDirty || updateMutation.isPending || !cardId) return
-    updateMutation.mutate({
-      field_values: fieldValues,
-      deck_id: deckId || undefined,
-      tags,
-    })
-  }, [isDirty, updateMutation, cardId, fieldValues, deckId, tags])
-
   // Resolve fields definition
   const fieldDefs = useMemo(() => {
     const rawDefs =
@@ -300,6 +292,17 @@ export function useStudyQuickEditForm({
       }
     })
   }, [cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
+
+  const handleSubmit = useCallback(() => {
+    if (!isDirty || updateMutation.isPending || !cardId) return
+    const values = normalizeAnswersFieldValues(fieldValues, fieldDefs)
+    if (values !== fieldValues) setFieldValues(values)
+    updateMutation.mutate({
+      field_values: values,
+      deck_id: deckId || undefined,
+      tags,
+    })
+  }, [isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags])
 
   const deckList = cardDetailQuery.data?.decks || []
 

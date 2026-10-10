@@ -29,6 +29,8 @@ interface EditFieldCardProps {
   error?: string | null
   preview?: ReactNode
   usage?: ReactNode
+  /** Entry to the answers conversion tool, shown under the type selector. */
+  typeConversion?: ReactNode
   className?: string
 }
 
@@ -50,6 +52,7 @@ export function EditFieldCard({
   error,
   preview,
   usage,
+  typeConversion,
   className,
 }: EditFieldCardProps) {
   const { t } = useTranslation('note_types')
@@ -92,11 +95,18 @@ export function EditFieldCard({
                     className="h-8 sm:h-9 text-xs sm:text-sm rounded-xl bg-background"
                   >
                     {FIELD_TYPES.map((type) => (
-                      <NativeSelectOption key={type} value={type}>
+                      // Existing values must be split first, so switching to
+                      // answers goes through the conversion tool instead.
+                      <NativeSelectOption
+                        key={type}
+                        value={type}
+                        disabled={type === 'answers' && selectedField.field_type !== 'answers'}
+                      >
                         {t(`setup.types.${type}.label`)}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
+                  {typeConversion}
                 </div>
 
                 <div className="flex items-center space-x-2 pt-0.5">

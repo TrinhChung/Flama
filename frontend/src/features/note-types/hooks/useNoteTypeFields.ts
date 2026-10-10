@@ -21,7 +21,7 @@ export type NoteTypeDetail = {
   field_defs?: FieldDefItem[]
 }
 
-export const FIELD_TYPES = ['text', 'richtext', 'markdown', 'image', 'audio', 'diagram'] as const
+export const FIELD_TYPES = ['text', 'richtext', 'markdown', 'image', 'audio', 'diagram', 'answers'] as const
 type FieldWrite = Pick<FieldDefItem, 'name' | 'field_type' | 'required' | 'identity_role'>
 type FieldsApi = {
   get: <T>(path: string) => Promise<T>

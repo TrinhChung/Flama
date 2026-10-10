@@ -7,6 +7,8 @@
  * whitespace, letter case); diacritics, kana script and punctuation are exact.
  */
 
+import { fieldValueToText } from '@/lib/answersField'
+
 export const TYPING_COMPARE_VERSION = 'typing-compare.v1'
 
 export type TypingInputConfig = {
@@ -30,39 +32,7 @@ export function readTypingInput(template: { typing_input?: unknown } | null | un
   return { key: value.key, showLength: value.show_length, hints: value.hints }
 }
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-}
-
-function decodeEntities(value: string): string {
-  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity: string) => {
-    if (entity[0] === '#') {
-      const code = entity[1] === 'x' || entity[1] === 'X'
-        ? Number.parseInt(entity.slice(2), 16)
-        : Number.parseInt(entity.slice(1), 10)
-      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match
-    }
-    return NAMED_ENTITIES[entity.toLowerCase()] ?? match
-  })
-}
-
-/** Visible text of a field value: line breaks kept, markup and sound refs dropped. */
-export function fieldValueToText(raw: unknown): string {
-  if (typeof raw !== 'string' || !raw) return ''
-  const withBreaks = raw
-    .replace(/\r\n?/g, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/?(div|p|li)\b[^>]*>/gi, '\n')
-  const withoutMarkup = withBreaks
-    .replace(/<[^>]*>/g, '')
-    .replace(/\[sound:[^\]]*\]/gi, '')
-  return decodeEntities(withoutMarkup)
-}
+export { fieldValueToText }
 
 /** Normalized form used for matching: only meaning-preserving differences removed. */
 export function normalizeTypedAnswer(value: string): string {

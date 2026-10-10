@@ -147,6 +147,31 @@ class TypingTemplateArtifactTests(unittest.TestCase):
             response = self._attach(template["id"], {"prompt": self.fields["Meaning"], "answer": self.fields[field]})
             self.assertEqual(response.status_code, 400, response.get_json())
 
+    def test_answers_field_type_is_created_saved_and_bound_but_never_switched_bare(self):
+        created = self.client.post(f"/api/note-types/{self.note_type['id']}/fields", json={"name": "Accepted", "field_type": "answers"})
+        self.assertEqual(created.status_code, 201, created.get_json())
+        accepted_id = created.get_json()["id"]
+        note = self.client.post("/api/notes", json={
+            "note_type_id": self.note_type["id"],
+            "field_values": {"Word": "食べる", "Accepted": "ăn\r\ndùng bữa"},
+        })
+        self.assertEqual(note.status_code, 201, note.get_json())
+        template = self._template(self._typing_schema())
+        response = self._attach(template["id"], {"prompt": self.fields["Word"], "answer": accepted_id})
+        self.assertEqual(response.status_code, 201, response.get_json())
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note.get_json()["id"], template_id=template["id"]).one()
+            content = build_content_artifact(build_effective_study_card(card=card, clone_scope=None))
+            self.assertEqual(content["field_values"]["answer"], "ăn\ndùng bữa")
+
+        bare = self.client.patch(
+            f"/api/note-types/{self.note_type['id']}/fields/{self.fields['Meaning']}",
+            json={"field_type": "answers"},
+        )
+        self.assertEqual(bare.status_code, 409, bare.get_json())
+        back = self.client.patch(f"/api/note-types/{self.note_type['id']}/fields/{accepted_id}", json={"field_type": "text"})
+        self.assertEqual(back.status_code, 200, back.get_json())
+
     def test_templates_without_answers_input_keep_their_artifact(self):
         template = self._template([{"key": "prompt", "label": "Prompt", "type": "text", "required": True}])
         response = self._attach(template["id"], {"prompt": self.fields["Word"]})

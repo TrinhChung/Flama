@@ -98,6 +98,7 @@
     "jump_input_aria": "Enter page number to jump to"
   },
   "editor": {
+    "answers_placeholder": "One answer per line",
     "empty_title": "No Card Selected",
     "empty_desc": "Click any card in the table to view field details, or click Add Card to create a new one.",
     "add_new_card": "Add New Card",
