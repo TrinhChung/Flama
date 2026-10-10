@@ -8,6 +8,13 @@ import type {
 
 export const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
 
+// {{FrontSide}} on the back shows the rendered front, as in Anki; on the front
+// it is empty. Same rule as FRONT_SIDE_TOKEN_RE in app/services/flashcard_renderer.py;
+// "&amp;" is how bleach leaves {{&FrontSide}} in the prepared source. The marker
+// is tag-like so escaped field text can never produce it.
+const FRONT_SIDE_TOKEN_RE = /\{\{\{\s*FrontSide\s*\}\}\}|\{\{\s*(?:&amp;|&)?\s*FrontSide\s*\}\}/g
+const FRONT_SIDE_MARKER = '<flama-front-side></flama-front-side>'
+
 export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -549,8 +556,21 @@ export function renderCardSide(
     }
   }
 
-  const rendered = Mustache.render(source, renderContext)
-  const trustedMedia = collectTrustedMediaUrls(template, { ...content, render_context: renderContext }, source)
+  // The front's inline scripts stay out of {{FrontSide}}: the client front
+  // source never contains them.
+  const frontSource = template.front_source.replace(FRONT_SIDE_TOKEN_RE, '')
+  const backSource = source.replace(FRONT_SIDE_TOKEN_RE, FRONT_SIDE_MARKER)
+  const showsFront = side === 'back' && backSource !== source
+  const rendered = side === 'front'
+    ? Mustache.render(frontSource, renderContext)
+    : showsFront
+      ? Mustache.render(backSource, renderContext).split(FRONT_SIDE_MARKER).join(Mustache.render(frontSource, renderContext))
+      : Mustache.render(source, renderContext)
+  const trustedMedia = collectTrustedMediaUrls(
+    template,
+    { ...content, render_context: renderContext },
+    showsFront ? `${frontSource}${source}` : source,
+  )
 
   const fieldValueProxyUrls: string[] = []
   if (content.field_values) {

@@ -102,6 +102,60 @@ describe('renderCardSide', () => {
     expect(result.supports_live_patch).toBe(false)
   })
 
+  it('shows the rendered front where the back has {{FrontSide}}, without front scripts', () => {
+    const cardTemplate = template({
+      front_source: '<div class="q">{{Word}}</div>{{FrontSide}}',
+      back_source: '{{FrontSide}}<hr id="answer">{{{Meaning}}}',
+      front_inline_scripts: ['<script>window.front = 1</script>'],
+      back_inline_scripts: ['<script>window.back = 1</script>'],
+    })
+    const back = renderCardSide(cardTemplate, content(), 'back')
+    expect(back.html).toContain('<div class="q">犬</div><hr id="answer"><strong>dog</strong><script>window.back = 1</script>')
+    expect(back.html).not.toContain('window.front')
+    expect(back.html).not.toContain('flama-front-side')
+    const front = renderCardSide(cardTemplate, content(), 'front')
+    expect(front.html).toContain('<div class="q">犬</div><script>window.front = 1</script>')
+    expect(front.html).not.toContain('flama-front-side')
+  })
+
+  it('accepts every {{FrontSide}} spelling and sections while field text cannot forge it', () => {
+    for (const back of [
+      '{{{FrontSide}}}|{{Meaning}}',
+      '{{ FrontSide }}|{{Meaning}}',
+      '{{&FrontSide}}|{{Meaning}}',
+      '{{&amp;FrontSide}}|{{Meaning}}',
+      '{{#Meaning}}{{FrontSide}}{{/Meaning}}|{{Meaning}}',
+    ]) {
+      const result = renderCardSide(
+        template({ front_source: '<b>{{Word}}</b>', back_source: back }),
+        content({ render_context: { Word: '<flama-front-side></flama-front-side>', Meaning: 'dog' } }),
+        'back',
+      )
+      expect(result.html, back).toContain('<b>&lt;flama-front-side&gt;&lt;/flama-front-side&gt;</b>|dog')
+    }
+  })
+
+  it('keeps front media URLs allowed inside {{FrontSide}} on the back', () => {
+    const result = renderCardSide(
+      template({
+        front_source: '<audio controls src="{{Audio_url}}"></audio>',
+        back_source: '{{FrontSide}}<hr>{{Word}}',
+        field_defs: [{ name: 'Audio', field_type: 'audio' }],
+      }),
+      content({
+        render_context: {
+          Word: '犬',
+          Audio: '<audio controls src="https://example.com/a.mp3"></audio>',
+          Audio_url: 'https://example.com/a.mp3',
+          Audio_urls: ['https://example.com/a.mp3'],
+        },
+      }),
+      'back',
+    )
+    expect(result.html).toContain('src="https://example.com/a.mp3"')
+    expect(result.allowed_media_urls).toContain('https://example.com/a.mp3')
+  })
+
   it('keeps a template answer box and gives its hidden answers one line each', () => {
     const result = renderCardSide(
       template({

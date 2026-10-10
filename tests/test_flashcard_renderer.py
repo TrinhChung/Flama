@@ -432,6 +432,58 @@ class FlashcardRendererTests(unittest.TestCase):
         html = rendered["front_html"]
         self.assertIn("Line1<br>Line2", html)
 
+    def test_front_side_on_back_shows_the_rendered_front_without_its_scripts(self):
+        template = self._template(
+            '<div class="q">{{Word}}</div>{{FrontSide}}<script>window.front = 1;</script>',
+            '{{FrontSide}}<hr id="answer">{{Meaning}}<script>window.back = 1;</script>',
+        )
+        fields = [self._field("Word"), self._field("Meaning")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "犬", "Meaning": "dog"},
+            media_assets=[],
+        )
+        self.assertIn('<div class="q">犬</div><hr id="answer">dog<script>window.back = 1;</script>', rendered["back_html"])
+        self.assertNotIn("window.front", rendered["back_html"])
+        self.assertIn('<div class="q">犬</div><script>window.front = 1;</script>', rendered["front_html"])
+        self.assertNotIn("flama-front-side", rendered["front_html"] + rendered["back_html"])
+
+    def test_front_side_spellings_and_sections_while_field_text_cannot_forge_it(self):
+        fields = [self._field("Word"), self._field("Meaning")]
+        values = {"Word": "<flama-front-side></flama-front-side>", "Meaning": "dog"}
+        for back in (
+            "{{{FrontSide}}}|{{Meaning}}",
+            "{{ FrontSide }}|{{Meaning}}",
+            "{{&FrontSide}}|{{Meaning}}",
+            "{{#Meaning}}{{FrontSide}}{{/Meaning}}|{{Meaning}}",
+        ):
+            rendered = render_template_pair(
+                template=self._template("<b>{{Word}}</b>", back),
+                field_defs=fields,
+                field_values=values,
+                media_assets=[],
+            )
+            self.assertIn("<b>&lt;flama-front-side&gt;&lt;/flama-front-side&gt;</b>|dog", rendered["back_html"], back)
+
+    def test_front_side_keeps_front_media_on_the_back(self):
+        template = self._template("{{{Word_Audio}}}{{{image}}}", "{{FrontSide}}<hr>{{Meaning}}")
+        fields = [self._field("Word_Audio", "audio"), self._field("image", "image"), self._field("Meaning")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word_Audio": "/media/proxy/audio-1", "image": "/media/proxy/image-1", "Meaning": "dog"},
+            media_assets=[],
+        )
+        self.assertIn("/media/proxy/audio-1", rendered["back_html"])
+        self.assertIn("/media/proxy/image-1", rendered["back_html"])
+        self.assertIn("/media/proxy/audio-1", rendered["back_renderer_payload"]["allowed_audio_urls"])
+
+    def test_client_template_keeps_front_side_tokens_for_the_study_renderer(self):
+        prepared = prepare_client_template_source("{{FrontSide}}<hr>{{&FrontSide}}", [])
+        # bleach escapes the ampersand; the client renderer accepts both spellings.
+        self.assertEqual(prepared["source"], "{{FrontSide}}<hr>{{&amp;FrontSide}}")
+
     def test_empty_rules(self):
         self.assertTrue(is_field_empty(None))
         self.assertTrue(is_field_empty(""))

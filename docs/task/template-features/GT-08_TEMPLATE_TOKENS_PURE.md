@@ -8,6 +8,8 @@
 
 Renderer dùng `chevron` (Mustache, delimiter mặc định `{{ }}`) và tham chiếu field theo **tên** (`app/services/flashcard_renderer.py`, `render_template_pair`, `build_render_context`). Context có thêm khóa `<Field>_url` và `<Field>_urls` cho field media. Tên field có thể chứa dấu cách, dấu chấm (`a.b` là tên phẳng), ký tự Unicode (`漢字`, `Nghĩa`). Không có hỗ trợ filter kiểu Anki (`{{text:X}}`) hay `{{FrontSide}}`: các chuỗi đó chỉ là tên biến bình thường với Mustache.
 
+*Cập nhật 2026-10-10:* renderer đã xử lý riêng `{{FrontSide}}` (mặt sau hiện lại mặt trước). Với module token này, `FrontSide` vẫn chỉ là một tên biến.
+
 ## 2. Mục tiêu
 
 Tạo `app/services/template_tokens.py` với 4 hàm và 1 exception, không phụ thuộc Flask, SQLAlchemy hay model.

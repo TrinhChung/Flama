@@ -310,7 +310,7 @@ Commits: 24d879f5, f0f90946 (T-01..T-03, gộp cùng việc khác), 851c1302, 3e
 Runtime change: có — field_type answers; input answers; GET/POST /api/note-types/<id>/fields/<field_id>/answers-conversion; template HTML giữ <input>/<label>. Ô gõ của host và typing_input đã cất (§12)
 Migration: không (cột field_type varchar(8), không CHECK — local; production đo ở R-04)
 Tests added or updated: tests/test_study_typing_template.py, tests/test_field_answers_conversion.py; vitest typingAnswer, StudyTypingAnswerPanel, answersField, answersConversion, FieldAnswersConversionDialog và các test bị ảnh hưởng
-Known limitations: deck đã cài chưa chuyển đổi được (R-02); Flask local cần khởi động lại (R-03); production chưa đo cột (R-04); {{FrontSide}} chưa được hỗ trợ
+Known limitations: deck đã cài chưa chuyển đổi được (R-02); Flask local cần khởi động lại (R-03); production chưa đo cột (R-04)
 ```
 
 ## 12. Đổi hướng (2026-10-10): tạm cất ô gõ của Flama, template tự viết HTML/JS
@@ -345,7 +345,8 @@ Code của ô gõ (`StudyTypingAnswerPanel.tsx`, `typing/typingAnswer.ts`, `typi
 - Mặt trước có câu hỏi, ô nhập, nút Kiểm tra, nút Gợi ý, và đáp án nằm trong một `div hidden`.
 - Script đọc đáp án theo dòng (mỗi `<br>` là một dòng). Trước khi so, cả hai bên được chuẩn hóa NFC, gộp khoảng trắng và đổi về chữ thường. Khớp một dòng bất kỳ là Đúng. Dấu tiếng Việt phải đúng (D-T3); không phân biệt hoa thường (D-T6).
 - Gợi ý là dãy chấm theo đáp án đầu tiên. Mỗi lần bấm mở thêm một ký tự, dừng khi còn một ký tự.
-- Mặt sau lặp lại `{{Prompt}}` vì Flama chưa hỗ trợ `{{FrontSide}}` (đã đề xuất sửa ở một phiên riêng).
+- Nếu server cũ (trước 2026-10-10) đã xóa thẻ `<input>`, script tự tạo ô nhập, nên mẫu chạy được cả trước khi backend mới lên.
+- Mặt sau dùng `{{Prompt}}` chứ không dùng `{{FrontSide}}`. Từ 2026-10-10 `{{FrontSide}}` đã hiện lại mặt trước, nhưng không mang theo script của mặt trước, nên ô nhập chép sang mặt sau sẽ không chạy.
 
 Mặt trước:
 
@@ -361,9 +362,22 @@ Mặt trước:
 <div id="cz-answers" hidden>{{Answer}}</div>
 <script>
 (function () {
+  var box = document.querySelector('.cz-box');
   var input = document.getElementById('cz-input');
   var result = document.getElementById('cz-result');
   var mask = document.getElementById('cz-mask');
+
+  // Servers older than 2026-10-10 strip <input> from templates: build the box here.
+  if (!input) {
+    input = document.createElement('input');
+    input.id = 'cz-input';
+    input.type = 'text';
+    input.placeholder = 'Gõ đáp án rồi nhấn Enter';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('autocapitalize', 'off');
+    box.insertBefore(input, box.firstChild);
+  }
 
   // Each line of the field is one accepted answer; a plain string is one line.
   function readAnswers(el) {
@@ -415,7 +429,7 @@ Mặt trước:
   });
 
   if (!answers.length) {
-    document.querySelector('.cz-box').hidden = true;
+    box.hidden = true;
   }
   drawMask();
   input.focus();

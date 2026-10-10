@@ -225,7 +225,7 @@ The renderer also scans concrete field names when upgrading HTML-producing token
 
 Rendering currently receives all fields, not only fields used by Mustache tokens. In addition, sandboxed Template JavaScript receives all `fieldValues` and `fieldDefs` through the renderer context (`frontend/src/features/study/components/CardRendererFrame.tsx:156-171`, `static/js/card_renderer_host.js:610-630`). A script may depend on a field name that static Mustache-token analysis cannot discover.
 
-One additional compatibility gap was found: multiple producers and MCP documentation emit `{{FrontSide}}`, but a repository-wide runtime search found no explicit renderer/context injection for `FrontSide`. Existing tests use the token but do not assert that the rendered front is present on the back. Unless a Note itself contains that key, Mustache would normally resolve it as empty. This needs a focused behavior test before any future input contract classifies `FrontSide` as a reserved variable.
+One additional compatibility gap was found: multiple producers and MCP documentation emit `{{FrontSide}}`, but a repository-wide runtime search found no explicit renderer/context injection for `FrontSide`. Existing tests use the token but do not assert that the rendered front is present on the back. Unless a Note itself contains that key, Mustache would normally resolve it as empty. This needs a focused behavior test before any future input contract classifies `FrontSide` as a reserved variable. *(Resolved 2026-10-10: the server and client renderers now put the rendered front where the back has `{{FrontSide}}`, with tests.)*
 
 ### 4.5 Field rename behavior
 
