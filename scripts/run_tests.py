@@ -405,6 +405,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/template-library/pages/TemplateLocalization.test.tsx",
             "src/features/template-library/pages/TemplateLibraryShell.test.tsx",
             "src/features/template-versions/ui/TemplateVersionHistorySheet.test.tsx",
+            "src/features/template-distribution/ui/TemplateDistributionPanel.test.tsx",
             "src/features/note-types/lib/templateErrors.test.ts",
             "src/features/note-types/pages/NoteTypeDetailPage.editor.test.tsx",
             "src/features/note-types/pages/NoteTypeDetailPage.draft.test.tsx",

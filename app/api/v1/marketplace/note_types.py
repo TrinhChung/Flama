@@ -118,6 +118,25 @@ def preview_shared_note_type_template(note_type_id: str, template_id: str):
     return jsonify(payload)
 
 
+@marketplace_note_types_bp.post(
+    "/shared/note-types/<note_type_id>/templates/<template_id>/install"
+)
+@marketplace_note_types_bp.post(
+    "/marketplace/note-types/<note_type_id>/templates/<template_id>/install"
+)
+@login_required
+def install_shared_note_type_template(note_type_id: str, template_id: str):
+    try:
+        payload = marketplace_note_type_service.install_shared_note_type_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+        )
+    except MarketplaceNoteTypeError as exc:
+        return _handle_error(exc)
+    return jsonify(payload), 200
+
+
 @marketplace_note_types_bp.post("/shared/note-types/<note_type_id>/install")
 @marketplace_note_types_bp.post("/marketplace/note-types/<note_type_id>/install")
 @login_required

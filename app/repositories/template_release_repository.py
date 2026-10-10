@@ -110,6 +110,13 @@ def source_access(session, *, user_id, source_template_id):
         ).limit(1)
         if session.execute(statement).first():
             return True
+    free_published = select(NoteType.id).where(
+        or_(NoteType.id.in_(note_types), NoteType.id == template_row.get("note_type_id")),
+        NoteType.publish_status.in_(["published", "unlisted"]),
+        NoteType.pricing_mode == "free",
+    ).limit(1)
+    if session.execute(free_published).first():
+        return True
     return False
 
 

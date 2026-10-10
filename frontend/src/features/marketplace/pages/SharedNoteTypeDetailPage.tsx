@@ -11,6 +11,7 @@ import {
   Layers,
   Loader2,
   Palette,
+  Plus,
   Share2,
   Star,
 } from 'lucide-react'
@@ -46,6 +47,8 @@ type TemplateItem = {
   name: string
   front_html?: string
   back_html?: string
+  is_installed?: boolean
+  installed_template_id?: string | null
 }
 
 type ReviewItem = {
@@ -159,6 +162,39 @@ export function SharedNoteTypeDetailPage() {
     },
     onError: (err: any) => {
       toast.error(err?.message || t('common.error', 'Không thể cài đặt loại thẻ này.'))
+    },
+  })
+
+  // Install Individual Template Mutation
+  const [installingTemplateId, setInstallingTemplateId] = useState<string | null>(null)
+  const installTemplateMutation = useMutation({
+    mutationFn: (templateId: string) => {
+      setInstallingTemplateId(templateId)
+      return appApi.mutate<{
+        local_template_id: string
+        source_template_id: string
+        already_installed: boolean
+      }>(`/api/shared/note-types/${id}/templates/${templateId}/install`, 'POST')
+    },
+    onSuccess: () => {
+      setInstallingTemplateId(null)
+      queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['card-templates'] })
+      queryClient.invalidateQueries({ queryKey: ['card-templates-library'] })
+      toast.success(
+        t('notetype_detail.toast_template_installed', {
+          defaultValue: 'Đã thêm mẫu giao diện vào thư viện của bạn!',
+        })
+      )
+    },
+    onError: (err: any) => {
+      setInstallingTemplateId(null)
+      toast.error(
+        err?.message ||
+          t('notetype_detail.error_install_template', {
+            defaultValue: 'Không thể thêm mẫu giao diện vào thư viện.',
+          })
+      )
     },
   })
 
@@ -565,7 +601,7 @@ export function SharedNoteTypeDetailPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
                         {tmpl.id !== selectedTemplateId ? (
                           <Button
                             variant="outline"
@@ -579,6 +615,38 @@ export function SharedNoteTypeDetailPage() {
                           <Badge variant="default" className="text-[10px] px-2 py-0.5 rounded-md font-semibold">
                             {t('notetype_detail.badge_previewing', { defaultValue: 'Đang xem' })}
                           </Badge>
+                        )}
+                        {noteType?.is_owner ? (
+                          <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-md text-muted-foreground border-border/80">
+                            {t('notetype_detail.badge_owned_template', { defaultValue: 'Của bạn' })}
+                          </Badge>
+                        ) : tmpl.is_installed ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            className="h-7 px-2 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-lg shrink-0"
+                          >
+                            <Link to={tmpl.installed_template_id ? `/card-templates/${tmpl.installed_template_id}` : '/card-templates'}>
+                              <Check className="size-3 mr-1" />
+                              {t('notetype_detail.btn_in_library', { defaultValue: 'Trong thư viện' })}
+                            </Link>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={installTemplateMutation.isPending && installingTemplateId === tmpl.id}
+                            className="h-7 px-2.5 text-[11px] font-semibold rounded-lg shrink-0 cursor-pointer gap-1"
+                            onClick={() => installTemplateMutation.mutate(tmpl.id)}
+                          >
+                            {installTemplateMutation.isPending && installingTemplateId === tmpl.id ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <Plus className="size-3" />
+                            )}
+                            {t('notetype_detail.btn_add_template_to_library', { defaultValue: 'Thêm vào thư viện' })}
+                          </Button>
                         )}
                       </div>
                     </div>
