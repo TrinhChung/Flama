@@ -265,6 +265,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/api/v1/strokes/**",
             "app/api/v1/images.py",
             "app/services/flashcard_*.py",
+            "app/services/field_*.py",
             "app/services/anki_import_service.py",
             "app/services/anki_content_normalizer.py",
             "app/services/image_*.py",
@@ -280,10 +281,12 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/note_management_service.py",
             "app/services/note_type_service.py",
             "app/validators/flashcard_input.py",
+            "app/validators/field_*.py",
             "app/validators/image_*.py",
             "models/flashcard.py",
             "models/note*.py",
             "models/field_def*.py",
+            "models/field_types.py",
             "models/template.py",
             "models/card.py",
             "models/image_asset.py",
@@ -317,6 +320,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_counter_logic.py",
             "tests/test_api_strokes.py",
             "tests/test_stroke_service.py",
+            "tests/test_field_answers_conversion.py",
         ],
         "frontend_tests": [
             "src/lib/ankiHtmlSanitizer.test.ts",
@@ -413,7 +417,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/session/contentPatchAdapter.adversarial.test.ts",
             "src/features/study/session/wireContract.test.ts",
             "src/features/study/session/sessionRestore.test.ts",
-            "src/features/study/components/StudyQuickEditDialog.test.tsx"
+            "src/features/study/components/StudyQuickEditDialog.test.tsx",
+            "src/lib/answersField.test.ts",
+            "src/features/note-types/lib/answersConversion.test.ts",
+            "src/features/note-types/components/fields/FieldAnswersConversionDialog.test.tsx",
         ]
     },
     "decks": {

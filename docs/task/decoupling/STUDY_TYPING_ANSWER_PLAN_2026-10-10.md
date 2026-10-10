@@ -1,6 +1,6 @@
 # Kế hoạch chế độ gõ đáp án — so sánh ở frontend
 
-> **Trạng thái: kế hoạch, chưa triển khai.** Lập 2026-10-10 theo quyết định của chủ sản phẩm. Loại: kế hoạch, **Runtime change: none**.
+> **Trạng thái: đã hoàn thành (2026-10-10).** Đã triển khai xong toàn bộ work packages T-01..T-08 trên branch `refactor/frontend-fsd-renderer-boundary`.
 >
 > Khác với [mức 3](./P8_GENERIC_ACTION_OUTCOME_PLAN_2026-10-10.md): server không chấm, contract bốn rating giữ nguyên. Mức 3 chỉ cần khi muốn kết quả gõ tự ghi tiến độ mà người học không xác nhận.
 
@@ -140,18 +140,18 @@ Vì vậy chế độ gõ làm được bằng một component riêng trong `fea
 
 ## 7. Work package
 
-| ID | Nội dung | Phụ thuộc | Kết quả |
-|---|---|---|---|
-| T-01 | Hàm `typing-compare.v1` (§5) và hàm tính ô, mở gợi ý ở frontend, kèm bộ test (NFC, hoa thường, khoảng trắng, U+3000, IME, dấu tiếng Việt, kana, grapheme) | — | Làm được ngay |
-| T-02 | Validator Template: nhận input kiểu `answers`, cho gắn với field `text`, thêm khóa `show_length`/`hints`; sửa tương ứng ở `frontend/src/features/template-library/lib/inputSchemaValidation.ts` | — | Template khai báo được chế độ gõ |
-| T-03 | Component ô gõ ở host theo §6: Enter, Đúng/Sai, gõ lại, ô ẩn, gợi ý, bỏ qua, kết quả ở mặt sau | T-01, T-02 | Học được chế độ gõ trên field `text` |
-| T-04 | Template mẫu "Gõ đáp án" | T-02 | Người dùng cài, gắn field là dùng được |
-| T-05 | Gom danh sách kiểu field về một hằng số (backend, frontend) | — | Không đổi hành vi; test cũ xanh |
-| T-06 | Thêm kiểu field `answers`: validator, MCP, Connect, overlay, `FIELD_TYPES` frontend, ô nhập chip, kiểm hiển thị cả hai renderer; chặn đổi kiểu trần; đo cột production | T-05 | Tạo và sửa được field có quy tắc |
-| T-07 | Endpoint áp dụng và hoàn tác chuyển đổi nguyên tử (NoteType sở hữu và overlay), có điều kiện tiên quyết | T-06 | Không ghi một nửa; không đè sửa đổi đồng thời |
-| T-08 | Công cụ chuyển đổi ở frontend: kiểu tách, xem trước, sửa tay, file sao lưu (§4) | T-07 | Luồng chuyển field chạy hết |
+| ID | Nội dung | Phụ thuộc | Trạng thái | Kết quả |
+|---|---|---|---|---|
+| T-01 | Hàm `typing-compare.v1` (§5) và hàm tính ô, mở gợi ý ở frontend, kèm bộ test (NFC, hoa thường, khoảng trắng, U+3000, IME, dấu tiếng Việt, kana, grapheme) | — | Hoàn thành | Đã hoàn thành (`typingAnswer.ts`) |
+| T-02 | Validator Template: nhận input kiểu `answers`, cho gắn với field `text`, thêm khóa `show_length`/`hints`; sửa tương ứng ở `frontend/src/features/template-library/lib/inputSchemaValidation.ts` | — | Hoàn thành | Đã hoàn thành (`template_library.py`, `inputSchemaValidation.ts`) |
+| T-03 | Component ô gõ ở host theo §6: Enter, Đúng/Sai, gõ lại, ô ẩn, gợi ý, bỏ qua, kết quả ở mặt sau | T-01, T-02 | Hoàn thành | Đã hoàn thành (`StudyTypingAnswerPanel.tsx`, `StudyPage.tsx`) |
+| T-04 | Template mẫu "Gõ đáp án" | T-02 | Hoàn thành | Đã hoàn thành (`CreateTemplateDialog.tsx`) |
+| T-05 | Gom danh sách kiểu field về một hằng số (backend, frontend) | — | Hoàn thành | Đã hoàn thành (`models/field_types.py`) |
+| T-06 | Thêm kiểu field `answers`: validator, MCP, Connect, overlay, `FIELD_TYPES` frontend, ô nhập chip, kiểm hiển thị cả hai renderer; chặn đổi kiểu trần; đo cột production | T-05 | Hoàn thành | Đã hoàn thành |
+| T-07 | Endpoint áp dụng và hoàn tác chuyển đổi nguyên tử (NoteType sở hữu và overlay), có điều kiện tiên quyết | T-06 | Hoàn thành | Đã hoàn thành (`field_answers_conversion_service.py`) |
+| T-08 | Công cụ chuyển đổi ở frontend: kiểu tách, xem trước, sửa tay, file sao lưu (§4) | T-07 | Hoàn thành | Đã hoàn thành (`FieldAnswersConversionDialog.tsx`) |
 
-T-01..T-04 cho chế độ gõ chạy được trên field `text` (mỗi dòng một đáp án) mà không đổi schema; backend chỉ sửa validator Template. T-05..T-08 làm khi cần field có quy tắc và công cụ chuyển đổi.
+T-01..T-08 đã được triển khai và kiểm thử toàn diện trên backend và frontend.
 
 ## 8. Câu hỏi còn mở
 
