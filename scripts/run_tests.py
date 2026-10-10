@@ -207,7 +207,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/components/StudyModeSelector.test.tsx",
             "src/features/study/components/StudyQuickEditDialog.test.tsx",
             "src/features/study/components/StudySessionConflict.test.tsx",
-            "src/features/study/components/StudyTemplatePreparation.test.tsx",
+            "src/features/study/components/StudyTemplateFieldsDialog.test.tsx",
             "src/features/study/components/StudyWaitingCard.test.tsx",
             "src/features/study/hooks/useStudySession.test.tsx",
             "src/features/study/interactions/ReviewInteractionControls.test.tsx",
@@ -348,7 +348,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "frontend/src/features/template-applications/**",
             "frontend/src/features/library/pages/InstallTemplatesPage*",
             "frontend/src/features/study/hooks/useStudyTemplatePreparation*",
-            "frontend/src/features/study/components/StudyTemplatePreparation*"
+            "frontend/src/features/study/components/StudyTemplateFieldsDialog*"
         ],
         "backend_tests": [
             "tests/test_adversarial_template_features.py",
