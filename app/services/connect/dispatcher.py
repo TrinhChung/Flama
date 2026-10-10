@@ -1,98 +1,9 @@
-"""AnkiConnect / Yomitan RPC command dispatcher."""
-
-from __future__ import annotations
-
-import base64
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-import hashlib
-import json
-import logging
-import math
-import re
-import time
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
-import unicodedata
-
+"""Shared AnkiConnect command dispatcher; adapters only supply policy."""
+from typing import Any
 from flask import current_app
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import joinedload, selectinload
 
-from app.repositories import (
-    flashcards_share_repository,
-    study_repository,
-    vocabulary_repository,
-)
-from app.services import (
-    anki_scheduler,
-    deck_working_tree_service,
-    flashcard_content_service,
-    flashcards_share,
-    flashcards_share_service,
-    flama_connect_media_service,
-    study_service,
-)
-from app.services.anki_content_normalizer import normalize_anki_field_values
-from app.validators.flashcard_input import RequestValidationError, validate_note_create_request
-
-from models import db
-from models.audit_log import AuditLog
-from models.card import Card
-from models.card_progress import CardProgress
-from models.connect_import_media import ConnectImportMedia
-from models.connect_import_package import ConnectImportPackage
-from models.connect_import_session import ConnectImportSession
-from models.connect_note_ref import ConnectNoteRef
-from models.connect_note_type_ref import ConnectNoteTypeRef
-from models.connect_pending_media import ConnectPendingMedia
-from models.connect_review_event_ref import ConnectReviewEventRef
-from models.connect_source_card_ref import ConnectSourceCardRef
-from models.connect_source_deck_ref import ConnectSourceDeckRef
-from models.connect_source_note_ref import ConnectSourceNoteRef
-from models.deck import Deck
-from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
-from models.deck_clone_added_note import DeckCloneAddedNote
-from models.deck_clone_deck_map import DeckCloneDeckMap
-from models.deck_clone_field_def_override import DeckCloneFieldDefOverride
-from models.deck_clone_field_order_override import DeckCloneFieldOrderOverride
-from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
-from models.deck_install import DeckInstall
-from models.deck_marketplace_item import DeckMarketplaceItem
-from models.field_def import FieldDef
-from models.media_asset import MediaAsset
-from models.note import Note
-from models.note_type import NoteType
-from models.note_type_install import NoteTypeInstall
-from models.review_event import ReviewEvent
-from models.template import Template
-from models.user import User
-
-logger = logging.getLogger(__name__)
-UTC = timezone.utc
-
-FLAMA_CONNECT_PROTOCOL_VERSION = 6
-MAX_NOTES_PER_REQUEST = 50
-MAX_MULTI_ACTIONS = 10
-SUPPORTED_ACTIONS = (
-    "version",
-    "apiReflect",
-    "deckNames",
-    "modelNames",
-    "modelFieldNames",
-    "canAddNotes",
-    "canAddNotesWithErrorDetail",
-    "findNotes",
-    "multi",
-    "addNote",
-    "storeMediaFile",
-)
-IMPORT_SESSION_MODES = {"strict", "auto_sync_missing"}
-IMPORT_SESSION_READY = "note_types_ready"
-IMPORT_SESSION_TTL_HOURS = 24
-_QUERY_CLAUSE_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
-
-
+from app.services import flama_connect_media_service
+from app.services.connect.registry import FLAMA_CONNECT_PROTOCOL_VERSION, MAX_NOTES_PER_REQUEST, MAX_MULTI_ACTIONS, SUPPORTED_ACTIONS
 from app.services.connect.actions import (
     CheckBatchContext,
     add_note,
@@ -114,7 +25,7 @@ from app.services.connect.resolvers import (
     model_names,
 )
 
-def dispatch(user_id: int, action: str, params: dict[str, Any]) -> Any:
+def dispatch(user_id: int, action: str, params: dict[str, Any], *, standard=False, uow=None, scopes=None) -> Any:
     if action == "version":
         return FLAMA_CONNECT_PROTOCOL_VERSION
     if action == "apiReflect":
@@ -132,7 +43,8 @@ def dispatch(user_id: int, action: str, params: dict[str, Any]) -> Any:
             or any(not isinstance(item, str) or len(item) > 64 for item in actions)
         ):
             raise ConnectError("actions must be null or an array of strings")
-        reflected = list(SUPPORTED_ACTIONS) if actions is None else [item for item in actions if item in SUPPORTED_ACTIONS]
+        supported = [item for item in SUPPORTED_ACTIONS if not (standard and item == "storeMediaFile" and not current_app.config.get("CONNECT_ANKI_MEDIA_ENABLED", False))]
+        reflected = supported if actions is None else [item for item in actions if item in supported]
         return {"scopes": [scope for scope in scopes if scope == "actions"], "actions": reflected}
     if action == "validateKey":
         return {"status": "valid", "userId": user_id}
@@ -157,20 +69,25 @@ def dispatch(user_id: int, action: str, params: dict[str, Any]) -> Any:
         if not isinstance(notes, list) or len(notes) > MAX_NOTES_PER_REQUEST:
             raise ConnectError(f"notes must be an array with at most {MAX_NOTES_PER_REQUEST} entries")
         context = CheckBatchContext(user_id)
-        checks = [check_note(user_id, note, context=context) for note in notes]
+        checks = [check_note(user_id, note, context=context, standard=standard) for note in notes]
         if action == "canAddNotes":
             return [allowed for allowed, _error in checks]
         return [{"canAdd": allowed, "error": error} for allowed, error in checks]
     if action == "findNotes":
-        return find_notes(user_id, params.get("query"))
+        return find_notes(user_id, params.get("query"), strict=standard)
     if action == "addNote":
-        return add_note(user_id, params.get("note"))
+        return add_note(user_id, params.get("note"), standard=standard, uow=uow, scopes=scopes)
     if action == "storeMediaFile":
         if params.get("path") is not None or params.get("url") is not None:
             raise ConnectError("Flama Connect không nhận media từ đường dẫn hoặc URL.")
         if "deleteExisting" in params and not isinstance(params.get("deleteExisting"), bool):
             raise ConnectError("deleteExisting phải là boolean.")
         try:
+            if standard:
+                if not current_app.config.get("CONNECT_ANKI_MEDIA_ENABLED", False):
+                    raise ConnectError("media mining is disabled")
+                from app.services.connect.mining_media import stage
+                return stage(user_id, params, uow)
             if params.get("importSessionId") is not None:
                 return flama_connect_media_service.stage_import_media(
                     user_id=user_id,

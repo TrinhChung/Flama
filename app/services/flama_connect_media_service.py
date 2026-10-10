@@ -95,15 +95,16 @@ def _unlink_quietly(path: Path) -> None:
         current_app.logger.warning("Unable to remove Flama Connect media file: %s", path)
 
 
-def _purge_expired() -> None:
+def _purge_expired() -> int:
     expired = (
         ConnectPendingMedia.query.filter(ConnectPendingMedia.expires_at <= _utcnow())
         .order_by(ConnectPendingMedia.expires_at.asc())
         .limit(100)
+        .with_for_update(skip_locked=True)
         .all()
     )
     if not expired:
-        return
+        return 0
     paths: list[Path] = []
     for row in expired:
         try:
@@ -114,6 +115,7 @@ def _purge_expired() -> None:
     db.session.commit()
     for path in paths:
         _unlink_quietly(path)
+    return len(expired)
 
 
 def _decode_base64_audio(raw_data: object, *, max_bytes: int) -> bytes:
@@ -267,12 +269,21 @@ def stage_mp3(*, user_id: int, filename: object, data: object) -> str:
     except RequestValidationError as exc:
         raise ConnectMediaError(f"Audio MP3 không hợp lệ: {exc}") from exc
 
+    from app.services.connect.mining_media import lock_account
     _purge_expired()
+    lock_account(user_id)
+    return stage_validated_pending(user_id=user_id, filename=filename, uploaded=validated)
+
+
+def stage_validated_pending(*, user_id, filename, uploaded, uow=None, standard=False):
+    validated = uploaded
     now = _utcnow()
     ttl_seconds = _config_int("CONNECT_PENDING_MEDIA_TTL_SECONDS", 30 * 60)
     expires_at = now + timedelta(seconds=ttl_seconds)
     existing = ConnectPendingMedia.query.filter_by(user_id=user_id, filename=filename).first()
     if existing is not None:
+        if standard and existing.expires_at <= now:
+            raise ConnectMediaError("staged media has expired; use a new filename")
         if existing.sha256 != validated.sha256:
             raise ConnectMediaError("Tên media đã tồn tại với nội dung khác.")
         existing_path = _safe_path(existing.storage_path)
@@ -285,8 +296,11 @@ def stage_mp3(*, user_id: int, filename: object, data: object) -> str:
             and hashlib.sha256(existing_content).hexdigest() == existing.sha256
         ):
             existing.expires_at = expires_at
-            db.session.commit()
+            if uow is None:
+                db.session.commit()
             return filename
+        if uow is not None:
+            raise ConnectMediaError("staged media is expired or damaged; use a new filename")
         db.session.delete(existing)
         db.session.commit()
         _unlink_quietly(existing_path)
@@ -306,20 +320,26 @@ def stage_mp3(*, user_id: int, filename: object, data: object) -> str:
         or 0
     )
     max_items = _config_int("CONNECT_PENDING_MEDIA_MAX_ITEMS", 20)
-    max_total_bytes = _config_int("CONNECT_PENDING_MEDIA_MAX_TOTAL_BYTES", 10 * 1024 * 1024)
+    max_total_bytes = _config_int("CONNECT_ANKI_PENDING_MAX_BYTES", 16 * 1024 * 1024) if standard else _config_int("CONNECT_PENDING_MEDIA_MAX_TOTAL_BYTES", 10 * 1024 * 1024)
     if active_count >= max_items or active_bytes + validated.size_bytes > max_total_bytes:
         raise ConnectMediaError("Đã vượt giới hạn media đang chờ của tài khoản.")
+
+    if standard:
+        from app.services.connect.mining_media import check_quota
+        check_quota(user_id, validated.size_bytes, incoming_items=1)
 
     relative_path = (
         Path("connect_pending") / str(user_id) / validated.storage_filename
     )
     full_path = _safe_path(relative_path)
     full_path.parent.mkdir(parents=True, exist_ok=True)
+    if uow is not None:
+        uow.created_paths.append(full_path)
     full_path.write_bytes(validated.content)
     row = ConnectPendingMedia(
         user_id=user_id,
         filename=filename,
-        mime_type="audio/mpeg",
+        mime_type=validated.mime_type,
         storage_path=str(relative_path).replace("\\", "/"),
         sha256=validated.sha256,
         size_bytes=validated.size_bytes,
@@ -340,7 +360,8 @@ def stage_mp3(*, user_id: int, filename: object, data: object) -> str:
                 },
             )
         )
-        db.session.commit()
+        if uow is None:
+            db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         _unlink_quietly(full_path)
@@ -582,6 +603,7 @@ def materialize_audio(
     user_id: int,
     note: Note,
     attachments: dict[str, ConnectPendingMedia],
+    managed: bool = False,
 ) -> MaterializedMedia:
     if not attachments:
         return MaterializedMedia((), ())
@@ -591,26 +613,32 @@ def materialize_audio(
     pending_paths_by_id: dict[str, Path] = {}
     try:
         for field_name, pending in attachments.items():
-            pending_path = _safe_path(pending.storage_path)
-            try:
-                content = pending_path.read_bytes()
-            except OSError as exc:
-                raise ConnectMediaError("File audio đang chờ không còn tồn tại.") from exc
+            pending_path = None
+            if hasattr(pending, "content"):
+                content = pending.content
+            else:
+                pending_path = _safe_path(pending.storage_path)
+                try:
+                    content = pending_path.read_bytes()
+                except OSError as exc:
+                    raise ConnectMediaError("File media đang chờ không còn tồn tại.") from exc
             if len(content) != pending.size_bytes or hashlib.sha256(content).hexdigest() != pending.sha256:
                 raise ConnectMediaError("File audio đang chờ không còn toàn vẹn.")
 
-            storage_filename = f"{uuid4().hex}_{pending.sha256[:12]}.mp3"
+            storage_filename = f"{uuid4().hex}_{pending.sha256[:12]}{Path(pending.filename).suffix.lower()}"
             relative_path = Path(str(user_id)) / note.id / storage_filename
+            if managed:
+                relative_path = Path("connect_mined") / relative_path
             final_path = _safe_path(relative_path)
             final_path.parent.mkdir(parents=True, exist_ok=True)
-            final_path.write_bytes(content)
             final_paths.append(final_path)
+            final_path.write_bytes(content)
 
             asset = MediaAsset(
                 note_id=note.id,
                 field_name=field_name,
                 filename=pending.filename,
-                mime_type="audio/mpeg",
+                mime_type=pending.mime_type,
                 storage_path=str(relative_path).replace("\\", "/"),
                 sha256=pending.sha256,
                 size_bytes=pending.size_bytes,
@@ -618,7 +646,8 @@ def materialize_audio(
             db.session.add(asset)
             db.session.flush()
             values[field_name] = f"/media/proxy/{asset.id}"
-            pending_paths_by_id[pending.id] = pending_path
+            if pending_path is not None:
+                pending_paths_by_id[pending.id] = pending_path
     except Exception:
         for path in final_paths:
             _unlink_quietly(path)

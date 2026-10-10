@@ -69,8 +69,6 @@ flashcards_bp = Blueprint("flashcards", __name__)
 
 logger = logging.getLogger(__name__)
 
-FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
-
 ALLOWED_MEDIA_MIME_TYPES = set(VALIDATOR_ALLOWED_MEDIA_MIME_TYPES)
 
 CSP_CARD_POLICY = (

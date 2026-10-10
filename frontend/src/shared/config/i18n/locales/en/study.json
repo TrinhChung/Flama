@@ -70,6 +70,7 @@
     "configure_fields_for": "Field setup for {{name}}"
   },
   "quick_edit": {
+    "answers_placeholder": "One answer per line",
     "title": "Quick Edit Card",
     "description": "Edit vocabulary fields and contents without interrupting your study session.",
     "generate_stroke": "Stroke Diagram",
@@ -204,5 +205,23 @@
     "save_and_apply": "Save & apply",
     "remember_hint": "The setup is remembered for this deck.",
     "apply_hint": "Progress is saved and the session reopens with the new setup."
+  },
+  "typing": {
+    "aria_label": "Type the answer",
+    "placeholder": "Type the answer and press Enter",
+    "check": "Check",
+    "incorrect": "Not quite, try again.",
+    "hint": "Hint",
+    "hint_progress": "{{used}}/{{max}}",
+    "skip": "Skip",
+    "length": "{{count}} characters",
+    "keyboard_hint": "Enter to check · Esc to leave the input",
+    "correct": "Correct",
+    "attempts": "attempt {{count}}",
+    "hints_used": "{{count}} hints revealed",
+    "skipped": "Skipped",
+    "wrong_attempts": "{{count}} wrong attempts",
+    "your_answer": "You typed",
+    "answers": "Answer"
   }
 }

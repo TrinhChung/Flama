@@ -53,6 +53,14 @@ export type StudyManifest = {
   note_type_name?: string
 }
 
+/** The template's typed-answer input; answers come from content field_values[key]. */
+export type StudyTypingInput = {
+  schema_version: 'study-typing-input.v1'
+  key: string
+  show_length: boolean
+  hints: boolean
+}
+
 export type StudyTemplateArtifact = {
   schema_version: 'study-template.v1'
   renderer_abi: string
@@ -70,6 +78,7 @@ export type StudyTemplateArtifact = {
     field_defs: FieldDef[]
     fingerprint: string
   }
+  typing_input?: StudyTypingInput
 }
 
 export type StudyMediaArtifact = {

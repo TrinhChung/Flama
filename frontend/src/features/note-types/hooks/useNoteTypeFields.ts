@@ -21,7 +21,7 @@ export type NoteTypeDetail = {
   field_defs?: FieldDefItem[]
 }
 
-export const FIELD_TYPES = ['text', 'richtext', 'markdown', 'image', 'audio', 'diagram'] as const
+export const FIELD_TYPES = ['text', 'richtext', 'markdown', 'image', 'audio', 'diagram', 'answers'] as const
 type FieldWrite = Pick<FieldDefItem, 'name' | 'field_type' | 'required' | 'identity_role'>
 type FieldsApi = {
   get: <T>(path: string) => Promise<T>
@@ -234,6 +234,8 @@ export function useNoteTypeFields(api: FieldsApi) {
     formError, isDirty, isOrderDirty, canSave: isDirty || isOrderDirty, isBusy,
     saveDraft, discardDraft, saveOrder, discardOrder, saveAll, selectField, startAddField, cancelAddField,
     createMutation, updateMutation, deleteMutation, reorderMutation,
+    /** Refetch fields after a change made outside this editor (e.g. the answers conversion). */
+    refreshFields: () => (noteTypeId ? invalidateFields(noteTypeId) : Promise.resolve()),
     handleDragStart: (id: string) => setDraggedId(id),
     handleDrop: (targetId: string) => {
       reorder(fields.findIndex((field) => field.id === draggedId), fields.findIndex((field) => field.id === targetId))

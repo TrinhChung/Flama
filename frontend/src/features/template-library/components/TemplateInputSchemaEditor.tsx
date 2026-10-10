@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { inputSchemaIssues, templateInputTypes } from '../lib/inputSchemaValidation'
+import { defaultTypingOptions, inputSchemaIssues, templateInputTypes, withInputType } from '../lib/inputSchemaValidation'
 import { templateInputReferences } from '../lib/templateInputReferences'
 
 type Props = {
@@ -28,9 +28,11 @@ export function TemplateInputSchemaEditor({ value, onChange, disabled = false, p
   const issues = inputSchemaIssues(value, t)
   const references = useMemo(() => templateInputReferences(frontHtml, backHtml, value), [frontHtml, backHtml, value])
   const input = selected === null ? null : value[selected]
-  const update = (patch: Partial<TemplateInputSpec>) => {
-    if (!disabled && selected !== null) onChange(value.map((item, index) => index === selected ? { ...item, ...patch } : item))
+  const replaceSelected = (next: (item: TemplateInputSpec) => TemplateInputSpec) => {
+    if (!disabled && selected !== null) onChange(value.map((item, index) => index === selected ? next(item) : item))
   }
+  const update = (patch: Partial<TemplateInputSpec>) => replaceSelected((item) => ({ ...item, ...patch }))
+  const typing = input?.type === 'answers' ? { ...defaultTypingOptions, ...input.typing } : null
   const sides = input ? [references.front.has(input.key) && t('setup.front'), references.back.has(input.key) && t('setup.back')].filter(Boolean) : []
   const used = sides.length > 0
   const filtered = value.map((item, index) => ({ item, index })).filter(({ item }) => `${item.label} ${item.key}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
@@ -54,8 +56,13 @@ export function TemplateInputSchemaEditor({ value, onChange, disabled = false, p
         <Button type="button" variant="ghost" size="sm" className="sm:hidden" onClick={() => setSelected(null)}><ArrowLeft className="size-4" />{t('setup.input_list')}</Button>
         <div className="space-y-1"><h3 className="font-semibold break-words">{input.label || input.key}</h3><p className="text-xs text-muted-foreground">{t('setup.input_contract')}</p></div>
         <div className="space-y-2"><Label htmlFor={`${prefix}-label`}>{t('setup.input_label')}</Label><Input id={`${prefix}-label`} value={input.label} maxLength={255} disabled={disabled} onChange={(event) => update({ label: event.target.value })} /></div>
-        <div className="space-y-2"><Label htmlFor={`${prefix}-type`}>{t('setup.input_type')}</Label><NativeSelect id={`${prefix}-type`} value={input.type} disabled={disabled} onChange={(event) => update({ type: event.target.value as TemplateInputSpec['type'] })}>{templateInputTypes.map((type) => <NativeSelectOption key={type} value={type}>{t(`setup.types.${type}`)}</NativeSelectOption>)}</NativeSelect></div>
+        <div className="space-y-2"><Label htmlFor={`${prefix}-type`}>{t('setup.input_type')}</Label><NativeSelect id={`${prefix}-type`} value={input.type} disabled={disabled} onChange={(event) => replaceSelected((item) => withInputType(item, event.target.value as TemplateInputSpec['type']))}>{templateInputTypes.map((type) => <NativeSelectOption key={type} value={type}>{t(`setup.types.${type}`)}</NativeSelectOption>)}</NativeSelect></div>
         {applicationCount > 0 && <p className="text-xs text-muted-foreground">{t('setup.type_change_hint', { count: applicationCount })}</p>}
+        {typing && <fieldset className="space-y-2 rounded-xl border p-3"><legend className="px-1 text-sm font-medium">{t('setup.typing.title')}</legend>
+          <p className="text-xs text-muted-foreground">{t('setup.typing.description')}</p>
+          <Label className="flex items-center gap-2"><input type="checkbox" checked={typing.show_length} disabled={disabled} onChange={(event) => update({ typing: { ...typing, show_length: event.target.checked } })} />{t('setup.typing.show_length')}</Label>
+          <Label className="flex items-center gap-2"><input type="checkbox" checked={typing.hints} disabled={disabled} onChange={(event) => update({ typing: { ...typing, hints: event.target.checked } })} />{t('setup.typing.hints')}</Label>
+        </fieldset>}
         <Label className="flex items-center gap-2"><input type="checkbox" checked={input.required} disabled={disabled} onChange={(event) => update({ required: event.target.checked })} />{t('input_schema.recommended_checkbox')}</Label>
         <details className="rounded-xl border p-3 space-y-3"><summary className="cursor-pointer font-medium">{t('setup.advanced')}</summary>
           <div className="space-y-2 pt-3"><Label htmlFor={`${prefix}-key`}>{t('setup.input_key')}</Label><Input id={`${prefix}-key`} value={input.key} readOnly={persistedKeys.includes(input.key)} disabled={disabled} onChange={(event) => update({ key: event.target.value })} />

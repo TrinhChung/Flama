@@ -62,7 +62,14 @@
       "markdown": "Markdown",
       "image": "Hình ảnh",
       "audio": "Âm thanh",
-      "diagram": "Sơ đồ"
+      "diagram": "Sơ đồ",
+      "answers": "Đáp án gõ"
+    },
+    "typing": {
+      "title": "Chế độ gõ",
+      "description": "Người học gõ đáp án, Flama so với từng dòng của field được gắn. Đúng thì lật sang mặt sau, sai thì báo để gõ lại.",
+      "show_length": "Hiện số ký tự cần gõ",
+      "hints": "Cho mở gợi ý từng ký tự"
     }
   },
   "library": {
@@ -131,7 +138,14 @@
     "cancel": "Hủy",
     "creating": "Đang tạo…",
     "create": "Tạo giao diện",
-    "toast_success": "Đã tạo giao diện thẻ."
+    "toast_success": "Đã tạo giao diện thẻ.",
+    "preset_label": "Điểm xuất phát",
+    "preset_basic": "Lật thẻ cơ bản",
+    "preset_basic_desc": "Mặt trước và mặt sau, người học tự chấm.",
+    "preset_typing": "Gõ đáp án",
+    "preset_typing_desc": "Người học gõ đáp án, Flama so với field được gắn rồi mới lật thẻ.",
+    "typing_prompt_label": "Câu hỏi",
+    "typing_answer_label": "Đáp án"
   },
   "apply_wizard": {
     "step1_title": "Chọn loại thẻ",
@@ -207,7 +221,8 @@
     "val_invalid_key": "Key không hợp lệ: không để trống, thêm khoảng trắng ở đầu/cuối hoặc dùng ký tự dành riêng.",
     "val_unique_key": "Key input phải duy nhất.",
     "val_label_max": "Nhãn tối đa 255 ký tự.",
-    "val_invalid_type": "Kiểu input không hợp lệ."
+    "val_invalid_type": "Kiểu input không hợp lệ.",
+    "val_single_answers": "Mỗi mẫu chỉ có một input đáp án gõ."
   },
   "history": {
     "title": "Lịch sử phiên bản",

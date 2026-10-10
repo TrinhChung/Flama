@@ -2,6 +2,11 @@
 # process bound to 127.0.0.1:4790; only this narrowly scoped reverse proxy is
 # exposed publicly. No wildcard CORS headers are added.
 limit_req_zone $binary_remote_addr zone=flama_connect_ip:10m rate=2r/s;
+# Keep this edge error allowlist aligned with CONNECT_ANKI_ALLOWED_ORIGINS.
+map $http_origin $connect_error_origin {
+    default "";
+    "https://killergerbah.github.io" "https://killergerbah.github.io";
+}
 
 server {
     listen 443 ssl http2;
@@ -31,6 +36,45 @@ server {
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_request_buffering on;
         proxy_read_timeout 30s;
+    }
+
+    location = /v1/anki-connect {
+        limit_except POST OPTIONS { deny all; }
+        client_max_body_size 6m;
+        limit_req zone=flama_connect_ip burst=60 nodelay;
+        error_page 413 = @connect_json_too_large;
+        error_page 429 = @connect_json_rate_limited;
+        error_page 502 504 = @connect_json_unavailable;
+        access_log off;
+        proxy_pass http://127.0.0.1:4790/v1/anki-connect;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_request_buffering on;
+        proxy_read_timeout 30s;
+    }
+
+    location @connect_json_too_large {
+        default_type application/json;
+        add_header Access-Control-Allow-Origin $connect_error_origin always;
+        add_header Vary Origin always;
+        add_header Cache-Control no-store always;
+        return 413 '{"result":null,"error":"request body is too large"}';
+    }
+    location @connect_json_rate_limited {
+        default_type application/json;
+        add_header Access-Control-Allow-Origin $connect_error_origin always;
+        add_header Vary Origin always;
+        add_header Cache-Control no-store always;
+        add_header Retry-After 60 always;
+        return 429 '{"result":null,"error":"rate limit exceeded"}';
+    }
+    location @connect_json_unavailable {
+        default_type application/json;
+        add_header Access-Control-Allow-Origin $connect_error_origin always;
+        add_header Vary Origin always;
+        add_header Cache-Control no-store always;
+        return 503 '{"result":null,"error":"service temporarily unavailable"}';
     }
 
     # The token is intentionally stored in the path because stock Yomitan may

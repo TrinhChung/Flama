@@ -198,8 +198,11 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_stats_study_time.py",
             "tests/test_review_analytics_study_integration.py",
             "tests/test_deck_count_projection.py",
+            "tests/test_study_typing_template.py",
         ],
         "frontend_tests": [
+            "src/features/study/typing/typingAnswer.test.ts",
+            "src/features/study/components/StudyTypingAnswerPanel.test.tsx",
             "src/features/study/components/CardDisplay.test.tsx",
             "src/features/study/components/CardRendererFrame.test.tsx",
             "src/features/study/components/CardRendererHost.test.ts",
@@ -208,6 +211,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/components/StudyQuickEditDialog.test.tsx",
             "src/features/study/components/StudySessionConflict.test.tsx",
             "src/features/study/components/StudyTemplateFieldsDialog.test.tsx",
+            "src/features/study/components/StudyTemplatePreparation.test.tsx",
             "src/features/study/components/StudyWaitingCard.test.tsx",
             "src/features/study/hooks/useStudySession.test.tsx",
             "src/features/study/interactions/ReviewInteractionControls.test.tsx",
@@ -262,6 +266,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/api/v1/strokes/**",
             "app/api/v1/images.py",
             "app/services/flashcard_*.py",
+            "app/services/field_*.py",
             "app/services/anki_import_service.py",
             "app/services/anki_content_normalizer.py",
             "app/services/image_*.py",
@@ -277,10 +282,12 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/note_management_service.py",
             "app/services/note_type_service.py",
             "app/validators/flashcard_input.py",
+            "app/validators/field_*.py",
             "app/validators/image_*.py",
             "models/flashcard.py",
             "models/note*.py",
             "models/field_def*.py",
+            "models/field_types.py",
             "models/template.py",
             "models/card.py",
             "models/image_asset.py",
@@ -314,6 +321,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_counter_logic.py",
             "tests/test_api_strokes.py",
             "tests/test_stroke_service.py",
+            "tests/test_field_answers_conversion.py",
         ],
         "frontend_tests": [
             "src/lib/ankiHtmlSanitizer.test.ts",
@@ -348,7 +356,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "frontend/src/features/template-applications/**",
             "frontend/src/features/library/pages/InstallTemplatesPage*",
             "frontend/src/features/study/hooks/useStudyTemplatePreparation*",
-            "frontend/src/features/study/components/StudyTemplateFieldsDialog*"
+            "frontend/src/features/study/components/StudyTemplateFieldsDialog*",
+            "frontend/src/features/study/components/StudyTemplatePreparation*"
         ],
         "backend_tests": [
             "tests/test_adversarial_template_features.py",
@@ -410,7 +419,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/session/contentPatchAdapter.adversarial.test.ts",
             "src/features/study/session/wireContract.test.ts",
             "src/features/study/session/sessionRestore.test.ts",
-            "src/features/study/components/StudyQuickEditDialog.test.tsx"
+            "src/features/study/components/StudyQuickEditDialog.test.tsx",
+            "src/lib/answersField.test.ts",
+            "src/features/note-types/lib/answersConversion.test.ts",
+            "src/features/note-types/components/fields/FieldAnswersConversionDialog.test.tsx",
         ]
     },
     "decks": {
@@ -527,6 +539,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
     "connect_mcp": {
         "source_patterns": [
             "scripts/flama_mcp_server.py",
+            "scripts/probe_connect_protocol_mysql.py",
             "connect_wsgi.py",
             "app/connect/**",
             "app/services/connect/**",
@@ -553,6 +566,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_anki_content_normalizer.py",
             "tests/test_flama_connect.py",
             "tests/test_flama_connect_auth.py",
+            "tests/test_connect_protocol.py",
             "tests/test_flama_connect_mcp.py",
             "tests/test_mcp_access_tokens.py",
             "tests/test_mcp_list_my_decks.py",
@@ -571,6 +585,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "frontend_tests": [
             "src/lib/ankiSyncEngine.test.ts",
             "src/lib/ankiSyncPackages.test.ts",
+            "src/features/settings/components/__tests__/ConnectMiningSetup.test.tsx",
         ],
     },
     "payment": {

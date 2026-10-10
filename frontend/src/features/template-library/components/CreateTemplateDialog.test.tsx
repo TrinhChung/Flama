@@ -26,6 +26,19 @@ describe('CreateTemplateDialog', () => {
     expect(createLibraryTemplate).toHaveBeenCalledWith({ name: 'New template', description: '', front_html: '{{Front}}', back_html: '{{Front}}<hr>{{Back}}', shared_css: '', input_schema: [{ key: 'Front', label: 'Front', type: 'text', required: false }, { key: 'Back', label: 'Back', type: 'text', required: false }] })
     expect(container.querySelector('output')?.textContent).toBe('/card-templates/new%2Fid')
   })
+  it('creates a typing template from the typed-answer starting point', async () => {
+    vi.mocked(createLibraryTemplate).mockResolvedValue({ id: 'typing-id' } as TemplateLibraryTemplate); await render(); await name('Gõ nghĩa')
+    await act(async () => document.querySelector<HTMLInputElement>('input[value="typing"]')!.click())
+    await act(async () => button('Tạo giao diện').click()); await flush()
+    expect(createLibraryTemplate).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Gõ nghĩa',
+      front_html: '<div class="flama-typing-prompt">{{Prompt}}</div>',
+      input_schema: [
+        { key: 'Prompt', label: 'Câu hỏi', type: 'text', required: true },
+        { key: 'Answer', label: 'Đáp án', type: 'answers', required: true, typing: { show_length: true, hints: true } },
+      ],
+    }))
+  })
   it('keeps input and server error for retry', async () => { vi.mocked(createLibraryTemplate).mockRejectedValue(new Error('bad name')); await render(); await name('Draft'); await act(async () => button('Tạo giao diện').click()); await flush(); expect(document.querySelector<HTMLInputElement>('#create-template-name')?.value).toBe('Draft'); expect(document.body.textContent).toContain('bad name') })
   it('ignores a late create response after close and reopen', async () => {
     let resolve!: (value: TemplateLibraryTemplate) => void

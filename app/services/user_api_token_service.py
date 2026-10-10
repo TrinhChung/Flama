@@ -22,6 +22,12 @@ from models.user_api_token import UserApiToken
 TOKEN_PREFIX = "flama_yt_"
 TOKEN_RE = re.compile(r"^flama_yt_[0-9a-f]{8}_[A-Za-z0-9_-]{40,64}$")
 DEFAULT_SCOPES = mcp_scope_service.DEFAULT_SCOPES
+MINING_TEXT_SCOPES = ("deck:read", "note-type:read", "note:check", "note:create")
+TOKEN_PRESETS = {
+    "legacy": DEFAULT_SCOPES,
+    "mining-text": MINING_TEXT_SCOPES,
+    "mining-media": (*MINING_TEXT_SCOPES, "media:write"),
+}
 has_scope = mcp_scope_service.has_scope
 ALLOWED_EXPIRY_DAYS = {30, 90, 180, 365}
 MAX_ACTIVE_TOKENS_PER_USER = 10
@@ -55,10 +61,12 @@ def parse_scopes(record: UserApiToken) -> frozenset[str]:
         values = json.loads(record.scopes)
     except (TypeError, ValueError):
         return frozenset()
+    if not isinstance(values, list):
+        return frozenset()
     return frozenset(str(value) for value in values if isinstance(value, str))
 
 
-def issue_token(*, user_id: int, name: str, expires_in_days: int | None = 180) -> IssuedUserApiToken:
+def issue_token(*, user_id: int, name: str, expires_in_days: int | None = 180, preset: str = "legacy", scopes=None) -> IssuedUserApiToken:
     normalized_name = str(name or "").strip()
     if not normalized_name or len(normalized_name) > 120:
         raise TokenInputError("Token name must contain between 1 and 120 characters.")
@@ -66,6 +74,16 @@ def issue_token(*, user_id: int, name: str, expires_in_days: int | None = 180) -
         raise TokenInputError("Token name cannot contain control characters.")
     if expires_in_days is not None and expires_in_days not in ALLOWED_EXPIRY_DAYS:
         raise TokenInputError("expires_in_days must be 30, 90, 180, 365, or null.")
+    if scopes is None:
+        if not isinstance(preset, str) or preset not in TOKEN_PRESETS:
+            raise TokenInputError("Unknown integration token preset.")
+        token_scopes = TOKEN_PRESETS[preset]
+    else:
+        if not isinstance(scopes, (list, tuple)) or not scopes or len(scopes) > len(DEFAULT_SCOPES):
+            raise TokenInputError("scopes must be a nonempty array of supported scopes.")
+        if any(not isinstance(scope, str) or scope not in DEFAULT_SCOPES for scope in scopes):
+            raise TokenInputError("Unsupported integration token scope.")
+        token_scopes = tuple(dict.fromkeys(scopes))
     now = _utcnow()
     total_records = UserApiToken.query.filter_by(user_id=user_id).count()
     if total_records >= MAX_TOKEN_RECORDS_PER_USER:
@@ -85,7 +103,7 @@ def issue_token(*, user_id: int, name: str, expires_in_days: int | None = 180) -
         name=normalized_name,
         token_hash=_hash_token(plaintext),
         token_prefix=f"{TOKEN_PREFIX}{marker}",
-        scopes=_serialize_scopes(),
+        scopes=_serialize_scopes(token_scopes),
         expires_at=(now + timedelta(days=expires_in_days)) if expires_in_days is not None else None,
         created_at=now,
         updated_at=now,
@@ -99,7 +117,7 @@ def issue_token(*, user_id: int, name: str, expires_in_days: int | None = 180) -
             payload={
                 "token_id": record.id,
                 "expires_at": record.expires_at.isoformat() if record.expires_at else None,
-                "scopes": list(DEFAULT_SCOPES),
+                "scopes": list(token_scopes),
             },
         )
     )
@@ -141,7 +159,7 @@ def rotate_token(
         return None
     if record.revoked_at is None:
         record.revoked_at = _utcnow()
-    issued = issue_token(user_id=user_id, name=record.name, expires_in_days=expires_in_days)
+    issued = issue_token(user_id=user_id, name=record.name, expires_in_days=expires_in_days, scopes=sorted(parse_scopes(record)))
     db.session.add(
         AuditLog(
             user_id=user_id,
@@ -197,6 +215,7 @@ def serialize_token(record: UserApiToken) -> dict:
         "name": record.name,
         "token_prefix": record.token_prefix,
         "scopes": sorted(parse_scopes(record)),
+        "preset": next((name for name, scopes in TOKEN_PRESETS.items() if frozenset(scopes) == parse_scopes(record)), "custom"),
         "status": status,
         "expires_at": record.expires_at.isoformat() + "Z" if record.expires_at else None,
         "last_used_at": record.last_used_at.isoformat() + "Z" if record.last_used_at else None,

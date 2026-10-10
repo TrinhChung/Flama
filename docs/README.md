@@ -68,6 +68,7 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 | Tài liệu | Mô tả |
 |---|---|
 | [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
+| [`Flama Connect nhiều phiên bản và asbplayer — #217`](plans/proposals/FLAMA_CONNECT_MULTI_VERSION_ASBPLAYER_PLAN_2026-10-10.md) | Pipeline v2–v6, MVP text/media đã có code và test local; rollout, quota toàn hệ thống và client qualification còn gate riêng. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
 | [`TEMPLATE_NOTE_TYPE_SETUP_UX_DESIGN_2026-10-09.md`](plans/proposals/TEMPLATE_NOTE_TYPE_SETUP_UX_DESIGN_2026-10-09.md) | Thiết kế và kết quả triển khai UI/UX: Template tập trung mặt trước/mặt sau/CSS, input trong modal; Note Type khai báo field và mapping từng lần gắn template. Có kiểm chứng và giới hạn triển khai. |
 | [`TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md`](plans/proposals/TEMPLATE_FEATURES_CLAUDE_GEMINI_EXECUTION_PLAN_2026-10-05.md) | Kế hoạch triển khai template tách riêng, nhiều kiểu thẻ/deck, phiên bản và bản riêng cho deck đã cài; chia task Claude/Gemini, spec ở [`task/template-features/`](task/template-features/README.md). Chờ duyệt. |
@@ -101,6 +102,7 @@ Các tài liệu hướng dẫn quy trình vận hành, phát hành và công c�
 |---|---|
 | [`FLASHCARD_V2_RUNBOOK.md`](runbooks/FLASHCARD_V2_RUNBOOK.md) | Runbook vận hành hệ thống Flashcard V2, template syntax và schema baseline. |
 | [`FLAMA_AUDIO_WINDOWS_RELEASE.md`](runbooks/FLAMA_AUDIO_WINDOWS_RELEASE.md) | Quy trình build, ký số Authenticode và phát hành `FlamaAudio-Portable.exe`. |
+| [`FLAMA_CONNECT_ASBPLAYER.md`](runbooks/FLAMA_CONNECT_ASBPLAYER.md) | Bật adapter AnkiConnect v2–v6, cấu hình token/asbplayer, media cleanup, giới hạn hỗ trợ và evidence local. |
 | [`CHUNGBECH_IMPORT_GUIDE.md`](runbooks/CHUNGBECH_IMPORT_GUIDE.md) | Hướng dẫn import file TSV Anki ChungBech. |
 
 ---

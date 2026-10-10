@@ -30,6 +30,10 @@ export const FLAMA_CONNECT_URL = String(
   import.meta.env.VITE_FLAMA_CONNECT_URL || DEFAULT_FLAMA_CONNECT_URL,
 ).trim()
 
+export const FLAMA_ANKI_CONNECT_URL = String(
+  import.meta.env.VITE_FLAMA_ANKI_CONNECT_URL || FLAMA_CONNECT_URL.replace(/\/v1\/flama-connect\/?$/, '/v1/anki-connect'),
+).trim()
+
 const DEFAULT_FLAMA_MCP_URL = import.meta.env.DEV
   ? 'http://127.0.0.1:4790/v1/mcp'
   : 'https://connect.flama.vn/v1/mcp'

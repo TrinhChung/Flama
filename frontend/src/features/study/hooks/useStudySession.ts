@@ -1129,6 +1129,15 @@ export function useStudySession(deckId: string | null) {
     waitForMutation,
   ])
 
+  const startPreparedSession = useCallback(async () => {
+    const controller = leaseControllerRef.current
+    if (!controller || !isCurrentLease(controller) || !hasLeaseRef.current) return
+    const selection = await templatePreparation.submit()
+    if (selection && isCurrentLease(controller) && hasLeaseRef.current) {
+      await selectComposition(selection.compositionId, selection.inputBindings)
+    }
+  }, [hasLeaseRef, isCurrentLease, leaseControllerRef, selectComposition, templatePreparation])
+
   // One click in the picker: open with the learner's saved field map, or the
   // template defaults when none was saved.
   const startComposition = useCallback(async (compositionId: string) => {
@@ -1464,6 +1473,7 @@ export function useStudySession(deckId: string | null) {
     updateTemplateContent,
     selectComposition,
     templatePreparation,
+    startPreparedSession,
     startComposition,
     applyTemplateBindings,
     reloadSession,

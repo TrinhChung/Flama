@@ -21,6 +21,7 @@ from models import db
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
+from models.connect_note_ref import ConnectNoteRef
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
@@ -837,7 +838,8 @@ class TestTier3CrossFeatureCombinations(AnkiNormalizerTestBase):
 
         # Inspect persisted note in database
         with self.app.app_context():
-            note = Note.query.get(note_id)
+            ref = db.session.get(ConnectNoteRef, note_id)
+            note = db.session.get(Note, ref.note_id)
             self.assertIsNotNone(note)
             fields = note.field_values
             self.assertEqual(fields["Word"], "食べる")
@@ -935,7 +937,8 @@ class TestTier3CrossFeatureCombinations(AnkiNormalizerTestBase):
         note_id = res
 
         with self.app.app_context():
-            note = Note.query.get(note_id)
+            ref = db.session.get(ConnectNoteRef, note_id)
+            note = db.session.get(Note, ref.note_id)
             fields = note.field_values
             # Text fields are stripped
             self.assertEqual(fields["Word"], "勉強する")
@@ -1080,7 +1083,8 @@ class TestTier4RealWorldScenarios(AnkiNormalizerTestBase):
         note_id = res
 
         with self.app.app_context():
-            note = Note.query.get(note_id)
+            ref = db.session.get(ConnectNoteRef, note_id)
+            note = db.session.get(Note, ref.note_id)
             fields = note.field_values
             self.assertEqual(fields["Word"], "約束")
             self.assertEqual(fields["Reading"], "やくそく")

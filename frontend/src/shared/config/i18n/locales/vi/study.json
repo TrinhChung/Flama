@@ -70,6 +70,7 @@
     "configure_fields_for": "Thiết lập trường cho {{name}}"
   },
   "quick_edit": {
+    "answers_placeholder": "Mỗi dòng một đáp án",
     "title": "Sửa nhanh thẻ",
     "description": "Chỉnh sửa các trường từ vựng và nội dung mà không làm gián đoạn phiên học.",
     "generate_stroke": "Tạo nét",
@@ -204,5 +205,23 @@
     "save_and_apply": "Lưu & áp dụng",
     "remember_hint": "Thiết lập được ghi nhớ cho bộ thẻ này.",
     "apply_hint": "Tiến độ được lưu, phiên học mở lại với thiết lập mới."
+  },
+  "typing": {
+    "aria_label": "Gõ đáp án",
+    "placeholder": "Gõ đáp án rồi nhấn Enter",
+    "check": "Kiểm tra",
+    "incorrect": "Chưa đúng, gõ lại nhé.",
+    "hint": "Gợi ý",
+    "hint_progress": "{{used}}/{{max}}",
+    "skip": "Bỏ qua",
+    "length": "{{count}} ký tự",
+    "keyboard_hint": "Enter để kiểm tra · Esc để rời ô gõ",
+    "correct": "Đúng",
+    "attempts": "lần thử thứ {{count}}",
+    "hints_used": "đã mở {{count}} gợi ý",
+    "skipped": "Đã bỏ qua",
+    "wrong_attempts": "{{count}} lần gõ sai",
+    "your_answer": "Bạn gõ",
+    "answers": "Đáp án"
   }
 }

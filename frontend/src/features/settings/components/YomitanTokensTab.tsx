@@ -22,13 +22,17 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
     setName,
     expiry,
     setExpiry,
+    preset,
+    setPreset,
     copied,
     copy,
     issuedConnectUrl,
+    issuedMiningKey,
     refresh,
     createMutation,
     revokeMutation,
     rotateMutation,
+    setupMiningMutation,
   } = hookResult
 
   return (
@@ -38,9 +42,14 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
         setName={setName}
         expiry={expiry}
         setExpiry={setExpiry}
+        preset={preset}
+        setPreset={setPreset}
         isPending={createMutation.isPending}
         onCreate={() => createMutation.mutate()}
         issuedConnectUrl={issuedConnectUrl}
+        issuedMiningKey={issuedMiningKey}
+        onSetupMining={() => setupMiningMutation.mutate()}
+        isPreparingMining={setupMiningMutation.isPending}
         copied={copied}
         onCopy={copy}
       />

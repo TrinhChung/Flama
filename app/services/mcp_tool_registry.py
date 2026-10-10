@@ -9,6 +9,7 @@ from app.services import mcp_tool_service
 from app.services.mcp import public_search_tools
 from app.validators import RequestValidationError
 from models import db
+from models.field_types import FIELD_TYPES
 from app.validators.mcp import (
     validate_add_tags_arguments,
     validate_batch_create_notes_arguments,
@@ -1128,7 +1129,7 @@ CREATE_NOTE_TYPE_TOOL = McpToolDefinition(
                         "name": {"type": "string", "description": "Field name (e.g. 'Word', 'Meaning')"},
                         "field_type": {
                             "type": "string",
-                            "enum": ["text", "richtext", "markdown", "image", "audio", "diagram"],
+                            "enum": list(FIELD_TYPES),
                             "default": "text",
                             "description": "Field data type",
                         },

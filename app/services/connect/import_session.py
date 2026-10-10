@@ -73,21 +73,8 @@ from models.user import User
 logger = logging.getLogger(__name__)
 UTC = timezone.utc
 
-FLAMA_CONNECT_PROTOCOL_VERSION = 6
-MAX_NOTES_PER_REQUEST = 50
-MAX_MULTI_ACTIONS = 10
-SUPPORTED_ACTIONS = (
-    "version",
-    "apiReflect",
-    "deckNames",
-    "modelNames",
-    "modelFieldNames",
-    "canAddNotes",
-    "canAddNotesWithErrorDetail",
-    "findNotes",
-    "multi",
-    "addNote",
-    "storeMediaFile",
+from app.services.connect.registry import (
+    FLAMA_CONNECT_PROTOCOL_VERSION, MAX_NOTES_PER_REQUEST, MAX_MULTI_ACTIONS, SUPPORTED_ACTIONS,
 )
 IMPORT_SESSION_MODES = {"strict", "auto_sync_missing"}
 IMPORT_SESSION_READY = "note_types_ready"

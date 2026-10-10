@@ -2,7 +2,7 @@ import '@/shared/config/i18n'
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import type { TemplateBindings, TemplateInputSpec } from '@/entities/card-template'
+import { isTypeCompatible, type TemplateBindings, type TemplateInputSpec } from '@/entities/card-template'
 
 export type StudyTemplateFieldDef = {
   id: string
@@ -27,7 +27,7 @@ export function TemplateInputBindingEditor({ inputSchema, fieldDefs, value, onCh
   return (
     <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
       {inputSchema.map((input, index) => {
-        const candidates = fieldDefs.filter((field) => field.id && field.field_type === input.type)
+        const candidates = fieldDefs.filter((field) => field.id && isTypeCompatible(input.type, field.field_type))
         const target = value[input.key]
         const valid = Boolean(target && candidates.some((field) => field.id === target))
         const stale = staleInputs.includes(input.key)

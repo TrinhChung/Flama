@@ -66,6 +66,25 @@ class IntegrationTokenApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_mining_token_rotation_and_setup(self):
+        created = self.client.post("/api/integration-tokens", json={"name": "asbplayer", "preset": "mining-text"})
+        self.assertEqual(created.status_code, 201)
+        item = created.get_json()["item"]
+        self.assertNotIn("note:update", item["scopes"])
+        self.assertNotIn("media:write", item["scopes"])
+        rotated = self.client.post(f'/api/integration-tokens/{item["id"]}/rotate', json={}).get_json()["item"]
+        self.assertEqual(rotated["scopes"], item["scopes"])
+        for _ in range(2):
+            setup = self.client.post("/api/integration-tokens/sentence-mining-setup", json={})
+            self.assertEqual(setup.status_code, 200)
+            self.assertEqual(setup.get_json()["modelName"], "Sentence Card")
+        with self.app.app_context():
+            self.assertEqual(NoteType.query.filter_by(user_id=self.user_id, name="Sentence Card").count(), 1)
+
+    def test_unknown_token_scopes_are_rejected(self):
+        for payload in ({"name": "bad", "preset": "unknown"}, {"name": "bad", "scopes": ["admin:write"]}, {"name": "bad", "scopes": []}):
+            self.assertEqual(self.client.post("/api/integration-tokens", json=payload).status_code, 400)
+
     def test_identity_field_is_explicit_unique_required_text_and_delete_safe(self):
         with self.app.app_context():
             note_type = NoteType(user_id=self.user_id, name="Identity Test")

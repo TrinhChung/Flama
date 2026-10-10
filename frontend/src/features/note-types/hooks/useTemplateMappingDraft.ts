@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { apiRequest } from '@/shared/api/client'
 import {
-  cardTemplateQueryKeys, fetchTemplateApplications, previewLibraryTemplate, updateTemplateApplication, validateBindings,
+  cardTemplateQueryKeys, fetchTemplateApplications, isTypeCompatible, previewLibraryTemplate, updateTemplateApplication, validateBindings,
   type MappingField, type TemplateApplication, type TemplateBindings, type TemplateInputSpec, type TemplateLibraryPreview,
 } from '@/entities/card-template'
 
@@ -26,7 +26,7 @@ export function mappingSampleValues(inputs: TemplateInputSpec[], fields: Mapping
   return Object.fromEntries(inputs.flatMap((input) => {
     const target = Object.hasOwn(bindings, input.key) ? bindings[input.key] : null
     const field = target ? fieldById.get(target) : undefined
-    if (!field || field.field_type !== input.type) return [[input.key, '']]
+    if (!field || !isTypeCompatible(input.type, field.field_type)) return [[input.key, '']]
     if (Object.hasOwn(samples, field.id)) return [[input.key, samples[field.id]]]
     if (input.type === 'image' || input.type === 'audio') return []
     return [[input.key, field.name]]

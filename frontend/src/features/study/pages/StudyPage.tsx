@@ -1,5 +1,5 @@
 import '@/shared/config/i18n'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -10,12 +10,15 @@ import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { StudyCompositionPickerView } from '../components/StudyCompositionPickerView'
+import { StudyTemplatePreparation } from '../components/StudyTemplatePreparation'
 import { StudyTemplateFieldsDialog } from '../components/StudyTemplateFieldsDialog'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
 import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { StudyExitConfirmDialog } from '../components/StudyExitConfirmDialog'
+import { StudyTypingAnswerPanel } from '../components/StudyTypingAnswerPanel'
+import { parseAnswerLines, readTypingInput } from '../typing/typingAnswer'
 import { useStudySession } from '../hooks/useStudySession'
 import { useStudyKeyboardShortcuts } from '../hooks/useStudyKeyboardShortcuts'
 import { useStudyNavigationBlocker } from '../hooks/useStudyNavigationBlocker'
@@ -75,6 +78,14 @@ export function StudyPage() {
   const decision = decisionState && decisionState.cardKey === activeCardKey
     ? decisionState.value
     : null
+  // A typing mode needs a declared answers input and at least one answer on
+  // this card; otherwise the card studies as a normal flip card.
+  const typingInput = readTypingInput(template)
+  const typingKey = typingInput?.key ?? null
+  const typingAnswers = useMemo(
+    () => (typingKey ? parseAnswerLines(content?.field_values?.[typingKey]) : []),
+    [content, typingKey],
+  )
 
   const handleOpenEdit = useCallback(() => {
     if (card?.card_id && card?.can_edit_card !== false && !study.isBusy) {
@@ -271,23 +282,26 @@ export function StudyPage() {
   }
 
   if (study.awaitingCompositionSelection) {
-    return (
-      <>
-        <StudyCompositionPickerView
-          deckName={deckName}
-          deckId={deckIdRaw}
+    if (study.templatePreparation?.availability) {
+      return (
+        <StudyTemplatePreparation
+          preparation={study.templatePreparation}
+          deckName={deckName ?? study.scopeName}
           error={study.error}
-          compositionGroups={study.compositionGroups}
-          selectedCompositionId={study.selectedCompositionId}
-          onSelectComposition={(compositionId) => { void study.startComposition(compositionId) }}
-          noteCounts={preparation.availability?.note_counts}
-          onConfigureComposition={preparation.availability ? openFields : undefined}
-          canConfigureComposition={(compositionId) => Boolean(preparation.availability?.template_inputs[compositionId]?.input_schema.length)}
-          isCompositionCustomized={(compositionId) => Boolean(preparation.mappingOf(compositionId)?.customized)}
-          disabled={study.isBusy || preparation.isSaving}
+          disabled={study.isBusy}
+          onStart={() => { void study.startPreparedSession() }}
         />
-        {fieldsDialog}
-      </>
+      )
+    }
+    return (
+      <StudyCompositionPickerView
+        deckName={deckName}
+        error={study.error}
+        compositionGroups={study.compositionGroups}
+        selectedCompositionId={study.selectedCompositionId}
+        onSelectComposition={(compositionId) => { void study.selectComposition(compositionId) }}
+        disabled={study.isBusy}
+      />
     )
   }
 
@@ -417,6 +431,18 @@ export function StudyPage() {
           />
         </div>
       )}
+
+      {card && template && content && !blockingCommit && typingInput && typingAnswers.length > 0 ? (
+        <StudyTypingAnswerPanel
+          key={activeCardKey ?? card.card_id}
+          answers={typingAnswers}
+          showLength={typingInput.showLength}
+          hints={typingInput.hints}
+          revealed={revealed}
+          disabled={study.isBusy}
+          onReveal={handleReveal}
+        />
+      ) : null}
 
       {card && template && content && !blockingCommit ? (
         <StudyBottomBar

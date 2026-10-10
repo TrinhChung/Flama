@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import UniqueConstraint
 
 from models import db
+from models.field_types import FIELD_TYPES
 from models.model_uuid import uuid_str
 
 
@@ -13,16 +14,7 @@ class FieldDef(db.Model):
     note_type_id = db.Column(db.String(36), db.ForeignKey("note_types.id", ondelete="CASCADE"), nullable=False, index=True)
     name = db.Column(db.String(255), nullable=False)
     field_type = db.Column(
-        db.Enum(
-            "text",
-            "richtext",
-            "markdown",
-            "image",
-            "audio",
-            "diagram",
-            name="field_type_enum",
-            native_enum=False,
-        ),
+        db.Enum(*FIELD_TYPES, name="field_type_enum", native_enum=False),
         nullable=False,
         default="text",
     )

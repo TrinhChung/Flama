@@ -98,6 +98,7 @@
     "jump_input_aria": "Nhập số trang muốn chuyển tới"
   },
   "editor": {
+    "answers_placeholder": "Mỗi dòng một đáp án",
     "empty_title": "Chưa chọn thẻ",
     "empty_desc": "Nhấp vào bất kỳ thẻ nào trong bảng để xem chi tiết trường hoặc bấm thêm thẻ để tạo mới.",
     "add_new_card": "Thêm thẻ mới",

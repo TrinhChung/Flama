@@ -44,12 +44,13 @@ from models.flashcard import (
 )
 from models.deck import Deck
 from models.audit_log import AuditLog
+from models.field_types import FIELD_TYPES as _FIELD_TYPES
 
 logger = logging.getLogger(__name__)
 # Keep self-references stable while legacy call sites are migrated.
 flashcards_share = sys.modules[__name__]
 
-FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
+FIELD_TYPES = set(_FIELD_TYPES)
 PUBLISH_STATUSES_VISIBLE = {"published", "unlisted"}
 DECK_ACTIVE_REVIEW_THRESHOLD = 3
 MARKET_ACTIVITY_POLICY_VERSION = 1

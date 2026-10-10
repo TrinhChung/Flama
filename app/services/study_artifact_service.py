@@ -25,6 +25,7 @@ TEMPLATE_SCHEMA = "study-template.v1"
 CONTENT_SCHEMA = "study-content.v1"
 MANIFEST_SCHEMA = "study-manifest.v1"
 INTERVALS_SCHEMA = "study-intervals.v1"
+TYPING_INPUT_SCHEMA = "study-typing-input.v1"
 
 
 @dataclass(frozen=True)
@@ -168,7 +169,33 @@ def template_version(context: EffectiveStudyCard) -> str:
     projection = _binding_projection_payload(context)
     if projection is not None:
         material["binding_projection"] = projection
+    typing_input = typing_input_payload(template)
+    if typing_input is not None:
+        material["typing_input"] = typing_input
     return canonical_digest(material)
+
+
+def typing_input_payload(template: Any) -> dict[str, Any] | None:
+    """Expose the template's answers input so the host can run a typing mode.
+
+    Only the key and display options travel; answers stay in the content
+    artifact and the frontend alone compares them. Templates without an
+    answers input keep their artifact (and version) unchanged.
+    """
+    for item in getattr(template, "input_schema", None) or []:
+        if not isinstance(item, Mapping) or item.get("type") != "answers":
+            continue
+        key = str(item.get("key") or "").strip()
+        if not key:
+            return None
+        options = item.get("typing") if isinstance(item.get("typing"), Mapping) else {}
+        return {
+            "schema_version": TYPING_INPUT_SCHEMA,
+            "key": key,
+            "show_length": bool(options.get("show_length", True)),
+            "hints": bool(options.get("hints", True)),
+        }
+    return None
 
 
 def _binding_projection_payload(context):
@@ -235,6 +262,9 @@ def build_template_artifact(context: EffectiveStudyCard) -> dict[str, Any]:
     projection = _binding_projection_payload(context)
     if projection is not None:
         artifact["binding_projection"] = projection
+    typing_input = typing_input_payload(context.template)
+    if typing_input is not None:
+        artifact["typing_input"] = typing_input
     return artifact
 
 

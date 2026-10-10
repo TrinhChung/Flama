@@ -13,6 +13,23 @@ from models import db
 integration_tokens_bp = Blueprint("api_v1_integration_tokens", __name__)
 
 
+@integration_tokens_bp.post("/sentence-mining-setup")
+@login_required
+def sentence_mining_setup():
+    from app.services.connect.base import ConnectError
+    from app.services.connect.mining_setup import prepare_sentence_mining
+    try:
+        result = prepare_sentence_mining(current_user.id)
+        db.session.commit()
+        return jsonify(result)
+    except ConnectError as exc:
+        db.session.rollback()
+        return error_response("VALIDATION_ERROR", str(exc), status=400)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
 def _expiry_from_payload(payload: dict, *, default: int | None = 180) -> int | None:
     return payload.get("expires_in_days", default)
 
@@ -46,6 +63,8 @@ def create_integration_token():
             user_id=current_user.id,
             name=payload.get("name"),
             expires_in_days=_expiry_from_payload(payload),
+            preset=payload.get("preset", "legacy"),
+            scopes=payload.get("scopes"),
         )
         db.session.commit()
     except user_api_token_service.TokenInputError as exc:

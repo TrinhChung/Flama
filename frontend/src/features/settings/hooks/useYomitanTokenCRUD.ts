@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
-import { FLAMA_CONNECT_URL } from '@/config/env'
+import { FLAMA_CONNECT_URL, FLAMA_ANKI_CONNECT_URL } from '@/config/env'
+
+export type TokenPreset = 'legacy' | 'mining-text' | 'mining-media'
 
 export type IntegrationToken = {
   id: number
@@ -15,6 +17,7 @@ export type IntegrationToken = {
   last_used_at: string | null
   created_at: string
   token?: string
+  preset?: TokenPreset | 'custom'
 }
 
 export type TokensResponse = {
@@ -32,13 +35,17 @@ export function useYomitanTokenCRUD() {
   const queryKey = ['integration-tokens'] as const
   const [name, setName] = useState(() => t('yomitan.tokens.default_name', 'Yomitan - PC cá nhân'))
   const [expiry, setExpiry] = useState('180')
+  const [preset, setPreset] = useState<TokenPreset>('legacy')
   const [issued, setIssued] = useState<IntegrationToken | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const hasAutoProcessedRef = useRef(false)
 
   const issuedConnectUrl = issued?.token
-    ? `${FLAMA_CONNECT_URL.replace(/\/+$/, '')}/${encodeURIComponent(issued.token)}`
+    ? issued.preset?.startsWith('mining-')
+      ? FLAMA_ANKI_CONNECT_URL
+      : `${FLAMA_CONNECT_URL.replace(/\/+$/, '')}/${encodeURIComponent(issued.token)}`
     : null
+  const issuedMiningKey = issued?.preset?.startsWith('mining-') ? issued.token ?? null : null
 
   const query = useQuery({
     queryKey,
@@ -53,6 +60,7 @@ export function useYomitanTokenCRUD() {
     mutationFn: () => appApi.mutate<{ item: IntegrationToken }>('/integration-tokens', 'POST', {
       name: name.trim(),
       expires_in_days: expiry === 'none' ? null : Number(expiry),
+      preset,
     }),
     onSuccess: async ({ item }) => {
       setIssued(item)
@@ -80,6 +88,12 @@ export function useYomitanTokenCRUD() {
       await refresh()
       toast.success(t('yomitan.messages.rotate_success'))
     },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
+  const setupMiningMutation = useMutation({
+    mutationFn: () => appApi.mutate('/integration-tokens/sentence-mining-setup', 'POST', {}),
+    onSuccess: () => toast.success(t('connect.mining.setup_success', 'Đã chuẩn bị deck Sentences và model Sentence Card.')),
     onError: (error: Error) => toast.error(error.message),
   })
 
@@ -121,14 +135,18 @@ export function useYomitanTokenCRUD() {
     setName,
     expiry,
     setExpiry,
+    preset,
+    setPreset,
     issued,
     setIssued,
     copied,
     copy,
     issuedConnectUrl,
+    issuedMiningKey,
     refresh,
     createMutation,
     revokeMutation,
     rotateMutation,
+    setupMiningMutation,
   }
 }
