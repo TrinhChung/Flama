@@ -198,8 +198,11 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_stats_study_time.py",
             "tests/test_review_analytics_study_integration.py",
             "tests/test_deck_count_projection.py",
+            "tests/test_study_typing_template.py",
         ],
         "frontend_tests": [
+            "src/features/study/typing/typingAnswer.test.ts",
+            "src/features/study/components/StudyTypingAnswerPanel.test.tsx",
             "src/features/study/components/CardDisplay.test.tsx",
             "src/features/study/components/CardRendererFrame.test.tsx",
             "src/features/study/components/CardRendererHost.test.ts",
@@ -527,6 +530,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
     "connect_mcp": {
         "source_patterns": [
             "scripts/flama_mcp_server.py",
+            "scripts/probe_connect_protocol_mysql.py",
             "connect_wsgi.py",
             "app/connect/**",
             "app/services/connect/**",
@@ -553,6 +557,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_anki_content_normalizer.py",
             "tests/test_flama_connect.py",
             "tests/test_flama_connect_auth.py",
+            "tests/test_connect_protocol.py",
             "tests/test_flama_connect_mcp.py",
             "tests/test_mcp_access_tokens.py",
             "tests/test_mcp_list_my_decks.py",
@@ -571,6 +576,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "frontend_tests": [
             "src/lib/ankiSyncEngine.test.ts",
             "src/lib/ankiSyncPackages.test.ts",
+            "src/features/settings/components/__tests__/ConnectMiningSetup.test.tsx",
         ],
     },
     "payment": {

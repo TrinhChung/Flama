@@ -75,21 +75,8 @@ from models.user import User
 logger = logging.getLogger(__name__)
 UTC = timezone.utc
 
-FLAMA_CONNECT_PROTOCOL_VERSION = 6
-MAX_NOTES_PER_REQUEST = 50
-MAX_MULTI_ACTIONS = 10
-SUPPORTED_ACTIONS = (
-    "version",
-    "apiReflect",
-    "deckNames",
-    "modelNames",
-    "modelFieldNames",
-    "canAddNotes",
-    "canAddNotesWithErrorDetail",
-    "findNotes",
-    "multi",
-    "addNote",
-    "storeMediaFile",
+from app.services.connect.registry import (
+    FLAMA_CONNECT_PROTOCOL_VERSION, MAX_NOTES_PER_REQUEST, MAX_MULTI_ACTIONS, SUPPORTED_ACTIONS,
 )
 IMPORT_SESSION_MODES = {"strict", "auto_sync_missing"}
 IMPORT_SESSION_READY = "note_types_ready"
@@ -140,6 +127,7 @@ def _parse_note(
     batch_context: ImportBatchContext | None = None,
     check_context: CheckBatchContext | None = None,
     existing_note: Note | None = None,
+    standard: bool = False,
 ) -> PreparedNote:
     if not isinstance(raw_note, dict):
         raise ConnectError("note must be an object")
@@ -147,7 +135,7 @@ def _parse_note(
     if unknown:
         raise ConnectError("note contains unsupported properties")
     for media_key in ("audio", "picture", "video"):
-        if raw_note.get(media_key):
+        if not standard and raw_note.get(media_key):
             raise ConnectError("media import is not supported in this version")
 
     deck_name = raw_note.get("deckName")
@@ -204,14 +192,16 @@ def _parse_note(
             name: normalize_anki_text_entities(value)
             for name, value in fields.items()
         }
-    if import_session_id is None and any(
+    if not standard and import_session_id is None and any(
         field_defs_by_name.get(field_name) is not None
         and field_defs_by_name[field_name].field_type in {"image", "diagram"}
         and bool(str(value or "").strip())
         for field_name, value in fields.items()
     ):
         raise ConnectError("Flama Connect hiện chỉ hỗ trợ media audio MP3.")
-    options = raw_note.get("options") or {}
+    options = raw_note.get("options", {})
+    if options is None:
+        options = {}
     if not isinstance(options, dict):
         raise ConnectError("options must be an object")
     unknown_options = set(options) - {"allowDuplicate", "duplicateScope", "duplicateScopeOptions"}
@@ -244,7 +234,12 @@ def _parse_note(
     pending_audio: dict[str, ConnectPendingMedia] = {}
     pending_import_media: dict[str, Any] = {}
     try:
-        if import_session_id is not None:
+        if standard:
+            from app.services.connect import mining_media
+            fields, pending_audio, allowed_media_references = mining_media.prepare(
+                user_id, note_type, raw_note, fields, lock=lock_deck,
+            )
+        elif import_session_id is not None:
             pending_import_media, allowed_media_references = flama_connect_media_service.resolve_import_media(
                 user_id=user_id,
                 session_id=import_session_id,
@@ -330,18 +325,23 @@ def _ensure_note_ref(note: Note | NoteIdentityMatch, user_id: int) -> ConnectNot
         row = ConnectNoteRef(**ref_kwargs)
         db.session.add(row)
         db.session.flush()
+    from app.services.connect.registry import MAX_SAFE_NUMERIC_ID
+    if not 0 < int(row.id) <= MAX_SAFE_NUMERIC_ID:
+        raise ConnectError("note reference exceeds the supported numeric ID range")
     return row
 
 
 
 def check_note(
-    user_id: int, raw_note: object, *, context: CheckBatchContext | None = None,
+    user_id: int, raw_note: object, *, context: CheckBatchContext | None = None, standard: bool = False,
 ) -> tuple[bool, str | None]:
     try:
-        prepared = _parse_note(user_id, raw_note, lock_deck=False, check_context=context)
-        if not prepared.allow_duplicate and _is_duplicate(
-            user_id, prepared, lookup=context.identities if context is not None else None,
-        ):
+        prepared = _parse_note(user_id, raw_note, lock_deck=False, check_context=context, standard=standard)
+        if standard:
+            duplicate = _standard_duplicate(user_id, prepared, raw_note)
+        else:
+            duplicate = not prepared.allow_duplicate and _is_duplicate(user_id, prepared, lookup=context.identities if context is not None else None)
+        if duplicate:
             return False, "cannot create note because it is a duplicate in the target deck"
         return True, None
     except ConnectError as exc:
@@ -349,12 +349,82 @@ def check_note(
 
 
 
-def add_note(user_id: int, raw_note: object) -> int:
-    prepared = _parse_note(user_id, raw_note, lock_deck=True)
+def _standard_duplicate(user_id, prepared, raw_note):
+    """Supported standard scopes use the same model and normalized identity."""
+    options = raw_note.get("options") or {}
+    scope = options.get("duplicateScope", "collection")
+    extra = options.get("duplicateScopeOptions") or {}
+    if scope not in {"deck", "collection"} or extra.get("checkChildren", False) or extra.get("checkAllModels", False):
+        raise ConnectError("unsupported duplicate scope options")
+    if prepared.allow_duplicate:
+        return False
+    if scope == "deck":
+        target = extra.get("deckName")
+        decks = [_resolve_deck(user_id, target)] if target else [prepared.deck]
+    else:
+        if extra.get("deckName"):
+            raise ConnectError("deckName is only supported with duplicateScope=deck")
+        decks = Deck.query.filter_by(owner_user_id=user_id, deleted_at=None).all()
+    lookup = NoteIdentityLookup(user_id)
+    for deck in decks:
+        if any(match.note_type_id == prepared.note_type.id for match in lookup.local_matches(
+            deck_id=deck.id, field_name=prepared.identity_field.name, identity_value=prepared.identity_value,
+        )):
+            return True
+        if deck.note_type_id == prepared.note_type.id:
+            clone_map = _clone_map_for_deck(user_id, deck.id)
+            if clone_map is not None and lookup.clone_matches(
+                clone_map=clone_map, field_name=prepared.identity_field.name, identity_value=prepared.identity_value,
+            ):
+                return True
+    return False
+
+
+def add_note(user_id: int, raw_note: object, *, standard=False, uow=None, scopes=None) -> int:
+    from app.services.connect.unit_of_work import ConnectUnitOfWork
+    own_transaction = uow is None
+    transaction = uow or ConnectUnitOfWork()
+    try:
+        result = _add_note(user_id, raw_note, standard=standard, uow=transaction, scopes=scopes)
+        if own_transaction:
+            transaction.commit()
+        return result
+    except flama_connect_media_service.ConnectMediaError as exc:
+        if own_transaction:
+            transaction.rollback()
+        raise ConnectError(str(exc)) from exc
+    except Exception:
+        if own_transaction:
+            transaction.rollback()
+        raise
+
+
+def _add_note(user_id: int, raw_note: object, *, standard, uow, scopes) -> int:
+    from app.services.connect.mining_media import lock_account, check_quota, InlineMedia
+    from app.services.user_api_token_service import has_scope
+    lock_account(user_id)
+    prepared = _parse_note(user_id, raw_note, lock_deck=True, standard=standard)
+    if standard and _standard_duplicate(user_id, prepared, raw_note):
+        raise ConnectError("cannot create note because it is a duplicate")
+    if standard and prepared.pending_audio:
+        if not current_app.config.get("CONNECT_ANKI_MEDIA_ENABLED", False):
+            raise ConnectError("media mining is disabled")
+        if scopes is not None and not has_scope(scopes, "media:write"):
+            raise ConnectError("permission denied: media:write is required")
+        inline_bytes = sum(item.size_bytes for item in prepared.pending_audio.values() if isinstance(item, InlineMedia))
+        pending_rows = {item.id: item for item in prepared.pending_audio.values() if not isinstance(item, InlineMedia)}
+        # A file referenced by two fields creates two owned assets.
+        extra_bytes = sum(item.size_bytes for item in prepared.pending_audio.values()) - sum(item.size_bytes for item in pending_rows.values())
+        try:
+            check_quota(user_id, max(inline_bytes, extra_bytes))
+        except flama_connect_media_service.ConnectMediaError as exc:
+            raise ConnectError(str(exc)) from exc
     identities = NoteIdentityLookup(user_id)
-    if not prepared.allow_duplicate and _is_duplicate(user_id, prepared, lookup=identities):
+    if not standard and not prepared.allow_duplicate and _is_duplicate(user_id, prepared, lookup=identities):
         existing_note = _find_existing_note(user_id, prepared, lookup=identities)
         if existing_note:
+            if scopes is not None and not has_scope(scopes, "note:update"):
+                raise ConnectError("permission denied: note:update is required")
             # Update fields if new content is present
             updated = False
             changed_field_names: set[str] = set()
@@ -373,102 +443,89 @@ def add_note(user_id: int, raw_note: object) -> int:
                         note=existing_note,
                         field_names=changed_field_names,
                     )
-                db.session.commit()
-            return int(_ensure_note_ref(existing_note, user_id).id)
+            ref = _ensure_note_ref(existing_note, user_id)
+            return int(ref.id)
         raise ConnectError("cannot create note because it is a duplicate in the target deck")
     if prepared.deck.note_type_id is None:
         prepared.deck.note_type_id = prepared.note_type.id
 
-    materialized = None
-    try:
-        max_ref_id = db.session.query(db.func.max(ConnectNoteRef.id)).scalar() or 0
-        next_ref_id = int(max_ref_id) + 1
-        note_id = str(next_ref_id)
-        while db.session.query(Note.id).filter_by(id=note_id).first() is not None:
-            next_ref_id += 1
-            note_id = str(next_ref_id)
-
-        note = Note(
-            id=note_id,
+    note = Note(
+        note_type_id=prepared.note_type.id,
+        user_id=user_id,
+        deck_id=prepared.deck.id,
+        field_values=prepared.fields,
+        tags=prepared.tags,
+    )
+    db.session.add(note)
+    db.session.flush()
+    from app.repositories.template_library_repository import create_cards_for_note
+    from models.study_application import StudyApplication
+    templates = StudyApplication.query.filter_by(note_type_id=prepared.note_type.id, status_code="ACTIVE").all()
+    if not templates:
+        # An intentionally retired NoteType stays empty. Only legacy
+        # types without any occurrence receive the compatibility default.
+        if StudyApplication.query.filter_by(note_type_id=prepared.note_type.id).first() is not None:
+            raise ValueError("NoteType has no active template application.")
+        tmpl = Template(
             note_type_id=prepared.note_type.id,
-            user_id=user_id,
-            deck_id=prepared.deck.id,
-            field_values=prepared.fields,
-            tags=prepared.tags,
+            name="Card 1",
+            position=0,
+            front_html="{{Front}}",
+            back_html="{{Back}}",
         )
-        db.session.add(note)
+        db.session.add(tmpl)
         db.session.flush()
-        from app.repositories.template_library_repository import create_cards_for_note
-        from models.study_application import StudyApplication
-        templates = StudyApplication.query.filter_by(note_type_id=prepared.note_type.id, status_code="ACTIVE").all()
-        if not templates:
-            # An intentionally retired NoteType stays empty. Only legacy
-            # types without any occurrence receive the compatibility default.
-            if StudyApplication.query.filter_by(note_type_id=prepared.note_type.id).first() is not None:
-                raise ValueError("NoteType has no active template application.")
-            tmpl = Template(
-                note_type_id=prepared.note_type.id,
-                name="Card 1",
-                position=0,
-                front_html="{{Front}}",
-                back_html="{{Back}}",
-            )
-            db.session.add(tmpl)
-            db.session.flush()
-        create_cards_for_note(db.session, note)
+    create_cards_for_note(db.session, note)
 
-        materialized = flama_connect_media_service.materialize_audio(
-            user_id=user_id,
+    materialized = flama_connect_media_service.materialize_audio(
+        user_id=user_id,
+        note=note,
+        attachments=prepared.pending_audio,
+        managed=standard,
+    )
+
+    uow.materialized.append(materialized)
+
+    if prepared.clone_map is not None:
+        install = prepared.clone_map.deck_install
+        db.session.add(DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id))
+        install.last_sync_status = "needs_sync"
+        install.last_activity_at = datetime.utcnow()
+    else:
+        from app.services import deck_working_tree_service
+
+        deck_working_tree_service.mark_note_fields_changed(
             note=note,
-            attachments=prepared.pending_audio,
+            field_names=(note.field_values or {}).keys(),
+            operation="add",
         )
 
-        if prepared.clone_map is not None:
-            install = prepared.clone_map.deck_install
-            db.session.add(DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id))
-            install.last_sync_status = "needs_sync"
-            install.last_activity_at = datetime.utcnow()
-        else:
-            from app.services import deck_working_tree_service
-
-            deck_working_tree_service.mark_note_fields_changed(
-                note=note,
-                field_names=(note.field_values or {}).keys(),
-                operation="add",
-            )
-
-        ref = _ensure_note_ref(note, user_id)
-        db.session.add(
-            AuditLog(
-                user_id=user_id,
-                action="connect.note.create",
-                payload={
-                    "note_id": note.id,
-                    "connect_note_id": int(ref.id),
-                    "deck_id": prepared.deck.id,
-                    "note_type_id": prepared.note_type.id,
-                    "clone_install_id": prepared.clone_map.deck_install_id if prepared.clone_map else None,
-                    "media_count": len(prepared.pending_audio),
-                },
-            )
+    ref = _ensure_note_ref(note, user_id)
+    db.session.add(
+        AuditLog(
+            user_id=user_id,
+            action="connect.note.create",
+            payload={
+                "note_id": note.id,
+                "connect_note_id": int(ref.id),
+                "deck_id": prepared.deck.id,
+                "note_type_id": prepared.note_type.id,
+                "clone_install_id": prepared.clone_map.deck_install_id if prepared.clone_map else None,
+                "media_count": len(prepared.pending_audio),
+            },
         )
-        db.session.commit()
-    except flama_connect_media_service.ConnectMediaError as exc:
-        db.session.rollback()
-        flama_connect_media_service.compensate_materialized(materialized)
-        raise ConnectError(str(exc)) from exc
-    except Exception:
-        db.session.rollback()
-        flama_connect_media_service.compensate_materialized(materialized)
-        raise
-    flama_connect_media_service.finalize_materialized(materialized)
+    )
     return int(ref.id)
 
 
-
-def find_notes(user_id: int, query: object) -> list[int]:
+def find_notes(user_id: int, query: object, *, strict=False) -> list[int]:
     if not isinstance(query, str) or len(query) > 2048:
         raise ConnectError("query must be a string no longer than 2048 characters")
+    if strict and (len(_QUERY_CLAUSE_RE.findall(query)) != 2 or _QUERY_CLAUSE_RE.sub("", query).strip()):
+        raise ConnectError('findNotes supports quoted deck and primary-field clauses only')
+    # This lookup may allocate stable numeric refs for pre-existing notes.
+    from app.services.connect.mining_media import lock_account
+    lock_account(user_id)
     deck_name: str | None = None
     field_name: str | None = None
     field_value: str | None = None
@@ -482,6 +539,8 @@ def find_notes(user_id: int, query: object) -> list[int]:
         else:
             field_name, field_value = key, value
     if deck_name is None or field_name is None or field_value is None:
+        if strict:
+            raise ConnectError('findNotes supports quoted deck and primary-field clauses only')
         return []
     deck = _resolve_deck(user_id, deck_name)
     expected = _normalized_identity(field_value)

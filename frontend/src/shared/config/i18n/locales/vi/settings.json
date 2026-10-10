@@ -1,4 +1,22 @@
 {
+  "connect": {
+    "preset": {
+      "label": "Ứng dụng và quyền truy cập",
+      "text": "chỉ văn bản",
+      "media": "văn bản, ảnh và MP3"
+    },
+    "mining": {
+      "title": "Cấu hình asbplayer",
+      "mapping": "Chọn Add, deck Sentences và model Sentence Card. Map sentence → Sentence, definition → Definition, word → Word, source → Source, URL → URL.",
+      "media": "Map image → Image, audio → Audio và chọn audio MP3.",
+      "text": "Để trống mapping image và audio khi chỉ gửi văn bản.",
+      "prepare": "Chuẩn bị deck và model",
+      "setup_success": "Đã chuẩn bị deck Sentences và model Sentence Card.",
+      "key_label": "Dán token này vào API key của asbplayer:",
+      "copy_key": "Sao chép API key",
+      "save_key_warning": "Sao chép API key ngay — Flama chỉ hiển thị key này một lần."
+    }
+  },
   "study_goals": {
     "header": {
       "title": "Mục tiêu học tập",

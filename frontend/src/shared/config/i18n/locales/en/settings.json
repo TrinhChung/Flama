@@ -1,4 +1,22 @@
 {
+  "connect": {
+    "preset": {
+      "label": "Application and access permissions",
+      "text": "text only",
+      "media": "text, images and MP3"
+    },
+    "mining": {
+      "title": "Configure asbplayer",
+      "mapping": "Choose Add, deck Sentences and model Sentence Card. Map sentence → Sentence, definition → Definition, word → Word, source → Source, URL → URL.",
+      "media": "Map image → Image, audio → Audio and select MP3 audio.",
+      "text": "Leave the image and audio mappings empty for text-only mining.",
+      "prepare": "Prepare deck and model",
+      "setup_success": "Deck Sentences and model Sentence Card are ready.",
+      "key_label": "Paste this token into asbplayer's API key setting:",
+      "copy_key": "Copy API key",
+      "save_key_warning": "Copy the API key now — Flama displays this key only once."
+    }
+  },
   "study_goals": {
     "header": {
       "title": "Study Goals",
