@@ -31,6 +31,21 @@ describe('splitToAnswers', () => {
     expect(splitToAnswers('ジョン・スミス', presets('middle_dot')).answers).toEqual(['ジョン', 'スミス'])
   })
 
+  it('never splits inside brackets and flags bracketed answers', () => {
+    expect(splitToAnswers('Số tờ, số tấm (giấy, ảnh, vé)', DEFAULT_SPLIT_PRESETS)).toEqual({
+      value: 'Số tờ\nsố tấm (giấy, ảnh, vé)',
+      answers: ['Số tờ', 'số tấm (giấy, ảnh, vé)'],
+      flags: ['brackets'],
+    })
+    expect(splitToAnswers('たべる（食べる、喰べる）、くう', presets('jp_comma')).answers).toEqual(['たべる（食べる、喰べる）', 'くう'])
+    expect(splitToAnswers('a [b; c]; d「e, f」, g', DEFAULT_SPLIT_PRESETS).answers).toEqual(['a [b; c]', 'd「e, f」', 'g'])
+  })
+
+  it('survives unbalanced brackets and numbered markers with a closing parenthesis', () => {
+    expect(splitToAnswers('a), b, (c', DEFAULT_SPLIT_PRESETS).answers).toEqual(['a)', 'b', '(c'])
+    expect(splitToAnswers('1) ăn 2) uống', presets('numbered')).answers).toEqual(['ăn', 'uống'])
+  })
+
   it('joins lines when the newline separator is off', () => {
     expect(splitToAnswers('dùng\nbữa', presets('comma')).answers).toEqual(['dùng bữa'])
   })

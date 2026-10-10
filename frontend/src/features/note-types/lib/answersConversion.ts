@@ -23,19 +23,53 @@ export const DEFAULT_SPLIT_PRESETS: ReadonlySet<SplitPresetId> = new Set(
 )
 
 /** Reasons a converted value deserves a look before applying. */
-export type ConversionFlag = 'html' | 'sound' | 'empty' | 'duplicates' | 'long'
+export type ConversionFlag = 'html' | 'sound' | 'empty' | 'duplicates' | 'long' | 'brackets'
 
 export const LONG_ANSWER_LENGTH = 80
+/** Same cap as the server (MAX_CONVERSION_NOTES); bigger NoteTypes need a chunked design. */
+export const MAX_CONVERSION_NOTES = 20_000
 
 export type SplitResult = { value: string; answers: string[]; flags: ConversionFlag[] }
+
+const OPENING = '(（[［【「『{｛'
+const CLOSING = ')）]］】」』}｝'
+const BRACKETS = /[(（[［【「『{｛]/u
+
+/** Split on separators outside brackets only: "số tấm (giấy, ảnh, vé)" stays one answer. */
+function splitOutsideBrackets(line: string, separator: RegExp | null): string[] {
+  if (!separator) return [line]
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  let index = 0
+  while (index < line.length) {
+    const char = line[index]
+    if (OPENING.includes(char)) depth += 1
+    else if (CLOSING.includes(char)) depth = Math.max(0, depth - 1)
+    if (depth === 0) {
+      separator.lastIndex = index
+      const match = separator.exec(line)
+      if (match && match[0].length > 0) {
+        parts.push(line.slice(start, index))
+        index += match[0].length
+        start = index
+        continue
+      }
+    }
+    index += 1
+  }
+  parts.push(line.slice(start))
+  return parts
+}
 
 export function splitToAnswers(raw: unknown, presets: ReadonlySet<SplitPresetId>): SplitResult {
   const source = typeof raw === 'string' ? raw : ''
   let text = fieldValueToText(source)
   if (!presets.has('newline')) text = text.replace(/\n+/g, ' ')
   const patterns = SPLIT_PRESETS.filter((preset) => preset.id !== 'newline' && presets.has(preset.id)).map((preset) => preset.pattern)
-  const separator = patterns.length ? new RegExp(patterns.join('|'), 'u') : null
-  const parts = text.split('\n').flatMap((line) => (separator ? line.split(separator) : [line]))
+  // Sticky: a separator only counts where the scan stands, so brackets can shield it.
+  const separator = patterns.length ? new RegExp(patterns.join('|'), 'uy') : null
+  const parts = text.split('\n').flatMap((line) => splitOutsideBrackets(line, separator))
   const kept = parts.map((part) => part.normalize('NFC').replace(/\s+/g, ' ').trim()).filter(Boolean)
   const value = normalizeAnswersValue(kept.join('\n'))
   const answers = value ? value.split('\n') : []
@@ -45,6 +79,8 @@ export function splitToAnswers(raw: unknown, presets: ReadonlySet<SplitPresetId>
   if (source.trim() && !answers.length) flags.push('empty')
   if (kept.length > answers.length) flags.push('duplicates')
   if (answers.some((answer) => Array.from(answer).length > LONG_ANSWER_LENGTH)) flags.push('long')
+  // A learner would have to type the bracketed note too; worth a look.
+  if (answers.some((answer) => BRACKETS.test(answer))) flags.push('brackets')
   return { value, answers, flags }
 }
 

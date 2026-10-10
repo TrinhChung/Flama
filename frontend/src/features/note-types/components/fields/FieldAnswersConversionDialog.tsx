@@ -8,9 +8,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { ApiError } from '@/shared/api/client'
 import { cn } from '@/lib/utils'
-import { SPLIT_PRESETS } from '../../lib/answersConversion'
+import { MAX_CONVERSION_NOTES, SPLIT_PRESETS } from '../../lib/answersConversion'
+import { knownConversionError } from '../../lib/conversionError'
 import { useAnswersConversion, type AnswersConversionResult, type ConversionRow } from '../../hooks/useAnswersConversion'
 import type { FieldDefItem } from '../../hooks/useNoteTypeFields'
 
@@ -90,8 +90,14 @@ export function FieldAnswersConversionDialog({ open, onOpenChange, noteTypeId, f
   const currentPage = Math.min(page, pages - 1)
   const pageRows = visible.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
   const blocked = source.data && !source.data.convertible ? source.data.blocked_reason : null
-  const writeError = write.error instanceof ApiError ? write.error : write.error instanceof Error ? write.error : null
-  const notesChanged = write.error instanceof ApiError && write.error.code === 'NOTES_CHANGED'
+  const tooMany = summary.total > MAX_CONVERSION_NOTES
+  const knownError = knownConversionError(write.error)
+  const writeError = write.error
+    ? knownError
+      ? t(`fields.answers_conversion.error_${knownError}`)
+      : t('fields.answers_conversion.error_generic', { message: write.error.message })
+    : null
+  const notesChanged = knownError === 'NOTES_CHANGED'
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!write.isPending) onOpenChange(next) }}>
@@ -157,9 +163,14 @@ export function FieldAnswersConversionDialog({ open, onOpenChange, noteTypeId, f
             </>
           )}
         </div>
+        {tooMany ? (
+          <p role="alert" className="text-sm text-destructive">
+            {t('fields.answers_conversion.too_many_notes', { count: summary.total, max: MAX_CONVERSION_NOTES })}
+          </p>
+        ) : null}
         {writeError ? (
           <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">
-            <span>{writeError.message}</span>
+            <span>{writeError}</span>
             {notesChanged ? (
               <Button type="button" size="sm" variant="outline" onClick={() => { write.reset(); void source.refetch() }}>{t('fields.answers_conversion.reload')}</Button>
             ) : null}
@@ -177,7 +188,7 @@ export function FieldAnswersConversionDialog({ open, onOpenChange, noteTypeId, f
             <Button type="button" variant="ghost" disabled={write.isPending} onClick={() => onOpenChange(false)}>{t('fields.answers_conversion.cancel')}</Button>
             <Button
               type="button"
-              disabled={!source.data || Boolean(blocked) || !conversion.backupReady || write.isPending}
+              disabled={!source.data || Boolean(blocked) || tooMany || !conversion.backupReady || write.isPending}
               onClick={conversion.apply}
               className={cn(write.isPending && 'cursor-wait')}
             >

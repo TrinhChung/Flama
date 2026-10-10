@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { parseAnswersBackup, type AnswersBackup } from '../../lib/answersConversion'
+import { knownConversionError } from '../../lib/conversionError'
 import { useAnswersRestore, type AnswersConversionResult } from '../../hooks/useAnswersConversion'
 import type { FieldDefItem } from '../../hooks/useNoteTypeFields'
 
@@ -23,6 +24,12 @@ export function FieldAnswersRestoreDialog({ open, onOpenChange, noteTypeId, fiel
   const [backup, setBackup] = useState<AnswersBackup | null>(null)
   const [fileError, setFileError] = useState<string | null>(null)
   const plan = backup && restore.source.data ? restore.plan(backup) : null
+  const knownError = knownConversionError(restore.write.error)
+  const writeError = restore.write.error
+    ? knownError
+      ? t(`fields.answers_conversion.error_${knownError}`)
+      : t('fields.answers_conversion.error_generic', { message: restore.write.error.message })
+    : null
 
   const readFile = async (file: File | undefined) => {
     setBackup(null)
@@ -61,7 +68,7 @@ export function FieldAnswersRestoreDialog({ open, onOpenChange, noteTypeId, fiel
               })}
             </p>
           ) : null}
-          {restore.write.error ? <p role="alert" className="text-sm text-destructive">{restore.write.error.message}</p> : null}
+          {writeError ? <p role="alert" className="text-sm text-destructive">{writeError}</p> : null}
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={restore.write.isPending} onClick={() => onOpenChange(false)}>{t('fields.answers_conversion.cancel')}</Button>
