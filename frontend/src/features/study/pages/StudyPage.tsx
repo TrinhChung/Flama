@@ -10,6 +10,7 @@ import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { StudyCompositionPickerView } from '../components/StudyCompositionPickerView'
+import { StudyTemplatePreparation } from '../components/StudyTemplatePreparation'
 import { StudyTemplateFieldsDialog } from '../components/StudyTemplateFieldsDialog'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
@@ -281,23 +282,26 @@ export function StudyPage() {
   }
 
   if (study.awaitingCompositionSelection) {
-    return (
-      <>
-        <StudyCompositionPickerView
-          deckName={deckName}
-          deckId={deckIdRaw}
+    if (study.templatePreparation?.availability) {
+      return (
+        <StudyTemplatePreparation
+          preparation={study.templatePreparation}
+          deckName={deckName ?? study.scopeName}
           error={study.error}
-          compositionGroups={study.compositionGroups}
-          selectedCompositionId={study.selectedCompositionId}
-          onSelectComposition={(compositionId) => { void study.startComposition(compositionId) }}
-          noteCounts={preparation.availability?.note_counts}
-          onConfigureComposition={preparation.availability ? openFields : undefined}
-          canConfigureComposition={(compositionId) => Boolean(preparation.availability?.template_inputs[compositionId]?.input_schema.length)}
-          isCompositionCustomized={(compositionId) => Boolean(preparation.mappingOf(compositionId)?.customized)}
-          disabled={study.isBusy || preparation.isSaving}
+          disabled={study.isBusy}
+          onStart={() => { void study.startPreparedSession() }}
         />
-        {fieldsDialog}
-      </>
+      )
+    }
+    return (
+      <StudyCompositionPickerView
+        deckName={deckName}
+        error={study.error}
+        compositionGroups={study.compositionGroups}
+        selectedCompositionId={study.selectedCompositionId}
+        onSelectComposition={(compositionId) => { void study.selectComposition(compositionId) }}
+        disabled={study.isBusy}
+      />
     )
   }
 
