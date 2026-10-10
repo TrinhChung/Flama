@@ -1,9 +1,19 @@
-"""Typing-answer templates: answers input validation, bindings and study artifact."""
+"""Answers inputs, template-authored answer boxes, bindings and study artifacts.
+
+The host typing mode is parked (STUDY_TYPING_ANSWER_PLAN §12): templates check
+typed answers in their own HTML/JS. Tests of the parked behavior are skipped
+and kept so the mode can be restored.
+"""
 
 import unittest
 from types import SimpleNamespace
 
 from app import create_app
+from app.services.flashcard_renderer import (
+    prepare_client_template_source,
+    render_template_pair,
+    sanitize_html_fragment,
+)
 from app.services.study_artifact_service import (
     build_content_artifact,
     build_effective_study_card,
@@ -20,8 +30,21 @@ from models import db
 from models.card import Card
 from models.user import User
 
+PARKED = "Parked 2026-10-10 with the host typing mode (STUDY_TYPING_ANSWER_PLAN §12)."
+
 
 class AnswersInputSchemaTests(unittest.TestCase):
+    def test_answers_inputs_store_no_typing_options_and_are_not_limited(self):
+        schema = validate_input_schema([
+            {"key": "first", "type": "answers", "typing": {"hints": False}},
+            {"key": "second", "type": "answers"},
+        ])
+        self.assertEqual(schema, [
+            {"key": "first", "label": "first", "type": "answers", "required": False},
+            {"key": "second", "label": "second", "type": "answers", "required": False},
+        ])
+
+    @unittest.skip(PARKED)
     def test_answers_input_gets_default_typing_options(self):
         schema = validate_input_schema([{"key": "answer", "type": "answers"}])
         self.assertEqual(schema, [{
@@ -29,10 +52,12 @@ class AnswersInputSchemaTests(unittest.TestCase):
             "typing": {"show_length": True, "hints": True},
         }])
 
+    @unittest.skip(PARKED)
     def test_typing_options_are_kept_and_completed(self):
         schema = validate_input_schema([{"key": "answer", "type": "answers", "typing": {"hints": False}}])
         self.assertEqual(schema[0]["typing"], {"show_length": True, "hints": False})
 
+    @unittest.skip(PARKED)
     def test_invalid_typing_definitions_are_rejected(self):
         for schema in (
             [{"key": "answer", "type": "text", "typing": {"hints": True}}],
@@ -116,9 +141,9 @@ class TypingTemplateArtifactTests(unittest.TestCase):
             answer["typing"] = typing
         return [{"key": "prompt", "label": "Prompt", "type": "text", "required": True}, answer]
 
-    def test_answers_input_binds_to_text_field_and_reaches_study_artifacts(self):
+    def test_answers_input_binds_to_text_field_and_reaches_the_content_artifact(self):
         template = self._template(self._typing_schema({"show_length": False}))
-        self.assertEqual(template["input_schema"][1]["typing"], {"show_length": False, "hints": True})
+        self.assertNotIn("typing", template["input_schema"][1])
         response = self._attach(template["id"], {"prompt": self.fields["Meaning"], "answer": self.fields["Word"]})
         self.assertEqual(response.status_code, 201, response.get_json())
         self.assertEqual(response.get_json()["warnings"], [])
@@ -131,12 +156,7 @@ class TypingTemplateArtifactTests(unittest.TestCase):
             card = Card.query.filter_by(note_id=note.get_json()["id"], template_id=template["id"]).one()
             context = build_effective_study_card(card=card, clone_scope=None)
             artifact = build_template_artifact(context)
-            self.assertEqual(artifact["typing_input"], {
-                "schema_version": "study-typing-input.v1",
-                "key": "answer",
-                "show_length": False,
-                "hints": True,
-            })
+            self.assertNotIn("typing_input", artifact)
             self.assertEqual(artifact["version"], template_version(context))
             content = build_content_artifact(context)
             self.assertEqual(content["field_values"]["answer"], "食べる\nたべる")
@@ -182,6 +202,48 @@ class TypingTemplateArtifactTests(unittest.TestCase):
             card = Card.query.filter_by(note_id=note.get_json()["id"], template_id=template["id"]).one()
             artifact = build_template_artifact(build_effective_study_card(card=card, clone_scope=None))
             self.assertNotIn("typing_input", artifact)
+
+
+class TemplateAnswerBoxTests(unittest.TestCase):
+    """A template may carry its own answer box; field content may not."""
+
+    FRONT = (
+        '<div class="prompt">{{Prompt}}</div>'
+        '<label for="guess">Đáp án</label>'
+        '<input id="guess" type="text" placeholder="Gõ đáp án" autocomplete="off" spellcheck="false">'
+        '<button type="button" id="check">Kiểm tra</button>'
+        '<div id="answers" hidden>{{Answer}}</div>'
+        '<script>document.getElementById("check").addEventListener("click", function () {});</script>'
+    )
+
+    def setUp(self):
+        self.fields = [
+            SimpleNamespace(id="f-prompt", name="Prompt", field_type="text", position=0, required=False),
+            SimpleNamespace(id="f-answer", name="Answer", field_type="answers", position=1, required=False),
+        ]
+
+    def test_study_template_source_keeps_the_answer_box_and_script(self):
+        prepared = prepare_client_template_source(self.FRONT, self.fields)
+        self.assertIn('<label for="guess">Đáp án</label>', prepared["source"])
+        self.assertIn('<input id="guess" type="text" placeholder="Gõ đáp án" autocomplete="off" spellcheck="false">', prepared["source"])
+        self.assertIn('<div id="answers" hidden="">{{Answer}}</div>', prepared["source"])
+        self.assertEqual(len(prepared["inline_scripts"]), 1)
+
+    def test_server_render_keeps_the_answer_box_and_answer_lines(self):
+        template = SimpleNamespace(
+            id="tpl-box", updated_at="t1", front_html=self.FRONT, back_html="{{Prompt}}<hr>{{Answer}}",
+            shared_css="", input_schema=None,
+        )
+        rendered = render_template_pair(
+            template=template, field_defs=self.fields,
+            field_values={"Prompt": "最低", "Answer": "tối thiểu\nít nhất"},
+        )
+        self.assertIn('<input id="guess" type="text"', rendered["front_html"])
+        self.assertIn("tối thiểu<br>ít nhất", rendered["front_html"])
+        self.assertIn("<script>", rendered["front_html"])
+
+    def test_field_content_still_cannot_add_form_controls(self):
+        self.assertEqual(sanitize_html_fragment('<input id="x" value="a">ăn<label>b</label>'), "ănb")
 
 
 if __name__ == "__main__":

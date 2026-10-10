@@ -84,6 +84,11 @@ ALLOWED_HTML_TAGS = [
     "text",
     "tspan",
 ]
+# Template markup may also carry its own answer box, checked by the template's
+# script (a typed answer is plain HTML/JS in the card). Scripts can create the
+# same elements anyway, and the sandboxed iframe blocks form submission
+# (form-action 'none') and network access. Field content keeps the list above.
+TEMPLATE_HTML_TAGS = [*ALLOWED_HTML_TAGS, "input", "label"]
 
 ALLOWED_CSS_PROPERTIES = [
     "color",
@@ -514,7 +519,7 @@ def sanitize_template_html_fragment(raw_html: str | None) -> str:
     cleaned_html, scripts = _extract_inline_scripts(raw_html or "")
     safe_html = bleach.clean(
         cleaned_html,
-        tags=ALLOWED_HTML_TAGS,
+        tags=TEMPLATE_HTML_TAGS,
         attributes=_template_allowed_attr,
         strip=True,
         css_sanitizer=_css_sanitizer,
@@ -563,7 +568,7 @@ def prepare_client_template_source(
 
     safe_source = bleach.clean(
         script_free_html,
-        tags=ALLOWED_HTML_TAGS,
+        tags=TEMPLATE_HTML_TAGS,
         attributes=_client_template_allowed_attr,
         strip=True,
         css_sanitizer=_css_sanitizer,

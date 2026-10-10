@@ -169,14 +169,19 @@ def template_version(context: EffectiveStudyCard) -> str:
     projection = _binding_projection_payload(context)
     if projection is not None:
         material["binding_projection"] = projection
-    typing_input = typing_input_payload(template)
-    if typing_input is not None:
-        material["typing_input"] = typing_input
+    # Parked 2026-10-10 with the host typing mode (STUDY_TYPING_ANSWER_PLAN §12):
+    # templates check typed answers in their own HTML/JS, so no artifact carries
+    # typing_input and template versions match those before the typing mode.
+    # typing_input = typing_input_payload(template)
+    # if typing_input is not None:
+    #     material["typing_input"] = typing_input
     return canonical_digest(material)
 
 
 def typing_input_payload(template: Any) -> dict[str, Any] | None:
     """Expose the template's answers input so the host can run a typing mode.
+
+    Parked 2026-10-10: not called while the host typing mode is off.
 
     Only the key and display options travel; answers stay in the content
     artifact and the frontend alone compares them. Templates without an
@@ -262,9 +267,10 @@ def build_template_artifact(context: EffectiveStudyCard) -> dict[str, Any]:
     projection = _binding_projection_payload(context)
     if projection is not None:
         artifact["binding_projection"] = projection
-    typing_input = typing_input_payload(context.template)
-    if typing_input is not None:
-        artifact["typing_input"] = typing_input
+    # Parked 2026-10-10 with the host typing mode (see template_version above).
+    # typing_input = typing_input_payload(context.template)
+    # if typing_input is not None:
+    #     artifact["typing_input"] = typing_input
     return artifact
 
 

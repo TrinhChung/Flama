@@ -2,6 +2,8 @@
 
 > **Trạng thái (2026-10-10): T-01..T-08 đã triển khai cho NoteType người dùng sở hữu**, trên nhánh `refactor/frontend-fsd-renderer-boundary`, chưa push: `24d879f5` và `f0f90946` (T-01..T-03, commit gộp cùng việc khác), `851c1302` (T-04), `3e51c94b` (T-05), `8c914a85` (T-06), `94849c42` (T-07), `d93b40b2` (T-08). R-01 (kiểm tra trên trình duyệt với dữ liệu thật) xong, các lỗi tìm được sửa ở `d763043e`. Còn lại: nạp code vào Flask local (R-03), kiểm tra production trước deploy (R-04); chuyển đổi cho deck đã cài để dành (R-02). Xem [§10](#10-việc-còn-lại-sau-triển-khai).
 >
+> **Đổi hướng 2026-10-10:** ô gõ do Flama vẽ đã được comment lại. Gõ đáp án nay viết trong HTML/JS của chính template; kiểu field `answers` và công cụ chuyển đổi vẫn giữ. Xem [§12](#12-đổi-hướng-2026-10-10-tạm-cất-ô-gõ-của-flama-template-tự-viết-htmljs).
+>
 > Khác với [mức 3](./P8_GENERIC_ACTION_OUTCOME_PLAN_2026-10-10.md): server không chấm, contract bốn rating giữ nguyên. Mức 3 chỉ cần khi muốn kết quả gõ tự ghi tiến độ mà người học không xác nhận.
 
 ## 1. Mục tiêu và nguyên tắc
@@ -289,12 +291,12 @@ SELECT field_type, COUNT(*) FROM field_defs GROUP BY field_type;
 - Các commit của chế độ gõ nằm trên `refactor/frontend-fsd-renderer-boundary` cùng nhiều việc khác (refactor FSD, Connect multi-version…). Deploy nghĩa là merge cả nhánh, nên phải xem CI và review cho toàn nhánh.
 - Muốn ship riêng chế độ gõ thì phải tách sang nhánh khác. Việc này khó, vì T-01..T-03 nằm trong commit gộp của phiên khác (`24d879f5`, `f0f90946`).
 - Không có migration, nhưng theo quy trình vẫn backup trước khi merge thay đổi runtime.
-- Frontend (Cloudflare Pages) có thể lên trước backend vài phút. Trong khoảng đó ô gõ không hiện (chưa có `typing_input`) và công cụ chuyển đổi báo lỗi 404. Chấp nhận được theo thỏa thuận đã có.
+- Frontend (Cloudflare Pages) có thể lên trước backend vài phút. Trong khoảng đó công cụ chuyển đổi báo lỗi 404, và template có `<input>` mất ô nhập cho tới khi backend mới lên. Chấp nhận được theo thỏa thuận đã có.
 
 **3. Smoke test sau deploy** (SSH, đọc-only, cộng một tài khoản thử):
 
 - GET endpoint chuyển đổi trả 200 cho NoteType sở hữu và 404 cho người khác;
-- artifact của Template gõ có `typing_input`;
+- artifact của một template có `<input>` vẫn giữ ô nhập (§12);
 - tạo được field `answers`.
 
 **Xong khi:** kết quả SQL đã ghi; deploy và smoke test đạt.
@@ -305,8 +307,160 @@ SELECT field_type, COUNT(*) FROM field_defs GROUP BY field_type;
 Task ID: STUDY-TYPING-ANSWER
 Primary outcome: chế độ gõ so sánh ở frontend (Đúng/Sai/gõ lại/gợi ý/bỏ qua ở host, typing-compare.v1); kiểu field answers; công cụ chuyển đổi có xem trước, sao lưu, khôi phục cho NoteType sở hữu; quyết định D-T1..D-T8
 Commits: 24d879f5, f0f90946 (T-01..T-03, gộp cùng việc khác), 851c1302, 3e51c94b, 8c914a85, 94849c42, d93b40b2 — nhánh refactor/frontend-fsd-renderer-boundary, chưa push
-Runtime change: có — input answers + typing_input trong artifact Template; field_type answers; GET/POST /api/note-types/<id>/fields/<field_id>/answers-conversion
+Runtime change: có — field_type answers; input answers; GET/POST /api/note-types/<id>/fields/<field_id>/answers-conversion; template HTML giữ <input>/<label>. Ô gõ của host và typing_input đã cất (§12)
 Migration: không (cột field_type varchar(8), không CHECK — local; production đo ở R-04)
 Tests added or updated: tests/test_study_typing_template.py, tests/test_field_answers_conversion.py; vitest typingAnswer, StudyTypingAnswerPanel, answersField, answersConversion, FieldAnswersConversionDialog và các test bị ảnh hưởng
-Known limitations: chưa kiểm công cụ chuyển đổi trên trình duyệt và mobile (R-01); deck đã cài chưa chuyển đổi được (R-02); Flask local cần khởi động lại (R-03); production chưa đo cột (R-04)
+Known limitations: deck đã cài chưa chuyển đổi được (R-02); Flask local cần khởi động lại (R-03); production chưa đo cột (R-04); {{FrontSide}} chưa được hỗ trợ
 ```
+
+## 12. Đổi hướng (2026-10-10): tạm cất ô gõ của Flama, template tự viết HTML/JS
+
+**Quyết định của chủ sản phẩm:** chưa làm phức tạp. Mẫu không chia thành "lật" hay "gõ". Phần gõ đáp án nằm hoàn toàn trong mã mặt trước và mặt sau của thẻ: người viết template tự đặt ô nhập, tự so đáp án và tự làm gợi ý bằng HTML/CSS/JS. Flama và backend không tham gia. Sau này muốn kết quả gõ ghi vào tiến độ thì thêm trigger ([mức 3](./P8_GENERIC_ACTION_OUTCOME_PLAN_2026-10-10.md)).
+
+**Đã comment lại** (đánh dấu `Parked 2026-10-10`; bỏ comment là dùng lại):
+
+| Phần | Vị trí |
+|---|---|
+| Ô gõ của Flama trên màn học | `frontend/src/features/study/pages/StudyPage.tsx` |
+| `typing_input` trong artifact Template | `app/services/study_artifact_service.py` (`template_version`, `build_template_artifact`) |
+| Lựa chọn "Lật thẻ cơ bản / Gõ đáp án" khi tạo mẫu | `frontend/src/features/template-library/components/CreateTemplateDialog.tsx` |
+| Ô cấu hình "Chế độ gõ" (hiện số ký tự, gợi ý) | `frontend/src/features/template-library/components/TemplateInputSchemaEditor.tsx` |
+| Luật "mỗi mẫu một input `answers`", lưu tùy chọn `typing` | `app/validators/template_library.py`, `frontend/src/features/template-library/lib/inputSchemaValidation.ts` |
+
+Code của ô gõ (`StudyTypingAnswerPanel.tsx`, `typing/typingAnswer.ts`, `typing/useTypingAnswer.ts`) và test của chúng vẫn giữ nguyên. Test của hành vi đã cất được đánh dấu skip, kèm cùng ghi chú.
+
+**Giữ nguyên:**
+
+- Kiểu field `answers` (mỗi dòng một đáp án) và công cụ chuyển đổi (§4).
+- Kiểu input `answers`, gắn được field `answers` hoặc `text`. Nay một mẫu có thể có nhiều input `answers`.
+- Key `typing` lưu từ trước vẫn được nhận, nhưng bị bỏ khi lưu lại.
+
+**Thay đổi để template tự viết ô nhập.** Bộ lọc HTML của template nay giữ thẻ `<input>` và `<label>`: server dùng `TEMPLATE_HTML_TAGS` trong `app/services/flashcard_renderer.py`, client dùng `ALLOWED_TAGS` trong `frontend/src/entities/flashcard/lib/clientRenderer.ts`. Trước đây hai thẻ này bị xóa, nên template chỉ tạo được ô nhập bằng JS.
+
+- Nội dung field vẫn dùng danh sách chặt cũ (`sanitize_html_fragment`).
+- Không thêm năng lực mới: script của template vốn tạo được các thẻ này, và iframe sandbox chặn gửi form (`form-action 'none'`) cũng như mạng (`connect-src 'none'`).
+
+**Mẫu tham khảo.** Ở DB local đã có hai bản: "Gõ đáp án (thử)" của user 1, gắn vào deck "Thử chế độ gõ" (`Prompt` = Từ vựng, `Answer` = Nghĩa); và "Điền đáp án (JS)" của tài khoản thử.
+
+- Mặt trước có câu hỏi, ô nhập, nút Kiểm tra, nút Gợi ý, và đáp án nằm trong một `div hidden`.
+- Script đọc đáp án theo dòng (mỗi `<br>` là một dòng). Trước khi so, cả hai bên được chuẩn hóa NFC, gộp khoảng trắng và đổi về chữ thường. Khớp một dòng bất kỳ là Đúng. Dấu tiếng Việt phải đúng (D-T3); không phân biệt hoa thường (D-T6).
+- Gợi ý là dãy chấm theo đáp án đầu tiên. Mỗi lần bấm mở thêm một ký tự, dừng khi còn một ký tự.
+- Mặt sau lặp lại `{{Prompt}}` vì Flama chưa hỗ trợ `{{FrontSide}}` (đã đề xuất sửa ở một phiên riêng).
+
+Mặt trước:
+
+```html
+<div class="cz-prompt">{{Prompt}}</div>
+<div class="cz-box">
+  <input id="cz-input" type="text" placeholder="Gõ đáp án rồi nhấn Enter" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button type="button" id="cz-check">Kiểm tra</button>
+  <button type="button" id="cz-hint">Gợi ý</button>
+</div>
+<div id="cz-mask" class="cz-mask"></div>
+<div id="cz-result" class="cz-result"></div>
+<div id="cz-answers" hidden>{{Answer}}</div>
+<script>
+(function () {
+  var input = document.getElementById('cz-input');
+  var result = document.getElementById('cz-result');
+  var mask = document.getElementById('cz-mask');
+
+  // Each line of the field is one accepted answer; a plain string is one line.
+  function readAnswers(el) {
+    var lines = [''];
+    el.childNodes.forEach(function (node) {
+      if (node.nodeName === 'BR') lines.push('');
+      else lines[lines.length - 1] += node.textContent;
+    });
+    return lines.map(function (line) { return line.trim(); }).filter(Boolean);
+  }
+  // Same text = same after NFC, collapsed spaces and lower case.
+  function norm(text) {
+    return text.normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim().toLowerCase();
+  }
+
+  var answers = readAnswers(document.getElementById('cz-answers'));
+  var first = Array.from((answers[0] || '').normalize('NFC'));
+  var shown = 0;
+
+  // Hint slots follow the first answer: one dot per character, opened left to right.
+  function drawMask() {
+    mask.textContent = first.map(function (ch, i) {
+      return i < shown || ch === ' ' ? ch : '•';
+    }).join('');
+  }
+
+  function check() {
+    var typed = norm(input.value);
+    if (!typed) return;
+    var ok = false;
+    for (var i = 0; i < answers.length; i++) {
+      if (norm(answers[i]) === typed) { ok = true; break; }
+    }
+    result.textContent = ok ? 'Đúng' : 'Sai, thử lại';
+    result.className = 'cz-result ' + (ok ? 'cz-ok' : 'cz-bad');
+    if (ok) { shown = first.length; drawMask(); } else { input.select(); }
+  }
+
+  input.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    check();
+  });
+  document.getElementById('cz-check').addEventListener('click', check);
+  document.getElementById('cz-hint').addEventListener('click', function () {
+    if (shown < first.length - 1) shown += 1;
+    drawMask();
+    input.focus();
+  });
+
+  if (!answers.length) {
+    document.querySelector('.cz-box').hidden = true;
+  }
+  drawMask();
+  input.focus();
+})();
+</script>
+```
+
+Mặt sau:
+
+```html
+<div class="cz-prompt">{{Prompt}}</div>
+<hr>
+<div class="cz-answer">{{Answer}}</div>
+```
+
+CSS dùng chung:
+
+```css
+.cz-prompt { font-size: 1.8em; font-weight: 600; text-align: center; margin: 12px 0; }
+.cz-box { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.cz-box input { font-size: 1.1em; padding: 8px 12px; border: 1px solid #d4d4d8; border-radius: 10px; min-width: 220px; }
+.cz-box button { font-size: 0.95em; padding: 8px 12px; border: 1px solid #d4d4d8; border-radius: 10px; background: #fff; cursor: pointer; }
+.cz-mask { text-align: center; letter-spacing: 0.3em; font-size: 1.2em; margin-top: 12px; color: #71717a; }
+.cz-result { text-align: center; margin-top: 8px; font-weight: 600; min-height: 1.4em; }
+.cz-ok { color: #15803d; }
+.cz-bad { color: #b91c1c; }
+.cz-answer { font-size: 1.3em; text-align: center; }
+```
+
+**Giới hạn đã biết** (do iframe sandbox, đúng theo ADR bàn phím tin cậy):
+
+- Khi con trỏ đang ở trong ô nhập, phím tắt của màn học (Space lật thẻ, 1–4 chấm điểm) không chạy, vì phím gõ trong iframe không lên tới trang. Muốn lật thì bấm "Hiện đáp án", hoặc bấm ra ngoài thẻ rồi nhấn Space.
+- Template không lật thẻ hay chấm điểm được; người học vẫn tự chọn rating.
+- Chữ đã gõ không mang sang mặt sau, vì mặt sau là một tài liệu iframe khác và không có bộ nhớ chung.
+- Lệnh `input.focus()` lúc mở thẻ có thể bị trình duyệt chặn trong iframe khác origin; khi đó người học bấm vào ô.
+
+**Kiểm chứng (2026-10-10):**
+
+- Backend: `python scripts/run_tests.py --module templates,flashcards,study --backend-only` đạt 102 file. `tests/test_study_typing_template.py`: 10 đạt, 3 skip.
+- Frontend: vitest cho `entities/flashcard`, `features/template-library`, `features/study`: 537 đạt, 4 skip. `tsc -b` và `oxlint` sạch.
+- Trình duyệt (Flask 4799 và Vite 5183 tạm, tài khoản thử, MySQL local): iframe của màn học giữ `<input>` và script. Chạy chính tài liệu iframe đó trong một khung thử:
+  - một đáp án ("mới"): gõ "  MỚI " được Đúng, "moi" bị Sai;
+  - nhiều đáp án: dòng hai "Ít nhất" được Đúng, "it nhat" bị Sai, "sự   tồi tệ" được Đúng;
+  - gợi ý: "••• •••••" thành "tố• •••••" sau hai lần bấm, dừng ở "tối thiể•";
+  - field đáp án rỗng thì ô nhập bị ẩn; mặt sau hiện đáp án.
+- Chưa kiểm bằng mắt (pane trình duyệt đang ẩn nên không chụp được) và chưa gõ thật bằng bàn phím trong iframe.
+
+**Cách mở lại ô gõ của Flama:** bỏ comment các chỗ trong bảng trên, khôi phục `useMemo` trong `StudyPage.tsx`, rồi bỏ skip các test.

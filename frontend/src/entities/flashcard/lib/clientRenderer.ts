@@ -359,6 +359,8 @@ const ALLOWED_TAGS = [
   'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'audio', 'video',
   'source', 'button', 'ruby', 'rt', 'rp', 'a', 'style',
   'svg', 'g', 'path', 'line', 'circle', 'rect', 'ellipse', 'polyline', 'polygon', 'text', 'tspan',
+  // A template's own answer box (server TEMPLATE_HTML_TAGS).
+  'input', 'label',
 ]
 
 const ALLOWED_ATTR = [

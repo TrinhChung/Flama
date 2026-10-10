@@ -27,7 +27,18 @@ describe('TemplateInputSchemaEditor', () => {
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, ' bad '); input.dispatchEvent(new Event('input', { bubbles: true })) })
     expect(change).toHaveBeenCalledWith([{ ...value[0], key: ' bad ' }]); expect(change.mock.calls[0][0][0]).not.toBe(value[0]); expect(value[0].key).toBe('Input1')
   })
-  it('switches to a typed-answer input with typing options', async () => {
+  it('switches to an answers input without typing options and drops saved ones', async () => {
+    await render(); await select(); const select_ = container.querySelector<HTMLSelectElement>('select')!
+    await act(async () => { select_.value = 'answers'; select_.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(change).toHaveBeenLastCalledWith([{ ...value[0], type: 'answers' }])
+    const saved: TemplateInputSpec[] = [{ ...value[0], type: 'answers', typing: { show_length: true, hints: true } }]
+    await act(async () => root.render(<TemplateInputSchemaEditor value={saved} onChange={change} />))
+    expect(container.textContent).not.toContain('Chế độ gõ')
+    await act(async () => { select_.value = 'text'; select_.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(change).toHaveBeenLastCalledWith([value[0]])
+  })
+  // Parked 2026-10-10 with the host typing mode (STUDY_TYPING_ANSWER_PLAN §12).
+  it.skip('switches to a typed-answer input with typing options', async () => {
     await render(); await select(); const select_ = container.querySelector<HTMLSelectElement>('select')!
     await act(async () => { select_.value = 'answers'; select_.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(change).toHaveBeenLastCalledWith([{ ...value[0], type: 'answers', typing: { show_length: true, hints: true } }])

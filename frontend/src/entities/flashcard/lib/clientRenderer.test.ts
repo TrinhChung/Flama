@@ -102,6 +102,20 @@ describe('renderCardSide', () => {
     expect(result.supports_live_patch).toBe(false)
   })
 
+  it('keeps a template answer box and gives its hidden answers one line each', () => {
+    const result = renderCardSide(
+      template({
+        front_source: '<label for="guess">Đáp án</label><input id="guess" type="text" autocomplete="off"><div id="answers" hidden>{{Answer}}</div>',
+        front_inline_scripts: ['<script>document.getElementById("guess").focus()</script>'],
+      }),
+      content({ render_context: { Answer: 'tối thiểu__FC_LINEBREAK_TOKEN__ít nhất' } }),
+      'front',
+    )
+    expect(result.html).toContain('<label for="guess">Đáp án</label><input id="guess" type="text" autocomplete="off">')
+    expect(result.html).toContain('<div id="answers" hidden="">tối thiểu<br>ít nhất</div>')
+    expect(result.html).toContain('<script>document.getElementById("guess").focus()</script>')
+  })
+
   it('converts linebreak tokens in text nodes and derives media allowlists', () => {
     const result = renderCardSide(
       template({ front_source: '<div>{{Word}}</div>' }),

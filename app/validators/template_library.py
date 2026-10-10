@@ -5,8 +5,8 @@ from app.services.template_tokens import TemplateTokenError, extract_variable_na
 from models.field_types import FIELD_TYPES as _FIELD_TYPES
 
 FIELD_TYPES = set(_FIELD_TYPES)
-# An ``answers`` input is the typed-answer source of a typing Study mode: the
-# frontend compares the learner's input with each line of the bound field.
+# An ``answers`` input takes a line-per-answer field; the template's own script
+# compares what the learner types with each line.
 ANSWERS_INPUT_TYPE = "answers"
 INPUT_TYPES = FIELD_TYPES | {ANSWERS_INPUT_TYPE}
 TYPING_OPTION_DEFAULTS = {"show_length": True, "hints": True}
@@ -39,6 +39,7 @@ def text(value, *, field, maximum=None, required=False):
 
 
 def _typing_options(item, kind):
+    # Parked 2026-10-10: unused while the host typing mode is off.
     options = item.get("typing")
     if kind != ANSWERS_INPUT_TYPE:
         if options is not None:
@@ -64,13 +65,17 @@ def validate_input_schema(schema):
         kind = item.get("type", "text")
         if kind not in INPUT_TYPES or not isinstance(item.get("required", False), bool):
             raise TemplateLibraryError("VALIDATION_ERROR", "Invalid input type or recommendation.", field="input_schema")
-        if kind == ANSWERS_INPUT_TYPE and any(other["type"] == ANSWERS_INPUT_TYPE for other in result):
-            raise TemplateLibraryError("VALIDATION_ERROR", "A template can declare only one answers input.", field="input_schema")
+        # Parked 2026-10-10 with the host typing mode (STUDY_TYPING_ANSWER_PLAN §12):
+        # templates build and check their own answer boxes in HTML/JS, so any
+        # number of answers inputs is fine and typing options are not stored.
+        # A "typing" key saved before is still accepted and dropped.
+        # if kind == ANSWERS_INPUT_TYPE and any(other["type"] == ANSWERS_INPUT_TYPE for other in result):
+        #     raise TemplateLibraryError("VALIDATION_ERROR", "A template can declare only one answers input.", field="input_schema")
         label = text(item.get("label", key), field="input_schema.label", maximum=255)
         normalized = {"key": key, "label": label, "type": kind, "required": item.get("required", False)}
-        typing = _typing_options(item, kind)
-        if typing is not None:
-            normalized["typing"] = typing
+        # typing = _typing_options(item, kind)
+        # if typing is not None:
+        #     normalized["typing"] = typing
         result.append(normalized)
         keys.add(key)
     return result
