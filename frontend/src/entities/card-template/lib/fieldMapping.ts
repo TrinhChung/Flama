@@ -8,9 +8,12 @@ export type MappingIssue =
   | { kind: 'type_mismatch'; key: string; fieldId: string; blocking: true }
   | { kind: 'unknown_input'; key: string; blocking: true }
 
-const INPUT_TYPES = new Set(['text', 'richtext', 'markdown', 'image', 'audio', 'diagram'])
+const INPUT_TYPES = new Set(['text', 'richtext', 'markdown', 'image', 'audio', 'diagram', 'answers'])
+// Plain text and line-per-answer fields display and type the same way.
+const TEXT_COMPATIBLE = new Set(['text', 'answers'])
 
 export function isTypeCompatible(inputType: string, fieldType: string): boolean {
+  if (TEXT_COMPATIBLE.has(inputType)) return TEXT_COMPATIBLE.has(fieldType)
   return inputType === fieldType && INPUT_TYPES.has(inputType)
 }
 

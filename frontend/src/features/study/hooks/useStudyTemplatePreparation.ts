@@ -10,6 +10,7 @@ import {
   type StudyTemplatePreset,
   fetchStudyTemplateInputs,
   fetchStudyTemplatePreset,
+  isTypeCompatible,
   saveStudyTemplatePreset,
 } from '@/entities/card-template'
 
@@ -41,7 +42,7 @@ export type StudyTemplateMapping = {
 }
 
 function isValidTarget(entry: StudyTemplatePreparationEntry, input: TemplateInputSpec, target: string | null | undefined) {
-  return Boolean(target && entry.field_defs.some((field: StudyTemplateFieldDef) => field.id === target && field.field_type === input.type))
+  return Boolean(target && entry.field_defs.some((field: StudyTemplateFieldDef) => field.id === target && isTypeCompatible(input.type, field.field_type)))
 }
 
 /** Saved targets win; a saved target that no longer fits falls back to the
@@ -113,9 +114,14 @@ export function useStudyTemplatePreparation(deckId: string | null) {
       ])
       if (!isCurrent()) return null
       setAvailability(choices); setPreset(preferences)
-      // Only an ambiguous deck needs the picker; a single template starts right away.
-      const autoSelection = choices.compositions.length === 1
-        ? selectionOf(choices, preferences, choices.compositions[0].composition_id) : null
+      // Single-template decks prompt before study by default.
+      // Only bypass the picker when there is exactly 1 composition AND
+      // the learner has explicitly set ask_before_study: false in their preset.
+      const shouldAutoSelect = choices.compositions.length === 1
+        && preferences?.ask_before_study === false
+      const autoSelection = shouldAutoSelect
+        ? selectionOf(choices, preferences, choices.compositions[0].composition_id)
+        : null
       return { availability: choices, autoSelection }
     } catch (caught) {
       if (isCurrent()) setError(caught)

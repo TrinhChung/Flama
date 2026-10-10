@@ -62,7 +62,14 @@
       "markdown": "Markdown",
       "image": "Hình ảnh",
       "audio": "Âm thanh",
-      "diagram": "Sơ đồ"
+      "diagram": "Sơ đồ",
+      "answers": "Đáp án gõ"
+    },
+    "typing": {
+      "title": "Chế độ gõ",
+      "description": "Người học gõ đáp án, Flama so với từng dòng của field được gắn. Đúng thì lật sang mặt sau, sai thì báo để gõ lại.",
+      "show_length": "Hiện số ký tự cần gõ",
+      "hints": "Cho mở gợi ý từng ký tự"
     }
   },
   "library": {
@@ -207,7 +214,8 @@
     "val_invalid_key": "Key không hợp lệ: không để trống, thêm khoảng trắng ở đầu/cuối hoặc dùng ký tự dành riêng.",
     "val_unique_key": "Key input phải duy nhất.",
     "val_label_max": "Nhãn tối đa 255 ký tự.",
-    "val_invalid_type": "Kiểu input không hợp lệ."
+    "val_invalid_type": "Kiểu input không hợp lệ.",
+    "val_single_answers": "Mỗi mẫu chỉ có một input đáp án gõ."
   },
   "history": {
     "title": "Lịch sử phiên bản",

@@ -15,6 +15,7 @@ export type {
   TemplateBindingWarning,
   TemplateInputSpec,
   TemplateInputType,
+  TemplateTypingOptions,
   TemplateLibraryDetail,
   TemplateLibraryGroup,
   TemplateLibraryItem,

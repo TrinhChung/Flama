@@ -84,13 +84,20 @@ export type DeckCardTypesResponse = {
   note_counts: Record<string, number>
 }
 
-export type TemplateInputType = 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram'
+export type TemplateInputType = 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram' | 'answers'
+
+/** Display options of a typing-answer input (only on `answers` inputs). */
+export type TemplateTypingOptions = {
+  show_length: boolean
+  hints: boolean
+}
 
 export type TemplateInputSpec = {
   key: string
   label: string
   type: TemplateInputType
   required: boolean
+  typing?: TemplateTypingOptions
 }
 
 export type TemplateBindings = Record<string, string | null>

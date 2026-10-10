@@ -16,7 +16,7 @@ describe('TemplateInputSchemaEditor', () => {
   async function render(disabled = false) { await act(async () => root.render(<TemplateInputSchemaEditor value={value} onChange={change} disabled={disabled} />)) }
   async function select() { await act(async () => container.querySelector<HTMLButtonElement>('[aria-pressed="false"]')!.click()) }
   it('uses all exact types, advisory required wording and immutable add/delete', async () => {
-    await render(); expect(container.querySelector('select')).toBeNull(); await select(); expect([...container.querySelectorAll('option')].map((el) => el.value)).toEqual(['text', 'richtext', 'markdown', 'image', 'audio', 'diagram'])
+    await render(); expect(container.querySelector('select')).toBeNull(); await select(); expect([...container.querySelectorAll('option')].map((el) => el.value)).toEqual(['text', 'richtext', 'markdown', 'image', 'audio', 'diagram', 'answers'])
     expect(container.textContent).toContain('Khuyến nghị ánh xạ'); expect(container.textContent).toContain('Dữ liệu mà thiết kế thẻ cần nhận.')
     await act(async () => [...container.querySelectorAll('button')].find((el) => el.textContent === 'Thêm input')!.click())
     expect(change).toHaveBeenLastCalledWith([...value, { key: 'Input2', label: '', type: 'text', required: false }]); expect(value).toHaveLength(1)
@@ -26,6 +26,17 @@ describe('TemplateInputSchemaEditor', () => {
     await render(); await select(); const input = container.querySelector<HTMLInputElement>('details input')!
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, ' bad '); input.dispatchEvent(new Event('input', { bubbles: true })) })
     expect(change).toHaveBeenCalledWith([{ ...value[0], key: ' bad ' }]); expect(change.mock.calls[0][0][0]).not.toBe(value[0]); expect(value[0].key).toBe('Input1')
+  })
+  it('switches to a typed-answer input with typing options', async () => {
+    await render(); await select(); const select_ = container.querySelector<HTMLSelectElement>('select')!
+    await act(async () => { select_.value = 'answers'; select_.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(change).toHaveBeenLastCalledWith([{ ...value[0], type: 'answers', typing: { show_length: true, hints: true } }])
+    const answers: TemplateInputSpec[] = [{ ...value[0], type: 'answers', typing: { show_length: true, hints: true } }]
+    await act(async () => root.render(<TemplateInputSchemaEditor value={answers} onChange={change} />))
+    expect(container.textContent).toContain('Chế độ gõ')
+    const hints = [...container.querySelectorAll<HTMLInputElement>('fieldset input[type="checkbox"]')][1]
+    await act(async () => hints.click())
+    expect(change).toHaveBeenLastCalledWith([{ ...answers[0], typing: { show_length: true, hints: false } }])
   })
   it('disables every editing control without mutations', async () => {
     await render(true); expect([...container.querySelectorAll('button')].every((el) => el.disabled)).toBe(true)

@@ -57,9 +57,9 @@ export function StudyCompositionPickerView({
           </p>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t('page.choose_template')}</h1>
           <p className="text-xs sm:text-sm leading-5 sm:leading-6 text-muted-foreground">
-            {deckName
-              ? t('page.deck_multiple_types', { deckName })
-              : t('page.scope_multiple_types')}{' '}
+            {compositionGroups.some((group) => group.compositions.length > 1) || compositionGroups.length > 1
+              ? `${deckName ? t('page.deck_multiple_types', { deckName }) : t('page.scope_multiple_types')} `
+              : ''}
             {t('page.choose_template_desc')}
           </p>
         </div>

@@ -537,31 +537,47 @@ afterEach(async () => {
 })
 
 describe('useStudySession cross-tab ownership', () => {
-  it('starts a single-template deck at once with template defaults even when the preset asks first', async () => {
+  it('prompts for a single-template deck when ask_before_study is true and starts upon selection', async () => {
+    const choice = snapshot().selected_composition_id!
     mocks.templatePreset.mockResolvedValue({ selected_compositions: [], input_bindings: {}, ask_before_study: true, stale_compositions: [] })
-    await openReadySession()
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness()
+    await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+    expect(latest.session).toBeNull()
+    expect(mocks.mutate).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await latest.startComposition(choice)
+    })
     expect(latest.awaitingCompositionSelection).toBe(false)
+    expect(latest.session?.snapshot.session_id).toBe('session-1')
     expect(lastOpenBody()).not.toHaveProperty('input_bindings')
     expect(mocks.saveTemplatePreset).not.toHaveBeenCalled()
   })
 
   it('opens a single-template deck with the saved field map', async () => {
     const choice = snapshot().selected_composition_id!
-    mocks.templatePreset.mockResolvedValue({ selected_compositions: [choice], input_bindings: { [choice]: { term: 'field-2' } }, ask_before_study: true, stale_compositions: [] })
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [choice], input_bindings: { [choice]: { term: 'field-2' } }, ask_before_study: false, stale_compositions: [] })
     await openReadySession()
     expect(lastOpenBody()).toEqual(expect.objectContaining({ composition_id: choice, input_bindings: { term: 'field-2' } }))
   })
 
   it('replaces a saved target that no longer fits with the template default instead of blocking study', async () => {
     const choice = snapshot().selected_composition_id!
-    mocks.templatePreset.mockResolvedValue({ selected_compositions: [choice], input_bindings: { [choice]: { term: 'deleted-field' } }, ask_before_study: true, stale_compositions: [] })
+    mocks.templatePreset.mockResolvedValue({ selected_compositions: [choice], input_bindings: { [choice]: { term: 'deleted-field' } }, ask_before_study: false, stale_compositions: [] })
     await openReadySession()
     expect(lastOpenBody()?.input_bindings).toEqual({ term: 'field-1' })
   })
 
-  it('still studies with template defaults when the preset request fails', async () => {
+  it('still studies with template defaults when the preset request fails upon selection', async () => {
+    const choice = snapshot().selected_composition_id!
     mocks.templatePreset.mockRejectedValue(new Error('preset unavailable'))
-    await openReadySession()
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+    await renderHarness()
+    await waitFor(() => expect(latest.awaitingCompositionSelection).toBe(true))
+    await act(async () => {
+      await latest.startComposition(choice)
+    })
     expect(lastOpenBody()).not.toHaveProperty('input_bindings')
     expect(latest.error).toBeNull()
   })

@@ -62,7 +62,14 @@
       "markdown": "Markdown",
       "image": "Image",
       "audio": "Audio",
-      "diagram": "Diagram"
+      "diagram": "Diagram",
+      "answers": "Typed answer"
+    },
+    "typing": {
+      "title": "Typing mode",
+      "description": "The learner types the answer and Flama compares it with each line of the bound field. Correct flips to the back; incorrect asks to try again.",
+      "show_length": "Show how many characters to type",
+      "hints": "Allow revealing hint characters"
     }
   },
   "library": {
@@ -207,7 +214,8 @@
     "val_invalid_key": "Invalid key: must not be empty, have leading/trailing whitespace, or use reserved characters.",
     "val_unique_key": "Input key must be unique.",
     "val_label_max": "Label must not exceed 255 characters.",
-    "val_invalid_type": "Invalid input type."
+    "val_invalid_type": "Invalid input type.",
+    "val_single_answers": "A template can have only one typed-answer input."
   },
   "history": {
     "title": "Version History",
