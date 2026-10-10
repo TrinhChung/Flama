@@ -1,5 +1,5 @@
 import '@/shared/config/i18n'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,8 @@ import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
 import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { StudyExitConfirmDialog } from '../components/StudyExitConfirmDialog'
+import { StudyTypingAnswerPanel } from '../components/StudyTypingAnswerPanel'
+import { parseAnswerLines, readTypingInput } from '../typing/typingAnswer'
 import { useStudySession } from '../hooks/useStudySession'
 import { useStudyKeyboardShortcuts } from '../hooks/useStudyKeyboardShortcuts'
 import { useStudyNavigationBlocker } from '../hooks/useStudyNavigationBlocker'
@@ -75,6 +77,14 @@ export function StudyPage() {
   const decision = decisionState && decisionState.cardKey === activeCardKey
     ? decisionState.value
     : null
+  // A typing mode needs a declared answers input and at least one answer on
+  // this card; otherwise the card studies as a normal flip card.
+  const typingInput = readTypingInput(template)
+  const typingKey = typingInput?.key ?? null
+  const typingAnswers = useMemo(
+    () => (typingKey ? parseAnswerLines(content?.field_values?.[typingKey]) : []),
+    [content, typingKey],
+  )
 
   const handleOpenEdit = useCallback(() => {
     if (card?.card_id && card?.can_edit_card !== false && !study.isBusy) {
@@ -417,6 +427,18 @@ export function StudyPage() {
           />
         </div>
       )}
+
+      {card && template && content && !blockingCommit && typingInput && typingAnswers.length > 0 ? (
+        <StudyTypingAnswerPanel
+          key={activeCardKey ?? card.card_id}
+          answers={typingAnswers}
+          showLength={typingInput.showLength}
+          hints={typingInput.hints}
+          revealed={revealed}
+          disabled={study.isBusy}
+          onReveal={handleReveal}
+        />
+      ) : null}
 
       {card && template && content && !blockingCommit ? (
         <StudyBottomBar
