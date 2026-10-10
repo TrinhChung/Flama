@@ -39,6 +39,7 @@
     "type_change_warning": "Changing this type may make existing template mappings incompatible. Review their mappings after saving.",
     "unsaved_field": "This field has unsaved changes. Save it, discard the changes, or stay here to continue editing.",
     "delete_title": "Delete data field?",
+    "delete_notetype_btn": "Delete Note Type",
     "rename": "Rename",
     "rename_title": "Rename Note Type",
     "rename_description": "Change the name shown for this Note Type.",
@@ -69,7 +70,8 @@
       "docs_btn": "Documentation",
       "ai_prompt_banner_title": "Create Templates with AI in 1 Minute",
       "ai_prompt_banner_desc": "No coding needed! Use standardized Prompts for ChatGPT / Claude to design Flashcards as desired.",
-      "ai_prompt_banner_btn": "Open AI Guide & Prompts"
+      "ai_prompt_banner_btn": "Open AI Guide & Prompts",
+      "btn_explore_market": "Explore Note Types"
     },
     "create": {
       "title": "Create New Note Type",
@@ -385,6 +387,8 @@
     "step3_desc": "No programming needed! Click here to open the guide and copy the Master Prompt for ChatGPT / Claude to design card templates for you.",
     "step4_cards_title": "📇 4. NoteType Card & Badges",
     "step4_cards_desc": "Each card displays the note type name along with two key badges: number of Templates (display card faces) and number of Fields.",
+    "step5_view_title": "👁️ 5. \"View\" Button (Configure & Manage Note Type)",
+    "step5_view_desc": "Click View to open detailed management: configure Fields, customize Templates, preview live cards, and share or delete the note type.",
     "step5_fields_title": "⚙️ 5. \"Fields\" Button (Data Columns)",
     "step5_fields_desc": "Click here to add fields like Word, Meaning, Audio, Example, Furigana... defining data storage structure.",
     "step6_templates_title": "🎨 6. \"Templates\" Button (Edit & Preview)",
@@ -392,7 +396,7 @@
     "step7_share_title": "🌐 7. \"Share\" Button (Community Marketplace)",
     "step7_share_desc": "Once designed, click this button to publish your card template to the Marketplace for the Flama community.",
     "step4_empty_title": "📋 4. Note Types List Area",
-    "step4_empty_desc": "After creating note types, they will appear here with action buttons: Manage Fields, Customize Templates, Live Preview, and Share to Marketplace."
+    "step4_empty_desc": "After creating note types, they will appear here with the \"View\" button to open the detailed setup page."
   },
   "guide_tour": {
     "step1_title": "📘 1. Guide Center & AI Prompts",

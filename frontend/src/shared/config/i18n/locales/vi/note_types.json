@@ -39,6 +39,7 @@
     "type_change_warning": "Đổi kiểu dữ liệu có thể làm ánh xạ hiện tại không còn tương thích. Kiểm tra lại mapping sau khi lưu.",
     "unsaved_field": "Trường này có thay đổi chưa lưu. Lưu trường, bỏ thay đổi hoặc ở lại để tiếp tục sửa.",
     "delete_title": "Xóa trường dữ liệu?",
+    "delete_notetype_btn": "Xóa Note Type",
     "rename": "Đổi tên",
     "rename_title": "Đổi tên Note Type",
     "rename_description": "Thay đổi tên hiển thị của Note Type này.",
@@ -69,7 +70,8 @@
       "docs_btn": "Tài liệu",
       "ai_prompt_banner_title": "Tạo Template Bằng AI Trong 1 Phút",
       "ai_prompt_banner_desc": "Không cần biết lập trình! Dùng Prompt chuẩn cho ChatGPT / Claude để tự thiết kế mẫu thẻ Flashcard đúng ý bạn.",
-      "ai_prompt_banner_btn": "Mở Hướng Dẫn & Prompt AI"
+      "ai_prompt_banner_btn": "Mở Hướng Dẫn & Prompt AI",
+      "btn_explore_market": "Khám phá từ Chợ"
     },
     "create": {
       "title": "Tạo cấu trúc thẻ mới",
@@ -385,6 +387,8 @@
     "step3_desc": "Không cần biết lập trình! Bấm nút này để mở trang hướng dẫn và sao chép Master Prompt cho ChatGPT / Claude tự thiết kế mẫu thẻ cho bạn.",
     "step4_cards_title": "📇 4. Thẻ NoteType & Huy Hiệu Thông Số",
     "step4_cards_desc": "Mỗi thẻ hiển thị tên loại thẻ cùng 2 huy hiệu quan trọng: số lượng Template (các mặt thẻ hiển thị) và số lượng Trường dữ liệu hiện có trong bộ thẻ.",
+    "step5_view_title": "👁️ 5. Nút \"Xem\" (Thiết Lập & Quản Lý Cấu Trúc Thẻ)",
+    "step5_view_desc": "Bấm nút Xem để mở giao diện quản lý chi tiết: thiết lập các Trường (Fields), tùy chỉnh Giao diện (Templates), xem trước và chia sẻ hoặc xóa cấu trúc thẻ.",
     "step5_fields_title": "⚙️ 5. Nút \"Trường\" (Quản Lý Cột Dữ Liệu)",
     "step5_fields_desc": "Bấm vào đây để thêm các trường như Word, Meaning, Audio, Example, Furigana... định hình cấu trúc dữ liệu lưu trữ cho thẻ.",
     "step6_templates_title": "🎨 6. Nút \"Templates\" (Soạn Giao Diện & Xem Trước)",
@@ -392,7 +396,7 @@
     "step7_share_title": "🌐 7. Nút \"Chia Sẻ\" Lên Kho Cộng Đồng",
     "step7_share_desc": "Khi đã thiết kế xong mẫu thẻ ưng ý, bạn có thể bấm nút này để xuất bản lên Marketplace cho cộng đồng Flama cùng sử dụng.",
     "step4_empty_title": "📋 4. Khu Vực Danh Sách Loại Thẻ",
-    "step4_empty_desc": "Sau khi tạo loại thẻ, các thẻ NoteType sẽ xuất hiện tại đây kèm các nút chức năng: Quản lý Trường (Fields), Tùy chỉnh Template (HTML/CSS), Xem trước Live Preview và Chia sẻ lên Kho Marketplace."
+    "step4_empty_desc": "Sau khi tạo loại thẻ, các thẻ NoteType sẽ xuất hiện tại đây kèm nút \"Xem\" để mở trang thiết lập chi tiết."
   },
   "guide_tour": {
     "step1_title": "📘 1. Trung Tâm Hướng Dẫn & Prompt AI",

@@ -1,15 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import {
-  faArrowUpRightFromSquare,
-  faCircleCheck,
-  faCode,
-  faLayerGroup,
-  faShareNodes,
-  faSliders,
-  faTrashCan,
-} from '@fortawesome/free-solid-svg-icons'
+import { CheckCircle2, Eye, Layers, SlidersHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -18,10 +9,9 @@ import type { NoteTypeItem } from '../../hooks/useNoteTypeManager'
 interface NoteTypeCardProps {
   item: NoteTypeItem
   index: number
-  onDelete: (item: NoteTypeItem) => void
 }
 
-export function NoteTypeCard({ item, index, onDelete }: NoteTypeCardProps) {
+export function NoteTypeCard({ item, index }: NoteTypeCardProps) {
   const { t } = useTranslation('note_types')
 
   return (
@@ -33,18 +23,18 @@ export function NoteTypeCard({ item, index, onDelete }: NoteTypeCardProps) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <Badge variant="secondary" className="px-2 py-0.5 text-xs font-semibold rounded-md gap-1">
-              <FontAwesomeIcon icon={faLayerGroup} className="text-primary text-[10px]" />
+              <Layers className="text-primary size-3" />
               {t('manager.card.templates_badge', { count: item.templates?.length ?? 0 })}
             </Badge>
             <Badge variant="outline" className="px-2 py-0.5 text-xs font-semibold rounded-md gap-1">
-              <FontAwesomeIcon icon={faSliders} className="text-muted-foreground text-[10px]" />
+              <SlidersHorizontal className="text-muted-foreground size-3" />
               {t('manager.card.fields_badge', { count: item.field_defs?.length ?? 0 })}
             </Badge>
           </div>
 
           {item.publish_status === 'published' || item.publish_status === 'unlisted' ? (
             <Badge variant="outline" className="text-xs font-semibold rounded-md border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1">
-              <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500 text-[10px]" />
+              <CheckCircle2 className="text-emerald-500 size-3" />
               {t('manager.card.shared_badge')}
             </Badge>
           ) : null}
@@ -62,71 +52,17 @@ export function NoteTypeCard({ item, index, onDelete }: NoteTypeCardProps) {
         </div>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            data-tour={index === 0 ? 'card-fields-btn' : undefined}
-            className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl gap-1"
-          >
-            <Link to={`/flashcards/note-types/${item.id}/fields`}>
-              <FontAwesomeIcon icon={faSliders} className="text-xs" />
-              {t('manager.card.btn_fields')}
-            </Link>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            data-tour={index === 0 ? 'card-template-btn' : undefined}
-            className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl gap-1"
-          >
-            <Link to={`/flashcards/note-types/${item.id}`}>
-              <FontAwesomeIcon icon={faCode} className="text-xs" />
-              {t('manager.card.btn_templates')}
-            </Link>
-          </Button>
-
-          {item.publish_status === 'published' || item.publish_status === 'unlisted' ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              asChild
-              data-tour={index === 0 ? 'card-share-btn' : undefined}
-              className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
-            >
-              <Link to={`/marketplace/note-types/${item.id}`}>
-                <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="text-xs" />
-                {t('manager.card.btn_view')}
-              </Link>
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              asChild
-              data-tour={index === 0 ? 'card-share-btn' : undefined}
-              className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-primary hover:text-primary hover:bg-primary/10 gap-1"
-            >
-              <Link to={`/marketplace/note-types/publish?id=${item.id}`}>
-                <FontAwesomeIcon icon={faShareNodes} className="text-xs" />
-                {t('manager.card.btn_share')}
-              </Link>
-            </Button>
-          )}
-        </div>
-
+      <div className="mt-4 pt-3 border-t border-border/60">
         <Button
-          variant="ghost"
           size="sm"
-          className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl shrink-0"
-          onClick={() => onDelete(item)}
-          title={t('manager.card.btn_delete_title')}
+          asChild
+          data-tour={index === 0 ? 'card-view-btn' : undefined}
+          className="w-full h-8.5 sm:h-9 text-xs font-bold rounded-xl shadow-xs gap-1.5"
         >
-          <FontAwesomeIcon icon={faTrashCan} className="text-xs" />
+          <Link to={`/flashcards/note-types/${item.id}/fields`}>
+            <Eye className="size-3.5" />
+            {t('manager.card.btn_view', { defaultValue: 'Xem' })}
+          </Link>
         </Button>
       </div>
     </Card>

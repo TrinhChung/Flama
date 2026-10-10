@@ -42,29 +42,11 @@ export function getNoteTypeManagerTourSteps(
         placement: 'top',
       },
       {
-        target: '[data-tour="card-fields-btn"]',
-        title: tr('manager_tour.step5_fields_title', '⚙️ 5. Nút "Trường" (Quản Lý Cột Dữ Liệu)'),
+        target: '[data-tour="card-view-btn"]',
+        title: tr('manager_tour.step5_view_title', '👁️ 5. Nút "Xem" (Thiết Lập & Quản Lý Cấu Trúc Thẻ)'),
         content: tr(
-          'manager_tour.step5_fields_desc',
-          'Bấm vào đây để thêm các trường như Word, Meaning, Audio, Example, Furigana... định hình cấu trúc dữ liệu lưu trữ cho thẻ.'
-        ),
-        placement: 'top',
-      },
-      {
-        target: '[data-tour="card-template-btn"]',
-        title: tr('manager_tour.step6_templates_title', '🎨 6. Nút "Templates" (Soạn Giao Diện & Xem Trước)'),
-        content: tr(
-          'manager_tour.step6_templates_desc',
-          'Bấm vào đây để mở trình soạn thảo HTML/CSS Front & Back, dán mã code tạo bởi AI và xem mô phỏng thẻ mẫu (Live Preview) theo thời gian thực.'
-        ),
-        placement: 'top',
-      },
-      {
-        target: '[data-tour="card-share-btn"]',
-        title: tr('manager_tour.step7_share_title', '🌐 7. Nút "Chia Sẻ" Lên Kho Cộng Đồng'),
-        content: tr(
-          'manager_tour.step7_share_desc',
-          'Khi đã thiết kế xong mẫu thẻ ưng ý, bạn có thể bấm nút này để xuất bản lên Marketplace cho cộng đồng Flama cùng sử dụng.'
+          'manager_tour.step5_view_desc',
+          'Bấm nút Xem để mở giao diện quản lý: thiết lập các Trường (Fields), tùy chỉnh Giao diện (Templates), xem trước và chia sẻ hoặc xóa cấu trúc thẻ.'
         ),
         placement: 'top',
       },
