@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from models.field_types import FIELD_TYPES
+from models.field_types import FIELD_TYPES, stored_field_value
 
 from .flashcard_input import RequestValidationError
 
@@ -597,7 +597,7 @@ def validate_update_note_arguments(arguments: Any) -> dict[str, Any]:
 
     return {
         "note_id": str(note_id).strip(),
-        "fields": {str(k).strip(): str(v or "") for k, v in fields.items()} if fields is not None else None,
+        "fields": {str(k).strip(): stored_field_value(v) for k, v in fields.items()} if fields is not None else None,
         "tags": [str(t).strip() for t in tags if str(t).strip()] if tags is not None else None,
         "deck_id": deck_id,
     }
@@ -851,7 +851,7 @@ def validate_single_note_payload(raw_note: Any) -> dict[str, Any]:
         "deck_name": str(deck_name).strip() if deck_name else None,
         "note_type_id": str(note_type_id).strip() if note_type_id else None,
         "note_type_name": str(note_type_name).strip() if note_type_name else None,
-        "fields": {str(k).strip(): str(v or "") for k, v in fields.items()},
+        "fields": {str(k).strip(): stored_field_value(v) for k, v in fields.items()},
         "tags": [str(t).strip() for t in (tags or []) if str(t).strip()],
         "allow_duplicate": allow_duplicate,
     }

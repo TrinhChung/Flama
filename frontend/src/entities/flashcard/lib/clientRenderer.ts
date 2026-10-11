@@ -139,7 +139,7 @@ export function renderMediaHtml(
 
 export function patchRenderContext(
   existingRenderContext: Record<string, unknown>,
-  newFieldValues: Record<string, string>,
+  newFieldValues: Record<string, unknown>,
   fieldDefs?: Array<{ name: string; field_type?: string }>,
   mediaLookup?: Array<{ id: string; filename?: string; proxy_url?: string; mime_type?: string }>,
 ): Record<string, unknown> {
@@ -154,7 +154,8 @@ export function patchRenderContext(
   }
 
   for (const [key, rawValue] of Object.entries(newFieldValues)) {
-    const stringValue = rawValue === null || rawValue === undefined ? '' : String(rawValue)
+    const isList = Array.isArray(rawValue)
+    const stringValue = rawValue === null || rawValue === undefined || isList ? '' : String(rawValue)
     const fieldType = fieldTypeMap.get(key) || 'text'
     const lowerKey = key.toLowerCase()
     const isAudio = (
@@ -181,7 +182,7 @@ export function patchRenderContext(
       lowerKey.endsWith('_photo') ||
       lowerKey.endsWith(' photo')
     )
-    const isMedia = isAudio || isImage
+    const isMedia = !isList && (isAudio || isImage)
 
     if (isMedia) {
       const trimmed = stringValue.trim()
@@ -197,7 +198,8 @@ export function patchRenderContext(
         next[`${key}_urls`] = urls
       }
     } else {
-      const normalized = stringValue
+      // A stored array reaches Mustache unchanged, so sections iterate its items.
+      const normalized = isList ? rawValue : stringValue
         .replace(/\r\n/g, '\n')
         .replace(/\r/g, '\n')
         .replace(/\\n/g, LINEBREAK_TOKEN)

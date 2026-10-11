@@ -18,8 +18,10 @@ from app.services.media_field_codec import (
     MediaFieldValueError,
     normalize_media_field_for_write,
 )
+from models.field_types import ARRAY_FIELD_TYPE, stored_field_value
 
 MAX_TEXT_FIELD_LENGTH = 5_000
+MAX_ARRAY_DEPTH = 3
 MAX_RICHTEXT_LENGTH = 20_000
 MAX_MARKDOWN_LENGTH = 20_000
 MAX_TAG_LENGTH = 64
@@ -74,8 +76,8 @@ class RequestValidationError(ValueError):
 class NoteMutationInput:
     """Normalized note mutation payload for create/patch/update routes."""
 
-    field_values: dict[str, str]
-    field_updates: dict[str, str]
+    field_values: dict[str, Any]
+    field_updates: dict[str, Any]
     tags: list[str] | None
     deck_id: int | None
     update_tags: bool
@@ -413,6 +415,62 @@ def _assert_required_fields(
             )
 
 
+def _clean_array_items(items: list[Any], *, field_name: str, depth: int, budget: int) -> tuple[list[Any], int]:
+    """Sanitize items, spending ``budget`` (text length, at least 1 per item or list)."""
+    if depth > MAX_ARRAY_DEPTH:
+        raise RequestValidationError(
+            f"Field '{field_name}' nests arrays more than {MAX_ARRAY_DEPTH} levels deep.",
+            field=field_name,
+        )
+    cleaned: list[Any] = []
+    for item in items:
+        if isinstance(item, list):
+            value, budget = _clean_array_items(item, field_name=field_name, depth=depth + 1, budget=budget - 1)
+        elif isinstance(item, str):
+            value = sanitize_plain_text(item, field_name=field_name)
+            budget -= max(len(value), 1)
+        else:
+            raise RequestValidationError(
+                f"Field '{field_name}' array items must be text or arrays.",
+                field=field_name,
+            )
+        if budget < 0:
+            raise RequestValidationError(
+                f"Field '{field_name}' exceeds max length {MAX_TEXT_FIELD_LENGTH}.",
+                field=field_name,
+            )
+        cleaned.append(value)
+    return cleaned, budget
+
+
+def _clean_array_field_value(raw_value: Any, *, field_name: str) -> list[Any]:
+    """Store an ``array`` field as a JSON list of plain-text items.
+
+    Editors send one item per line; API clients may send a list nested at most
+    ``MAX_ARRAY_DEPTH`` deep, kept as sent apart from sanitizing each item. The
+    whole array shares one text field's length budget.
+    """
+    if raw_value is None:
+        return []
+    if not isinstance(raw_value, list):
+        text = sanitize_plain_text(raw_value, field_name=field_name)
+        return [line.strip() for line in text.split("\n") if line.strip()]
+    cleaned, _ = _clean_array_items(raw_value, field_name=field_name, depth=1, budget=MAX_TEXT_FIELD_LENGTH)
+    return cleaned
+
+
+def clean_array_fields(values: dict[str, Any], field_defs: Any) -> dict[str, Any]:
+    """``values`` with every ``array`` field cleaned the way note writes clean it."""
+    array_names = {
+        field_def.name for field_def in field_defs or ()
+        if str(field_def.field_type or "").lower() == ARRAY_FIELD_TYPE
+    }
+    return {
+        name: _clean_array_field_value(value, field_name=name) if name in array_names else value
+        for name, value in values.items()
+    }
+
+
 def clean_note_field_values(
     *,
     note_type: Any,
@@ -421,11 +479,11 @@ def clean_note_field_values(
     current_values: dict[str, Any] | None = None,
     note_media_ids: Any = None,
     allow_missing_media: bool = False,
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     if raw_field_values is None:
         if partial:
             merged = {
-                str(key).strip(): "" if value is None else str(value)
+                str(key).strip(): stored_field_value(value)
                 for key, value in dict(current_values or {}).items()
                 if str(key).strip()
             }
@@ -448,17 +506,17 @@ def clean_note_field_values(
             field="field_values",
         )
 
-    merged: dict[str, str] = {}
+    merged: dict[str, Any] = {}
     if current_values:
         merged.update(
             {
-                str(key).strip(): "" if value is None else str(value)
+                str(key).strip(): stored_field_value(value)
                 for key, value in dict(current_values).items()
                 if str(key).strip()
             }
         )
 
-    updates: dict[str, str] = {}
+    updates: dict[str, Any] = {}
     for field_name, raw_value in raw_field_values.items():
         field_def = field_map[field_name]
         field_type = str(field_def.field_type or "text").strip().lower()
@@ -473,6 +531,8 @@ def clean_note_field_values(
                 note_media_ids=note_media_ids,
                 field_type=field_type,
             )
+        elif field_type == ARRAY_FIELD_TYPE:
+            cleaned_value = _clean_array_field_value(raw_value, field_name=field_name)
         else:
             cleaned_value = sanitize_plain_text(raw_value, field_name=field_name)
 
@@ -480,9 +540,9 @@ def clean_note_field_values(
         merged[field_name] = cleaned_value
 
     if not partial:
-        for field_name in field_map:
+        for field_name, fdef in field_map.items():
             if field_name not in merged:
-                merged[field_name] = ""
+                merged[field_name] = [] if fdef.field_type == ARRAY_FIELD_TYPE else ""
 
     _assert_required_fields(
         note_type,

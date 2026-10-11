@@ -17,7 +17,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
+import { fieldValueEditorText, isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
 import { MediaFieldPreview } from './MediaFieldPreview'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import type { useBrowseState } from '../hooks/useBrowseState'
@@ -154,7 +154,7 @@ export function BrowseCardEditForm({
 
         {/* Dynamic Card fields */}
         {detail.fields.map((field) => {
-          const val = editFieldValues[field.name] || ''
+          const val = fieldValueEditorText(editFieldValues[field.name])
           const ft = (field.field_type || 'text').toLowerCase()
 
           // Media fields get a specialized preview/code editor.

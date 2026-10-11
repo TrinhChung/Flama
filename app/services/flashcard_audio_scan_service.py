@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from models import db
 from models.deck import Deck
+from models.field_types import field_value_text
 from models.field_def import FieldDef
 from models.media_asset import MediaAsset
 from models.note import Note
@@ -269,6 +270,7 @@ def scan_deck_audio(
             or (next(iter(field_values.values())) if field_values else "")
             or note.id
         )
+        word = field_value_text(word)
 
         media_by_field: dict[str, list[MediaAsset]] = {}
         for asset in note.media_assets or []:

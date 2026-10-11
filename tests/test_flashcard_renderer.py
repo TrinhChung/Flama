@@ -41,6 +41,31 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("EMPTY", rendered["front_html"])
         self.assertNotIn("R:", rendered["front_html"])
 
+    def test_array_list_reaches_mustache_unchanged(self):
+        template = self._template("{{#Meaning}}<li>{{.}}</li>{{/Meaning}}|{{Meaning}}|{{#Pairs}}[{{#.}}<i>{{.}}</i>{{/.}}]{{/Pairs}}")
+        fields = [self._field("Meaning", "array"), self._field("Pairs", "array")]
+        values = {"Meaning": ["ăn", "<b>dùng</b>"], "Pairs": [["a", "b"], ["c"]]}
+        rendered = render_template_pair(template=template, field_defs=fields, field_values=values, media_assets=[])
+        self.assertIn(
+            "<li>ăn</li><li>&lt;b&gt;dùng&lt;/b&gt;</li>|ăn,&lt;b&gt;dùng&lt;/b&gt;|[<i>a</i><i>b</i>][<i>c</i>]",
+            rendered["front_html"],
+        )
+        context = build_render_context(fields, values, [])
+        self.assertEqual(set(context), {"Meaning", "Pairs"})
+        self.assertEqual(context["Meaning"], ["ăn", "<b>dùng</b>"])
+
+    def test_array_text_renders_as_before(self):
+        # Values written before lists keep the text path: one section, line breaks.
+        template = self._template("{{#Meaning}}<div>{{Meaning}}</div>{{/Meaning}}{{^Empty}}-{{/Empty}}")
+        fields = [self._field("Meaning", "array"), self._field("Empty", "array")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Meaning": "ăn\ndùng bữa", "Empty": []},
+            media_assets=[],
+        )
+        self.assertIn("<div>ăn<br>dùng bữa</div>-", rendered["front_html"])
+
     def test_richtext_rendered_with_sanitized_raw_html(self):
         template = self._template("{{{Meaning}}}")
         fields = [self._field("Meaning", "richtext")]

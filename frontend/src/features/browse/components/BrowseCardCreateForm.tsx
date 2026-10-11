@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { LoaderCircle, Plus, RotateCcw, Tag, X } from 'lucide-react'
-import { isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
+import { fieldValueEditorText, isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
 import { MediaFieldPreview } from './MediaFieldPreview'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
@@ -163,7 +163,7 @@ export function BrowseCardCreateForm({
           </div>
         ) : (
           fields.map((field) => {
-            const val = editFieldValues[field.name] || ''
+            const val = fieldValueEditorText(editFieldValues[field.name])
             const ft = (field.field_type || 'text').toLowerCase()
 
             // Media fields get a specialized preview/code editor.

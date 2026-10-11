@@ -170,6 +170,18 @@ describe('renderCardSide', () => {
     expect(result.html).toContain('<script>document.getElementById("guess").focus()</script>')
   })
 
+  it('iterates a stored array as is, printing {{field}} like the server', () => {
+    const result = renderCardSide(
+      template({
+        front_source: '{{#Meaning}}<li>{{.}}</li>{{/Meaning}}|{{Meaning}}|{{#Pairs}}[{{#.}}<i>{{.}}</i>{{/.}}]{{/Pairs}}',
+        field_defs: [{ name: 'Meaning', field_type: 'array' }, { name: 'Pairs', field_type: 'array' }],
+      }),
+      content({ render_context: { Meaning: ['ăn', '<b>dùng</b>'], Pairs: [['a', 'b'], ['c']] } }),
+      'front',
+    )
+    expect(result.html).toContain('<li>ăn</li><li>&lt;b&gt;dùng&lt;/b&gt;</li>|ăn,&lt;b&gt;dùng&lt;/b&gt;|[<i>a</i><i>b</i>][<i>c</i>]')
+  })
+
   it('converts linebreak tokens in text nodes and derives media allowlists', () => {
     const result = renderCardSide(
       template({ front_source: '<div>{{Word}}</div>' }),
@@ -371,6 +383,17 @@ describe('renderCardSide', () => {
       const updated = patchRenderContext(prevContext, { Meaning: 'Line 1\nLine 2\r\nLine 3' })
       expect(updated.Meaning).toBe(`Line 1${LINEBREAK_TOKEN}Line 2${LINEBREAK_TOKEN}Line 3`)
       expect(updated.Word).toBe('犬')
+    })
+
+    it('keeps a stored array as the same list and older text arrays on the text path', () => {
+      const pairs = [['a', 'b'], ['c']]
+      const updated = patchRenderContext({}, { Pairs: pairs, Meaning: 'ăn\ndùng bữa' }, [
+        { name: 'Pairs', field_type: 'array' },
+        { name: 'Meaning', field_type: 'array' },
+      ])
+      expect(updated.Pairs).toBe(pairs)
+      expect(updated.Meaning).toBe(`ăn${LINEBREAK_TOKEN}dùng bữa`)
+      expect(Object.keys(updated).sort()).toEqual(['Meaning', 'Pairs'])
     })
 
     it('extracts media urls for image and audio', () => {

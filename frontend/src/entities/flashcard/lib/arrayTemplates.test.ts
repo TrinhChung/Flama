@@ -10,7 +10,7 @@ const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: { runScripts: 'dangerously' }) => { window: Window }
 }
 
-function render(slug: string, values: Record<string, string>) {
+function render(slug: string, values: Record<string, unknown>) {
   const folder = resolve(process.cwd(), '..', 'note-type-templates', slug)
   const source = readFileSync(resolve(folder, 'back.html'), 'utf8')
   const prototype = JSON.parse(readFileSync(resolve(folder, 'prototype.json'), 'utf8'))
@@ -30,6 +30,32 @@ function render(slug: string, values: Record<string, string>) {
 }
 
 describe('array-backed template JavaScript through the client renderer', () => {
+  it('renders native pairs once and keeps empty positions and literal punctuation', () => {
+    const dom = render('advanced-vocabulary-card', {
+      Vocabulary: 'native', Meaning: ['one', 'two'],
+      Collocation: ['first, literal', 'second; literal', 'third'],
+      Coollocation_VI: ['trùng', '', 'trùng'],
+    })
+    const doc = dom.window.document
+    expect(doc.querySelectorAll('#coll-raw')).toHaveLength(1)
+    expect(doc.querySelectorAll('#coll-pairs')).toHaveLength(1)
+    expect(doc.querySelectorAll('.meaning-vi')).toHaveLength(1)
+    expect([...doc.querySelectorAll('#coll-pairs .pair-left')].map(el => el.textContent)).toEqual(['first, literal', 'second; literal', 'third'])
+    expect([...doc.querySelectorAll('#coll-pairs .pair-right')].map(el => el.textContent)).toEqual(['trùng', '', 'trùng'])
+    dom.window.close()
+  })
+
+  it('keeps native Default items and its existing prose formatting without repeated blocks', () => {
+    const dom = render('flama-default', { word: '食べる', reading: ['たべる', 'くう'],
+      translation_vi: ['ăn; nguyên một mục', 'ăn; nguyên một mục'], meaning_jp: 'one$two' })
+    const doc = dom.window.document
+    expect(doc.querySelectorAll('[data-array-field="reading"]')).toHaveLength(1)
+    expect(doc.querySelectorAll('[data-array-field="translation_vi"]')).toHaveLength(1)
+    expect(doc.querySelector('[data-array-field="translation_vi"]')!.textContent).toContain('ăn; nguyên một mụcăn; nguyên một mục')
+    expect(doc.querySelector('[auto-split]')!.querySelectorAll('br')).toHaveLength(1)
+    expect(doc.querySelectorAll('[data-native-array-guard], [data-native-array-value]')).toHaveLength(0)
+    dom.window.close()
+  })
   it('keeps six EN/VI rows, duplicates, punctuation and missing translations', () => {
     const dom = render('advanced-vocabulary-card', {
       Vocabulary: 'parallel', Meaning: 'một; còn nguyên\nhai',
