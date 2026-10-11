@@ -1,0 +1,51 @@
+<div class="ft-card ft-back" data-mode="reading">
+  <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v14"></path></svg></span><span>Ôn lại nội dung</span></div>
+  <div class="ft-back-hero">
+    {{#PromptText}}<h1 class="ft-back-text">{{PromptText}}</h1>{{/PromptText}}
+    <div class="ft-back-meta">
+    </div>
+  </div>
+  {{#Answer}}<div class="ft-answer-panel"><div class="ft-answer-label">Cách đọc</div><div class="ft-answer-values">{{Answer}}</div></div>{{/Answer}}
+  <div class="ft-back-content">
+    {{#Meaning}}<div class="ft-info-block ft-info-definition" data-info="Meaning"><h2 class="ft-info-heading">Nghĩa</h2><div class="ft-info-array">{{Meaning}}</div></div>{{/Meaning}}
+    {{#Explanation}}<div class="ft-info-block ft-info-definition" data-info="Explanation"><h2 class="ft-info-heading">Giải thích</h2><div class="ft-info-content">{{{Explanation}}}</div></div>{{/Explanation}}
+    {{#Example}}<div class="ft-info-block" data-info="Example"><h2 class="ft-info-heading">Ví dụ</h2><div class="ft-info-content">{{{Example}}}</div></div>{{/Example}}
+    {{#ExampleTranslation}}<div class="ft-info-block" data-info="ExampleTranslation"><h2 class="ft-info-heading">Bản dịch ví dụ</h2><div class="ft-info-content">{{{ExampleTranslation}}}</div></div>{{/ExampleTranslation}}
+    {{#Audio}}<div class="ft-info-block ft-info-audio" data-info="Audio"><h2 class="ft-info-heading">Nghe lại</h2><div class="ft-info-content">{{{Audio}}}</div></div>{{/Audio}}
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var root = document.querySelector('.ft-back');
+  if (!root) return;
+  root.querySelectorAll('.ft-info-array').forEach(function (source) {
+    var copy = source.cloneNode(true);
+    copy.querySelectorAll('br').forEach(function (node) { node.replaceWith('\n'); });
+    copy.querySelectorAll('p, div, li').forEach(function (node) { node.append('\n'); });
+    var values = copy.textContent.split(/\r\n?|\n/).map(function (value) { return value.trim(); }).filter(Boolean);
+    if (!values.length) { source.closest('.ft-info-block').hidden = true; return; }
+    var list = document.createElement('ul');
+    list.className = 'ft-info-list';
+    values.forEach(function (value) {
+      var item = document.createElement('li');
+      item.textContent = value;
+      list.append(item);
+    });
+    source.replaceChildren(list);
+  });
+  root.querySelectorAll('.ft-info-block, .ft-back-meta-item').forEach(function (block) {
+    var content = block.querySelector('.ft-info-content, .ft-info-array') || block;
+    if (!content.textContent.trim() && !content.querySelector('audio, img, video')) block.hidden = true;
+  });
+  root.querySelectorAll('.ft-info-grid').forEach(function (grid) {
+    if (!grid.querySelector('.ft-info-block:not([hidden])')) grid.hidden = true;
+  });
+  var hero = root.querySelector('.ft-back-hero');
+  if (!hero.textContent.trim()) hero.hidden = true;
+  root.querySelectorAll('audio').forEach(function (audio) {
+    audio.removeAttribute('autoplay');
+    audio.preload = 'none';
+  });
+})();
+</script>

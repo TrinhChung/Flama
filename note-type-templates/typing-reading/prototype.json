@@ -1,0 +1,178 @@
+{
+  "slug": "typing-reading",
+  "version": "1.0.0",
+  "saved_at": "2026-10-11",
+  "source": {
+    "kind": "authored",
+    "design_system": "../../DESIGN.md",
+    "reference_templates": [
+      "flama-default",
+      "advanced-vocabulary-card",
+      "grammar-literary-quotes-card"
+    ]
+  },
+  "note_type": {
+    "name": "Gõ cách đọc",
+    "description": "Nhìn từ, gõ kana, pinyin hoặc phiên âm; mặt sau xem nghĩa và ví dụ.",
+    "field_defs": [
+      {
+        "name": "PromptText",
+        "field_type": "text",
+        "position": 0,
+        "required": true
+      },
+      {
+        "name": "Answer",
+        "field_type": "array",
+        "position": 1,
+        "required": true
+      },
+      {
+        "name": "Meaning",
+        "field_type": "array",
+        "position": 2,
+        "required": false
+      },
+      {
+        "name": "Explanation",
+        "field_type": "richtext",
+        "position": 3,
+        "required": false
+      },
+      {
+        "name": "Example",
+        "field_type": "richtext",
+        "position": 4,
+        "required": false
+      },
+      {
+        "name": "ExampleTranslation",
+        "field_type": "richtext",
+        "position": 5,
+        "required": false
+      },
+      {
+        "name": "Audio",
+        "field_type": "audio",
+        "position": 6,
+        "required": false
+      }
+    ]
+  },
+  "template": {
+    "name": "Gõ cách đọc",
+    "description": "Nhìn từ, gõ kana, pinyin hoặc phiên âm; mặt sau xem nghĩa và ví dụ.",
+    "input_schema": [
+      {
+        "key": "PromptText",
+        "label": "Từ / cụm từ",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "Answer",
+        "label": "Cách đọc cần gõ",
+        "type": "array",
+        "required": true
+      },
+      {
+        "key": "Meaning",
+        "label": "Nghĩa ngắn gọn · mặt sau",
+        "type": "array",
+        "required": false
+      },
+      {
+        "key": "Explanation",
+        "label": "Giải thích nghĩa · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Example",
+        "label": "Ví dụ · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "ExampleTranslation",
+        "label": "Bản dịch ví dụ · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Audio",
+        "label": "Phát âm · chỉ ở mặt sau",
+        "type": "audio",
+        "required": false
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "PromptText": "PromptText",
+    "Answer": "Answer",
+    "Meaning": "Meaning",
+    "Explanation": "Explanation",
+    "Example": "Example",
+    "ExampleTranslation": "ExampleTranslation",
+    "Audio": "Audio"
+  },
+  "example_field_values": {
+    "PromptText": "食べる",
+    "Answer": "たべる",
+    "Meaning": "ăn",
+    "Explanation": "<p>食べ物を口に入れる。</p>",
+    "Example": "<p>毎日、朝ご飯を食べます。</p>",
+    "ExampleTranslation": "<p>Mỗi ngày tôi ăn sáng.</p>",
+    "Audio": null
+  },
+  "examples": [
+    {
+      "name": "Tiếng Nhật · Flama Default",
+      "source": "flama-default",
+      "bindings": {
+        "PromptText": "word",
+        "Answer": "reading",
+        "Meaning": "translation_vi",
+        "Explanation": "meaning_vi",
+        "Example": "example_jp",
+        "ExampleTranslation": "example_vi",
+        "Audio": "word_audio"
+      }
+    },
+    {
+      "name": "Tiếng Anh · Advanced Vocabulary",
+      "source": "advanced-vocabulary-card",
+      "bindings": {
+        "PromptText": "Vocabulary",
+        "Answer": "Pronunciation",
+        "Meaning": "Meaning",
+        "Example": "Example",
+        "ExampleTranslation": "Example_VI",
+        "Audio": "Vocabulary_Audio"
+      }
+    },
+    {
+      "name": "Tiếng Trung",
+      "bindings": {
+        "PromptText": "Hanzi",
+        "Answer": "Pinyin",
+        "Meaning": "Meaning"
+      }
+    }
+  ],
+  "behavior": {
+    "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
+    "accepted_answers": "One answer per non-empty line; array and text fields are compatible. Flama array storage is newline-delimited text.",
+    "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
+    "character_count": "Unicode grapheme clusters excluding whitespace; rounded tiles grouped by words.",
+    "hints": "Reveal a character per click, leaving the last hidden.",
+    "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
+    "back": "Reference information only: no correctness verdict. Every optional block is independent.",
+    "grading": "Flip the card and choose the study rating."
+  }
+}

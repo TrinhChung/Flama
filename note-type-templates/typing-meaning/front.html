@@ -1,0 +1,230 @@
+<div class="ft-card" data-mode="meaning">
+  <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 12h.01M11 12h.01M15 12h.01M7 15h10"></path></svg></span><span>Gõ nghĩa</span></div>
+  <div class="ft-stimulus">
+    {{#PromptText}}<div class="ft-prompt-text">{{PromptText}}</div>{{/PromptText}}
+    <p class="ft-instruction">Gõ nghĩa của từ này.</p>
+  </div>
+  <div class="ft-guide">
+    <div class="ft-guide-heading"><span class="ft-guide-label">Độ dài đáp án</span><span class="ft-length"></span></div>
+    <div class="ft-slots" role="group"></div>
+  </div>
+  <div class="ft-entry">
+    <label class="ft-label" for="ft-input">Đáp án của bạn</label>
+    <div class="ft-input-wrap"><input class="ft-input" id="ft-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <span class="ft-entry-help" id="ft-entry-help">Nhấn Enter hoặc Kiểm tra khi bạn đã sẵn sàng.</span>
+    <div class="ft-actions">
+      <button class="ft-button ft-hint" type="button"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Mở gợi ý</span></button>
+      <button class="ft-button ft-check" type="button"><span>Kiểm tra</span><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"></path></svg></button>
+    </div>
+    <div class="ft-status" id="ft-status" role="status" aria-live="polite"></div>
+  </div>
+  <div class="ft-empty" hidden>Chưa có đáp án cho thẻ này.</div>
+  <div class="ft-answer-source" hidden>{{Answer}}</div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var root = document.querySelector('.ft-card');
+  if (!root) return;
+  var find = function (selector) { return root.querySelector(selector); };
+  var input = find('.ft-input');
+  var form = find('.ft-entry');
+  var status = find('.ft-status');
+  var slots = find('.ft-slots');
+  var guide = find('.ft-guide');
+  var length = find('.ft-length');
+  var hint = find('.ft-hint');
+  var checkButton = find('.ft-check');
+  var composing = false;
+  var revealed = 0;
+  var solved = false;
+
+  function normalize(text) {
+    return String(text || '').normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim();
+  }
+  function comparable(text) { return normalize(text).toLowerCase(); }
+  function lines(element) {
+    if (!element) return [];
+    var copy = element.cloneNode(true);
+    copy.querySelectorAll('br').forEach(function (node) { node.replaceWith('\n'); });
+    copy.querySelectorAll('p, div, li').forEach(function (node) { node.append('\n'); });
+    return copy.textContent.split(/\r\n?|\n/).map(normalize).filter(Boolean);
+  }
+  function characters(text) {
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+      return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), function (part) {
+        return part.segment;
+      });
+    }
+    return Array.from(text.normalize('NFC'));
+  }
+  var answers = lines(find('.ft-answer-source'));
+  var first = characters(answers[0] || '');
+  var current = first;
+  var total = function (chars) { return chars.filter(function (ch) { return !/\s/.test(ch); }).length; };
+
+  // Fallback for older template sanitizers that removed the input tag.
+  if (!input) {
+    input = document.createElement('input');
+    input.className = 'ft-input';
+    input.id = 'ft-input';
+    input.type = 'text';
+    find('.ft-input-wrap').prepend(input);
+  }
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.setAttribute('autocapitalize', 'off');
+  input.setAttribute('aria-describedby', 'ft-status ft-entry-help');
+  var placeholders = { reading: 'Gõ cách đọc…', meaning: 'Gõ nghĩa của từ…', image: 'Gõ tên hình ảnh…', dictation: 'Gõ lại nội dung bạn vừa nghe…' };
+  input.placeholder = placeholders[root.getAttribute('data-mode')] || 'Nhập đáp án…';
+  checkButton.disabled = true;
+
+  function drawGuide() {
+    slots.replaceChildren();
+    var word = null;
+    var index = 0;
+    current.forEach(function (ch) {
+      if (/\s/.test(ch)) { word = null; return; }
+      if (!word) {
+        word = document.createElement('span');
+        word.className = 'ft-word';
+        slots.append(word);
+      }
+      var tile = document.createElement('span');
+      var open = solved || index < revealed;
+      tile.className = 'ft-slot' + (open ? ' is-revealed' : '') + (solved ? ' is-solved' : '');
+      tile.textContent = open ? ch : '';
+      tile.setAttribute('aria-hidden', 'true');
+      word.append(tile);
+      index += 1;
+    });
+    var count = total(current);
+    length.textContent = count + ' ký tự';
+    slots.setAttribute('aria-label', 'Đáp án có ' + count + ' ký tự' +
+      (revealed ? ', đã mở ' + revealed + ' ký tự gợi ý' : ''));
+    hint.disabled = solved || revealed >= Math.max(total(first) - 1, 0);
+  }
+  function setStatus(kind, message) {
+    form.classList.remove('is-correct', 'is-incorrect');
+    if (kind) form.classList.add('is-' + kind);
+    status.className = 'ft-status' + (kind ? ' is-' + kind : '');
+    status.textContent = message;
+    input.setAttribute('aria-invalid', kind === 'incorrect' ? 'true' : 'false');
+  }
+  function check() {
+    if (composing) return;
+    var typed = comparable(input.value);
+    if (!typed) { input.focus(); return; }
+    var matched = answers.find(function (answer) { return comparable(answer) === typed; });
+    if (matched !== undefined) {
+      solved = true;
+      current = characters(matched);
+      setStatus('correct', 'Chính xác! Bạn đã gõ đúng đáp án.');
+      drawGuide();
+    } else {
+      solved = false;
+      current = first;
+      setStatus('incorrect', 'Chưa đúng. Thử lại hoặc mở thêm một gợi ý nhé.');
+      drawGuide();
+      input.focus();
+      input.select();
+    }
+  }
+  input.addEventListener('compositionstart', function () { composing = true; });
+  input.addEventListener('compositionend', function () {
+    composing = false;
+    checkButton.disabled = !comparable(input.value);
+  });
+  input.addEventListener('input', function () {
+    if (solved) { solved = false; current = first; drawGuide(); }
+    setStatus('', '');
+    checkButton.disabled = !comparable(input.value);
+  });
+  input.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' || event.isComposing || composing || event.keyCode === 229) return;
+    event.preventDefault();
+    check();
+  });
+  checkButton.addEventListener('click', check);
+  hint.addEventListener('click', function () {
+    if (revealed < Math.max(total(first) - 1, 0)) revealed += 1;
+    current = first;
+    drawGuide();
+    input.focus();
+  });
+
+  var text = find('.ft-prompt-text');
+  if (text && !text.textContent.trim()) text.hidden = true;
+  var picture = find('.ft-prompt-image');
+  if (picture && !picture.querySelector('img')) picture.hidden = true;
+
+  // Audio only starts on a learner click. Multiple clips play in order.
+  var audioPanel = find('.ft-audio');
+  if (audioPanel) {
+    var tracks = Array.from(audioPanel.querySelectorAll('audio'));
+    var play = audioPanel.querySelector('.ft-play');
+    var playLabel = audioPanel.querySelector('.ft-play-label');
+    var audioStatus = audioPanel.querySelector('.ft-audio-status');
+    var playing = false;
+    var trackIndex = 0;
+    var attempt = 0;
+    var played = false;
+    function idle() {
+      playing = false;
+      audioPanel.classList.remove('is-playing');
+      play.setAttribute('aria-pressed', 'false');
+      playLabel.textContent = played ? 'Nghe lại' : 'Nghe âm thanh';
+    }
+    function stop() {
+      attempt += 1;
+      tracks.forEach(function (track) { track.pause(); track.currentTime = 0; });
+      idle();
+    }
+    function startTrack() {
+      var ticket = attempt;
+      var track = tracks[trackIndex];
+      if (!track) { idle(); return; }
+      playing = true;
+      played = true;
+      audioPanel.classList.add('is-playing');
+      play.setAttribute('aria-pressed', 'true');
+      playLabel.textContent = 'Dừng âm thanh';
+      audioStatus.textContent = '';
+      function failed() {
+        if (ticket !== attempt) return;
+        idle();
+        audioStatus.textContent = 'Chưa phát được âm thanh. Nhấn nghe để thử lại.';
+      }
+      try { Promise.resolve(track.play()).catch(failed); } catch (error) { failed(); }
+    }
+    tracks.forEach(function (track, index) {
+      track.preload = 'none';
+      track.removeAttribute('autoplay');
+      track.addEventListener('ended', function () {
+        if (!playing || index !== trackIndex) return;
+        if (trackIndex < tracks.length - 1) { trackIndex += 1; startTrack(); }
+        else idle();
+      });
+      track.addEventListener('error', function () {
+        if (!playing || index !== trackIndex) return;
+        stop();
+        audioStatus.textContent = 'Chưa tải được âm thanh. Nhấn nghe để thử lại.';
+      });
+    });
+    play.addEventListener('click', function () {
+      if (playing) { stop(); return; }
+      attempt += 1;
+      trackIndex = 0;
+      tracks.forEach(function (track) { track.currentTime = 0; });
+      startTrack();
+    });
+    if (!tracks.length) audioPanel.hidden = true;
+  }
+  if (!answers.length) {
+    form.hidden = true;
+    guide.hidden = true;
+    find('.ft-empty').hidden = false;
+  }
+  drawGuide();
+})();
+</script>

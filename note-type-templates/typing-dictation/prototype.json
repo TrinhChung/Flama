@@ -1,0 +1,135 @@
+{
+  "slug": "typing-dictation",
+  "version": "1.0.0",
+  "saved_at": "2026-10-11",
+  "source": {
+    "kind": "authored",
+    "design_system": "../../DESIGN.md",
+    "reference_templates": [
+      "flama-default",
+      "advanced-vocabulary-card",
+      "grammar-literary-quotes-card"
+    ]
+  },
+  "note_type": {
+    "name": "Gõ chép chính tả",
+    "description": "Nhấn nghe và chép lại; mặt sau đọc bản dịch và ghi chú nếu có.",
+    "field_defs": [
+      {
+        "name": "Audio",
+        "field_type": "audio",
+        "position": 0,
+        "required": true
+      },
+      {
+        "name": "Answer",
+        "field_type": "array",
+        "position": 1,
+        "required": true
+      },
+      {
+        "name": "Translation",
+        "field_type": "richtext",
+        "position": 2,
+        "required": false
+      },
+      {
+        "name": "Notes",
+        "field_type": "richtext",
+        "position": 3,
+        "required": false
+      },
+      {
+        "name": "BackImage",
+        "field_type": "image",
+        "position": 4,
+        "required": false
+      }
+    ]
+  },
+  "template": {
+    "name": "Gõ chép chính tả",
+    "description": "Nhấn nghe và chép lại; mặt sau đọc bản dịch và ghi chú nếu có.",
+    "input_schema": [
+      {
+        "key": "Audio",
+        "label": "Âm thanh cần nghe",
+        "type": "audio",
+        "required": true
+      },
+      {
+        "key": "Answer",
+        "label": "Nội dung cần chép",
+        "type": "array",
+        "required": true
+      },
+      {
+        "key": "Translation",
+        "label": "Bản dịch · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Notes",
+        "label": "Ghi chú · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "BackImage",
+        "label": "Ảnh minh họa · mặt sau",
+        "type": "image",
+        "required": false
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "Audio": "Audio",
+    "Answer": "Answer",
+    "Translation": "Translation",
+    "Notes": "Notes",
+    "BackImage": "BackImage"
+  },
+  "example_field_values": {
+    "Audio": null,
+    "Answer": "I learn something new every day.",
+    "Translation": "<p>Tôi học một điều mới mỗi ngày.</p>",
+    "Notes": "<p><strong>Something new</strong>: một điều mới.</p>",
+    "BackImage": null
+  },
+  "examples": [
+    {
+      "name": "Nghe câu",
+      "bindings": {
+        "Audio": "Audio",
+        "Answer": "Transcript",
+        "Translation": "Translation",
+        "Notes": "Notes"
+      }
+    },
+    {
+      "name": "Nghe từ · Flama Default",
+      "source": "flama-default",
+      "bindings": {
+        "Audio": "word_audio",
+        "Answer": "word",
+        "Translation": "meaning_vi"
+      }
+    }
+  ],
+  "behavior": {
+    "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
+    "accepted_answers": "One answer per non-empty line; array and text fields are compatible. Flama array storage is newline-delimited text.",
+    "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
+    "character_count": "Unicode grapheme clusters excluding whitespace; rounded tiles grouped by words.",
+    "hints": "Reveal a character per click, leaving the last hidden.",
+    "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
+    "back": "Reference information only: no correctness verdict. Every optional block is independent.",
+    "grading": "Flip the card and choose the study rating."
+  }
+}
