@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import { Search, Sliders, Trash2, Plus, AlertTriangle } from 'lucide-react'
+import { Search, Sliders, Trash2, Plus, AlertTriangle, AlignLeft, Code } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
 export interface BrowseToolbarProps {
@@ -22,6 +22,8 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
     selectedDeck,
     bulkDeleteMutation,
     handleStartCreateCard,
+    arrayViewMode,
+    setArrayViewMode,
   } = browse
 
   return (
@@ -48,6 +50,36 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
           <Plus className="size-3.5" />
           <span>{t('toolbar.add_card')}</span>
         </Button>
+
+        {/* View Mode Toggle: Normal vs Code (Array) */}
+        <div className="flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs shrink-0">
+          <button
+            type="button"
+            onClick={() => setArrayViewMode('normal')}
+            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+              arrayViewMode === 'normal'
+                ? 'bg-background text-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title={t('toolbar.view_mode_normal_tooltip', 'Chế độ xem thường')}
+          >
+            <AlignLeft className="size-3" />
+            <span className="hidden sm:inline">{t('toolbar.view_mode_normal', 'Thường')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setArrayViewMode('code')}
+            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+              arrayViewMode === 'code'
+                ? 'bg-background text-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title={t('toolbar.view_mode_code_tooltip', 'Chế độ xem code mảng (Array JSON)')}
+          >
+            <Code className="size-3" />
+            <span className="hidden sm:inline">{t('toolbar.view_mode_code', 'Code')}</span>
+          </button>
+        </div>
 
         {/* Status filter dropdown mapping */}
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold">

@@ -58,7 +58,11 @@
     "template_badge": "Mẫu: {{name}}",
     "selected_cards_count": "Đã chọn: {{count}} thẻ",
     "delete_selected": "Xóa {{count}} thẻ",
-    "confirm_bulk_delete": "Bạn có chắc chắn muốn xóa vĩnh viễn {{count}} thẻ đã chọn?"
+    "confirm_bulk_delete": "Bạn có chắc chắn muốn xóa vĩnh viễn {{count}} thẻ đã chọn?",
+    "view_mode_normal": "Thường",
+    "view_mode_code": "Code",
+    "view_mode_normal_tooltip": "Chế độ xem thường",
+    "view_mode_code_tooltip": "Chế độ xem code mảng (Array JSON)"
   },
   "card_table": {
     "searching": "Đang tìm thẻ...",
@@ -120,7 +124,14 @@
     "cancel": "Hủy",
     "save_card": "Lưu thẻ",
     "delete_card": "Xóa thẻ vĩnh viễn",
-    "confirm_delete": "Bạn có chắc chắn muốn xóa vĩnh viễn thẻ này? Thao tác này không thể hoàn tác."
+    "confirm_delete": "Bạn có chắc chắn muốn xóa vĩnh viễn thẻ này? Thao tác này không thể hoàn tác.",
+    "view_mode_normal": "Thường",
+    "view_mode_code": "Code",
+    "view_mode_normal_tooltip": "Chế độ xem thường (mỗi dòng một phần tử)",
+    "view_mode_code_tooltip": "Chế độ xem code mảng JSON",
+    "switch_to_code": "Chuyển sang xem code",
+    "switch_to_normal": "Chuyển sang xem thường",
+    "invalid_array_json": "Cú pháp JSON Array không hợp lệ (ví dụ: [\"mục 1\", \"mục 2\"])"
   },
   "stroke_modal": {
     "title": "Tạo sơ đồ thứ tự nét Kanji & Hanzi",

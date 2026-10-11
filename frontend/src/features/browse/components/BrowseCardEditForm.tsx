@@ -1,5 +1,5 @@
 import '@/shared/config/i18n'
-import type React from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  AlignLeft,
+  Code,
   LoaderCircle,
   PenTool,
   Plus,
@@ -18,7 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { fieldValueEditorText, isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
-import { MediaFieldPreview } from './MediaFieldPreview'
+import { MediaFieldPreview, ArrayFieldInput, type ArrayViewMode } from '@/entities/flashcard'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
@@ -62,6 +64,14 @@ export function BrowseCardEditForm({
   } = browse
 
   const detail = cardDetailQuery.data
+  const [editorArrayMode, setEditorArrayMode] = useState<ArrayViewMode>(browse.arrayViewMode || 'normal')
+
+  useEffect(() => {
+    if (browse.arrayViewMode) {
+      setEditorArrayMode(browse.arrayViewMode)
+    }
+  }, [browse.arrayViewMode])
+
   if (!detail) return null
 
   const deckList = detail.decks || decksQuery.data?.decks || []
@@ -104,6 +114,42 @@ export function BrowseCardEditForm({
           <span className="text-xs font-bold text-foreground">{t('editor.note_detail_title')}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          {/* View mode toggle: Normal lines vs Code (Array) */}
+          <div className="flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setEditorArrayMode('normal')
+                browse.setArrayViewMode('normal')
+              }}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                editorArrayMode === 'normal'
+                  ? 'bg-background text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title={t('editor.view_mode_normal_tooltip', 'Chế độ xem thường')}
+            >
+              <AlignLeft className="size-3" />
+              <span className="hidden sm:inline">{t('editor.view_mode_normal', 'Thường')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditorArrayMode('code')
+                browse.setArrayViewMode('code')
+              }}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                editorArrayMode === 'code'
+                  ? 'bg-background text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title={t('editor.view_mode_code_tooltip', 'Chế độ xem code mảng JSON')}
+            >
+              <Code className="size-3" />
+              <span className="hidden sm:inline">{t('editor.view_mode_code', 'Code')}</span>
+            </button>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -173,8 +219,22 @@ export function BrowseCardEditForm({
             )
           }
 
-          const isArray = isArrayField(ft)
-          const isMultiline = isArray || val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
+          if (isArrayField(ft)) {
+            return (
+              <ArrayFieldInput
+                key={field.name}
+                fieldName={field.name}
+                value={editFieldValues[field.name]}
+                onChange={(v) =>
+                  setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
+                }
+                required={field.required}
+                mode={editorArrayMode}
+              />
+            )
+          }
+
+          const isMultiline = val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
 
           return (
             <div key={field.name} className="space-y-1.5">
@@ -187,7 +247,6 @@ export function BrowseCardEditForm({
                   onChange={(e) =>
                     setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
                   }
-                  placeholder={isArray ? t('editor.array_placeholder') : undefined}
                   className="min-h-20 text-xs sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50"
                 />
               ) : (

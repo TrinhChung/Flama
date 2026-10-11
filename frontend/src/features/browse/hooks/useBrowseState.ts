@@ -328,6 +328,7 @@ export function useBrowseState() {
   const [editDeckId, setEditDeckId] = useState<number | null>(null)
   const [editTags, setEditTags] = useState<string[]>([])
   const [newTagInput, setNewTagInput] = useState('')
+  const [arrayViewMode, setArrayViewMode] = useState<'normal' | 'code'>('normal')
 
   // Initial Snapshot for Dirty Tracking
   const [initialFieldValues, setInitialFieldValues] = useState<Record<string, string>>({})
@@ -1050,5 +1051,7 @@ export function useBrowseState() {
     handleResetTtsDefaults,
     saveApiKeyIfValid,
     cards,
+    arrayViewMode,
+    setArrayViewMode,
   }
 }

@@ -87,7 +87,11 @@
     "save_changes": "Save Changes",
     "save_tooltip": "Save changes (Ctrl+Enter)",
     "saved_success": "Card changes saved successfully.",
-    "save_error": "Could not save card"
+    "save_error": "Could not save card",
+    "view_mode_normal": "Normal",
+    "view_mode_code": "Code",
+    "view_mode_normal_tooltip": "Normal view (one item per line)",
+    "view_mode_code_tooltip": "JSON array code view"
   },
   "edit_modal": {
     "title": "Edit Card",

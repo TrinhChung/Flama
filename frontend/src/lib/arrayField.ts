@@ -53,8 +53,24 @@ export function isArrayField(fieldType: string | null | undefined): boolean {
   return (fieldType || '').toLowerCase() === ARRAY_FIELD_TYPE
 }
 
-/** Trim lines and drop empty ones. An array keeps order and repeated items. */
+/** Trim lines and drop empty ones. An array keeps order and repeated items. Also parses JSON array if supplied. */
 export function normalizeArrayValue(value: string): string {
+  if (typeof value !== 'string' || !value) return ''
+  const trimmed = value.trim()
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => (typeof item === 'string' ? item : String(item)).normalize('NFC').replace(/\s+/g, ' ').trim())
+          .filter(Boolean)
+          .join('\n')
+      }
+    } catch {
+      // not valid JSON, fall back to line splitting
+    }
+  }
+
   const lines: string[] = []
   for (const raw of value.split(/\r\n|\r|\n/)) {
     const line = raw.normalize('NFC').replace(/\s+/g, ' ').trim()
@@ -62,6 +78,60 @@ export function normalizeArrayValue(value: string): string {
     lines.push(line)
   }
   return lines.join('\n')
+}
+
+/** Check if text is a valid JSON array syntax */
+export function isValidArrayJson(text: string): boolean {
+  if (typeof text !== 'string') return false
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return false
+  try {
+    const parsed = JSON.parse(trimmed)
+    return Array.isArray(parsed)
+  } catch {
+    return false
+  }
+}
+
+/** Extract list of string items from any array representation (lines, list, or JSON code) */
+export function parseArrayItems(input: unknown): string[] {
+  if (Array.isArray(input)) {
+    return input.map((item) => (typeof item === 'string' ? item.trim() : fieldValueEditorText(item))).filter(Boolean)
+  }
+  if (typeof input !== 'string' || !input) return []
+  const trimmed = input.trim()
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => (typeof item === 'string' ? item.trim() : String(item).trim())).filter(Boolean)
+      }
+    } catch {
+      // not valid JSON, fall back to line splitting
+    }
+  }
+  const lines: string[] = []
+  for (const raw of trimmed.split(/\r\n|\r|\n/)) {
+    const line = raw.normalize('NFC').replace(/\s+/g, ' ').trim()
+    if (!line) continue
+    lines.push(line)
+  }
+  return lines
+}
+
+/** Convert array field value (lines or list) into formatted JSON array code string */
+export function arrayLinesToCode(value: unknown, multiline = true): string {
+  const items = parseArrayItems(value)
+  if (items.length === 0) return '[]'
+  return multiline && items.length > 1
+    ? JSON.stringify(items, null, 2)
+    : JSON.stringify(items)
+}
+
+/** Convert JSON array code string to lines format */
+export function arrayCodeToLines(codeText: string): string {
+  const items = parseArrayItems(codeText)
+  return items.join('\n')
 }
 
 /** Normalize only the values of `array` fields; other fields pass through untouched. */
@@ -77,3 +147,4 @@ export function normalizeArrayFieldValues<T extends Record<string, string>>(
   }
   return next as T
 }
+

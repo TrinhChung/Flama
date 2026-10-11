@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { ArrowUpDown } from 'lucide-react'
+import { isValidArrayJson } from '@/lib/arrayField'
 import type { useBrowseState } from '../hooks/useBrowseState'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import { BrowsePagination } from './BrowsePagination'
@@ -34,6 +35,7 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
     setSortBy,
     sortDir,
     setSortDir,
+    arrayViewMode,
   } = browse
 
   const tableContainerRef = useRef<HTMLDivElement>(null)
@@ -147,7 +149,19 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
                     </TableCell>
                     <TableCell className="font-semibold text-foreground truncate max-w-48">{card.word}</TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-48">{card.reading}</TableCell>
-                    <TableCell className="text-muted-foreground truncate max-w-72 leading-relaxed">{card.meaning}</TableCell>
+                    <TableCell className="text-muted-foreground truncate max-w-72 leading-relaxed">
+                      {arrayViewMode === 'code' ? (
+                        <code className="font-mono text-[11px] text-primary/90 bg-muted/60 px-1.5 py-0.5 rounded border border-border/40 inline-block truncate max-w-full">
+                          {card.meaning ? (
+                            isValidArrayJson(card.meaning)
+                              ? card.meaning
+                              : JSON.stringify(card.meaning.split(/\s*;\s*|\n+/).filter(Boolean))
+                          ) : '[]'}
+                        </code>
+                      ) : (
+                        card.meaning
+                      )}
+                    </TableCell>
                     <TableCell className="text-center">
                       <Badge variant={statusVariant(card.status)} className="text-[10px] px-1.5 py-0 font-medium">
                         {statusLabel(card.status)}
