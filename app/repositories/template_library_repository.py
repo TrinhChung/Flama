@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import defer, joinedload, undefer
+from sqlalchemy.orm import defer, joinedload, selectinload, undefer
 from models.card import Card
 from models.note import Note
 from models.note_type import NoteType
@@ -84,7 +84,10 @@ def applications(session, note_type_id, *, include_retired=False):
     statement = select(StudyApplication).where(StudyApplication.note_type_id == str(note_type_id))
     if not include_retired:
         statement = statement.where(StudyApplication.status_code == "ACTIVE")
-    return session.execute(statement.options(joinedload(StudyApplication.template)).order_by(StudyApplication.position, StudyApplication.id)).scalars().all()
+    return session.execute(statement.options(
+        joinedload(StudyApplication.template),
+        joinedload(StudyApplication.note_type).selectinload(NoteType.field_defs),
+    ).order_by(StudyApplication.position, StudyApplication.id)).scalars().all()
 
 
 def active_card_condition():

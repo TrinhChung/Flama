@@ -82,7 +82,7 @@ class ContentApiError(ValueError):
 from sqlalchemy.orm import selectinload
 
 
-def list_note_types(*, user_id: int) -> dict[str, Any]:
+def list_note_types(*, user_id: int, compact: bool = False) -> dict[str, Any]:
     installed_ids = [
         r[0]
         for r in db.session.query(NoteTypeInstall.installed_note_type_id)
@@ -90,20 +90,43 @@ def list_note_types(*, user_id: int) -> dict[str, Any]:
         .all()
         if r[0]
     ]
-    rows = (
-        NoteType.query.filter(
-            (NoteType.user_id == user_id)
-            | (NoteType.id.in_(installed_ids))
-        )
-        .options(
-            selectinload(NoteType.field_defs),
-            selectinload(NoteType.templates),
-            selectinload(NoteType.owner),
-        )
-        .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
-        .all()
+    query = NoteType.query.filter(
+        (NoteType.user_id == user_id)
+        | (NoteType.id.in_(installed_ids))
     )
+    if compact:
+        rows = (
+            query.options(selectinload(NoteType.field_defs))
+            .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
+            .all()
+        )
+    else:
+        rows = (
+            query.options(
+                selectinload(NoteType.field_defs),
+                selectinload(NoteType.templates),
+                selectinload(NoteType.owner),
+            )
+            .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
+            .all()
+        )
     installed_id_set = {str(note_type_id) for note_type_id in installed_ids}
+    if compact:
+        return {
+            "items": [
+                {
+                    "id": row.id,
+                    "name": row.name,
+                    "title": row.name,
+                    "is_marketplace_install": str(row.id) in installed_id_set,
+                    "field_defs": [
+                        marketplace_query_service.serialize_field(field)
+                        for field in sorted(row.field_defs, key=lambda item: item.position)
+                    ],
+                }
+                for row in rows
+            ]
+        }
     return {
         "items": [
             {

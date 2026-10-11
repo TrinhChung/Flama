@@ -62,7 +62,7 @@ describe('AttachTemplateDialog', () => {
     fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST') return post(JSON.parse(String(init.body)))
       if (String(url).includes('template-applications')) return json({ schema_version: 'template-applications.v2', items: existing })
-      if (String(url) === '/api/note-types') return json(noteTypes)
+      if (String(url) === '/api/note-types' || String(url).startsWith('/api/note-types?')) return json(noteTypes)
       if (String(url).includes('/api/card-templates/template%2Fshared')) return detailFailure
         ? json({ error: 'FAILED', message: 'Không tải được thiết kế.' }, 500) : json(template)
       return json({ schema_version: 'template-library.v2', items: [template, { ...template, id: 'archived', name: 'Archived', archived_at: '2026-10-08' }] })
