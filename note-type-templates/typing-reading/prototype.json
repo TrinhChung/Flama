@@ -1,6 +1,6 @@
 {
   "slug": "typing-reading",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -56,6 +56,30 @@
         "field_type": "audio",
         "position": 6,
         "required": false
+      },
+      {
+        "name": "ExampleAudio",
+        "field_type": "audio",
+        "position": 7,
+        "required": false
+      },
+      {
+        "name": "Usage",
+        "field_type": "richtext",
+        "position": 8,
+        "required": false
+      },
+      {
+        "name": "UsageTranslation",
+        "field_type": "richtext",
+        "position": 9,
+        "required": false
+      },
+      {
+        "name": "Notes",
+        "field_type": "richtext",
+        "position": 10,
+        "required": false
       }
     ]
   },
@@ -101,8 +125,32 @@
       },
       {
         "key": "Audio",
-        "label": "Phát âm · chỉ ở mặt sau",
+        "label": "Phát âm từ · tự phát ở mặt sau",
         "type": "audio",
+        "required": false
+      },
+      {
+        "key": "ExampleAudio",
+        "label": "Âm thanh ví dụ · tự phát ở mặt sau",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "Usage",
+        "label": "Cách sử dụng · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "UsageTranslation",
+        "label": "Giải thích cách dùng · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Notes",
+        "label": "Ghi chú · mặt sau",
+        "type": "richtext",
         "required": false
       }
     ],
@@ -119,7 +167,11 @@
     "Explanation": "Explanation",
     "Example": "Example",
     "ExampleTranslation": "ExampleTranslation",
-    "Audio": "Audio"
+    "Audio": "Audio",
+    "ExampleAudio": "ExampleAudio",
+    "Usage": "Usage",
+    "UsageTranslation": "UsageTranslation",
+    "Notes": "Notes"
   },
   "example_field_values": {
     "PromptText": "食べる",
@@ -128,7 +180,11 @@
     "Explanation": "<p>食べ物を口に入れる。</p>",
     "Example": "<p>毎日、朝ご飯を食べます。</p>",
     "ExampleTranslation": "<p>Mỗi ngày tôi ăn sáng.</p>",
-    "Audio": null
+    "Audio": null,
+    "ExampleAudio": null,
+    "Usage": null,
+    "UsageTranslation": null,
+    "Notes": null
   },
   "examples": [
     {
@@ -141,7 +197,11 @@
         "Explanation": "meaning_vi",
         "Example": "example_jp",
         "ExampleTranslation": "example_vi",
-        "Audio": "word_audio"
+        "Audio": "word_audio",
+        "ExampleAudio": "example_audio",
+        "Usage": "usage_jp",
+        "UsageTranslation": "usage_vi",
+        "Notes": "additional_note_jp"
       }
     },
     {
@@ -153,7 +213,8 @@
         "Meaning": "Meaning",
         "Example": "Example",
         "ExampleTranslation": "Example_VI",
-        "Audio": "Vocabulary_Audio"
+        "Audio": "Vocabulary_Audio",
+        "ExampleAudio": "Example_Audio"
       }
     },
     {
@@ -171,7 +232,7 @@
     "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
     "character_count": "Unicode grapheme clusters excluding whitespace. Short answers have tiles grouped by words and a word count. Any alternative over 32 characters or 6 whitespace-separated words switches to one compact guide and a bounded textarea.",
     "hints": "Short answers reveal one Unicode grapheme per click through the final character. Long answers reveal eight at a time until the entire first answer is visible in a bounded scrolling guide, without creating character tiles. Disable the hint button only after the full reveal or a correct answer; remove the trailing ellipsis on full reveal.",
-    "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
+    "audio": "Front stays click-to-play. On each back render, play Audio first, then ExampleAudio once after a 500 ms pause. If Audio is absent, play ExampleAudio directly. Replay buttons play only the chosen field; a manual click cancels the automatic sequence. Multiple clips in a field play in order. Missing/invalid inputs hide their button; blocked playback shows a manual replay hint. Stop clips and pending playback when the card leaves the page or the document is hidden.",
     "back": "Uses the same card width, padding, mode heading and prompt/media geometry as the front. Keep the prompt or image in place; put the answer next, then immediately related reading/meaning/translation, followed by explanations, paired examples and notes. Dictation repeats the front audio button and compact borderless word typography. Optional empty inputs hide independently; no correctness verdict.",
     "grading": "Flip the card and choose the study rating.",
     "keyboard": "Short input: Enter checks. Long textarea: Enter adds a line; Ctrl/Command+Enter checks. IME composition never submits. Typed line breaks normalize to spaces."
@@ -180,10 +241,19 @@
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "5c460ccb-5714-48ac-830b-1f74cc611bee",
-    "current_version_id": "c908f726-fd48-4b48-a187-bd604b20b805",
+    "current_version_id": "32a10955-498e-41e1-9783-d5c0c1c6d74a",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 6
+    "version_no": 7
+  },
+  "production_installation": {
+    "database_name": "flama",
+    "owner_user_id": 1,
+    "template_id": "5c460ccb-5714-48ac-830b-1f74cc611bee",
+    "current_version_id": "86f9b622-ae9e-4b56-83bb-bb41840ec87b",
+    "version_no": 2,
+    "updated_at": "2026-10-11",
+    "primary_category": "Luyện gõ"
   }
 }

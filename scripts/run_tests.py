@@ -424,6 +424,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/components/StudyQuickEditDialog.test.tsx",
             "src/lib/arrayField.test.ts",
             "src/entities/flashcard/lib/arrayTemplates.test.ts",
+            "src/entities/flashcard/lib/typingTemplates.test.ts",
             "src/features/note-types/lib/arrayConversion.test.ts",
             "src/features/note-types/components/fields/FieldArrayConversionDialog.test.tsx",
         ]

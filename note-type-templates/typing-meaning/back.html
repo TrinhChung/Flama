@@ -1,7 +1,7 @@
 <div class="ft-card ft-back" data-mode="meaning">
   <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 12h.01M11 12h.01M15 12h.01M7 15h10"></path></svg></span><span>Gõ nghĩa</span></div>
   <div class="ft-stimulus">
-    <div class="ft-back-prompt">{{#PromptText}}<div class="ft-prompt-text">{{PromptText}}</div>{{/PromptText}}{{#Reading}}<div class="ft-back-meta ft-prompt-reading"><span class="ft-back-meta-item ft-inline-array" data-info="Reading">{{Reading}}</span></div>{{/Reading}}</div>
+    <div class="ft-back-prompt"><div class="ft-prompt-line">{{#PromptText}}<div class="ft-prompt-text">{{PromptText}}</div>{{/PromptText}}{{#Audio}}<div class="ft-info-block ft-inline-audio ft-primary-audio" data-info="Audio"><div class="ft-audio-source" hidden>{{{Audio}}}</div><button class="ft-audio-replay" type="button" aria-label="Nghe phát âm" title="Nghe phát âm" aria-pressed="false"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"></path></svg></button><span class="ft-replay-status" role="status" aria-live="polite"></span></div>{{/Audio}}</div>{{#Reading}}<div class="ft-back-meta ft-prompt-reading"><span class="ft-back-meta-item ft-inline-array" data-info="Reading">{{Reading}}</span></div>{{/Reading}}</div>
     {{#Answer}}<p class="ft-instruction">Nghĩa và cách dùng của từ.</p>{{/Answer}}
   </div>
   <div class="ft-review">
@@ -9,18 +9,27 @@
   </div>
   <div class="ft-back-content">
     {{#Explanation}}<div class="ft-info-block ft-info-definition" data-info="Explanation"><h2 class="ft-info-heading">Giải thích</h2><div class="ft-info-content">{{{Explanation}}}</div></div>{{/Explanation}}
+    <div class="ft-usage-group">
+    {{#Usage}}<div class="ft-info-block" data-info="Usage"><h2 class="ft-info-heading">Cách sử dụng</h2><div class="ft-info-content">{{{Usage}}}</div></div>{{/Usage}}
+    {{#UsageTranslation}}<div class="ft-info-block ft-info-secondary" data-info="UsageTranslation"><h2 class="ft-info-heading">Giải thích cách dùng</h2><div class="ft-info-content">{{{UsageTranslation}}}</div></div>{{/UsageTranslation}}
+    </div>
   <div class="ft-example-group">
-    {{#Example}}<div class="ft-info-block" data-info="Example"><h2 class="ft-info-heading">Ví dụ</h2><div class="ft-info-content">{{{Example}}}</div></div>{{/Example}}
+    <div class="ft-example-title"><h2 class="ft-info-heading">Ví dụ</h2>{{#ExampleAudio}}<div class="ft-info-block ft-inline-audio ft-example-audio" data-info="ExampleAudio"><div class="ft-audio-source" hidden>{{{ExampleAudio}}}</div><button class="ft-audio-replay" type="button" aria-label="Nghe ví dụ" title="Nghe ví dụ" aria-pressed="false"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"></path></svg></button><span class="ft-replay-status" role="status" aria-live="polite"></span></div>{{/ExampleAudio}}</div>
+    {{#Example}}<div class="ft-info-block" data-info="Example"><div class="ft-info-content">{{{Example}}}</div></div>{{/Example}}
     {{#ExampleTranslation}}<div class="ft-info-block" data-info="ExampleTranslation"><h2 class="ft-info-heading">Bản dịch ví dụ</h2><div class="ft-info-content">{{{ExampleTranslation}}}</div></div>{{/ExampleTranslation}}
   </div>
-  {{#Audio}}<div class="ft-info-block ft-info-audio" data-info="Audio"><h2 class="ft-info-heading">Nghe lại</h2><div class="ft-info-content">{{{Audio}}}</div></div>{{/Audio}}
+    {{#Notes}}<div class="ft-info-block" data-info="Notes"><h2 class="ft-info-heading">Ghi chú</h2><div class="ft-info-content">{{{Notes}}}</div></div>{{/Notes}}
+
   </div>
 </div>
 <script>
 (function () {
   'use strict';
-  var root = document.querySelector('.ft-back');
-  if (!root) return;
+  var script = document.currentScript;
+  var root = script && (script.closest('.ft-back') || script.previousElementSibling);
+  if (!root || !root.classList.contains('ft-back')) root = document.querySelector('.ft-back');
+  if (!root || root.dataset.backReady) return;
+  root.dataset.backReady = 'true';
 
   // Read the rendered array boundaries without re-parsing migrated delimiters.
   function readArray(source) {
@@ -71,7 +80,7 @@
     var content = block.querySelector('.ft-info-content, .ft-info-array') || block;
     if (!content.textContent.trim() && !content.querySelector('audio, img, video')) block.hidden = true;
   });
-  root.querySelectorAll('.ft-example-group, .ft-related, .ft-back-content, .ft-back-meta').forEach(function (group) {
+  root.querySelectorAll('.ft-example-group, .ft-usage-group, .ft-related, .ft-back-content, .ft-back-meta').forEach(function (group) {
     if (!group.querySelector('.ft-info-block:not([hidden]), .ft-back-meta-item:not([hidden])')) group.hidden = true;
   });
   root.querySelectorAll('.ft-back-prompt, .ft-stimulus').forEach(function (group) {
@@ -79,9 +88,118 @@
   });
   var review = root.querySelector('.ft-review');
   if (review && !review.querySelector('.ft-answer-panel:not([hidden]), .ft-info-block:not([hidden]), .ft-back-meta-item:not([hidden])')) review.hidden = true;
-  root.querySelectorAll('audio').forEach(function (audio) {
-    audio.removeAttribute('autoplay');
-    audio.preload = 'none';
+  // Flama Default order: primary audio, then example once after 500 ms.
+  // Keep this inside the template: all sources are already rendered media.
+  var panels = [];
+  var active = null;
+  var generation = 0;
+  var followTimer = null;
+  function cancelFollow() {
+    if (followTimer !== null) window.clearTimeout(followTimer);
+    followTimer = null;
+  }
+  function idle(panel) {
+    panel.element.classList.remove('is-playing');
+    panel.button.setAttribute('aria-pressed', 'false');
+    panel.button.setAttribute('aria-label', panel.label);
+    panel.button.title = panel.label;
+    if (panel.caption) panel.caption.textContent = 'Nghe lại';
+  }
+  function stopAll() {
+    generation += 1;
+    cancelFollow();
+    active = null;
+    panels.forEach(function (panel) {
+      panel.tracks.forEach(function (track) {
+        try { track.pause(); track.currentTime = 0; } catch (error) { /* Unloaded clip. */ }
+      });
+      idle(panel);
+    });
+  }
+  function start(panel, automatic) {
+    stopAll();
+    if (!panel || !root.isConnected || document.hidden) return;
+    var ticket = generation;
+    var index = 0;
+    active = panel;
+    panel.status.textContent = '';
+    function valid() { return ticket === generation && active === panel && root.isConnected; }
+    function failed() {
+      if (!valid()) return;
+      active = null;
+      generation += 1;
+      cancelFollow();
+      panel.tracks.forEach(function (track) { track.pause(); });
+      idle(panel);
+      panel.status.textContent = 'Nhấn nút nghe để thử lại.';
+    }
+    function next() {
+      if (!valid()) return;
+      var track = panel.tracks[index];
+      if (!track) {
+        active = null;
+        idle(panel);
+        if (automatic && panel.role === 'primary') {
+          var example = panels.find(function (item) { return item.role === 'example'; });
+          if (example) followTimer = window.setTimeout(function () {
+            followTimer = null;
+            if (ticket === generation && root.isConnected && !document.hidden) start(example, false);
+          }, 500);
+        }
+        return;
+      }
+      panel.element.classList.add('is-playing');
+      panel.button.setAttribute('aria-pressed', 'true');
+      panel.button.setAttribute('aria-label', 'Dừng âm thanh');
+      panel.button.title = 'Dừng âm thanh';
+      if (panel.caption) panel.caption.textContent = 'Dừng âm thanh';
+      // A replay starts a new run; the listeners do not accumulate.
+      track.onended = function () {
+        if (!valid() || panel.tracks[index] !== track) return;
+        index += 1;
+        next();
+      };
+      track.onerror = failed;
+      try { Promise.resolve(track.play()).catch(failed); } catch (error) { failed(); }
+    }
+    next();
+  }
+  root.querySelectorAll('.ft-primary-audio, .ft-example-audio').forEach(function (element) {
+    var button = element.querySelector('.ft-audio-replay, .ft-play');
+    var tracks = Array.from(element.querySelectorAll('.ft-audio-source audio')).filter(function (track) {
+      return track.getAttribute('src') || track.querySelector('source[src]');
+    });
+    if (!button || !tracks.length) { element.hidden = true; return; }
+    tracks.forEach(function (track) {
+      track.removeAttribute('autoplay');
+      track.preload = 'none';
+    });
+    var status = element.querySelector('.ft-replay-status, .ft-audio-status');
+    var panel = { element: element, button: button, tracks: tracks,
+      role: element.classList.contains('ft-primary-audio') ? 'primary' : 'example', label: button.getAttribute('aria-label') || 'Nghe lại đoạn văn',
+      caption: element.querySelector('.ft-play-label'), status: status };
+    panels.push(panel);
+    idle(panel);
+    button.addEventListener('click', function () {
+      if (active === panel) stopAll();
+      else start(panel, false);
+    });
   });
+  // Hide wrappers even when an audio binding rendered no playable media.
+  root.querySelectorAll('.ft-example-title, .ft-prompt-line, .ft-answer-line').forEach(function (group) {
+    group.hidden = !Array.from(group.children).some(function (child) { return !child.hidden; });
+  });
+  root.querySelectorAll('.ft-example-group, .ft-usage-group, .ft-related, .ft-back-content, .ft-back-meta').forEach(function (group) {
+    group.hidden = !group.querySelector('.ft-info-block:not([hidden]), .ft-back-meta-item:not([hidden])');
+  });
+  root.querySelectorAll('.ft-back-prompt, .ft-stimulus, .ft-review').forEach(function (group) {
+    group.hidden = !Array.from(group.children).some(function (child) { return !child.hidden; });
+  });
+  window.addEventListener('pagehide', stopAll);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) stopAll(); });
+  var primary = panels.find(function (panel) { return panel.role === 'primary'; });
+  var example = panels.find(function (panel) { return panel.role === 'example'; });
+  start(primary || example, true);
+
 })();
 </script>

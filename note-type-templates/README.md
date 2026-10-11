@@ -24,3 +24,16 @@ Chữ dùng input text, danh sách đáp án/nghĩa/cách đọc dùng array, �
 Các bản backup từ DB lưu HTML/CSS nguyên nội dung, nguồn và ID trong `prototype.json`, cùng SHA-256 để kiểm tra file. Bốn mẫu gõ mới được soạn trong thư viện và đã cài vào DB ngày 2026-10-11, nhóm **Luyện gõ**. Tìm trong trang `/card-templates`; ID template và phiên bản được ghi tại database_installation của từng prototype.json. `example_field_values` là dữ liệu minh họa để thử mẫu.
 
 Khi thêm mẫu mới, tạo thư mục cùng cấp với `typing-answer/` và thêm liên kết vào bảng trên.
+
+### Âm thanh, cách sử dụng và ghi chú cho bốn mẫu gõ
+
+Mặt trước giữ cách phát khi bấm. Mặt sau tự phát `Audio` (từ hoặc đoạn nghe),
+rồi `ExampleAudio` sau 500 ms, như Flama Default; nút nghe lại phát riêng phần
+được chọn. `ExampleAudio`, `Usage`, `UsageTranslation`, `Notes` đều tùy chọn;
+`Audio` chỉ bắt buộc với chép chính tả. Không ánh xạ hoặc truyền null để ẩn
+phần không cần. [Hướng dẫn ánh xạ](typing-reading/README.md#âm-thanh-và-thông-tin-tùy-chọn-ở-mặt-sau).
+
+Đã cập nhật cả DB local và production ngày 2026-10-11. Mỗi `prototype.json`
+ghi riêng phiên bản local trong `database_installation` và production trong
+`production_installation`; các ánh xạ cũ vẫn dùng được. Muốn nghe ví dụ và xem
+cách dùng, ánh xạ thêm những input tùy chọn tương ứng khi áp dụng template.

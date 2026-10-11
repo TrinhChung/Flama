@@ -1,6 +1,6 @@
 {
   "slug": "typing-meaning",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -62,6 +62,30 @@
         "field_type": "richtext",
         "position": 7,
         "required": false
+      },
+      {
+        "name": "ExampleAudio",
+        "field_type": "audio",
+        "position": 8,
+        "required": false
+      },
+      {
+        "name": "Usage",
+        "field_type": "richtext",
+        "position": 9,
+        "required": false
+      },
+      {
+        "name": "UsageTranslation",
+        "field_type": "richtext",
+        "position": 10,
+        "required": false
+      },
+      {
+        "name": "Notes",
+        "field_type": "richtext",
+        "position": 11,
+        "required": false
       }
     ]
   },
@@ -107,13 +131,37 @@
       },
       {
         "key": "Audio",
-        "label": "Phát âm · chỉ ở mặt sau",
+        "label": "Phát âm từ · tự phát ở mặt sau",
         "type": "audio",
         "required": false
       },
       {
         "key": "DefinitionHint",
         "label": "Gợi ý giải thích · ngôn ngữ đích · mặt trước",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "ExampleAudio",
+        "label": "Âm thanh ví dụ · tự phát ở mặt sau",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "Usage",
+        "label": "Cách sử dụng · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "UsageTranslation",
+        "label": "Giải thích cách dùng · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Notes",
+        "label": "Ghi chú · mặt sau",
         "type": "richtext",
         "required": false
       }
@@ -132,7 +180,11 @@
     "Example": "Example",
     "ExampleTranslation": "ExampleTranslation",
     "Audio": "Audio",
-    "DefinitionHint": "DefinitionHint"
+    "DefinitionHint": "DefinitionHint",
+    "ExampleAudio": "ExampleAudio",
+    "Usage": "Usage",
+    "UsageTranslation": "UsageTranslation",
+    "Notes": "Notes"
   },
   "example_field_values": {
     "PromptText": "学ぶ",
@@ -142,7 +194,11 @@
     "Example": "<p>日本語を学んでいます。</p>",
     "ExampleTranslation": "<p>Tôi đang học tiếng Nhật.</p>",
     "Audio": null,
-    "DefinitionHint": "<p>知識や技術を身につけること。</p>"
+    "DefinitionHint": "<p>知識や技術を身につけること。</p>",
+    "ExampleAudio": null,
+    "Usage": null,
+    "UsageTranslation": null,
+    "Notes": null
   },
   "examples": [
     {
@@ -156,7 +212,11 @@
         "Example": "example_jp",
         "ExampleTranslation": "example_vi",
         "Audio": "word_audio",
-        "DefinitionHint": "meaning_jp"
+        "DefinitionHint": "meaning_jp",
+        "ExampleAudio": "example_audio",
+        "Usage": "usage_jp",
+        "UsageTranslation": "usage_vi",
+        "Notes": "additional_note_jp"
       }
     },
     {
@@ -168,7 +228,8 @@
         "Reading": "Pronunciation",
         "Example": "Example",
         "ExampleTranslation": "Example_VI",
-        "Audio": "Vocabulary_Audio"
+        "Audio": "Vocabulary_Audio",
+        "ExampleAudio": "Example_Audio"
       }
     }
   ],
@@ -178,7 +239,7 @@
     "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
     "character_count": "One ordinary single-line input for all meanings, with no character tiles, character count or word count, regardless of the lengths of accepted alternatives.",
     "hints": "The first Answer item supplies a prefix only after clicking Open character. Reveal one Unicode grapheme per click through the final character, then disable the hint button and remove the trailing ellipsis. All complete alternative meanings remain accepted. The clue scrolls within a bounded box.",
-    "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
+    "audio": "Front stays click-to-play. On each back render, play Audio first, then ExampleAudio once after a 500 ms pause. If Audio is absent, play ExampleAudio directly. Replay buttons play only the chosen field; a manual click cancels the automatic sequence. Multiple clips in a field play in order. Missing/invalid inputs hide their button; blocked playback shows a manual replay hint. Stop clips and pending playback when the card leaves the page or the document is hidden.",
     "back": "Uses the same card width, padding, mode heading and prompt/media geometry as the front. Keep the prompt or image in place; put the answer next, then immediately related reading/meaning/translation, followed by explanations, paired examples and notes. Dictation repeats the front audio button and compact borderless word typography. Optional empty inputs hide independently; no correctness verdict.",
     "grading": "Flip the card and choose the study rating.",
     "keyboard": "Enter checks the single-line input. IME composition never submits. Case, NFC and whitespace normalization remain unchanged.",
@@ -188,10 +249,19 @@
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
-    "current_version_id": "6e865aef-e893-485b-acd2-7e0b8bf98ef3",
+    "current_version_id": "da8dc334-0ba0-4b2f-9427-75bdabceccf3",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 8
+    "version_no": 9
+  },
+  "production_installation": {
+    "database_name": "flama",
+    "owner_user_id": 1,
+    "template_id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
+    "current_version_id": "34d615ad-f594-49ce-a7dc-e1cffc156408",
+    "version_no": 2,
+    "updated_at": "2026-10-11",
+    "primary_category": "Luyện gõ"
   }
 }

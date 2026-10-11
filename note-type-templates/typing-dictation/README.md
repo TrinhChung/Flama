@@ -1,8 +1,8 @@
 # Gõ chép chính tả
 
-Nhấn nghe và chép lại theo từng từ; mặt sau đọc bản dịch và ghi chú nếu có. Mẫu 2.2.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhấn nghe và chép lại theo từng từ; mặt sau đọc bản dịch và ghi chú nếu có. Mẫu 2.3.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
 
-Mặt sau dùng cùng vị trí nút nghe, kích thước thẻ và kiểu chữ đoạn văn như mặt trước. Bản dịch nằm ngay dưới bản chép; ghi chú và hình minh họa tiếp theo. Nút nghe lại hoạt động giống mặt trước, chỉ phát khi bấm. Phần thông tin không truyền vào tự ẩn.
+Mặt sau dùng cùng vị trí nút nghe, kích thước thẻ và kiểu chữ đoạn văn như mặt trước. Bản dịch nằm ngay dưới bản chép; ghi chú và hình minh họa tiếp theo. Mặt sau tự phát đoạn nghe, rồi phát âm ví dụ nếu có; nút nghe lại vẫn ở cùng vị trí như mặt trước. Phần thông tin không truyền vào tự ẩn.
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn lại bổ sung thông tin ở mặt sau; để không ánh xạ nếu không cần.
 
@@ -13,6 +13,11 @@ Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn l�
 | Translation | richtext | Bản dịch · mặt sau (tùy chọn, trống tự ẩn). |
 | Notes | richtext | Ghi chú · mặt sau (tùy chọn, trống tự ẩn). |
 | BackImage | image | Ảnh minh họa · mặt sau (tùy chọn, trống tự ẩn). |
+| ExampleAudio | audio | Âm thanh của ví dụ · mặt sau (tùy chọn). |
+| Usage | richtext | Cách sử dụng / lưu ý ngữ cảnh (tùy chọn). |
+| UsageTranslation | richtext | Giải thích cách dùng bằng ngôn ngữ khác (tùy chọn, độc lập với Usage). |
+| Example | richtext | Ví dụ bổ sung · mặt sau (tùy chọn). |
+| ExampleTranslation | richtext | Bản dịch ví dụ · mặt sau (tùy chọn). |
 
 Mặt trước dành cho **nghe và gõ một đoạn dài**. Mỗi từ là một cụm gạch nhỏ: một gạch cho một ký tự, khoảng trắng giữa các từ giữ như trong câu. Đoạn văn dùng một nút cho mỗi từ, không tạo từng ô ký tự riêng. Đoạn văn không có viền hay nền hộp, xuống dòng tự nhiên; đoạn rất dài cuộn trong vùng giới hạn chiều cao. Chỉ có **một ô nhập nhỏ** cho từ đang chọn.
 
@@ -31,10 +36,35 @@ Input array nhận cả field text và array; mỗi dòng không trống là m�
 
 Template đọc các mục array từ ranh giới `<br>` đã được render sẵn; không dùng `.split()` hoặc tách lại dấu `;`, `$`, `/`, dấu phẩy. Kiểm tra đáp án, gợi ý và bố cục tùy chỉnh nằm hoàn toàn trong HTML/CSS/JS của template; không cần thay đổi backend.
 
-Tiếng Nhật, Trung và Anh dùng chung bộ so sánh Unicode. NFC, chữ hoa/thường và khoảng trắng được chuẩn hóa. Không kiểm tra lỗi hay tự chuyển từ khi IME đang ghép ký tự; chỉ kiểm tra sau khi ghép xong. Âm thanh chỉ phát khi bấm nghe; có thể nghe lại, dừng hoặc phát nhiều clip nối tiếp.
+Tiếng Nhật, Trung và Anh dùng chung bộ so sánh Unicode. NFC, chữ hoa/thường và khoảng trắng được chuẩn hóa. Không kiểm tra lỗi hay tự chuyển từ khi IME đang ghép ký tự; chỉ kiểm tra sau khi ghép xong. Mặt trước phát khi bấm ở mặt trước và tự phát ở mặt sau nghe. Mặt sau tự phát Audio rồi ExampleAudio; có thể nghe lại hoặc dừng bằng nút riêng.
 
 Dán [front.html](front.html), [back.html](back.html), [style.css](style.css) vào template và dùng input_schema trong [prototype.json](prototype.json). Cấu trúc note_type là tham khảo; có thể gắn template vào note type hiện có. Media giữ đường dẫn proxy của Flama. CSS có light/dark, mobile và reduced motion. Mẫu đã được cài vào thư viện template cá nhân trong DB ngày 2026-10-11, nhóm **Luyện gõ**. ID template và phiên bản nằm trong database_installation của prototype.json.
 
 ## Dữ liệu thử
 
 [test-data.json](test-data.json) lưu bốn mẫu đã thêm vào deck **6. Luyện gõ - Gõ chép chính tả (Dictation)**, ID 6859: ba bài tiếng Anh từ câu ngắn đến đoạn dài và một đoạn tiếng Nhật để thử IME. Mỗi note có âm thanh giọng máy khớp bản chép, bản dịch và ghi chú; âm thanh trong DB dùng media proxy của Flama. File này lưu nội dung mẫu và tên giọng, không chứa file âm thanh.
+
+## Âm thanh và thông tin tùy chọn ở mặt sau
+
+`Audio` giữ nguyên input cũ: âm từ đối với ba mẫu từ vựng, âm đoạn nghe đối với
+chép chính tả. `ExampleAudio` là input mới cho âm ví dụ. Khi lật, template dùng
+thứ tự của Flama Default: **Audio → nghỉ 500 ms → ExampleAudio**, một lần.
+Nếu chỉ có ExampleAudio thì phát ví dụ ngay. Nếu một field có nhiều clip thì
+phát hết các clip theo thứ tự trước khi chuyển sang field tiếp theo.
+
+Nút loa nằm cạnh từ/đáp án và cạnh ví dụ; mẫu chép chính tả giữ nút nghe của mặt
+trước. Bấm nghe lại chỉ phát field đã chọn và hủy phần tự phát đang chờ. Rời thẻ
+hoặc ẩn trang sẽ dừng âm thanh. Nếu trình duyệt chặn tự phát, bấm nút nghe để
+phát lại; thẻ vẫn hoạt động bình thường.
+
+Audio là input cần thiết cho bài nghe. Không cần ánh xạ ExampleAudio, Usage,
+UsageTranslation hoặc Notes nếu không dùng. Mỗi phần trống/null/không ánh xạ tự ẩn; bản dịch ví dụ và giải thích
+cách dùng vẫn hiển thị độc lập khi phần ngôn ngữ đích không được truyền vào.
+
+Với **Flama Default**, ánh xạ tùy chọn: Audio → word_audio, Example → example_jp,
+ExampleTranslation → example_vi, ExampleAudio → example_audio, Usage → usage_jp,
+UsageTranslation → usage_vi, Notes → additional_note_jp. Với **Advanced Vocabulary**,
+Example → Example, ExampleTranslation → Example_VI, ExampleAudio → Example_Audio,
+Audio → Vocabulary_Audio. Usage và Notes nhận richtext; tạo field richtext nếu
+note type đang dùng chỉ có ghi chú dạng text. Tất cả phát âm dùng media được
+Flama render sẵn; template không cần backend bổ sung xử lý hoặc phân tách dữ liệu.
