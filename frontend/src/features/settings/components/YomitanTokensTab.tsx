@@ -17,22 +17,18 @@ interface YomitanTokensTabProps {
 export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
   const { t } = useTranslation('settings')
   const {
-    query,
+    tokens,
     name,
     setName,
     expiry,
     setExpiry,
-    preset,
-    setPreset,
     copied,
     copy,
     issuedConnectUrl,
-    issuedMiningKey,
     refresh,
     createMutation,
     revokeMutation,
     rotateMutation,
-    setupMiningMutation,
   } = hookResult
 
   return (
@@ -42,14 +38,9 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
         setName={setName}
         expiry={expiry}
         setExpiry={setExpiry}
-        preset={preset}
-        setPreset={setPreset}
         isPending={createMutation.isPending}
         onCreate={() => createMutation.mutate()}
         issuedConnectUrl={issuedConnectUrl}
-        issuedMiningKey={issuedMiningKey}
-        onSetupMining={() => setupMiningMutation.mutate()}
-        isPreparingMining={setupMiningMutation.isPending}
         copied={copied}
         onCopy={copy}
       />
@@ -76,7 +67,7 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
           </Button>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0">
-          {!query.data?.items.length ? (
+          {!tokens.length ? (
             <EmptyState
               title={t('yomitan.tokens.empty_title')}
               description={t('yomitan.tokens.empty_desc')}
@@ -84,14 +75,14 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
           ) : (
             <>
               <YomitanTokenListMobile
-                tokens={query.data.items}
+                tokens={tokens}
                 isRotating={rotateMutation.isPending}
                 isRevoking={revokeMutation.isPending}
                 onRotate={(id) => rotateMutation.mutate(id)}
                 onRevoke={(id) => revokeMutation.mutate(id)}
               />
               <YomitanTokenListDesktop
-                tokens={query.data.items}
+                tokens={tokens}
                 isRotating={rotateMutation.isPending}
                 isRevoking={revokeMutation.isPending}
                 onRotate={(id) => rotateMutation.mutate(id)}

@@ -44,22 +44,6 @@ async function renderHarness(deckId = '12') {
   })
 }
 
-async function waitFor(assertion: () => void) {
-  let lastError: unknown
-  for (let index = 0; index < 40; index += 1) {
-    try {
-      assertion()
-      return
-    } catch (error) {
-      lastError = error
-    }
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 10))
-    })
-  }
-  if (lastError) throw lastError
-}
-
 const mockInputsResponse: StudyTemplateInputsResponse = {
   schema_version: 'study-scope-compositions.v2',
   scope_type: 'deck',

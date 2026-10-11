@@ -115,6 +115,7 @@ export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 						{/* Col 4 — Công cụ & Tích hợp */}
 						<FooterColumn title={t('footer.col_tools')}>
 							<FooterLink to="/settings/yomitan">{t('footer.link_yomitan')}</FooterLink>
+							<FooterLink to="/settings/asbplayer">{t('footer.link_asbplayer')}</FooterLink>
 							<FooterLink to="/guide/flama-audio">{t('footer.link_flama_audio')}</FooterLink>
 							<FooterLink to="/sync">{t('footer.link_anki_sync')}</FooterLink>
 							<FooterLink to="/guide">{t('footer.link_guide')}</FooterLink>

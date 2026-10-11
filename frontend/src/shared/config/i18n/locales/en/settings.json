@@ -141,5 +141,105 @@
       "auto_create": "No connection token found. Automatically generating a new Flama Connect key...",
       "copied": "Copied to clipboard."
     }
+  },
+  "asbplayer": {
+    "loading": "Loading asbplayer tokens…",
+    "header": {
+      "title": "asbplayer Token & AnkiConnect Management",
+      "description": "Integrate asbplayer extension to mine sentences, images, and audio from video and anime directly into Flama.",
+      "guide_title": "asbplayer Connection Guide",
+      "troubleshoot_title": "Troubleshoot asbplayer",
+      "guide_btn": "Connection Guide"
+    },
+    "quick_links": {
+      "label": "Quick references:",
+      "install": "Install & Download Extension",
+      "mapping": "7 Field Mapping Configuration",
+      "shortcuts": "Mining Shortcuts"
+    },
+    "highlights": {
+      "video_title": "Video & Anime Mining",
+      "video_sub": "Bilingual Subtitles",
+      "media_title": "1-Click Audio & Image",
+      "media_sub": "Accurate Auto Cut",
+      "sentences_title": "Sentence Mining",
+      "sentences_sub": "Context-based Learning",
+      "protocol_title": "AnkiConnect Protocol",
+      "protocol_sub": "Anki-compatible Standard"
+    },
+    "form": {
+      "title": "Create asbplayer API Token",
+      "description": "Issue an AnkiConnect API token for the asbplayer extension. See <link>Detailed Connection Guide</link> for configuration steps.",
+      "guide_link_text": "Detailed Connection Guide",
+      "preset_label": "Mining Mode (Preset)",
+      "preset_text": "Text only (Sentence & Word)",
+      "preset_media": "Text, images and MP3",
+      "setup_title": "Prepare deck and model",
+      "setup_desc": "Automatically create the \"Sentences\" deck and \"Sentence Card\" note type with 7 standard fields: Sentence, Word, Definition, Image, Audio, Source, URL.",
+      "setup_btn": "Prepare deck and model",
+      "setup_loading": "Preparing…",
+      "name_label": "Device / Browser Name",
+      "name_placeholder": "e.g. asbplayer - Chrome PC",
+      "expiry_label": "Validity Period",
+      "expiry_30": "30 days",
+      "expiry_90": "90 days",
+      "expiry_180": "180 days (default)",
+      "expiry_365": "365 days",
+      "expiry_none": "Never expires",
+      "submit_btn": "Generate New Token",
+      "issued_title": "asbplayer Connection Details",
+      "issued_warning": "Copy the API Key now — Flama displays this key only once!",
+      "url_label": "AnkiConnect Server URL",
+      "copy_url_btn": "Copy URL",
+      "copied_url_btn": "URL Copied",
+      "key_label": "API Key (AnkiConnect Secret)",
+      "copy_key_btn": "Copy API Key",
+      "copied_key_btn": "API Key Copied"
+    },
+    "tokens": {
+      "default_name": "asbplayer - PC Browser",
+      "title": "asbplayer Tokens",
+      "description": "Active and revoked asbplayer API keys for your account",
+      "refresh": "Refresh",
+      "refresh_tooltip": "Reload token list",
+      "empty_title": "No asbplayer tokens yet",
+      "empty_desc": "Create your first token to connect the asbplayer extension to Flama.",
+      "status_active": "Active",
+      "status_revoked": "Revoked",
+      "status_expired": "Expired",
+      "badge_text": "Text",
+      "badge_media": "Text & Media",
+      "th_name": "Device Name & Preset",
+      "th_status": "Status",
+      "th_expiry": "Expires",
+      "th_last_used": "Last Used",
+      "th_actions": "Actions",
+      "never_expires": "Never expires",
+      "never_used": "Never used",
+      "action_copy_url": "Copy AnkiConnect URL",
+      "action_rotate": "Regenerate",
+      "action_revoke": "Revoke",
+      "confirm_rotate": "Revoke the old token and create a new token with this name?",
+      "confirm_revoke": "Are you sure you want to revoke this token immediately?"
+    },
+    "docs": {
+      "title": "Documentation & Reference Guides",
+      "view_all": "View all",
+      "card1_title": "Install & Configure asbplayer",
+      "card1_desc": "Step-by-step extension installation on Chrome and AnkiConnect setup.",
+      "card2_title": "7 Sentence Card Fields Mapping",
+      "card2_desc": "Configure mapping for Sentence, Word, Definition, Image, Audio, Source, URL.",
+      "card3_title": "Shortcuts & Video Mining",
+      "card3_desc": "Use Ctrl+Shift+X shortcut to create cards while watching anime and videos."
+    },
+    "messages": {
+      "create_success": "asbplayer token created successfully.",
+      "revoke_success": "Token was revoked immediately.",
+      "rotate_success": "Old token revoked and new token created successfully.",
+      "setup_success": "Deck Sentences and model Sentence Card are ready.",
+      "copied": "Copied to clipboard.",
+      "copied_url": "AnkiConnect Server URL copied.",
+      "copy_failed": "Failed to copy to clipboard."
+    }
   }
 }

@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
-import { FLAMA_CONNECT_URL, FLAMA_ANKI_CONNECT_URL } from '@/config/env'
+import { FLAMA_CONNECT_URL } from '@/config/env'
 
-export type TokenPreset = 'legacy' | 'mining-text' | 'mining-media'
+export type TokenPreset = 'legacy' | 'mining-text' | 'mining-media' | 'custom'
 
 export type IntegrationToken = {
   id: number
@@ -17,7 +17,7 @@ export type IntegrationToken = {
   last_used_at: string | null
   created_at: string
   token?: string
-  preset?: TokenPreset | 'custom'
+  preset?: TokenPreset
 }
 
 export type TokensResponse = {
@@ -35,33 +35,35 @@ export function useYomitanTokenCRUD() {
   const queryKey = ['integration-tokens'] as const
   const [name, setName] = useState(() => t('yomitan.tokens.default_name', 'Yomitan - PC cá nhân'))
   const [expiry, setExpiry] = useState('180')
-  const [preset, setPreset] = useState<TokenPreset>('legacy')
   const [issued, setIssued] = useState<IntegrationToken | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const hasAutoProcessedRef = useRef(false)
 
   const issuedConnectUrl = issued?.token
-    ? issued.preset?.startsWith('mining-')
-      ? FLAMA_ANKI_CONNECT_URL
-      : `${FLAMA_CONNECT_URL.replace(/\/+$/, '')}/${encodeURIComponent(issued.token)}`
+    ? `${FLAMA_CONNECT_URL.replace(/\/+$/, '')}/${encodeURIComponent(issued.token)}`
     : null
-  const issuedMiningKey = issued?.preset?.startsWith('mining-') ? issued.token ?? null : null
 
   const query = useQuery({
     queryKey,
     queryFn: () => appApi.get<TokensResponse>('/integration-tokens'),
   })
 
+  const rawTokens = query.data?.items || []
+  const tokens = rawTokens.filter(
+    (t) => t.preset === 'legacy' || !t.preset || t.preset === 'custom'
+  )
+
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey })
   }
 
   const createMutation = useMutation({
-    mutationFn: () => appApi.mutate<{ item: IntegrationToken }>('/integration-tokens', 'POST', {
-      name: name.trim(),
-      expires_in_days: expiry === 'none' ? null : Number(expiry),
-      preset,
-    }),
+    mutationFn: () =>
+      appApi.mutate<{ item: IntegrationToken }>('/integration-tokens', 'POST', {
+        name: name.trim(),
+        expires_in_days: expiry === 'none' ? null : Number(expiry),
+        preset: 'legacy',
+      }),
     onSuccess: async ({ item }) => {
       setIssued(item)
       await refresh()
@@ -80,9 +82,10 @@ export function useYomitanTokenCRUD() {
   })
 
   const rotateMutation = useMutation({
-    mutationFn: (id: number) => appApi.mutate<{ item: IntegrationToken }>(`/integration-tokens/${id}/rotate`, 'POST', {
-      expires_in_days: expiry === 'none' ? null : Number(expiry),
-    }),
+    mutationFn: (id: number) =>
+      appApi.mutate<{ item: IntegrationToken }>(`/integration-tokens/${id}/rotate`, 'POST', {
+        expires_in_days: expiry === 'none' ? null : Number(expiry),
+      }),
     onSuccess: async ({ item }) => {
       setIssued(item)
       await refresh()
@@ -91,24 +94,21 @@ export function useYomitanTokenCRUD() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const setupMiningMutation = useMutation({
-    mutationFn: () => appApi.mutate('/integration-tokens/sentence-mining-setup', 'POST', {}),
-    onSuccess: () => toast.success(t('connect.mining.setup_success', 'Đã chuẩn bị deck Sentences và model Sentence Card.')),
-    onError: (error: Error) => toast.error(error.message),
-  })
-
   useEffect(() => {
     if (!query.data || hasAutoProcessedRef.current || createMutation.isPending || rotateMutation.isPending) return
 
     const items = query.data.items || []
+    const yomitanTokens = items.filter(
+      (t) => t.preset === 'legacy' || !t.preset || t.preset === 'custom'
+    )
     const now = Date.now()
-    const activeTokens = items.filter(
+    const activeTokens = yomitanTokens.filter(
       (t) => t.status === 'active' && (!t.expires_at || new Date(t.expires_at).getTime() > now)
     )
 
     if (activeTokens.length === 0) {
       hasAutoProcessedRef.current = true
-      const expiredToken = items.find(
+      const expiredToken = yomitanTokens.find(
         (t) => t.status === 'expired' || (t.expires_at && new Date(t.expires_at).getTime() <= now && t.status !== 'revoked')
       )
 
@@ -131,22 +131,19 @@ export function useYomitanTokenCRUD() {
 
   return {
     query,
+    tokens,
     name,
     setName,
     expiry,
     setExpiry,
-    preset,
-    setPreset,
     issued,
     setIssued,
     copied,
     copy,
     issuedConnectUrl,
-    issuedMiningKey,
     refresh,
     createMutation,
     revokeMutation,
     rotateMutation,
-    setupMiningMutation,
   }
 }

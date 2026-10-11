@@ -98,6 +98,7 @@
       "marketplace_note_types": "Kho loại thẻ",
       "orders": "Danh sách đơn hàng",
       "settings_yomitan": "Cài đặt Kết nối Yomitan",
+      "settings_asbplayer": "Cài đặt Kết nối asbplayer",
       "settings_mcp_tokens": "MCP Access Tokens",
       "feedback": "Góp ý & Báo lỗi",
       "tickets": "Danh sách Ticket hỗ trợ",
@@ -339,5 +340,8 @@
     "checkout_failed": "Không thể khởi tạo thanh toán.",
     "audio_connected": "Đã kết nối thành công với Flama Audio Desktop (127.0.0.1:4791)!",
     "audio_offline": "Chưa tìm thấy Flama Audio Desktop đang chạy tại port 4791."
+  },
+  "page_options": {
+    "settings_asbplayer": "Cài đặt Kết nối asbplayer"
   }
 }
