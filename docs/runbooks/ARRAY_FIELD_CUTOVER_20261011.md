@@ -20,7 +20,7 @@ Bracketed prose is preserved. Missing/null keys, non-target fields, media,
 identity, tags, cards and review progress are retained. Already-array fields are
 validated without splitting their punctuation again.
 
-Production preflight: 41,199 scanned notes; 21,244 need content changes; 19,955
+Initial production preflight: 41,199 scanned notes; 21,244 need content changes; 19,955
 already have the same one-item result. 308 other notes remain out of scope.
 139 repeated field values are preserved. Existing pair-length mismatches total
 165 occurrences in **113 distinct notes** (Collocation 1, Synonym 64, Antonym 100);
@@ -104,4 +104,50 @@ apply, checks idempotency and release previews, then restores all target values.
 Rehearsal passed injected rollback, full restore and idempotency; 22 historical
 releases and all install pointers/overlay revisions stayed unchanged. It created
 22,596 additional dirty atoms, and real release previews detected the backfill.
-Deployment results are recorded after activation and production verification.
+
+## Production result
+
+Completed on 2026-10-11 after [PR #226](https://github.com/TrinhChung/Flama/pull/226)
+merged as `40ca800c23e86e6c009c104e5971229baa67bfe5`.
+[Master CI and backend deployment](https://github.com/TrinhChung/Flama/actions/runs/38115472515)
+passed all backend, frontend, MySQL, Redis and SPA gates. The VPS selected that
+release and Alembic reached `20261010_000056`.
+
+The frontend is currently a Cloudflare **Workers Static Assets** deployment,
+`flama-frontend1001`, rather than the Pages deployment described in older setup
+notes. Its existing Git trigger built master commit `40ca800c…` successfully;
+deployed Worker version `b0df415f-336c-46c6-8e9a-575ea40c2015`. Chrome loaded the
+new `index-Djro7yp9.js` bundle without console errors.
+
+HTTP, Connect, Study worker and the active retention timer were stopped before
+the final backup and plan. The gzip-validated full stopped-writer backup is
+`/var/backups/flama/array-20261011/before-stopped.sql.gz` (114,277,364 bytes,
+mode 0600 inside a mode 0700 directory). Its SHA-256 is
+`356c4db4801c15da98d46d0f0a640072743725dce2bf7da3d4589b052f63a5ce`.
+The earlier rehearsal backup `before.sql.gz` is retained separately.
+
+Private `cutover.json` and `applied.json` are beside the backups. Final plan
+checksum: `5547220e30027a1a696a23109404a189bccae20bcf965addc3d721b766428f51`.
+The apply committed 20 field-type changes, 21,244 note-content changes, four
+existing template updates and four new typing library definitions atomically.
+
+Stopped-writer verification checked whole-note hashes for all 41,199 scoped
+notes, including 19,955 unchanged notes. A subsequent plan reported zero
+mutations. One new out-of-scope note had been created after the initial census;
+all **309** out-of-scope notes were retained, bringing the total to **41,508**.
+Full row hashes stayed identical for 41,508 cards, 33,930 media assets, 22 deck
+releases and 28 deck installs. All 30 previous template-version rows stayed
+identical; eight new versions brought the total to 38. The template count is 34.
+Auto-publication flags were unchanged. Dirty atoms rose from 674 to 23,270
+(22,596 additions), leaving a later explicit release able to detect the migration.
+
+The actual production note used in the audit rendered all six collocation pairs,
+including repeated translations, at 1280, 390 and 320 px. Pair-item margin and
+padding remain 0, with a 3 px row gap. The HTML fixture and screenshot remain in
+ignored local `output/typing-templates/array-layout/`; private row data is not
+committed. The known 113 notes with uneven source/translation counts remain
+reported rather than filled with guessed translations.
+
+After restart, HTTP and Connect health passed, Study worker readiness passed,
+all 20 scoped fields remained arrays and all four typing definitions appeared
+through the template-library service. The retention timer was resumed.
