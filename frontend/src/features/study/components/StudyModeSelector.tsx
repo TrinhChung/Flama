@@ -58,8 +58,8 @@ export function StudyModeSelector({
                 : 'border-border/40 bg-card/80 text-foreground hover:border-orange-400/60 hover:bg-orange-500/5 hover:shadow-xs dark:hover:border-orange-700/60'
               const content = (
                 <>
-                  <span className="block text-sm font-semibold">{composition.template_name}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
+                  <span className="block text-xs sm:text-sm font-semibold truncate">{composition.template_name}</span>
+                  <span className="mt-0.5 sm:mt-1 block text-[11px] sm:text-xs text-muted-foreground truncate">
                     {composition.context_kind === 'installed_source'
                       ? t('mode_selector.source_installed')
                       : composition.context_kind === 'installed_local'
@@ -77,7 +77,7 @@ export function StudyModeSelector({
                     type="button"
                     disabled={disabled}
                     onClick={() => onSelectComposition(id)}
-                    className={`rounded-xl border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 disabled:cursor-not-allowed disabled:opacity-60 ${stateClass}`}
+                    className={`rounded-xl border px-3.5 py-2.5 sm:px-4 sm:py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 disabled:cursor-not-allowed disabled:opacity-60 ${stateClass}`}
                     aria-pressed={isSelected}
                   >
                     {content}
@@ -93,7 +93,7 @@ export function StudyModeSelector({
                     type="button"
                     disabled={disabled}
                     onClick={() => onSelectComposition(id)}
-                    className="min-w-0 flex-1 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500/60 disabled:cursor-not-allowed"
+                    className="min-w-0 flex-1 px-3.5 py-2.5 sm:px-4 sm:py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500/60 disabled:cursor-not-allowed"
                     aria-pressed={isSelected}
                   >
                     {content}
@@ -102,7 +102,7 @@ export function StudyModeSelector({
                     type="button"
                     disabled={disabled}
                     onClick={() => onConfigureComposition?.(id)}
-                    className="flex shrink-0 items-center gap-1.5 border-l border-border/70 px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-orange-500/10 hover:text-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500/60 disabled:cursor-not-allowed dark:hover:text-orange-300"
+                    className="flex shrink-0 items-center gap-1.5 border-l border-border/70 px-2.5 sm:px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-orange-500/10 hover:text-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500/60 disabled:cursor-not-allowed dark:hover:text-orange-300"
                     title={t('mode_selector.configure_fields_for', { name: composition.template_name })}
                     aria-label={t('mode_selector.configure_fields_for', { name: composition.template_name })}
                   >

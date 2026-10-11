@@ -537,10 +537,12 @@ export function AppLayout() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-4 bg-border/60" />
+            <div className="hidden sm:flex sm:items-center sm:gap-2.5">
+              <Separator orientation="vertical" className="h-4 bg-border/60" />
 
-            {/* Corner Utility: Language Switcher at the far right corner */}
-            <LanguageSwitcher />
+              {/* Corner Utility: Language Switcher at the far right corner */}
+              <LanguageSwitcher />
+            </div>
           </div>
         </header>
         <main className="min-h-[calc(100svh-3.5rem)] flex-1">
