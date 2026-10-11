@@ -1,6 +1,6 @@
 {
   "slug": "typing-reading",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -172,15 +172,17 @@
     "character_count": "Unicode grapheme clusters excluding whitespace; rounded tiles grouped by words.",
     "hints": "Reveal a character per click, leaving the last hidden.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
-    "back": "Reference information only: no correctness verdict. Every optional block is independent.",
+    "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
     "grading": "Flip the card and choose the study rating."
   },
   "database_installation": {
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "5c460ccb-5714-48ac-830b-1f74cc611bee",
-    "current_version_id": "771da9ff-8ded-4ca9-9a1d-f86e0f51eeea",
+    "current_version_id": "28af24ad-b9f3-4854-b402-d2f04d4a59cc",
     "installed_at": "2026-10-11",
-    "primary_category": "Luyện gõ"
+    "primary_category": "Luyện gõ",
+    "updated_at": "2026-10-11",
+    "version_no": 2
   }
 }

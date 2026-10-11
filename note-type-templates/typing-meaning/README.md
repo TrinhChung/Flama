@@ -1,6 +1,6 @@
 # Gõ nghĩa
 
-Nhìn từ, gõ nghĩa; mặt sau xem cách đọc, giải thích và ví dụ. Mẫu 1.0.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhìn từ, gõ nghĩa; mặt sau xem cách đọc, giải thích và ví dụ. Mẫu 1.0.1, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn lại bổ sung thông tin ở mặt sau; để không ánh xạ nếu không cần.
 
@@ -14,7 +14,7 @@ Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn l�
 | ExampleTranslation | richtext | Bản dịch ví dụ · mặt sau (tùy chọn, trống tự ẩn). |
 | Audio | audio | Phát âm · chỉ ở mặt sau (tùy chọn, trống tự ẩn). |
 
-Mặt trước kiểm tra đáp án và mở gợi ý từng ô ký tự. Mặt sau là phần ôn lại: nghĩa và thông tin được truyền vào; không hiển thị lại kết quả đúng/sai. Khối null, trống hoặc không ánh xạ tự ẩn, gồm cả tiêu đề của khối đó. Nếu chưa có Answer, ô gõ ẩn và báo thiếu đáp án.
+Mặt trước kiểm tra đáp án và mở gợi ý từng ô ký tự. Mặt sau là phần ôn lại: nghĩa và thông tin được truyền vào; không hiển thị lại kết quả đúng/sai. Bố cục mặt sau gọn: từ và đáp án ở đầu, thông tin chia bằng đường phân cách nhẹ; ví dụ và bản dịch nằm cùng một khối. Khối null, trống hoặc không ánh xạ tự ẩn, gồm cả tiêu đề của khối đó. Nếu chưa có Answer, ô gõ ẩn và báo thiếu đáp án.
 
 ## Ánh xạ tham khảo
 

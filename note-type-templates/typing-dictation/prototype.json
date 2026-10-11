@@ -1,6 +1,6 @@
 {
   "slug": "typing-dictation",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -129,15 +129,17 @@
     "character_count": "Unicode grapheme clusters excluding whitespace; rounded tiles grouped by words.",
     "hints": "Reveal a character per click, leaving the last hidden.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
-    "back": "Reference information only: no correctness verdict. Every optional block is independent.",
+    "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
     "grading": "Flip the card and choose the study rating."
   },
   "database_installation": {
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "fc011484-1674-4d5a-b3d6-e1abd21b64e2",
-    "current_version_id": "5b065717-7950-4e3a-9de5-85c643a3174c",
+    "current_version_id": "456f7dd1-65b9-4c52-805e-c733c80ae0f7",
     "installed_at": "2026-10-11",
-    "primary_category": "Luyện gõ"
+    "primary_category": "Luyện gõ",
+    "updated_at": "2026-10-11",
+    "version_no": 2
   }
 }

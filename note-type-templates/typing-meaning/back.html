@@ -1,5 +1,4 @@
 <div class="ft-card ft-back" data-mode="meaning">
-  <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v14"></path></svg></span><span>Ôn lại nội dung</span></div>
   <div class="ft-back-hero">
     {{#PromptText}}<h1 class="ft-back-text">{{PromptText}}</h1>{{/PromptText}}
     <div class="ft-back-meta">
@@ -9,8 +8,10 @@
   {{#Answer}}<div class="ft-answer-panel"><div class="ft-answer-label">Nghĩa</div><div class="ft-answer-values">{{Answer}}</div></div>{{/Answer}}
   <div class="ft-back-content">
     {{#Explanation}}<div class="ft-info-block ft-info-definition" data-info="Explanation"><h2 class="ft-info-heading">Giải thích</h2><div class="ft-info-content">{{{Explanation}}}</div></div>{{/Explanation}}
-    {{#Example}}<div class="ft-info-block" data-info="Example"><h2 class="ft-info-heading">Ví dụ</h2><div class="ft-info-content">{{{Example}}}</div></div>{{/Example}}
-    {{#ExampleTranslation}}<div class="ft-info-block" data-info="ExampleTranslation"><h2 class="ft-info-heading">Bản dịch ví dụ</h2><div class="ft-info-content">{{{ExampleTranslation}}}</div></div>{{/ExampleTranslation}}
+    <div class="ft-example-group">
+      {{#Example}}<div class="ft-info-block" data-info="Example"><h2 class="ft-info-heading">Ví dụ</h2><div class="ft-info-content">{{{Example}}}</div></div>{{/Example}}
+      {{#ExampleTranslation}}<div class="ft-info-block" data-info="ExampleTranslation"><h2 class="ft-info-heading">Bản dịch ví dụ</h2><div class="ft-info-content">{{{ExampleTranslation}}}</div></div>{{/ExampleTranslation}}
+    </div>
     {{#Audio}}<div class="ft-info-block ft-info-audio" data-info="Audio"><h2 class="ft-info-heading">Nghe lại</h2><div class="ft-info-content">{{{Audio}}}</div></div>{{/Audio}}
   </div>
 </div>
@@ -19,11 +20,35 @@
   'use strict';
   var root = document.querySelector('.ft-back');
   if (!root) return;
-  root.querySelectorAll('.ft-info-array').forEach(function (source) {
+
+  function lines(source) {
     var copy = source.cloneNode(true);
     copy.querySelectorAll('br').forEach(function (node) { node.replaceWith('\n'); });
     copy.querySelectorAll('p, div, li').forEach(function (node) { node.append('\n'); });
-    var values = copy.textContent.split(/\r\n?|\n/).map(function (value) { return value.trim(); }).filter(Boolean);
+    return copy.textContent.split(/\r\n?|\n/).map(function (value) { return value.trim(); }).filter(Boolean);
+  }
+
+  root.querySelectorAll('.ft-answer-values').forEach(function (source) {
+    var values = lines(source);
+    if (!values.length) { source.closest('.ft-answer-panel').hidden = true; return; }
+    var primary = document.createElement('div');
+    primary.className = 'ft-answer-primary';
+    primary.textContent = values[0];
+    source.replaceChildren(primary);
+    if (values.length > 1) {
+      var variants = document.createElement('div');
+      variants.className = 'ft-answer-variants';
+      values.slice(1).forEach(function (value) {
+        var item = document.createElement('span');
+        item.textContent = value;
+        variants.append(item);
+      });
+      source.append(variants);
+    }
+  });
+
+  root.querySelectorAll('.ft-info-array').forEach(function (source) {
+    var values = lines(source);
     if (!values.length) { source.closest('.ft-info-block').hidden = true; return; }
     var list = document.createElement('ul');
     list.className = 'ft-info-list';
@@ -38,11 +63,11 @@
     var content = block.querySelector('.ft-info-content, .ft-info-array') || block;
     if (!content.textContent.trim() && !content.querySelector('audio, img, video')) block.hidden = true;
   });
-  root.querySelectorAll('.ft-info-grid').forEach(function (grid) {
-    if (!grid.querySelector('.ft-info-block:not([hidden])')) grid.hidden = true;
+  root.querySelectorAll('.ft-example-group, .ft-back-content').forEach(function (group) {
+    if (!group.querySelector('.ft-info-block:not([hidden])')) group.hidden = true;
   });
   var hero = root.querySelector('.ft-back-hero');
-  if (!hero.textContent.trim()) hero.hidden = true;
+  if (hero && !hero.textContent.trim()) hero.hidden = true;
   root.querySelectorAll('audio').forEach(function (audio) {
     audio.removeAttribute('autoplay');
     audio.preload = 'none';
