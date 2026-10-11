@@ -1,6 +1,6 @@
 {
   "slug": "typing-meaning",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -56,6 +56,12 @@
         "field_type": "audio",
         "position": 6,
         "required": false
+      },
+      {
+        "name": "DefinitionHint",
+        "field_type": "richtext",
+        "position": 7,
+        "required": false
       }
     ]
   },
@@ -104,6 +110,12 @@
         "label": "Phát âm · chỉ ở mặt sau",
         "type": "audio",
         "required": false
+      },
+      {
+        "key": "DefinitionHint",
+        "label": "Gợi ý giải thích · ngôn ngữ đích · mặt trước",
+        "type": "richtext",
+        "required": false
       }
     ],
     "source_files": {
@@ -119,7 +131,8 @@
     "Explanation": "Explanation",
     "Example": "Example",
     "ExampleTranslation": "ExampleTranslation",
-    "Audio": "Audio"
+    "Audio": "Audio",
+    "DefinitionHint": "DefinitionHint"
   },
   "example_field_values": {
     "PromptText": "学ぶ",
@@ -128,7 +141,8 @@
     "Explanation": "<p>Tiếp thu kiến thức hoặc kỹ năng.</p>",
     "Example": "<p>日本語を学んでいます。</p>",
     "ExampleTranslation": "<p>Tôi đang học tiếng Nhật.</p>",
-    "Audio": null
+    "Audio": null,
+    "DefinitionHint": "<p>知識や技術を身につけること。</p>"
   },
   "examples": [
     {
@@ -141,7 +155,8 @@
         "Explanation": "meaning_vi",
         "Example": "example_jp",
         "ExampleTranslation": "example_vi",
-        "Audio": "word_audio"
+        "Audio": "word_audio",
+        "DefinitionHint": "meaning_jp"
       }
     },
     {
@@ -161,21 +176,22 @@
     "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
     "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible. Matching any one complete item is correct; a fragment or concatenation of different items is not.",
     "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
-    "character_count": "Unicode grapheme clusters excluding whitespace. Short answers have tiles grouped by words and a word count. Any alternative over 32 characters or 6 whitespace-separated words switches to one compact guide and a bounded textarea.",
-    "hints": "Short answers reveal one character per click, leaving the last hidden. Long answers reveal eight at a time, limited to a 48-character prefix and leaving the last character hidden.",
+    "character_count": "One ordinary single-line input for all meanings, with no character tiles, character count or word count, regardless of the lengths of accepted alternatives.",
+    "hints": "The first Answer item supplies a prefix only after clicking Open character. Reveal one Unicode grapheme per click, keep the last hidden, and cap the prefix at 48 non-whitespace characters. All complete alternative meanings remain accepted.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
     "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
     "grading": "Flip the card and choose the study rating.",
-    "keyboard": "Short input: Enter checks. Long textarea: Enter adds a line; Ctrl/Command+Enter checks. IME composition never submits. Typed line breaks normalize to spaces."
+    "keyboard": "Enter checks the single-line input. IME composition never submits. Case, NFC and whitespace normalization remain unchanged.",
+    "definition_hint": "Optional richtext input DefinitionHint is a target-language explanation, collapsed on the front until the learner opens it. Null, unbound, whitespace-only and visually empty richtext hide the entire clue. It is not part of answer matching."
   },
   "database_installation": {
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
-    "current_version_id": "467f6c2e-5376-46c4-bfb7-fab35f1f2181",
+    "current_version_id": "d58339ae-aa6c-4239-a4fc-81bc7ef68a1c",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 4
+    "version_no": 5
   }
 }

@@ -4,6 +4,10 @@
     {{#PromptImage}}<div class="ft-prompt-image">{{{PromptImage}}}</div>{{/PromptImage}}
     <p class="ft-instruction">Gõ từ tương ứng với hình ảnh.</p>
   </div>
+  {{#DefinitionHint}}<div class="ft-definition-hint">
+    <button class="ft-definition-toggle" type="button" aria-expanded="false" aria-controls="ft-definition-content"><span class="ft-definition-label"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Giải thích bằng ngôn ngữ đích</span></span><svg class="ft-icon ft-definition-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+    <div class="ft-definition-content" id="ft-definition-content" hidden>{{{DefinitionHint}}}</div>
+  </div>{{/DefinitionHint}}
   <div class="ft-guide">
     <div class="ft-guide-heading"><span class="ft-guide-label">Độ dài đáp án</span><span class="ft-length"></span></div>
     <div class="ft-slots" role="group"></div>
@@ -13,7 +17,7 @@
     <div class="ft-input-wrap"><input class="ft-input" id="ft-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
     <span class="ft-entry-help" id="ft-entry-help">Nhấn Enter hoặc Kiểm tra khi bạn đã sẵn sàng.</span>
     <div class="ft-actions">
-      <button class="ft-button ft-hint" type="button"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Mở gợi ý</span></button>
+      <button class="ft-button ft-hint" type="button"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Mở ký tự</span></button>
       <button class="ft-button ft-check" type="button"><span>Kiểm tra</span><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"></path></svg></button>
     </div>
     <div class="ft-status" id="ft-status" role="status" aria-live="polite"></div>
@@ -214,6 +218,22 @@
   resizeEntry();
   if (longEntry) window.addEventListener('resize', resizeEntry);
 
+  // DefinitionHint is an optional learner-controlled clue, independent of Answer.
+  var definitionHint = find('.ft-definition-hint');
+  if (definitionHint) {
+    var definitionContent = find('.ft-definition-content');
+    var definitionToggle = find('.ft-definition-toggle');
+    if (!normalize(definitionContent.textContent) && !definitionContent.querySelector('img, audio, video')) {
+      definitionHint.hidden = true;
+    } else {
+      definitionToggle.addEventListener('click', function () {
+        var opening = definitionContent.hidden;
+        definitionContent.hidden = !opening;
+        definitionToggle.setAttribute('aria-expanded', String(opening));
+        definitionHint.classList.toggle('is-open', opening);
+      });
+    }
+  }
   var text = find('.ft-prompt-text');
   if (text && !text.textContent.trim()) text.hidden = true;
   var picture = find('.ft-prompt-image');

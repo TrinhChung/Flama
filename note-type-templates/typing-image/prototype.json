@@ -1,6 +1,6 @@
 {
   "slug": "typing-image",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -44,6 +44,12 @@
         "field_type": "audio",
         "position": 4,
         "required": false
+      },
+      {
+        "name": "DefinitionHint",
+        "field_type": "richtext",
+        "position": 5,
+        "required": false
       }
     ]
   },
@@ -80,6 +86,12 @@
         "label": "Phát âm · chỉ ở mặt sau",
         "type": "audio",
         "required": false
+      },
+      {
+        "key": "DefinitionHint",
+        "label": "Gợi ý giải thích · ngôn ngữ đích · mặt trước",
+        "type": "richtext",
+        "required": false
       }
     ],
     "source_files": {
@@ -93,14 +105,16 @@
     "Answer": "Answer",
     "Meaning": "Meaning",
     "Reading": "Reading",
-    "Audio": "Audio"
+    "Audio": "Audio",
+    "DefinitionHint": "DefinitionHint"
   },
   "example_field_values": {
     "PromptImage": null,
     "Answer": "apple\nan apple",
     "Meaning": "quả táo",
     "Reading": "/ˈæp.əl/",
-    "Audio": null
+    "Audio": null,
+    "DefinitionHint": "<p>A round fruit with red or green skin and crisp flesh.</p>"
   },
   "examples": [
     {
@@ -122,7 +136,8 @@
         "Answer": "word",
         "Meaning": "translation_vi",
         "Reading": "reading",
-        "Audio": "word_audio"
+        "Audio": "word_audio",
+        "DefinitionHint": "meaning_jp"
       }
     }
   ],
@@ -135,16 +150,17 @@
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
     "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
     "grading": "Flip the card and choose the study rating.",
-    "keyboard": "Short input: Enter checks. Long textarea: Enter adds a line; Ctrl/Command+Enter checks. IME composition never submits. Typed line breaks normalize to spaces."
+    "keyboard": "Short input: Enter checks. Long textarea: Enter adds a line; Ctrl/Command+Enter checks. IME composition never submits. Typed line breaks normalize to spaces.",
+    "definition_hint": "Optional richtext input DefinitionHint is a target-language explanation, collapsed on the front until the learner opens it. Null, unbound, whitespace-only and visually empty richtext hide the entire clue. It is not part of answer matching."
   },
   "database_installation": {
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "633d3b27-902c-4c48-b556-3baf0f113a83",
-    "current_version_id": "35571e8c-14ea-4963-acd4-6ea4f38ea62d",
+    "current_version_id": "5d77db9f-7f03-4efb-b50b-9e8ce20e59e0",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 4
+    "version_no": 5
   }
 }
