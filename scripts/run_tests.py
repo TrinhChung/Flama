@@ -322,6 +322,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_api_strokes.py",
             "tests/test_stroke_service.py",
             "tests/test_field_array_conversion.py",
+            "tests/test_array_cutover.py",
         ],
         "frontend_tests": [
             "src/lib/ankiHtmlSanitizer.test.ts",
@@ -422,6 +423,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/session/sessionRestore.test.ts",
             "src/features/study/components/StudyQuickEditDialog.test.tsx",
             "src/lib/arrayField.test.ts",
+            "src/entities/flashcard/lib/arrayTemplates.test.ts",
             "src/features/note-types/lib/arrayConversion.test.ts",
             "src/features/note-types/components/fields/FieldArrayConversionDialog.test.tsx",
         ]

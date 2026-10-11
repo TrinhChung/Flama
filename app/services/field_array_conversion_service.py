@@ -106,7 +106,7 @@ def _new_value(request, field: FieldDef, item) -> str:
         if problem:
             raise ArrayConversionError(
                 "INVALID_ARRAY_VALUE",
-                "Array values must be plain text with one non-empty, unique item per line.",
+                "Array values must be plain text with one non-empty item per line.",
                 details={"note_id": item.note_id, "problem": problem},
             )
         return item.value

@@ -73,3 +73,6 @@ skills/*
 # OS / Editor files
 .DS_Store
 Thumbs.db
+
+# Private database dumps and generated template test exports.
+/docs/dumps/

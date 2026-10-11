@@ -1,6 +1,6 @@
 {
   "slug": "flama-default",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "saved_at": "2026-10-11T09:57:33+09:00",
   "source": {
     "kind": "database",
@@ -348,5 +348,10 @@
     "diagram": "",
     "word_audio": "",
     "example_audio": ""
+  },
+  "files_sha256": {
+    "front.html": "9317ed9de21583df07ddb3fb86c62bafe4b2506ffaecd77393ea038f681423bb",
+    "back.html": "ac5bf0d45ee568bf80794d7b3229745601b273d873289eca48060b24f8f91a7b",
+    "style.css": "f5c42590f778727c8a6bc15364fb17b79fd1f51735cef61bc65bd5437e99bd70"
   }
 }

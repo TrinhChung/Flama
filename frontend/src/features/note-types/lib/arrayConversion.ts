@@ -77,7 +77,7 @@ export function splitToArray(raw: unknown, presets: ReadonlySet<SplitPresetId>):
   if (/<[a-z/][^>]*>/i.test(source)) flags.push('html')
   if (/\[sound:[^\]]*\]/i.test(source)) flags.push('sound')
   if (source.trim() && !items.length) flags.push('empty')
-  if (kept.length > items.length) flags.push('duplicates')
+  if (new Set(items.map((item) => item.toLowerCase())).size < items.length) flags.push('duplicates')
   if (items.some((item) => Array.from(item).length > LONG_ITEM_LENGTH)) flags.push('long')
   // A bracketed note stays inside its item (a learner would have to type it too); worth a look.
   if (items.some((item) => BRACKETS.test(item))) flags.push('brackets')

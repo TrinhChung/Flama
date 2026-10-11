@@ -51,7 +51,7 @@ describe('splitToArray', () => {
   })
 
   it('flags markup, sound references, duplicates and long items', () => {
-    expect(splitToArray('<b>ăn</b>, ăn', DEFAULT_SPLIT_PRESETS)).toEqual({ value: 'ăn', items: ['ăn'], flags: ['html', 'duplicates'] })
+    expect(splitToArray('<b>ăn</b>, ăn', DEFAULT_SPLIT_PRESETS)).toEqual({ value: 'ăn\năn', items: ['ăn', 'ăn'], flags: ['html', 'duplicates'] })
     expect(splitToArray('ăn[sound:a.mp3]', DEFAULT_SPLIT_PRESETS).flags).toEqual(['sound'])
     expect(splitToArray('x'.repeat(81), DEFAULT_SPLIT_PRESETS).flags).toEqual(['long'])
   })

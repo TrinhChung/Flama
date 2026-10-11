@@ -88,12 +88,7 @@ def array_value_problem(value: str) -> str | None:
         return "too_long"
     if "\r" in value or _HTML_TAG_RE.search(value):
         return "not_plain_lines"
-    seen: set[str] = set()
     for line in value.split("\n"):
         if not line or line != line.strip():
             return "not_plain_lines"
-        key = line.lower()  # same rule as the frontend normalizer (toLowerCase)
-        if key in seen:
-            return "duplicate_item"
-        seen.add(key)
     return None

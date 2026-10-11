@@ -1,6 +1,6 @@
 {
   "slug": "advanced-vocabulary-card",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "saved_at": "2026-10-11T09:57:33+09:00",
   "source": {
     "kind": "database",
@@ -400,5 +400,10 @@
     "Vocabulary_Audio": "",
     "Example_Audio": "",
     "image": ""
+  },
+  "files_sha256": {
+    "front.html": "a0d40e578d813c87e3bdfd7ee47169c85a74dfe356fe88b9c14e2400323cd5ae",
+    "back.html": "6b1ca4e599d67b61e693dfe5cd223b44cd5bc66db44495f794871512f8607269",
+    "style.css": "352952dafcd57ed0f11cf69434bc78d6e606e6a014be508f2c3c7518ba1489b6"
   }
 }

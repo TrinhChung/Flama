@@ -19,12 +19,10 @@
 
   <!-- Meaning -->
   {{#Meaning}}
-  <div auto-split style='
-        display: flex;
+  <div data-array-field="Meaning" style='
         font-weight: bold;
         font-family: "Arial"; 
         font-size: 20px;
-        flex-direction: column;
         text-transform: uppercase;' class="meaning-vi">{{Meaning}}</div>
   {{/Meaning}}
 
@@ -95,6 +93,11 @@
 </div>
 
 <script>
+(function () {
+  var script = document.currentScript;
+  var scope = script && (script.closest('.vocab-card') || script.previousElementSibling);
+  if (!scope || !scope.classList.contains('vocab-card')) return;
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -104,34 +107,35 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
-function splitBySemicolon(raw) {
-  if (!raw) return [];
-  return raw
-    .replace(/\r/g, "")
-    .replace(/\n/g, ";")
-    .replace(/<br\s*\/?>/gi, ";")
-    .split(";")
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
+/* Array fields render one item per <br>. Punctuation belongs to the item. */
+function readArray(el) {
+  if (!el) return [];
+  var copy = el.cloneNode(true);
+  copy.querySelectorAll('br').forEach(function (node) { node.replaceWith('\n'); });
+  copy.querySelectorAll('p, div, li').forEach(function (node) { node.append('\n'); });
+  return (copy.textContent || '')
+    .split(/\r\n?|\n/)
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
 }
 
 /* Grid renderer: cột trái = fit-content(max), cột phải = 1fr */
 function renderPairs(rawId, rawViId, outId) {
-  const rawEl = document.getElementById(rawId);
-  const rawViEl = document.getElementById(rawViId);
-  const outEl = document.getElementById(outId);
+  var rawEl = scope.querySelector('#' + rawId);
+  var rawViEl = scope.querySelector('#' + rawViId);
+  var outEl = scope.querySelector('#' + outId);
   if (!outEl || !rawEl) return;
 
-  const leftArr = splitBySemicolon(rawEl.textContent || "");
-  const rightArr = splitBySemicolon(rawViEl ? (rawViEl.textContent || "") : "");
+  var leftArr = readArray(rawEl);
+  var rightArr = readArray(rawViEl);
   if (leftArr.length === 0 && rightArr.length === 0) return;
 
-  const max = Math.max(leftArr.length, rightArr.length);
-  let html = '<div class="pairs-grid">';
+  var max = Math.max(leftArr.length, rightArr.length);
+  var html = '<div class="pairs-grid">';
 
-  for (let i = 0; i < max; i++) {
-    const left = leftArr[i] || "";
-    const right = rightArr[i] || "";
+  for (var i = 0; i < max; i++) {
+    var left = leftArr[i] || "";
+    var right = rightArr[i] || "";
 
     html += ''
       + '<div class="pair-left">' + escapeHtml(left) + '</div>'
@@ -142,28 +146,25 @@ function renderPairs(rawId, rawViId, outId) {
   outEl.innerHTML = html;
 }
 
-/* 1) render paired sections */
-renderPairs("coll-raw", "collvi-raw", "coll-pairs");
-renderPairs("syn-raw", "synvi-raw", "syn-pairs");
-renderPairs("ant-raw", "antvi-raw", "ant-pairs");
+  /* 1) render paired sections */
+  renderPairs("coll-raw", "collvi-raw", "coll-pairs");
+  renderPairs("syn-raw", "synvi-raw", "syn-pairs");
+  renderPairs("ant-raw", "antvi-raw", "ant-pairs");
 
-/* 2) auto split ; for normal blocks */
-(function () {
-  document.querySelectorAll('[auto-split]').forEach(el => {
+  /* These prose fields were not migrated; retain their existing formatting. */
+  scope.querySelectorAll('[auto-split]').forEach(function (el) {
     el.innerHTML = el.innerHTML.replace(/;\s*/g, "<br>");
   });
-})();
 
-/* 3) auto play word -> example */
-(() => {
-  const word = document.getElementById("word-audio");
-  const example = document.getElementById("example-audio");
+  /* 3) auto play word -> example */
+  var word = scope.querySelector("#word-audio");
+  var example = scope.querySelector("#example-audio");
 
   if (word) {
-    word.play().catch(()=>{});
-    word.onended = () => {
-      setTimeout(() => {
-        if (example) example.play().catch(()=>{});
+    word.play().catch(function (){});
+    word.onended = function () {
+      setTimeout(function () {
+        if (example) example.play().catch(function (){});
       }, 500);
     };
   }

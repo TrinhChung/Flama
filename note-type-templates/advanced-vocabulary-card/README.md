@@ -1,6 +1,6 @@
 # Backup: Advanced Vocabulary Card
 
-Bản chụp ngày 2026-10-11 từ DB của user 1: note type **En4Everyone**, template **Advanced Vocabulary Card**. HTML, JavaScript và CSS giữ nguyên nội dung DB.
+Bản chụp ngày 2026-10-11 từ DB của user 1: note type **En4Everyone**, template **Advanced Vocabulary Card**. Mặt sau phiên bản 1.1 đọc ranh giới array từ `<br>` và ghép EN–VI theo index, giữ phần tử trùng và dấu câu trong từng mục. Mặt trước và CSS giữ nguyên. `source.sha256` là checksum DB gốc; `files_sha256` là checksum file hiện tại.
 
 | File | Nội dung |
 | --- | --- |

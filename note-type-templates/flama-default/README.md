@@ -2,7 +2,7 @@
 
 Bản chụp ngày 2026-10-11 của note type **Flama Standard Vocabulary** và template **Default Flama Flashcard**, đọc trực tiếp từ DB của user 1. ID note type, template, phiên bản hiện tại, các FieldDef và ánh xạ application được lưu trong `prototype.json`.
 
-HTML, JavaScript và CSS giữ nguyên nội dung trong DB, kể cả khoảng trắng. Cấu trúc trường lấy từ `field_defs`; SHA-256 tính từ byte thực tế của từng file backup.
+Mặt trước và CSS giữ nguyên bản DB. Mặt sau phiên bản 1.1 đọc trực tiếp xuống dòng của array cho cách đọc/nghĩa; vùng chữ dùng layout block để `<br>` không bị gom ngang bởi flex. `source.sha256` giữ checksum của bản DB gốc, `files_sha256` mô tả các file hiện tại.
 
 | File | Nội dung |
 | --- | --- |
@@ -34,7 +34,7 @@ Thứ tự bên dưới khớp `position` 0–15 trong DB. Trường `word` bắ
 | `word_audio` | `audio` |
 | `example_audio` | `audio` |
 
-Trường tên `diagram` có kiểu `image` theo DB. `reading` và `translation_vi` lưu danh sách chuỗi; dữ liệu ví dụ cũng dùng JSON array.
+Trường tên `diagram` có kiểu `image` theo DB. `reading` và `translation_vi` lưu chuỗi với một phần tử mỗi dòng. Danh sách JSON trong dữ liệu ví dụ là biểu diễn để đọc; khi nhập DB, nối bằng `\n`.
 
 DB chưa khai báo input schema riêng (`null`, schema của phiên bản là `[]`). `template.input_schema` lưu schema hiệu lực được suy ra bằng `infer_input_schema` của ứng dụng: input ứng với field `array` được suy ra thành `text`, các input có `required = false`. Quy tắc bắt buộc của note vẫn nằm trong `note_type.field_defs`. Schema gốc được giữ trong `source`.
 
@@ -47,4 +47,4 @@ DB chưa khai báo input schema riêng (`null`, schema của phiên bản là `[
 
 `prototype.json` là bản mô tả backup. Khi dựng payload API, đọc nội dung các file trong `template.source_files` vào `front_html`, `back_html`, `shared_css`, và thay tên trường trong `input_bindings_by_field_name` bằng ID thật của FieldDef thuộc note type đích. Các ID trong `source` ghi lại nguồn DB đã xuất; metadata như `is_official` và `publish_status` cũng lấy từ DB.
 
-Mặt sau giữ script phát âm từ vựng rồi phát âm câu ví dụ sau 500 ms, cùng logic đổi dấu `$` thành xuống dòng trong các vùng `auto-split`.
+Mặt sau giữ script phát âm từ vựng rồi phát âm câu ví dụ sau 500 ms. Chỉ các trường văn xuôi chưa migrate còn dùng `$` trong vùng `auto-split`; không tách lại dấu câu của array. Các phần tử array không được bọc thêm thẻ block có margin/padding.

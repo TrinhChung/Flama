@@ -135,12 +135,23 @@ class FieldArrayConversionTests(unittest.TestCase):
 
     def test_array_values_must_be_clean_lines(self):
         source = self.client.get(self._url()).get_json()
-        for bad in ("ăn\n\ndùng bữa", " ăn", "ăn\nĂN", "<b>ăn</b>", "ăn\r\nuống"):
+        for bad in ("ăn\n\ndùng bữa", " ăn", "<b>ăn</b>", "ăn\r\nuống"):
             payload = self._payload(source, transform=lambda value, bad=bad: bad if value.startswith("ăn") else value)
             response = self.client.post(self._url(), json=payload)
             self.assertEqual(response.status_code, 400, (bad, response.get_json()))
             self.assertEqual(response.get_json()["error"], "INVALID_ARRAY_VALUE")
         self.assertEqual(self._field_type(), "text")
+
+    def test_repeated_array_items_survive_conversion_and_note_edit(self):
+        source = self.client.get(self._url()).get_json()
+        repeated = "xử lý đồng thời\nkhác\nxử lý đồng thời"
+        payload = self._payload(source, transform=lambda value: repeated if value.startswith("ăn") else value)
+        response = self.client.post(self._url(), json=payload)
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(self._meaning(self.note_ids[0]), repeated)
+        response = self.client.patch(f"/api/notes/{self.note_ids[0]}", json={"field_values": {"Word": "食べる", "Meaning": repeated}})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(self._meaning(self.note_ids[0]), repeated)
 
     def test_primary_media_and_changed_fields_are_refused(self):
         word = self.client.get(self._url("Word")).get_json()

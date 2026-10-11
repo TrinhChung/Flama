@@ -55,7 +55,7 @@
       "image": { "label": "Image", "hint": "Stores an image media reference. Try a sample image or enter an existing reference." },
       "audio": { "label": "Audio", "hint": "Stores an audio media reference. Play a sample here; TTS generation is configured in Audio." },
       "diagram": { "label": "Diagram", "hint": "Stores image or SVG references, as in the current diagram editor. Try a sample or an existing reference." },
-      "array": { "label": "Array", "hint": "A list of values, one item per line. Empty and duplicate lines are dropped on save." }
+      "array": { "label": "Array", "hint": "A list of values, one item per line. Order and repeated items are preserved; empty lines are dropped on save." }
     }
   },
   "manager": {
@@ -180,14 +180,14 @@
       "flag_html": "Has HTML; formatting will be dropped",
       "flag_sound": "Has [sound:]; audio will be dropped",
       "flag_empty": "No items left",
-      "flag_duplicates": "Duplicate items merged",
+      "flag_duplicates": "Contains repeated items (preserved)",
       "flag_long": "An item is longer than 80 characters",
       "flag_brackets": "Has a bracketed part, kept inside one item",
       "error_NOTES_CHANGED": "Notes changed since the preview. Reload the preview and try again.",
       "error_FIELD_CHANGED": "The field type changed since the preview. Close the dialog and open it again.",
       "error_FIELD_RENAME_IN_PROGRESS": "The field is being renamed. Wait for it to finish and try again.",
       "error_FIELD_NOT_CONVERTIBLE": "This field cannot be converted.",
-      "error_INVALID_ARRAY_VALUE": "A value is invalid: each line must be one item, without duplicates or HTML.",
+      "error_INVALID_ARRAY_VALUE": "A value is invalid: each line must be one non-empty item, without HTML.",
       "error_INVALID_FIELD_VALUE": "The backup has a value that is invalid for the original field type.",
       "error_generic": "Could not apply: {{message}}",
       "too_many_notes": "This card type has {{count}} Notes, over the limit of {{max}} Notes per conversion. Card types this large cannot be converted yet.",

@@ -27,11 +27,11 @@
         flex-direction: column;
         text-transform: uppercase;'
     >
-        <div style='font-family: "Arial"; display: flex'>
+        <div data-array-field="reading" style='font-family: "Arial";'>
             {{{reading}}} 「{{{hanviet}}}」
         </div>
 
-        <div style='color: green; display: flex; padding-bottom: 10px' auto-split>
+        <div data-array-field="translation_vi" style='color: green; padding-bottom: 10px'>
             {{{translation_vi}}}
         </div>
     </div>
@@ -165,10 +165,15 @@
 })();
 
 (function() {
-    document.querySelectorAll('div[auto-split]').forEach(el => {
-        let text = el.innerHTML;
-        text = text.replace(/\$/g, "<br>");
-        el.innerHTML = text;
+    var script = document.currentScript;
+    var scope = script && (script.closest('.flama-vocab-card') || script.previousElementSibling);
+    if (!scope || !scope.classList.contains('flama-vocab-card')) return;
+    // Only legacy prose fields still use $. Array fields render <br> directly.
+    scope.querySelectorAll('div[auto-split]').forEach(function(el) {
+        var text = el.innerHTML;
+        if (text.indexOf('$') !== -1) {
+            el.innerHTML = text.replace(/\$/g, "<br>");
+        }
     });
 })();
 </script>
