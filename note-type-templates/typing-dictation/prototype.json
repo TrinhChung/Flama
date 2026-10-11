@@ -1,6 +1,6 @@
 {
   "slug": "typing-dictation",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -126,22 +126,22 @@
     "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
     "accepted_answers": "Each rendered array item is one complete transcript alternative. Word matching selects a consistent transcript; a mixture of incompatible alternatives cannot pass. Array boundaries are read from existing DOM <br> nodes. Only template JavaScript tokenizes words.",
     "normalization": "NFC and case insensitive. Boundary punctuation is supplied by the transcript and optional when typing; accents, tone marks, internal apostrophes and internal hyphens remain significant.",
-    "character_count": "One small dash per Unicode grapheme inside a word, with ordinary spaces between words. One button per word, no separate character boxes. The long passage scrolls within a bounded height and one small input edits the active word.",
+    "character_count": "One compact dash per Unicode grapheme, ordinary spaces and supplied punctuation between words. A borderless passage wraps naturally and scrolls only when very long; one small editor handles the active word.",
     "hints": "Reveal one grapheme of the active word per click through its final character. Hints do not fill the input or mark a word correct.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
     "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
     "grading": "Flip the card and choose the study rating.",
-    "keyboard": "Space, Enter or Commit word submits the current word and advances. Exact words reveal live; submitted mistakes show red x characters. Click a word to restore its typed text for correction. Backspace in an empty editor goes to the previous word. IME composition never submits; paste supports multiple words.",
-    "correction": "After correcting a word, move to the next unfinished word. Extra words stay visible and incorrect until removed. Reset starts the transcript again. Completing every word of one accepted transcript shows success; hints alone cannot complete it."
+    "keyboard": "An exact word automatically advances without Space, Enter or a commit button. Valid partial prefixes stay neutral; incompatible input turns red and shakes once per mistake. Space after an automatic advance is ignored. Enter can skip a word for later correction. Click a word to restore its attempted text; empty-editor Backspace returns to the previous word. IME composition never advances; paste accepts multiple words including a correct final word.",
+    "correction": "Mistakes remain visible as red x masks and can be clicked to retype. Exact correction advances to the next unfinished word. CSS feedback respects reduced motion. Extra pasted words stay incorrect until removed. Hints alone cannot complete the exercise; all words must belong to one accepted transcript."
   },
   "database_installation": {
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "fc011484-1674-4d5a-b3d6-e1abd21b64e2",
-    "current_version_id": "85a9b6d5-25bc-4933-b5e9-9e0ef00181f9",
+    "current_version_id": "1839bc72-f55a-4801-9ed6-83b3f761033a",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 6
+    "version_no": 7
   }
 }
