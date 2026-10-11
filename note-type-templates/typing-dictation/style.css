@@ -202,11 +202,6 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
 .ft-example-group:has([data-info="Example"]:not([hidden])) [data-info="ExampleTranslation"] .ft-info-heading { display: none; }
 .ft-info-media img { display: block; width: auto; max-width: 100%; max-height: 240px; height: auto; margin: 0; border-radius: 16px; object-fit: contain; }
 .ft-info-media .flama-media-gallery { display: flex; flex-wrap: wrap; gap: 10px; }
-.ft-info-audio { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
-.ft-info-audio .ft-info-heading { margin: 0; }
-.ft-info-audio .ft-info-content { flex: 1 1 200px; max-width: 360px; min-width: 0; }
-.ft-info-audio audio { display: block; width: 100%; height: 36px; }
-.ft-info-audio audio + audio { margin-top: 6px; }
 .ft-back[data-mode="dictation"] .ft-stimulus { gap: 14px; margin-top: 26px; }
 .ft-back[data-mode="dictation"] .ft-audio { padding: 0; border: 0; border-radius: 0; background: transparent; }
 .ft-back[data-mode="dictation"] .ft-instruction { text-align: left; font-size: 12px; line-height: 1.65; }
@@ -222,3 +217,23 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
   .ft-back[data-mode="dictation"] .ft-review { margin-top: 24px; }
   .ft-back[data-mode="dictation"] .ft-answer-values { font-size: 16px; }
 }
+
+/* Optional replay buttons sit beside their word or example. */
+.ft-prompt-line, .ft-answer-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ft-prompt-line { justify-content: center; }
+.ft-prompt-line .ft-prompt-text, .ft-answer-line .ft-answer-panel { min-width: 0; }
+.ft-inline-audio { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.ft-audio-replay { display: inline-flex; justify-content: center; align-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--ft-brand-soft); color: var(--ft-brand); cursor: pointer; transition: background .16s, color .16s; }
+.ft-audio-replay .ft-icon { width: 18px; height: 18px; }
+.ft-audio-replay:hover, .ft-audio-replay[aria-pressed="true"] { background: var(--ft-brand); color: #fff; }
+.ft-audio-replay:focus-visible { outline: 3px solid var(--ft-brand); outline-offset: 3px; }
+.ft-replay-status { max-width: 160px; color: var(--ft-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
+.ft-replay-status:empty { display: none; }
+.ft-example-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+.ft-example-title .ft-info-heading { margin: 0; }
+.ft-example-title .ft-audio-replay { width: 32px; height: 32px; }
+.ft-example-title:empty { display: none; }
+.ft-info-secondary .ft-info-content { color: var(--ft-muted); font-size: 14px; }
+
+.ft-usage-group [data-info="Usage"] + [data-info="UsageTranslation"] { margin-top: 4px; }
+.ft-usage-group:has([data-info="Usage"]:not([hidden])) [data-info="UsageTranslation"] .ft-info-heading { display: none; }
