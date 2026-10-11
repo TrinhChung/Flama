@@ -1,6 +1,6 @@
 {
   "slug": "typing-image",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -128,7 +128,7 @@
   ],
   "behavior": {
     "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
-    "accepted_answers": "One answer per non-empty line; array and text fields are compatible. Flama array storage is newline-delimited text.",
+    "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible.",
     "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
     "character_count": "Unicode grapheme clusters excluding whitespace; rounded tiles grouped by words.",
     "hints": "Reveal a character per click, leaving the last hidden.",
@@ -140,10 +140,10 @@
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "633d3b27-902c-4c48-b556-3baf0f113a83",
-    "current_version_id": "113a71b5-abe9-4b2f-8cf8-528a80ae2bf1",
+    "current_version_id": "a5d0476c-040b-496e-b397-c92c712146f0",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 2
+    "version_no": 3
   }
 }

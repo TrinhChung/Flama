@@ -1,6 +1,6 @@
 {
   "slug": "typing-dictation",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -124,7 +124,7 @@
   ],
   "behavior": {
     "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
-    "accepted_answers": "One answer per non-empty line; array and text fields are compatible. Flama array storage is newline-delimited text.",
+    "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible.",
     "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
     "character_count": "Unicode grapheme clusters excluding whitespace; rounded tiles grouped by words.",
     "hints": "Reveal a character per click, leaving the last hidden.",
@@ -136,10 +136,10 @@
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "fc011484-1674-4d5a-b3d6-e1abd21b64e2",
-    "current_version_id": "456f7dd1-65b9-4c52-805e-c733c80ae0f7",
+    "current_version_id": "242abd58-90ff-451e-893e-d5a93c7f5af4",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 2
+    "version_no": 3
   }
 }

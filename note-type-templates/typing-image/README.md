@@ -1,6 +1,6 @@
 # Gõ từ qua ảnh
 
-Nhìn hình, gõ tên; mặt sau xem nghĩa, cách đọc và nghe phát âm. Mẫu 1.0.1, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhìn hình, gõ tên; mặt sau xem nghĩa, cách đọc và nghe phát âm. Mẫu 1.0.2, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn lại bổ sung thông tin ở mặt sau; để không ánh xạ nếu không cần.
 
@@ -20,6 +20,8 @@ Mặt trước kiểm tra đáp án và mở gợi ý từng ô ký tự. Mặt 
 - **Tiếng Nhật · Flama Default**: PromptImage → image, Answer → word, Meaning → translation_vi, Reading → reading, Audio → word_audio.
 
 Input array nhận cả field text và array; mỗi dòng không trống là một đáp án/mục. Field array hiện lưu chuỗi văn bản, mỗi mục một dòng. Input richtext nhận field richtext; không ánh xạ field richtext vào Answer. Nếu transcript hiện ở field richtext, dùng thêm field text/array cho nội dung cần gõ. Tên field trong ví dụ cần đổi thành ID thật khi gọi API.
+
+Template đọc các mục array từ ranh giới `<br>` đã được render sẵn; không dùng `.split()` hoặc tách lại dấu `;`, `$`, `/`, dấu phẩy. Kiểm tra đáp án, gợi ý và bố cục tùy chỉnh nằm hoàn toàn trong HTML/CSS/JS của template; không cần thay đổi backend.
 
 Tiếng Nhật, Trung và Anh dùng chung bộ so sánh Unicode. NFC, chữ hoa/thường và khoảng trắng được chuẩn hóa; dấu tiếng Việt, dấu thanh pinyin và dấu câu vẫn cần đúng. Enter không gửi khi IME đang ghép ký tự. Gợi ý giữ lại ký tự cuối; khi đúng, hiển thị đáp án khớp với nội dung đã gõ.
 

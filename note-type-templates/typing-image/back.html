@@ -14,15 +14,18 @@
   var root = document.querySelector('.ft-back');
   if (!root) return;
 
-  function lines(source) {
-    var copy = source.cloneNode(true);
-    copy.querySelectorAll('br').forEach(function (node) { node.replaceWith('\n'); });
-    copy.querySelectorAll('p, div, li').forEach(function (node) { node.append('\n'); });
-    return copy.textContent.split(/\r\n?|\n/).map(function (value) { return value.trim(); }).filter(Boolean);
+  // Read the rendered array boundaries without re-parsing migrated delimiters.
+  function readArray(source) {
+    var values = [''];
+    source.childNodes.forEach(function (node) {
+      if (node.nodeName === 'BR') values.push('');
+      else values[values.length - 1] += node.textContent || '';
+    });
+    return values.map(function (value) { return value.trim(); }).filter(Boolean);
   }
 
   root.querySelectorAll('.ft-answer-values').forEach(function (source) {
-    var values = lines(source);
+    var values = readArray(source);
     if (!values.length) { source.closest('.ft-answer-panel').hidden = true; return; }
     var primary = document.createElement('div');
     primary.className = 'ft-answer-primary';
@@ -41,7 +44,7 @@
   });
 
   root.querySelectorAll('.ft-info-array').forEach(function (source) {
-    var values = lines(source);
+    var values = readArray(source);
     if (!values.length) { source.closest('.ft-info-block').hidden = true; return; }
     var list = document.createElement('ul');
     list.className = 'ft-info-list';

@@ -55,12 +55,15 @@
     return String(text || '').normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim();
   }
   function comparable(text) { return normalize(text).toLowerCase(); }
-  function lines(element) {
+  // Array items already arrive separated by <br>; punctuation stays inside each item.
+  function readArray(element) {
     if (!element) return [];
-    var copy = element.cloneNode(true);
-    copy.querySelectorAll('br').forEach(function (node) { node.replaceWith('\n'); });
-    copy.querySelectorAll('p, div, li').forEach(function (node) { node.append('\n'); });
-    return copy.textContent.split(/\r\n?|\n/).map(normalize).filter(Boolean);
+    var values = [''];
+    element.childNodes.forEach(function (node) {
+      if (node.nodeName === 'BR') values.push('');
+      else values[values.length - 1] += node.textContent || '';
+    });
+    return values.map(normalize).filter(Boolean);
   }
   function characters(text) {
     if (typeof Intl !== 'undefined' && Intl.Segmenter) {
@@ -70,7 +73,7 @@
     }
     return Array.from(text.normalize('NFC'));
   }
-  var answers = lines(find('.ft-answer-source'));
+  var answers = readArray(find('.ft-answer-source'));
   var first = characters(answers[0] || '');
   var current = first;
   var total = function (chars) { return chars.filter(function (ch) { return !/\s/.test(ch); }).length; };
