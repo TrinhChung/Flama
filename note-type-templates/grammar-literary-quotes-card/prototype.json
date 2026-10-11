@@ -1,0 +1,349 @@
+{
+  "slug": "grammar-literary-quotes-card",
+  "version": "1.0.0",
+  "saved_at": "2026-10-11T09:57:33+09:00",
+  "source": {
+    "kind": "database",
+    "database_name": "nihongo",
+    "owner_user_id": 1,
+    "note_type_id": "4fc2eb8e-16ba-4c6b-b323-a5f66bc41cd8",
+    "template_id": "0a86851a-843e-48b5-8275-66f244c595b7",
+    "current_version_id": "c1fa7f3d-32f6-5b7d-9c07-a1eb44aa9704",
+    "current_version_no": 1,
+    "stored_input_schema": null,
+    "current_version_input_schema": [],
+    "input_schema_origin": "inferred_by_app.validators.template_library.infer_input_schema",
+    "field_def_ids": {
+      "name": "2490cf75-017c-4a87-a1c9-326e54710e73",
+      "meaning": "d8da8806-72da-4ba4-9648-4a4f515ba0ba",
+      "structure": "09fcaaf9-dc7c-4bdb-8d6d-5bcb178eb5f7",
+      "notes": "0f3329c4-9348-4e91-97d5-a2943427ba6a",
+      "additional_example": "b0ab1bec-6458-47dd-9ae1-26f3a5b74d27",
+      "example_vi": "396051ad-f322-4809-a716-7ca86631a037",
+      "literary_example.quote": "e8414082-bf95-42ba-822a-fc94568b28f4",
+      "literary_example.work": "a696009b-3c36-4b9f-b369-9bfc5f6b842c",
+      "literary_example.author": "c443d320-6218-46ba-a48a-7f73bf104cd2",
+      "literary_example.translation": "0f7fbdba-fa89-4306-a1c2-c274b6cea3ad",
+      "Audio": "a3fafe86-64c4-41a9-903f-65a4cdf8d180",
+      "Example_Audio": "3160f96d-ca77-4247-9e2f-f7a09b359bf4",
+      "Literary_Audio": "ffbf25b8-77b7-4c71-9b3d-f9ab66a95d6f",
+      "note_jp": "a9be05a6-0078-4ac0-85dc-d90def2ccb0e",
+      "note_vi": "53d0b601-2144-4e16-8de7-535dd3bec352"
+    },
+    "applications": [
+      {
+        "id": "8cc53bd5-f31e-4f6d-b7bb-740c4267edbe",
+        "occurrence_key": "compat",
+        "status_code": "ACTIVE",
+        "display_name": null,
+        "position": 0,
+        "is_default": true,
+        "input_bindings": {
+          "name": "2490cf75-017c-4a87-a1c9-326e54710e73",
+          "Audio": "a3fafe86-64c4-41a9-903f-65a4cdf8d180",
+          "notes": "0f3329c4-9348-4e91-97d5-a2943427ba6a",
+          "meaning": "d8da8806-72da-4ba4-9648-4a4f515ba0ba",
+          "note_jp": "a9be05a6-0078-4ac0-85dc-d90def2ccb0e",
+          "note_vi": "53d0b601-2144-4e16-8de7-535dd3bec352",
+          "structure": "09fcaaf9-dc7c-4bdb-8d6d-5bcb178eb5f7",
+          "example_vi": "396051ad-f322-4809-a716-7ca86631a037",
+          "Example_Audio": "3160f96d-ca77-4247-9e2f-f7a09b359bf4",
+          "Literary_Audio": "ffbf25b8-77b7-4c71-9b3d-f9ab66a95d6f",
+          "additional_example": "b0ab1bec-6458-47dd-9ae1-26f3a5b74d27",
+          "literary_example.work": "a696009b-3c36-4b9f-b369-9bfc5f6b842c",
+          "literary_example.quote": "e8414082-bf95-42ba-822a-fc94568b28f4",
+          "literary_example.author": "c443d320-6218-46ba-a48a-7f73bf104cd2",
+          "literary_example.translation": "0f7fbdba-fa89-4306-a1c2-c274b6cea3ad"
+        }
+      }
+    ],
+    "sha256": {
+      "front.html": "5d296c0a7d72defd03a9ffd4a37d5c270e1d526de918695cee719ce367b34281",
+      "back.html": "67863c67e18a11cdd27c2991f0286f7c923aebc9df2ade38205561f048085e5a",
+      "style.css": "057cbd9fc82f8fda93a46ea98fda3f0eaaed239acd4783886fbf577a13944fff"
+    }
+  },
+  "note_type": {
+    "name": "文法N1",
+    "description": "Gồm ví dụ, âm thanh, trích dẫn văn học",
+    "primary_category": "Templates",
+    "tags": [
+      "jlpt",
+      "n1",
+      "tieng_nhat"
+    ],
+    "taxonomy_metadata": {
+      "domain": "language_learning",
+      "subject": "japanese",
+      "audience": null,
+      "framework": "jlpt",
+      "subcategory": null,
+      "best_used_for": null,
+      "learning_goals": [
+        "vocabulary",
+        "grammar"
+      ],
+      "primary_topics": [
+        "sentence_patterns"
+      ],
+      "difficulty_band": "advanced",
+      "format_features": [],
+      "framework_level": "n1",
+      "framework_track": null,
+      "target_audience": null
+    },
+    "preview_text": "Bộ thẻ ngữ pháp n1",
+    "preview_image_url": null,
+    "pricing_mode": "free",
+    "price_amount_minor": 0,
+    "version": "1.0.0",
+    "changelog": null,
+    "is_official": false,
+    "publish_status": "published",
+    "field_defs": [
+      {
+        "name": "name",
+        "field_type": "text",
+        "position": 0,
+        "required": true,
+        "identity_role": "primary"
+      },
+      {
+        "name": "meaning",
+        "field_type": "richtext",
+        "position": 1,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "structure",
+        "field_type": "text",
+        "position": 2,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "notes",
+        "field_type": "text",
+        "position": 3,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "additional_example",
+        "field_type": "richtext",
+        "position": 4,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "example_vi",
+        "field_type": "richtext",
+        "position": 5,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "literary_example.quote",
+        "field_type": "richtext",
+        "position": 6,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "literary_example.work",
+        "field_type": "richtext",
+        "position": 7,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "literary_example.author",
+        "field_type": "richtext",
+        "position": 8,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "literary_example.translation",
+        "field_type": "richtext",
+        "position": 9,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Audio",
+        "field_type": "audio",
+        "position": 10,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Example_Audio",
+        "field_type": "audio",
+        "position": 11,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Literary_Audio",
+        "field_type": "audio",
+        "position": 12,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "note_jp",
+        "field_type": "text",
+        "position": 13,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "note_vi",
+        "field_type": "text",
+        "position": 14,
+        "required": false,
+        "identity_role": null
+      }
+    ]
+  },
+  "template": {
+    "name": "Grammar & Literary Quotes Card",
+    "description": "Mẫu thẻ ngữ pháp chuyên sâu phong cách văn học. Mặt trước hiển thị tiêu đề điểm ngữ pháp nổi bật; mặt sau trình bày cấu trúc ngữ pháp, giải thích chi tiết, ví dụ minh họa và trích dẫn văn học kinh điển kèm chuỗi âm thanh 3 tầng (từ ➔ ví dụ ➔ trích dẫn).",
+    "primary_category": "Japanese",
+    "position": 0,
+    "is_default": true,
+    "input_schema": [
+      {
+        "key": "name",
+        "label": "name",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Audio",
+        "label": "Audio",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "meaning",
+        "label": "meaning",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "structure",
+        "label": "structure",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "notes",
+        "label": "notes",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "additional_example",
+        "label": "additional_example",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Example_Audio",
+        "label": "Example_Audio",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "example_vi",
+        "label": "example_vi",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "literary_example.quote",
+        "label": "literary_example.quote",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Literary_Audio",
+        "label": "Literary_Audio",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "literary_example.translation",
+        "label": "literary_example.translation",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "literary_example.author",
+        "label": "literary_example.author",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "literary_example.work",
+        "label": "literary_example.work",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "note_jp",
+        "label": "note_jp",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "note_vi",
+        "label": "note_vi",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "name": "name",
+    "Audio": "Audio",
+    "meaning": "meaning",
+    "structure": "structure",
+    "notes": "notes",
+    "additional_example": "additional_example",
+    "Example_Audio": "Example_Audio",
+    "example_vi": "example_vi",
+    "literary_example.quote": "literary_example.quote",
+    "Literary_Audio": "Literary_Audio",
+    "literary_example.translation": "literary_example.translation",
+    "literary_example.author": "literary_example.author",
+    "literary_example.work": "literary_example.work",
+    "note_jp": "note_jp",
+    "note_vi": "note_vi"
+  },
+  "example_field_values": {
+    "name": "～とあって",
+    "meaning": "Vì / do",
+    "structure": "N + とあって",
+    "notes": "",
+    "additional_example": "",
+    "example_vi": "",
+    "literary_example.quote": "",
+    "literary_example.work": "",
+    "literary_example.author": "",
+    "literary_example.translation": "",
+    "Audio": "",
+    "Example_Audio": "",
+    "Literary_Audio": "",
+    "note_jp": "",
+    "note_vi": ""
+  }
+}

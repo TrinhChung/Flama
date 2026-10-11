@@ -1,0 +1,150 @@
+    <!-- Ví dụ: Hiển thị lại từ vựng (nếu muốn) -->
+    {{#name}}
+<div style='
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    text-align: start;
+    padding-left: 20px;
+    font-family: "Arial"; 
+    font-size: 18px;'
+>
+    <div style='
+        font-family: "Arial"; 
+        font-size: 36px; 
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        color: #e53c20;
+        padding-top: 20px;'
+    >
+        {{name}}
+{{#Audio}}
+  <audio id="custom-audio" src="{{Audio_url}}"></audio>
+  <button onclick="document.getElementById('custom-audio').play()">🔊</button>
+{{/Audio}}
+    </div>
+    {{/name}}
+
+    <!-- Ngữ nghĩa / Cấu trúc (nếu muốn lặp lại) -->
+    {{#meaning}}
+    <div style='
+        display: flex;
+        font-weight: bold;
+        font-family: "Arial"; 
+        font-size: 20px;
+        flex-direction: column;
+        text-transform: uppercase;
+        margin-top: 10px;'
+    >
+        <div style='font-family: "Arial"; display: flex'>
+            {{meaning}}
+        </div>
+        {{#structure}}
+        <div style='color: green; display: flex; padding-bottom: 10px'>
+            {{structure}}
+        </div>
+        {{/structure}}
+    </div>
+    {{/meaning}}
+
+    <!-- Ghi chú bổ sung / giải thích chi tiết -->
+    {{#notes}}
+    <div style='display: flex; padding-top: 10px; color: #3367d6'>
+        ◆ Ghi chú / Giải thích thêm:
+    </div>
+    <div style='display: flex; padding-top: 5px'>
+        {{notes}}
+    </div>
+    {{/notes}}
+
+    <!-- Example bổ sung nếu có -->
+    {{#additional_example}}
+    <div style='display: flex; padding-top: 10px; color: #3367d6; font-weight: bold;'>
+        ◆ Ví dụ khác:
+    </div>
+<div style='display: flex; flex-direction: column; padding-top: 10px;'>
+    <div style="font-size: 20px; display: flex; align-items: center;">
+        {{additional_example}}
+{{#Example_Audio}}
+  <audio id="example-audio" src="{{Example_Audio_url}}"></audio>
+  <button onclick="document.getElementById('example-audio').play()">🔊</button>
+{{/Example_Audio}}
+    </div>
+    {{/additional_example}}
+</div>
+        {{#example_vi}}
+        <div style="font-size: 16px; color: gray; margin-left: 10px;">{{example_vi}}</div>
+        {{/example_vi}}
+   
+<!-- Hiển thị lại Literary Example (nếu muốn) -->
+{{#literary_example.quote}}
+<div style="display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;">
+    ◆ Cách sử dụng (trích dẫn văn học):
+</div>
+<div style="display: flex; flex-direction: column; padding-top: 10px;">
+    <div style="font-size: 20px;">{{literary_example.quote}}{{#Literary_Audio}}
+  <audio id="literary-audio" src="{{Literary_Audio_url}}"></audio>
+  <button onclick="document.getElementById('literary-audio').play()">🔊</button>
+{{/Literary_Audio}}</div>
+    {{#literary_example.translation}}
+    <div style="font-size: 16px; color: gray; margin-left: 10px;">{{literary_example.translation}}</div>
+    {{/literary_example.translation}}
+</div>
+{{/literary_example.quote}}
+
+{{#literary_example.author}}
+<div style="display: flex; align-items: center; padding-top: 10px;">
+    <span style="font-weight: bold; color: #3367d6;">◆ Nguồn:</span>
+    <span style="margin-left: 5px;">
+        <span style="font-weight: bold;">{{literary_example.work}}</span>
+        <span style="color: gray;"> - {{literary_example.author}}</span>
+    </span>
+</div>
+{{/literary_example.author}}
+
+    <!-- Ghi chú bổ sung / giải thích chi tiết -->
+    {{#notes}}
+    <div style='display: flex; padding-top: 10px; color: #3367d6'>
+        ◆ Ghi chú / Giải thích thêm:
+    </div>
+    <div style='display: flex; padding-top: 5px'>
+        {{note_jp}}
+    </div>
+<div style='display: flex; padding-top: 5px'>
+        {{note_vi}}
+    </div>
+    {{/notes}}
+
+<!-- Script phát âm từ vựng và ví dụ -->
+<script>
+(() => {
+  // 1️⃣ 参照を取得
+  const wordAudio     = document.getElementById('custom-audio');
+  const exampleAudio  = document.getElementById('example-audio');
+  const literaryAudio = document.getElementById('literary-audio');
+
+  // 2️⃣ 例外を握りつぶして安全に play する関数
+  const safePlay = (audio) => {
+    if (audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
+  };
+
+  // 3️⃣ 最初だけ連続再生
+  const playSequenceOnce = () => {
+    if (!wordAudio) return;
+
+    // Word ➜ Example ➜ Literary の順で 1 回だけつなぐ
+    wordAudio.addEventListener('ended', () => {
+      safePlay(exampleAudio);
+
+      exampleAudio?.addEventListener('ended', () => {
+        safePlay(literaryAudio);
+      }, { once:true });          // ← ここが “一度だけ” の鍵
+    }, { once:true });
+
+    safePlay(wordAudio);          // 再生スタート
+  };
+
+  playSequenceOnce();             // カードを開いた瞬間に実行
+})();
+</script>

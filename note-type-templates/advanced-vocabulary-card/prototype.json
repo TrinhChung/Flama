@@ -1,0 +1,404 @@
+{
+  "slug": "advanced-vocabulary-card",
+  "version": "1.0.0",
+  "saved_at": "2026-10-11T09:57:33+09:00",
+  "source": {
+    "kind": "database",
+    "database_name": "nihongo",
+    "owner_user_id": 1,
+    "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+    "template_id": "f6d63262-7ad8-4694-af0c-4bd8b0519c61",
+    "current_version_id": "d83a08a0-8e04-5d09-bd86-86a429d1cf7c",
+    "current_version_no": 1,
+    "stored_input_schema": null,
+    "current_version_input_schema": [],
+    "input_schema_origin": "inferred_by_app.validators.template_library.infer_input_schema",
+    "field_def_ids": {
+      "STT": "bb6592f3-eba3-4243-b280-8b62b0bec435",
+      "Vocabulary": "c1f8ca60-a815-4eb7-bf67-eb55002f4de8",
+      "PoS": "8ca1aa40-f713-440f-aa70-9d2d2d21ffab",
+      "Pronunciation": "af384972-d557-4f03-b463-9d88c0bcdb69",
+      "Meaning": "bd8621fa-82c4-4e1c-8845-323f02ce5a42",
+      "Example": "15c56c47-9ba2-4120-8c8f-a2594e8dfcd1",
+      "Example_VI": "d9dd7d47-500a-42c4-96f8-c4ee6c1836a2",
+      "Collocation": "30603a5c-744d-4305-aefa-d96816a3a689",
+      "Coollocation_VI": "bf48afdd-e5e2-4321-83ad-b462277a402a",
+      "Synonym": "ab4d5de5-b94a-4e72-bc82-04bc5a033900",
+      "Synonym_VI": "a5bd3d61-6972-431d-b966-921e600491ea",
+      "Antonym": "e42bbf32-3f42-45a5-8b08-3bcd4ac3b056",
+      "Antonym_VI": "8d6346d9-093a-4a8e-b3c5-e9b8dbd80736",
+      "Word Family": "380c8b3f-4523-42c5-ac1e-50fef8993216",
+      "Note_EN": "6940e146-acef-469d-b866-9efb10d7f309",
+      "Note_VI": "61852846-7aa8-4c04-b5b8-e913e17f27fa",
+      "Vocabulary_Audio": "2882f795-803d-43f0-8d56-edbe6eed1919",
+      "Example_Audio": "d4b6b67a-d26b-4222-9532-78973b5e18d0",
+      "image": "7b0d2188-212d-4a47-b5ff-6632febb1220"
+    },
+    "applications": [
+      {
+        "id": "690b2cec-b779-499c-91c1-6807d2280329",
+        "occurrence_key": "compat",
+        "status_code": "ACTIVE",
+        "display_name": "Thẻ 1",
+        "position": 0,
+        "is_default": true,
+        "input_bindings": {
+          "PoS": "8ca1aa40-f713-440f-aa70-9d2d2d21ffab",
+          "image": "7b0d2188-212d-4a47-b5ff-6632febb1220",
+          "Antonym": "e42bbf32-3f42-45a5-8b08-3bcd4ac3b056",
+          "Example": "15c56c47-9ba2-4120-8c8f-a2594e8dfcd1",
+          "Meaning": "bd8621fa-82c4-4e1c-8845-323f02ce5a42",
+          "Note_EN": "6940e146-acef-469d-b866-9efb10d7f309",
+          "Note_VI": "61852846-7aa8-4c04-b5b8-e913e17f27fa",
+          "Synonym": "ab4d5de5-b94a-4e72-bc82-04bc5a033900",
+          "Antonym_VI": "8d6346d9-093a-4a8e-b3c5-e9b8dbd80736",
+          "Example_VI": "d9dd7d47-500a-42c4-96f8-c4ee6c1836a2",
+          "Synonym_VI": "a5bd3d61-6972-431d-b966-921e600491ea",
+          "Vocabulary": "c1f8ca60-a815-4eb7-bf67-eb55002f4de8",
+          "Collocation": "30603a5c-744d-4305-aefa-d96816a3a689",
+          "Word Family": "380c8b3f-4523-42c5-ac1e-50fef8993216",
+          "Example_Audio": "d4b6b67a-d26b-4222-9532-78973b5e18d0",
+          "Pronunciation": "af384972-d557-4f03-b463-9d88c0bcdb69",
+          "Coollocation_VI": "bf48afdd-e5e2-4321-83ad-b462277a402a",
+          "Vocabulary_Audio": "2882f795-803d-43f0-8d56-edbe6eed1919"
+        }
+      }
+    ],
+    "sha256": {
+      "front.html": "a0d40e578d813c87e3bdfd7ee47169c85a74dfe356fe88b9c14e2400323cd5ae",
+      "back.html": "9f57e8b1c0cdb50fb6c18bca5a695c6a617f61a7c45bcbb4e724222726673dbe",
+      "style.css": "352952dafcd57ed0f11cf69434bc78d6e606e6a014be508f2c3c7518ba1489b6"
+    }
+  },
+  "note_type": {
+    "name": "En4Everyone",
+    "description": "ENG",
+    "primary_category": "Tiếng Nhật",
+    "tags": [],
+    "taxonomy_metadata": {
+      "domain": "language_learning",
+      "subject": "japanese",
+      "audience": null,
+      "framework": null,
+      "best_used_for": null,
+      "learning_goals": [
+        "vocabulary"
+      ],
+      "primary_topics": [
+        "meaning_recall"
+      ],
+      "difficulty_band": "beginner",
+      "format_features": [],
+      "framework_level": null,
+      "framework_track": null
+    },
+    "preview_text": "ENG",
+    "preview_image_url": null,
+    "pricing_mode": "free",
+    "price_amount_minor": 0,
+    "version": "1.0.0",
+    "changelog": null,
+    "is_official": false,
+    "publish_status": "published",
+    "field_defs": [
+      {
+        "name": "STT",
+        "field_type": "text",
+        "position": 0,
+        "required": true,
+        "identity_role": "primary"
+      },
+      {
+        "name": "Vocabulary",
+        "field_type": "text",
+        "position": 1,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "PoS",
+        "field_type": "text",
+        "position": 2,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Pronunciation",
+        "field_type": "text",
+        "position": 3,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Meaning",
+        "field_type": "array",
+        "position": 4,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Example",
+        "field_type": "richtext",
+        "position": 5,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Example_VI",
+        "field_type": "richtext",
+        "position": 6,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Collocation",
+        "field_type": "array",
+        "position": 7,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Coollocation_VI",
+        "field_type": "array",
+        "position": 8,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Synonym",
+        "field_type": "array",
+        "position": 9,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Synonym_VI",
+        "field_type": "array",
+        "position": 10,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Antonym",
+        "field_type": "array",
+        "position": 11,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Antonym_VI",
+        "field_type": "array",
+        "position": 12,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Word Family",
+        "field_type": "text",
+        "position": 13,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Note_EN",
+        "field_type": "text",
+        "position": 14,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Note_VI",
+        "field_type": "text",
+        "position": 15,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Vocabulary_Audio",
+        "field_type": "audio",
+        "position": 16,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "Example_Audio",
+        "field_type": "audio",
+        "position": 17,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "image",
+        "field_type": "image",
+        "position": 18,
+        "required": false,
+        "identity_role": null
+      }
+    ]
+  },
+  "template": {
+    "name": "Advanced Vocabulary Card",
+    "description": "Mẫu thẻ từ vựng chuyên sâu đa trường dữ liệu. Tự động chia lưới 2 cột cho các cặp Cụm từ (Collocation), Từ đồng nghĩa (Synonym), Từ trái nghĩa (Antonym), kèm họ từ (Word Family) và phát âm tuần tự tự động giữa từ vựng và câu ví dụ.",
+    "primary_category": "English",
+    "position": 0,
+    "is_default": true,
+    "input_schema": [
+      {
+        "key": "Vocabulary",
+        "label": "Vocabulary",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Vocabulary_Audio",
+        "label": "Vocabulary_Audio",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "Pronunciation",
+        "label": "Pronunciation",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "PoS",
+        "label": "PoS",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Meaning",
+        "label": "Meaning",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Collocation",
+        "label": "Collocation",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Coollocation_VI",
+        "label": "Coollocation_VI",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "image",
+        "label": "image",
+        "type": "image",
+        "required": false
+      },
+      {
+        "key": "Synonym",
+        "label": "Synonym",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Synonym_VI",
+        "label": "Synonym_VI",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Antonym",
+        "label": "Antonym",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Antonym_VI",
+        "label": "Antonym_VI",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Example",
+        "label": "Example",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Example_Audio",
+        "label": "Example_Audio",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "Example_VI",
+        "label": "Example_VI",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Word Family",
+        "label": "Word Family",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Note_EN",
+        "label": "Note_EN",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "Note_VI",
+        "label": "Note_VI",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "Vocabulary": "Vocabulary",
+    "Vocabulary_Audio": "Vocabulary_Audio",
+    "Pronunciation": "Pronunciation",
+    "PoS": "PoS",
+    "Meaning": "Meaning",
+    "Collocation": "Collocation",
+    "Coollocation_VI": "Coollocation_VI",
+    "image": "image",
+    "Synonym": "Synonym",
+    "Synonym_VI": "Synonym_VI",
+    "Antonym": "Antonym",
+    "Antonym_VI": "Antonym_VI",
+    "Example": "Example",
+    "Example_Audio": "Example_Audio",
+    "Example_VI": "Example_VI",
+    "Word Family": "Word Family",
+    "Note_EN": "Note_EN",
+    "Note_VI": "Note_VI"
+  },
+  "example_field_values": {
+    "STT": "1",
+    "Vocabulary": "learn",
+    "PoS": "verb",
+    "Pronunciation": "/lɜːn/",
+    "Meaning": [
+      "học"
+    ],
+    "Example": "I learn something new every day.",
+    "Example_VI": "Tôi học điều mới mỗi ngày.",
+    "Collocation": [],
+    "Coollocation_VI": [],
+    "Synonym": [],
+    "Synonym_VI": [],
+    "Antonym": [],
+    "Antonym_VI": [],
+    "Word Family": "",
+    "Note_EN": "",
+    "Note_VI": "",
+    "Vocabulary_Audio": "",
+    "Example_Audio": "",
+    "image": ""
+  }
+}

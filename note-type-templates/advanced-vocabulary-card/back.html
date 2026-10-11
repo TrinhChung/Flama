@@ -1,0 +1,171 @@
+<div class="vocab-card card">
+
+  <!-- Vocabulary + Audio -->
+  <div class="vocab-head">
+    <span class="word-text">{{Vocabulary}}</span>
+
+    {{#Vocabulary_Audio}}
+    <audio id="word-audio" src="{{Vocabulary_Audio_url}}"></audio>
+    <button onclick="document.getElementById('word-audio').play()">🔊</button>
+    {{/Vocabulary_Audio}}
+  </div>
+
+  <!-- PoS + Pronunciation -->
+<div class="pos-pron-row">
+  <div class="pron">{{Pronunciation}}</div>
+  <div class="pos">{{PoS}}</div>
+</div>
+
+
+  <!-- Meaning -->
+  {{#Meaning}}
+  <div auto-split style='
+        display: flex;
+        font-weight: bold;
+        font-family: "Arial"; 
+        font-size: 20px;
+        flex-direction: column;
+        text-transform: uppercase;' class="meaning-vi">{{Meaning}}</div>
+  {{/Meaning}}
+
+  <!-- Collocation (paired, grid) -->
+  {{#Collocation}}
+  <div class="section-title pt20">◆ Collocation</div>
+  <div id="coll-raw" style="display:none;">{{Collocation}}</div>
+  <div id="collvi-raw" style="display:none;">{{Coollocation_VI}}</div>
+  <div id="coll-pairs"></div>
+  {{/Collocation}}
+
+  {{#image}}
+  {{image}}
+  {{/image}}
+
+  <!-- Synonym (paired, grid) -->
+  {{#Synonym}}
+  <div class="section-title pt20">◆ Synonym</div>
+  <div id="syn-raw" style="display:none;">{{Synonym}}</div>
+  <div id="synvi-raw" style="display:none;">{{Synonym_VI}}</div>
+  <div id="syn-pairs"></div>
+  {{/Synonym}}
+
+  <!-- Antonym (paired, grid) -->
+  {{#Antonym}}
+  <div class="section-title pt20">◆ Antonym</div>
+  <div id="ant-raw" style="display:none;">{{Antonym}}</div>
+  <div id="antvi-raw" style="display:none;">{{Antonym_VI}}</div>
+  <div id="ant-pairs"></div>
+  {{/Antonym}}
+
+
+
+<!-- Example + Audio -->
+  {{#Example}}
+  <div class="section-title">◆ Example</div>
+  <div auto-split class="example-row">
+    <span class="example-text">{{Example}}</span>
+
+    {{#Example_Audio}}
+    <audio id="example-audio" src="{{Example_Audio_url}}"></audio>
+    <button onclick="document.getElementById('example-audio').play()">🔊</button>
+    {{/Example_Audio}}
+  </div>
+  {{/Example}}
+
+  {{#Example_VI}}
+  <div auto-split class="subtext">{{Example_VI}}</div>
+  {{/Example_VI}}
+
+
+  <!-- Word Family -->
+  {{#Word Family}}
+  <div class="section-title pt20">◆ Word Family</div>
+  <div auto-split>{{Word Family}}</div>
+  {{/Word Family}}
+
+  <!-- Notes -->
+  {{#Note_EN}}
+  <div class="section-title pt20">◆ Note</div>
+  <div auto-split>{{Note_EN}}</div>
+  {{/Note_EN}}
+
+  {{#Note_VI}}
+  <div auto-split class="subtext">{{Note_VI}}</div>
+  {{/Note_VI}}
+
+</div>
+
+<script>
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function splitBySemicolon(raw) {
+  if (!raw) return [];
+  return raw
+    .replace(/\r/g, "")
+    .replace(/\n/g, ";")
+    .replace(/<br\s*\/?>/gi, ";")
+    .split(";")
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+/* Grid renderer: cột trái = fit-content(max), cột phải = 1fr */
+function renderPairs(rawId, rawViId, outId) {
+  const rawEl = document.getElementById(rawId);
+  const rawViEl = document.getElementById(rawViId);
+  const outEl = document.getElementById(outId);
+  if (!outEl || !rawEl) return;
+
+  const leftArr = splitBySemicolon(rawEl.textContent || "");
+  const rightArr = splitBySemicolon(rawViEl ? (rawViEl.textContent || "") : "");
+  if (leftArr.length === 0 && rightArr.length === 0) return;
+
+  const max = Math.max(leftArr.length, rightArr.length);
+  let html = '<div class="pairs-grid">';
+
+  for (let i = 0; i < max; i++) {
+    const left = leftArr[i] || "";
+    const right = rightArr[i] || "";
+
+    html += ''
+      + '<div class="pair-left">' + escapeHtml(left) + '</div>'
+      + '<div class="pair-right">' + escapeHtml(right) + '</div>';
+  }
+
+  html += '</div>';
+  outEl.innerHTML = html;
+}
+
+/* 1) render paired sections */
+renderPairs("coll-raw", "collvi-raw", "coll-pairs");
+renderPairs("syn-raw", "synvi-raw", "syn-pairs");
+renderPairs("ant-raw", "antvi-raw", "ant-pairs");
+
+/* 2) auto split ; for normal blocks */
+(function () {
+  document.querySelectorAll('[auto-split]').forEach(el => {
+    el.innerHTML = el.innerHTML.replace(/;\s*/g, "<br>");
+  });
+})();
+
+/* 3) auto play word -> example */
+(() => {
+  const word = document.getElementById("word-audio");
+  const example = document.getElementById("example-audio");
+
+  if (word) {
+    word.play().catch(()=>{});
+    word.onended = () => {
+      setTimeout(() => {
+        if (example) example.play().catch(()=>{});
+      }, 500);
+    };
+  }
+})();
+</script>
