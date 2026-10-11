@@ -1,0 +1,39 @@
+{
+  "deck_id": 6859,
+  "deck_name": "6. Luyện gõ - Gõ chép chính tả (Dictation)",
+  "seed_tag": "dictation-auto-2026-10-11",
+  "samples": [
+    {
+      "key": "short-en",
+      "voice": "Microsoft Zira Desktop",
+      "audio_filename": "dictation-short-en.wav",
+      "answer": ["The little duck is swimming in the pond. It looks happy today."],
+      "translation": "<p>Chú vịt nhỏ đang bơi trong ao. Hôm nay nó trông rất vui.</p>",
+      "notes": "<p>Mẫu ngắn để thử tự chuyển từ. Dấu câu đã có sẵn; thử gõ sai một từ rồi sửa lại.</p>"
+    },
+    {
+      "key": "morning-en",
+      "voice": "Microsoft Zira Desktop",
+      "audio_filename": "dictation-morning-en.wav",
+      "answer": ["Every morning, I take a short walk before work. I listen to the birds, enjoy the fresh air, and think about what I want to learn that day. This simple habit helps me feel calm and ready for a new day."],
+      "translation": "<p>Mỗi sáng, tôi đi dạo một lúc trước khi làm việc. Tôi lắng nghe tiếng chim, tận hưởng không khí trong lành và nghĩ về những điều muốn học trong ngày. Thói quen đơn giản này giúp tôi thấy bình tĩnh và sẵn sàng cho một ngày mới.</p>",
+      "notes": "<p>Đoạn văn 41 từ. Có thể nhấn Enter để bỏ qua một từ chưa nghe rõ, rồi bấm vào từ đỏ để sửa.</p>"
+    },
+    {
+      "key": "library-en",
+      "voice": "Microsoft David Desktop",
+      "audio_filename": "dictation-library-en.wav",
+      "answer": ["Last Saturday, I visited the local library with a friend. We found a quiet table near the window and spent an hour reading. Before we left, the librarian recommended a book about small daily habits. I borrowed it and started reading on the bus. The first chapter reminded me that learning does not have to be difficult. Even ten minutes of practice each day can make a difference over time."],
+      "translation": "<p>Thứ Bảy tuần trước, tôi đến thư viện địa phương cùng một người bạn. Chúng tôi tìm một bàn yên tĩnh gần cửa sổ và đọc sách trong một giờ. Trước khi chúng tôi rời đi, thủ thư giới thiệu một cuốn sách về các thói quen nhỏ hằng ngày. Tôi mượn sách và bắt đầu đọc trên xe buýt. Chương đầu nhắc tôi rằng việc học không nhất thiết phải khó. Chỉ mười phút luyện tập mỗi ngày cũng có thể tạo ra thay đổi theo thời gian.</p>",
+      "notes": "<p>Đoạn dài để kiểm tra xuống dòng, theo dõi từ đang gõ và nghe lại. <strong>Over time</strong>: theo thời gian.</p>"
+    },
+    {
+      "key": "morning-ja",
+      "voice": "Microsoft Haruka Desktop",
+      "audio_filename": "dictation-morning-ja.wav",
+      "answer": ["毎朝、私は公園を散歩します。鳥の声を聞きながら、今日の予定を考えます。家に帰ってから、温かいお茶を飲んで、日本語を勉強します。"],
+      "translation": "<p>Mỗi sáng, tôi đi dạo trong công viên. Vừa nghe tiếng chim, tôi vừa nghĩ về kế hoạch hôm nay. Sau khi về nhà, tôi uống trà nóng rồi học tiếng Nhật.</p>",
+      "notes": "<p>Mẫu tiếng Nhật để thử nhập bằng IME. Gõ theo cách viết của bản chép, gồm cả kanji; dấu câu hiển thị sẵn. Việc chuyển từ chỉ xảy ra sau khi kết thúc ghép ký tự.</p>"
+    }
+  ]
+}

@@ -419,7 +419,7 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
         detailedSections: [
           {
             title: 'Cú Pháp Mustache Tags Thường Dùng',
-            content: '• `{{InputKey}}`: Hiển thị input nhận dữ liệu qua mapping của Note Type.\n• `{{FrontSide}}`: Hiển thị lại nội dung mặt trước ở mặt sau.\n• `{{#InputKey}} ... {{/InputKey}}`: Chỉ hiển thị khi input có dữ liệu.\n• `{{^InputKey}} ... {{/InputKey}}`: Hiển thị khi input để trống.\nDùng Chèn input trong editor; quản lý key, nhãn và kiểu ở hộp thoại Inputs.',
+            content: '• `{{InputKey}}`: Hiển thị input nhận dữ liệu qua mapping của Note Type.\n• `{{FrontSide}}`: Hiển thị lại nội dung mặt trước ở mặt sau (không chạy lại script của mặt trước; đặt ở mặt trước thì để trống).\n• `{{#InputKey}} ... {{/InputKey}}`: Chỉ hiển thị khi input có dữ liệu.\n• `{{^InputKey}} ... {{/InputKey}}`: Hiển thị khi input để trống.\nDùng Chèn input trong editor; quản lý key, nhãn và kiểu ở hộp thoại Inputs.',
           },
           {
             title: 'Tùy Biến Giao Diện CSS',

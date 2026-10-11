@@ -43,6 +43,7 @@ export {
   archiveLibraryTemplate,
   createLibraryTemplate,
   createNoteTypeTemplate,
+  deleteLibraryTemplate,
   deleteNoteTypeTemplate,
   duplicateLibraryTemplate,
   fetchDeckCardTypes,

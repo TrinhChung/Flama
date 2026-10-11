@@ -21,8 +21,8 @@ from app.validators import (
     RequestValidationError,
     sanitize_query_text,
 )
-from app.services import field_answers_conversion_service, flashcard_content_service
-from app.validators.field_answers_conversion import AnswersConversionError
+from app.services import field_array_conversion_service, flashcard_content_service
+from app.validators.field_array_conversion import ArrayConversionError
 
 
 def _content_error(exc: flashcard_content_service.ContentApiError):
@@ -34,7 +34,7 @@ def _content_error(exc: flashcard_content_service.ContentApiError):
     )
 
 
-def _conversion_error(exc: AnswersConversionError):
+def _conversion_error(exc: ArrayConversionError):
     payload = {"error": exc.code, "message": str(exc)}
     if exc.details:
         payload["details"] = exc.details
@@ -293,36 +293,36 @@ def delete_field(note_type_id: str, field_id: str):
     except flashcard_content_service.ContentApiError as exc:
         return _content_error(exc)
 
-@flashcards_bp.route("/api/note-types/<note_type_id>/fields/<field_id>/answers-conversion", methods=["GET"])
+@flashcards_bp.route("/api/note-types/<note_type_id>/fields/<field_id>/array-conversion", methods=["GET"])
 @login_required
-def get_field_answers_conversion(note_type_id: str, field_id: str):
+def get_field_array_conversion(note_type_id: str, field_id: str):
     """Every owner Note value of the field, for the frontend to split and preview."""
     try:
         return jsonify(
-            field_answers_conversion_service.get_conversion_source(
+            field_array_conversion_service.get_conversion_source(
                 user_id=current_user.id,
                 note_type_id=note_type_id,
                 field_id=field_id,
             )
         )
-    except AnswersConversionError as exc:
+    except ArrayConversionError as exc:
         return _conversion_error(exc)
 
 
-@flashcards_bp.route("/api/note-types/<note_type_id>/fields/<field_id>/answers-conversion", methods=["POST"])
+@flashcards_bp.route("/api/note-types/<note_type_id>/fields/<field_id>/array-conversion", methods=["POST"])
 @login_required
-def apply_field_answers_conversion(note_type_id: str, field_id: str):
+def apply_field_array_conversion(note_type_id: str, field_id: str):
     """Apply a frontend-split conversion (or a restore) to the field and all its Notes at once."""
     try:
         return jsonify(
-            field_answers_conversion_service.apply_conversion(
+            field_array_conversion_service.apply_conversion(
                 user_id=current_user.id,
                 note_type_id=note_type_id,
                 field_id=field_id,
                 payload=request.get_json(silent=True),
             )
         )
-    except AnswersConversionError as exc:
+    except ArrayConversionError as exc:
         return _conversion_error(exc)
 
 

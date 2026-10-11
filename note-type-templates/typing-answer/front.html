@@ -1,0 +1,84 @@
+<div class="cz-prompt">{{Prompt}}</div>
+<div class="cz-box">
+  <input id="cz-input" type="text" placeholder="Gõ đáp án rồi nhấn Enter" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button type="button" id="cz-check">Kiểm tra</button>
+  <button type="button" id="cz-hint">Gợi ý</button>
+</div>
+<div id="cz-mask" class="cz-mask"></div>
+<div id="cz-result" class="cz-result"></div>
+<div id="cz-answers" hidden>{{Answer}}</div>
+<script>
+(function () {
+  var box = document.querySelector('.cz-box');
+  var input = document.getElementById('cz-input');
+  var result = document.getElementById('cz-result');
+  var mask = document.getElementById('cz-mask');
+
+  // Servers older than 2026-10-10 strip <input> from templates: build the box here.
+  if (!input) {
+    input = document.createElement('input');
+    input.id = 'cz-input';
+    input.type = 'text';
+    input.placeholder = 'Gõ đáp án rồi nhấn Enter';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('autocapitalize', 'off');
+    box.insertBefore(input, box.firstChild);
+  }
+
+  // Each line of the field is one accepted answer; a plain string is one line.
+  function readAnswers(el) {
+    var lines = [''];
+    el.childNodes.forEach(function (node) {
+      if (node.nodeName === 'BR') lines.push('');
+      else lines[lines.length - 1] += node.textContent;
+    });
+    return lines.map(function (line) { return line.trim(); }).filter(Boolean);
+  }
+  // Same text = same after NFC, collapsed spaces and lower case.
+  function norm(text) {
+    return text.normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim().toLowerCase();
+  }
+
+  var answers = readAnswers(document.getElementById('cz-answers'));
+  var first = Array.from((answers[0] || '').normalize('NFC'));
+  var shown = 0;
+
+  // Hint slots follow the first answer: one dot per character, opened left to right.
+  function drawMask() {
+    mask.textContent = first.map(function (ch, i) {
+      return i < shown || ch === ' ' ? ch : '•';
+    }).join('');
+  }
+
+  function check() {
+    var typed = norm(input.value);
+    if (!typed) return;
+    var ok = false;
+    for (var i = 0; i < answers.length; i++) {
+      if (norm(answers[i]) === typed) { ok = true; break; }
+    }
+    result.textContent = ok ? 'Đúng' : 'Sai, thử lại';
+    result.className = 'cz-result ' + (ok ? 'cz-ok' : 'cz-bad');
+    if (ok) { shown = first.length; drawMask(); } else { input.select(); }
+  }
+
+  input.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    check();
+  });
+  document.getElementById('cz-check').addEventListener('click', check);
+  document.getElementById('cz-hint').addEventListener('click', function () {
+    if (shown < first.length - 1) shown += 1;
+    drawMask();
+    input.focus();
+  });
+
+  if (!answers.length) {
+    box.hidden = true;
+  }
+  drawMask();
+  input.focus();
+})();
+</script>

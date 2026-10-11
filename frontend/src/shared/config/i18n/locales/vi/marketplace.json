@@ -276,7 +276,12 @@
     "template_active_preview": "Đang xem trước",
     "template_available": "Giao diện hiển thị",
     "btn_select_preview": "Xem",
-    "badge_previewing": "Đang xem"
+    "badge_previewing": "Đang xem",
+    "btn_add_template_to_library": "Thêm vào thư viện",
+    "btn_in_library": "Trong thư viện",
+    "badge_owned_template": "Của bạn",
+    "toast_template_installed": "Đã thêm mẫu giao diện vào thư viện của bạn!",
+    "error_install_template": "Không thể thêm mẫu giao diện vào thư viện."
   },
   "keys_manager": {
     "title": "Quản lý mã truy cập khóa học",

@@ -1,0 +1,9 @@
+.cz-prompt { font-size: 1.8em; font-weight: 600; text-align: center; margin: 12px 0; }
+.cz-box { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.cz-box input { font-size: 1.1em; padding: 8px 12px; border: 1px solid #d4d4d8; border-radius: 10px; min-width: 220px; }
+.cz-box button { font-size: 0.95em; padding: 8px 12px; border: 1px solid #d4d4d8; border-radius: 10px; background: #fff; cursor: pointer; }
+.cz-mask { text-align: center; letter-spacing: 0.3em; font-size: 1.2em; margin-top: 12px; color: #71717a; }
+.cz-result { text-align: center; margin-top: 8px; font-weight: 600; min-height: 1.4em; }
+.cz-ok { color: #15803d; }
+.cz-bad { color: #b91c1c; }
+.cz-answer { font-size: 1.3em; text-align: center; }

@@ -1,0 +1,213 @@
+<div class="ft-card ft-back" data-mode="dictation">
+  <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 12h.01M11 12h.01M15 12h.01M7 15h10"></path></svg></span><span>Gõ chép chính tả</span></div>
+  <div class="ft-stimulus">
+    {{#Audio}}
+    <div class="ft-audio ft-info-block" data-info="Audio">
+      <div class="ft-audio-source" hidden>{{{Audio}}}</div>
+      <div class="ft-audio-row">
+        <button class="ft-play" type="button" aria-pressed="false">
+          <span class="ft-play-disc" aria-hidden="true"></span>
+          <span><span class="ft-play-label">Nghe lại</span><span class="ft-audio-subtitle">Nhấn để nghe, có thể phát lại</span></span>
+        </button>
+        <div class="ft-wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="ft-audio-status" role="status" aria-live="polite"></div>
+    </div>
+    {{/Audio}}
+    {{#Answer}}<p class="ft-instruction">Nghe lại đoạn văn rồi xem bản chép và thông tin liên quan.</p>{{/Answer}}
+  </div>
+  <div class="ft-review">
+    {{#Answer}}<div class="ft-answer-panel"><div class="ft-answer-label">Bản chép</div><div class="ft-answer-values ft-dict-passage">{{Answer}}</div></div>{{/Answer}}
+    <div class="ft-related">
+      {{#Translation}}<div class="ft-info-block ft-info-definition" data-info="Translation"><h2 class="ft-info-heading">Bản dịch</h2><div class="ft-info-content">{{{Translation}}}</div></div>{{/Translation}}
+    </div>
+  </div>
+  <div class="ft-back-content">
+    {{#Notes}}<div class="ft-info-block" data-info="Notes"><h2 class="ft-info-heading">Ghi chú</h2><div class="ft-info-content">{{{Notes}}}</div></div>{{/Notes}}
+  {{#BackImage}}<div class="ft-info-block ft-info-media" data-info="BackImage"><h2 class="ft-info-heading">Hình minh họa</h2><div class="ft-info-content">{{{BackImage}}}</div></div>{{/BackImage}}
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var root = document.querySelector('.ft-back');
+  if (!root) return;
+
+  function normalize(text) {
+    return String(text || '').normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim();
+  }
+  function comparable(text) { return normalize(text).toLowerCase(); }
+  var segmenter = typeof Intl !== 'undefined' && Intl.Segmenter
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+  function characters(text) {
+    return segmenter ? Array.from(segmenter.segment(text), function (part) { return part.segment; })
+      : Array.from(text.normalize('NFC'));
+  }
+  function makeWord(text) {
+    var match = /^([^\p{L}\p{N}\p{M}]*)(.*?)([^\p{L}\p{N}\p{M}]*)$/u.exec(text);
+    var core = match ? match[2] : text;
+    return { prefix: match ? match[1] : '', core: core, suffix: match ? match[3] : '',
+      key: comparable(core), chars: characters(core) };
+  }
+  function transcript(text) {
+    text = normalize(text);
+    var units = [];
+    var prefix = '';
+    var spaced = /\s/.test(text);
+    var parts = text.match(/\S+/g) || [];
+    // No-space Japanese/Chinese text can still be practiced in word-sized units.
+    if (!spaced && /[\u3040-\u30ff\u3400-\u9fff]/.test(text) && typeof Intl !== 'undefined' && Intl.Segmenter) {
+      parts = Array.from(new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text), function (part) { return part.segment; });
+    }
+    parts.forEach(function (part) {
+      var word = makeWord(part);
+      if (!word.core) {
+        if (units.length) units[units.length - 1].suffix += (spaced ? ' ' : '') + part;
+        else prefix += part + (spaced ? ' ' : '');
+        return;
+      }
+      word.prefix = prefix + word.prefix;
+      prefix = '';
+      units.push(word);
+    });
+    return { words: units, separator: spaced ? ' ' : '' };
+  }
+  function paragraph(text) {
+    var target = transcript(text);
+    var fragment = document.createDocumentFragment();
+    target.words.forEach(function (word, index) {
+      if (index) fragment.append(document.createTextNode(target.separator));
+      var span = document.createElement('span');
+      span.className = 'ft-dict-word';
+      span.textContent = word.prefix + word.core + word.suffix;
+      fragment.append(span);
+    });
+    if (!target.words.length) fragment.append(document.createTextNode(text));
+    return fragment;
+  }
+
+  // Read the rendered array boundaries without re-parsing migrated delimiters.
+  function readArray(source) {
+    var values = [''];
+    source.childNodes.forEach(function (node) {
+      if (node.nodeName === 'BR') values.push('');
+      else values[values.length - 1] += node.textContent || '';
+    });
+    return values.map(function (value) { return value.trim(); }).filter(Boolean);
+  }
+
+  root.querySelectorAll('.ft-answer-values').forEach(function (source) {
+    var values = readArray(source);
+    if (!values.length) { source.closest('.ft-answer-panel').hidden = true; return; }
+    var primary = document.createElement('div');
+    primary.className = 'ft-answer-primary';
+    primary.append(paragraph(values[0]));
+    source.replaceChildren(primary);
+    if (values.length > 1) {
+      var variants = document.createElement('div');
+      variants.className = 'ft-answer-variants';
+      values.slice(1).forEach(function (value) {
+        var item = document.createElement('span');
+        item.append(paragraph(value));
+        variants.append(item);
+      });
+      source.append(variants);
+    }
+  });
+
+  root.querySelectorAll('.ft-info-array').forEach(function (source) {
+    var values = readArray(source);
+    if (!values.length) { source.closest('.ft-info-block').hidden = true; return; }
+    var list = document.createElement('ul');
+    list.className = 'ft-info-list';
+    values.forEach(function (value) {
+      var item = document.createElement('li');
+      item.textContent = value;
+      list.append(item);
+    });
+    source.replaceChildren(list);
+  });
+  root.querySelectorAll('.ft-inline-array').forEach(function (source) {
+    source.textContent = readArray(source).join(' · ');
+    if (!source.textContent.trim()) source.hidden = true;
+  });
+  root.querySelectorAll('.ft-info-block, .ft-back-meta-item, .ft-prompt-text').forEach(function (block) {
+    var content = block.querySelector('.ft-info-content, .ft-info-array') || block;
+    if (!content.textContent.trim() && !content.querySelector('audio, img, video')) block.hidden = true;
+  });
+  root.querySelectorAll('.ft-example-group, .ft-related, .ft-back-content, .ft-back-meta').forEach(function (group) {
+    if (!group.querySelector('.ft-info-block:not([hidden]), .ft-back-meta-item:not([hidden])')) group.hidden = true;
+  });
+  root.querySelectorAll('.ft-back-prompt, .ft-stimulus').forEach(function (group) {
+    if (!Array.from(group.children).some(function (child) { return !child.hidden; })) group.hidden = true;
+  });
+  var review = root.querySelector('.ft-review');
+  if (review && !review.querySelector('.ft-answer-panel:not([hidden]), .ft-info-block:not([hidden]), .ft-back-meta-item:not([hidden])')) review.hidden = true;
+  root.querySelectorAll('audio').forEach(function (audio) {
+    audio.removeAttribute('autoplay');
+    audio.preload = 'none';
+  });
+  // Audio only starts on a learner click. Multiple clips play in order.
+  var audioPanel = root.querySelector('.ft-audio');
+  if (audioPanel) {
+    var tracks = Array.from(audioPanel.querySelectorAll('audio'));
+    var play = audioPanel.querySelector('.ft-play');
+    var playLabel = audioPanel.querySelector('.ft-play-label');
+    var audioStatus = audioPanel.querySelector('.ft-audio-status');
+    var playing = false;
+    var trackIndex = 0;
+    var attempt = 0;
+    var played = true;
+    function idle() {
+      playing = false;
+      audioPanel.classList.remove('is-playing');
+      play.setAttribute('aria-pressed', 'false');
+      playLabel.textContent = played ? 'Nghe lại' : 'Nghe âm thanh';
+    }
+    function stop() {
+      attempt += 1;
+      tracks.forEach(function (track) { track.pause(); track.currentTime = 0; });
+      idle();
+    }
+    function startTrack() {
+      var ticket = attempt;
+      var track = tracks[trackIndex];
+      if (!track) { idle(); return; }
+      playing = true;
+      played = true;
+      audioPanel.classList.add('is-playing');
+      play.setAttribute('aria-pressed', 'true');
+      playLabel.textContent = 'Dừng âm thanh';
+      audioStatus.textContent = '';
+      function failed() {
+        if (ticket !== attempt) return;
+        idle();
+        audioStatus.textContent = 'Chưa phát được âm thanh. Nhấn nghe để thử lại.';
+      }
+      try { Promise.resolve(track.play()).catch(failed); } catch (error) { failed(); }
+    }
+    tracks.forEach(function (track, index) {
+      track.preload = 'none';
+      track.removeAttribute('autoplay');
+      track.addEventListener('ended', function () {
+        if (!playing || index !== trackIndex) return;
+        if (trackIndex < tracks.length - 1) { trackIndex += 1; startTrack(); }
+        else idle();
+      });
+      track.addEventListener('error', function () {
+        if (!playing || index !== trackIndex) return;
+        stop();
+        audioStatus.textContent = 'Chưa tải được âm thanh. Nhấn nghe để thử lại.';
+      });
+    });
+    play.addEventListener('click', function () {
+      if (playing) { stop(); return; }
+      attempt += 1;
+      trackIndex = 0;
+      tracks.forEach(function (track) { track.currentTime = 0; });
+      startTrack();
+    });
+    if (!tracks.length) audioPanel.hidden = true;
+  }
+})();
+</script>

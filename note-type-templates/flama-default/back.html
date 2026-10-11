@@ -1,0 +1,179 @@
+<div class="flama-vocab-card">
+    <!-- Hiển thị từ vựng -->
+    <div style='
+        font-family: "Arial";
+        font-size: 36px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        color: #e53c20;
+        padding-top: 20px;'
+    >
+        {{{word}}}
+
+{{#word_audio}}
+  <audio id="custom-audio" controls style="display: none" src="{{{word_audio_url}}}"></audio>
+  <button onclick="document.getElementById('custom-audio').play()">🔊</button>
+{{/word_audio}}
+    </div>
+
+    <!-- Hiển thị cách đọc -->
+    {{#reading}}
+    <div style='
+        display: flex;
+        font-weight: bold;
+        font-family: "Arial";
+        font-size: 20px;
+        flex-direction: column;
+        text-transform: uppercase;'
+    >
+        <div data-array-field="reading" style='font-family: "Arial";'>
+            {{{reading}}} 「{{{hanviet}}}」
+        </div>
+
+        <div data-array-field="translation_vi" style='color: green; padding-bottom: 10px'>
+            {{{translation_vi}}}
+        </div>
+    </div>
+    {{/reading}}
+
+    <!-- Hiển thị giải thích -->
+    {{#meaning_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6' auto-split>
+        ◆ {{{meaning_jp}}}
+    </div>
+    {{/meaning_jp}}
+
+    {{#meaning_vi}}
+    <div style='display: flex; padding-top: 10px' auto-split>
+        {{{meaning_vi}}}
+    </div>
+    {{/meaning_vi}}
+
+    <!-- Ảnh minh hoạ stroke order -->
+    {{#image}}
+      {{{image}}}
+    {{/image}}
+    {{#diagram}}
+      {{{diagram}}}
+    {{/diagram}}
+
+    <!-- Hiển thị cách sử dụng -->
+    {{#usage_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+        ◆ Cách sử dụng:
+    </div>
+
+    <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+        <div style="font-size: 20px;" auto-split>
+            {{{usage_jp}}}
+        </div>
+
+        {{#usage_vi}}
+        <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>
+            {{{usage_vi}}}
+        </div>
+        {{/usage_vi}}
+    </div>
+    {{/usage_jp}}
+
+    <!-- Hiển thị ví dụ -->
+    {{#example_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+        ◆ Câu ví dụ:
+    </div>
+
+    <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+        <div style="font-size: 20px; display: flex; align-items: center;" auto-split>
+            {{{example_jp}}}
+
+            {{#example_audio}}
+            <audio
+                id="example-audio"
+                controls
+                style="display: none"
+                src="{{{example_audio_url}}}">
+            </audio>
+
+            <button onclick="document.getElementById('example-audio').play()">🔊</button>
+            {{/example_audio}}
+        </div>
+
+        {{#example_vi}}
+        <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>
+            {{{example_vi}}}
+        </div>
+        {{/example_vi}}
+    </div>
+    {{/example_jp}}
+
+    <!-- Hiển thị ghi chú -->
+    {{#additional_note_jp}}
+    <div style='
+        display: flex;
+        padding-top: 20px;
+        font-family: "Arial";
+        color: #3367d6;'
+    >
+        ◆ Ghi chú:
+    </div>
+
+    <div style='display: flex; padding-top: 10px' auto-split>
+        {{{additional_note_jp}}}
+    </div>
+    {{/additional_note_jp}}
+
+    {{#additional_note_vi}}
+    <div style='
+        display: flex;
+        padding-top: 10px;
+        font-family: "Arial";
+        color: gray;
+        font-size: 16px;'
+        auto-split
+    >
+        {{{additional_note_vi}}}
+    </div>
+    {{/additional_note_vi}}
+</div>
+
+<!-- Script phát âm từ vựng và ví dụ -->
+<script>
+(() => {
+    const wordAudio = document.getElementById("custom-audio");
+    const exampleAudio = document.getElementById("example-audio");
+
+    if (wordAudio) {
+        // Tự động phát từ vựng lần đầu
+        wordAudio.play().catch(err => {
+            console.warn("Autoplay:", err);
+        });
+
+        // Chỉ phát ví dụ sau từ vựng ở LẦN ĐẦU TIÊN
+        const autoPlayExampleOnce = () => {
+            setTimeout(() => {
+                if (exampleAudio) {
+                    exampleAudio.play().catch(err => console.warn(err));
+                }
+            }, 500);
+
+            wordAudio.removeEventListener("ended", autoPlayExampleOnce);
+        };
+
+        wordAudio.addEventListener("ended", autoPlayExampleOnce);
+    }
+})();
+
+(function() {
+    var script = document.currentScript;
+    var scope = script && (script.closest('.flama-vocab-card') || script.previousElementSibling);
+    if (!scope || !scope.classList.contains('flama-vocab-card')) return;
+    // Only legacy prose fields still use $. Array fields render <br> directly.
+    scope.querySelectorAll('div[auto-split]').forEach(function(el) {
+        var text = el.innerHTML;
+        if (text.indexOf('$') !== -1) {
+            el.innerHTML = text.replace(/\$/g, "<br>");
+        }
+    });
+})();
+</script>

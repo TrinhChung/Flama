@@ -1,0 +1,177 @@
+.card {
+  font-family: Arial, sans-serif;
+  font-size: 20px;
+  text-align: center;
+  color: black;
+  background-color: white;
+  box-sizing: border-box;
+}
+
+/* =========================================================
+   FRONT
+   ========================================================= */
+
+.flama-front {
+  min-height: 100vh;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  text-align: center;
+
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.flama-front-word {
+  font-weight: bold;
+  color: #e53c20;
+
+  /*
+   * Mobile không quá to.
+   * Desktop vẫn có thể lên tới 70px.
+   */
+  font-size: clamp(40px, 8vw, 70px);
+
+  max-width: 92vw;
+
+  line-height: 1.12;
+
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
+/* =========================================================
+   BACK CARD
+   ========================================================= */
+
+.flama-vocab-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+
+  text-align: left;
+
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+
+  /*
+   * Desktop:
+   * không cho nội dung trải hết màn hình rộng.
+   */
+  width: 100%;
+  max-width: 980px;
+
+  /*
+   * Căn giữa cả khối trên desktop.
+   */
+  margin: 0 auto;
+
+  /*
+   * Mobile có khoảng thở đều hai bên.
+   */
+  padding: 0 20px 24px;
+
+  box-sizing: border-box;
+
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
+/* =========================================================
+   MEDIA / IMAGES
+   ========================================================= */
+
+.flama-media-gallery {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  justify-content: flex-start;
+  align-items: flex-start;
+
+  margin-top: 15px;
+
+  line-height: 0;
+}
+
+.flama-media-image,
+.flama-media-gallery > img {
+  height: 180px;
+  width: auto;
+
+  max-width: 100%;
+
+  object-fit: contain;
+
+  border-radius: 6px;
+
+  display: block;
+
+  margin: 0;
+
+  flex: none;
+  align-self: flex-start;
+}
+
+
+/* =========================================================
+   TABLET / MOBILE
+   ========================================================= */
+
+@media (max-width: 768px) {
+
+  .flama-vocab-card {
+    /*
+     * Hai bên cân nhau trên điện thoại/tablet.
+     */
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+
+/*
+ * Điện thoại:
+ * tối đa 2 ảnh mỗi hàng.
+ */
+@media (max-width: 480px) {
+
+  .flama-media-gallery {
+    gap: 8px;
+  }
+
+  .flama-media-image,
+  .flama-media-gallery > img {
+    flex: 0 0 calc(50% - 4px);
+
+    width: calc(50% - 4px);
+    height: auto;
+
+    max-height: none;
+
+    object-fit: contain;
+
+    margin: 0;
+  }
+}
+
+
+/*
+ * Điện thoại rất nhỏ:
+ * 1 ảnh / hàng.
+ */
+@media (max-width: 320px) {
+
+  .flama-media-image,
+  .flama-media-gallery > img {
+    flex: 0 0 100%;
+
+    width: 100%;
+    height: auto;
+  }
+}

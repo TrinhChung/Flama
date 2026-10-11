@@ -39,6 +39,7 @@
     "type_change_warning": "Changing this type may make existing template mappings incompatible. Review their mappings after saving.",
     "unsaved_field": "This field has unsaved changes. Save it, discard the changes, or stay here to continue editing.",
     "delete_title": "Delete data field?",
+    "delete_notetype_btn": "Delete Note Type",
     "rename": "Rename",
     "rename_title": "Rename Note Type",
     "rename_description": "Change the name shown for this Note Type.",
@@ -54,7 +55,7 @@
       "image": { "label": "Image", "hint": "Stores an image media reference. Try a sample image or enter an existing reference." },
       "audio": { "label": "Audio", "hint": "Stores an audio media reference. Play a sample here; TTS generation is configured in Audio." },
       "diagram": { "label": "Diagram", "hint": "Stores image or SVG references, as in the current diagram editor. Try a sample or an existing reference." },
-      "answers": { "label": "Typed answers", "hint": "Each line is one accepted answer in a typing mode. Empty and duplicate lines are dropped on save." }
+      "array": { "label": "Array", "hint": "A list of values, one item per line. Order and repeated items are preserved; empty lines are dropped on save." }
     }
   },
   "manager": {
@@ -69,7 +70,8 @@
       "docs_btn": "Documentation",
       "ai_prompt_banner_title": "Create Templates with AI in 1 Minute",
       "ai_prompt_banner_desc": "No coding needed! Use standardized Prompts for ChatGPT / Claude to design Flashcards as desired.",
-      "ai_prompt_banner_btn": "Open AI Guide & Prompts"
+      "ai_prompt_banner_btn": "Open AI Guide & Prompts",
+      "btn_explore_market": "Explore Note Types"
     },
     "create": {
       "title": "Create New Note Type",
@@ -146,12 +148,12 @@
       "save_btn": "Save Changes",
       "confirm_delete": "Delete field \"{{name}}\"? Associated data across notes will be discarded."
     },
-    "answers_conversion": {
-      "open": "Convert to typed answers…",
+    "array_conversion": {
+      "open": "Convert to array…",
       "open_restore": "Restore from backup…",
       "save_first": "Save the field changes before converting.",
-      "title": "Convert \"{{name}}\" to typed answers",
-      "description": "Flama splits the value of every Note of this card type into one answer per line. Preview, fix what you need, download a backup, then apply.",
+      "title": "Convert \"{{name}}\" to an array",
+      "description": "Flama splits the value of every Note of this card type into one item per line. Preview, fix what you need, download a backup, then apply.",
       "loading": "Loading Note values…",
       "blocked_PRIMARY_FIELD": "The primary identity field must stay Text.",
       "blocked_UNSUPPORTED_FIELD_TYPE": "Only Text, Rich text or Markdown fields can be converted.",
@@ -170,16 +172,25 @@
       "no_rows": "No Notes in this view.",
       "original": "Before",
       "result": "After",
-      "no_answers": "(no answers)",
+      "no_items": "(no items)",
       "edit": "Edit",
       "reset_edit": "Undo edit",
       "edited": "Edited by hand",
-      "edit_hint": "One answer per line",
+      "edit_hint": "One item per line",
       "flag_html": "Has HTML; formatting will be dropped",
       "flag_sound": "Has [sound:]; audio will be dropped",
-      "flag_empty": "No answers left",
-      "flag_duplicates": "Duplicate answers merged",
-      "flag_long": "An answer is longer than 80 characters",
+      "flag_empty": "No items left",
+      "flag_duplicates": "Contains repeated items (preserved)",
+      "flag_long": "An item is longer than 80 characters",
+      "flag_brackets": "Has a bracketed part, kept inside one item",
+      "error_NOTES_CHANGED": "Notes changed since the preview. Reload the preview and try again.",
+      "error_FIELD_CHANGED": "The field type changed since the preview. Close the dialog and open it again.",
+      "error_FIELD_RENAME_IN_PROGRESS": "The field is being renamed. Wait for it to finish and try again.",
+      "error_FIELD_NOT_CONVERTIBLE": "This field cannot be converted.",
+      "error_INVALID_ARRAY_VALUE": "A value is invalid: each line must be one non-empty item, without HTML.",
+      "error_INVALID_FIELD_VALUE": "The backup has a value that is invalid for the original field type.",
+      "error_generic": "Could not apply: {{message}}",
+      "too_many_notes": "This card type has {{count}} Notes, over the limit of {{max}} Notes per conversion. Card types this large cannot be converted yet.",
       "page": "Page {{page}}/{{pages}}",
       "previous": "Previous",
       "next": "Next",
@@ -190,7 +201,7 @@
       "applying": "Applying…",
       "reload": "Reload preview",
       "cancel": "Cancel",
-      "success": "Converted {{count}} Notes to typed answers.",
+      "success": "Converted {{count}} Notes to an array.",
       "restore_title": "Restore \"{{name}}\" from a backup",
       "restore_description": "Choose the backup file downloaded during the conversion. Notes created after the backup stay as they are.",
       "restore_file": "Backup file (.json)",
@@ -376,6 +387,8 @@
     "step3_desc": "No programming needed! Click here to open the guide and copy the Master Prompt for ChatGPT / Claude to design card templates for you.",
     "step4_cards_title": "📇 4. NoteType Card & Badges",
     "step4_cards_desc": "Each card displays the note type name along with two key badges: number of Templates (display card faces) and number of Fields.",
+    "step5_view_title": "👁️ 5. \"View\" Button (Configure & Manage Note Type)",
+    "step5_view_desc": "Click View to open detailed management: configure Fields, customize Templates, preview live cards, and share or delete the note type.",
     "step5_fields_title": "⚙️ 5. \"Fields\" Button (Data Columns)",
     "step5_fields_desc": "Click here to add fields like Word, Meaning, Audio, Example, Furigana... defining data storage structure.",
     "step6_templates_title": "🎨 6. \"Templates\" Button (Edit & Preview)",
@@ -383,7 +396,7 @@
     "step7_share_title": "🌐 7. \"Share\" Button (Community Marketplace)",
     "step7_share_desc": "Once designed, click this button to publish your card template to the Marketplace for the Flama community.",
     "step4_empty_title": "📋 4. Note Types List Area",
-    "step4_empty_desc": "After creating note types, they will appear here with action buttons: Manage Fields, Customize Templates, Live Preview, and Share to Marketplace."
+    "step4_empty_desc": "After creating note types, they will appear here with the \"View\" button to open the detailed setup page."
   },
   "guide_tour": {
     "step1_title": "📘 1. Guide Center & AI Prompts",

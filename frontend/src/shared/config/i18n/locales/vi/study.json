@@ -70,7 +70,7 @@
     "configure_fields_for": "Thiết lập trường cho {{name}}"
   },
   "quick_edit": {
-    "answers_placeholder": "Mỗi dòng một đáp án",
+    "array_placeholder": "Mỗi dòng một phần tử",
     "title": "Sửa nhanh thẻ",
     "description": "Chỉnh sửa các trường từ vựng và nội dung mà không làm gián đoạn phiên học.",
     "generate_stroke": "Tạo nét",

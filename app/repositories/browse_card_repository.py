@@ -20,7 +20,7 @@ from models.flashcard import Card, Note, NoteType
 from models.field_def import FieldDef
 
 
-TEXT_FIELD_TYPES = {"text", "richtext", "markdown", "answers"}
+TEXT_FIELD_TYPES = {"text", "richtext", "markdown", "array"}
 
 
 def _dialect_name() -> str:

@@ -1,0 +1,176 @@
+{
+  "schema_version": "flama-array-manifest.v1",
+  "fields": [
+    {
+      "id": "de70eaa3-185a-47ba-95c4-831fadfa7ec8",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "name": "Meaning",
+      "owner_user_id": 4,
+      "parser": "meaning"
+    },
+    {
+      "id": "352e6d11-2fc4-4dee-ae43-c94a80b92c72",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "name": "Collocation",
+      "owner_user_id": 4,
+      "parser": "paired"
+    },
+    {
+      "id": "f966ff50-8fd8-444e-a17e-7c826470a3a9",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "name": "Coollocation_VI",
+      "owner_user_id": 4,
+      "parser": "paired"
+    },
+    {
+      "id": "065e632a-6401-48ee-b90f-3e0bfa143793",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "name": "Synonym",
+      "owner_user_id": 4,
+      "parser": "paired"
+    },
+    {
+      "id": "e7986ac2-3146-48a8-a005-0c5649dfd943",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "name": "Synonym_VI",
+      "owner_user_id": 4,
+      "parser": "paired"
+    },
+    {
+      "id": "f2fe6b59-bd6f-4931-b548-ff6c96a11190",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "name": "Antonym",
+      "owner_user_id": 4,
+      "parser": "paired"
+    },
+    {
+      "id": "5b910d40-7de4-41b7-a235-39b20f90a8d5",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "name": "Antonym_VI",
+      "owner_user_id": 4,
+      "parser": "paired"
+    },
+    {
+      "id": "2d61252d-159f-4a6e-9de7-5e0f7fdbd8ab",
+      "note_type_id": "395e575f-03e8-49e9-bf40-a428bf9b9ca0",
+      "name": "reading",
+      "owner_user_id": 2,
+      "parser": "reading"
+    },
+    {
+      "id": "cd8c860d-3ec1-422a-9b47-dfd12f23360c",
+      "note_type_id": "395e575f-03e8-49e9-bf40-a428bf9b9ca0",
+      "name": "translation_vi",
+      "owner_user_id": 2,
+      "parser": "translation_vi"
+    },
+    {
+      "id": "bd8621fa-82c4-4e1c-8845-323f02ce5a42",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Meaning",
+      "owner_user_id": 1,
+      "parser": "meaning"
+    },
+    {
+      "id": "30603a5c-744d-4305-aefa-d96816a3a689",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Collocation",
+      "owner_user_id": 1,
+      "parser": "paired"
+    },
+    {
+      "id": "bf48afdd-e5e2-4321-83ad-b462277a402a",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Coollocation_VI",
+      "owner_user_id": 1,
+      "parser": "paired"
+    },
+    {
+      "id": "ab4d5de5-b94a-4e72-bc82-04bc5a033900",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Synonym",
+      "owner_user_id": 1,
+      "parser": "paired"
+    },
+    {
+      "id": "a5bd3d61-6972-431d-b966-921e600491ea",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Synonym_VI",
+      "owner_user_id": 1,
+      "parser": "paired"
+    },
+    {
+      "id": "e42bbf32-3f42-45a5-8b08-3bcd4ac3b056",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Antonym",
+      "owner_user_id": 1,
+      "parser": "paired"
+    },
+    {
+      "id": "8d6346d9-093a-4a8e-b3c5-e9b8dbd80736",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "name": "Antonym_VI",
+      "owner_user_id": 1,
+      "parser": "paired"
+    },
+    {
+      "id": "826db147-f30d-43d0-8eb1-2cd078bfb858",
+      "note_type_id": "91f567ab-d99d-4ed0-b3ab-fdb12cc790cb",
+      "name": "Phiên âm",
+      "owner_user_id": 4,
+      "parser": "reading"
+    },
+    {
+      "id": "2104259e-3499-4f8a-afda-9f206ea9ed5d",
+      "note_type_id": "91f567ab-d99d-4ed0-b3ab-fdb12cc790cb",
+      "name": "Nghĩa",
+      "owner_user_id": 4,
+      "parser": "kanji_meaning"
+    },
+    {
+      "id": "cfe0d506-f625-4db3-b249-960126870f51",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "reading",
+      "owner_user_id": 1,
+      "parser": "reading"
+    },
+    {
+      "id": "e71ec494-dbfb-41b2-8b89-1e3584d6aeaf",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "name": "translation_vi",
+      "owner_user_id": 1,
+      "parser": "translation_vi"
+    }
+  ],
+  "templates": [
+    {
+      "id": "e0cb18b2-881d-4b46-a567-dc5db14d661f",
+      "slug": "flama-default",
+      "expected_back_sha256": "211fc1952d74e1c526e9b2ec1058587cf47ee5a85f70a750ddbb1b1863a61f43"
+    },
+    {
+      "id": "ebf594ca-608c-4965-9845-9f325e62dd78",
+      "slug": "flama-default",
+      "expected_back_sha256": "a0820cea5aa0ebb66a0b2588a1e26e343f66cb6b9b21a978acc6c65723725bee",
+      "variant": "default-copy"
+    },
+    {
+      "id": "f6d63262-7ad8-4694-af0c-4bd8b0519c61",
+      "slug": "advanced-vocabulary-card",
+      "expected_back_sha256": "9f57e8b1c0cdb50fb6c18bca5a695c6a617f61a7c45bcbb4e724222726673dbe"
+    },
+    {
+      "id": "0ff348a2-4896-4ba7-a7f6-99708e3e33de",
+      "slug": "advanced-vocabulary-card",
+      "expected_back_sha256": "2d186866212ce02d72870ad453e0f94d14e985d152a7b5a2f8ec4f870edf476e",
+      "variant": "english-copy"
+    }
+  ],
+  "library_owner_user_id": 1,
+  "library_slugs": [
+    "typing-reading",
+    "typing-meaning",
+    "typing-image",
+    "typing-dictation"
+  ]
+}

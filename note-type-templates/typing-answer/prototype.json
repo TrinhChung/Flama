@@ -1,0 +1,54 @@
+{
+  "slug": "typing-answer",
+  "version": "1.0.0",
+  "saved_at": "2026-10-11",
+  "note_type": {
+    "name": "Gõ đáp án",
+    "description": "Câu hỏi và danh sách đáp án được chấp nhận cho thẻ gõ dữ liệu.",
+    "field_defs": [
+      {
+        "name": "Prompt",
+        "field_type": "text",
+        "position": 0,
+        "required": true
+      },
+      {
+        "name": "Answer",
+        "field_type": "array",
+        "position": 1,
+        "required": true
+      }
+    ]
+  },
+  "template": {
+    "name": "Gõ đáp án (JS)",
+    "description": "Gõ đáp án, nhấn Enter hoặc Kiểm tra; Gợi ý mở dần đáp án đầu tiên.",
+    "input_schema": [
+      {
+        "key": "Prompt",
+        "label": "Câu hỏi",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "Answer",
+        "label": "Đáp án được chấp nhận",
+        "type": "array",
+        "required": true
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "Prompt": "Prompt",
+    "Answer": "Answer"
+  },
+  "example_field_values": {
+    "Prompt": "食べる nghĩa là gì?",
+    "Answer": ["ăn", "ăn uống"]
+  }
+}

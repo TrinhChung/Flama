@@ -1,0 +1,172 @@
+<div class="vocab-card card">
+
+  <!-- Vocabulary + Audio -->
+  <div class="vocab-head">
+    <span class="word-text">{{Vocabulary}}</span>
+
+    {{#Vocabulary_Audio}}
+    <audio id="word-audio" src="{{Vocabulary_Audio_url}}"></audio>
+    <button onclick="document.getElementById('word-audio').play()">🔊</button>
+    {{/Vocabulary_Audio}}
+  </div>
+
+  <!-- PoS + Pronunciation -->
+<div class="pos-pron-row">
+  <div class="pron">{{Pronunciation}}</div>
+  <div class="pos">{{PoS}}</div>
+</div>
+
+
+  <!-- Meaning -->
+  {{#Meaning}}
+  <div data-array-field="Meaning" style='
+        font-weight: bold;
+        font-family: "Arial"; 
+        font-size: 20px;
+        text-transform: uppercase;' class="meaning-vi">{{Meaning}}</div>
+  {{/Meaning}}
+
+  <!-- Collocation (paired, grid) -->
+  {{#Collocation}}
+  <div class="section-title pt20">◆ Collocation</div>
+  <div id="coll-raw" style="display:none;">{{Collocation}}</div>
+  <div id="collvi-raw" style="display:none;">{{Coollocation_VI}}</div>
+  <div id="coll-pairs"></div>
+  {{/Collocation}}
+
+  {{#image}}
+  {{image}}
+  {{/image}}
+
+  <!-- Synonym (paired, grid) -->
+  {{#Synonym}}
+  <div class="section-title pt20">◆ Synonym</div>
+  <div id="syn-raw" style="display:none;">{{Synonym}}</div>
+  <div id="synvi-raw" style="display:none;">{{Synonym_VI}}</div>
+  <div id="syn-pairs"></div>
+  {{/Synonym}}
+
+  <!-- Antonym (paired, grid) -->
+  {{#Antonym}}
+  <div class="section-title pt20">◆ Antonym</div>
+  <div id="ant-raw" style="display:none;">{{Antonym}}</div>
+  <div id="antvi-raw" style="display:none;">{{Antonym_VI}}</div>
+  <div id="ant-pairs"></div>
+  {{/Antonym}}
+
+
+
+<!-- Example + Audio -->
+  {{#Example}}
+  <div class="section-title">◆ Example</div>
+  <div auto-split class="example-row">
+    <span class="example-text">{{Example}}</span>
+
+    {{#Example_Audio}}
+    <audio id="example-audio" src="{{Example_Audio_url}}"></audio>
+    <button onclick="document.getElementById('example-audio').play()">🔊</button>
+    {{/Example_Audio}}
+  </div>
+  {{/Example}}
+
+  {{#Example_VI}}
+  <div auto-split class="subtext">{{Example_VI}}</div>
+  {{/Example_VI}}
+
+
+  <!-- Word Family -->
+  {{#Word Family}}
+  <div class="section-title pt20">◆ Word Family</div>
+  <div auto-split>{{Word Family}}</div>
+  {{/Word Family}}
+
+  <!-- Notes -->
+  {{#Note_EN}}
+  <div class="section-title pt20">◆ Note</div>
+  <div auto-split>{{Note_EN}}</div>
+  {{/Note_EN}}
+
+  {{#Note_VI}}
+  <div auto-split class="subtext">{{Note_VI}}</div>
+  {{/Note_VI}}
+
+</div>
+
+<script>
+(function () {
+  var script = document.currentScript;
+  var scope = script && (script.closest('.vocab-card') || script.previousElementSibling);
+  if (!scope || !scope.classList.contains('vocab-card')) return;
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/* Array fields render one item per <br>. Punctuation belongs to the item. */
+function readArray(el) {
+  if (!el) return [];
+  var copy = el.cloneNode(true);
+  copy.querySelectorAll('br').forEach(function (node) { node.replaceWith('\n'); });
+  copy.querySelectorAll('p, div, li').forEach(function (node) { node.append('\n'); });
+  return (copy.textContent || '')
+    .split(/\r\n?|\n/)
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
+}
+
+/* Grid renderer: cột trái = fit-content(max), cột phải = 1fr */
+function renderPairs(rawId, rawViId, outId) {
+  var rawEl = scope.querySelector('#' + rawId);
+  var rawViEl = scope.querySelector('#' + rawViId);
+  var outEl = scope.querySelector('#' + outId);
+  if (!outEl || !rawEl) return;
+
+  var leftArr = readArray(rawEl);
+  var rightArr = readArray(rawViEl);
+  if (leftArr.length === 0 && rightArr.length === 0) return;
+
+  var max = Math.max(leftArr.length, rightArr.length);
+  var html = '<div class="pairs-grid">';
+
+  for (var i = 0; i < max; i++) {
+    var left = leftArr[i] || "";
+    var right = rightArr[i] || "";
+
+    html += ''
+      + '<div class="pair-left">' + escapeHtml(left) + '</div>'
+      + '<div class="pair-right">' + escapeHtml(right) + '</div>';
+  }
+
+  html += '</div>';
+  outEl.innerHTML = html;
+}
+
+  /* 1) render paired sections */
+  renderPairs("coll-raw", "collvi-raw", "coll-pairs");
+  renderPairs("syn-raw", "synvi-raw", "syn-pairs");
+  renderPairs("ant-raw", "antvi-raw", "ant-pairs");
+
+  /* These prose fields were not migrated; retain their existing formatting. */
+  scope.querySelectorAll('[auto-split]').forEach(function (el) {
+    el.innerHTML = el.innerHTML.replace(/;\s*/g, "<br>");
+  });
+
+  /* 3) auto play word -> example */
+  var word = scope.querySelector("#word-audio");
+  var example = scope.querySelector("#example-audio");
+
+  if (word) {
+    word.play().catch(function (){});
+    word.onended = function () {
+      setTimeout(function () {
+        if (example) example.play().catch(function (){});
+      }, 500);
+    };
+  }
+})();
+</script>

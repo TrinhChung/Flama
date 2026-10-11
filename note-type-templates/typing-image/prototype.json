@@ -1,0 +1,166 @@
+{
+  "slug": "typing-image",
+  "version": "1.3.0",
+  "saved_at": "2026-10-11",
+  "source": {
+    "kind": "authored",
+    "design_system": "../../DESIGN.md",
+    "reference_templates": [
+      "flama-default",
+      "advanced-vocabulary-card",
+      "grammar-literary-quotes-card"
+    ]
+  },
+  "note_type": {
+    "name": "Gõ từ qua ảnh",
+    "description": "Nhìn hình, gõ tên; mặt sau xem nghĩa, cách đọc và nghe phát âm.",
+    "field_defs": [
+      {
+        "name": "PromptImage",
+        "field_type": "image",
+        "position": 0,
+        "required": true
+      },
+      {
+        "name": "Answer",
+        "field_type": "array",
+        "position": 1,
+        "required": true
+      },
+      {
+        "name": "Meaning",
+        "field_type": "array",
+        "position": 2,
+        "required": false
+      },
+      {
+        "name": "Reading",
+        "field_type": "array",
+        "position": 3,
+        "required": false
+      },
+      {
+        "name": "Audio",
+        "field_type": "audio",
+        "position": 4,
+        "required": false
+      },
+      {
+        "name": "DefinitionHint",
+        "field_type": "richtext",
+        "position": 5,
+        "required": false
+      }
+    ]
+  },
+  "template": {
+    "name": "Gõ từ qua ảnh",
+    "description": "Nhìn hình, gõ tên; mặt sau xem nghĩa, cách đọc và nghe phát âm.",
+    "input_schema": [
+      {
+        "key": "PromptImage",
+        "label": "Ảnh cần gọi tên",
+        "type": "image",
+        "required": true
+      },
+      {
+        "key": "Answer",
+        "label": "Từ cần gõ",
+        "type": "array",
+        "required": true
+      },
+      {
+        "key": "Meaning",
+        "label": "Nghĩa · mặt sau",
+        "type": "array",
+        "required": false
+      },
+      {
+        "key": "Reading",
+        "label": "Cách đọc · mặt sau",
+        "type": "array",
+        "required": false
+      },
+      {
+        "key": "Audio",
+        "label": "Phát âm · chỉ ở mặt sau",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "DefinitionHint",
+        "label": "Gợi ý giải thích · ngôn ngữ đích · mặt trước",
+        "type": "richtext",
+        "required": false
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "PromptImage": "PromptImage",
+    "Answer": "Answer",
+    "Meaning": "Meaning",
+    "Reading": "Reading",
+    "Audio": "Audio",
+    "DefinitionHint": "DefinitionHint"
+  },
+  "example_field_values": {
+    "PromptImage": null,
+    "Answer": "apple\nan apple",
+    "Meaning": "quả táo",
+    "Reading": "/ˈæp.əl/",
+    "Audio": null,
+    "DefinitionHint": "<p>A round fruit with red or green skin and crisp flesh.</p>"
+  },
+  "examples": [
+    {
+      "name": "Tiếng Anh · Advanced Vocabulary",
+      "source": "advanced-vocabulary-card",
+      "bindings": {
+        "PromptImage": "image",
+        "Answer": "Vocabulary",
+        "Meaning": "Meaning",
+        "Reading": "Pronunciation",
+        "Audio": "Vocabulary_Audio"
+      }
+    },
+    {
+      "name": "Tiếng Nhật · Flama Default",
+      "source": "flama-default",
+      "bindings": {
+        "PromptImage": "image",
+        "Answer": "word",
+        "Meaning": "translation_vi",
+        "Reading": "reading",
+        "Audio": "word_audio",
+        "DefinitionHint": "meaning_jp"
+      }
+    }
+  ],
+  "behavior": {
+    "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
+    "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible. Matching any one complete item is correct; a fragment or concatenation of different items is not.",
+    "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
+    "character_count": "Unicode grapheme clusters excluding whitespace. Short answers have tiles grouped by words and a word count. Any alternative over 32 characters or 6 whitespace-separated words switches to one compact guide and a bounded textarea.",
+    "hints": "Short answers reveal one Unicode grapheme per click through the final character. Long answers reveal eight at a time until the entire first answer is visible in a bounded scrolling guide, without creating character tiles. Disable the hint button only after the full reveal or a correct answer; remove the trailing ellipsis on full reveal.",
+    "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
+    "back": "Uses the same card width, padding, mode heading and prompt/media geometry as the front. Keep the prompt or image in place; put the answer next, then immediately related reading/meaning/translation, followed by explanations, paired examples and notes. Dictation repeats the front audio button and compact borderless word typography. Optional empty inputs hide independently; no correctness verdict.",
+    "grading": "Flip the card and choose the study rating.",
+    "keyboard": "Short input: Enter checks. Long textarea: Enter adds a line; Ctrl/Command+Enter checks. IME composition never submits. Typed line breaks normalize to spaces.",
+    "definition_hint": "Optional richtext input DefinitionHint is a target-language explanation, collapsed on the front until the learner opens it. Null, unbound, whitespace-only and visually empty richtext hide the entire clue. It is not part of answer matching."
+  },
+  "database_installation": {
+    "database_name": "nihongo",
+    "owner_user_id": 1,
+    "template_id": "633d3b27-902c-4c48-b556-3baf0f113a83",
+    "current_version_id": "241cd047-ac8e-47dd-b49a-604f681b02fa",
+    "installed_at": "2026-10-11",
+    "primary_category": "Luyện gõ",
+    "updated_at": "2026-10-11",
+    "version_no": 7
+  }
+}

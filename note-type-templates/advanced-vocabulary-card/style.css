@@ -1,0 +1,210 @@
+.front-wrap{
+  height: 100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  text-align:center;
+  padding: 0 14px;
+}
+
+/* default = giống vocab-head (36px) */
+.front-word{
+  font-weight: bold;
+  color: #e53c20;
+  font-size: clamp(40px, 8vw, 72px);
+
+  max-width: 92vw;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.12;
+}
+
+
+.card {
+  font-family: arial;
+  font-size: 20px;
+  text-align: center;
+  color: black;
+  background-color: white;
+}
+
+.meaning-vi {
+  color: #1b8f3a;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.flama-media-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-top: 15px;
+  line-height: 0;
+}
+
+/* Desktop: ảnh cao 180px, width auto giữ tỉ lệ */
+.flama-media-image,
+.flama-media-gallery > img {
+  height: 180px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  display: block;
+  margin: 0 5px 10px 0; /* khoảng cách ảnh */
+  flex: none;           /* không chiếm % chiều ngang */
+  align-self: flex-start;
+}
+
+@media (max-width: 480px) {
+  .kanji-stroke-images > img {
+    flex: 0 0 48%;
+    height: 38vw;
+    width: auto;
+    margin: 0;
+  }
+
+}
+
+@media (max-width: 320px) {
+  .flama-media-image,
+ .flama-media-gallery > img {
+    flex: 0 0 100%;
+    height: 68vw;
+    width: auto;
+  }
+
+}
+
+/* ===== Vocab card ===== */
+.vocab-card{
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-start;
+  text-align:left;            /* override .card center */
+  padding: 0 20px 0 0px;
+  font-family: Arial;
+  font-size: 18px;
+
+  /* quan trọng: chặn “dàn hàng ngang” trên màn hình quá to */
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.vocab-head{
+  font-size:36px;
+  font-weight:bold;
+  color:#e53c20;
+  padding-top:10px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.word-text,
+.example-text{
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  min-width:0;
+}
+
+.pos-pron-row{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  flex-wrap:wrap;     /* dài thì tự xuống dòng */
+	padding-bottom: 10px;
+}
+
+.pos{
+  font-size:20px;
+  font-weight:bold;
+}
+
+.pron{
+  font-size:18px;
+  color:green;
+}
+
+.section-title{
+  padding-top:16px;
+  color:#3367d6;
+  font-weight:bold;
+}
+
+.section-title.pt20{ padding-top:20px; }
+
+.example-row{
+  font-size:20px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.subtext{
+  font-size:16px;
+  color:gray;
+  margin-left:0px;
+}
+
+/* Desktop: ảnh cao 180px, width auto giữ tỉ lệ */
+.img-wrap > img {
+  height: 180px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  display: block;
+  margin: 0 5px 10px 0; /* khoảng cách ảnh */
+  flex: none;           /* không chiếm % chiều ngang */
+}
+
+/* Điện thoại: 2 ảnh 1 dòng, mỗi ảnh 48% chiều ngang, chiều cao theo % màn hình */
+@media (max-width: 480px) {
+  .img-wrap > img {
+    flex: 0 0 48%;       /* 2 ảnh 1 dòng */
+    height: 38vw;        /* chiều cao theo % màn hình */
+    width: auto;         /* width tự động */
+    margin: 0;
+  }
+}
+
+/* Điện thoại nhỏ hơn: 1 ảnh 1 dòng */
+@media (max-width: 320px) {
+  .img-wrap > img {
+    flex: 0 0 100%;      /* 1 ảnh 1 dòng */
+    height: 68vw;        /* chiều cao theo % màn hình */
+    width: auto;
+  }
+}
+
+/* ===== Paired sections: Grid 2 columns (fix khoảng cách xa trên màn hình to) ===== */
+/* Cột trái lấy theo width item dài nhất, nhưng tối đa 420px */
+.pairs-grid{
+  display:grid;
+  grid-template-columns: fit-content(420px) 1fr;
+  column-gap:14px;
+  row-gap:3px;
+  align-items:start;
+}
+
+.pair-left,
+.pair-right{
+  min-width:0;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  line-height:1.12;
+}
+
+.pair-left{ font-weight:bold; }
+.pair-right{ color:gray; }
+
+/* Mobile: xếp dọc */
+@media (max-width: 480px){
+  .pairs-grid{ grid-template-columns: 1fr; }
+  .pair-right{ padding-left:12px; }
+}

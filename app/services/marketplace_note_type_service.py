@@ -14,12 +14,14 @@ from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
 from models.note_type_review import NoteTypeReview
 from models.template import Template
+from models.template_subscription import TemplateSubscription
 
 from app.services import (
     flashcards_share_service,
     marketplace_hub_service,
     marketplace_query_service,
     payment_service,
+    template_release_service,
 )
 from app.repositories import flashcards_share_repository, template_release_repository
 from app.repositories.marketplace_list_repository import ordered_items_query, visible_items_query
@@ -293,6 +295,19 @@ def get_shared_note_type_detail(
             user_id=user_id,
         )
     )
+    templates = payload.get("templates") or []
+    if templates:
+        template_ids = [t["id"] for t in templates if "id" in t]
+        subscriptions = {
+            sub.source_template_id: sub.local_template_id
+            for sub in TemplateSubscription.query.filter(
+                TemplateSubscription.user_id == user_id,
+                TemplateSubscription.source_template_id.in_(template_ids),
+            ).all()
+        }
+        for tmpl in templates:
+            tmpl["is_installed"] = tmpl.get("id") in subscriptions
+            tmpl["installed_template_id"] = subscriptions.get(tmpl.get("id"))
     return payload
 
 
@@ -533,6 +548,89 @@ def install_shared_note_type(
         },
         201,
     )
+
+
+def install_shared_note_type_template(
+    *,
+    user_id: int,
+    note_type_id: str,
+    template_id: str,
+) -> dict[str, Any]:
+    """Install an individual template from a shared note type into current user account."""
+    source_note_type = db.session.get(NoteType, note_type_id)
+    if not source_note_type:
+        raise MarketplaceNoteTypeError(
+            "FIELD_NOT_FOUND", "Note type not found.", status=404
+        )
+    status = str(source_note_type.publish_status or "").strip().lower()
+    if status not in PUBLISH_STATUSES_VISIBLE:
+        raise MarketplaceNoteTypeError(
+            "VALIDATION_ERROR",
+            "This note type is not available for install.",
+            status=409,
+        )
+    if source_note_type.user_id == user_id:
+        raise MarketplaceNoteTypeError(
+            "VALIDATION_ERROR", "Owner cannot install own template.", status=409
+        )
+
+    attached = flashcards_share_repository.get_template_applications_by_note_type(source_note_type.id)
+    template = next((t for t, _app in attached if t.id == template_id), None)
+    if template is None:
+        template = next((row for row in flashcards_share_repository.get_templates_by_note_type(source_note_type.id) if row.id == template_id), None)
+    if not template:
+        raise MarketplaceNoteTypeError(
+            "FIELD_NOT_FOUND", "Template not found in this note type.", status=404
+        )
+
+    if source_note_type.pricing_mode == "paid":
+        has_installed = NoteTypeInstall.query.filter_by(
+            source_note_type_id=source_note_type.id,
+            user_id=user_id,
+        ).first() is not None
+        if not has_installed:
+            raise MarketplaceNoteTypeError(
+                "PAYMENT_REQUIRED",
+                "Mẫu thẻ thuộc Loại thẻ trả phí. Vui lòng mua Loại thẻ để thêm mẫu này vào thư viện.",
+                status=402,
+            )
+
+    existing = template_release_repository.subscription(
+        db.session,
+        user_id=user_id,
+        source_template_id=template_id,
+    )
+    if existing:
+        return {
+            "local_template_id": existing["local_template_id"],
+            "source_template_id": template_id,
+            "already_installed": True,
+        }
+
+    try:
+        template_release_service.stage_note_type_publications(
+            db.session,
+            note_type_id=source_note_type.id,
+            actor_user_id=source_note_type.user_id,
+            initialize_only=True,
+        )
+        subscription = template_release_service.ensure_subscription(
+            db.session,
+            user_id=user_id,
+            source_template_id=template_id,
+        )
+        db.session.commit()
+        return {
+            "local_template_id": subscription["local_template_id"],
+            "source_template_id": template_id,
+            "already_installed": False,
+        }
+    except template_release_service.TemplateReleaseError as exc:
+        db.session.rollback()
+        raise MarketplaceNoteTypeError(exc.code, str(exc), status=exc.status, field=exc.field) from exc
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def rate_shared_note_type(

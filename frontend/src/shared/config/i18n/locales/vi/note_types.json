@@ -39,6 +39,7 @@
     "type_change_warning": "Đổi kiểu dữ liệu có thể làm ánh xạ hiện tại không còn tương thích. Kiểm tra lại mapping sau khi lưu.",
     "unsaved_field": "Trường này có thay đổi chưa lưu. Lưu trường, bỏ thay đổi hoặc ở lại để tiếp tục sửa.",
     "delete_title": "Xóa trường dữ liệu?",
+    "delete_notetype_btn": "Xóa Note Type",
     "rename": "Đổi tên",
     "rename_title": "Đổi tên Note Type",
     "rename_description": "Thay đổi tên hiển thị của Note Type này.",
@@ -54,7 +55,7 @@
       "image": { "label": "Hình ảnh", "hint": "Lưu tham chiếu media hình ảnh. Dùng ảnh mẫu hoặc nhập tham chiếu có sẵn để xem thử." },
       "audio": { "label": "Âm thanh", "hint": "Lưu tham chiếu audio. Phát thử mẫu tại đây; thiết lập tạo TTS nằm trong luồng Audio." },
       "diagram": { "label": "Sơ đồ", "hint": "Lưu tham chiếu ảnh hoặc SVG theo editor sơ đồ hiện tại. Dùng mẫu hoặc tham chiếu có sẵn để xem thử." },
-      "answers": { "label": "Đáp án gõ", "hint": "Mỗi dòng là một đáp án được chấp nhận khi học ở chế độ gõ. Dòng trống và đáp án trùng được bỏ khi lưu." }
+      "array": { "label": "Mảng", "hint": "Danh sách giá trị, mỗi dòng một phần tử. Giữ thứ tự và phần tử trùng; bỏ dòng trống khi lưu." }
     }
   },
   "manager": {
@@ -69,7 +70,8 @@
       "docs_btn": "Tài liệu",
       "ai_prompt_banner_title": "Tạo Template Bằng AI Trong 1 Phút",
       "ai_prompt_banner_desc": "Không cần biết lập trình! Dùng Prompt chuẩn cho ChatGPT / Claude để tự thiết kế mẫu thẻ Flashcard đúng ý bạn.",
-      "ai_prompt_banner_btn": "Mở Hướng Dẫn & Prompt AI"
+      "ai_prompt_banner_btn": "Mở Hướng Dẫn & Prompt AI",
+      "btn_explore_market": "Khám phá từ Chợ"
     },
     "create": {
       "title": "Tạo cấu trúc thẻ mới",
@@ -146,12 +148,12 @@
       "save_btn": "Lưu thay đổi",
       "confirm_delete": "Xóa trường \"{{name}}\"? Dữ liệu tương ứng trong các ghi chú sẽ bị giải phóng."
     },
-    "answers_conversion": {
-      "open": "Chuyển sang Đáp án gõ…",
+    "array_conversion": {
+      "open": "Chuyển sang Mảng…",
       "open_restore": "Khôi phục từ bản sao lưu…",
       "save_first": "Lưu thay đổi của trường trước khi chuyển đổi.",
-      "title": "Chuyển \"{{name}}\" sang Đáp án gõ",
-      "description": "Flama tách giá trị của mọi Note thuộc loại thẻ này thành mỗi dòng một đáp án. Xem trước, sửa nếu cần, tải bản sao lưu rồi mới áp dụng.",
+      "title": "Chuyển \"{{name}}\" sang Mảng",
+      "description": "Flama tách giá trị của mọi Note thuộc loại thẻ này thành mỗi dòng một phần tử. Xem trước, sửa nếu cần, tải bản sao lưu rồi mới áp dụng.",
       "loading": "Đang tải dữ liệu các Note…",
       "blocked_PRIMARY_FIELD": "Trường định danh chính phải giữ kiểu Văn bản.",
       "blocked_UNSUPPORTED_FIELD_TYPE": "Chỉ chuyển được trường Văn bản, Văn bản có định dạng hoặc Markdown.",
@@ -170,16 +172,25 @@
       "no_rows": "Không có Note nào trong mục này.",
       "original": "Trước",
       "result": "Sau",
-      "no_answers": "(không có đáp án)",
+      "no_items": "(không có phần tử)",
       "edit": "Sửa",
       "reset_edit": "Bỏ sửa",
       "edited": "Đã sửa tay",
-      "edit_hint": "Mỗi dòng một đáp án",
+      "edit_hint": "Mỗi dòng một phần tử",
       "flag_html": "Có HTML, sẽ bỏ định dạng",
       "flag_sound": "Có [sound:], sẽ bỏ âm thanh",
-      "flag_empty": "Không còn đáp án",
-      "flag_duplicates": "Đã gộp đáp án trùng",
-      "flag_long": "Có đáp án dài hơn 80 ký tự",
+      "flag_empty": "Không còn phần tử",
+      "flag_duplicates": "Có phần tử trùng (được giữ lại)",
+      "flag_long": "Có phần tử dài hơn 80 ký tự",
+      "flag_brackets": "Có phần trong ngoặc, được giữ trong cùng một phần tử",
+      "error_NOTES_CHANGED": "Dữ liệu Note đã thay đổi kể từ lúc xem trước. Tải lại xem trước rồi thử lại.",
+      "error_FIELD_CHANGED": "Kiểu trường đã thay đổi kể từ lúc xem trước. Đóng hộp thoại rồi mở lại.",
+      "error_FIELD_RENAME_IN_PROGRESS": "Trường đang được đổi tên. Đợi xong rồi thử lại.",
+      "error_FIELD_NOT_CONVERTIBLE": "Trường này không chuyển đổi được.",
+      "error_INVALID_ARRAY_VALUE": "Có giá trị không hợp lệ: mỗi dòng phải là một phần tử không rỗng, không có HTML.",
+      "error_INVALID_FIELD_VALUE": "Bản sao lưu có giá trị không hợp lệ với kiểu trường gốc.",
+      "error_generic": "Không áp dụng được: {{message}}",
+      "too_many_notes": "Loại thẻ này có {{count}} Note, vượt giới hạn {{max}} Note mỗi lần chuyển đổi. Hiện chưa chuyển được loại thẻ lớn như vậy.",
       "page": "Trang {{page}}/{{pages}}",
       "previous": "Trước",
       "next": "Sau",
@@ -190,7 +201,7 @@
       "applying": "Đang áp dụng…",
       "reload": "Tải lại xem trước",
       "cancel": "Hủy",
-      "success": "Đã chuyển {{count}} Note sang Đáp án gõ.",
+      "success": "Đã chuyển {{count}} Note sang Mảng.",
       "restore_title": "Khôi phục \"{{name}}\" từ bản sao lưu",
       "restore_description": "Chọn file sao lưu đã tải khi chuyển đổi. Note tạo sau lần sao lưu được giữ nguyên.",
       "restore_file": "File sao lưu (.json)",
@@ -376,6 +387,8 @@
     "step3_desc": "Không cần biết lập trình! Bấm nút này để mở trang hướng dẫn và sao chép Master Prompt cho ChatGPT / Claude tự thiết kế mẫu thẻ cho bạn.",
     "step4_cards_title": "📇 4. Thẻ NoteType & Huy Hiệu Thông Số",
     "step4_cards_desc": "Mỗi thẻ hiển thị tên loại thẻ cùng 2 huy hiệu quan trọng: số lượng Template (các mặt thẻ hiển thị) và số lượng Trường dữ liệu hiện có trong bộ thẻ.",
+    "step5_view_title": "👁️ 5. Nút \"Xem\" (Thiết Lập & Quản Lý Cấu Trúc Thẻ)",
+    "step5_view_desc": "Bấm nút Xem để mở giao diện quản lý chi tiết: thiết lập các Trường (Fields), tùy chỉnh Giao diện (Templates), xem trước và chia sẻ hoặc xóa cấu trúc thẻ.",
     "step5_fields_title": "⚙️ 5. Nút \"Trường\" (Quản Lý Cột Dữ Liệu)",
     "step5_fields_desc": "Bấm vào đây để thêm các trường như Word, Meaning, Audio, Example, Furigana... định hình cấu trúc dữ liệu lưu trữ cho thẻ.",
     "step6_templates_title": "🎨 6. Nút \"Templates\" (Soạn Giao Diện & Xem Trước)",
@@ -383,7 +396,7 @@
     "step7_share_title": "🌐 7. Nút \"Chia Sẻ\" Lên Kho Cộng Đồng",
     "step7_share_desc": "Khi đã thiết kế xong mẫu thẻ ưng ý, bạn có thể bấm nút này để xuất bản lên Marketplace cho cộng đồng Flama cùng sử dụng.",
     "step4_empty_title": "📋 4. Khu Vực Danh Sách Loại Thẻ",
-    "step4_empty_desc": "Sau khi tạo loại thẻ, các thẻ NoteType sẽ xuất hiện tại đây kèm các nút chức năng: Quản lý Trường (Fields), Tùy chỉnh Template (HTML/CSS), Xem trước Live Preview và Chia sẻ lên Kho Marketplace."
+    "step4_empty_desc": "Sau khi tạo loại thẻ, các thẻ NoteType sẽ xuất hiện tại đây kèm nút \"Xem\" để mở trang thiết lập chi tiết."
   },
   "guide_tour": {
     "step1_title": "📘 1. Trung Tâm Hướng Dẫn & Prompt AI",

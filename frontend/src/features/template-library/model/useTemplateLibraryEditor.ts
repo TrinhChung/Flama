@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '@/shared/api/client'
 import {
-  archiveLibraryTemplate, cardTemplateQueryKeys, fetchLibraryTemplate, previewLibraryTemplate, updateLibraryTemplate,
+  archiveLibraryTemplate, cardTemplateQueryKeys, deleteLibraryTemplate, fetchLibraryTemplate, previewLibraryTemplate, updateLibraryTemplate,
   type CardTemplateItem, type TemplateInputSpec, type TemplateLibraryDetail, type TemplateLibraryPreview,
   type TemplateLibraryTemplate, type TemplateWriteBody,
 } from '@/entities/card-template'
@@ -94,6 +94,17 @@ export function useTemplateLibraryEditor(id: string) {
     },
     onError: (error, request) => { if (stillCurrent(request)) toast.error(t('editor.archive_error_title'), { description: errorMessage(error) }) },
   })
+  const deleteMutation = useMutation({
+    mutationFn: (request: { id: string; generation: number }) => deleteLibraryTemplate(request.id),
+    onSuccess: async (_data, request) => {
+      if (!stillCurrent(request)) return
+      toast.success(t('detail.delete_success'))
+      await invalidate()
+    },
+    onError: (error, request) => {
+      if (stillCurrent(request)) toast.error(errorMessage(error))
+    },
+  })
 
   // Restore/distribution responses have intentionally different DTOs. Replace explicit
   // sources first, then fetch the full library schema and metadata with a fresh request.
@@ -154,6 +165,8 @@ export function useTemplateLibraryEditor(id: string) {
     },
     archiveMutation, setArchived: (archived: boolean) => archiveMutation.mutate({ ...capture(), archived }),
     archive: (archived: boolean) => archiveMutation.mutateAsync({ ...capture(), archived }),
+    deleteMutation,
+    deleteTemplate: () => deleteMutation.mutateAsync({ ...capture() }),
     refreshAndReplaceDraft, isReplacingDraft, refreshError,
     previewResult: preview?.key === previewKey ? preview.data : null,
     previewError: schemaIssues.length ? t('editor.preview_schema_error') : preview?.key === previewKey ? preview.error : null,

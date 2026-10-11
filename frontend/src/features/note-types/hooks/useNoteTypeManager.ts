@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
-import { useBootstrap } from '@/shared/api/bootstrap'
 
 export type NoteTypeItem = {
   id: string
@@ -24,12 +23,8 @@ export function useNoteTypeManager() {
   const { t } = useTranslation('note_types')
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const bootstrapQuery = useBootstrap()
-  const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
 
   const [name, setName] = useState('')
-  const [noteTypeToDelete, setNoteTypeToDelete] = useState<NoteTypeItem | null>(null)
-  const [purgeNoteType, setPurgeNoteType] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
 
   const query = useQuery({
@@ -51,22 +46,6 @@ export function useNoteTypeManager() {
     },
   })
 
-  const deleteMutation = useMutation<unknown, Error, { id: string; purge?: boolean }>({
-    mutationFn: ({ id, purge }) => {
-      const suffix = purge ? '?purge=true' : ''
-      return appApi.mutate(`/note-types/${id}${suffix}`, 'DELETE')
-    },
-    onSuccess: () => {
-      toast.success(t('manager.messages.delete_success'))
-      void queryClient.invalidateQueries({ queryKey: ['note-types'] })
-      setNoteTypeToDelete(null)
-      setPurgeNoteType(false)
-    },
-    onError: (error: Error) => {
-      toast.error(t('manager.messages.delete_error'), { description: error.message })
-    },
-  })
-
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = name.trim()
@@ -80,17 +59,11 @@ export function useNoteTypeManager() {
   return {
     query,
     noteTypes: query.data?.items || [],
-    isAdmin,
     name,
     setName,
-    noteTypeToDelete,
-    setNoteTypeToDelete,
-    purgeNoteType,
-    setPurgeNoteType,
     tourOpen,
     setTourOpen,
     createMutation,
-    deleteMutation,
     handleCreate,
   }
 }

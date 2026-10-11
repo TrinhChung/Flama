@@ -276,7 +276,12 @@
     "template_active_preview": "Previewing",
     "template_available": "Card template",
     "btn_select_preview": "Preview",
-    "badge_previewing": "Previewing"
+    "badge_previewing": "Previewing",
+    "btn_add_template_to_library": "Add to library",
+    "btn_in_library": "In library",
+    "badge_owned_template": "Yours",
+    "toast_template_installed": "Template added to your library!",
+    "error_install_template": "Failed to add template to your library."
   },
   "keys_manager": {
     "title": "Course Access Keys Management",

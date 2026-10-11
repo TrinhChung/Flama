@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { LoaderCircle, Plus, RotateCcw, Tag, X } from 'lucide-react'
-import { isAnswersField, normalizeAnswersFieldValues } from '@/lib/answersField'
+import { isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
 import { MediaFieldPreview } from './MediaFieldPreview'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
@@ -85,7 +85,7 @@ export function BrowseCardCreateForm({
     void createMutation.mutate({
       deck_id: editDeckId,
       note_type_id: noteTypeId,
-      field_values: normalizeAnswersFieldValues(payloadFields, fields),
+      field_values: normalizeArrayFieldValues(payloadFields, fields),
       tags: editTags,
     })
   }
@@ -182,9 +182,9 @@ export function BrowseCardCreateForm({
               )
             }
 
-            const isAnswers = isAnswersField(ft)
+            const isArray = isArrayField(ft)
             const isMultiline =
-              isAnswers ||
+              isArray ||
               val.length > 50 ||
               val.includes('\n') ||
               field.name.toLowerCase().includes('meaning') ||
@@ -198,7 +198,7 @@ export function BrowseCardCreateForm({
                 </Label>
                 {isMultiline ? (
                   <Textarea
-                    placeholder={isAnswers ? t('editor.answers_placeholder') : `Nhập ${field.name}...`}
+                    placeholder={isArray ? t('editor.array_placeholder') : `Nhập ${field.name}...`}
                     value={val}
                     onChange={(e) =>
                       setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))

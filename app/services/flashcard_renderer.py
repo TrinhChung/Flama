@@ -84,6 +84,11 @@ ALLOWED_HTML_TAGS = [
     "text",
     "tspan",
 ]
+# Template markup may also carry its own answer box, checked by the template's
+# script (a typed answer is plain HTML/JS in the card). Scripts can create the
+# same elements anyway, and the sandboxed iframe blocks form submission
+# (form-action 'none') and network access. Field content keeps the list above.
+TEMPLATE_HTML_TAGS = [*ALLOWED_HTML_TAGS, "input", "label"]
 
 ALLOWED_CSS_PROPERTIES = [
     "color",
@@ -156,6 +161,14 @@ _PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127
 _LIBRARY_MEDIA_URL_RE = re.compile(r"^/media/library/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$")
 _STATIC_STROKE_URL_RE = re.compile(r"^/static/strokes/([a-zA-Z0-9_-]+)/([a-fA-F0-9]+)\.svg$")
 _SCRIPT_TOKEN_PREFIX = "__FC_INLINE_SCRIPT_BLOCK_"
+# {{FrontSide}} on the back shows the rendered front, as in Anki; on the front it
+# is empty. The token becomes a tag-like marker before Mustache runs, so escaped
+# field text can never produce it, and the marker is then swapped for the front
+# markup (without the front's scripts) before the back is sanitized. Keep in
+# sync with FRONT_SIDE_TOKEN_RE in frontend clientRenderer.ts; "&amp;" covers a
+# client source that went through bleach.
+FRONT_SIDE_TOKEN_RE = re.compile(r"\{\{\{\s*FrontSide\s*\}\}\}|\{\{\s*(?:&amp;|&)?\s*FrontSide\s*\}\}")
+_FRONT_SIDE_MARKER = "<flama-front-side></flama-front-side>"
 _ALLOWED_INLINE_SCRIPT_TYPES = {
     "",
     "text/javascript",
@@ -514,7 +527,7 @@ def sanitize_template_html_fragment(raw_html: str | None) -> str:
     cleaned_html, scripts = _extract_inline_scripts(raw_html or "")
     safe_html = bleach.clean(
         cleaned_html,
-        tags=ALLOWED_HTML_TAGS,
+        tags=TEMPLATE_HTML_TAGS,
         attributes=_template_allowed_attr,
         strip=True,
         css_sanitizer=_css_sanitizer,
@@ -563,7 +576,7 @@ def prepare_client_template_source(
 
     safe_source = bleach.clean(
         script_free_html,
-        tags=ALLOWED_HTML_TAGS,
+        tags=TEMPLATE_HTML_TAGS,
         attributes=_client_template_allowed_attr,
         strip=True,
         css_sanitizer=_css_sanitizer,
@@ -1052,6 +1065,8 @@ def render_template_pair(
         _rewrite_media_url_attribute_tokens(back_source_raw, field_defs),
         field_defs,
     )
+    front_source_prepared = FRONT_SIDE_TOKEN_RE.sub("", front_source_prepared)
+    back_source_prepared = FRONT_SIDE_TOKEN_RE.sub(_FRONT_SIDE_MARKER, back_source_prepared)
     context = build_render_context(
         field_defs,
         field_values,
@@ -1084,6 +1099,8 @@ def render_template_pair(
         back_rendered = chevron.render(back_source, context)
     except Exception as exc:
         raise TemplateCompileError(str(exc)) from exc
+    if _FRONT_SIDE_MARKER in back_rendered:
+        back_rendered = back_rendered.replace(_FRONT_SIDE_MARKER, _INLINE_SCRIPT_RE.sub("", front_rendered))
 
     front_rendered = _replace_linebreak_token_in_html_text_nodes(front_rendered)
     back_rendered = _replace_linebreak_token_in_html_text_nodes(back_rendered)

@@ -29,6 +29,8 @@ Trong `create_note_type`, danh sách field đầu vào là biến `input_fields`
 
 Renderer **không** hỗ trợ `{{FrontSide}}`, nên không được dùng token đó.
 
+*Cập nhật 2026-10-10:* renderer đã hỗ trợ `{{FrontSide}}` (`FRONT_SIDE_TOKEN_RE` trong `app/services/flashcard_renderer.py`). Nội dung mặc định vẫn không cần token này.
+
 ## 2. Mục tiêu
 
 Thêm một helper thuần và dùng nó ở đúng hai chỗ trên. Không đổi hành vi khi người gọi đã gửi `front_html`/`back_html`.

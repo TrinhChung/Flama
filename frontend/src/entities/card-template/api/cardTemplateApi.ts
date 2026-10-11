@@ -148,6 +148,10 @@ export function duplicateLibraryTemplate(
   return apiJson<TemplateLibraryTemplate>(`/api/card-templates/${enc(id)}/duplicate`, 'POST', body)
 }
 
+export function deleteLibraryTemplate(id: string): Promise<{ success: boolean; id: string }> {
+  return apiJson<{ success: boolean; id: string }>(`/api/card-templates/${enc(id)}`, 'DELETE')
+}
+
 export function fetchTemplateApplications(
   noteTypeId: string,
   includeRetired = false,

@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
-import { ArrowLeft, BookOpen, LoaderCircle, Pencil, Save, Share2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, LoaderCircle, Pencil, Save, Share2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { useBootstrap } from '@/shared/api/bootstrap'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,11 +20,12 @@ import { useUnsavedChangesGuard } from '@/shared/hooks/useUnsavedChangesGuard'
 import { cardTemplateQueryKeys, fetchTemplateApplications } from '@/entities/card-template'
 import { useNoteTypeFields } from '../hooks/useNoteTypeFields'
 import { NoteTypeSetupShell } from '../components/NoteTypeSetupShell'
+import { DeleteNoteTypeDialog } from '../components/manager/DeleteNoteTypeDialog'
 import { FieldListCard } from '../components/fields/FieldListCard'
 import { AddFieldCard } from '../components/fields/AddFieldCard'
 import { EditFieldCard } from '../components/fields/EditFieldCard'
 import { FieldEditorPreview } from '../components/fields/FieldEditorPreview'
-import { FieldAnswersConversionEntry } from '../components/fields/FieldAnswersConversionEntry'
+import { FieldArrayConversionEntry } from '../components/fields/FieldArrayConversionEntry'
 
 export function NoteTypeFieldsPage() {
   const { t } = useTranslation('note_types')
@@ -31,15 +33,19 @@ export function NoteTypeFieldsPage() {
   const queryClient = useQueryClient()
   const editor = useNoteTypeFields(appApi)
   const { noteTypeId, query, detailQuery, fields, selectedField, selectedFieldId, isAddingField, isBusy } = editor
+  const bootstrapQuery = useBootstrap()
+  const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
   const [mobileDetail, setMobileDetail] = useState(false)
   const [samples, setSamples] = useState<Record<string, string>>({})
   const [sampleFiles, setSampleFiles] = useState<Record<string, File | null>>({})
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteNoteTypeOpen, setDeleteNoteTypeOpen] = useState(false)
+  const [purgeNoteType, setPurgeNoteType] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
   const renameButtonRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => { setMobileDetail(false); setSamples({}); setSampleFiles({}); setDeleteOpen(false); setRenameOpen(false) }, [noteTypeId])
+  useEffect(() => { setMobileDetail(false); setSamples({}); setSampleFiles({}); setDeleteOpen(false); setRenameOpen(false); setDeleteNoteTypeOpen(false); setPurgeNoteType(false) }, [noteTypeId])
   const applicationsQuery = useQuery({
     queryKey: cardTemplateQueryKeys.applications(noteTypeId ?? ''),
     queryFn: ({ signal }) => fetchTemplateApplications(noteTypeId!, false, signal),
@@ -74,6 +80,21 @@ export function NoteTypeFieldsPage() {
       ])
     },
     onError: (error: Error) => setRenameError(error.message),
+  })
+
+  const deleteNoteTypeMutation = useMutation<unknown, Error, { id: string; purge?: boolean }>({
+    mutationFn: ({ id, purge }) => {
+      const suffix = purge ? '?purge=true' : ''
+      return appApi.mutate(`/note-types/${encodeURIComponent(id)}${suffix}`, 'DELETE')
+    },
+    onSuccess: () => {
+      toast.success(t('manager.messages.delete_success'))
+      void queryClient.invalidateQueries({ queryKey: ['note-types'] })
+      navigate('/flashcards/note-types')
+    },
+    onError: (error: Error) => {
+      toast.error(t('manager.messages.delete_error'), { description: error.message })
+    },
   })
 
   if (query.isPending || detailQuery.isPending) return <PageLoading label={t('fields.loading')} />
@@ -117,6 +138,19 @@ export function NoteTypeFieldsPage() {
           if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); goTo(shareLink) }
         }}><Share2 className="size-4" />{t(isPublished ? 'detail.header.view_marketplace' : 'detail.header.share_marketplace')}</Link></Button>
         <Button variant="ghost" size="sm" asChild><Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer"><BookOpen className="size-4" />{t('detail.header.guide_btn')}</Link></Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isBusy || deleteNoteTypeMutation.isPending}
+          className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1.5"
+          onClick={() => {
+            setPurgeNoteType(false)
+            setDeleteNoteTypeOpen(true)
+          }}
+        >
+          <Trash2 className="size-4" />
+          {t('setup.delete_notetype_btn', { defaultValue: 'Xóa Note Type' })}
+        </Button>
       </>}>
       <div className="grid gap-3 sm:gap-4 lg:gap-5 md:grid-cols-[minmax(240px,0.7fr)_minmax(0,1.3fr)] lg:grid-cols-[minmax(260px,0.75fr)_minmax(0,1.5fr)] xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)] 2xl:max-w-[110rem] 2xl:mx-auto w-full md:min-h-[34rem] lg:min-h-0 lg:flex-1 items-stretch">
         <div className={cn('h-full min-h-0 flex flex-col min-h-[min(28rem,calc(100svh-11rem))] md:min-h-0', mobileDetail ? 'hidden md:flex' : 'flex')}>
@@ -142,7 +176,7 @@ export function NoteTypeFieldsPage() {
               editType={editor.editType} onEditTypeChange={editor.setEditType} editRequired={editor.editRequired} onEditRequiredChange={editor.setEditRequired}
               editIdentity={editor.editIdentity} onEditIdentityChange={editor.setEditIdentity}
               preview={preview} usage={usage} error={editor.formError} isDirty={editor.canSave}
-              typeConversion={noteTypeId ? <FieldAnswersConversionEntry noteTypeId={noteTypeId} field={selectedField} dirty={editor.isDirty}
+              typeConversion={noteTypeId ? <FieldArrayConversionEntry noteTypeId={noteTypeId} field={selectedField} dirty={editor.isDirty}
                 onChanged={() => { void editor.refreshFields() }} /> : undefined}
               isUpdating={isBusy} isDeleting={editor.deleteMutation.isPending}
               onDelete={() => requestAction(() => setDeleteOpen(true))}
@@ -178,6 +212,20 @@ export function NoteTypeFieldsPage() {
           </form>
         </DialogContent>
       </Dialog>
+      <DeleteNoteTypeDialog
+        noteType={detailQuery.data ? { id: detailQuery.data.id, name: detailQuery.data.name } : null}
+        isOpen={deleteNoteTypeOpen}
+        onClose={() => setDeleteNoteTypeOpen(false)}
+        isAdmin={isAdmin}
+        purgeNoteType={purgeNoteType}
+        onPurgeChange={setPurgeNoteType}
+        onConfirmDelete={() => {
+          if (noteTypeId) {
+            deleteNoteTypeMutation.mutate({ id: noteTypeId, purge: purgeNoteType })
+          }
+        }}
+        isDeleting={deleteNoteTypeMutation.isPending}
+      />
     </NoteTypeSetupShell>
   )
 }

@@ -8,16 +8,16 @@ import {
   faRobot,
   faRoute,
 } from '@fortawesome/free-solid-svg-icons'
+import { Store } from 'lucide-react'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Button } from '@/components/ui/button'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 import { ContextHelpButton } from '@/features/guide'
 import { SpotlightTour } from '@/shared/components/SpotlightTour'
-import { useNoteTypeManager, type NoteTypeItem } from '../hooks/useNoteTypeManager'
+import { useNoteTypeManager } from '../hooks/useNoteTypeManager'
 import { CreateNoteTypeBar } from '../components/manager/CreateNoteTypeBar'
 import { NoteTypeCard } from '../components/manager/NoteTypeCard'
-import { DeleteNoteTypeDialog } from '../components/manager/DeleteNoteTypeDialog'
 import { getNoteTypeManagerTourSteps } from '../components/manager/noteTypeManagerTourSteps'
 
 const TOUR_STORAGE_KEY = 'flama_notetype_spotlight_tour_v1'
@@ -27,17 +27,11 @@ export function NoteTypeManagerPage() {
   const {
     query,
     noteTypes,
-    isAdmin,
     name,
     setName,
-    noteTypeToDelete,
-    setNoteTypeToDelete,
-    purgeNoteType,
-    setPurgeNoteType,
     tourOpen,
     setTourOpen,
     createMutation,
-    deleteMutation,
     handleCreate,
   } = useNoteTypeManager()
 
@@ -78,6 +72,17 @@ export function NoteTypeManagerPage() {
             >
               <FontAwesomeIcon icon={faRoute} className="text-primary text-xs shrink-0" />
               <span className="hidden xs:inline">Tour </span>{t('manager.header.tour_btn')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 shrink-0 gap-1.5"
+            >
+              <Link to="/marketplace/note-types">
+                <Store className="size-3.5 text-primary shrink-0" />
+                {t('manager.header.btn_explore_market', { defaultValue: 'Khám phá từ Chợ' })}
+              </Link>
             </Button>
             <Button
               variant="outline"
@@ -126,30 +131,10 @@ export function NoteTypeManagerPage() {
               key={item.id}
               item={item}
               index={index}
-              onDelete={(nt: NoteTypeItem) => {
-                setPurgeNoteType(false)
-                setNoteTypeToDelete(nt)
-              }}
             />
           ))}
         </div>
       )}
-
-      {/* Delete Confirmation Dialog */}
-      <DeleteNoteTypeDialog
-        noteType={noteTypeToDelete}
-        isOpen={Boolean(noteTypeToDelete)}
-        onClose={() => setNoteTypeToDelete(null)}
-        isAdmin={isAdmin}
-        purgeNoteType={purgeNoteType}
-        onPurgeChange={setPurgeNoteType}
-        onConfirmDelete={() => {
-          if (noteTypeToDelete) {
-            deleteMutation.mutate({ id: noteTypeToDelete.id, purge: purgeNoteType })
-          }
-        }}
-        isDeleting={deleteMutation.isPending}
-      />
 
       {/* Interactive Spotlight Onboarding Tour */}
       <SpotlightTour

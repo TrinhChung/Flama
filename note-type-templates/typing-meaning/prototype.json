@@ -1,0 +1,197 @@
+{
+  "slug": "typing-meaning",
+  "version": "1.3.0",
+  "saved_at": "2026-10-11",
+  "source": {
+    "kind": "authored",
+    "design_system": "../../DESIGN.md",
+    "reference_templates": [
+      "flama-default",
+      "advanced-vocabulary-card",
+      "grammar-literary-quotes-card"
+    ]
+  },
+  "note_type": {
+    "name": "Gõ nghĩa",
+    "description": "Nhìn từ, gõ nghĩa; mặt sau xem cách đọc, giải thích và ví dụ.",
+    "field_defs": [
+      {
+        "name": "PromptText",
+        "field_type": "text",
+        "position": 0,
+        "required": true
+      },
+      {
+        "name": "Answer",
+        "field_type": "array",
+        "position": 1,
+        "required": true
+      },
+      {
+        "name": "Reading",
+        "field_type": "array",
+        "position": 2,
+        "required": false
+      },
+      {
+        "name": "Explanation",
+        "field_type": "richtext",
+        "position": 3,
+        "required": false
+      },
+      {
+        "name": "Example",
+        "field_type": "richtext",
+        "position": 4,
+        "required": false
+      },
+      {
+        "name": "ExampleTranslation",
+        "field_type": "richtext",
+        "position": 5,
+        "required": false
+      },
+      {
+        "name": "Audio",
+        "field_type": "audio",
+        "position": 6,
+        "required": false
+      },
+      {
+        "name": "DefinitionHint",
+        "field_type": "richtext",
+        "position": 7,
+        "required": false
+      }
+    ]
+  },
+  "template": {
+    "name": "Gõ nghĩa",
+    "description": "Nhìn từ, gõ nghĩa; mặt sau xem cách đọc, giải thích và ví dụ.",
+    "input_schema": [
+      {
+        "key": "PromptText",
+        "label": "Từ / cụm từ",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "Answer",
+        "label": "Nghĩa cần gõ",
+        "type": "array",
+        "required": true
+      },
+      {
+        "key": "Reading",
+        "label": "Cách đọc · mặt sau",
+        "type": "array",
+        "required": false
+      },
+      {
+        "key": "Explanation",
+        "label": "Giải thích · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Example",
+        "label": "Ví dụ · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "ExampleTranslation",
+        "label": "Bản dịch ví dụ · mặt sau",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "Audio",
+        "label": "Phát âm · chỉ ở mặt sau",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "DefinitionHint",
+        "label": "Gợi ý giải thích · ngôn ngữ đích · mặt trước",
+        "type": "richtext",
+        "required": false
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "PromptText": "PromptText",
+    "Answer": "Answer",
+    "Reading": "Reading",
+    "Explanation": "Explanation",
+    "Example": "Example",
+    "ExampleTranslation": "ExampleTranslation",
+    "Audio": "Audio",
+    "DefinitionHint": "DefinitionHint"
+  },
+  "example_field_values": {
+    "PromptText": "学ぶ",
+    "Answer": "học\nhọc tập",
+    "Reading": "まなぶ",
+    "Explanation": "<p>Tiếp thu kiến thức hoặc kỹ năng.</p>",
+    "Example": "<p>日本語を学んでいます。</p>",
+    "ExampleTranslation": "<p>Tôi đang học tiếng Nhật.</p>",
+    "Audio": null,
+    "DefinitionHint": "<p>知識や技術を身につけること。</p>"
+  },
+  "examples": [
+    {
+      "name": "Tiếng Nhật · Flama Default",
+      "source": "flama-default",
+      "bindings": {
+        "PromptText": "word",
+        "Answer": "translation_vi",
+        "Reading": "reading",
+        "Explanation": "meaning_vi",
+        "Example": "example_jp",
+        "ExampleTranslation": "example_vi",
+        "Audio": "word_audio",
+        "DefinitionHint": "meaning_jp"
+      }
+    },
+    {
+      "name": "Tiếng Anh · Advanced Vocabulary",
+      "source": "advanced-vocabulary-card",
+      "bindings": {
+        "PromptText": "Vocabulary",
+        "Answer": "Meaning",
+        "Reading": "Pronunciation",
+        "Example": "Example",
+        "ExampleTranslation": "Example_VI",
+        "Audio": "Vocabulary_Audio"
+      }
+    }
+  ],
+  "behavior": {
+    "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
+    "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible. Matching any one complete item is correct; a fragment or concatenation of different items is not.",
+    "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
+    "character_count": "One ordinary single-line input for all meanings, with no character tiles, character count or word count, regardless of the lengths of accepted alternatives.",
+    "hints": "The first Answer item supplies a prefix only after clicking Open character. Reveal one Unicode grapheme per click through the final character, then disable the hint button and remove the trailing ellipsis. All complete alternative meanings remain accepted. The clue scrolls within a bounded box.",
+    "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
+    "back": "Uses the same card width, padding, mode heading and prompt/media geometry as the front. Keep the prompt or image in place; put the answer next, then immediately related reading/meaning/translation, followed by explanations, paired examples and notes. Dictation repeats the front audio button and compact borderless word typography. Optional empty inputs hide independently; no correctness verdict.",
+    "grading": "Flip the card and choose the study rating.",
+    "keyboard": "Enter checks the single-line input. IME composition never submits. Case, NFC and whitespace normalization remain unchanged.",
+    "definition_hint": "Optional richtext input DefinitionHint is a target-language explanation, collapsed on the front until the learner opens it. Null, unbound, whitespace-only and visually empty richtext hide the entire clue. It is not part of answer matching."
+  },
+  "database_installation": {
+    "database_name": "nihongo",
+    "owner_user_id": 1,
+    "template_id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
+    "current_version_id": "6e865aef-e893-485b-acd2-7e0b8bf98ef3",
+    "installed_at": "2026-10-11",
+    "primary_category": "Luyện gõ",
+    "updated_at": "2026-10-11",
+    "version_no": 8
+  }
+}

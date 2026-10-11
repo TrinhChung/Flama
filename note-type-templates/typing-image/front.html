@@ -1,0 +1,309 @@
+<div class="ft-card" data-mode="image">
+  <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 12h.01M11 12h.01M15 12h.01M7 15h10"></path></svg></span><span>Gõ từ qua ảnh</span></div>
+  <div class="ft-stimulus">
+    {{#PromptImage}}<div class="ft-prompt-image">{{{PromptImage}}}</div>{{/PromptImage}}
+    <p class="ft-instruction">Gõ từ tương ứng với hình ảnh.</p>
+  </div>
+  {{#DefinitionHint}}<div class="ft-definition-hint">
+    <button class="ft-definition-toggle" type="button" aria-expanded="false" aria-controls="ft-definition-content"><span class="ft-definition-label"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Giải thích bằng ngôn ngữ đích</span></span><svg class="ft-icon ft-definition-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+    <div class="ft-definition-content" id="ft-definition-content" hidden>{{{DefinitionHint}}}</div>
+  </div>{{/DefinitionHint}}
+  <div class="ft-guide">
+    <div class="ft-guide-heading"><span class="ft-guide-label">Độ dài đáp án</span><span class="ft-length"></span></div>
+    <div class="ft-slots" role="group"></div>
+  </div>
+  <div class="ft-entry">
+    <label class="ft-label" for="ft-input">Đáp án của bạn</label>
+    <div class="ft-input-wrap"><input class="ft-input" id="ft-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <span class="ft-entry-help" id="ft-entry-help">Nhấn Enter hoặc Kiểm tra khi bạn đã sẵn sàng.</span>
+    <div class="ft-actions">
+      <button class="ft-button ft-hint" type="button"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Mở ký tự</span></button>
+      <button class="ft-button ft-check" type="button"><span>Kiểm tra</span><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"></path></svg></button>
+    </div>
+    <div class="ft-status" id="ft-status" role="status" aria-live="polite"></div>
+  </div>
+  <div class="ft-empty" hidden>Chưa có đáp án cho thẻ này.</div>
+  <div class="ft-answer-source" hidden>{{Answer}}</div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var root = document.querySelector('.ft-card');
+  if (!root) return;
+  var find = function (selector) { return root.querySelector(selector); };
+  var input = find('.ft-input');
+  var form = find('.ft-entry');
+  var status = find('.ft-status');
+  var slots = find('.ft-slots');
+  var guide = find('.ft-guide');
+  var length = find('.ft-length');
+  var hint = find('.ft-hint');
+  var checkButton = find('.ft-check');
+  var composing = false;
+  var revealed = 0;
+  var solved = false;
+
+  function normalize(text) {
+    return String(text || '').normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim();
+  }
+  function comparable(text) { return normalize(text).toLowerCase(); }
+  // Array items already arrive separated by <br>; punctuation stays inside each item.
+  function readArray(element) {
+    if (!element) return [];
+    var values = [''];
+    element.childNodes.forEach(function (node) {
+      if (node.nodeName === 'BR') values.push('');
+      else values[values.length - 1] += node.textContent || '';
+    });
+    return values.map(normalize).filter(Boolean);
+  }
+  function characters(text) {
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+      return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), function (part) {
+        return part.segment;
+      });
+    }
+    return Array.from(text.normalize('NFC'));
+  }
+  var answers = readArray(find('.ft-answer-source'));
+  var answerCharacters = answers.map(characters);
+  var first = answerCharacters[0] || [];
+  var current = first;
+  var total = function (chars) { return chars.filter(function (ch) { return !/\s/.test(ch); }).length; };
+  function wordCount(chars) {
+    var count = 0;
+    var inWord = false;
+    chars.forEach(function (ch) {
+      if (/\s/.test(ch)) { inWord = false; return; }
+      if (!inWord) count += 1;
+      inWord = true;
+    });
+    return count;
+  }
+  // Template-only settings: short answers use tiles; longer answers use one compact guide.
+  var shortCharacterLimit = 32;
+  var shortWordLimit = 6;
+  var longEntry = answerCharacters.some(function (chars) {
+    return total(chars) > shortCharacterLimit || wordCount(chars) > shortWordLimit;
+  });
+  var hintLimit = total(first);
+
+  // A textarea is created inside the template; no renderer changes are required.
+  if (longEntry || !input) {
+    var replacement = document.createElement(longEntry ? 'textarea' : 'input');
+    replacement.className = 'ft-input' + (longEntry ? ' ft-input-multiline' : '');
+    replacement.id = 'ft-input';
+    if (longEntry) replacement.rows = 3;
+    else replacement.type = 'text';
+    if (input) input.replaceWith(replacement);
+    else find('.ft-input-wrap').prepend(replacement);
+    input = replacement;
+  }
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.setAttribute('autocapitalize', 'off');
+  input.setAttribute('aria-describedby', 'ft-status ft-entry-help');
+  input.setAttribute('aria-keyshortcuts', longEntry ? 'Control+Enter Meta+Enter' : 'Enter');
+  var placeholders = { reading: 'Gõ cách đọc…', meaning: 'Gõ nghĩa của từ…', image: 'Gõ tên hình ảnh…', dictation: 'Gõ lại nội dung bạn vừa nghe…' };
+  input.placeholder = placeholders[root.getAttribute('data-mode')] || 'Nhập đáp án…';
+  if (longEntry) {
+    find('.ft-entry-help').textContent = 'Enter để xuống dòng · Ctrl/⌘ + Enter để kiểm tra.';
+    find('.ft-guide-label').textContent = 'Gợi ý nội dung';
+  }
+  checkButton.disabled = true;
+
+  function resizeEntry() {
+    if (!longEntry) return;
+    input.style.height = 'auto';
+    input.style.height = Math.min(216, Math.max(112, input.scrollHeight)) + 'px';
+  }
+  function drawGuide() {
+    slots.replaceChildren();
+    slots.classList.toggle('is-compact', longEntry);
+    slots.classList.toggle('is-complete', longEntry && solved);
+    var count = total(current);
+    var words = wordCount(current);
+    length.textContent = count + ' ký tự' + (words > 1 ? ' · ' + words + ' từ' : '');
+    slots.setAttribute('aria-label', 'Đáp án có ' + count + ' ký tự' +
+      (words > 1 ? ', ' + words + ' từ' : '') +
+      (!solved && revealed ? ', đã mở ' + revealed + ' ký tự gợi ý' : ''));
+    hint.disabled = solved || revealed >= hintLimit;
+    if (longEntry) {
+      if (solved) { slots.textContent = 'Đã gõ đúng nội dung.'; return; }
+      if (!revealed) { slots.textContent = 'Mở gợi ý để xem vài ký tự đầu của đáp án.'; return; }
+      var prefix = '';
+      var seen = 0;
+      for (var i = 0; i < first.length; i++) {
+        if (!/\s/.test(first[i])) {
+          if (seen >= revealed) break;
+          seen += 1;
+        }
+        prefix += first[i];
+      }
+      slots.textContent = normalize(prefix) + (revealed < hintLimit ? '…' : '');
+      return;
+    }
+    var word = null;
+    var index = 0;
+    current.forEach(function (ch) {
+      if (/\s/.test(ch)) { word = null; return; }
+      if (!word) {
+        word = document.createElement('span');
+        word.className = 'ft-word';
+        slots.append(word);
+      }
+      var tile = document.createElement('span');
+      var open = solved || index < revealed;
+      tile.className = 'ft-slot' + (open ? ' is-revealed' : '') + (solved ? ' is-solved' : '');
+      tile.textContent = open ? ch : '';
+      tile.setAttribute('aria-hidden', 'true');
+      word.append(tile);
+      index += 1;
+    });
+  }
+  function setStatus(kind, message) {
+    form.classList.remove('is-correct', 'is-incorrect');
+    if (kind) form.classList.add('is-' + kind);
+    status.className = 'ft-status' + (kind ? ' is-' + kind : '');
+    status.textContent = message;
+    input.setAttribute('aria-invalid', kind === 'incorrect' ? 'true' : 'false');
+  }
+  function check() {
+    if (composing) return;
+    var typed = comparable(input.value);
+    if (!typed) { input.focus(); return; }
+    // Each Answer item is an alternative: matching any complete item is sufficient.
+    var matched = answers.find(function (answer) { return comparable(answer) === typed; });
+    if (matched !== undefined) {
+      solved = true;
+      current = characters(matched);
+      setStatus('correct', 'Chính xác! Bạn đã gõ đúng đáp án.');
+      drawGuide();
+    } else {
+      solved = false;
+      current = first;
+      setStatus('incorrect', 'Chưa đúng. Thử lại hoặc mở thêm một gợi ý nhé.');
+      drawGuide();
+      input.focus();
+      if (!longEntry) input.select();
+    }
+  }
+  input.addEventListener('compositionstart', function () { composing = true; });
+  input.addEventListener('compositionend', function () {
+    composing = false;
+    checkButton.disabled = !comparable(input.value);
+    resizeEntry();
+  });
+  input.addEventListener('input', function () {
+    if (solved) { solved = false; current = first; drawGuide(); }
+    setStatus('', '');
+    checkButton.disabled = !comparable(input.value);
+    resizeEntry();
+  });
+  input.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' || event.isComposing || composing || event.keyCode === 229) return;
+    if (longEntry && !event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    check();
+  });
+  checkButton.addEventListener('click', check);
+  hint.addEventListener('click', function () {
+    revealed = Math.min(hintLimit, revealed + (longEntry ? 8 : 1));
+    current = first;
+    drawGuide();
+    input.focus();
+  });
+  resizeEntry();
+  if (longEntry) window.addEventListener('resize', resizeEntry);
+
+  // DefinitionHint is an optional learner-controlled clue, independent of Answer.
+  var definitionHint = find('.ft-definition-hint');
+  if (definitionHint) {
+    var definitionContent = find('.ft-definition-content');
+    var definitionToggle = find('.ft-definition-toggle');
+    if (!normalize(definitionContent.textContent) && !definitionContent.querySelector('img, audio, video')) {
+      definitionHint.hidden = true;
+    } else {
+      definitionToggle.addEventListener('click', function () {
+        var opening = definitionContent.hidden;
+        definitionContent.hidden = !opening;
+        definitionToggle.setAttribute('aria-expanded', String(opening));
+        definitionHint.classList.toggle('is-open', opening);
+      });
+    }
+  }
+  var text = find('.ft-prompt-text');
+  if (text && !text.textContent.trim()) text.hidden = true;
+  var picture = find('.ft-prompt-image');
+  if (picture && !picture.querySelector('img')) picture.hidden = true;
+
+  // Audio only starts on a learner click. Multiple clips play in order.
+  var audioPanel = find('.ft-audio');
+  if (audioPanel) {
+    var tracks = Array.from(audioPanel.querySelectorAll('audio'));
+    var play = audioPanel.querySelector('.ft-play');
+    var playLabel = audioPanel.querySelector('.ft-play-label');
+    var audioStatus = audioPanel.querySelector('.ft-audio-status');
+    var playing = false;
+    var trackIndex = 0;
+    var attempt = 0;
+    var played = false;
+    function idle() {
+      playing = false;
+      audioPanel.classList.remove('is-playing');
+      play.setAttribute('aria-pressed', 'false');
+      playLabel.textContent = played ? 'Nghe lại' : 'Nghe âm thanh';
+    }
+    function stop() {
+      attempt += 1;
+      tracks.forEach(function (track) { track.pause(); track.currentTime = 0; });
+      idle();
+    }
+    function startTrack() {
+      var ticket = attempt;
+      var track = tracks[trackIndex];
+      if (!track) { idle(); return; }
+      playing = true;
+      played = true;
+      audioPanel.classList.add('is-playing');
+      play.setAttribute('aria-pressed', 'true');
+      playLabel.textContent = 'Dừng âm thanh';
+      audioStatus.textContent = '';
+      function failed() {
+        if (ticket !== attempt) return;
+        idle();
+        audioStatus.textContent = 'Chưa phát được âm thanh. Nhấn nghe để thử lại.';
+      }
+      try { Promise.resolve(track.play()).catch(failed); } catch (error) { failed(); }
+    }
+    tracks.forEach(function (track, index) {
+      track.preload = 'none';
+      track.removeAttribute('autoplay');
+      track.addEventListener('ended', function () {
+        if (!playing || index !== trackIndex) return;
+        if (trackIndex < tracks.length - 1) { trackIndex += 1; startTrack(); }
+        else idle();
+      });
+      track.addEventListener('error', function () {
+        if (!playing || index !== trackIndex) return;
+        stop();
+        audioStatus.textContent = 'Chưa tải được âm thanh. Nhấn nghe để thử lại.';
+      });
+    });
+    play.addEventListener('click', function () {
+      if (playing) { stop(); return; }
+      attempt += 1;
+      trackIndex = 0;
+      tracks.forEach(function (track) { track.currentTime = 0; });
+      startTrack();
+    });
+    if (!tracks.length) audioPanel.hidden = true;
+  }
+  if (!answers.length) {
+    form.hidden = true;
+    guide.hidden = true;
+    find('.ft-empty').hidden = false;
+  }
+  drawGuide();
+})();
+</script>

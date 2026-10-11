@@ -25,8 +25,10 @@ describe('CreateTemplateDialog', () => {
     await name('  New template  '); await act(async () => button('Tạo giao diện').click()); await flush()
     expect(createLibraryTemplate).toHaveBeenCalledWith({ name: 'New template', description: '', front_html: '{{Front}}', back_html: '{{Front}}<hr>{{Back}}', shared_css: '', input_schema: [{ key: 'Front', label: 'Front', type: 'text', required: false }, { key: 'Back', label: 'Back', type: 'text', required: false }] })
     expect(container.querySelector('output')?.textContent).toBe('/card-templates/new%2Fid')
+    expect(document.querySelector('input[name="create-template-preset"]')).toBeNull()
   })
-  it('creates a typing template from the typed-answer starting point', async () => {
+  // Parked 2026-10-10 with the host typing mode (STUDY_TYPING_ANSWER_PLAN §12).
+  it.skip('creates a typing template from the typed-answer starting point', async () => {
     vi.mocked(createLibraryTemplate).mockResolvedValue({ id: 'typing-id' } as TemplateLibraryTemplate); await render(); await name('Gõ nghĩa')
     await act(async () => document.querySelector<HTMLInputElement>('input[value="typing"]')!.click())
     await act(async () => button('Tạo giao diện').click()); await flush()
@@ -35,7 +37,7 @@ describe('CreateTemplateDialog', () => {
       front_html: '<div class="flama-typing-prompt">{{Prompt}}</div>',
       input_schema: [
         { key: 'Prompt', label: 'Câu hỏi', type: 'text', required: true },
-        { key: 'Answer', label: 'Đáp án', type: 'answers', required: true, typing: { show_length: true, hints: true } },
+        { key: 'Answer', label: 'Đáp án', type: 'array', required: true, typing: { show_length: true, hints: true } },
       ],
     }))
   })

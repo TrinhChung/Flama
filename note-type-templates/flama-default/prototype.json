@@ -1,0 +1,357 @@
+{
+  "slug": "flama-default",
+  "version": "1.1.0",
+  "saved_at": "2026-10-11T09:57:33+09:00",
+  "source": {
+    "kind": "database",
+    "database_name": "nihongo",
+    "owner_user_id": 1,
+    "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+    "template_id": "e0cb18b2-881d-4b46-a567-dc5db14d661f",
+    "current_version_id": "cba696b4-7116-5819-b2d2-971fc5a65b47",
+    "current_version_no": 1,
+    "stored_input_schema": null,
+    "current_version_input_schema": [],
+    "input_schema_origin": "inferred_by_app.validators.template_library.infer_input_schema",
+    "field_def_ids": {
+      "word": "72d2ce60-2024-4bd7-82e2-1cb9af1ef341",
+      "hanviet": "14a503d1-3594-4d46-ac08-edfd110dfa78",
+      "reading": "cfe0d506-f625-4db3-b249-960126870f51",
+      "translation_vi": "e71ec494-dbfb-41b2-8b89-1e3584d6aeaf",
+      "meaning_jp": "d5315be8-c639-4b97-a0b6-d497afb0cd5a",
+      "meaning_vi": "c7102da8-ba8e-4260-a061-2b95da4de579",
+      "usage_jp": "ee54985b-62ac-47ad-b4b4-95d7b3d509c9",
+      "usage_vi": "b694faab-5492-40ee-a85a-e2e3684731e1",
+      "example_jp": "70b7ab9e-59b6-457e-9e8c-0c4d01eb63c2",
+      "example_vi": "ee4cc949-2011-42a3-99b3-9f3cce36b1c5",
+      "additional_note_jp": "8d3c5d61-a516-4d47-9e1a-4af4b4617d24",
+      "additional_note_vi": "f3abea0b-ebe5-4342-b2dd-ecdd191b7e08",
+      "image": "680baf49-c95d-4bd6-9f18-afd52f3e8ee0",
+      "diagram": "9b8060eb-cf3e-4f1a-a1f3-2ea45c1384dc",
+      "word_audio": "0a972aa6-41f5-4798-a6c4-c8d734f05dea",
+      "example_audio": "36772519-9178-43be-aa90-bc3f5b31003c"
+    },
+    "applications": [
+      {
+        "id": "e47485cc-84a8-41ae-8836-5dec2e7b9963",
+        "occurrence_key": "compat",
+        "status_code": "ACTIVE",
+        "display_name": null,
+        "position": 0,
+        "is_default": true,
+        "input_bindings": {
+          "word": "72d2ce60-2024-4bd7-82e2-1cb9af1ef341",
+          "image": "680baf49-c95d-4bd6-9f18-afd52f3e8ee0",
+          "diagram": "9b8060eb-cf3e-4f1a-a1f3-2ea45c1384dc",
+          "hanviet": "14a503d1-3594-4d46-ac08-edfd110dfa78",
+          "reading": "cfe0d506-f625-4db3-b249-960126870f51",
+          "usage_jp": "ee54985b-62ac-47ad-b4b4-95d7b3d509c9",
+          "usage_vi": "b694faab-5492-40ee-a85a-e2e3684731e1",
+          "example_jp": "70b7ab9e-59b6-457e-9e8c-0c4d01eb63c2",
+          "example_vi": "ee4cc949-2011-42a3-99b3-9f3cce36b1c5",
+          "meaning_jp": "d5315be8-c639-4b97-a0b6-d497afb0cd5a",
+          "meaning_vi": "c7102da8-ba8e-4260-a061-2b95da4de579",
+          "word_audio": "0a972aa6-41f5-4798-a6c4-c8d734f05dea",
+          "example_audio": "36772519-9178-43be-aa90-bc3f5b31003c",
+          "translation_vi": "e71ec494-dbfb-41b2-8b89-1e3584d6aeaf",
+          "additional_note_jp": "8d3c5d61-a516-4d47-9e1a-4af4b4617d24",
+          "additional_note_vi": "f3abea0b-ebe5-4342-b2dd-ecdd191b7e08"
+        }
+      }
+    ],
+    "sha256": {
+      "front.html": "9317ed9de21583df07ddb3fb86c62bafe4b2506ffaecd77393ea038f681423bb",
+      "back.html": "211fc1952d74e1c526e9b2ec1058587cf47ee5a85f70a750ddbb1b1863a61f43",
+      "style.css": "f5c42590f778727c8a6bc15364fb17b79fd1f51735cef61bc65bd5437e99bd70"
+    }
+  },
+  "note_type": {
+    "name": "Flama Standard Vocabulary",
+    "description": "Official default Japanese vocabulary note type by Flama.",
+    "primary_category": "Japanese",
+    "tags": [
+      "official",
+      "default",
+      "japanese",
+      "vocabulary"
+    ],
+    "taxonomy_metadata": {},
+    "preview_text": "Word / Reading / Meaning / Example layout.",
+    "preview_image_url": null,
+    "pricing_mode": "free",
+    "price_amount_minor": 0,
+    "version": "1.0.0",
+    "changelog": null,
+    "is_official": true,
+    "publish_status": "published",
+    "field_defs": [
+      {
+        "name": "word",
+        "field_type": "text",
+        "position": 0,
+        "required": true,
+        "identity_role": "primary"
+      },
+      {
+        "name": "hanviet",
+        "field_type": "text",
+        "position": 1,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "reading",
+        "field_type": "array",
+        "position": 2,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "translation_vi",
+        "field_type": "array",
+        "position": 3,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "meaning_jp",
+        "field_type": "richtext",
+        "position": 4,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "meaning_vi",
+        "field_type": "richtext",
+        "position": 5,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "usage_jp",
+        "field_type": "richtext",
+        "position": 6,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "usage_vi",
+        "field_type": "richtext",
+        "position": 7,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "example_jp",
+        "field_type": "richtext",
+        "position": 8,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "example_vi",
+        "field_type": "richtext",
+        "position": 9,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "additional_note_jp",
+        "field_type": "richtext",
+        "position": 10,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "additional_note_vi",
+        "field_type": "richtext",
+        "position": 11,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "image",
+        "field_type": "image",
+        "position": 12,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "diagram",
+        "field_type": "image",
+        "position": 13,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "word_audio",
+        "field_type": "audio",
+        "position": 14,
+        "required": false,
+        "identity_role": null
+      },
+      {
+        "name": "example_audio",
+        "field_type": "audio",
+        "position": 15,
+        "required": false,
+        "identity_role": null
+      }
+    ]
+  },
+  "template": {
+    "name": "Default Flama Flashcard",
+    "description": "Mẫu flashcard từ vựng tiêu chuẩn của Flama. Mặt trước hiển thị chữ lớn tối giản căn giữa; mặt sau tích hợp phát âm tự động, phiên âm Hiragana, Hán Việt, giải thích nghĩa song ngữ, ví dụ thực tế và hình ảnh nét viết Kanji.",
+    "primary_category": "Japanese",
+    "position": 0,
+    "is_default": true,
+    "input_schema": [
+      {
+        "key": "word",
+        "label": "word",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "word_audio",
+        "label": "word_audio",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "reading",
+        "label": "reading",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "hanviet",
+        "label": "hanviet",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "translation_vi",
+        "label": "translation_vi",
+        "type": "text",
+        "required": false
+      },
+      {
+        "key": "meaning_jp",
+        "label": "meaning_jp",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "meaning_vi",
+        "label": "meaning_vi",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "image",
+        "label": "image",
+        "type": "image",
+        "required": false
+      },
+      {
+        "key": "diagram",
+        "label": "diagram",
+        "type": "image",
+        "required": false
+      },
+      {
+        "key": "usage_jp",
+        "label": "usage_jp",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "usage_vi",
+        "label": "usage_vi",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "example_jp",
+        "label": "example_jp",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "example_audio",
+        "label": "example_audio",
+        "type": "audio",
+        "required": false
+      },
+      {
+        "key": "example_vi",
+        "label": "example_vi",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "additional_note_jp",
+        "label": "additional_note_jp",
+        "type": "richtext",
+        "required": false
+      },
+      {
+        "key": "additional_note_vi",
+        "label": "additional_note_vi",
+        "type": "richtext",
+        "required": false
+      }
+    ],
+    "source_files": {
+      "front_html": "front.html",
+      "back_html": "back.html",
+      "shared_css": "style.css"
+    }
+  },
+  "input_bindings_by_field_name": {
+    "word": "word",
+    "word_audio": "word_audio",
+    "reading": "reading",
+    "hanviet": "hanviet",
+    "translation_vi": "translation_vi",
+    "meaning_jp": "meaning_jp",
+    "meaning_vi": "meaning_vi",
+    "image": "image",
+    "diagram": "diagram",
+    "usage_jp": "usage_jp",
+    "usage_vi": "usage_vi",
+    "example_jp": "example_jp",
+    "example_audio": "example_audio",
+    "example_vi": "example_vi",
+    "additional_note_jp": "additional_note_jp",
+    "additional_note_vi": "additional_note_vi"
+  },
+  "example_field_values": {
+    "word": "食べる",
+    "hanviet": "THỰC",
+    "reading": [
+      "たべる"
+    ],
+    "translation_vi": [
+      "ăn"
+    ],
+    "meaning_jp": "食べ物を口に入れる。",
+    "meaning_vi": "Đưa thức ăn vào miệng.",
+    "usage_jp": "",
+    "usage_vi": "",
+    "example_jp": "毎日、朝ご飯を食べます。",
+    "example_vi": "Mỗi ngày tôi ăn sáng.",
+    "additional_note_jp": "",
+    "additional_note_vi": "",
+    "image": "",
+    "diagram": "",
+    "word_audio": "",
+    "example_audio": ""
+  },
+  "files_sha256": {
+    "front.html": "9317ed9de21583df07ddb3fb86c62bafe4b2506ffaecd77393ea038f681423bb",
+    "back.html": "ac5bf0d45ee568bf80794d7b3229745601b273d873289eca48060b24f8f91a7b",
+    "style.css": "f5c42590f778727c8a6bc15364fb17b79fd1f51735cef61bc65bd5437e99bd70"
+  }
+}

@@ -63,7 +63,7 @@
       "image": "Hình ảnh",
       "audio": "Âm thanh",
       "diagram": "Sơ đồ",
-      "answers": "Đáp án gõ"
+      "array": "Mảng"
     },
     "typing": {
       "title": "Chế độ gõ",
@@ -76,6 +76,7 @@
     "title": "Giao diện thẻ",
     "description": "Thư viện giao diện thẻ dùng lại cho nhiều cấu trúc thẻ.",
     "create_button": "Tạo mẫu mới",
+    "btn_explore_market": "Khám phá từ Chợ",
     "search_aria": "Tìm giao diện thẻ",
     "search_placeholder": "Tìm giao diện thẻ…",
     "group_aria": "Nhóm giao diện thẻ",
@@ -93,7 +94,9 @@
     "badge_archived": "Đã lưu trữ",
     "usage_note_types": "Dùng ở {{count}} cấu trúc thẻ",
     "usage_unused": "Chưa dùng",
-    "usage_attachments": " · {{count}} lần gắn"
+    "usage_attachments": " · {{count}} lần gắn",
+    "btn_details": "Xem chi tiết",
+    "no_desc": "Chưa có mô tả cho mẫu thẻ này."
   },
   "detail": {
     "loading": "Đang tải mẫu thẻ…",
@@ -121,7 +124,13 @@
     "archive_confirm_btn": "Lưu trữ",
     "reload_confirm_title": "Tải lại mẫu thẻ?",
     "reload_confirm_desc": "Nội dung chưa lưu sẽ được thay bằng bản mới nhất trên máy chủ.",
-    "reload_confirm_btn": "Tải lại"
+    "reload_confirm_btn": "Tải lại",
+    "delete": "Xóa template",
+    "delete_confirm_title": "Xóa mẫu thẻ này?",
+    "delete_confirm_desc": "Mẫu thẻ sẽ bị xóa vĩnh viễn khỏi thư viện. Hành động này không thể hoàn tác.",
+    "delete_in_use_warning": "Mẫu thẻ đang được dùng trong {{count}} lần gắn. Hãy gỡ khỏi các cấu trúc thẻ trước khi xóa.",
+    "delete_confirm_btn": "Xóa template",
+    "delete_success": "Đã xóa mẫu thẻ."
   },
   "editor": {
     "toast_saved": "Đã lưu mẫu thẻ.",
@@ -206,7 +215,12 @@
     "cancel": "Hủy",
     "retire_confirm_title": "Gỡ mẫu khỏi loại thẻ?",
     "retire_confirm_desc": "Mẫu sẽ ngừng xuất hiện khi học. Tiến độ đã học được giữ lại.",
-    "retire_confirm_btn": "Gỡ mẫu"
+    "retire_confirm_btn": "Gỡ mẫu",
+    "btn_delete": "Xóa template",
+    "delete_confirm_title": "Xóa template khỏi cấu trúc thẻ?",
+    "delete_confirm_desc": "Thẻ dùng template này trong cấu trúc thẻ sẽ bị xóa vĩnh viễn. Hành động này không thể hoàn tác.",
+    "delete_confirm_btn": "Xóa template",
+    "delete_success": "Đã xóa template khỏi cấu trúc thẻ."
   },
   "input_schema": {
     "title": "Input của mẫu",
@@ -250,6 +264,82 @@
       "fork": "Tạo bản riêng",
       "market_copy": "Bản nhận marketplace",
       "update": "Cập nhật từ tác giả"
+    }
+  },
+  "distribution": {
+    "title": "Phân phối & Cập nhật",
+    "description": "Quản lý phát hành template hoặc cập nhật từ nguồn tác giả.",
+    "tab_publication": "Bản phát hành",
+    "tab_subscription": "Cập nhật từ nguồn",
+    "author_title": "Quản lý phát hành",
+    "author_description": "Phát hành phiên bản mới để các bản sao hoặc người dùng khác có thể nhận bản cập nhật.",
+    "current_release": "Bản phát hành hiện tại",
+    "no_release_yet": "Chưa có bản phát hành nào.",
+    "unpublished_changes_badge": "Có thay đổi chưa phát hành",
+    "up_to_date_badge": "Đã phát hành mới nhất",
+    "auto_publish_label": "Tự động phát hành khi lưu",
+    "auto_publish_desc": "Tự động sinh số phiên bản mới và phát hành khi template được lưu.",
+    "publish_button": "Phát hành phiên bản mới",
+    "release_history_title": "Lịch sử phát hành",
+    "release_history_empty": "Chưa có lịch sử phát hành.",
+    "release_version": "Phiên bản {{version}}",
+    "published_at": "Phát hành lúc {{time}}",
+    "publish_mode_auto": "Tự động",
+    "publish_mode_manual": "Thủ công",
+    "change_note": "Ghi chú thay đổi",
+    "no_change_note": "Không có ghi chú thay đổi.",
+    "dialog_publish_title": "Phát hành phiên bản mới",
+    "dialog_publish_desc": "Tạo một bản phát hành chính thức từ thiết kế template hiện tại.",
+    "version_label": "Nhãn phiên bản",
+    "version_label_placeholder": "Ví dụ: 1.0.0 hoặc v1.1",
+    "version_label_required": "Vui lòng nhập nhãn phiên bản.",
+    "change_note_label": "Ghi chú thay đổi (tùy chọn)",
+    "change_note_placeholder": "Mô tả những điểm mới hoặc sửa đổi trong bản này...",
+    "btn_publish": "Phát hành",
+    "publishing": "Đang phát hành...",
+    "publish_success": "Đã phát hành phiên bản {{version}} thành công.",
+    "publish_error": "Không thể phát hành phiên bản mới.",
+    "subscriber_title": "Cập nhật từ nguồn",
+    "subscriber_description": "Mẫu thẻ này được nhận từ nguồn hoặc marketplace. Bạn có thể theo dõi và cập nhật khi tác giả có bản mới.",
+    "applied_release": "Phiên bản đang dùng",
+    "latest_release": "Phiên bản nguồn mới nhất",
+    "update_available_title": "Có bản cập nhật mới!",
+    "update_available_desc": "Tác giả đã phát hành phiên bản mới hơn. Bạn có thể cập nhật để nhận các cải tiến.",
+    "auto_update_label": "Tự động cập nhật",
+    "auto_update_desc": "Tự động áp dụng bản phát hành mới từ tác giả nếu không xảy ra xung đột.",
+    "btn_update": "Cập nhật lên bản mới",
+    "btn_preparing": "Đang chuẩn bị cập nhật...",
+    "btn_reset_upstream": "Khôi phục về bản gốc của tác giả",
+    "reset_upstream_confirm_title": "Khôi phục về bản gốc của tác giả?",
+    "reset_upstream_confirm_desc": "Mọi thay đổi cục bộ bạn đã sửa trên mẫu thẻ này sẽ bị ghi đè hoàn toàn bằng bản gốc hiện tại từ tác giả. Hành động này không thể hoàn tác.",
+    "reset_upstream_confirm_btn": "Khôi phục về bản gốc",
+    "reset_upstream_success": "Đã khôi phục về bản gốc của tác giả thành công.",
+    "reset_upstream_error": "Không thể khôi phục về bản gốc.",
+    "update_success": "Đã cập nhật template lên phiên bản mới thành công.",
+    "update_error": "Không thể cập nhật template.",
+    "sync_status": {
+      "synced": "Đã đồng bộ",
+      "ready": "Sẵn sàng cập nhật",
+      "conflict": "Có xung đột cần xử lý",
+      "unknown": "Chưa xác định"
+    },
+    "original_release": "Bản gốc",
+    "not_available": "Không có",
+    "conflicts": {
+      "badge": "Xung đột",
+      "choose_resolution": "Lựa chọn xử lý:",
+      "dialog_title": "Giải quyết xung đột cập nhật",
+      "dialog_desc": "Bản cập nhật từ tác giả xung đột với thay đổi cục bộ của bạn. Vui lòng chọn cách xử lý cho từng phần tử:",
+      "field_front_html": "HTML Mặt trước",
+      "field_back_html": "HTML Mặt sau",
+      "field_shared_css": "CSS Dùng chung",
+      "field_input_schema": "Cấu trúc Input Schema",
+      "mode_keep_mine": "Giữ bản cục bộ của tôi",
+      "mode_keep_upstream": "Dùng bản mới từ tác giả",
+      "mode_manual": "Chỉnh sửa thủ công",
+      "manual_input_placeholder": "Nhập nội dung đã hợp nhất...",
+      "btn_apply": "Áp dụng cập nhật",
+      "applying": "Đang áp dụng..."
     }
   }
 }

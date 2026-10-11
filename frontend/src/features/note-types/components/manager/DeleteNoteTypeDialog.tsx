@@ -11,10 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import type { NoteTypeItem } from '../../hooks/useNoteTypeManager'
-
-interface DeleteNoteTypeDialogProps {
-  noteType: NoteTypeItem | null
+export interface DeleteNoteTypeDialogProps {
+  noteType: { id: string; name: string } | null
   isOpen: boolean
   onClose: () => void
   isAdmin: boolean

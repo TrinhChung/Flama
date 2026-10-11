@@ -318,7 +318,58 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("recommended_for_you", res.get_json())
 
+    def test_install_shared_note_type_template_success(self):
+        self._login("learner@example.com")
+
+        # Before installation, detail should show is_installed: False
+        detail_res = self.client.get(f"/api/marketplace/note-types/{self.note_type_id}")
+        self.assertEqual(detail_res.status_code, 200)
+        templates = detail_res.get_json().get("templates", [])
+        self.assertTrue(len(templates) > 0)
+        self.assertFalse(templates[0].get("is_installed", False))
+
+        # Install individual template
+        res = self.client.post(
+            f"/api/marketplace/note-types/{self.note_type_id}/templates/{self.template_id}/install"
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["source_template_id"], self.template_id)
+        self.assertFalse(data["already_installed"])
+        local_template_id = data["local_template_id"]
+        self.assertIsNotNone(local_template_id)
+
+        # Installing again returns already_installed: True
+        res_again = self.client.post(
+            f"/api/shared/note-types/{self.note_type_id}/templates/{self.template_id}/install"
+        )
+        self.assertEqual(res_again.status_code, 200)
+        self.assertTrue(res_again.get_json()["already_installed"])
+        self.assertEqual(res_again.get_json()["local_template_id"], local_template_id)
+
+        # Now detail endpoint should show template as installed
+        detail_res2 = self.client.get(f"/api/marketplace/note-types/{self.note_type_id}")
+        self.assertEqual(detail_res2.status_code, 200)
+        templates2 = detail_res2.get_json().get("templates", [])
+        self.assertTrue(templates2[0].get("is_installed"))
+        self.assertEqual(templates2[0].get("installed_template_id"), local_template_id)
+
+    def test_install_shared_note_type_template_as_owner_fails(self):
+        self._login("author@example.com")
+        res = self.client.post(
+            f"/api/marketplace/note-types/{self.note_type_id}/templates/{self.template_id}/install"
+        )
+        self.assertEqual(res.status_code, 409)
+        self.assertEqual(res.get_json()["error"], "VALIDATION_ERROR")
+
+    def test_install_shared_note_type_template_invalid_template(self):
+        self._login("learner@example.com")
+        res = self.client.post(
+            f"/api/marketplace/note-types/{self.note_type_id}/templates/non-existent-id/install"
+        )
+        self.assertEqual(res.status_code, 404)
 
 
 if __name__ == "__main__":
     unittest.main()
+

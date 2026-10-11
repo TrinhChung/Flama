@@ -1,0 +1,2 @@
+# Keep exported file hashes stable across Windows and Unix checkouts.
+* text eol=lf

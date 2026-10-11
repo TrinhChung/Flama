@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { appApi } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
-import { normalizeAnswersFieldValues } from '@/lib/answersField'
+import { normalizeArrayFieldValues } from '@/lib/arrayField'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
 
@@ -19,9 +19,9 @@ export function inferFieldType(
   rawFieldType?: string | null,
   fieldName?: string,
   fieldValue?: string,
-): 'image' | 'audio' | 'diagram' | 'text' | 'answers' {
+): 'image' | 'audio' | 'diagram' | 'text' | 'array' {
   const ft = (rawFieldType || '').trim().toLowerCase()
-  if (ft === 'image' || ft === 'audio' || ft === 'diagram' || ft === 'answers') {
+  if (ft === 'image' || ft === 'audio' || ft === 'diagram' || ft === 'array') {
     return ft
   }
 
@@ -295,7 +295,7 @@ export function useStudyQuickEditForm({
 
   const handleSubmit = useCallback(() => {
     if (!isDirty || updateMutation.isPending || !cardId) return
-    const values = normalizeAnswersFieldValues(fieldValues, fieldDefs)
+    const values = normalizeArrayFieldValues(fieldValues, fieldDefs)
     if (values !== fieldValues) setFieldValues(values)
     updateMutation.mutate({
       field_values: values,

@@ -7,7 +7,7 @@
  * whitespace, letter case); diacritics, kana script and punctuation are exact.
  */
 
-import { fieldValueToText } from '@/lib/answersField'
+import { fieldValueToText } from '@/lib/arrayField'
 
 export const TYPING_COMPARE_VERSION = 'typing-compare.v1'
 
