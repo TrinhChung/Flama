@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/native-select'
 import { MediaFieldPreview } from '@/features/browse/components/MediaFieldPreview'
+import { fieldValueEditorText } from '@/lib/arrayField'
 
 export type StudyQuickEditFieldDef = {
   name: string
@@ -58,7 +59,7 @@ export function StudyQuickEditFields({
 
       {/* Dynamic Note Fields */}
       {fieldDefs.map((field) => {
-        const val = fieldValues[field.name] || ''
+        const val = fieldValueEditorText(fieldValues[field.name])
         const ft = field.field_type
 
         if (ft === 'image' || ft === 'audio' || ft === 'diagram') {

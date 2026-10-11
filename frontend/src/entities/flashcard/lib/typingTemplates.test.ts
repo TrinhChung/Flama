@@ -6,13 +6,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderCardSide, patchRenderContext } from './clientRenderer'
 import type { CardRenderTemplate } from '../model/types'
 
-type TestWindow = Window & { HTMLMediaElement: typeof HTMLMediaElement; Event: typeof Event; eval: (source: string) => void }
+type TestWindow = Window & { HTMLMediaElement: typeof HTMLMediaElement; Event: typeof Event; KeyboardEvent: typeof KeyboardEvent; eval: (source: string) => void }
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: { runScripts: 'dangerously'; pretendToBeVisual: boolean; beforeParse: (window: TestWindow) => void }) => { window: TestWindow }
 }
 const slugs = ['typing-reading', 'typing-meaning', 'typing-image', 'typing-dictation']
 
-function render(slug: string, values: Record<string, string>, side: 'front' | 'back' = 'back', blocked = false) {
+function render(slug: string, values: Record<string, unknown>, side: 'front' | 'back' = 'back', blocked = false) {
   const folder = resolve(process.cwd(), '..', 'note-type-templates', slug)
   const source = readFileSync(resolve(folder, `${side}.html`), 'utf8')
   const prototype = JSON.parse(readFileSync(resolve(folder, 'prototype.json'), 'utf8'))
@@ -49,6 +49,42 @@ const exampleAudio = '<audio src="/media/proxy/example"></audio>'
 const values = { PromptText: 'apple', PromptImage: '<img src="/media/proxy/image">', Answer: 'apple', Audio: audio,
   Example: '<p>This is an apple.</p>', ExampleTranslation: '<p>Đây là một quả táo.</p>', ExampleAudio: exampleAudio,
   Usage: '<p>Dùng khi gọi tên loại quả.</p>', UsageTranslation: '<p>A common noun.</p>', Notes: '<p>Ghi chú riêng.</p>' }
+
+describe.each(['typing-reading', 'typing-meaning', 'typing-image', 'typing-answer', 'typing-dictation'])('native answer alternatives: %s', slug => {
+  it('accepts each item independently, with punctuation kept inside its answer', () => {
+    const dom = render(slug, { Prompt: 'Question', PromptText: 'Question', Answer: ['first, literal', 'second; literal'] }, 'front')
+    const doc = dom.window.document
+    const input = doc.querySelector<HTMLInputElement>('.ft-input, #cz-input')!
+    const button = doc.querySelector<HTMLElement>('.ft-check, #cz-check')
+    const status = doc.querySelector<HTMLElement>('.ft-status, #cz-result')!
+    for (const answer of ['first, literal', 'second; literal']) {
+      if (slug === 'typing-dictation') doc.querySelector<HTMLElement>('.ft-dict-reset')!.click()
+      input.value = answer
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+      if (button) button.click()
+      else input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      expect(status.className).toMatch(/is-correct|cz-ok/)
+    }
+    if (slug === 'typing-dictation') doc.querySelector<HTMLElement>('.ft-dict-reset')!.click()
+    input.value = 'first, literal,second; literal'
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+    if (button) button.click()
+    else input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    expect(status.className).toMatch(/is-incorrect|cz-bad/)
+    dom.window.close()
+  })
+})
+
+it('renders one answer panel and one Meaning section with native lists', () => {
+  const dom = render('typing-reading', { PromptText: '你好', Answer: ['nǐ hǎo', 'ni hao'], Meaning: ['xin chào', 'xin chào'] })
+  const doc = dom.window.document
+  expect(doc.querySelectorAll('.ft-answer-panel')).toHaveLength(1)
+  expect(doc.querySelectorAll('[data-info="Meaning"]')).toHaveLength(1)
+  expect([...doc.querySelectorAll('.ft-info-list li')].map(el => el.textContent)).toEqual(['xin chào', 'xin chào'])
+  expect(doc.querySelector('.ft-answer-primary')!.textContent).toBe('nǐ hǎo')
+  expect(doc.querySelector('.ft-answer-variants')!.textContent).toBe('ni hao')
+  dom.window.close()
+})
 
 describe.each(slugs)('typing back audio: %s', slug => {
   it('plays primary then example once, and a manual replay does not chain', () => {

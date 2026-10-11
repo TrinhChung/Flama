@@ -18,6 +18,7 @@ from app.repositories.study_repository import (
     normalize_progress_queue as _normalize_progress_queue,
 )
 from models.card_progress import CardProgress
+from models.field_types import field_value_text
 from models.flashcard import Card, Note
 
 
@@ -25,24 +26,23 @@ def browse_first_non_empty(field_values: dict | None) -> str:
     if not isinstance(field_values, dict):
         return ""
     for value in field_values.values():
-        if value is None:
-            continue
-        text = str(value).strip()
+        text = field_value_text(value).strip()
         if text:
             return text
     return ""
 
 
-def note_field_values_as_strings(note_obj: Note | None) -> dict[str, str]:
+def note_field_values_as_strings(note_obj: Note | None) -> dict[str, Any]:
+    """Stored values with text trimmed; an ``array`` list stays a list for editors."""
     if not note_obj or not isinstance(note_obj.field_values, dict):
         return {}
 
-    normalized: dict[str, str] = {}
+    normalized: dict[str, Any] = {}
     for key, value in note_obj.field_values.items():
         key_name = str(key).strip()
         if not key_name:
             continue
-        normalized[key_name] = "" if value is None else str(value).strip()
+        normalized[key_name] = value if isinstance(value, list) else ("" if value is None else str(value).strip())
     return normalized
 
 
@@ -186,7 +186,7 @@ def note_display_triplet(note_obj: Note | None) -> dict[str, str]:
     ordered_text_names = note_ordered_field_names(note_obj, text_only=True)
     non_empty_values: list[str] = []
     for field_name in ordered_text_names:
-        text = field_values.get(field_name, "").strip()
+        text = field_value_text(field_values.get(field_name)).strip()
         if text:
             non_empty_values.append(text)
 

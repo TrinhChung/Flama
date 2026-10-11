@@ -2,12 +2,12 @@
   <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 12h.01M11 12h.01M15 12h.01M7 15h10"></path></svg></span><span>Gõ cách đọc</span></div>
   <div class="ft-stimulus">
     <div class="ft-prompt-line">{{#PromptText}}<div class="ft-prompt-text">{{PromptText}}</div>{{/PromptText}}{{#Audio}}<div class="ft-info-block ft-inline-audio ft-primary-audio" data-info="Audio"><div class="ft-audio-source" hidden>{{{Audio}}}</div><button class="ft-audio-replay" type="button" aria-label="Nghe phát âm" title="Nghe phát âm" aria-pressed="false"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"></path></svg></button><span class="ft-replay-status" role="status" aria-live="polite"></span></div>{{/Audio}}</div>
-    {{#Answer}}<p class="ft-instruction">Cách đọc và nghĩa của từ.</p>{{/Answer}}
+    <span data-native-array-guard="Answer" style="display:contents">{{#Answer}}<span data-native-array-presence hidden></span>{{/Answer}}<p class="ft-instruction">Cách đọc và nghĩa của từ.</p></span>
   </div>
   <div class="ft-review">
-    {{#Answer}}<div class="ft-answer-panel"><div class="ft-answer-label">Cách đọc</div><div class="ft-answer-values">{{Answer}}</div></div>{{/Answer}}
+    <span data-native-array-guard="Answer" style="display:contents">{{#Answer}}<span data-native-array-presence hidden></span>{{/Answer}}<div class="ft-answer-panel"><div class="ft-answer-label">Cách đọc</div><div class="ft-answer-values"><span data-native-array-value>{{#Answer}}<span data-native-array-item>{{.}}</span>{{/Answer}}</span></div></div></span>
     <div class="ft-related">
-      {{#Meaning}}<div class="ft-info-block ft-info-definition" data-info="Meaning"><h2 class="ft-info-heading">Nghĩa</h2><div class="ft-info-array">{{Meaning}}</div></div>{{/Meaning}}
+      <span data-native-array-guard="Meaning" style="display:contents">{{#Meaning}}<span data-native-array-presence hidden></span>{{/Meaning}}<div class="ft-info-block ft-info-definition" data-info="Meaning"><h2 class="ft-info-heading">Nghĩa</h2><div class="ft-info-array"><span data-native-array-value>{{#Meaning}}<span data-native-array-item>{{.}}</span>{{/Meaning}}</span></div></div></span>
     </div>
   </div>
   <div class="ft-back-content">
@@ -26,6 +26,41 @@
   </div>
 </div>
 <script>
+
+// flama-native-arrays.v1: template-owned formatting, before its interaction scripts.
+(function () {
+  'use strict';
+  document.querySelectorAll('[data-native-array-guard]').forEach(function (guard) {
+    var present = Array.from(guard.children).filter(function (child) {
+      return child.hasAttribute('data-native-array-presence');
+    });
+    if (!present.length) { guard.remove(); return; }
+    present.forEach(function (child) { child.remove(); });
+    var content = document.createDocumentFragment();
+    while (guard.firstChild) content.appendChild(guard.firstChild);
+    guard.replaceWith(content);
+  });
+  document.querySelectorAll('[data-native-array-value]').forEach(function (source) {
+    var values = [];
+    Array.from(source.children).forEach(function (item) {
+      // Only legacy scalar strings acquire BR nodes from the renderer.
+      var lines = [''];
+      item.childNodes.forEach(function (node) {
+        if (node.nodeName === 'BR') lines.push('');
+        else lines[lines.length - 1] += node.textContent || '';
+      });
+      values.push.apply(values, lines);
+    });
+    source.parentNode.__flamaArrayItems = values;
+    var content = document.createDocumentFragment();
+    values.forEach(function (value, index) {
+      if (index) content.appendChild(document.createElement('br'));
+      content.appendChild(document.createTextNode(value));
+    });
+    source.replaceWith(content);
+  });
+})();
+
 (function () {
   'use strict';
   var script = document.currentScript;
@@ -36,6 +71,7 @@
 
   // Read the rendered array boundaries without re-parsing migrated delimiters.
   function readArray(source) {
+    if (source && Array.isArray(source.__flamaArrayItems)) return source.__flamaArrayItems;
     var values = [''];
     source.childNodes.forEach(function (node) {
       if (node.nodeName === 'BR') values.push('');
@@ -168,6 +204,7 @@
     next();
   }
   root.querySelectorAll('.ft-primary-audio, .ft-example-audio').forEach(function (element) {
+    if (Array.isArray(element.__flamaArrayItems)) return;
     var button = element.querySelector('.ft-audio-replay, .ft-play');
     var tracks = Array.from(element.querySelectorAll('.ft-audio-source audio')).filter(function (track) {
       return track.getAttribute('src') || track.querySelector('source[src]');

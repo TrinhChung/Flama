@@ -32,6 +32,7 @@ from models import db
 from models.card import Card
 from models.deck import Deck
 from models.deck_install import DeckInstall
+from models.field_types import field_value_text
 from models.note import Note
 from models.note_type import NoteType
 
@@ -688,13 +689,13 @@ def _generate_genkouyoushi_pages(
             fvals = n.field_values or {}
             val = ""
             if text_field and text_field in fvals:
-                val = str(fvals[text_field] or "").strip()
+                val = field_value_text(fvals[text_field]).strip()
             elif "Sentence" in fvals:
-                val = str(fvals["Sentence"] or "").strip()
+                val = field_value_text(fvals["Sentence"]).strip()
             elif "Example" in fvals:
-                val = str(fvals["Example"] or "").strip()
+                val = field_value_text(fvals["Example"]).strip()
             elif "Expression" in fvals:
-                val = str(fvals["Expression"] or "").strip()
+                val = field_value_text(fvals["Expression"]).strip()
             if val:
                 c_val = CjkExtractor.strip_html(val)
                 if c_val:
@@ -1167,9 +1168,9 @@ def generate_worksheet_preview(
         fvals = note.field_values or {}
 
         if template.id == "kanji_compound":
-            raw_kanji_text = str(fvals.get(kanji_field_name) or "").strip()
-            raw_reading = str(fvals.get(reading_field_name) or "").strip() if reading_field_name else ""
-            raw_meaning = str(fvals.get(meaning_field_name) or "").strip() if meaning_field_name else ""
+            raw_kanji_text = field_value_text(fvals.get(kanji_field_name)).strip()
+            raw_reading = field_value_text(fvals.get(reading_field_name)).strip() if reading_field_name else ""
+            raw_meaning = field_value_text(fvals.get(meaning_field_name)).strip() if meaning_field_name else ""
 
             reading_text = CjkExtractor.strip_html(raw_reading)
             meaning_text = CjkExtractor.strip_html(raw_meaning)
@@ -1204,9 +1205,9 @@ def generate_worksheet_preview(
             })
 
         elif template.id == "kanji_step_by_step":
-            raw_kanji_text = str(fvals.get(kanji_field_name) or "").strip()
-            raw_reading = str(fvals.get(reading_field_name) or "").strip() if reading_field_name else ""
-            raw_meaning = str(fvals.get(meaning_field_name) or "").strip() if meaning_field_name else ""
+            raw_kanji_text = field_value_text(fvals.get(kanji_field_name)).strip()
+            raw_reading = field_value_text(fvals.get(reading_field_name)).strip() if reading_field_name else ""
+            raw_meaning = field_value_text(fvals.get(meaning_field_name)).strip() if meaning_field_name else ""
 
             reading_text = CjkExtractor.strip_html(raw_reading)
             meaning_text = CjkExtractor.strip_html(raw_meaning)
@@ -1273,9 +1274,9 @@ def generate_worksheet_preview(
                 })
 
         elif template.category == "kanji":
-            raw_kanji_text = str(fvals.get(kanji_field_name) or "").strip()
-            raw_reading = str(fvals.get(reading_field_name) or "").strip() if reading_field_name else ""
-            raw_meaning = str(fvals.get(meaning_field_name) or "").strip() if meaning_field_name else ""
+            raw_kanji_text = field_value_text(fvals.get(kanji_field_name)).strip()
+            raw_reading = field_value_text(fvals.get(reading_field_name)).strip() if reading_field_name else ""
+            raw_meaning = field_value_text(fvals.get(meaning_field_name)).strip() if meaning_field_name else ""
 
             reading_text = CjkExtractor.strip_html(raw_reading)
             meaning_text = CjkExtractor.strip_html(raw_meaning)
@@ -1313,9 +1314,9 @@ def generate_worksheet_preview(
             reading_field = reading_field_name
             meaning_field = meaning_field_name
 
-            word_val = CjkExtractor.strip_html(str(fvals.get(word_field) or ""))
-            reading_val = CjkExtractor.strip_html(str(fvals.get(reading_field) or "")) if reading_field else ""
-            meaning_val = CjkExtractor.strip_html(str(fvals.get(meaning_field) or "")) if meaning_field else ""
+            word_val = CjkExtractor.strip_html(field_value_text(fvals.get(word_field)))
+            reading_val = CjkExtractor.strip_html(field_value_text(fvals.get(reading_field))) if reading_field else ""
+            meaning_val = CjkExtractor.strip_html(field_value_text(fvals.get(meaning_field))) if meaning_field else ""
 
             if not word_val and not meaning_val:
                 continue
@@ -1334,9 +1335,9 @@ def generate_worksheet_preview(
             reading_field = reading_field_name
             meaning_field = meaning_field_name
 
-            word_val = CjkExtractor.strip_html(str(fvals.get(word_field) or ""))
-            reading_val = CjkExtractor.strip_html(str(fvals.get(reading_field) or "")) if reading_field else ""
-            meaning_val = CjkExtractor.strip_html(str(fvals.get(meaning_field) or "")) if meaning_field else ""
+            word_val = CjkExtractor.strip_html(field_value_text(fvals.get(word_field)))
+            reading_val = CjkExtractor.strip_html(field_value_text(fvals.get(reading_field))) if reading_field else ""
+            meaning_val = CjkExtractor.strip_html(field_value_text(fvals.get(meaning_field))) if meaning_field else ""
 
             if not word_val:
                 continue
@@ -1358,7 +1359,7 @@ def generate_worksheet_preview(
 
             row_data: dict[str, str] = {}
             for col in custom_cols:
-                row_data[col] = CjkExtractor.strip_html(str(fvals.get(col) or ""))
+                row_data[col] = CjkExtractor.strip_html(field_value_text(fvals.get(col)))
 
             raw_items.append({
                 "type": "table_row",
@@ -1371,9 +1372,9 @@ def generate_worksheet_preview(
             reading_field = str(field_mapping.get("reading") or "").strip()
             meaning_field = str(field_mapping.get("meaning") or "").strip()
 
-            sentence_val = CjkExtractor.strip_html(str(fvals.get(sentence_field) or ""))
-            reading_val = CjkExtractor.strip_html(str(fvals.get(reading_field) or "")) if reading_field else ""
-            meaning_val = CjkExtractor.strip_html(str(fvals.get(meaning_field) or "")) if meaning_field else ""
+            sentence_val = CjkExtractor.strip_html(field_value_text(fvals.get(sentence_field)))
+            reading_val = CjkExtractor.strip_html(field_value_text(fvals.get(reading_field))) if reading_field else ""
+            meaning_val = CjkExtractor.strip_html(field_value_text(fvals.get(meaning_field))) if meaning_field else ""
 
             if not sentence_val and not meaning_val:
                 continue
@@ -1391,9 +1392,9 @@ def generate_worksheet_preview(
             meaning_field = str(field_mapping.get("meaning_usage") or field_mapping.get("meaning") or "").strip()
             example_field = str(field_mapping.get("example") or "").strip()
 
-            grammar_val = CjkExtractor.strip_html(str(fvals.get(grammar_field) or ""))
-            meaning_val = CjkExtractor.strip_html(str(fvals.get(meaning_field) or "")) if meaning_field else ""
-            example_val = CjkExtractor.strip_html(str(fvals.get(example_field) or "")) if example_field else ""
+            grammar_val = CjkExtractor.strip_html(field_value_text(fvals.get(grammar_field)))
+            meaning_val = CjkExtractor.strip_html(field_value_text(fvals.get(meaning_field))) if meaning_field else ""
+            example_val = CjkExtractor.strip_html(field_value_text(fvals.get(example_field))) if example_field else ""
 
             if not grammar_val:
                 continue

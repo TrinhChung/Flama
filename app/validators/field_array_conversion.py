@@ -1,8 +1,9 @@
 """Request validation for converting a NoteType field to or from ``array``.
 
-The frontend splits values and sends the final text of every Note; the server
-only checks the request shape and that ``array`` values are one clean item per
-line. It never splits or rewrites items itself.
+The frontend splits values and sends every Note's items, one per line; the
+server only checks the request shape and that ``array`` values are one clean
+item per line, then stores those lines as a JSON list. It never splits or
+rewrites items itself.
 """
 
 from __future__ import annotations

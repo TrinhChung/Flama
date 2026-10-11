@@ -54,6 +54,7 @@ from models import db
 from models.card_progress import CardProgress
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
+from models.field_types import stored_field_value
 from models.flashcard import Card, DeckInstall, Note, NoteType
 
 
@@ -1650,7 +1651,7 @@ def _apply_clone_overlay_to_browse_payload(
         overlay_field_values = dict(note_obj.field_values or {})
 
     normalized_values = {
-        str(key).strip(): "" if value is None else str(value)
+        str(key).strip(): stored_field_value(value)
         for key, value in dict(overlay_field_values or {}).items()
         if str(key).strip()
     }

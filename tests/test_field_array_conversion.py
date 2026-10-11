@@ -109,10 +109,12 @@ class FieldArrayConversionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_json())
         body = response.get_json()
         self.assertEqual(body["field"]["field_type"], "array")
-        self.assertEqual((body["note_count"], body["changed_note_count"]), (3, 1))
+        # Every value changes storage from text to a list, so every Note is rewritten.
+        self.assertEqual((body["note_count"], body["changed_note_count"]), (3, 3))
         self.assertEqual(self._field_type(), "array")
-        self.assertEqual(self._meaning(self.note_ids[0]), "ăn\ndùng bữa")
-        self.assertEqual(self._meaning(self.note_ids[1]), "uống")
+        self.assertEqual(self._meaning(self.note_ids[0]), ["ăn", "dùng bữa"])
+        self.assertEqual(self._meaning(self.note_ids[1]), ["uống"])
+        self.assertEqual(self._meaning(self.note_ids[2]), [])
         self.assertEqual(self._meaning(self.foreign_note_id), "nhìn, xem")
         with self.app.app_context():
             self.assertEqual(AuditLog.query.filter_by(action="field.convert_array").count(), 1)
@@ -142,16 +144,34 @@ class FieldArrayConversionTests(unittest.TestCase):
             self.assertEqual(response.get_json()["error"], "INVALID_ARRAY_VALUE")
         self.assertEqual(self._field_type(), "text")
 
+    def test_array_note_edit_takes_lines_or_a_list_as_sent(self):
+        source = self.client.get(self._url()).get_json()
+        self.assertEqual(self.client.post(self._url(), json=self._payload(source)).status_code, 200)
+        url = f"/api/notes/{self.note_ids[0]}"
+        # Text is split into lines only; text that looks like JSON stays one item.
+        for sent, stored in (('["a", "b"]', ['["a", "b"]']), ([[["three"]]], [[["three"]]]), ([["a", "b"], ["c"]], [["a", "b"], ["c"]])):
+            response = self.client.patch(url, json={"field_values": {"Word": "食べる", "Meaning": sent}})
+            self.assertEqual(response.status_code, 200, response.get_json())
+            self.assertEqual(self._meaning(self.note_ids[0]), stored)
+        response = self.client.patch(url, json={"field_values": {"Word": "食べる2"}})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(self._meaning(self.note_ids[0]), [["a", "b"], ["c"]])
+        for bad in (["a", {"b": 1}], [[[["four levels"]]]], ["x" * 3000, "y" * 3000], [""] * 6000):
+            response = self.client.patch(url, json={"field_values": {"Word": "食べる", "Meaning": bad}})
+            self.assertEqual(response.status_code, 400, (bad, response.get_json()))
+        self.assertEqual(self._meaning(self.note_ids[0]), [["a", "b"], ["c"]])
+
     def test_repeated_array_items_survive_conversion_and_note_edit(self):
         source = self.client.get(self._url()).get_json()
         repeated = "xử lý đồng thời\nkhác\nxử lý đồng thời"
+        expected_array = ["xử lý đồng thời", "khác", "xử lý đồng thời"]
         payload = self._payload(source, transform=lambda value: repeated if value.startswith("ăn") else value)
         response = self.client.post(self._url(), json=payload)
         self.assertEqual(response.status_code, 200, response.get_json())
-        self.assertEqual(self._meaning(self.note_ids[0]), repeated)
+        self.assertEqual(self._meaning(self.note_ids[0]), expected_array)
         response = self.client.patch(f"/api/notes/{self.note_ids[0]}", json={"field_values": {"Word": "食べる", "Meaning": repeated}})
         self.assertEqual(response.status_code, 200, response.get_json())
-        self.assertEqual(self._meaning(self.note_ids[0]), repeated)
+        self.assertEqual(self._meaning(self.note_ids[0]), expected_array)
 
     def test_primary_media_and_changed_fields_are_refused(self):
         word = self.client.get(self._url("Word")).get_json()

@@ -19,6 +19,7 @@ from app.services.strokes.dataset_builder import (
     generate_kanji_placeholder_svg,
 )
 from models import db
+from models.field_types import field_value_text
 from models.flashcard import Card, Note, NoteType
 from models.shared_image_asset import SharedImageAsset
 
@@ -363,7 +364,7 @@ def estimate_batch_strokes(
             notes_skipped += 1
             continue
 
-        source_val = str(field_values.get(source_field) or "").strip()
+        source_val = field_value_text(field_values.get(source_field)).strip()
         if not source_val:
             notes_skipped += 1
             continue
@@ -506,7 +507,7 @@ def batch_generate_strokes(
             skipped_count += 1
             continue
 
-        source_val = str(field_values.get(source_field) or "").strip()
+        source_val = field_value_text(field_values.get(source_field)).strip()
         if not source_val:
             skipped_count += 1
             continue

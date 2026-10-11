@@ -1,5 +1,7 @@
 # Array field cutover — 2026-10-11
 
+> Follow-up for native JSON lists and template/data cleanup: use [NATIVE_ARRAY_CLEANUP_20261011.md](NATIVE_ARRAY_CLEANUP_20261011.md). This file documents the earlier line-string cutover; do not rerun its script to perform the native-list cleanup.
+
 ## Scope and storage
 
 Based on Gemini's local production-dump analysis and the independent
@@ -13,8 +15,10 @@ across five NoteTypes, including the owners of the two installed types with own
 notes. It does not match NoteTypes by name or change 50 empty installed schemas.
 Release-pinned clone schema/content and learner overlays remain pinned.
 
-Flama's native `array` value is a **string with one item per line**, not a JSON
-list. Reading separators, `$` in short Vietnamese translations, semicolons in
+At this cutover Flama's native `array` value was a **string with one item per
+line**, not a JSON list. Later note writes store a JSON list instead (see
+`models/field_types.py`); the strings written here stay until they are migrated
+separately. Reading separators, `$` in short Vietnamese translations, semicolons in
 English lists and commas in Kanji_N3 meanings follow the reviewed parsers.
 Bracketed prose is preserved. Missing/null keys, non-target fields, media,
 identity, tags, cards and review progress are retained. Already-array fields are
