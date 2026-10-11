@@ -59,6 +59,7 @@ lerna-debug.log*
 .agents/
 .stitch/
 .impeccable/
+.claude/worktrees/
 plugins/
 
 # External agent skills in skills/ (preserve repo-local skills: docs-architect, nihongo-agent-architect, flama-database-architecture)

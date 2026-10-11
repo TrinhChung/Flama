@@ -1,6 +1,6 @@
 # Review báo cáo Native JSON Array của Gemini
 
-> **Trạng thái sau xử lý local:** Đã sửa 12 source HTML, 25 template DB và chuyển lại nội dung có bằng chứng của 68 note. Plan/apply/restore/verify, audit đối soát và [runbook production](../runbooks/NATIVE_ARRAY_CLEANUP_20261011.md) đã được bàn giao; còn 113 note cần biên tập nội dung/bản dịch. Production chưa được ghi. Các finding bên dưới giữ bằng chứng của pha review trước khi sửa; SHA-256 là của báo cáo gốc trước phần đính chính.
+> **Trạng thái sau xử lý:** Local đã sửa 12 source HTML, 25 template DB và 68 note lệch cột. Production đã triển khai riêng qua PR #228, backfill 41.199 note, sửa 68 note và 9 template; đối soát 106 bảng/41.510 note pass, không đưa P11 vào release. Chi tiết backup/receipt/smoke nằm trong [runbook production](../runbooks/NATIVE_ARRAY_CLEANUP_20261011.md). Còn 113 note cần biên tập nội dung/bản dịch. Các finding bên dưới giữ bằng chứng của pha review trước khi sửa; SHA-256 là của báo cáo gốc trước phần đính chính.
 
 > Ngày: 2026-10-11 (Asia/Tokyo) | Chế độ: INVESTIGATE
 > Đối tượng: `docs/reports/ARRAY_MIGRATION_AUDIT_REPORT.md`, bản 1.0.0.
