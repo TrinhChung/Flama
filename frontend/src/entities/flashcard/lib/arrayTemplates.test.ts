@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { JSDOM } from 'jsdom'
+import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 import { renderCardSide, patchRenderContext } from './clientRenderer'
 import type { CardRenderTemplate } from '../model/types'
+
+const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
+  JSDOM: new (html: string, options: { runScripts: 'dangerously' }) => { window: Window }
+}
 
 function render(slug: string, values: Record<string, string>) {
   const folder = resolve(process.cwd(), '..', 'note-type-templates', slug)

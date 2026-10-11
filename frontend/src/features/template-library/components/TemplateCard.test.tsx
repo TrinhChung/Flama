@@ -77,7 +77,7 @@ describe('TemplateCard', () => {
       id: 'tmpl-market',
       origin: 'market_copy',
       archived_at: '2026-10-10T00:00:00Z',
-      description: null,
+      description: '',
       note_type_count: 0,
       application_count: 0,
     }

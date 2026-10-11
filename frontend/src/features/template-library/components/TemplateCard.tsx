@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import type { TemplateLibraryItem } from '@/entities/card-template'
+import type { TemplateLibrarySummary } from '@/entities/card-template'
 
 export interface TemplateCardProps {
-  template: TemplateLibraryItem
+  template: TemplateLibrarySummary
 }
 
 export function TemplateCard({ template }: TemplateCardProps) {
