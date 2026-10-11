@@ -1,7 +1,7 @@
 /**
- * The `array` field type stores a list of plain-text items, one per line.
- * Editors keep that shape clean on save; a template decides what the items mean
- * (accepted answers, choices, …).
+ * The `array` field type stores a JSON list of plain-text items (older values
+ * may still be one item per line). Editors show one item per line and the server
+ * stores the lines as a list; the renderer passes the list to the template as is.
  */
 export const ARRAY_FIELD_TYPE = 'array'
 
@@ -37,6 +37,16 @@ export function fieldValueToText(raw: unknown): string {
     .replace(/<[^>]*>/g, '')
     .replace(/\[sound:[^\]]*\]/gi, '')
   return decodeEntities(withoutMarkup)
+}
+
+/**
+ * Text an editor shows for a stored value: array items one per line. Keep the
+ * stored list in form state until the user edits it, so an untouched (nested)
+ * array is saved back unchanged.
+ */
+export function fieldValueEditorText(value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => fieldValueEditorText(item)).join('\n')
+  return value === null || value === undefined ? '' : String(value)
 }
 
 export function isArrayField(fieldType: string | null | undefined): boolean {

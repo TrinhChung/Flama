@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { isArrayField, normalizeArrayFieldValues, normalizeArrayValue } from './arrayField'
+import { fieldValueEditorText, isArrayField, normalizeArrayFieldValues, normalizeArrayValue } from './arrayField'
 
 describe('array field values', () => {
   it('keeps order and repeated translations while trimming empty lines', () => {
     expect(normalizeArrayValue('  ăn \r\n\n dùng   bữa\nĂN\r')).toBe('ăn\ndùng bữa\nĂN')
     expect(normalizeArrayValue('xử lý đồng thời\nkhác\nxử lý đồng thời')).toBe('xử lý đồng thời\nkhác\nxử lý đồng thời')
+  })
+
+  it('shows a stored list one item per line in editors', () => {
+    expect(fieldValueEditorText(['ăn', 'dùng bữa'])).toBe('ăn\ndùng bữa')
+    expect(fieldValueEditorText([['a', 'b'], ['c']])).toBe('a\nb\nc')
+    expect(fieldValueEditorText('ăn\nuống')).toBe('ăn\nuống')
+    expect(fieldValueEditorText(null)).toBe('')
   })
 
   it('only touches array fields', () => {

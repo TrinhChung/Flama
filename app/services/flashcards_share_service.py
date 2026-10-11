@@ -44,7 +44,7 @@ from models.flashcard import (
 )
 from models.deck import Deck
 from models.audit_log import AuditLog
-from models.field_types import FIELD_TYPES as _FIELD_TYPES
+from models.field_types import FIELD_TYPES as _FIELD_TYPES, stored_field_value
 
 logger = logging.getLogger(__name__)
 # Keep self-references stable while legacy call sites are migrated.
@@ -1501,15 +1501,15 @@ def select_preview_note_for_shared_deck(
         note_type_id, deck_ids, deck_item.owner_user_id
     )
 
-def _normalize_note_field_values_for_cutover(raw_values: dict | None) -> dict[str, str]:
+def _normalize_note_field_values_for_cutover(raw_values: dict | None) -> dict[str, Any]:
     if not isinstance(raw_values, dict):
         return {}
-    normalized: dict[str, str] = {}
+    normalized: dict[str, Any] = {}
     for key, value in raw_values.items():
         key_name = str(key).strip()
         if not key_name:
             continue
-        normalized[key_name] = "" if value is None else str(value)
+        normalized[key_name] = stored_field_value(value)
     return normalized
 
 def _deck_paths_for_cutover(root_deck_id: int) -> dict[tuple[int, ...], int]:

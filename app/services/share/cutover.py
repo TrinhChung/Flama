@@ -72,6 +72,7 @@ from models.deck_release import DeckRelease
 from models.deck_release_entity_membership import DeckReleaseEntityMembership
 from models.deck_review import DeckReview
 from models.field_def import FieldDef
+from models.field_types import stored_field_value
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
@@ -105,15 +106,15 @@ from app.services.share.overlay import (
     upsert_shared_deck_clone_overlay,
 )
 
-def _normalize_note_field_values_for_cutover(raw_values: dict | None) -> dict[str, str]:
+def _normalize_note_field_values_for_cutover(raw_values: dict | None) -> dict[str, Any]:
     if not isinstance(raw_values, dict):
         return {}
-    normalized: dict[str, str] = {}
+    normalized: dict[str, Any] = {}
     for key, value in raw_values.items():
         key_name = str(key).strip()
         if not key_name:
             continue
-        normalized[key_name] = "" if value is None else str(value)
+        normalized[key_name] = stored_field_value(value)
     return normalized
 
 

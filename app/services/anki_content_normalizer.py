@@ -19,6 +19,7 @@ from app.services.flashcard_renderer import (
 from models import db
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.field_def import FieldDef
+from models.field_types import stored_field_value
 from models.note import Note
 
 
@@ -456,9 +457,9 @@ def sanitize_yomitan_richtext(raw_html: str | None, max_length: int = 20_000) ->
 
 
 def normalize_anki_field_values(
-    raw_values: dict[str, str],
+    raw_values: dict[str, Any],
     field_defs: list[FieldDef] | tuple[FieldDef, ...],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Normalize imported text and richtext fields with field-type awareness and semantic bounds."""
     field_defs_map: dict[str, Any] = {}
     for field_def in field_defs:
@@ -468,10 +469,14 @@ def normalize_anki_field_values(
         if name:
             field_defs_map[str(name)] = field_def
 
-    normalized_result: dict[str, str] = {}
+    normalized_result: dict[str, Any] = {}
     for name, value in raw_values.items():
         if value is None:
             normalized_result[name] = ""
+            continue
+        if isinstance(value, list):
+            # Array items are already plain text; Anki entities never reach them.
+            normalized_result[name] = value
             continue
 
         value_str = str(value)
@@ -548,7 +553,7 @@ def backfill_anki_note_entities(
             )
             field_type_cache[note.note_type_id] = field_defs
         current = {
-            str(name): "" if value is None else str(value)
+            str(name): stored_field_value(value)
             for name, value in dict(note.field_values or {}).items()
         }
         normalized = normalize_anki_field_values(current, field_defs)

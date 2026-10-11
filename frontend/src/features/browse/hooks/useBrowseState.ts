@@ -15,6 +15,7 @@ import {
   saveStoredBrowseTtsSettings,
 } from '../services/ttsSettingsStorage'
 import { cleanTextForTts } from '@/features/audio/services/ttsTextNormalizer'
+import { fieldValueEditorText } from '@/lib/arrayField'
 
 export type BrowseCardRow = {
   card_id: string
@@ -807,7 +808,7 @@ export function useBrowseState() {
   // Preview VoiceVox
   const handlePreviewVoiceVox = async () => {
     const rawPreview =
-      effectiveCardDetail?.note?.field_values?.[ttsSourceField] ||
+      fieldValueEditorText(effectiveCardDetail?.note?.field_values?.[ttsSourceField]) ||
       cards[0]?.word ||
       cards[0]?.reading ||
       'こんにちは'

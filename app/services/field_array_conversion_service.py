@@ -29,7 +29,7 @@ from models import db
 from models.audit_log import AuditLog
 from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
-from models.field_types import ARRAY_FIELD_TYPE
+from models.field_types import ARRAY_FIELD_TYPE, field_value_text
 from models.note import Note
 from models.note_type import NoteType
 
@@ -71,8 +71,7 @@ def _owner_notes(*, user_id: int, note_type_id: str, lock: bool = False) -> list
 
 
 def _value(note: Note, field_name: str) -> str:
-    value = (note.field_values or {}).get(field_name)
-    return value if isinstance(value, str) else ("" if value is None else str(value))
+    return field_value_text((note.field_values or {}).get(field_name))
 
 
 def _rename_in_progress(note_type_id: str) -> bool:
@@ -100,7 +99,7 @@ def get_conversion_source(*, user_id: int, note_type_id: str, field_id: str) -> 
     }
 
 
-def _new_value(request, field: FieldDef, item) -> str:
+def _new_value(request, field: FieldDef, item) -> Any:
     if request.to_array:
         problem = array_value_problem(item.value)
         if problem:
@@ -109,7 +108,8 @@ def _new_value(request, field: FieldDef, item) -> str:
                 "Array values must be plain text with one non-empty item per line.",
                 details={"note_id": item.note_id, "problem": problem},
             )
-        return item.value
+        # A clean value is already one trimmed item per line.
+        return item.value.split("\n") if item.value else []
     try:
         return _RESTORE_SANITIZERS[request.target_type](item.value, field_name=field.name)
     except RequestValidationError as exc:
@@ -158,7 +158,7 @@ def apply_conversion(*, user_id: int, note_type_id: str, field_id: str, payload:
         for item in request.notes:
             note = by_id[item.note_id]
             value = _new_value(request, field, item)
-            if value == _value(note, field.name):
+            if value == (note.field_values or {}).get(field.name):
                 continue
             next_values = dict(note.field_values or {})
             next_values[field.name] = value

@@ -29,12 +29,13 @@ from app.services.mcp.base import (
     _resolve_deck_for_user,
     _resolve_note_type_for_user,
 )
-from app.validators.flashcard_input import RequestValidationError
+from app.validators.flashcard_input import RequestValidationError, clean_array_fields
 from models import db
 from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
+from models.field_types import field_value_text
 from models.note import Note
 from models.note_type import NoteType
 from models.study_progress_subject import StudyProgressSubject
@@ -256,7 +257,7 @@ def find_notes(
         matched = False
         if not search_term:
             matched = True
-        elif any(search_term in str(val).lower() for val in field_values.values()):
+        elif any(search_term in field_value_text(val).lower() for val in field_values.values()):
             matched = True
         elif any(search_term in t.lower() for t in tags):
             matched = True
@@ -438,7 +439,10 @@ def _create_note(
         ) from exc
 
     fields = note_data.get("fields", {})
-    normalized_fields = normalize_anki_field_values(fields, tuple(note_type.field_defs))
+    normalized_fields = clean_array_fields(
+        normalize_anki_field_values(fields, tuple(note_type.field_defs)),
+        note_type.field_defs,
+    )
     tags = list(note_data.get("tags") or [])
     allow_duplicate = bool(note_data.get("allow_duplicate", False))
 
@@ -579,6 +583,7 @@ def update_note(
         note_type = note.note_type
         if note_type:
             normalized = normalize_anki_field_values(current_fields, tuple(note_type.field_defs))
+            normalized.update(clean_array_fields({name: normalized[name] for name in fields}, note_type.field_defs))
             note.field_values = normalized
             _auto_crawl_note_fields(user_id=user_id, note=note, field_defs=note_type.field_defs)
         else:

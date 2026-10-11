@@ -22,6 +22,7 @@ from app.services.image_security_service import validate_image_security
 from app.validators import RequestValidationError, resolve_safe_storage_path
 from models import db
 from models.audit_log import AuditLog
+from models.field_types import stored_field_value
 from models.media_asset import MediaAsset
 from models.note import Note
 
@@ -326,15 +327,16 @@ def commit_all_staged_urls_in_field_values(
     note_id: str,
     field_values: dict[str, Any] | None,
     upload_root: Path | None = None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Scan field_values, commit any /media/staged/<stage_id> to MediaAsset, and replace URLs."""
     if not field_values:
         return {}
 
-    updated: dict[str, str] = {}
+    updated: dict[str, Any] = {}
     for field_name, val in field_values.items():
         if not val or not isinstance(val, str):
-            updated[field_name] = "" if val is None else str(val)
+            # Array items are plain text and never hold staged media URLs.
+            updated[field_name] = stored_field_value(val)
             continue
 
         text_val = str(val)

@@ -21,6 +21,7 @@ from app.services.media_field_codec import (
     split_media_field_value,
 )
 from models import db
+from models.field_types import field_value_text
 from models.flashcard import Card, MediaAsset, Note, NoteType
 
 
@@ -338,7 +339,7 @@ def generate_voicevox(
             continue
 
         note_values = dict(note_obj.field_values or {})
-        source_text_raw = str(note_values.get(source_field) or "").strip()
+        source_text_raw = field_value_text(note_values.get(source_field)).strip()
         source_type = str(source_def.field_type or "").strip().lower()
         if source_type == "richtext":
             source_text = _strip_richtext_to_plain(source_text_raw)

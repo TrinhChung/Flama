@@ -5,6 +5,8 @@
 > Database kiểm tra: MySQL `localhost:3306/nihongo`.
 
 > Đây là audit trước rollout của script Gemini ban đầu. Script đó đã được lưu ngoài git; triển khai tiếp theo dùng manifest ID và `scripts/migrations/array_cutover.py`. Trạng thái khắc phục và kết quả vận hành nằm trong [runbook cutover](../runbooks/ARRAY_FIELD_CUTOVER_20261011.md).
+>
+> Sau cutover, ghi Note lưu `array` dưới dạng JSON list; các chuỗi mỗi dòng một item do cutover ghi vẫn giữ nguyên cho tới đợt migrate riêng.
 
 ## Kết luận
 

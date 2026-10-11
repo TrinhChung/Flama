@@ -15,6 +15,7 @@ import {
   type LocalAudioSettings,
 } from '../services/localAudioStorage'
 import { scanDeckAudio } from '../services/audioScanService'
+import { fieldValueEditorText } from '@/lib/arrayField'
 import { cleanTextForTts } from '../services/ttsTextNormalizer'
 import { startLocalAudioPolling } from '../services/localAudioPolling'
 import type { VoiceDescriptor, DeckScanResponse } from '../types'
@@ -816,9 +817,9 @@ export function useLocalAudioEngine(options: {
         try {
           const detail = await apiRequest<{
             card: { word: string }
-            note: { field_values?: Record<string, string> }
+            note: { field_values?: Record<string, unknown> }
           }>(`/api/browse/cards/${encodeURIComponent(targetCardIds[0])}`)
-          const raw = detail.note?.field_values?.[sourceField] || detail.card.word || sampleText
+          const raw = fieldValueEditorText(detail.note?.field_values?.[sourceField]) || detail.card.word || sampleText
           sampleText = cleanTextForTts(raw, engineId) || sampleText
         } catch {}
       }

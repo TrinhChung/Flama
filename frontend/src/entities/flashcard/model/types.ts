@@ -40,7 +40,7 @@ export interface CardRenderTemplate {
 
 export interface CardRenderContent {
   renderer_abi: string
-  field_values: Record<string, string>
+  field_values: Record<string, unknown>
   render_context: Record<string, unknown>
   media: CardMediaArtifact[]
 }

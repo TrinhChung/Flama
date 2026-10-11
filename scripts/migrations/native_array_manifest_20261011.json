@@ -1,0 +1,1393 @@
+{
+  "schema_version": "flama-native-array-cleanup.v1",
+  "fields": [
+    {
+      "id": "065e632a-6401-48ee-b90f-3e0bfa143793",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "name": "Synonym"
+    },
+    {
+      "id": "0b07c701-31ac-4cdd-90fc-e14aada3b0b0",
+      "note_type_id": "a3048e55-6fd9-40d0-ba18-e5d01f17ae94",
+      "owner_user_id": 1,
+      "name": "Answer",
+      "optional": true
+    },
+    {
+      "id": "17dc7398-5a32-414d-8aca-c537936797ba",
+      "note_type_id": "cb1f2819-0ea8-4cf3-894a-98802dcb9c35",
+      "owner_user_id": 19,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "1961f193-5e82-4440-85c8-ef242fdbbb27",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "name": "Meaning",
+      "optional": true
+    },
+    {
+      "id": "1ce094a6-336f-4f68-a8d5-0071ff644cdd",
+      "note_type_id": "4eafbe43-512f-420e-aebf-43cfcc76989a",
+      "owner_user_id": 13,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "1cf86648-3a20-4475-89d6-876995259629",
+      "note_type_id": "c46f7c09-cb5c-4b1f-b6cc-be018f5e0636",
+      "owner_user_id": 15,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "1ecc6f6d-f2bf-4f21-bd52-5b92ba74c597",
+      "note_type_id": "4eafbe43-512f-420e-aebf-43cfcc76989a",
+      "owner_user_id": 13,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "2104259e-3499-4f8a-afda-9f206ea9ed5d",
+      "note_type_id": "91f567ab-d99d-4ed0-b3ab-fdb12cc790cb",
+      "owner_user_id": 4,
+      "name": "Nghĩa"
+    },
+    {
+      "id": "23770fef-0dc9-4a02-bc30-726abb44f195",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "name": "Coollocation_VI",
+      "optional": true
+    },
+    {
+      "id": "2d61252d-159f-4a6e-9de7-5e0f7fdbd8ab",
+      "note_type_id": "395e575f-03e8-49e9-bf40-a428bf9b9ca0",
+      "owner_user_id": 2,
+      "name": "reading"
+    },
+    {
+      "id": "2e8883a0-50bf-40c8-ad9f-182dac7d1aaa",
+      "note_type_id": "9c282b21-c87d-4797-b23c-188f53a82724",
+      "owner_user_id": 16,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "30603a5c-744d-4305-aefa-d96816a3a689",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "name": "Collocation"
+    },
+    {
+      "id": "329a3e9c-54ea-4b66-ae72-eeed5c2f6f84",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "name": "Coollocation_VI",
+      "optional": true
+    },
+    {
+      "id": "352e6d11-2fc4-4dee-ae43-c94a80b92c72",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "name": "Collocation"
+    },
+    {
+      "id": "367f20ab-7285-4775-88fd-22d9121a70bd",
+      "note_type_id": "0b9a37e5-c8ff-427d-bc50-b3a2d2bb00c6",
+      "owner_user_id": 1,
+      "name": "Meaning",
+      "optional": true
+    },
+    {
+      "id": "3a502874-44bf-483f-ad53-3a6fd8351995",
+      "note_type_id": "405f972c-a507-4cc8-934a-7ea46d864dff",
+      "owner_user_id": 12,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "3f2f114a-a582-4cc9-bf34-f536442ce513",
+      "note_type_id": "9e80eb7b-4d91-449f-9336-973d8605db83",
+      "owner_user_id": 1,
+      "name": "Answer",
+      "optional": true
+    },
+    {
+      "id": "45458281-595d-4e54-9108-dfc78deb5c4b",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "name": "Antonym",
+      "optional": true
+    },
+    {
+      "id": "4885d436-8446-4766-8ba8-e081df4fc7a0",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "name": "Antonym_VI",
+      "optional": true
+    },
+    {
+      "id": "49ff8b0e-49e8-4bc3-9906-8d531190b69c",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "name": "Collocation",
+      "optional": true
+    },
+    {
+      "id": "4d062b9c-82a2-4709-93f2-560dbdec7fe9",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "name": "Collocation",
+      "optional": true
+    },
+    {
+      "id": "4fa7845d-134e-419e-8d65-4afd0e5d96a7",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "name": "Antonym_VI",
+      "optional": true
+    },
+    {
+      "id": "55194908-9922-4747-80a8-e32e2e26b6d8",
+      "note_type_id": "71a5d689-21c0-4106-9111-cedba1b17241",
+      "owner_user_id": 14,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "5b910d40-7de4-41b7-a235-39b20f90a8d5",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "name": "Antonym_VI"
+    },
+    {
+      "id": "5c42ea3b-cf22-4d47-9eb9-fe3b80f25376",
+      "note_type_id": "f682acdc-1292-4da8-b40d-ac0ed9eee26b",
+      "owner_user_id": 3,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "60cb7237-a105-4218-9bd9-60c5208f87f9",
+      "note_type_id": "9e80eb7b-4d91-449f-9336-973d8605db83",
+      "owner_user_id": 1,
+      "name": "Reading",
+      "optional": true
+    },
+    {
+      "id": "61264dca-b16c-4f58-b030-e1ed22d24788",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "name": "Synonym",
+      "optional": true
+    },
+    {
+      "id": "62ad2bf2-ec98-4067-8dbe-56df8a0570a2",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "name": "Synonym",
+      "optional": true
+    },
+    {
+      "id": "69320145-bd67-4262-8fbb-00d0bf1fa750",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "name": "Meaning",
+      "optional": true
+    },
+    {
+      "id": "693fe06c-f6f8-4b6d-820b-23c93fbc2084",
+      "note_type_id": "f9912e3a-a270-4520-956e-c0f44752d3e3",
+      "owner_user_id": 1,
+      "name": "Reading",
+      "optional": true
+    },
+    {
+      "id": "6be6573e-6c76-4021-9576-2fb90154c83a",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "name": "Collocation",
+      "optional": true
+    },
+    {
+      "id": "6cecd688-32c1-4ee4-83b5-6303cd87aef0",
+      "note_type_id": "bb5f70a3-b3e1-4e92-acca-19e4076ef7bb",
+      "owner_user_id": 1,
+      "name": "Answer",
+      "optional": true
+    },
+    {
+      "id": "6faa1dc5-f99b-40b8-80b7-7cde20934b0f",
+      "note_type_id": "81162d64-b5fd-4711-b222-f25362f130fd",
+      "owner_user_id": 6,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "7a00e619-f6de-4de6-a522-63b410185a21",
+      "note_type_id": "8af3964c-5de9-4398-bdf2-e3dfb9810104",
+      "owner_user_id": 24,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "7f929e06-d681-416b-bafa-48d7794233fe",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "name": "Meaning",
+      "optional": true
+    },
+    {
+      "id": "7ff648cb-3293-4f26-affe-e41b175fc261",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "name": "Synonym_VI",
+      "optional": true
+    },
+    {
+      "id": "826db147-f30d-43d0-8eb1-2cd078bfb858",
+      "note_type_id": "91f567ab-d99d-4ed0-b3ab-fdb12cc790cb",
+      "owner_user_id": 4,
+      "name": "Phiên âm"
+    },
+    {
+      "id": "82e9a10a-9729-49a5-8e76-6bf36bf18782",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "name": "Synonym_VI",
+      "optional": true
+    },
+    {
+      "id": "85dbefee-20c7-4286-816b-a7d21b7eb126",
+      "note_type_id": "9c282b21-c87d-4797-b23c-188f53a82724",
+      "owner_user_id": 16,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "86aedf29-10f9-4d28-9192-3d5aaeaec713",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "name": "Antonym_VI",
+      "optional": true
+    },
+    {
+      "id": "8d6346d9-093a-4a8e-b3c5-e9b8dbd80736",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "name": "Antonym_VI"
+    },
+    {
+      "id": "92d15468-5400-4853-b4fa-b0a6935d5695",
+      "note_type_id": "9e80eb7b-4d91-449f-9336-973d8605db83",
+      "owner_user_id": 1,
+      "name": "Meaning",
+      "optional": true
+    },
+    {
+      "id": "93bd9df5-a61a-413a-949c-81d83ba22b6f",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "name": "Coollocation_VI",
+      "optional": true
+    },
+    {
+      "id": "96717310-e4d7-40dd-b573-dabb74c30fb7",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "name": "Collocation",
+      "optional": true
+    },
+    {
+      "id": "980f26e2-d2e1-4846-8001-0b2c38b8850f",
+      "note_type_id": "cb1f2819-0ea8-4cf3-894a-98802dcb9c35",
+      "owner_user_id": 19,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "a5bd3d61-6972-431d-b966-921e600491ea",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "name": "Synonym_VI"
+    },
+    {
+      "id": "a675ecb5-8085-4b60-a2d3-d34d4866da8b",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "name": "Antonym",
+      "optional": true
+    },
+    {
+      "id": "a9cb455c-66e4-4062-9363-bec1c32ab430",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "name": "Antonym",
+      "optional": true
+    },
+    {
+      "id": "ab4d5de5-b94a-4e72-bc82-04bc5a033900",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "name": "Synonym"
+    },
+    {
+      "id": "add7c3e6-6553-433d-be49-c77b2912144a",
+      "note_type_id": "f682acdc-1292-4da8-b40d-ac0ed9eee26b",
+      "owner_user_id": 3,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "aeb4e17b-83e9-4ee8-9f48-495027ac19b6",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "name": "Coollocation_VI",
+      "optional": true
+    },
+    {
+      "id": "bd8621fa-82c4-4e1c-8845-323f02ce5a42",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "name": "Meaning"
+    },
+    {
+      "id": "bda55a97-9a3b-4787-becc-4f54f9616649",
+      "note_type_id": "71a5d689-21c0-4106-9111-cedba1b17241",
+      "owner_user_id": 14,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "bddc690c-d42d-4195-bc49-b8a6b5eec855",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "name": "Synonym",
+      "optional": true
+    },
+    {
+      "id": "bf48afdd-e5e2-4321-83ad-b462277a402a",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "name": "Coollocation_VI"
+    },
+    {
+      "id": "c30052ca-1941-4e1f-a107-e86bba691e4b",
+      "note_type_id": "8af3964c-5de9-4398-bdf2-e3dfb9810104",
+      "owner_user_id": 24,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "c59402c5-40c6-48cf-8081-9c5c3ebc2833",
+      "note_type_id": "c46f7c09-cb5c-4b1f-b6cc-be018f5e0636",
+      "owner_user_id": 15,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "cd8c860d-3ec1-422a-9b47-dfd12f23360c",
+      "note_type_id": "395e575f-03e8-49e9-bf40-a428bf9b9ca0",
+      "owner_user_id": 2,
+      "name": "translation_vi"
+    },
+    {
+      "id": "cfe0d506-f625-4db3-b249-960126870f51",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "owner_user_id": 1,
+      "name": "reading"
+    },
+    {
+      "id": "d01457c7-e01e-4e0b-aa22-ce9304813730",
+      "note_type_id": "405f972c-a507-4cc8-934a-7ea46d864dff",
+      "owner_user_id": 12,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "d22272d2-d7c9-4742-97cd-79a1a83061e9",
+      "note_type_id": "e54a01ec-28bb-4293-a5bd-d1cbf7ff1b3e",
+      "owner_user_id": 20,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "d46b7ee1-a5a9-4225-96fd-c485fba2d974",
+      "note_type_id": "e54a01ec-28bb-4293-a5bd-d1cbf7ff1b3e",
+      "owner_user_id": 20,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "d61986c3-8536-499e-b2ad-f55aa52a96f9",
+      "note_type_id": "146b2361-4345-42bb-81ef-27bbeb3ff5e8",
+      "owner_user_id": 28,
+      "name": "reading",
+      "optional": true
+    },
+    {
+      "id": "de32f7be-29e5-4a11-9edc-c0f1460f42ba",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "name": "Synonym_VI",
+      "optional": true
+    },
+    {
+      "id": "de70eaa3-185a-47ba-95c4-831fadfa7ec8",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "name": "Meaning"
+    },
+    {
+      "id": "e42bbf32-3f42-45a5-8b08-3bcd4ac3b056",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "name": "Antonym"
+    },
+    {
+      "id": "e5b18377-9e56-414b-aaec-3a23d3b0cfcd",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "name": "Synonym_VI",
+      "optional": true
+    },
+    {
+      "id": "e66c0849-7379-46a4-ae8a-9a2df9f80012",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "name": "Synonym",
+      "optional": true
+    },
+    {
+      "id": "e71ec494-dbfb-41b2-8b89-1e3584d6aeaf",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "owner_user_id": 1,
+      "name": "translation_vi"
+    },
+    {
+      "id": "e7986ac2-3146-48a8-a005-0c5649dfd943",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "name": "Synonym_VI"
+    },
+    {
+      "id": "ecb7e0f6-0a56-4164-afbc-e985f07b6e2c",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "name": "Meaning",
+      "optional": true
+    },
+    {
+      "id": "f0929962-7aa2-4144-85e1-233f89e79023",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "name": "Antonym_VI",
+      "optional": true
+    },
+    {
+      "id": "f0a14eab-adbb-4c13-aee8-6816b6ddecc0",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "name": "Antonym",
+      "optional": true
+    },
+    {
+      "id": "f2fe6b59-bd6f-4931-b548-ff6c96a11190",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "name": "Antonym"
+    },
+    {
+      "id": "f51093b6-ea92-47a9-9b97-12b153c1a3c7",
+      "note_type_id": "81162d64-b5fd-4711-b222-f25362f130fd",
+      "owner_user_id": 6,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "f6ee00c4-21d4-4d43-bca9-64f95d9264fc",
+      "note_type_id": "146b2361-4345-42bb-81ef-27bbeb3ff5e8",
+      "owner_user_id": 28,
+      "name": "translation_vi",
+      "optional": true
+    },
+    {
+      "id": "f942998a-5d3d-4265-a741-424bcaa319ba",
+      "note_type_id": "f9912e3a-a270-4520-956e-c0f44752d3e3",
+      "owner_user_id": 1,
+      "name": "Answer",
+      "optional": true
+    },
+    {
+      "id": "f966ff50-8fd8-444e-a17e-7c826470a3a9",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "name": "Coollocation_VI"
+    },
+    {
+      "id": "fa31e851-0e98-431e-99da-c466c818f0a5",
+      "note_type_id": "0b9a37e5-c8ff-427d-bc50-b3a2d2bb00c6",
+      "owner_user_id": 1,
+      "name": "Answer",
+      "optional": true
+    }
+  ],
+  "templates": [
+    {
+      "id": "0ff348a2-4896-4ba7-a7f6-99708e3e33de",
+      "note_type_id": "13ff54d7-1775-4150-9c96-14c5cca3a42d",
+      "owner_user_id": 4,
+      "array_names": [
+        "Antonym",
+        "Antonym_VI",
+        "Collocation",
+        "Coollocation_VI",
+        "Meaning",
+        "Synonym",
+        "Synonym_VI"
+      ],
+      "allowed_before_hashes": [
+        "87f4076893a8587e124919267e28a20520b1752ff2bb7337b6b98010e792cc5c"
+      ]
+    },
+    {
+      "id": "187b3d10-0ac9-441f-a578-0faf4aa3230f",
+      "note_type_id": "146b2361-4345-42bb-81ef-27bbeb3ff5e8",
+      "owner_user_id": 28,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "81155ba0bef96e350992e418f295b414572f920a8966bd742af340d2eff3950a"
+      ]
+    },
+    {
+      "id": "21a53f7b-c355-4aa0-bd92-86036c2f499b",
+      "note_type_id": "91f567ab-d99d-4ed0-b3ab-fdb12cc790cb",
+      "owner_user_id": 4,
+      "array_names": [
+        "Nghĩa",
+        "Phiên âm"
+      ],
+      "allowed_before_hashes": [
+        "8d6f9fe329dc3ce2c8c13ef8bc45a4377d6dc9d2b7b4aa25d5c460a9e0bdd800"
+      ]
+    },
+    {
+      "id": "24646a7b-9526-401d-b50d-dbae103d263b",
+      "note_type_id": "4eafbe43-512f-420e-aebf-43cfcc76989a",
+      "owner_user_id": 13,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "7ea5e877b6aee3997647a9a856d062cc9ad74bb27055b42ecac7dc610dd11325"
+      ]
+    },
+    {
+      "id": "28634386-f3a6-41d3-ae6d-20c5cbefcda6",
+      "note_type_id": "9c282b21-c87d-4797-b23c-188f53a82724",
+      "owner_user_id": 16,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "7ea5e877b6aee3997647a9a856d062cc9ad74bb27055b42ecac7dc610dd11325"
+      ]
+    },
+    {
+      "id": "5c460ccb-5714-48ac-830b-1f74cc611bee",
+      "note_type_id": "0b9a37e5-c8ff-427d-bc50-b3a2d2bb00c6",
+      "owner_user_id": 1,
+      "array_names": [
+        "Answer",
+        "Meaning"
+      ],
+      "allowed_before_hashes": [
+        "d8217664cc96174f80cce040adef2e37ce04472d5959e73abd7763f6f2ec53c9"
+      ]
+    },
+    {
+      "id": "633d3b27-902c-4c48-b556-3baf0f113a83",
+      "note_type_id": "9e80eb7b-4d91-449f-9336-973d8605db83",
+      "owner_user_id": 1,
+      "array_names": [
+        "Answer",
+        "Meaning",
+        "Reading"
+      ],
+      "allowed_before_hashes": [
+        "9a4224951032c0f3df6b62f04ac984611ab68a6a8bf5a5c623ed9f5bd900c547"
+      ]
+    },
+    {
+      "id": "6ebcb224-b232-47b4-bb81-720bb9967f29",
+      "note_type_id": "8af3964c-5de9-4398-bdf2-e3dfb9810104",
+      "owner_user_id": 24,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "81155ba0bef96e350992e418f295b414572f920a8966bd742af340d2eff3950a"
+      ]
+    },
+    {
+      "id": "79583825-4cd2-4504-82ee-e71fb664e702",
+      "note_type_id": "7a0276f1-5725-4771-96d7-192cace77f4f",
+      "owner_user_id": 15,
+      "array_names": [
+        "Antonym",
+        "Antonym_VI",
+        "Collocation",
+        "Coollocation_VI",
+        "Meaning",
+        "Synonym",
+        "Synonym_VI"
+      ],
+      "allowed_before_hashes": [
+        "87f4076893a8587e124919267e28a20520b1752ff2bb7337b6b98010e792cc5c"
+      ]
+    },
+    {
+      "id": "7e8daff8-d06c-4b52-bc3e-b35d01de81aa",
+      "note_type_id": "71a5d689-21c0-4106-9111-cedba1b17241",
+      "owner_user_id": 14,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "7ea5e877b6aee3997647a9a856d062cc9ad74bb27055b42ecac7dc610dd11325"
+      ]
+    },
+    {
+      "id": "a37a3daa-7047-4df8-a9f4-771a11174e81",
+      "note_type_id": "a3048e55-6fd9-40d0-ba18-e5d01f17ae94",
+      "owner_user_id": 1,
+      "array_names": [
+        "Answer"
+      ],
+      "allowed_before_hashes": [
+        "c9510c3a1d5f8fa600ab0cf3b63598d472d3f5820dd5b6fb4855201be67949a9"
+      ]
+    },
+    {
+      "id": "cad0cda8-f441-424c-9723-907657d1d9a2",
+      "note_type_id": "e54a01ec-28bb-4293-a5bd-d1cbf7ff1b3e",
+      "owner_user_id": 20,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "81155ba0bef96e350992e418f295b414572f920a8966bd742af340d2eff3950a"
+      ]
+    },
+    {
+      "id": "d4c6aaa3-670e-462d-a7d6-b3d35867887b",
+      "note_type_id": "81162d64-b5fd-4711-b222-f25362f130fd",
+      "owner_user_id": 6,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "7ea5e877b6aee3997647a9a856d062cc9ad74bb27055b42ecac7dc610dd11325"
+      ]
+    },
+    {
+      "id": "d59eaec9-94c2-45c7-b63c-a10a8f5ca736",
+      "note_type_id": "3bd3924a-be8b-4f00-89d2-300f25d8a16d",
+      "owner_user_id": 20,
+      "array_names": [
+        "Antonym",
+        "Antonym_VI",
+        "Collocation",
+        "Coollocation_VI",
+        "Meaning",
+        "Synonym",
+        "Synonym_VI"
+      ],
+      "allowed_before_hashes": [
+        "166ea8f85e08708b50d5e30bad5ad210d7fda9bdbb6c43a4d4090633d52f96b7"
+      ]
+    },
+    {
+      "id": "d941ec64-9c5e-429c-bee4-44b9b76aef82",
+      "note_type_id": "405f972c-a507-4cc8-934a-7ea46d864dff",
+      "owner_user_id": 12,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "7ea5e877b6aee3997647a9a856d062cc9ad74bb27055b42ecac7dc610dd11325"
+      ]
+    },
+    {
+      "id": "e0cb18b2-881d-4b46-a567-dc5db14d661f",
+      "note_type_id": "e2f310a8-ecb3-4446-8a93-4c258e52b132",
+      "owner_user_id": 1,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "c60190b89746e2b9f8ca07390d861c2c989891269da399e67ffb15938dc81b64"
+      ]
+    },
+    {
+      "id": "e38dd9f6-7ec9-4464-b462-97d0904caab2",
+      "note_type_id": "c69c2406-566b-4ef0-bf33-e09013d01d1f",
+      "owner_user_id": 3,
+      "array_names": [
+        "Antonym",
+        "Antonym_VI",
+        "Collocation",
+        "Coollocation_VI",
+        "Meaning",
+        "Synonym",
+        "Synonym_VI"
+      ],
+      "allowed_before_hashes": [
+        "87f4076893a8587e124919267e28a20520b1752ff2bb7337b6b98010e792cc5c"
+      ]
+    },
+    {
+      "id": "ebf594ca-608c-4965-9845-9f325e62dd78",
+      "note_type_id": "395e575f-03e8-49e9-bf40-a428bf9b9ca0",
+      "owner_user_id": 2,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "59121c2d3ba746c7419d8eead27e9d2124bf46f03886129f712adf6cad56cb61"
+      ]
+    },
+    {
+      "id": "ebf68caa-53b0-49b3-a164-aeeb3d763671",
+      "note_type_id": "cb1f2819-0ea8-4cf3-894a-98802dcb9c35",
+      "owner_user_id": 19,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "81155ba0bef96e350992e418f295b414572f920a8966bd742af340d2eff3950a"
+      ]
+    },
+    {
+      "id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
+      "note_type_id": "f9912e3a-a270-4520-956e-c0f44752d3e3",
+      "owner_user_id": 1,
+      "array_names": [
+        "Answer",
+        "Reading"
+      ],
+      "allowed_before_hashes": [
+        "57b4cee5c60c1c05bc6c56c57f6db55edf3f0d434ff1488428fbc075f384e8ee"
+      ]
+    },
+    {
+      "id": "f0584f68-485f-4d88-80e6-1058a476b487",
+      "note_type_id": "1e94ef88-db8b-4db1-9722-f9a89dff01ef",
+      "owner_user_id": 17,
+      "array_names": [
+        "Antonym",
+        "Antonym_VI",
+        "Collocation",
+        "Coollocation_VI",
+        "Meaning",
+        "Synonym",
+        "Synonym_VI"
+      ],
+      "allowed_before_hashes": [
+        "87f4076893a8587e124919267e28a20520b1752ff2bb7337b6b98010e792cc5c"
+      ]
+    },
+    {
+      "id": "f4b9d2cd-32b9-4892-adfd-04aa49beaea6",
+      "note_type_id": "c46f7c09-cb5c-4b1f-b6cc-be018f5e0636",
+      "owner_user_id": 15,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "7ea5e877b6aee3997647a9a856d062cc9ad74bb27055b42ecac7dc610dd11325"
+      ]
+    },
+    {
+      "id": "f6d63262-7ad8-4694-af0c-4bd8b0519c61",
+      "note_type_id": "6b2a8fec-0276-401d-b361-c3affec1aa80",
+      "owner_user_id": 1,
+      "array_names": [
+        "Antonym",
+        "Antonym_VI",
+        "Collocation",
+        "Coollocation_VI",
+        "Meaning",
+        "Synonym",
+        "Synonym_VI"
+      ],
+      "allowed_before_hashes": [
+        "166ea8f85e08708b50d5e30bad5ad210d7fda9bdbb6c43a4d4090633d52f96b7"
+      ]
+    },
+    {
+      "id": "f864d4ff-dc7f-44d7-8284-f02fbc1043d2",
+      "note_type_id": "f682acdc-1292-4da8-b40d-ac0ed9eee26b",
+      "owner_user_id": 3,
+      "array_names": [
+        "reading",
+        "translation_vi"
+      ],
+      "allowed_before_hashes": [
+        "7ea5e877b6aee3997647a9a856d062cc9ad74bb27055b42ecac7dc610dd11325"
+      ]
+    },
+    {
+      "id": "fc011484-1674-4d5a-b3d6-e1abd21b64e2",
+      "note_type_id": "bb5f70a3-b3e1-4e92-acca-19e4076ef7bb",
+      "owner_user_id": 1,
+      "array_names": [
+        "Answer"
+      ],
+      "allowed_before_hashes": [
+        "e2438a983ed5440a855165f0f9de1c7c07550ef58b1a59738ae577b1e3d13e29"
+      ]
+    }
+  ],
+  "repair_scope_ids": [
+    "00653f96-b964-4a1f-8541-b832c5f976b1",
+    "0104de4c-249b-4d64-8662-0fe3eefbde0e",
+    "016ea19c-b376-4b32-bb01-d5e786b7aac8",
+    "02ebadf8-fe3e-4b45-a9e3-67eaf3758795",
+    "047b0de7-6682-4001-ad43-dc31ab29c186",
+    "1241c3ef-5d7e-4080-9b85-4340f26ad29d",
+    "14a9ce9c-74e9-4c9c-aff8-3d1982bfc6e1",
+    "15ed38e8-da8a-4b9b-b06b-d71f564db4a7",
+    "187a5dc2-2b1f-4c58-acd7-6cc75d29dfb4",
+    "1a5de5c1-1b05-480c-808e-35d9ed6434e5",
+    "1df040fa-da0a-4648-a192-013a0ef34cd2",
+    "1f5bc567-482d-4ed0-baca-b663d7df4c08",
+    "21c2e3a3-4696-4a69-b3a4-243b19f44ad5",
+    "22612ed7-d7c3-4da7-9b9a-a318bd9beabf",
+    "23b7ab81-bc95-4b60-b987-69e7d97a527a",
+    "247b04f2-f763-4779-908d-11f3989e5fa4",
+    "2b6e6e72-e775-437b-9c65-fbd39ddd9040",
+    "3066af4e-502f-4322-a42b-6a04c1d70199",
+    "3a1d2b3f-c453-4eee-b68d-cc2c248a4bae",
+    "455b4dc1-6bfe-4f1d-83bb-16937c5bb41f",
+    "461bede9-2997-4ca4-9e6e-7b7efd678f5f",
+    "48afe7a6-0e2a-4ebd-aa65-8440610bb1ba",
+    "48d147fc-ef64-465e-af38-02425145349b",
+    "4bc4f8c3-52ad-471f-b6bc-373aace54c11",
+    "50b3fcf8-1b38-4422-b88c-17a16cbb35cc",
+    "53b9c9d9-a99e-4815-9bcf-d5794c254708",
+    "57e550c9-bf03-424c-b6c0-e71c7ccb0f95",
+    "60501717-f4c7-495d-bff8-1a288d51a8a9",
+    "62c28a26-9e03-4094-abfc-65c79fecfc61",
+    "64527f43-1e50-46ea-9548-b209649f1bd6",
+    "665ec473-6f78-462e-b7a6-a2d2f6ff402e",
+    "6b8724a5-f994-40c6-9aa3-fd14cdbad019",
+    "6e40d75e-083d-4275-9950-2f4664040b40",
+    "76c3afda-b605-4c25-bad9-4d99931765b9",
+    "7c71849c-bcaa-4c59-b873-e0ed48967dd9",
+    "7ce9f413-e587-4aa9-a1fe-e3376b0bd3e1",
+    "7e8cdb0c-5da7-411c-91da-a5dae838eb87",
+    "7edec8dc-961a-4cdc-a904-cab32a8ae0d0",
+    "80f0ca4f-c915-4cc6-9ebd-0c7ea8c1af18",
+    "8dd5d007-5494-4c7c-84b6-fbea403dff07",
+    "8eb6df78-4885-48a4-aabf-b02523f6843b",
+    "91cc7ce2-daa8-4cec-8009-6581ae502749",
+    "95bd6f80-b2aa-46ad-be8c-e60fd2d6409a",
+    "9ea80bdb-7130-439b-869b-c6fe92b94835",
+    "9f7bd619-cacf-482b-b90a-055715e481c6",
+    "a0d8553a-3775-4d43-becd-72ae522d271a",
+    "a195de3d-6448-482e-9dea-2c9fa789e1e7",
+    "a3f629aa-09b6-4b8b-a502-271daba73e7f",
+    "a88155d8-90ef-4cb5-9c46-8b98d31c8f5f",
+    "aa872fa9-f069-48ab-b1f6-c105b777dae1",
+    "bc000b2d-e24f-4088-bbfd-3018c5bd8dc4",
+    "bd0c9822-e963-4268-a63d-237e2884256d",
+    "c0f1d5a4-f070-4a53-8419-aaaa2843a56a",
+    "c7706581-fc4f-491c-b6c5-4a421a5a4ac5",
+    "c86f06ea-b357-42a8-8514-86618cff3578",
+    "d3ed8229-bdfa-44eb-8d2b-b7029ac35ad3",
+    "d79da2f5-43c4-4d78-8cd4-9670dc3a25c4",
+    "da8b0227-06cd-464a-860a-d24ab011323d",
+    "df130bb2-6dd0-4a15-86b8-c0f3c07b0b50",
+    "e08737c9-d5b7-408a-a53a-2b51a673ee73",
+    "e08e43c9-8c3a-4e36-8adf-89bc7cd2e0e7",
+    "e23a0b40-a678-4cdf-9ea3-d4c8ed0995d9",
+    "f036e265-2856-46ed-b467-09e9d4703c24",
+    "f0c37a51-d6fa-4050-ace1-ee6f9783df6c",
+    "f26103ff-5394-428c-b2a0-894035899942",
+    "f3c4e3e2-9e6e-4935-bc5a-33564b27bc04",
+    "f41e5340-6b17-4471-bcc0-ac0e01c9e446",
+    "f672d161-b91d-4833-badd-01c7dedcb3f3"
+  ],
+  "unresolved": [
+    {
+      "id": "00653f96-b964-4a1f-8541-b832c5f976b1",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "0104de4c-249b-4d64-8662-0fe3eefbde0e",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "016ea19c-b376-4b32-bb01-d5e786b7aac8",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "02ebadf8-fe3e-4b45-a9e3-67eaf3758795",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "03096ddb-3896-4c35-8307-fb9d3fc9eeab",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "047b0de7-6682-4001-ad43-dc31ab29c186",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "052fd857-a250-4ad2-93a3-1c0906e5ba02",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "109a423d-0759-4d40-9f3a-371aae6b4b16",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "1241c3ef-5d7e-4080-9b85-4340f26ad29d",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "14a9ce9c-74e9-4c9c-aff8-3d1982bfc6e1",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "14ef513d-43ca-48e7-aa6a-254984bca3ea",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "15ed38e8-da8a-4b9b-b06b-d71f564db4a7",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "187a5dc2-2b1f-4c58-acd7-6cc75d29dfb4",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "19e3a61c-ec73-43d3-9f20-a2f4b07c88d9",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "1a5de5c1-1b05-480c-808e-35d9ed6434e5",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "1df040fa-da0a-4648-a192-013a0ef34cd2",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "1f5bc567-482d-4ed0-baca-b663d7df4c08",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "21c2e3a3-4696-4a69-b3a4-243b19f44ad5",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "22612ed7-d7c3-4da7-9b9a-a318bd9beabf",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "239e3f6a-8f82-4413-ac4d-644e2c9da1d5",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "23b7ab81-bc95-4b60-b987-69e7d97a527a",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "247b04f2-f763-4779-908d-11f3989e5fa4",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "2b6e6e72-e775-437b-9c65-fbd39ddd9040",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "3066af4e-502f-4322-a42b-6a04c1d70199",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "34993d9c-193c-4929-821f-e109a8cb9521",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "39f775ad-0b39-4f6c-8aaf-b0c6346ad3af",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "3a1d2b3f-c453-4eee-b68d-cc2c248a4bae",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "3a1d6b13-46c9-4551-a4ab-af146fd73a45",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "3eac65ba-f3e2-4d2f-8fa3-0d5f8d3c0a43",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "455b4dc1-6bfe-4f1d-83bb-16937c5bb41f",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "461bede9-2997-4ca4-9e6e-7b7efd678f5f",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "48afe7a6-0e2a-4ebd-aa65-8440610bb1ba",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "48d147fc-ef64-465e-af38-02425145349b",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "4aa1adb5-1c20-4e92-b14d-23123363c695",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "4bc4f8c3-52ad-471f-b6bc-373aace54c11",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "50b3fcf8-1b38-4422-b88c-17a16cbb35cc",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "50e798b7-9dfa-42f3-badd-2ae7e31769a3",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "5258d5b3-f1ee-461b-ba24-bbe94554e55f",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "53b9c9d9-a99e-4815-9bcf-d5794c254708",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "541baeeb-9543-4b2d-9f89-c36bbbb4b446",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "54b9026a-8ebb-402a-a352-9d82d61ac82b",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "5528b8be-c94c-43da-bc71-25273ee41657",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "57e550c9-bf03-424c-b6c0-e71c7ccb0f95",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "5877d17f-5162-4d24-94d9-92ecde719356",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "60501717-f4c7-495d-bff8-1a288d51a8a9",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "62c28a26-9e03-4094-abfc-65c79fecfc61",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "64527f43-1e50-46ea-9548-b209649f1bd6",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "665ec473-6f78-462e-b7a6-a2d2f6ff402e",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "67454fc3-a277-4cbc-86b1-b78fdeb198a4",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "679e08f6-bfbf-4126-a0ba-4974612edfc8",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "68bf9625-cb51-45b3-b6c0-fd551744dc8d",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "6b56f213-de31-4b9d-8938-0b4290b6e31a",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "6b8724a5-f994-40c6-9aa3-fd14cdbad019",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "6d31156c-a3d4-49cf-98ae-4b0a1fd2e9ea",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "6e40d75e-083d-4275-9950-2f4664040b40",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "6f5d43c1-137a-4a09-b887-fd4cc5bb80f3",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "76c3afda-b605-4c25-bad9-4d99931765b9",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "783ecbf3-c8bc-41ae-9d2e-ff1f40e2a235",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "7c71849c-bcaa-4c59-b873-e0ed48967dd9",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "7ce9f413-e587-4aa9-a1fe-e3376b0bd3e1",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "7d5d81cc-d7b5-4c9f-8d91-72a6de83f046",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "7e8cdb0c-5da7-411c-91da-a5dae838eb87",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "7edec8dc-961a-4cdc-a904-cab32a8ae0d0",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "80f0ca4f-c915-4cc6-9ebd-0c7ea8c1af18",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "8dd5d007-5494-4c7c-84b6-fbea403dff07",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "8eb6df78-4885-48a4-aabf-b02523f6843b",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "91cc7ce2-daa8-4cec-8009-6581ae502749",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "95bd6f80-b2aa-46ad-be8c-e60fd2d6409a",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "96804064-3218-408c-9cd5-de38dd8cac4b",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "9c71a61e-0ee1-4543-b1d8-f159b1fea6dd",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "9ea80bdb-7130-439b-869b-c6fe92b94835",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "9f7bd619-cacf-482b-b90a-055715e481c6",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "a0d8553a-3775-4d43-becd-72ae522d271a",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "a195de3d-6448-482e-9dea-2c9fa789e1e7",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "a3f629aa-09b6-4b8b-a502-271daba73e7f",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "a4b56f0d-70b6-4699-94bd-d93d9cc85717",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "a88155d8-90ef-4cb5-9c46-8b98d31c8f5f",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "aa872fa9-f069-48ab-b1f6-c105b777dae1",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "aa98a8f7-ed9d-49e4-bf3e-6cf4cba54c6c",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "aafee311-2ec7-4008-b077-88ac2c357da8",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "ae8467a8-4946-443a-9037-804a6473e7c6",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "aee818b2-2daa-4cda-8647-452e5e387865",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "b2e310e6-12b3-44c6-8520-485d6ae59388",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "bc000b2d-e24f-4088-bbfd-3018c5bd8dc4",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "bd0c9822-e963-4268-a63d-237e2884256d",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "c0f1d5a4-f070-4a53-8419-aaaa2843a56a",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "c37d7725-6389-42ea-8b5a-6382061ef743",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "c7706581-fc4f-491c-b6c5-4a421a5a4ac5",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "c86f06ea-b357-42a8-8514-86618cff3578",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "c8a70d71-c2cc-404b-b116-9d3dc7a87243",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "cc714ddb-bf94-4799-a311-f062c2340d71",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "cd5999d6-e2f6-43bd-8042-cb937eb12f07",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "d2793433-f8ef-4ff6-8608-70b764670d03",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "d3ed8229-bdfa-44eb-8d2b-b7029ac35ad3",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "d79da2f5-43c4-4d78-8cd4-9670dc3a25c4",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "da8b0227-06cd-464a-860a-d24ab011323d",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "dd56b20e-5a91-4963-8a14-ca27901c8aba",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "df130bb2-6dd0-4a15-86b8-c0f3c07b0b50",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "e08737c9-d5b7-408a-a53a-2b51a673ee73",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "e08e43c9-8c3a-4e36-8adf-89bc7cd2e0e7",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "e17ae237-fefb-4681-92cf-51ca16eca7b4",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "e23a0b40-a678-4cdf-9ea3-d4c8ed0995d9",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "e6a521ef-660a-4611-b019-7dff7eb40647",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "ef6e0743-a394-4ee8-8b5b-df8e8518ad2b",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f036e265-2856-46ed-b467-09e9d4703c24",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f0c37a51-d6fa-4050-ace1-ee6f9783df6c",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f26103ff-5394-428c-b2a0-894035899942",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f3c4e3e2-9e6e-4935-bc5a-33564b27bc04",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f41e5340-6b17-4471-bcc0-ac0e01c9e446",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f672d161-b91d-4833-badd-01c7dedcb3f3",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f72634fe-6f51-411b-b20f-72fa77d97f3a",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "f9ca69c1-cfbd-4e75-86e1-25d6a721dbdf",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    },
+    {
+      "id": "fc4f1b1b-bd1c-4c96-8218-3d505c3f216f",
+      "reason": "Missing or semantically misaligned translations; editorial review required"
+    }
+  ]
+}

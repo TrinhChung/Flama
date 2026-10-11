@@ -475,6 +475,30 @@ def _normalize_multiline_value(value: Any) -> str:
     return normalized.replace("\n", LINEBREAK_TOKEN)
 
 
+class _MustacheList(list):
+    """A stored array, handed to Mustache unchanged so sections iterate it.
+
+    Only ``{{field}}`` on the whole list needs help: chevron would print the
+    Python repr. It prints what mustache.js prints (``String(array)``) instead,
+    so server and browser agree. Templates format items themselves.
+    """
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        return ",".join("" if item is None else str(item) for item in self)
+
+
+def _mustache_list(items: list[Any]) -> _MustacheList:
+    return _MustacheList(_mustache_list(item) if isinstance(item, list) else item for item in items)
+
+
+def _plain_context_value(value: Any) -> Any:
+    if isinstance(value, list):
+        return _mustache_list(value)
+    return _normalize_multiline_value(value)
+
+
 def _normalize_markdown_value(value: Any) -> str:
     text = "" if value is None else str(value)
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -994,12 +1018,12 @@ def build_render_context(
             context[f"{name}_url"] = media_urls[0] if media_urls else ""
             context[f"{name}_urls"] = media_urls
             continue
-        context[name] = _normalize_multiline_value(value)
+        context[name] = _plain_context_value(value)
 
     # Keep unknown keys for legacy compatibility.
     for key, value in values.items():
         if key not in context:
-            context[key] = _normalize_multiline_value(value)
+            context[key] = _plain_context_value(value)
 
     # Common alias for compatibility with older templates.
     if "hanviet" in context and "han_viet" not in context:

@@ -18,6 +18,7 @@ from app.repositories import flashcards_share_repository, template_release_repos
 from app.template_formatters import format_vnd
 from app.services import marketplace_taxonomy_service
 from models import db
+from models.field_types import field_value_text
 from models.flashcard import Card, Deck, DeckInstall, DeckMarketplaceItem, FieldDef, Note, NoteType, Template
 
 
@@ -612,10 +613,7 @@ def first_non_empty_field_text(field_values: dict[str, Any], keys: list[str]) ->
     for key in keys:
         if key not in field_values:
             continue
-        candidate = field_values.get(key)
-        if candidate is None:
-            continue
-        text = str(candidate).strip()
+        text = field_value_text(field_values.get(key)).strip()
         if text:
             return text
     return ""
@@ -636,9 +634,7 @@ def serialize_field_values_test_sample(
     )
     if not word:
         for raw_value in field_values.values():
-            if raw_value is None:
-                continue
-            text = str(raw_value).strip()
+            text = field_value_text(raw_value).strip()
             if text:
                 word = text
                 break

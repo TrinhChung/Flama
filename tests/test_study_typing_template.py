@@ -182,7 +182,7 @@ class TypingTemplateArtifactTests(unittest.TestCase):
         with self.app.app_context():
             card = Card.query.filter_by(note_id=note.get_json()["id"], template_id=template["id"]).one()
             content = build_content_artifact(build_effective_study_card(card=card, clone_scope=None))
-            self.assertEqual(content["field_values"]["answer"], "ăn\ndùng bữa")
+            self.assertEqual(content["field_values"]["answer"], ["ăn", "dùng bữa"])
 
         bare = self.client.patch(
             f"/api/note-types/{self.note_type['id']}/fields/{self.fields['Meaning']}",

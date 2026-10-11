@@ -553,6 +553,30 @@ class FlamaConnectMcpTests(unittest.TestCase):
         self.assertEqual(updated["fields"]["Reading"], "たべる")
         self.assertEqual(updated["fields"]["Meaning"], "to eat, consume")
 
+    def test_call_update_note_cleans_array_fields_like_note_writes(self):
+        with self.app.app_context():
+            FieldDef.query.filter_by(note_type_id=self.note_type_id, name="Meaning").one().field_type = "array"
+            db.session.commit()
+
+        def update(meaning):
+            return self._post_mcp(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 14,
+                    "method": "tools/call",
+                    "params": {"name": "update_note", "arguments": {"note_id": str(self.note_id), "fields": {"Meaning": meaning}}},
+                },
+                token=self.api_token_str,
+            )
+
+        response = update("to eat\nconsume")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["result"]["structuredContent"]["fields"]["Meaning"], ["to eat", "consume"])
+        response = update([[[["four levels"]]]])
+        self.assertEqual(response.status_code, 400, response.get_json())
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Note, self.note_id).field_values["Meaning"], ["to eat", "consume"])
+
     def test_call_add_and_remove_tags(self):
         # add_tags
         response = self._post_mcp(
