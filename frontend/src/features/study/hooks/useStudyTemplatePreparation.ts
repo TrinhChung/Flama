@@ -67,7 +67,7 @@ export function useStudyTemplatePreparation(deckId: string | null) {
   const [compositionId, setCompositionId] = useState<string | null>(null)
   const [inputBindings, setInputBindings] = useState<TemplateBindings>({})
   const [staleInputs, setStaleInputs] = useState<string[]>([])
-  const [remember, setRemember] = useState(false)
+  const [remember, setRemember] = useState(true)
   const [askBeforeStudy, setAskBeforeStudy] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -83,7 +83,7 @@ export function useStudyTemplatePreparation(deckId: string | null) {
     controllerRef.current?.abort()
     saving.current = false
     setAvailability(null); setPreset(null); setCompositionId(null); setInputBindings({}); setStaleInputs([])
-    setRemember(false); setAskBeforeStudy(true); setIsLoading(false); setIsSaving(false); setError(null)
+    setRemember(true); setAskBeforeStudy(true); setIsLoading(false); setIsSaving(false); setError(null)
     return () => { generation.current += 1; controllerRef.current?.abort() }
   }, [deckId])
 
@@ -121,10 +121,20 @@ export function useStudyTemplatePreparation(deckId: string | null) {
       if (!isCurrent()) return null
       setAvailability(choices); setPreset(preferences)
       setAskBeforeStudy(preferences?.ask_before_study ?? true)
-      const savedId = preferences?.selected_compositions?.length === 1 ? preferences.selected_compositions[0] : null
+      if (preferences !== null) {
+        setRemember(true)
+      }
+      const localSavedId = typeof window !== 'undefined' && deckId ? window.localStorage.getItem(`flama:study_composition:${deckId}`) : null
+      const savedId = preferences?.selected_compositions?.find((id: string) =>
+        choices.compositions.some((choice: StudyTemplateComposition) => choice.composition_id === id && !preferences.stale_compositions?.includes(id))
+      ) ?? preferences?.selected_compositions?.[0] ?? (
+        localSavedId && choices.compositions.some((choice: StudyTemplateComposition) => choice.composition_id === localSavedId)
+          ? localSavedId
+          : null
+      )
       const savedChoice = savedId && !preferences?.stale_compositions?.includes(savedId)
         ? choices.compositions.find((choice: StudyTemplateComposition) => choice.composition_id === savedId) : undefined
-      const initialId = savedChoice?.composition_id ?? (choices.compositions.length === 1 ? choices.compositions[0].composition_id : null)
+      const initialId = savedChoice?.composition_id ?? choices.compositions[0]?.composition_id ?? null
       setCompositionId(initialId)
       const entry = initialId ? choices.template_inputs[initialId] : undefined
       const mapping = entry ? mappingFor(entry, savedBindings(preferences, initialId!)) : { inputBindings: {}, staleInputs: [], customized: false }
@@ -170,6 +180,19 @@ export function useStudyTemplatePreparation(deckId: string | null) {
     const isCurrent = () => generation.current === requestGeneration && currentDeckRef.current === deckId
     const mapped = mappingFor(entry, inputBindings)
     const selection = Object.freeze({ compositionId, inputBindings: Object.freeze({ ...mapped.inputBindings }) })
+
+    if (typeof window !== 'undefined' && deckId) {
+      try {
+        if (remember) {
+          window.localStorage.setItem(`flama:study_composition:${deckId}`, compositionId)
+        } else {
+          window.localStorage.removeItem(`flama:study_composition:${deckId}`)
+        }
+      } catch {
+        // Local storage quota or security error ignored
+      }
+    }
+
     if (!remember) {
       return selection
     }
@@ -198,8 +221,10 @@ export function useStudyTemplatePreparation(deckId: string | null) {
       setPreset({ ...payload, ...saved, stale_compositions: saved?.stale_compositions ?? [] })
       return selection
     } catch (caught) {
-      if (isCurrent()) setError(caught)
-      return null
+      if (isCurrent()) {
+        console.warn('Failed to save study template preset:', caught)
+      }
+      return selection
     } finally {
       saving.current = false
       if (isCurrent()) setIsSaving(false)

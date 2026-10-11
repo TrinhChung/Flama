@@ -309,4 +309,63 @@ describe('StudyTemplatePreparation', () => {
     expect(mappingLink?.getAttribute('href')).toBe('/flashcards/note-types/45/templates/app-real-uuid')
     expect(mappingLink?.getAttribute('href')).not.toContain('comp:')
   })
+
+  it('pre-selects the template in the dropdown and enables immediate start with onStart', async () => {
+    const handleStart = vi.fn()
+    const prep = createMockPreparation({
+      compositionId: 'deck:12:note:45:template:99:application:app-77',
+      remember: true,
+      askBeforeStudy: true,
+    })
+
+    await act(async () => {
+      root?.render(
+        <BrowserRouter>
+          <StudyTemplatePreparation preparation={prep} deckName="JLPT N5" onStart={handleStart} />
+        </BrowserRouter>,
+      )
+    })
+
+    const select = container?.querySelector('#study-template-choice') as HTMLSelectElement | null
+    expect(select?.value).toBe('deck:12:note:45:template:99:application:app-77')
+
+    const startButton = Array.from(container?.querySelectorAll('button') ?? []).find((b) =>
+      b.textContent?.includes('Bắt đầu học'),
+    ) as HTMLButtonElement | undefined
+    expect(startButton).toBeDefined()
+    expect(startButton?.disabled).toBe(false)
+
+    await act(async () => {
+      startButton?.click()
+    })
+    expect(handleStart).toHaveBeenCalledTimes(1)
+  })
+
+  it('toggles remember checkbox and calls setRemember', async () => {
+    const prep = createMockPreparation({
+      remember: true,
+    })
+
+    await act(async () => {
+      root?.render(
+        <BrowserRouter>
+          <StudyTemplatePreparation preparation={prep} deckName="JLPT N5" onStart={vi.fn()} />
+        </BrowserRouter>,
+      )
+    })
+
+    const rememberCheckbox = Array.from(container?.querySelectorAll('input[type="checkbox"]') ?? []).find((cb) => {
+      const label = cb.closest('label')
+      return label?.textContent?.includes('Ghi nhớ cho bộ thẻ này')
+    }) as HTMLInputElement | undefined
+
+    expect(rememberCheckbox).toBeDefined()
+    expect(rememberCheckbox?.checked).toBe(true)
+
+    await act(async () => {
+      rememberCheckbox?.click()
+    })
+    expect(prep.setRemember).toHaveBeenCalledWith(false)
+  })
 })
+
