@@ -125,10 +125,32 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
   }
 }
 
-/* Long answers keep both the guide and the editor bounded. */
-.ft-slots.is-compact { display: block; min-height: 58px; max-height: 96px; overflow-y: auto; padding: 14px 16px; border: 1px solid var(--ft-border); border-radius: 12px; background: var(--ft-soft); color: var(--ft-muted); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
-.ft-slots.is-complete { border-color: #9fceb1; background: var(--ft-success-bg); color: var(--ft-success); font-weight: 600; }
-.ft-input.ft-input-multiline { height: auto; min-height: 112px; max-height: 216px; overflow-y: auto; resize: none; font-size: 16px; line-height: 1.7; }
+/* Compact word-by-word dictation for long passages. */
+.ft-dict-guide { margin-top: 24px; }
+.ft-dict-progress { color: var(--ft-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ft-dict-passage { min-height: 88px; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; border: 1px solid var(--ft-border); border-radius: 13px; background: var(--ft-surface); font-size: 16px; line-height: 2; overflow-wrap: anywhere; }
+.ft-dict-word { display: inline-block; max-width: 100%; margin: 0; padding: 3px 2px; border: 0; border-radius: 4px; background: transparent; color: var(--ft-muted); font: inherit; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; line-height: 1.7; overflow-wrap: anywhere; cursor: pointer; }
+.ft-dict-word.is-active { background: var(--ft-brand-soft); box-shadow: inset 0 -2px var(--ft-brand); }
+.ft-dict-word.is-correct { color: var(--ft-success); }
+.ft-dict-word.is-wrong { color: var(--ft-error); background: var(--ft-error-bg); }
+.ft-dict-word.is-active.is-wrong { box-shadow: inset 0 -2px var(--ft-error); }
+.ft-dict-word:hover { background: var(--ft-soft); }
+.ft-dict-word:focus-visible { outline: 2px solid var(--ft-brand); outline-offset: 2px; }
+.ft-dict-help { margin: 8px 0 0; color: var(--ft-muted); font-size: 11px; }
+.ft-dict-entry { margin-top: 20px; }
+.ft-dict-position { color: var(--ft-muted); font-size: 12px; font-weight: 400; }
+.ft-dict-input-row { display: flex; align-items: center; gap: 10px; max-width: 440px; }
+.ft-dict-input-row .ft-input-wrap { flex: 1; min-width: 0; }
+.ft-dict-input-row .ft-input { height: 46px; padding: 10px 13px; font-size: 16px; }
+.ft-dict-input-row .ft-check { flex: none; min-height: 46px; padding: 10px 16px; }
+.ft-dict-entry .ft-actions { flex-wrap: wrap; margin-top: 12px; }
+.ft-dict-reset { padding-right: 0; color: var(--ft-muted); background: transparent; }
+.ft-dict-remove { color: var(--ft-error); background: var(--ft-error-bg); }
+@media (max-width: 420px) {
+  .ft-dict-passage { max-height: 260px; padding: 12px; font-size: 15px; }
+  .ft-dict-input-row { gap: 8px; }
+  .ft-dict-input-row .ft-check { padding: 10px 13px; }
+}
 
 /* Compact reference layout for the reverse side. */
 .ft-back { width: min(100%, 640px); padding: 28px 32px; }

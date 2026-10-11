@@ -17,7 +17,7 @@ Lưu các prototype để dùng lại khi tạo note type và template trong Fla
 
 Bốn mẫu mới tách theo mục đích học. Mỗi mẫu chỉ cần ánh xạ hai input đầu tiên; các input còn lại tùy chọn. Gõ nghĩa và gõ từ qua ảnh có thêm `DefinitionHint`: lời giải thích bằng ngôn ngữ đích, mở ở mặt trước khi cần. Các thông tin ôn tập khác dành cho mặt sau. Tiếng Nhật, Trung và Anh dùng chung template khi dữ liệu cùng kiểu. Không phải truyền toàn bộ input: phần null, trống hoặc không ánh xạ tự ẩn cùng tiêu đề.
 
-Gõ nghĩa dùng một ô nhập thường, không hiện số ký tự, số từ hoặc ô trống theo độ dài; gợi ý mở từng ký tự đầu của một nghĩa khi bấm **Mở ký tự**. Ba mẫu còn lại tự thích ứng: đáp án ngắn dùng ô ký tự tách theo từ; đáp án dài dùng một khối gợi ý nhỏ và ô nhập nhiều dòng có giới hạn chiều cao. Chỉ cần gõ đúng một mục hoàn chỉnh trong array Answer là được. Mẫu nghe dùng chung cho từ, câu hoặc đoạn văn; phần xử lý nằm trong HTML/CSS/JS của template.
+Gõ nghĩa dùng một ô nhập thường, không hiện số ký tự, số từ hoặc ô trống theo độ dài; gợi ý mở từng ký tự đầu của một nghĩa khi bấm **Mở ký tự**. Gõ cách đọc và gõ từ qua ảnh tự thích ứng theo độ dài. **Chép chính tả** dành cho đoạn văn: gạch nhỏ theo từng từ, một ô nhập nhỏ; từ đúng hiện chữ, từ sai hiện `xxx` màu đỏ và bấm để sửa. Dấu cách hoặc Enter chốt từng từ. Chỉ cần hoàn thành một bản chép trong array Answer là được. Phần xử lý nằm trong HTML/CSS/JS của template.
 
 Chữ dùng input text, danh sách đáp án/nghĩa/cách đọc dùng array, ảnh dùng image và âm thanh dùng audio. Mặt trước báo đúng/sai; mặt sau là phần thông tin ôn tập, gồm đáp án hoặc bản chép và dữ liệu bổ sung được truyền vào. Các trường nghĩa, giải thích và ví dụ tham khảo ba template đã backup; không cần tạo đầy đủ trường của chúng để dùng mẫu gõ.
 

@@ -14,19 +14,24 @@
       <div class="ft-audio-status" role="status" aria-live="polite"></div>
     </div>
     {{/Audio}}
-    <p class="ft-instruction">Nghe rồi gõ lại nội dung bạn vừa nghe.</p>
+    <p class="ft-instruction">Nghe và gõ từng từ trong đoạn.</p>
   </div>
-  <div class="ft-guide">
-    <div class="ft-guide-heading"><span class="ft-guide-label">Độ dài đáp án</span><span class="ft-length"></span></div>
-    <div class="ft-slots" role="group"></div>
+  <div class="ft-guide ft-dict-guide">
+    <div class="ft-guide-heading"><span class="ft-guide-label">Đoạn chép chính tả</span><span class="ft-dict-progress"></span></div>
+    <div class="ft-dict-passage" role="group" aria-label="Đoạn chép chính tả. Bấm vào một từ để gõ lại."></div>
+    <p class="ft-dict-help">Bấm vào từ màu đỏ để sửa. Dấu câu đã có sẵn.</p>
   </div>
-  <div class="ft-entry">
-    <label class="ft-label" for="ft-input">Đáp án của bạn</label>
-    <div class="ft-input-wrap"><input class="ft-input" id="ft-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-    <span class="ft-entry-help" id="ft-entry-help">Nhấn Enter hoặc Kiểm tra khi bạn đã sẵn sàng.</span>
+  <div class="ft-entry ft-dict-entry">
+    <label class="ft-label" for="ft-input">Từ đang gõ <span class="ft-dict-position"></span></label>
+    <div class="ft-dict-input-row">
+      <div class="ft-input-wrap"><input class="ft-input" id="ft-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <button class="ft-button ft-check" type="button">Chốt từ</button>
+    </div>
+    <span class="ft-entry-help" id="ft-entry-help">Dấu cách hoặc Enter để chốt từ và tiếp tục.</span>
     <div class="ft-actions">
-      <button class="ft-button ft-hint" type="button"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Mở gợi ý</span></button>
-      <button class="ft-button ft-check" type="button"><span>Kiểm tra</span><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"></path></svg></button>
+      <button class="ft-button ft-hint" type="button"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"></path></svg><span>Mở ký tự</span></button>
+      <button class="ft-button ft-dict-remove" type="button" hidden>Xóa từ thừa</button>
+      <button class="ft-button ft-dict-reset" type="button">Làm lại</button>
     </div>
     <div class="ft-status" id="ft-status" role="status" aria-live="polite"></div>
   </div>
@@ -41,194 +46,279 @@
   var find = function (selector) { return root.querySelector(selector); };
   var input = find('.ft-input');
   var form = find('.ft-entry');
-  var status = find('.ft-status');
-  var slots = find('.ft-slots');
   var guide = find('.ft-guide');
-  var length = find('.ft-length');
+  var passage = find('.ft-dict-passage');
+  var progress = find('.ft-dict-progress');
+  var position = find('.ft-dict-position');
+  var status = find('.ft-status');
   var hint = find('.ft-hint');
   var checkButton = find('.ft-check');
+  var removeButton = find('.ft-dict-remove');
+  var resetButton = find('.ft-dict-reset');
   var composing = false;
-  var revealed = 0;
-  var solved = false;
+  var active = 0;
+  var selected = 0;
+  var records = [];
+  var wordNodes = [];
+  var renderedSeparator = null;
 
   function normalize(text) {
     return String(text || '').normalize('NFC').replace(/[\s\u3000]+/g, ' ').trim();
   }
   function comparable(text) { return normalize(text).toLowerCase(); }
-  // Array items already arrive separated by <br>; punctuation stays inside each item.
+  // Answer items already arrive separated by <br>; do not re-parse migrated delimiters.
   function readArray(element) {
-    if (!element) return [];
     var values = [''];
+    if (!element) return [];
     element.childNodes.forEach(function (node) {
       if (node.nodeName === 'BR') values.push('');
       else values[values.length - 1] += node.textContent || '';
     });
     return values.map(normalize).filter(Boolean);
   }
+  var segmenter = typeof Intl !== 'undefined' && Intl.Segmenter
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
   function characters(text) {
-    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
-      return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), function (part) {
-        return part.segment;
-      });
+    return segmenter ? Array.from(segmenter.segment(text), function (part) { return part.segment; })
+      : Array.from(text.normalize('NFC'));
+  }
+  function makeWord(text) {
+    var match = /^([^\p{L}\p{N}\p{M}]*)(.*?)([^\p{L}\p{N}\p{M}]*)$/u.exec(text);
+    var core = match ? match[2] : text;
+    return { prefix: match ? match[1] : '', core: core, suffix: match ? match[3] : '',
+      key: comparable(core), chars: characters(core) };
+  }
+  function transcript(text) {
+    text = normalize(text);
+    var units = [];
+    var prefix = '';
+    var spaced = /\s/.test(text);
+    var parts = text.match(/\S+/g) || [];
+    // No-space Japanese/Chinese text can still be practiced in word-sized units.
+    if (!spaced && /[\u3040-\u30ff\u3400-\u9fff]/.test(text) && typeof Intl !== 'undefined' && Intl.Segmenter) {
+      parts = Array.from(new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text), function (part) { return part.segment; });
     }
-    return Array.from(text.normalize('NFC'));
+    parts.forEach(function (part) {
+      var word = makeWord(part);
+      if (!word.core) {
+        if (units.length) units[units.length - 1].suffix += (spaced ? ' ' : '') + part;
+        else prefix += part + (spaced ? ' ' : '');
+        return;
+      }
+      word.prefix = prefix + word.prefix;
+      prefix = '';
+      units.push(word);
+    });
+    return { words: units, separator: spaced ? ' ' : '' };
   }
   var answers = readArray(find('.ft-answer-source'));
-  var answerCharacters = answers.map(characters);
-  var first = answerCharacters[0] || [];
-  var current = first;
-  var total = function (chars) { return chars.filter(function (ch) { return !/\s/.test(ch); }).length; };
-  function wordCount(chars) {
-    var count = 0;
-    var inWord = false;
-    chars.forEach(function (ch) {
-      if (/\s/.test(ch)) { inWord = false; return; }
-      if (!inWord) count += 1;
-      inWord = true;
+  var transcripts = answers.map(transcript).filter(function (item) { return item.words.length; });
+  function target() { return transcripts[selected] || { words: [], separator: ' ' }; }
+  function record(index) {
+    if (!records[index]) records[index] = { typed: '', key: '', submitted: false, revealed: 0 };
+    return records[index];
+  }
+  function setRecord(index, text, submitted) {
+    var item = record(index);
+    item.typed = text;
+    item.key = makeWord(normalize(text)).key;
+    item.submitted = submitted;
+  }
+  function matches(index, words) {
+    return !!(words[index] && records[index] && records[index].key === words[index].key);
+  }
+  function score(item) {
+    var right = 0;
+    var prefix = 0;
+    var extras = 0;
+    records.forEach(function (entry, index) {
+      if (!entry || !entry.key) return;
+      if (matches(index, item.words)) right += 1;
+      if (index >= item.words.length) extras += 1;
+    });
+    while (prefix < item.words.length && matches(prefix, item.words)) prefix += 1;
+    var complete = item.words.every(function (word, index) {
+      return matches(index, item.words) && records[index].submitted;
+    }) && !extras;
+    return [complete ? 1 : 0, right - extras, prefix];
+  }
+  function chooseTranscript() {
+    var best = selected;
+    var bestScore = score(target());
+    transcripts.forEach(function (item, index) {
+      var candidate = score(item);
+      for (var i = 0; i < candidate.length; i++) {
+        if (candidate[i] === bestScore[i]) continue;
+        if (candidate[i] > bestScore[i]) { best = index; bestScore = candidate; }
+        break;
+      }
+    });
+    selected = best;
+  }
+  function visibleCount() {
+    var count = target().words.length;
+    records.forEach(function (item, index) {
+      if (item && (item.key || item.submitted)) count = Math.max(count, index + 1);
     });
     return count;
   }
-  // Template-only settings: short answers use tiles; longer answers use one compact guide.
-  var shortCharacterLimit = 32;
-  var shortWordLimit = 6;
-  var longEntry = answerCharacters.some(function (chars) {
-    return total(chars) > shortCharacterLimit || wordCount(chars) > shortWordLimit;
-  });
-  var hintLimit = total(first);
-
-  // A textarea is created inside the template; no renderer changes are required.
-  if (longEntry || !input) {
-    var replacement = document.createElement(longEntry ? 'textarea' : 'input');
-    replacement.className = 'ft-input' + (longEntry ? ' ft-input-multiline' : '');
-    replacement.id = 'ft-input';
-    if (longEntry) replacement.rows = 3;
-    else replacement.type = 'text';
-    if (input) input.replaceWith(replacement);
-    else find('.ft-input-wrap').prepend(replacement);
-    input = replacement;
+  function state(index) {
+    var item = records[index];
+    if (matches(index, target().words)) return 'correct';
+    return item && item.submitted ? 'wrong' : 'pending';
+  }
+  function render() {
+    chooseTranscript();
+    var words = target().words;
+    var count = visibleCount();
+    if (wordNodes.length !== count || renderedSeparator !== target().separator) {
+      var fragment = document.createDocumentFragment();
+      wordNodes = [];
+      for (var i = 0; i < count; i++) {
+        if (i) fragment.append(document.createTextNode(target().separator));
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('data-index', i);
+        wordNodes.push(button);
+        fragment.append(button);
+      }
+      passage.replaceChildren(fragment);
+      renderedSeparator = target().separator;
+    }
+    var right = 0;
+    var wrong = 0;
+    wordNodes.forEach(function (button, index) {
+      var item = records[index] || { typed: '', revealed: 0 };
+      var word = words[index] || makeWord(item.typed);
+      var kind = state(index);
+      if (kind === 'correct') right += 1;
+      if (kind === 'wrong') wrong += 1;
+      var revealed = Math.min(item.revealed || 0, word.chars.length);
+      var text = kind === 'correct' ? word.core : word.chars.slice(0, revealed).join('') +
+        (kind === 'wrong' ? 'x' : '-').repeat(Math.max(word.chars.length - revealed, 0));
+      var label = 'Từ ' + (index + 1) + (kind === 'correct' ? ', đúng: ' + word.core :
+        kind === 'wrong' ? ', chưa đúng. Bấm để gõ lại.' : ', chưa gõ.');
+      if (index >= words.length) label = 'Từ thừa ' + (index + 1) + '. Bấm để xóa.';
+      var className = 'ft-dict-word is-' + kind + (index === active ? ' is-active' : '');
+      if (button.className !== className) button.className = className;
+      var display = word.prefix + text + word.suffix;
+      if (button.textContent !== display) button.textContent = display;
+      button.setAttribute('aria-label', label);
+      button.setAttribute('aria-pressed', String(index === active));
+    });
+    var complete = transcripts.length && score(target())[0] === 1;
+    progress.textContent = right + '/' + words.length + ' từ đúng';
+    position.textContent = active < 0 ? '· hoàn thành' : active >= words.length
+      ? '· từ thừa' : '· ' + (active + 1) + '/' + words.length;
+    input.disabled = active < 0;
+    input.placeholder = active < 0 ? 'Bấm vào một từ để gõ lại' : 'Gõ từ bạn nghe được…';
+    checkButton.disabled = composing || active < 0 || !normalize(input.value);
+    hint.disabled = composing || active < 0 || !words[active] || state(active) === 'correct' ||
+      record(active).revealed >= words[active].chars.length;
+    removeButton.hidden = active < words.length;
+    resetButton.disabled = !records.some(function (item) { return item && (item.typed || item.revealed); });
+    form.classList.toggle('is-correct', !!complete);
+    form.classList.toggle('is-incorrect', !complete && active >= 0 && state(active) === 'wrong');
+    input.setAttribute('aria-invalid', !complete && active >= 0 && state(active) === 'wrong' ? 'true' : 'false');
+    status.className = 'ft-status' + (complete ? ' is-correct' : wrong ? ' is-incorrect' : '');
+    status.textContent = complete ? 'Đã chép đúng cả đoạn. Lật thẻ để xem bản dịch và ghi chú.' :
+      wrong ? 'Còn ' + wrong + ' từ chưa đúng. Bấm vào từ màu đỏ để sửa.' : '';
+  }
+  function showActive() {
+    var button = wordNodes[active];
+    if (!button) return;
+    var box = passage.getBoundingClientRect();
+    var bounds = button.getBoundingClientRect();
+    if (bounds.top < box.top + 12) passage.scrollTop -= box.top + 12 - bounds.top;
+    else if (bounds.bottom > box.bottom - 12) passage.scrollTop += bounds.bottom - box.bottom + 12;
+  }
+  function activate(index, selectText, focusEditor) {
+    active = index;
+    input.value = index >= 0 ? record(index).typed : '';
+    render();
+    showActive();
+    if (index >= 0 && focusEditor !== false) {
+      input.focus();
+      if (selectText) input.select();
+    }
+  }
+  function nextUnfinished(after) {
+    var count = visibleCount();
+    for (var step = 1; step <= count; step++) {
+      var index = (after + step) % count;
+      if (!matches(index, target().words) || !records[index].submitted) return index;
+    }
+    return -1;
+  }
+  function consume(text, finalize) {
+    if (active < 0 || composing) return;
+    var pieces = transcript(text).words.map(function (word) { return word.prefix + word.core + word.suffix; });
+    if (!pieces.length) { input.value = ''; render(); return; }
+    var all = finalize || /[\s\u3000]$/.test(text);
+    var committed = all ? pieces.length : pieces.length - 1;
+    var start = active;
+    for (var i = 0; i < committed; i++) setRecord(start + i, pieces[i], true);
+    if (!all) setRecord(start + committed, pieces[committed], false);
+    chooseTranscript();
+    if (all) activate(nextUnfinished(start + committed - 1), true);
+    else activate(start + committed, false);
+  }
+  function edited() {
+    if (active < 0) return;
+    if (!composing && /[\s\u3000]/.test(input.value)) { consume(input.value, false); return; }
+    setRecord(active, input.value, false);
+    render();
+  }
+  // Keep one small editor, even for a transcript with hundreds of words.
+  if (!input) {
+    input = document.createElement('input');
+    input.className = 'ft-input';
+    input.id = 'ft-input';
+    input.type = 'text';
+    find('.ft-input-wrap').prepend(input);
   }
   input.autocomplete = 'off';
   input.spellcheck = false;
   input.setAttribute('autocapitalize', 'off');
   input.setAttribute('aria-describedby', 'ft-status ft-entry-help');
-  input.setAttribute('aria-keyshortcuts', longEntry ? 'Control+Enter Meta+Enter' : 'Enter');
-  var placeholders = { reading: 'Gõ cách đọc…', meaning: 'Gõ nghĩa của từ…', image: 'Gõ tên hình ảnh…', dictation: 'Gõ lại nội dung bạn vừa nghe…' };
-  input.placeholder = placeholders[root.getAttribute('data-mode')] || 'Nhập đáp án…';
-  if (longEntry) {
-    find('.ft-entry-help').textContent = 'Enter để xuống dòng · Ctrl/⌘ + Enter để kiểm tra.';
-    find('.ft-guide-label').textContent = 'Gợi ý nội dung';
-  }
-  checkButton.disabled = true;
-
-  function resizeEntry() {
-    if (!longEntry) return;
-    input.style.height = 'auto';
-    input.style.height = Math.min(216, Math.max(112, input.scrollHeight)) + 'px';
-  }
-  function drawGuide() {
-    slots.replaceChildren();
-    slots.classList.toggle('is-compact', longEntry);
-    slots.classList.toggle('is-complete', longEntry && solved);
-    var count = total(current);
-    var words = wordCount(current);
-    length.textContent = count + ' ký tự' + (words > 1 ? ' · ' + words + ' từ' : '');
-    slots.setAttribute('aria-label', 'Đáp án có ' + count + ' ký tự' +
-      (words > 1 ? ', ' + words + ' từ' : '') +
-      (!solved && revealed ? ', đã mở ' + revealed + ' ký tự gợi ý' : ''));
-    hint.disabled = solved || revealed >= hintLimit;
-    if (longEntry) {
-      if (solved) { slots.textContent = 'Đã gõ đúng nội dung.'; return; }
-      if (!revealed) { slots.textContent = 'Mở gợi ý để xem vài ký tự đầu của đáp án.'; return; }
-      var prefix = '';
-      var seen = 0;
-      for (var i = 0; i < first.length; i++) {
-        if (!/\s/.test(first[i])) {
-          if (seen >= revealed) break;
-          seen += 1;
-        }
-        prefix += first[i];
-      }
-      slots.textContent = normalize(prefix) + (revealed < hintLimit ? '…' : '');
-      return;
-    }
-    var word = null;
-    var index = 0;
-    current.forEach(function (ch) {
-      if (/\s/.test(ch)) { word = null; return; }
-      if (!word) {
-        word = document.createElement('span');
-        word.className = 'ft-word';
-        slots.append(word);
-      }
-      var tile = document.createElement('span');
-      var open = solved || index < revealed;
-      tile.className = 'ft-slot' + (open ? ' is-revealed' : '') + (solved ? ' is-solved' : '');
-      tile.textContent = open ? ch : '';
-      tile.setAttribute('aria-hidden', 'true');
-      word.append(tile);
-      index += 1;
-    });
-  }
-  function setStatus(kind, message) {
-    form.classList.remove('is-correct', 'is-incorrect');
-    if (kind) form.classList.add('is-' + kind);
-    status.className = 'ft-status' + (kind ? ' is-' + kind : '');
-    status.textContent = message;
-    input.setAttribute('aria-invalid', kind === 'incorrect' ? 'true' : 'false');
-  }
-  function check() {
-    if (composing) return;
-    var typed = comparable(input.value);
-    if (!typed) { input.focus(); return; }
-    // Each Answer item is an alternative: matching any complete item is sufficient.
-    var matched = answers.find(function (answer) { return comparable(answer) === typed; });
-    if (matched !== undefined) {
-      solved = true;
-      current = characters(matched);
-      setStatus('correct', 'Chính xác! Bạn đã gõ đúng đáp án.');
-      drawGuide();
-    } else {
-      solved = false;
-      current = first;
-      setStatus('incorrect', 'Chưa đúng. Thử lại hoặc mở thêm một gợi ý nhé.');
-      drawGuide();
-      input.focus();
-      if (!longEntry) input.select();
-    }
-  }
-  input.addEventListener('compositionstart', function () { composing = true; });
-  input.addEventListener('compositionend', function () {
-    composing = false;
-    checkButton.disabled = !comparable(input.value);
-    resizeEntry();
-  });
-  input.addEventListener('input', function () {
-    if (solved) { solved = false; current = first; drawGuide(); }
-    setStatus('', '');
-    checkButton.disabled = !comparable(input.value);
-    resizeEntry();
-  });
+  input.setAttribute('aria-keyshortcuts', 'Space Enter');
+  input.addEventListener('compositionstart', function () { composing = true; render(); });
+  input.addEventListener('compositionend', function () { composing = false; edited(); });
+  input.addEventListener('input', edited);
   input.addEventListener('keydown', function (event) {
-    if (event.key !== 'Enter' || event.isComposing || composing || event.keyCode === 229) return;
-    if (longEntry && !event.ctrlKey && !event.metaKey) return;
-    event.preventDefault();
-    check();
+    if (event.isComposing || composing || event.keyCode === 229) return;
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      consume(input.value, true);
+    } else if (event.key === 'Backspace' && !input.value && active > 0) {
+      event.preventDefault();
+      activate(active - 1, true);
+    }
   });
-  checkButton.addEventListener('click', check);
+  checkButton.addEventListener('click', function () { consume(input.value, true); });
+  passage.addEventListener('click', function (event) {
+    var button = event.target.closest('.ft-dict-word');
+    if (button && passage.contains(button)) activate(Number(button.getAttribute('data-index')), true);
+  });
   hint.addEventListener('click', function () {
-    revealed = Math.min(hintLimit, revealed + (longEntry ? 8 : 1));
-    current = first;
-    drawGuide();
+    if (active < 0 || !target().words[active] || composing) return;
+    var item = record(active);
+    item.revealed = Math.min(target().words[active].chars.length, item.revealed + 1);
+    render();
     input.focus();
   });
-  resizeEntry();
-  if (longEntry) window.addEventListener('resize', resizeEntry);
-
-  var text = find('.ft-prompt-text');
-  if (text && !text.textContent.trim()) text.hidden = true;
-  var picture = find('.ft-prompt-image');
-  if (picture && !picture.querySelector('img')) picture.hidden = true;
-
+  removeButton.addEventListener('click', function () {
+    if (active < target().words.length) return;
+    var removed = active;
+    records.splice(active, 1);
+    render();
+    activate(nextUnfinished(removed - 1), true);
+  });
+  resetButton.addEventListener('click', function () {
+    records = [];
+    selected = 0;
+    activate(0, false);
+  });
   // Audio only starts on a learner click. Multiple clips play in order.
   var audioPanel = find('.ft-audio');
   if (audioPanel) {
@@ -291,11 +381,12 @@
     });
     if (!tracks.length) audioPanel.hidden = true;
   }
-  if (!answers.length) {
+  if (!transcripts.length) {
     form.hidden = true;
     guide.hidden = true;
     find('.ft-empty').hidden = false;
+  } else {
+    activate(0, false, false);
   }
-  drawGuide();
 })();
 </script>
