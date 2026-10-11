@@ -74,28 +74,85 @@
     return Array.from(text.normalize('NFC'));
   }
   var answers = readArray(find('.ft-answer-source'));
-  var first = characters(answers[0] || '');
+  var answerCharacters = answers.map(characters);
+  var first = answerCharacters[0] || [];
   var current = first;
   var total = function (chars) { return chars.filter(function (ch) { return !/\s/.test(ch); }).length; };
+  function wordCount(chars) {
+    var count = 0;
+    var inWord = false;
+    chars.forEach(function (ch) {
+      if (/\s/.test(ch)) { inWord = false; return; }
+      if (!inWord) count += 1;
+      inWord = true;
+    });
+    return count;
+  }
+  // Template-only settings: short answers use tiles; longer answers use one compact guide.
+  var shortCharacterLimit = 32;
+  var shortWordLimit = 6;
+  var longHintLimit = 48;
+  var longEntry = answerCharacters.some(function (chars) {
+    return total(chars) > shortCharacterLimit || wordCount(chars) > shortWordLimit;
+  });
+  var hintLimit = Math.max(total(first) - 1, 0);
+  if (longEntry) hintLimit = Math.min(hintLimit, longHintLimit);
 
-  // Fallback for older template sanitizers that removed the input tag.
-  if (!input) {
-    input = document.createElement('input');
-    input.className = 'ft-input';
-    input.id = 'ft-input';
-    input.type = 'text';
-    find('.ft-input-wrap').prepend(input);
+  // A textarea is created inside the template; no renderer changes are required.
+  if (longEntry || !input) {
+    var replacement = document.createElement(longEntry ? 'textarea' : 'input');
+    replacement.className = 'ft-input' + (longEntry ? ' ft-input-multiline' : '');
+    replacement.id = 'ft-input';
+    if (longEntry) replacement.rows = 3;
+    else replacement.type = 'text';
+    if (input) input.replaceWith(replacement);
+    else find('.ft-input-wrap').prepend(replacement);
+    input = replacement;
   }
   input.autocomplete = 'off';
   input.spellcheck = false;
   input.setAttribute('autocapitalize', 'off');
   input.setAttribute('aria-describedby', 'ft-status ft-entry-help');
+  input.setAttribute('aria-keyshortcuts', longEntry ? 'Control+Enter Meta+Enter' : 'Enter');
   var placeholders = { reading: 'Gõ cách đọc…', meaning: 'Gõ nghĩa của từ…', image: 'Gõ tên hình ảnh…', dictation: 'Gõ lại nội dung bạn vừa nghe…' };
   input.placeholder = placeholders[root.getAttribute('data-mode')] || 'Nhập đáp án…';
+  if (longEntry) {
+    find('.ft-entry-help').textContent = 'Enter để xuống dòng · Ctrl/⌘ + Enter để kiểm tra.';
+    find('.ft-guide-label').textContent = 'Gợi ý phần đầu';
+  }
   checkButton.disabled = true;
 
+  function resizeEntry() {
+    if (!longEntry) return;
+    input.style.height = 'auto';
+    input.style.height = Math.min(216, Math.max(112, input.scrollHeight)) + 'px';
+  }
   function drawGuide() {
     slots.replaceChildren();
+    slots.classList.toggle('is-compact', longEntry);
+    slots.classList.toggle('is-complete', longEntry && solved);
+    var count = total(current);
+    var words = wordCount(current);
+    length.textContent = count + ' ký tự' + (words > 1 ? ' · ' + words + ' từ' : '');
+    slots.setAttribute('aria-label', 'Đáp án có ' + count + ' ký tự' +
+      (words > 1 ? ', ' + words + ' từ' : '') +
+      (!solved && revealed ? ', đã mở ' + revealed + ' ký tự gợi ý' : ''));
+    hint.disabled = solved || revealed >= hintLimit;
+    if (longEntry) {
+      if (solved) { slots.textContent = 'Đã gõ đúng nội dung.'; return; }
+      if (!revealed) { slots.textContent = 'Mở gợi ý để xem vài ký tự đầu của đáp án.'; return; }
+      var prefix = '';
+      var seen = 0;
+      for (var i = 0; i < first.length; i++) {
+        if (!/\s/.test(first[i])) {
+          if (seen >= revealed) break;
+          seen += 1;
+        }
+        prefix += first[i];
+      }
+      slots.textContent = normalize(prefix) + '…';
+      return;
+    }
     var word = null;
     var index = 0;
     current.forEach(function (ch) {
@@ -113,11 +170,6 @@
       word.append(tile);
       index += 1;
     });
-    var count = total(current);
-    length.textContent = count + ' ký tự';
-    slots.setAttribute('aria-label', 'Đáp án có ' + count + ' ký tự' +
-      (revealed ? ', đã mở ' + revealed + ' ký tự gợi ý' : ''));
-    hint.disabled = solved || revealed >= Math.max(total(first) - 1, 0);
   }
   function setStatus(kind, message) {
     form.classList.remove('is-correct', 'is-incorrect');
@@ -130,6 +182,7 @@
     if (composing) return;
     var typed = comparable(input.value);
     if (!typed) { input.focus(); return; }
+    // Each Answer item is an alternative: matching any complete item is sufficient.
     var matched = answers.find(function (answer) { return comparable(answer) === typed; });
     if (matched !== undefined) {
       solved = true;
@@ -142,31 +195,36 @@
       setStatus('incorrect', 'Chưa đúng. Thử lại hoặc mở thêm một gợi ý nhé.');
       drawGuide();
       input.focus();
-      input.select();
+      if (!longEntry) input.select();
     }
   }
   input.addEventListener('compositionstart', function () { composing = true; });
   input.addEventListener('compositionend', function () {
     composing = false;
     checkButton.disabled = !comparable(input.value);
+    resizeEntry();
   });
   input.addEventListener('input', function () {
     if (solved) { solved = false; current = first; drawGuide(); }
     setStatus('', '');
     checkButton.disabled = !comparable(input.value);
+    resizeEntry();
   });
   input.addEventListener('keydown', function (event) {
     if (event.key !== 'Enter' || event.isComposing || composing || event.keyCode === 229) return;
+    if (longEntry && !event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     check();
   });
   checkButton.addEventListener('click', check);
   hint.addEventListener('click', function () {
-    if (revealed < Math.max(total(first) - 1, 0)) revealed += 1;
+    revealed = Math.min(hintLimit, revealed + (longEntry ? 8 : 1));
     current = first;
     drawGuide();
     input.focus();
   });
+  resizeEntry();
+  if (longEntry) window.addEventListener('resize', resizeEntry);
 
   var text = find('.ft-prompt-text');
   if (text && !text.textContent.trim()) text.hidden = true;

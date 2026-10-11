@@ -1,6 +1,6 @@
 {
   "slug": "typing-image",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -128,22 +128,23 @@
   ],
   "behavior": {
     "empty_inputs": "Null, empty and unbound inputs omit their own Mustache sections. Missing Answer hides entry and hints without throwing.",
-    "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible.",
+    "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible. Matching any one complete item is correct; a fragment or concatenation of different items is not.",
     "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
-    "character_count": "Unicode grapheme clusters excluding whitespace; rounded tiles grouped by words.",
-    "hints": "Reveal a character per click, leaving the last hidden.",
+    "character_count": "Unicode grapheme clusters excluding whitespace. Short answers have tiles grouped by words and a word count. Any alternative over 32 characters or 6 whitespace-separated words switches to one compact guide and a bounded textarea.",
+    "hints": "Short answers reveal one character per click, leaving the last hidden. Long answers reveal eight at a time, limited to a 48-character prefix and leaving the last character hidden.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
     "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
-    "grading": "Flip the card and choose the study rating."
+    "grading": "Flip the card and choose the study rating.",
+    "keyboard": "Short input: Enter checks. Long textarea: Enter adds a line; Ctrl/Command+Enter checks. IME composition never submits. Typed line breaks normalize to spaces."
   },
   "database_installation": {
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "633d3b27-902c-4c48-b556-3baf0f113a83",
-    "current_version_id": "a5d0476c-040b-496e-b397-c92c712146f0",
+    "current_version_id": "35571e8c-14ea-4963-acd4-6ea4f38ea62d",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 3
+    "version_no": 4
   }
 }

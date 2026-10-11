@@ -13,9 +13,11 @@ Lưu các prototype để dùng lại khi tạo note type và template trong Fla
 | [Advanced Vocabulary Card](advanced-vocabulary-card/README.md) | Backup từ DB: En4Everyone, 19 trường, template từ vựng tiếng Anh. |
 | [Grammar & Literary Quotes Card](grammar-literary-quotes-card/README.md) | Backup từ DB: 文法N1, 15 trường, template ngữ pháp và trích dẫn văn học. |
 
-[Xem và thử cả mặt trước / mặt sau](typing-preview.html): chép chính tả, kanji → cách đọc, từ → nghĩa, ảnh → từ vựng và Hán tự → pinyin. Preview mở trực tiếp trong trình duyệt, có sẵn âm thanh và hình minh họa.
+[Xem và thử cả mặt trước / mặt sau](typing-preview.html): chép chính tả, kanji → cách đọc, từ → nghĩa, ảnh → từ vựng, Hán tự → pinyin, cụm hai từ và nghe đoạn văn. Preview mở trực tiếp trong trình duyệt, có sẵn âm thanh và hình minh họa.
 
 Bốn mẫu mới tách theo mục đích học. Mỗi mẫu chỉ cần ánh xạ hai input đầu tiên; các input còn lại dành cho thông tin tùy chọn ở mặt sau. Tiếng Nhật, Trung và Anh dùng chung template khi dữ liệu cùng kiểu. Không phải truyền toàn bộ input: phần null, trống hoặc không ánh xạ tự ẩn cùng tiêu đề.
+
+Ô gõ tự thích ứng: đáp án ngắn dùng ô ký tự tách theo từ; đáp án dài dùng một khối gợi ý nhỏ và ô nhập nhiều dòng có giới hạn chiều cao. Chỉ cần gõ đúng một mục hoàn chỉnh trong array Answer là được. Mẫu nghe dùng chung cho từ, câu hoặc đoạn văn; phần xử lý nằm trong HTML/CSS/JS của template.
 
 Chữ dùng input text, danh sách đáp án/nghĩa/cách đọc dùng array, ảnh dùng image và âm thanh dùng audio. Mặt trước báo đúng/sai; mặt sau là phần thông tin ôn tập, gồm đáp án hoặc bản chép và dữ liệu bổ sung được truyền vào. Các trường nghĩa, giải thích và ví dụ tham khảo ba template đã backup; không cần tạo đầy đủ trường của chúng để dùng mẫu gõ.
 

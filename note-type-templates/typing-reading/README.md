@@ -1,6 +1,6 @@
 # Gõ cách đọc
 
-Nhìn từ, gõ kana, pinyin hoặc phiên âm; mặt sau xem nghĩa và ví dụ. Mẫu 1.0.2, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhìn từ, gõ kana, pinyin hoặc phiên âm; mặt sau xem nghĩa và ví dụ. Mẫu 1.1.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn lại bổ sung thông tin ở mặt sau; để không ánh xạ nếu không cần.
 
@@ -15,6 +15,10 @@ Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn l�
 | Audio | audio | Phát âm · chỉ ở mặt sau (tùy chọn, trống tự ẩn). |
 
 Mặt trước kiểm tra đáp án và mở gợi ý từng ô ký tự. Mặt sau là phần ôn lại: cách đọc và thông tin được truyền vào; không hiển thị lại kết quả đúng/sai. Bố cục mặt sau gọn: từ và đáp án ở đầu, thông tin chia bằng đường phân cách nhẹ; ví dụ và bản dịch nằm cùng một khối. Khối null, trống hoặc không ánh xạ tự ẩn, gồm cả tiêu đề của khối đó. Nếu chưa có Answer, ô gõ ẩn và báo thiếu đáp án.
+
+Đáp án ngắn hiện ô ký tự tách theo từ: **con vịt** có hai nhóm, mỗi nhóm ba ô. Nếu bất kỳ đáp án nào dài hơn **32 ký tự** (không tính khoảng trắng) hoặc **6 từ**, mẫu tự dùng một khối gợi ý nhỏ và ô nhập nhiều dòng, cao tối đa 216 px. Ngưỡng và cách gợi ý có thể sửa trực tiếp trong JS/CSS của template. Mẫu nghe dùng được cho cả từ và đoạn văn.
+
+Chỉ cần gõ đúng **một đáp án hoàn chỉnh** trong Answer là đúng; không cần nhập tất cả các nghĩa. Mỗi dòng/mục array là một đáp án hoàn chỉnh, nên bản chép đoạn văn đặt trong một mục. Khoảng trắng và xuống dòng khi gõ được chuẩn hóa. Ô ngắn dùng Enter để kiểm tra; ô dài dùng Enter để xuống dòng, **Ctrl/⌘ + Enter** hoặc nút **Kiểm tra** để gửi. Gợi ý đoạn dài mở tám ký tự mỗi lần, tối đa 48 ký tự đầu. Khi sai, ô dài giữ vị trí con trỏ để sửa nội dung.
 
 ## Ánh xạ tham khảo
 

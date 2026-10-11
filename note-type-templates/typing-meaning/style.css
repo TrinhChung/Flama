@@ -59,7 +59,7 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
 .ft-guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .ft-guide-label { color: var(--ft-muted); font-size: 12px; font-weight: 500; }
 .ft-length { padding: 3px 9px; border: 1px solid var(--ft-border); border-radius: 999px; background: var(--ft-surface); color: var(--ft-muted); font-size: 11px; font-weight: 550; font-variant-numeric: tabular-nums; }
-.ft-slots { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.ft-slots { display: flex; flex-wrap: wrap; gap: 10px 22px; }
 .ft-word { display: flex; flex: none; flex-wrap: wrap; gap: 5px; max-width: 100%; }
 .ft-slot { display: grid; place-items: center; width: 31px; height: 39px; border: 1px solid var(--ft-border); border-radius: 9px; background: var(--ft-soft); color: var(--ft-brand); font-size: 18px; font-weight: 600; line-height: 1; transition: color .16s, background .16s, border-color .16s; }
 .ft-slot.is-revealed { border-color: var(--ft-brand); background: var(--ft-brand-soft); }
@@ -124,6 +124,11 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
     --ft-error-bg: #38201c;
   }
 }
+
+/* Long answers keep both the guide and the editor bounded. */
+.ft-slots.is-compact { display: block; min-height: 58px; max-height: 96px; overflow-y: auto; padding: 14px 16px; border: 1px solid var(--ft-border); border-radius: 12px; background: var(--ft-soft); color: var(--ft-muted); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.ft-slots.is-complete { border-color: #9fceb1; background: var(--ft-success-bg); color: var(--ft-success); font-weight: 600; }
+.ft-input.ft-input-multiline { height: auto; min-height: 112px; max-height: 216px; overflow-y: auto; resize: none; font-size: 16px; line-height: 1.7; }
 
 /* Compact reference layout for the reverse side. */
 .ft-back { width: min(100%, 640px); padding: 28px 32px; }
