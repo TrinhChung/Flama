@@ -96,15 +96,15 @@ class StudyRepeatedApplicationTests(unittest.TestCase):
     _answer = fixtures.StudyDirectNoteReplayTests._answer
 
     def test_a_template_applied_twice_shares_one_note_state(self):
-        from app.services import study_content_delete_service as topology
+        from app.repositories.study_authority_repository import lock_study_authority_route
         from app.services.study_application_service import stage_repeated_application
 
         self._answer()  # state exists before the second occurrence is added
         with self.app.app_context():
             template = db.session.get(Card, self.card_ids[0]).template
             note_id = db.session.get(Card, self.card_ids[0]).note_id
-            routes = topology.lock_content_expansion_routes(
-                db.session, actor_user_ids=(self.user_id,), note_ids=[note_id])
+            routes = (lock_study_authority_route(
+                db.session, learner_user_id=self.user_id, allow_note_authority=True),)
             occurrence = stage_repeated_application(
                 db.session, routes=routes, template=template, occurrence_key="repeat-1")
             db.session.commit()

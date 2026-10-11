@@ -165,8 +165,8 @@ def _reconcile_note_authority_cards(
 ) -> None:
     """Template reconcile under NOTE: add siblings first, then remove.
 
-    Every learner holding state on the Note keeps one canonical state; a new
-    sibling copies it and a removed sibling only shrinks the projection.
+    Every learner holding state on the Note keeps its one row: a new sibling
+    shares it and a removed sibling changes no progress (ADR P10 §2.3).
     """
     from app.services import study_content_delete_service as content_topology
 
@@ -186,22 +186,18 @@ def _reconcile_note_authority_cards(
                 "cannot change card templates for a released shared note; "
                 "template-aware deck releases are required to preserve study history"
             )
-    note_ids = (str(note.id),)
+    # A new sibling writes no learner progress (ADR P10 §2.3); only a removal
+    # fences the learners holding state on this Note, before any other lock.
+    removed_ids = [str(card.id) for card in plan.removable]
     routes = content_topology.lock_content_delete_routes(
         db.session,
         actor_user_ids=(user_id,),
         card_ids=[str(card.id) for card in note.cards],
         deleted_note_ids=(),
-    )
-    for slot in plan.missing:
-        expansion = content_topology.prepare_content_expansion(
-            db.session, routes=routes, note_ids=note_ids)
-        content_topology.verify_content_expansion_scope(db.session, routes=routes, note_ids=note_ids)
-        new_card, = template_library_repository.build_cards([note.id], [slot])
-        db.session.add(new_card)
+    ) if removed_ids else ()
+    if plan.missing:
+        db.session.add_all(template_library_repository.build_cards([note.id], plan.missing))
         db.session.flush()
-        content_topology.finalize_content_expansion(expansion, new_cards=(new_card,))
-    removed_ids = [str(card.id) for card in plan.removable]
     if removed_ids:
         removal = content_topology.prepare_content_delete(
             db.session, routes=routes, card_ids=removed_ids, note_ids=(),

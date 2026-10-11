@@ -850,69 +850,19 @@ def create_template(
         note_type=note_type,
         owner_user_id=user_id,
     )
-    from app.services import study_content_delete_service as content_topology
-
-    try:
-        note_ids = [
-            str(row[0])
-            for row in db.session.query(Note.id)
-            .filter(
-                Note.note_type_id == note_type.id,
-                Note.user_id == int(user_id),
-            )
-            .order_by(Note.id.asc())
-            .all()
-            if row and row[0]
-        ]
-        # Any NOTE learner with state on these Notes gets the new sibling too.
-        authority_routes = content_topology.lock_content_expansion_routes(
-            db.session,
-            actor_user_ids=(int(user_id),),
-            note_ids=note_ids,
-        )
-        expansion_plan = content_topology.prepare_content_expansion(
-            db.session,
-            routes=authority_routes,
-            note_ids=note_ids,
-        )
-        content_topology.verify_content_expansion_scope(
-            db.session,
-            routes=authority_routes,
-            note_ids=note_ids,
-        )
-        template, error = flashcards_share_service.create_template(
-            note_type_id=note_type.id,
-            user_id=user_id,
-            payload=payload,
-            commit=False,
-        )
-    except StudyAuthorityFenceError as exc:
-        db.session.rollback()
-        raise ContentApiError(exc.code, str(exc), status=409) from exc
+    # A new Template sibling writes no learner progress (ADR P10 §2.3).
+    template, error = flashcards_share_service.create_template(
+        note_type_id=note_type.id,
+        user_id=user_id,
+        payload=payload,
+        commit=False,
+    )
     if template is None:
         db.session.rollback()
         raise ContentApiError(
             "VALIDATION_ERROR",
             error or "Unable to create template.",
         )
-    new_cards = (
-        Card.query.filter(
-            Card.template_id == template.id,
-            Card.note_id.in_(note_ids),
-        )
-        .order_by(Card.note_id.asc(), Card.id.asc())
-        .all()
-        if note_ids
-        else []
-    )
-    try:
-        content_topology.finalize_content_expansion(
-            expansion_plan,
-            new_cards=new_cards,
-        )
-    except StudyAuthorityFenceError as exc:
-        db.session.rollback()
-        raise ContentApiError(exc.code, str(exc), status=409) from exc
     db.session.commit()
     return marketplace_query_service.serialize_template(template)
 

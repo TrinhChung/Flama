@@ -112,13 +112,10 @@ def stage_note_template_changes(session, *, routes, note_type, changes, operatio
     # New Templates only generate Cards for the owner's Notes, as before.
     note_ids = tuple(str(note.id) for note in note_rows if note.user_id == route.learner_user_id)
 
-    # Sequential expansions stay inside the SAME transaction, with one exact
-    # copied projection per Note. A fault in any later step rolls back all.
+    # Additions stay inside the SAME transaction; a new sibling writes no
+    # learner progress (ADR P10 §2.3). A fault in any later step rolls back all.
     new_templates = []
     for index, data in enumerate(additions):
-        expansion = content_topology.prepare_content_expansion(
-            session, routes=routes, note_ids=note_ids, now_utc=now)
-        content_topology.verify_content_expansion_scope(session, routes=routes, note_ids=note_ids)
         template = Template(note_type_id=note_type.id, name=data["name"],
             front_html=str(data.get("front_html") or ""), back_html=str(data.get("back_html") or ""),
             shared_css=str(data.get("shared_css") or ""), position=data.get("position", len(current) + index),
@@ -128,8 +125,6 @@ def stage_note_template_changes(session, *, routes, note_type, changes, operatio
         cards = [Card(note_id=note_id, template_id=template.id, created_at=now, updated_at=now) for note_id in note_ids]
         session.add_all(cards)
         session.flush()
-        content_topology.finalize_content_expansion(expansion, new_cards=cards,
-            now_utc=now, provenance_code="NATIVE_MCP")
         new_templates.append(template)
 
     # A definition also used by another NoteType is only detached here, so the

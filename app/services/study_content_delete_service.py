@@ -10,7 +10,9 @@ of a deleted Note is tombstoned; a removed sibling Card changes no progress
 (ADR P10 §2.3). LEGACY learners keep ``card_progress``, which the caller
 deletes.
 
-Expansion: a new Template sibling inherits its Note's row; nothing is staged.
+Adding a Template sibling is not a learner topology change: the new Card
+inherits its Note's row and writes no progress (ADR P10 §2.3, §2.5), so it
+takes no learner fence.
 """
 
 from dataclasses import dataclass
@@ -182,58 +184,6 @@ def prepare_content_delete(session, *, routes, card_ids, note_ids, now_utc=None,
         for study_session in sessions:
             study_session.status = "cancelled"
     return ContentDeletePlan(tuple(note_plans), deleted_note_ids, partial=bool(partial_card_ids))
-
-
-@dataclass
-class ContentExpansionPlan:
-    plans: tuple = ()
-    finalized: bool = False
-
-
-def _note_card_ids(session, note_ids, *, current_read=False):
-    card_ids = set()
-    for chunk in _chunks(sorted(set(note_ids))):
-        statement = select(Card.id).where(Card.note_id.in_(chunk))
-        if current_read:
-            statement = statement.with_for_update(read=True)
-        card_ids.update(str(value) for value in session.execute(statement).scalars())
-    return card_ids
-
-
-def lock_content_expansion_routes(session, *, actor_user_ids, note_ids):
-    """Fence the actors and every learner with state on ``note_ids`` in ID order."""
-    learner_ids = set(int(value) for value in actor_user_ids)
-    learner_ids |= discover_content_learner_ids(session,
-        card_ids=_note_card_ids(session, note_ids), note_ids=note_ids)
-    return tuple(
-        lock_study_authority_route(session, learner_user_id=learner_id, allow_note_authority=True)
-        for learner_id in sorted(learner_ids)
-    )
-
-
-def prepare_content_expansion(session, *, routes, note_ids, now_utc=None):
-    """A new Template sibling inherits its Note's row (ADR P10 §2.3): nothing to lock."""
-    return ContentExpansionPlan()
-
-
-def verify_content_expansion_scope(session, *, routes, note_ids):
-    """Current-read recheck that no unfenced learner gained state meanwhile."""
-    locked = {route.learner_user_id for route in routes}
-    current = discover_content_learner_ids(session,
-        card_ids=_note_card_ids(session, note_ids, current_read=True), note_ids=note_ids, current_read=True)
-    if current - locked:
-        raise StudyAuthorityFenceError(
-            "CONTENT_SCOPE_CHANGED",
-            "Content learners changed while the Template change was admitted; retry.",
-        )
-
-
-def finalize_content_expansion(plan, *, new_cards, now_utc=None, provenance_code="NATIVE_DIRECT"):
-    """Nothing to attach: Cards carry no progress (ADR P10 §2.3)."""
-    if plan.finalized:
-        raise StudyAuthorityFenceError("AUTHORITY_LIFECYCLE_REPLAY", "Content expansion already finalized.")
-    plan.finalized = True
-    return ()
 
 
 def finalize_content_delete(plan, *, source_path, operation_key, now_utc=None):

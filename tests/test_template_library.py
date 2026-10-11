@@ -154,6 +154,28 @@ class TemplateLibraryTests(unittest.TestCase):
             self.assertEqual(db.session.get(StudyApplication, application["id"]).status_code, "ACTIVE")
             self.assertEqual(Card.query.filter_by(template_id=self.template_id).count(), 1)
 
+    def test_attach_reads_no_learner_progress_or_session(self):
+        # Adding a sibling writes no progress (ADR P10 §2.3): no learner fence or recheck.
+        from sqlalchemy import event
+
+        self._note()
+        self._note()
+        statements = []
+
+        def capture(_conn, _cursor, statement, _params, _context, _executemany):
+            statements.append(statement.lower())
+
+        with self.app.app_context():
+            engine = db.engine
+            event.listen(engine, "before_cursor_execute", capture)
+            try:
+                self._attach()
+            finally:
+                event.remove(engine, "before_cursor_execute", capture)
+        learner_tables = ("study_progress_subjects", "card_progress", "study_session_cards",
+                          "study_sessions", "study_authority_enrollments", "study_authority_storage_profile")
+        self.assertEqual([sql for sql in statements if any(table in sql for table in learner_tables)], [])
+
     def test_duplicate_has_new_independent_history(self):
         response = self.client.post(f"/api/card-templates/{self.template_id}/duplicate", json={"name": "Second"})
         self.assertEqual(response.status_code, 201, response.get_json())

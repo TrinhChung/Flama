@@ -106,16 +106,16 @@ class StudyNoteTemplateTests(unittest.TestCase):
     def test_second_expansion_fault_rolls_back_fields_metadata_and_all_cards(self):
         with self.app.app_context():
             before = self._identity()
-            original = content_topology.finalize_content_expansion
+            original = Template.__init__
             calls = 0
-            def fail_second(*args, **kwargs):
+            def fail_second(template, *args, **kwargs):
+                # Fault while staging the second addition, after the first was flushed.
                 nonlocal calls
                 calls += 1
-                result = original(*args, **kwargs)
                 if calls == 2:
                     raise RuntimeError("injected expansion fault")
-                return result
-            with patch.object(content_topology, "finalize_content_expansion", side_effect=fail_second):
+                original(template, *args, **kwargs)
+            with patch.object(Template, "__init__", fail_second):
                 with self.assertRaisesRegex(RuntimeError, "injected expansion fault"):
                     self._update({"added": [{"name": "A"}, {"name": "B"}]}, name="Uncommitted name",
                         fields={"added": [{"name": "Extra"}]})

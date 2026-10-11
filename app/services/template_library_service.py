@@ -336,11 +336,7 @@ def attach_template(*, user_id, note_type_id, payload):
         application = db.session.execute(select(StudyApplication).where(StudyApplication.note_type_id == note_type.id, StudyApplication.template_id == template.id, StudyApplication.occurrence_key == occurrence).with_for_update()).scalar_one_or_none()
         if application is not None and application.status_code == "ACTIVE":
             raise TemplateLibraryError("APPLICATION_EXISTS", "This occurrence is already attached.", status=409)
-        from app.services import study_content_delete_service as topology
         note_ids = list(db.session.execute(select(Note.id).where(Note.note_type_id == note_type.id, Note.user_id == user_id).order_by(Note.id)).scalars())
-        routes = topology.lock_content_expansion_routes(db.session, actor_user_ids=(user_id,), note_ids=note_ids)
-        plan = topology.prepare_content_expansion(db.session, routes=routes, note_ids=note_ids)
-        topology.verify_content_expansion_scope(db.session, routes=routes, note_ids=note_ids)
         if application is None:
             application = StudyApplication(note_type=note_type, template=template, occurrence_key=occurrence, status_code="ACTIVE", input_bindings={}, position=0, is_default=False)
             db.session.add(application)
@@ -365,7 +361,6 @@ def attach_template(*, user_id, note_type_id, payload):
             ]
             db.session.execute(insert(Card), card_rows)
             db.session.flush()
-        topology.finalize_content_expansion(plan, new_cards=())
         return lambda: serialize_application(application)
     return _commit(operation)
 
