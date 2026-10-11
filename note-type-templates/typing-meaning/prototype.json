@@ -1,6 +1,6 @@
 {
   "slug": "typing-meaning",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -177,7 +177,7 @@
     "accepted_answers": "Array items use the existing rendered <br> boundaries. Template JavaScript reads the DOM into an array without string splitting, delimiter parsing or backend changes. Plain text bindings with one answer per line remain compatible. Matching any one complete item is correct; a fragment or concatenation of different items is not.",
     "normalization": "NFC, collapsed whitespace, trimmed edges, case insensitive. Accents, tone marks and punctuation remain significant.",
     "character_count": "One ordinary single-line input for all meanings, with no character tiles, character count or word count, regardless of the lengths of accepted alternatives.",
-    "hints": "The first Answer item supplies a prefix only after clicking Open character. Reveal one Unicode grapheme per click, keep the last hidden, and cap the prefix at 48 non-whitespace characters. All complete alternative meanings remain accepted.",
+    "hints": "The first Answer item supplies a prefix only after clicking Open character. Reveal one Unicode grapheme per click through the final character, then disable the hint button and remove the trailing ellipsis. All complete alternative meanings remain accepted. The clue scrolls within a bounded box.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
     "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
     "grading": "Flip the card and choose the study rating.",
@@ -188,10 +188,10 @@
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
-    "current_version_id": "d58339ae-aa6c-4239-a4fc-81bc7ef68a1c",
+    "current_version_id": "1027da4f-e21f-482d-b1bf-250d1bf83c51",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 5
+    "version_no": 6
   }
 }

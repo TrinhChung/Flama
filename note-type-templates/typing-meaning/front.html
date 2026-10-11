@@ -64,7 +64,7 @@
   var answers = readArray(find('.ft-answer-source'));
   var first = characters(answers[0] || '');
   // Hints use one meaning; the input never implies a shared length for all meanings.
-  var hintLimit = Math.min(48, Math.max(first.filter(function (ch) { return !/\s/.test(ch); }).length - 1, 0));
+  var hintLimit = first.filter(function (ch) { return !/\s/.test(ch); }).length;
   if (!input) {
     input = document.createElement('input');
     input.className = 'ft-input';
@@ -92,7 +92,7 @@
       }
       text += first[i];
     }
-    prefix.textContent = revealed ? normalize(text) + '…' : '';
+    prefix.textContent = revealed ? normalize(text) + (revealed < hintLimit ? '…' : '') : '';
   }
   function setStatus(kind, message) {
     form.classList.remove('is-correct', 'is-incorrect');

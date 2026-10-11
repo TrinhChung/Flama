@@ -1,6 +1,6 @@
 # Gõ nghĩa
 
-Nhìn từ, gõ nghĩa; mặt sau xem cách đọc, giải thích và ví dụ. Mẫu 1.2.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhìn từ, gõ nghĩa; mặt sau xem cách đọc, giải thích và ví dụ. Mẫu 1.2.1, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. `DefinitionHint` bổ sung gợi ý ở mặt trước; các input tùy chọn còn lại bổ sung thông tin ở mặt sau. Để không ánh xạ nếu không cần.
 
@@ -19,7 +19,7 @@ Mặt trước dùng **một ô input thông thường**, không hiện ô ký t
 
 Khi chưa nhớ nghĩa, mở **Giải thích bằng ngôn ngữ đích** để đọc nội dung `DefinitionHint`. Ví dụ, từ tiếng Nhật có thể truyền lời giải thích tiếng Nhật, còn từ tiếng Anh truyền định nghĩa tiếng Anh. Gợi ý mặc định đóng, có thể đóng lại; nội dung dài cuộn trong khối nhỏ. Không có dữ liệu, kể cả richtext rỗng như `<p><br></p>`, thì cả khối tự ẩn. `Explanation` vẫn là thông tin mặt sau, độc lập với gợi ý này.
 
-Nếu vẫn chưa nhớ, bấm **Mở ký tự** để mở từng ký tự đầu của **nghĩa đầu tiên** trong Answer, chẳng hạn `h…` rồi `họ…`. Gợi ý không hiển thị số ô trống hoặc tổng độ dài; tối đa 48 ký tự đầu và giữ ký tự cuối chưa mở. Dù gợi ý lấy từ nghĩa đầu tiên, nhập đúng bất kỳ mục hoàn chỉnh nào trong Answer vẫn được chấp nhận. Ví dụ `học` và `học tập` là hai mục thay thế, không cần gõ cả hai. **Enter** hoặc **Kiểm tra** để gửi; khi sai giữ vị trí con trỏ để sửa.
+Nếu vẫn chưa nhớ, bấm **Mở ký tự** để mở từng ký tự đầu của **nghĩa đầu tiên** trong Answer, chẳng hạn `h…` rồi `họ…`. Gợi ý không hiển thị số ô trống hoặc tổng độ dài; mở được đến ký tự cuối cùng. Khi mở hết, dấu ba chấm biến mất và nút gợi ý tắt; nội dung dài cuộn trong khối có giới hạn chiều cao. Dù gợi ý lấy từ nghĩa đầu tiên, nhập đúng bất kỳ mục hoàn chỉnh nào trong Answer vẫn được chấp nhận. Ví dụ `học` và `học tập` là hai mục thay thế, không cần gõ cả hai. **Enter** hoặc **Kiểm tra** để gửi; khi sai giữ vị trí con trỏ để sửa.
 
 ## Ánh xạ tham khảo
 

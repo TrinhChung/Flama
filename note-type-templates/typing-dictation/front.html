@@ -91,12 +91,10 @@
   // Template-only settings: short answers use tiles; longer answers use one compact guide.
   var shortCharacterLimit = 32;
   var shortWordLimit = 6;
-  var longHintLimit = 48;
   var longEntry = answerCharacters.some(function (chars) {
     return total(chars) > shortCharacterLimit || wordCount(chars) > shortWordLimit;
   });
-  var hintLimit = Math.max(total(first) - 1, 0);
-  if (longEntry) hintLimit = Math.min(hintLimit, longHintLimit);
+  var hintLimit = total(first);
 
   // A textarea is created inside the template; no renderer changes are required.
   if (longEntry || !input) {
@@ -118,7 +116,7 @@
   input.placeholder = placeholders[root.getAttribute('data-mode')] || 'Nhập đáp án…';
   if (longEntry) {
     find('.ft-entry-help').textContent = 'Enter để xuống dòng · Ctrl/⌘ + Enter để kiểm tra.';
-    find('.ft-guide-label').textContent = 'Gợi ý phần đầu';
+    find('.ft-guide-label').textContent = 'Gợi ý nội dung';
   }
   checkButton.disabled = true;
 
@@ -150,7 +148,7 @@
         }
         prefix += first[i];
       }
-      slots.textContent = normalize(prefix) + '…';
+      slots.textContent = normalize(prefix) + (revealed < hintLimit ? '…' : '');
       return;
     }
     var word = null;
