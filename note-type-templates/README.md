@@ -19,6 +19,6 @@ Bốn mẫu mới tách theo mục đích học. Mỗi mẫu chỉ cần ánh x�
 
 Chữ dùng input text, danh sách đáp án/nghĩa/cách đọc dùng array, ảnh dùng image và âm thanh dùng audio. Mặt trước báo đúng/sai; mặt sau là phần thông tin ôn tập, gồm đáp án hoặc bản chép và dữ liệu bổ sung được truyền vào. Các trường nghĩa, giải thích và ví dụ tham khảo ba template đã backup; không cần tạo đầy đủ trường của chúng để dùng mẫu gõ.
 
-Các bản backup từ DB lưu HTML/CSS nguyên nội dung, nguồn và ID trong `prototype.json`, cùng SHA-256 để kiểm tra file. Bốn mẫu gõ mới là prototype được soạn trong thư viện, chưa lưu vào DB. `example_field_values` là dữ liệu minh họa để thử mẫu.
+Các bản backup từ DB lưu HTML/CSS nguyên nội dung, nguồn và ID trong `prototype.json`, cùng SHA-256 để kiểm tra file. Bốn mẫu gõ mới được soạn trong thư viện và đã cài vào DB ngày 2026-10-11, nhóm **Luyện gõ**. Tìm trong trang `/card-templates`; ID template và phiên bản được ghi tại database_installation của từng prototype.json. `example_field_values` là dữ liệu minh họa để thử mẫu.
 
 Khi thêm mẫu mới, tạo thư mục cùng cấp với `typing-answer/` và thêm liên kết vào bảng trên.

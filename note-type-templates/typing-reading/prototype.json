@@ -174,5 +174,13 @@
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
     "back": "Reference information only: no correctness verdict. Every optional block is independent.",
     "grading": "Flip the card and choose the study rating."
+  },
+  "database_installation": {
+    "database_name": "nihongo",
+    "owner_user_id": 1,
+    "template_id": "5c460ccb-5714-48ac-830b-1f74cc611bee",
+    "current_version_id": "771da9ff-8ded-4ca9-9a1d-f86e0f51eeea",
+    "installed_at": "2026-10-11",
+    "primary_category": "Luyện gõ"
   }
 }
