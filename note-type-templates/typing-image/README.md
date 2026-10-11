@@ -1,6 +1,8 @@
 # Gõ từ qua ảnh
 
-Nhìn hình, gõ tên; mặt sau xem nghĩa, cách đọc và nghe phát âm. Mẫu 1.2.1, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhìn hình, gõ tên; mặt sau xem nghĩa, cách đọc và nghe phát âm. Mẫu 1.3.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+
+Mặt sau giữ ảnh ở đúng vị trí và kích thước như mặt trước. Từ vựng ở bên dưới ảnh, tiếp đến cách đọc, nghĩa và âm thanh phát âm nếu có. Phần thông tin không truyền vào tự ẩn.
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. `DefinitionHint` bổ sung gợi ý ở mặt trước; các input tùy chọn còn lại bổ sung thông tin ở mặt sau. Để không ánh xạ nếu không cần.
 

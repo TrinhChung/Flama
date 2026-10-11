@@ -1,6 +1,6 @@
 {
   "slug": "typing-reading",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -172,7 +172,7 @@
     "character_count": "Unicode grapheme clusters excluding whitespace. Short answers have tiles grouped by words and a word count. Any alternative over 32 characters or 6 whitespace-separated words switches to one compact guide and a bounded textarea.",
     "hints": "Short answers reveal one Unicode grapheme per click through the final character. Long answers reveal eight at a time until the entire first answer is visible in a bounded scrolling guide, without creating character tiles. Disable the hint button only after the full reveal or a correct answer; remove the trailing ellipsis on full reveal.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
-    "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
+    "back": "Uses the same card width, padding, mode heading and prompt/media geometry as the front. Keep the prompt or image in place; put the answer next, then immediately related reading/meaning/translation, followed by explanations, paired examples and notes. Dictation repeats the front audio button and compact borderless word typography. Optional empty inputs hide independently; no correctness verdict.",
     "grading": "Flip the card and choose the study rating.",
     "keyboard": "Short input: Enter checks. Long textarea: Enter adds a line; Ctrl/Command+Enter checks. IME composition never submits. Typed line breaks normalize to spaces."
   },
@@ -180,10 +180,10 @@
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "5c460ccb-5714-48ac-830b-1f74cc611bee",
-    "current_version_id": "95578389-4ce5-4e70-95f7-5cf8d7527a8a",
+    "current_version_id": "c908f726-fd48-4b48-a187-bd604b20b805",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 5
+    "version_no": 6
   }
 }

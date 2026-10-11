@@ -1,6 +1,6 @@
 {
   "slug": "typing-meaning",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "saved_at": "2026-10-11",
   "source": {
     "kind": "authored",
@@ -179,7 +179,7 @@
     "character_count": "One ordinary single-line input for all meanings, with no character tiles, character count or word count, regardless of the lengths of accepted alternatives.",
     "hints": "The first Answer item supplies a prefix only after clicking Open character. Reveal one Unicode grapheme per click through the final character, then disable the hint button and remove the trailing ellipsis. All complete alternative meanings remain accepted. The clue scrolls within a bounded box.",
     "audio": "No autoplay. Dictation plays on the front only on click; other templates expose native controls on the back.",
-    "back": "Compact reference layout: word and answer first, examples paired with their translation. No correctness verdict. Optional sections hide independently, including empty groups.",
+    "back": "Uses the same card width, padding, mode heading and prompt/media geometry as the front. Keep the prompt or image in place; put the answer next, then immediately related reading/meaning/translation, followed by explanations, paired examples and notes. Dictation repeats the front audio button and compact borderless word typography. Optional empty inputs hide independently; no correctness verdict.",
     "grading": "Flip the card and choose the study rating.",
     "keyboard": "Enter checks the single-line input. IME composition never submits. Case, NFC and whitespace normalization remain unchanged.",
     "definition_hint": "Optional richtext input DefinitionHint is a target-language explanation, collapsed on the front until the learner opens it. Null, unbound, whitespace-only and visually empty richtext hide the entire clue. It is not part of answer matching."
@@ -188,10 +188,10 @@
     "database_name": "nihongo",
     "owner_user_id": 1,
     "template_id": "ef8757fb-f5c8-4670-83e6-3feef962beff",
-    "current_version_id": "1027da4f-e21f-482d-b1bf-250d1bf83c51",
+    "current_version_id": "6e865aef-e893-485b-acd2-7e0b8bf98ef3",
     "installed_at": "2026-10-11",
     "primary_category": "Luyện gõ",
     "updated_at": "2026-10-11",
-    "version_no": 6
+    "version_no": 8
   }
 }

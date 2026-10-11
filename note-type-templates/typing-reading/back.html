@@ -1,18 +1,22 @@
 <div class="ft-card ft-back" data-mode="reading">
-  <div class="ft-back-hero">
-    {{#PromptText}}<h1 class="ft-back-text">{{PromptText}}</h1>{{/PromptText}}
-    <div class="ft-back-meta">
+  <div class="ft-mode"><span class="ft-mode-icon"><svg class="ft-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 12h.01M11 12h.01M15 12h.01M7 15h10"></path></svg></span><span>Gõ cách đọc</span></div>
+  <div class="ft-stimulus">
+    {{#PromptText}}<div class="ft-prompt-text">{{PromptText}}</div>{{/PromptText}}
+    {{#Answer}}<p class="ft-instruction">Cách đọc và nghĩa của từ.</p>{{/Answer}}
+  </div>
+  <div class="ft-review">
+    {{#Answer}}<div class="ft-answer-panel"><div class="ft-answer-label">Cách đọc</div><div class="ft-answer-values">{{Answer}}</div></div>{{/Answer}}
+    <div class="ft-related">
+      {{#Meaning}}<div class="ft-info-block ft-info-definition" data-info="Meaning"><h2 class="ft-info-heading">Nghĩa</h2><div class="ft-info-array">{{Meaning}}</div></div>{{/Meaning}}
     </div>
   </div>
-  {{#Answer}}<div class="ft-answer-panel"><div class="ft-answer-label">Cách đọc</div><div class="ft-answer-values">{{Answer}}</div></div>{{/Answer}}
   <div class="ft-back-content">
-    {{#Meaning}}<div class="ft-info-block ft-info-definition" data-info="Meaning"><h2 class="ft-info-heading">Nghĩa</h2><div class="ft-info-array">{{Meaning}}</div></div>{{/Meaning}}
     {{#Explanation}}<div class="ft-info-block ft-info-definition" data-info="Explanation"><h2 class="ft-info-heading">Giải thích</h2><div class="ft-info-content">{{{Explanation}}}</div></div>{{/Explanation}}
-    <div class="ft-example-group">
-      {{#Example}}<div class="ft-info-block" data-info="Example"><h2 class="ft-info-heading">Ví dụ</h2><div class="ft-info-content">{{{Example}}}</div></div>{{/Example}}
-      {{#ExampleTranslation}}<div class="ft-info-block" data-info="ExampleTranslation"><h2 class="ft-info-heading">Bản dịch ví dụ</h2><div class="ft-info-content">{{{ExampleTranslation}}}</div></div>{{/ExampleTranslation}}
-    </div>
-    {{#Audio}}<div class="ft-info-block ft-info-audio" data-info="Audio"><h2 class="ft-info-heading">Nghe lại</h2><div class="ft-info-content">{{{Audio}}}</div></div>{{/Audio}}
+  <div class="ft-example-group">
+    {{#Example}}<div class="ft-info-block" data-info="Example"><h2 class="ft-info-heading">Ví dụ</h2><div class="ft-info-content">{{{Example}}}</div></div>{{/Example}}
+    {{#ExampleTranslation}}<div class="ft-info-block" data-info="ExampleTranslation"><h2 class="ft-info-heading">Bản dịch ví dụ</h2><div class="ft-info-content">{{{ExampleTranslation}}}</div></div>{{/ExampleTranslation}}
+  </div>
+  {{#Audio}}<div class="ft-info-block ft-info-audio" data-info="Audio"><h2 class="ft-info-heading">Nghe lại</h2><div class="ft-info-content">{{{Audio}}}</div></div>{{/Audio}}
   </div>
 </div>
 <script>
@@ -62,15 +66,22 @@
     });
     source.replaceChildren(list);
   });
-  root.querySelectorAll('.ft-info-block, .ft-back-meta-item').forEach(function (block) {
+  root.querySelectorAll('.ft-inline-array').forEach(function (source) {
+    source.textContent = readArray(source).join(' · ');
+    if (!source.textContent.trim()) source.hidden = true;
+  });
+  root.querySelectorAll('.ft-info-block, .ft-back-meta-item, .ft-prompt-text').forEach(function (block) {
     var content = block.querySelector('.ft-info-content, .ft-info-array') || block;
     if (!content.textContent.trim() && !content.querySelector('audio, img, video')) block.hidden = true;
   });
-  root.querySelectorAll('.ft-example-group, .ft-back-content').forEach(function (group) {
-    if (!group.querySelector('.ft-info-block:not([hidden])')) group.hidden = true;
+  root.querySelectorAll('.ft-example-group, .ft-related, .ft-back-content, .ft-back-meta').forEach(function (group) {
+    if (!group.querySelector('.ft-info-block:not([hidden]), .ft-back-meta-item:not([hidden])')) group.hidden = true;
   });
-  var hero = root.querySelector('.ft-back-hero');
-  if (hero && !hero.textContent.trim()) hero.hidden = true;
+  root.querySelectorAll('.ft-back-prompt, .ft-stimulus').forEach(function (group) {
+    if (!Array.from(group.children).some(function (child) { return !child.hidden; })) group.hidden = true;
+  });
+  var review = root.querySelector('.ft-review');
+  if (review && !review.querySelector('.ft-answer-panel:not([hidden]), .ft-info-block:not([hidden]), .ft-back-meta-item:not([hidden])')) review.hidden = true;
   root.querySelectorAll('audio').forEach(function (audio) {
     audio.removeAttribute('autoplay');
     audio.preload = 'none';

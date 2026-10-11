@@ -1,6 +1,8 @@
 # Gõ chép chính tả
 
-Nhấn nghe và chép lại theo từng từ; mặt sau đọc bản dịch và ghi chú nếu có. Mẫu 2.1.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhấn nghe và chép lại theo từng từ; mặt sau đọc bản dịch và ghi chú nếu có. Mẫu 2.2.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+
+Mặt sau dùng cùng vị trí nút nghe, kích thước thẻ và kiểu chữ đoạn văn như mặt trước. Bản dịch nằm ngay dưới bản chép; ghi chú và hình minh họa tiếp theo. Nút nghe lại hoạt động giống mặt trước, chỉ phát khi bấm. Phần thông tin không truyền vào tự ẩn.
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn lại bổ sung thông tin ở mặt sau; để không ánh xạ nếu không cần.
 

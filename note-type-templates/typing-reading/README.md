@@ -1,6 +1,8 @@
 # Gõ cách đọc
 
-Nhìn từ, gõ kana, pinyin hoặc phiên âm; mặt sau xem nghĩa và ví dụ. Mẫu 1.1.1, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+Nhìn từ, gõ kana, pinyin hoặc phiên âm; mặt sau xem nghĩa và ví dụ. Mẫu 1.2.0, ngày 2026-10-11. [Xem thử cả hai mặt thẻ](../typing-preview.html).
+
+Mặt sau giữ nguyên vị trí từ và cùng kích thước thẻ với mặt trước. Cách đọc nằm dưới từ; nghĩa ngay dưới cách đọc, tiếp đến giải thích và ví dụ kèm bản dịch. Phần thông tin không truyền vào tự ẩn.
 
 Chỉ cần ánh xạ **hai input đầu tiên** để dùng. Các input còn lại bổ sung thông tin ở mặt sau; để không ánh xạ nếu không cần.
 

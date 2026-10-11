@@ -145,24 +145,25 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
 .ft-definition-content a { color: var(--ft-brand); }
 
 /* Compact reference layout for the reverse side. */
-.ft-back { width: min(100%, 640px); padding: 28px 32px; }
-.ft-back-hero { margin: 0; }
-.ft-back-text { margin: 0; color: var(--ft-brand); font-size: clamp(30px, 6vw, 36px); font-weight: 700; line-height: 1.3; letter-spacing: -.025em; overflow-wrap: anywhere; }
-.ft-back-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.ft-back-meta:has(> :not([hidden])) { margin-top: 5px; }
-.ft-back-meta-item { color: var(--ft-muted); font-size: 15px; overflow-wrap: anywhere; }
+/* Share the front's card width, padding, prompt and media geometry. */
+.ft-review { margin-top: 32px; }
+.ft-back[data-mode="meaning"] .ft-review { margin-top: 26px; }
 .ft-back .ft-answer-panel { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
-.ft-back-hero:not([hidden]) + .ft-answer-panel { margin-top: 16px; }
-.ft-back .ft-answer-label { margin-bottom: 4px; color: var(--ft-muted); font-size: 11px; font-weight: 600; }
-.ft-back .ft-answer-values { font-size: clamp(21px, 4.5vw, 25px); font-weight: 600; line-height: 1.45; }
-.ft-answer-variants { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 4px; color: var(--ft-muted); font-size: 15px; font-weight: 400; }
-.ft-answer-variants > span { min-width: 0; overflow-wrap: anywhere; }
-.ft-back[data-mode="image"] .ft-answer-primary { color: var(--ft-brand); font-size: clamp(28px, 6vw, 34px); font-weight: 700; }
+.ft-back .ft-answer-label { margin-bottom: 8px; color: var(--ft-muted); font-size: 12px; font-weight: 500; }
+.ft-back .ft-answer-values { color: var(--ft-ink); font-size: 20px; font-weight: 600; line-height: 1.65; }
+.ft-back[data-mode="meaning"] .ft-answer-values { font-size: 18px; }
+.ft-back[data-mode="image"] .ft-answer-primary { color: var(--ft-brand); }
 .ft-back[data-mode="meaning"] .ft-answer-primary { color: var(--ft-success); }
-.ft-back[data-mode="dictation"] .ft-answer-values { font-size: clamp(20px, 4.5vw, 24px); line-height: 1.55; }
-.ft-back-content { display: grid; gap: 18px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--ft-border); }
+.ft-answer-variants { display: flex; flex-wrap: wrap; gap: 3px 14px; margin-top: 5px; color: var(--ft-muted); font-size: 15px; font-weight: 400; }
+.ft-answer-variants > span { min-width: 0; overflow-wrap: anywhere; }
+.ft-back-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.ft-prompt-reading { justify-content: center; margin-top: 8px; }
+.ft-back-meta-item { color: var(--ft-muted); font-size: 15px; overflow-wrap: anywhere; }
+.ft-related { display: grid; gap: 12px; margin-top: 12px; }
+.ft-review > .ft-related:first-child, .ft-answer-panel[hidden] + .ft-related { margin-top: 0; }
+.ft-back-content { display: grid; gap: 20px; margin-top: 24px; }
 .ft-info-block { min-width: 0; }
-.ft-info-heading { margin: 0 0 5px; color: var(--ft-muted); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.ft-info-heading { margin: 0 0 5px; color: var(--ft-muted); font-size: 12px; font-weight: 500; line-height: 1.55; }
 .ft-info-content, .ft-info-array { color: var(--ft-ink); font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
 .ft-info-content > :first-child { margin-top: 0; }
 .ft-info-content > :last-child { margin-bottom: 0; }
@@ -172,25 +173,34 @@ html, body { margin: 0; min-height: 100%; background: var(--ft-bg); }
 .ft-info-content th, .ft-info-content td { padding: 5px 8px; border: 1px solid var(--ft-border); }
 .ft-info-content img { max-width: 100%; height: auto; }
 .ft-info-list { margin: 0; padding: 0; list-style: none; }
-.ft-info-list li + li { margin-top: 4px; }
+.ft-info-list li + li { margin-top: 3px; }
 .ft-info-list li + li::before { content: "· "; color: var(--ft-muted); }
 .ft-info-definition .ft-info-content, .ft-info-definition .ft-info-array { font-size: 16px; }
-.ft-info-definition[data-info="Meaning"] .ft-info-array { color: var(--ft-success); font-weight: 500; }
 .ft-example-group { min-width: 0; padding: 12px 16px; border-left: 2px solid color-mix(in srgb, var(--ft-brand) 40%, var(--ft-border)); border-radius: 0 10px 10px 0; background: var(--ft-soft); }
 .ft-example-group .ft-info-heading { color: var(--ft-brand); }
 .ft-example-group [data-info="Example"] .ft-info-content { font-size: 17px; }
 .ft-example-group [data-info="ExampleTranslation"] .ft-info-content { color: var(--ft-muted); font-size: 14px; }
 .ft-example-group:has([data-info="Example"]:not([hidden])) [data-info="ExampleTranslation"] { margin-top: 5px; }
 .ft-example-group:has([data-info="Example"]:not([hidden])) [data-info="ExampleTranslation"] .ft-info-heading { display: none; }
-.ft-info-media img { display: block; width: auto; max-width: 100%; max-height: 220px; height: auto; margin: 0; border-radius: 10px; object-fit: contain; }
+.ft-info-media img { display: block; width: auto; max-width: 100%; max-height: 240px; height: auto; margin: 0; border-radius: 16px; object-fit: contain; }
 .ft-info-media .flama-media-gallery { display: flex; flex-wrap: wrap; gap: 10px; }
 .ft-info-audio { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
 .ft-info-audio .ft-info-heading { margin: 0; }
 .ft-info-audio .ft-info-content { flex: 1 1 200px; max-width: 360px; min-width: 0; }
 .ft-info-audio audio { display: block; width: 100%; height: 36px; }
 .ft-info-audio audio + audio { margin-top: 6px; }
+.ft-back[data-mode="dictation"] .ft-stimulus { gap: 14px; margin-top: 26px; }
+.ft-back[data-mode="dictation"] .ft-audio { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.ft-back[data-mode="dictation"] .ft-instruction { text-align: left; font-size: 12px; line-height: 1.65; }
+.ft-back[data-mode="dictation"] .ft-review { margin-top: 28px; }
+.ft-back[data-mode="dictation"] .ft-answer-values { font-size: 17px; font-weight: 400; line-height: 2.2; }
+.ft-back .ft-dict-word { color: var(--ft-ink); cursor: text; }
+.ft-back .ft-dict-word:hover { background: transparent; }
+.ft-back[data-mode="dictation"] .ft-answer-variants { display: grid; gap: 10px; margin-top: 12px; font-size: inherit; line-height: inherit; }
+.ft-back[data-mode="dictation"] .ft-related { margin-top: 10px; }
 @media (max-width: 420px) {
-  .ft-back { padding: 24px 20px; }
-  .ft-back-content { gap: 16px; margin-top: 18px; padding-top: 16px; }
+  .ft-back-content { gap: 18px; margin-top: 22px; }
   .ft-example-group { padding: 10px 13px; }
+  .ft-back[data-mode="dictation"] .ft-review { margin-top: 24px; }
+  .ft-back[data-mode="dictation"] .ft-answer-values { font-size: 16px; }
 }
