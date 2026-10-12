@@ -7,8 +7,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import i18n from '@/shared/config/i18n'
 import { ContextHelpButton } from './components/ContextHelpButton'
 import { GuideBreadcrumb } from './components/GuideBreadcrumb'
+import { GuideArticleRenderer } from './components/GuideArticleRenderer'
 import { YomitanMarkersExplorer } from './components/YomitanMarkersExplorer'
 import { McpToolsExplorer } from './components/McpToolsExplorer'
+import { getArticleBySlug } from './guideData'
 import type { GuideCategory } from './types'
 
 const mockCategory: GuideCategory = {
@@ -129,4 +131,47 @@ describe('Guide Feature Localization & Components', () => {
     expect(container.textContent).toContain('Flama MCP Tools Catalog (19 Tools)')
     expect(container.textContent).toContain('Sample Prompt')
   })
+
+  it('resolves asbplayer guide article and renders AsbplayerInteractiveGuide with bilingual support', async () => {
+    const resolved = getArticleBySlug('integrations', 'asbplayer')
+    expect(resolved).toBeDefined()
+    if (!resolved?.article) throw new Error('asbplayer article not found')
+
+    const { article, category } = resolved
+
+    expect(article.slug).toBe('asbplayer')
+    expect(article.steps?.length).toBe(6)
+    expect(article.shortcuts?.length).toBe(3)
+    expect(article.params?.length).toBe(7)
+    expect(article.troubleshoot?.length).toBe(2)
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <GuideArticleRenderer article={article} category={category} />
+        </MemoryRouter>,
+      )
+    })
+
+    // In Vietnamese
+    expect(container.textContent).toContain('asbplayer')
+    expect(container.textContent).toContain('6 Bước Thiết Lập')
+    expect(container.textContent).toContain('Bảng Ánh Xạ Trường')
+    expect(container.textContent).toContain('Mô Phỏng Thẻ Mẫu')
+    expect(container.textContent).toContain('Ctrl + Shift + X')
+    expect(container.textContent).toContain('http://localhost:4790/v1/anki-connect')
+
+    // In English
+    await act(async () => {
+      await i18n.changeLanguage('en')
+    })
+
+    expect(container.textContent).toContain('6-Step Workflow')
+    expect(container.textContent).toContain('Field Mapping Matrix')
+    expect(container.textContent).toContain('Card Simulator')
+    expect(container.textContent).toContain('Automated Subtitle Mining')
+    expect(container.textContent).toContain('Zero Desktop Anki Required')
+    expect(container.textContent).toContain('Yomitan Popup Synergy')
+  })
 })
+

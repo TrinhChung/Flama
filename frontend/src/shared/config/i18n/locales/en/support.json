@@ -98,6 +98,7 @@
       "marketplace_note_types": "Note Type Marketplace",
       "orders": "Orders List",
       "settings_yomitan": "Yomitan Settings",
+      "settings_asbplayer": "asbplayer Connection Settings",
       "settings_mcp_tokens": "MCP Access Tokens",
       "feedback": "Feedback & Bug Report",
       "tickets": "Support Tickets",
@@ -339,5 +340,8 @@
     "checkout_failed": "Unable to initialize payment.",
     "audio_connected": "Connected successfully to Flama Audio Desktop (127.0.0.1:4791)!",
     "audio_offline": "Flama Audio Desktop not detected on port 4791."
+  },
+  "page_options": {
+    "settings_asbplayer": "asbplayer Connection Settings"
   }
 }

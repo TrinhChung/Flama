@@ -64,6 +64,7 @@ const pageTitleKeyMap: Record<string, string> = {
   '/settings/goals': 'page_titles.settings_goals',
   '/settings/mcp-tokens': 'page_titles.settings_mcp',
   '/settings/yomitan': 'page_titles.settings_yomitan',
+  '/settings/asbplayer': 'page_titles.settings_asbplayer',
   '/guide': 'page_titles.guide',
   '/guide/flama-audio': 'page_titles.guide_flama_audio',
   '/feedback': 'page_titles.feedback',

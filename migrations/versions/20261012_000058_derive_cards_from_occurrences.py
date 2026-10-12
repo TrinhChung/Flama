@@ -1,7 +1,7 @@
 """Archive old presentation IDs and derive new presentations without Card rows.
 
 Revision ID: 20261012_000058
-Revises: 20261010_000056
+Revises: 20261012_000057
 
 This contraction requires a stopped-writer deployment window. It keeps every
 old Card column in an immutable alias table and captures original entity sets
@@ -24,7 +24,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "20261012_000058"
-down_revision = "20261010_000056"
+down_revision = "20261012_000057"
 branch_labels = None
 depends_on = None
 

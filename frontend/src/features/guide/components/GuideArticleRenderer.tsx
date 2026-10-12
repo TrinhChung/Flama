@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { GuideBreadcrumb } from './GuideBreadcrumb'
 import { YomitanInteractiveGuide } from './YomitanInteractiveGuide'
 import { YomitanMarkersExplorer } from './YomitanMarkersExplorer'
+import { AsbplayerInteractiveGuide } from './AsbplayerInteractiveGuide'
 import { McpInteractiveGuide } from './McpInteractiveGuide'
 import { McpToolsExplorer } from './McpToolsExplorer'
 import { getAdjacentArticles } from '../guideData'
@@ -35,6 +36,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
   const isSpecializedArticle =
     article.slug === 'yomitan' ||
     article.slug === 'yomitan-markers' ||
+    article.slug === 'asbplayer' ||
     article.slug === 'mcp-ai' ||
     article.slug === 'mcp-tools'
 
@@ -99,6 +101,11 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       {/* Specialized Yomitan Markers Explorer */}
       {article.slug === 'yomitan-markers' && (
         <YomitanMarkersExplorer />
+      )}
+
+      {/* Specialized asbplayer Interactive Overview */}
+      {article.slug === 'asbplayer' && (
+        <AsbplayerInteractiveGuide />
       )}
 
       {/* Specialized MCP Interactive Overview */}

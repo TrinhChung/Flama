@@ -141,5 +141,105 @@
       "auto_create": "Chưa có token kết nối. Đang tự động tạo key Flama Connect mới...",
       "copied": "Đã sao chép vào bộ nhớ tạm."
     }
+  },
+  "asbplayer": {
+    "loading": "Đang tải token asbplayer…",
+    "header": {
+      "title": "Quản lý Token asbplayer & AnkiConnect",
+      "description": "Tích hợp tiện ích asbplayer để khai thác câu, ảnh và audio từ video/anime trực tiếp vào Flama.",
+      "guide_title": "Hướng dẫn kết nối asbplayer",
+      "troubleshoot_title": "Khắc phục lỗi asbplayer",
+      "guide_btn": "Hướng dẫn kết nối"
+    },
+    "quick_links": {
+      "label": "Tra cứu nhanh:",
+      "install": "Cài đặt & Tải tiện ích",
+      "mapping": "Cấu hình 7 trường dữ liệu",
+      "shortcuts": "Phím tắt khai thác"
+    },
+    "highlights": {
+      "video_title": "Video & Anime Mining",
+      "video_sub": "Phụ đề song ngữ",
+      "media_title": "Audio & Ảnh 1-Click",
+      "media_sub": "Cắt tự động chuẩn xác",
+      "sentences_title": "Sentence Mining",
+      "sentences_sub": "Học từ qua ngữ cảnh",
+      "protocol_title": "Giao thức AnkiConnect",
+      "protocol_sub": "Tương thích chuẩn Anki"
+    },
+    "form": {
+      "title": "Tạo API Token asbplayer",
+      "description": "Cấp token truy cập giao thức AnkiConnect cho tiện ích asbplayer. Xem <link>Hướng dẫn kết nối chi tiết</link> để xem các bước cấu hình.",
+      "guide_link_text": "Hướng dẫn kết nối chi tiết",
+      "preset_label": "Chế độ khai thác (Preset)",
+      "preset_text": "Chỉ văn bản (Câu & Từ vựng)",
+      "preset_media": "Văn bản, hình ảnh và MP3",
+      "setup_title": "Chuẩn bị deck và model",
+      "setup_desc": "Tự động tạo deck \"Sentences\" và loại thẻ \"Sentence Card\" với 7 trường chuẩn: Sentence, Word, Definition, Image, Audio, Source, URL.",
+      "setup_btn": "Chuẩn bị deck và model",
+      "setup_loading": "Đang chuẩn bị…",
+      "name_label": "Tên thiết bị / Trình duyệt",
+      "name_placeholder": "Ví dụ: asbplayer - Chrome PC",
+      "expiry_label": "Thời hạn hiệu lực",
+      "expiry_30": "30 ngày",
+      "expiry_90": "90 ngày",
+      "expiry_180": "180 ngày (mặc định)",
+      "expiry_365": "365 ngày",
+      "expiry_none": "Không hết hạn",
+      "submit_btn": "Tạo token mới",
+      "issued_title": "Thông tin kết nối asbplayer",
+      "issued_warning": "Sao chép API Key ngay bây giờ — Flama chỉ hiển thị khóa này một lần duy nhất!",
+      "url_label": "AnkiConnect Server URL",
+      "copy_url_btn": "Sao chép URL",
+      "copied_url_btn": "Đã sao chép URL",
+      "key_label": "API Key (AnkiConnect Secret)",
+      "copy_key_btn": "Sao chép API Key",
+      "copied_key_btn": "Đã sao chép API Key"
+    },
+    "tokens": {
+      "default_name": "asbplayer - Trình duyệt PC",
+      "title": "Danh sách Token asbplayer",
+      "description": "Các API Key kết nối asbplayer đang hoạt động hoặc đã thu hồi của tài khoản",
+      "refresh": "Làm mới",
+      "refresh_tooltip": "Tải lại danh sách",
+      "empty_title": "Chưa có token asbplayer",
+      "empty_desc": "Hãy tạo token đầu tiên để kết nối tiện ích asbplayer với Flama.",
+      "status_active": "Đang hoạt động",
+      "status_revoked": "Đã thu hồi",
+      "status_expired": "Đã hết hạn",
+      "badge_text": "Văn bản",
+      "badge_media": "Văn bản & Media",
+      "th_name": "Tên thiết bị & Preset",
+      "th_status": "Trạng thái",
+      "th_expiry": "Hết hạn",
+      "th_last_used": "Lần dùng gần nhất",
+      "th_actions": "Thao tác",
+      "never_expires": "Không hết hạn",
+      "never_used": "Chưa từng sử dụng",
+      "action_copy_url": "Sao chép URL AnkiConnect",
+      "action_rotate": "Tạo lại",
+      "action_revoke": "Thu hồi",
+      "confirm_rotate": "Thu hồi token cũ và tạo token mới với tên này?",
+      "confirm_revoke": "Bạn có chắc chắn muốn thu hồi token này ngay lập tức?"
+    },
+    "docs": {
+      "title": "Tài liệu & Hướng dẫn tham chiếu",
+      "view_all": "Xem tất cả",
+      "card1_title": "Cài đặt & Cấu hình asbplayer",
+      "card1_desc": "Hướng dẫn cài đặt extension trên Chrome và cấu hình kết nối AnkiConnect.",
+      "card2_title": "Ánh xạ 7 trường Sentence Card",
+      "card2_desc": "Cấu hình mapping Sentence, Word, Definition, Image, Audio, Source, URL.",
+      "card3_title": "Phím tắt & Khai thác Video",
+      "card3_desc": "Sử dụng phím tắt Ctrl+Shift+X để tạo thẻ ngay khi xem anime và phim."
+    },
+    "messages": {
+      "create_success": "Đã tạo token asbplayer thành công.",
+      "revoke_success": "Token đã được thu hồi ngay lập tức.",
+      "rotate_success": "Đã thu hồi token cũ và tạo token mới thành công.",
+      "setup_success": "Đã chuẩn bị deck Sentences và model Sentence Card thành công.",
+      "copied": "Đã sao chép vào bộ nhớ tạm.",
+      "copied_url": "Đã sao chép AnkiConnect Server URL.",
+      "copy_failed": "Không thể sao chép vào bộ nhớ tạm."
+    }
   }
 }

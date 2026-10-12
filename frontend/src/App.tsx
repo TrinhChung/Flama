@@ -201,6 +201,11 @@ const YomitanTokensPage = lazy(() =>
     default: module.YomitanTokensPage,
   })),
 )
+const AsbplayerTokensPage = lazy(() =>
+  import('./features/settings/pages/AsbplayerTokensPage').then((module) => ({
+    default: module.AsbplayerTokensPage,
+  })),
+)
 const FeedbackPage = lazy(() =>
   import('./features/support/pages/FeedbackPage').then((module) => ({
     default: module.FeedbackPage,
@@ -567,6 +572,14 @@ const router = createBrowserRouter([
           {
             path: 'settings/yomitan',
             element: deferred(<YomitanTokensPage />),
+          },
+          {
+            path: 'settings/asbplayer',
+            element: deferred(<AsbplayerTokensPage />),
+          },
+          {
+            path: 'asbplayer',
+            element: <Navigate to="/settings/asbplayer" replace />,
           },
           {
             path: 'feedback',
