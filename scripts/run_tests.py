@@ -1443,6 +1443,11 @@ def build_backend_test_environment(media_root: str) -> dict[str, str]:
     # Rate-limit tests opt in explicitly through their app config. Disabling the
     # default here prevents module-level counters from leaking across test apps.
     env["RATE_LIMIT_DAILY_ENABLED"] = "0"
+    # A developer's .env may configure real SMTP/Resend credentials. Tests
+    # opt into their provider fixtures explicitly instead of sending mail.
+    env["EMAIL_ENABLED"] = "0"
+    env["EMAIL_PROVIDER"] = "memory"
+    env["EMAIL_ENVIRONMENT"] = "test"
     return env
 
 def run_backend_tests(
