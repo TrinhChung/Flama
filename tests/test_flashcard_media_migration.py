@@ -17,6 +17,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class FlashcardMediaMigrationTests(unittest.TestCase):
@@ -30,10 +31,8 @@ class FlashcardMediaMigrationTests(unittest.TestCase):
         self.context.push()
         db.create_all()
 
-        user = User(username="media_migration", email="media-migration@example.com")
+        user = create_note_user(db.session, username="media_migration", email="media-migration@example.com")
         user.set_password("password")
-        db.session.add(user)
-        db.session.flush()
         deck = Deck(name="Media migration", owner_user_id=user.id)
         note_type = NoteType(user_id=user.id, name="Media migration type")
         db.session.add_all([deck, note_type])
@@ -68,13 +67,21 @@ class FlashcardMediaMigrationTests(unittest.TestCase):
             sha256="a" * 64,
             size_bytes=1,
         ))
-        template = Template(
+        template = attach_template(
+            db.session,
+            owner_user_id=user.id,
             note_type_id=note_type.id,
             name="Card",
             front_html='<audio src="{{Audio}}"></audio>{{Picture}}',
             back_html="{{Diagram}}",
+            input_schema=[
+                {"key": "Picture", "type": "image"},
+                {"key": "Diagram", "type": "diagram"},
+                {"key": "Audio", "type": "audio"},
+                {"key": "MissingAudio", "type": "audio"},
+                {"key": "WrongAudio", "type": "audio"},
+            ],
         )
-        db.session.add(template)
         db.session.commit()
         self.deck_id = deck.id
         self.note_id = note.id
@@ -136,10 +143,8 @@ class FlashcardMediaMigrationTests(unittest.TestCase):
         self.assertEqual(rollback.skipped_changed_since, 0)
 
     def test_active_clone_override_is_migrated_without_mutating_source_note(self):
-        learner = User(username="media_learner", email="media-learner@example.com")
+        learner = create_note_user(db.session, username="media_learner", email="media-learner@example.com")
         learner.set_password("password")
-        db.session.add(learner)
-        db.session.flush()
         clone_deck = Deck(name="Installed media deck", owner_user_id=learner.id)
         item = DeckMarketplaceItem(
             owner_user_id=self.user_id,

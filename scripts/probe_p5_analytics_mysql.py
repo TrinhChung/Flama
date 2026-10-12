@@ -56,6 +56,7 @@ def run_probe():
             @classmethod
             def setUpClass(cls):
                 cls.app = app
+                cls.app.config["STUDY_NOTE_COUNT_ENABLED"] = False
 
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteAnalyticsReadTests)
         result = unittest.TextTestRunner(verbosity=2).run(suite)

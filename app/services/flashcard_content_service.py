@@ -800,10 +800,14 @@ def list_templates(*, user_id: int, note_type_id: str) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     # Preserve the compatibility list DTO; input schema/bindings are exposed by
     # library/application APIs. Order/default/membership still come from use.
-    items = [
-        {key: value for key, value in item.items() if key not in {"input_schema", "input_bindings"}}
-        for item in marketplace_query_service.serialize_note_type_templates(note_type)
-    ]
+    items = []
+    seen_template_ids = set()
+    for item in marketplace_query_service.serialize_note_type_templates(note_type):
+        if item["id"] in seen_template_ids:
+            continue
+        seen_template_ids.add(item["id"])
+        items.append({key: value for key, value in item.items()
+                      if key not in {"input_schema", "input_bindings"}})
     template_ids = [str(item["id"]) for item in items]
     note_counts: dict[str, int] = {}
     if template_ids:

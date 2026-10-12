@@ -34,9 +34,9 @@
     - `20261012_000061_index_note_due_selection.py` (Tối ưu index range scan cho queue queries)
 * **Điểm nghẽn dở dang cần fix (Test Suite Blockers):**
   - Chạy `python scripts/run_tests.py --module study` phát hiện **81 lỗi test** (`FAILED (failures=7, errors=74)`):
-    1. **`ModuleNotFoundError: No module named 'models.card_progress'`**: Các file test cũ (`test_deck_count_projection.py`, `test_study_session_api.py`, `test_scheduler_schema.py`, `test_study_direct_note_replay.py`,...) vẫn còn câu lệnh `import CardProgress`.  
+    1. **`ModuleNotFoundError: No module named 'models.card_progress'`**: Các file test cũ (`test_deck_count_projection.py`, `test_study_session_api.py`, `test_scheduler_schema.py`, `test_study_direct_note_replay.py`,...) vẫn còn câu lệnh `import CardProgress`.
        👉 *Cần làm:* Thay thế bằng `study_note_fixtures.py` hoặc cập nhật assertions sang `StudyProgressSubject`.
-    2. **Mã lỗi `409 STUDY_AUTHORITY_MIGRATION_REQUIRED`**: Do đã ngắt bỏ hoàn toàn fallback legacy, mọi learner bắt buộc phải có enrollment `CONSOLIDATED_V1`. Một số test fixtures cũ tạo user mà không tạo enrollment bản ghi tương ứng.  
+    2. **Mã lỗi `409 STUDY_AUTHORITY_MIGRATION_REQUIRED`**: Do đã ngắt bỏ hoàn toàn fallback legacy, mọi learner bắt buộc phải có enrollment `CONSOLIDATED_V1`. Một số test fixtures cũ tạo user mà không tạo enrollment bản ghi tương ứng.
        👉 *Cần làm:* Bổ sung auto-enrollment trong các test fixtures tương ứng.
 
 ---

@@ -19,6 +19,7 @@ from models import db
 from models.review_analytics import DailyReviewCount, ReviewAnalyticsGeneration
 from models.review_event import ReviewEvent
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 class ReviewAnalyticsProjectionTests(unittest.TestCase):
@@ -30,7 +31,7 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
-        user = User(username="rollup-writer", email="rollup-writer@example.invalid", timezone="UTC")
+        user = create_note_user(db.session, username="rollup-writer", email="rollup-writer@example.invalid", timezone="UTC")
         db.session.add(user)
         db.session.commit()
         self.user_id = user.id
@@ -94,7 +95,7 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         row = self._event()
         flush_review_analytics_deltas(db.session)
         db.session.commit()
-        other = User(username="other-rollup", email="other-rollup@example.invalid", timezone="UTC")
+        other = create_note_user(db.session, username="other-rollup", email="other-rollup@example.invalid", timezone="UTC")
         db.session.add(other)
         db.session.commit()
         other_id = other.id

@@ -22,6 +22,7 @@ from models.flashcard import (
     Note,
 )
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 class DeckChangeRequestFlowTests(unittest.TestCase):
@@ -37,7 +38,7 @@ class DeckChangeRequestFlowTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="owner", email="owner@example.com", is_admin=True)
+            user = create_note_user(db.session, username="owner", email="owner@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
@@ -109,7 +110,7 @@ class DeckChangeRequestFlowTests(unittest.TestCase):
         source_note_id = owner_note_resp.get_json()["id"]
 
         with self.app.app_context():
-            learner = User(username="learner", email="learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="learner", email="learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -655,7 +656,7 @@ class DeckChangeRequestFlowTests(unittest.TestCase):
         request_id = draft_resp.get_json()["id"]
 
         with self.app.app_context():
-            outsider = User(
+            outsider = create_note_user(db.session,
                 username="outsider",
                 email="outsider@example.com",
                 is_admin=False,

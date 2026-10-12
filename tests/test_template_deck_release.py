@@ -21,6 +21,7 @@ from models.template import Template
 from models.template_subscription import TemplateSubscription
 from models.user import User
 
+from tests.study_note_fixtures import attach_template, create_note_user
 
 class TemplateDeckReleaseTests(unittest.TestCase):
     def setUp(self):
@@ -28,15 +29,15 @@ class TemplateDeckReleaseTests(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
-        self.owner = User(username="presentation-author", email="presentation-author@example.com")
-        self.learner = User(username="presentation-learner", email="presentation-learner@example.com")
+        self.owner = create_note_user(db.session, username="presentation-author", email="presentation-author@example.com")
+        self.learner = create_note_user(db.session, username="presentation-learner", email="presentation-learner@example.com")
         db.session.add_all([self.owner, self.learner])
         db.session.flush()
         self.nt = NoteType(user_id=self.owner.id, name="Source")
         db.session.add(self.nt)
         db.session.flush()
         self.field = FieldDef(note_type_id=self.nt.id, name="Word", field_type="text", position=0)
-        self.template = Template(note_type_id=self.nt.id, owner_user_id=self.owner.id, name="Front", front_html="FRONT", back_html="BACK", shared_css="", input_schema=[])
+        self.template = attach_template(db.session, note_type_id=self.nt.id, owner_user_id=self.owner.id, name="Front", front_html="FRONT", back_html="BACK", shared_css="", input_schema=[])
         db.session.add_all([self.field, self.template])
         db.session.commit()
         self.application = StudyApplication.query.filter_by(note_type_id=self.nt.id, template_id=self.template.id).one()

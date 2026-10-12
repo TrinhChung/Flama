@@ -39,6 +39,7 @@ from models.note_type import NoteType
 from models.study_application import StudyApplication
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 _MIN_MP3_BYTES = b"ID3\x04\x00\x00\x00\x00\x00\x15" + (b"\x00" * 64)
@@ -101,12 +102,10 @@ class FlamaConnectTests(unittest.TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
-            owner = User(username="connect-owner", email="connect@example.com")
+            owner = create_note_user(db.session, username="connect-owner", email="connect@example.com")
             owner.set_password("password")
-            other = User(username="connect-other", email="other@example.com")
+            other = create_note_user(db.session, username="connect-other", email="other@example.com")
             other.set_password("password")
-            db.session.add_all([owner, other])
-            db.session.flush()
             self.user_id = owner.id
             self.other_user_id = other.id
 
@@ -129,13 +128,16 @@ class FlamaConnectTests(unittest.TestCase):
                         required=True,
                         identity_role="primary",
                     ),
-                    Template(
-                        note_type_id=note_type.id,
-                        name="Card 1",
-                        front_html="{{Word}}",
-                        back_html="{{Meaning}}",
-                    ),
                 ]
+            )
+            attach_template(
+                db.session,
+                note_type_id=note_type.id,
+                owner_user_id=owner.id,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Meaning}}",
+                position=0,
             )
             inbox = Deck(owner_user_id=owner.id, name="Inbox")
             second = Deck(owner_user_id=owner.id, name="Second")
@@ -340,7 +342,7 @@ class FlamaConnectTests(unittest.TestCase):
             target = db.session.get(NoteType, target_id)
             self.assertIsNotNone(target)
             self.assertEqual([field.name for field in target.field_defs], ["Word", "Meaning"])
-            self.assertEqual(len(target.templates), 1)
+            self.assertEqual(len(target.study_applications), 1)
             self.assertEqual(Deck.query.count(), before_decks)
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Card.query.count(), 0)
@@ -361,13 +363,16 @@ class FlamaConnectTests(unittest.TestCase):
                         identity_role="primary",
                     ),
                     FieldDef(note_type_id=second_type.id, name="Meaning", field_type="richtext", position=1),
-                    Template(
-                        note_type_id=second_type.id,
-                        name="Card 1",
-                        front_html="{{Word}}",
-                        back_html="{{Meaning}}",
-                    ),
                 ]
+            )
+            attach_template(
+                db.session,
+                note_type_id=second_type.id,
+                owner_user_id=self.user_id,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Meaning}}",
+                position=0,
             )
             db.session.commit()
             second_type_id = second_type.id
@@ -933,15 +938,17 @@ class FlamaConnectTests(unittest.TestCase):
                         field_type="audio",
                         position=3,
                     ),
-                    Template(
-                        note_type_id=alternative_type.id,
-                        name="Card 1",
-                        front_html="{{Word}}",
-                        back_html="{{Meaning}}",
-                        position=0,
-                        is_default=True,
-                    ),
                 ]
+            )
+            attach_template(
+                db.session,
+                note_type_id=alternative_type.id,
+                owner_user_id=self.user_id,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Meaning}}",
+                position=0,
+                is_default=True,
             )
             db.session.commit()
             alternative_type_id = alternative_type.id
@@ -969,20 +976,30 @@ class FlamaConnectTests(unittest.TestCase):
         )
 
         with self.app.app_context():
-            db.session.add(
-                Template(
-                    note_type_id=self.note_type_id,
-                    name="Card 2",
-                    front_html="{{Meaning}}",
-                    back_html="{{Word}}",
-                    position=1,
-                )
+            attach_template(
+                db.session,
+                note_type_id=self.note_type_id,
+                owner_user_id=self.user_id,
+                name="Card 2",
+                front_html="{{Meaning}}",
+                back_html="{{Word}}",
+                position=1,
             )
             db.session.commit()
             # Adding a presentation is itself a valid working-tree change.
-            # The rejected import below must preserve that new revision.
+            # The import below must preserve the presentations already derived
+            # by this attachment and must not create per-Note Card rows.
             revision_after_template_add = int(db.session.get(DeckMarketplaceItem, item_id).working_revision or 0)
             self.assertEqual(revision_after_template_add, 2)
+            derived_card_ids = sorted(str(row.id) for row in Card.query.filter_by(note_id=note_id))
+            self.assertEqual(len(derived_card_ids), 2)
+            self.assertTrue(set(original_card_ids).issubset(derived_card_ids))
+            from tests.note_progress_fixtures import stage_note_state
+            subject = stage_note_state(db.session, user_id=self.user_id, note_id=note_id,
+                queue="review", due_day=739010, interval_days=7, reps=3, revision=5)
+            db.session.commit()
+            protected_state = (subject.authority_revision, subject.state_payload,
+                               bytes(subject.semantic_state_hash))
 
         template_plan = note_type_plan(
             self.note_type_id,
@@ -990,7 +1007,7 @@ class FlamaConnectTests(unittest.TestCase):
             include_second_template=True,
         )
         template_session = create_session(template_plan, "9")
-        template_blocked = import_existing(
+        template_imported = import_existing(
             template_session,
             model_id=source_model_id,
             target_note_type_id=self.note_type_id,
@@ -1000,14 +1017,7 @@ class FlamaConnectTests(unittest.TestCase):
             image_name=image_name,
             audio_name=audio_name,
         )
-        self.assertFalse(
-            template_blocked["results"][0]["imported"],
-            template_blocked,
-        )
-        self.assertIn(
-            "cannot change card templates for a released shared note",
-            template_blocked["results"][0]["error"],
-        )
+        self.assertTrue(template_imported["results"][0]["imported"], template_imported)
 
         with self.app.app_context():
             db.session.expire_all()
@@ -1024,8 +1034,15 @@ class FlamaConnectTests(unittest.TestCase):
                     .order_by(Card.id.asc())
                     .all()
                 ],
-                sorted(original_card_ids),
+                derived_card_ids,
             )
+            from models.study_progress_subject import StudyProgressSubject
+            from tests.study_note_fixtures import assert_retired_progress_absent
+            subject = StudyProgressSubject.query.filter_by(
+                learner_user_id=self.user_id, live_note_id=note_id).one()
+            self.assertEqual((subject.authority_revision, subject.state_payload,
+                              bytes(subject.semantic_state_hash)), protected_state)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(int(item.working_revision or 0), revision_after_template_add)
             self.assertEqual(
                 DeckWorkingDirtyEntity.query.filter_by(
@@ -1276,10 +1293,7 @@ class FlamaConnectTests(unittest.TestCase):
 
     def test_add_note_accepts_active_application_without_legacy_template_origin(self):
         with self.app.app_context():
-            template = Template.query.filter_by(note_type_id=self.note_type_id).one()
-            template.note_type_id = None
-            db.session.commit()
-            self.assertEqual(Template.query.filter_by(note_type_id=self.note_type_id).count(), 0)
+            self.assertFalse(hasattr(Template, "note_type_id"))
             self.assertEqual(StudyApplication.query.filter_by(note_type_id=self.note_type_id, status_code="ACTIVE").count(), 1)
         response = self._call("addNote", {"note": self._note()})
         self.assertIsInstance(response.get_json(), int)
@@ -1458,12 +1472,18 @@ class FlamaConnectTests(unittest.TestCase):
                 note_type_id=source_type.id, name="Word", field_type="text",
                 required=True, identity_role="primary",
             )
-            source_template = Template(
-                note_type_id=source_type.id, name="Card 1", front_html="{{Word}}", back_html="{{Word}}",
+            source_template = attach_template(
+                db.session,
+                note_type_id=source_type.id,
+                owner_user_id=self.other_user_id,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                position=0,
             )
             source_deck = Deck(owner_user_id=self.other_user_id, note_type_id=source_type.id, name="Pinned Source")
             local_deck = Deck(owner_user_id=self.user_id, note_type_id=self.note_type_id, name="Pinned Clone")
-            db.session.add_all([source_field, source_template, source_deck, local_deck])
+            db.session.add_all([source_field, source_deck, local_deck])
             db.session.flush()
             source_notes = [Note(
                 user_id=self.other_user_id, note_type_id=source_type.id, deck_id=source_deck.id,
@@ -1756,11 +1776,14 @@ class FlamaConnectTests(unittest.TestCase):
                 required=True,
                 identity_role="primary",
             )
-            source_template = Template(
+            source_template = attach_template(
+                db.session,
                 note_type_id=source_type.id,
+                owner_user_id=self.other_user_id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{Word}}",
+                position=0,
             )
             source_deck = Deck(
                 owner_user_id=self.other_user_id,
@@ -1772,7 +1795,7 @@ class FlamaConnectTests(unittest.TestCase):
                 note_type_id=self.note_type_id,
                 name="Installed Clone",
             )
-            db.session.add_all([source_field, source_template, source_deck, local_deck])
+            db.session.add_all([source_field, source_deck, local_deck])
             db.session.flush()
             source_note = Note(
                 user_id=self.other_user_id,

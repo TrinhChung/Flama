@@ -28,6 +28,7 @@ from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.template import Template
 from models.user import User
 
+from tests.study_note_fixtures import attach_template, create_note_user
 
 class PaymentOrderFlowTests(unittest.TestCase):
     def setUp(self):
@@ -56,9 +57,9 @@ class PaymentOrderFlowTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            owner = User(username="payment-owner", email="payment-owner@example.com", is_admin=False)
+            owner = create_note_user(db.session, username="payment-owner", email="payment-owner@example.com", is_admin=False)
             owner.set_password("password")
-            buyer = User(username="payment-buyer", email="payment-buyer@example.com", is_admin=False)
+            buyer = create_note_user(db.session, username="payment-buyer", email="payment-buyer@example.com", is_admin=False)
             buyer.set_password("password")
             db.session.add_all([owner, buyer])
             db.session.commit()
@@ -103,7 +104,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
                 )
             )
             db.session.add(
-                Template(
+                attach_template(db.session, owner_user_id=self.owner_id,
                     note_type_id=note_type.id,
                     name="Card 1",
                     front_html="{{Word}}",
@@ -377,17 +378,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
             pricing_mode="paid", price_amount_minor=75000
         )
         with self.app.app_context():
-            enrolled_at = datetime(2026, 9, 23)
-            db.session.add(
-                StudyAuthorityEnrollment(
-                    learner_user_id=self.buyer_id,
-                    mode_code="NOTE",
-                    epoch=1,
-                    created_at=enrolled_at,
-                    updated_at=enrolled_at,
-                )
-            )
-            db.session.commit()
+            self.assertEqual(db.session.get(StudyAuthorityEnrollment, self.buyer_id).mode_code, "NOTE")
             item = db.session.get(DeckMarketplaceItem, deck_item_id)
             # Both checkout validators take the learner fence but accept NOTE.
             for validate in (
@@ -436,6 +427,10 @@ class PaymentOrderFlowTests(unittest.TestCase):
         order_id = (checkout_response.get_json() or {})["order"]["id"]
 
         with self.app.app_context():
+            # Explicit recovery fixture: an unenrolled account with an already
+            # admitted order must not bypass the pending-payment fence.
+            db.session.delete(db.session.get(StudyAuthorityEnrollment, self.buyer_id))
+            db.session.commit()
             with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
                 stage_note_authority_enrollment(
                     db.session,
@@ -444,7 +439,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
                 )
             self.assertEqual(failure.exception.code, "PENDING_DECK_ORDER")
             db.session.rollback()
-            self.assertEqual(StudyAuthorityEnrollment.query.count(), 0)
+            self.assertIsNone(db.session.get(StudyAuthorityEnrollment, self.buyer_id))
 
             order = db.session.get(PaymentOrder, order_id)
             order.status = "canceled"

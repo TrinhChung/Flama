@@ -92,6 +92,7 @@ class PinnedNewInstallTests(unittest.TestCase):
         self.source_app.status_code = "RETIRED"
         self.source_app.position = 99
         self.source_app.is_default = False
+        self.source_app.input_bindings = {}
         self.template.front_html = "unpublished draft"
         db.session.commit()
         install, local_nt = self._install(entry)
@@ -119,6 +120,15 @@ class PinnedNewInstallTests(unittest.TestCase):
         self.assertEqual({card.note_id for card in visible}, {self.source_note.id, local_note.id})
         self.assertEqual(Note.query.filter_by(user_id=self.author.id).count(), 1)
         self.assertEqual(Card.query.filter_by(note_id=local_note.id).count(), 1)
+        from app.services.study_composition_service import list_available_compositions_for_query
+        from app.services.study_template_preset_service import template_inputs_for_compositions
+        compositions = list_available_compositions_for_query(
+            flashcards_share_service.query_clone_scope_cards(scope), clone_scope=scope)
+        inputs = template_inputs_for_compositions(compositions,
+            user_id=self.learner.id, clone_scope=scope)
+        source = next(item for item in compositions if item.context_kind == "installed_source")
+        self.assertEqual(source.study_application_id, self.source_app.id)
+        self.assertEqual(inputs[source.composition_id]["input_bindings"], {"term": self.field.id})
 
     def _empty_case(self, entry):
         self._publish(empty=True)

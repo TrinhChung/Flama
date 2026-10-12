@@ -11,6 +11,7 @@ from models.note import Note
 from models.template import Template
 from models.user import User
 from models.deck import Deck
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 
@@ -29,25 +30,23 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
             db.create_all()
 
             # Author user
-            author = User(
+            author = create_note_user(
+                db.session,
                 username="author",
                 email="author@example.com",
                 is_admin=False,
             )
             author.set_password("password123")
-            db.session.add(author)
-            db.session.flush()
             self.author_id = author.id
 
             # Learner user
-            learner = User(
+            learner = create_note_user(
+                db.session,
                 username="learner",
                 email="learner@example.com",
                 is_admin=False,
             )
             learner.set_password("password123")
-            db.session.add(learner)
-            db.session.flush()
             self.learner_id = learner.id
 
             # Create NoteType with FieldDef and Template
@@ -79,7 +78,9 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
             )
             db.session.add_all([field1, field2])
 
-            template = Template(
+            template = attach_template(
+                db.session,
+                owner_user_id=author.id,
                 note_type_id=note_type.id,
                 name="Card 1",
                 front_html="<div>{{Word}}</div>",
@@ -87,7 +88,6 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
                 shared_css="body { font-family: sans-serif; }",
                 position=0,
             )
-            db.session.add(template)
             db.session.commit()
 
             self.note_type_id = note_type.id

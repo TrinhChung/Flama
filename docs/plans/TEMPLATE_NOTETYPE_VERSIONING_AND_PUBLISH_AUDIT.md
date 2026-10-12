@@ -1,6 +1,6 @@
 # Báo cáo & Kế hoạch Xử lý: Versioning và Publish lại khi 1 NoteType gắn nhiều Template
 
-> **Ngày lập báo cáo:** 2026-10-12  
+> **Ngày lập báo cáo:** 2026-10-12
 > **Phạm vi:** Kiến trúc Template Library (`Template`, `StudyApplication`), Versioning (`TemplateVersion`, `TemplateRelease`), phát hành lại Deck (`DeckRelease`, `DeckReleaseTemplatePin`), và phát hành lại `NoteType` độc lập trên Marketplace.
 
 ---

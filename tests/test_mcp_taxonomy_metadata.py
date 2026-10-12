@@ -15,6 +15,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class McpTaxonomyMetadataTests(unittest.TestCase):
@@ -30,16 +31,14 @@ class McpTaxonomyMetadataTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(
+            user = create_note_user(
+                db.session,
                 username="test_taxonomy_user",
                 email="taxonomy_user@example.com",
                 timezone="UTC",
                 is_admin=False,
             )
             user.set_password("password123")
-            db.session.add(user)
-            db.session.flush()
-
             self.user_id = user.id
             issued_token = user_api_token_service.issue_token(user_id=user.id, name="Test Token")
             self.token = issued_token.plaintext
@@ -54,8 +53,10 @@ class McpTaxonomyMetadataTests(unittest.TestCase):
             f2 = FieldDef(note_type_id=nt.id, name="Back", field_type="text", position=1, required=True)
             db.session.add_all([f1, f2])
 
-            t1 = Template(
+            t1 = attach_template(
+                db.session,
                 note_type_id=nt.id,
+                owner_user_id=user.id,
                 name="Card 1",
                 front_html="{{Front}}",
                 back_html="{{FrontSide}}<hr>{{Back}}",
@@ -63,7 +64,6 @@ class McpTaxonomyMetadataTests(unittest.TestCase):
                 position=0,
                 is_default=True,
             )
-            db.session.add(t1)
 
             deck = Deck(name="JLPT N3 Master", owner_user_id=user.id)
             db.session.add(deck)

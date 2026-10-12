@@ -37,6 +37,7 @@ _SAFE_SVG_BYTES = (
     b'<rect width="50" height="50" fill="green"/></svg>'
 )
 
+from tests.study_note_fixtures import attach_template, create_note_user
 
 class ImageCrawlServiceTests(unittest.TestCase):
     def setUp(self):
@@ -59,14 +60,14 @@ class ImageCrawlServiceTests(unittest.TestCase):
                 db.session.add(role)
                 db.session.commit()
 
-            user1 = User(
+            user1 = create_note_user(db.session,
                 username="crawler-user1",
                 email="user1@example.com",
                 is_admin=False,
                 role_id=role.id,
             )
             user1.set_password("password")
-            user2 = User(
+            user2 = create_note_user(db.session,
                 username="crawler-user2",
                 email="user2@example.com",
                 is_admin=False,
@@ -107,7 +108,7 @@ class ImageCrawlServiceTests(unittest.TestCase):
             )
             db.session.add_all([field_front, field_img, field_md])
 
-            template = Template(
+            template = attach_template(db.session, owner_user_id=user1.id,
                 note_type_id=note_type.id,
                 name="Card 1",
                 front_html="<div>{{Word}}</div>",

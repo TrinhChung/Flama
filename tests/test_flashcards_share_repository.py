@@ -17,6 +17,7 @@ from models.flashcard import (
 )
 from models.study_application import StudyApplication
 from app.repositories import flashcards_share_repository
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
@@ -34,13 +35,10 @@ class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
         self.app_context.push()
         db.create_all()
 
-        user = User(username="testuser", email="test@example.com")
+        user = create_note_user(db.session, username="testuser", email="test@example.com")
         user.set_password("password")
-        other_user = User(username="otheruser", email="other@example.com")
+        other_user = create_note_user(db.session, username="otheruser", email="other@example.com")
         other_user.set_password("password")
-        db.session.add_all([user, other_user])
-        db.session.flush()
-
         self.user_id = user.id
         self.other_user_id = other_user.id
 
@@ -66,47 +64,22 @@ class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
         db.session.add(nt_install)
 
         # Templates
-        self.tpl1 = Template(id="tpl_1", note_type_id=self.nt1.id, name="Card 1")
-        self.tpl2 = Template(id="tpl_2", note_type_id=self.nt2.id, name="Card 2")
-        db.session.add_all([self.tpl1, self.tpl2])
-        db.session.flush()
+        self.tpl1 = attach_template(db.session, id="tpl_1", owner_user_id=self.user_id, note_type_id=self.nt1.id, name="Card 1")
+        self.tpl2 = attach_template(db.session, id="tpl_2", owner_user_id=self.user_id, note_type_id=self.nt2.id, name="Card 2")
+        StudyApplication.query.filter_by(note_type_id=self.nt2.id).one().status_code = "RETIRED"
 
-        # Study application: tpl1 is ACTIVE, tpl2 is RETIRED
-        app1 = StudyApplication(
-            note_type_id=self.nt1.id,
-            template_id=self.tpl1.id,
-            occurrence_key="default_1",
-            status_code="ACTIVE",
-        )
-        app2 = StudyApplication(
-            note_type_id=self.nt2.id,
-            template_id=self.tpl2.id,
-            occurrence_key="default_2",
-            status_code="RETIRED",
-        )
-        db.session.add_all([app1, app2])
-        db.session.flush()
-
-        # Ensure all applications for nt2 are RETIRED
-        StudyApplication.query.filter_by(note_type_id=self.nt2.id).update({"status_code": "RETIRED"})
-        db.session.flush()
-
-        # Notes and cards
+        # Notes and derived presentations
         # Deck 1 has note1 and note1b (nt1), each with 1 card -> 2 cards total
         note1 = Note(id="note_1", user_id=self.user_id, deck_id=self.deck1.id, note_type_id=self.nt1.id)
-        card1a = Card(id="card_1a", note_id="note_1", template_id=self.tpl1.id)
         note1b = Note(id="note_1b", user_id=self.user_id, deck_id=self.deck1.id, note_type_id=self.nt1.id)
-        card1b = Card(id="card_1b", note_id="note_1b", template_id=self.tpl1.id)
 
         # Deck 2 has note2 (nt2) with 1 card
         note2 = Note(id="note_2", user_id=self.user_id, deck_id=self.deck2.id, note_type_id=self.nt2.id)
-        card2a = Card(id="card_2a", note_id="note_2", template_id=self.tpl2.id)
 
         # Deck Other has note_oth with 1 card (should not be counted for user)
         note_other = Note(id="note_oth", user_id=self.other_user_id, deck_id=self.deck_other.id, note_type_id=self.nt1.id)
-        card_oth = Card(id="card_oth", note_id="note_oth", template_id=self.tpl1.id)
 
-        db.session.add_all([note1, card1a, note1b, card1b, note2, card2a, note_other, card_oth])
+        db.session.add_all([note1, note1b, note2, note_other])
         db.session.commit()
 
     def tearDown(self):
@@ -120,7 +93,7 @@ class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
             deck_ids=[self.deck1.id, self.deck2.id, self.deck_other.id, 99999],
         )
         self.assertEqual(counts.get(self.deck1.id), 2)
-        self.assertEqual(counts.get(self.deck2.id), 1)
+        self.assertEqual(counts.get(self.deck2.id, 0), 0)
         # deck_other belongs to other user, so count for this user must be 0 (or not present)
         self.assertNotIn(self.deck_other.id, counts)
         self.assertNotIn(99999, counts)
@@ -133,14 +106,13 @@ class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
         self.assertEqual(counts, {})
 
     def test_combined_publish_facts_match_separate_queries_and_preserve_zero_card_note_types(self):
-        extra_template = Template(id="extra_tpl", note_type_id=self.nt1.id, name="Extra presentation")
+        extra_template = attach_template(db.session, owner_user_id=self.user_id, id="extra_tpl", note_type_id=self.nt1.id, name="Extra presentation")
         zero_card_deck = Deck(name="Zero card notes", owner_user_id=self.user_id)
         empty_deck = Deck(name="Empty", owner_user_id=self.user_id)
         deleted_deck = Deck(name="Deleted", owner_user_id=self.user_id, deleted_at=datetime.now())
         db.session.add_all([extra_template, zero_card_deck, empty_deck, deleted_deck])
         db.session.flush()
         db.session.add_all([
-            Card(id="extra_card", note_id="note_1", template_id=extra_template.id),
             Note(id="zero_mixed", user_id=self.user_id, deck_id=self.deck1.id, note_type_id=self.nt2.id),
             Note(id="zero_only", user_id=self.user_id, deck_id=zero_card_deck.id, note_type_id=self.nt_installed.id),
             Note(id="foreign_in_scope", user_id=self.other_user_id, deck_id=self.deck1.id, note_type_id=self.nt_installed.id),
@@ -153,7 +125,7 @@ class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
         )
         self.assertEqual(counts, flashcards_share_repository.batch_get_cards_count_by_deck_ids(user_id=self.user_id, deck_ids=scope))
         self.assertEqual(note_types, flashcards_share_repository.batch_get_deck_note_types(user_id=self.user_id, deck_ids=scope))
-        self.assertEqual(counts[self.deck1.id], 3)
+        self.assertEqual(counts[self.deck1.id], 4)  # Two active Templates on two Notes.
         self.assertEqual(note_types[self.deck1.id], {self.nt1.id, self.nt2.id})
         self.assertEqual(note_types[zero_card_deck.id], {self.nt_installed.id})
         self.assertNotIn(zero_card_deck.id, counts)
@@ -184,7 +156,7 @@ class FlashcardsShareRepositoryBatchTests(unittest.TestCase):
         )
         db.session.add(leaf_note)
         db.session.flush()
-        db.session.add(Card(id="deep_card", note_id=leaf_note.id, template_id=self.tpl1.id))
+        self.assertEqual(Card.query.filter_by(note_id=leaf_note.id).count(), 1)
         db.session.commit()
         db.session.remove()
         queries = []

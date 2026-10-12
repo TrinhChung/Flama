@@ -50,6 +50,15 @@ then stop `flama-study-worker.service` and the retention timer/service. Confirm
 there are no other schedulers or deployments that can write or activate old
 code during the window. Record the prior enabled/active service states.
 
+Keep startup maintenance/create-all/automatic clone cutover disabled in the
+target environment during and after activation; schema changes use explicit
+commands. Preserve these unmanaged environment keys during managed env sync.
+Migration units also disable these startup operations explicitly, so a code
+release that cannot resolve the contracted Alembic revision fails before it
+can create obsolete tables. Merge the compatible code into the deploy branch
+before permitting future automatic releases; never activate an older runtime
+by manually bypassing its failed migration command.
+
 With writers stopped, take the final full backup and restore proof, then create
 the fresh audit, external archive and protected-state baseline. CLI commands
 below run from the new release. Local credentials come from the private env
@@ -57,7 +66,8 @@ file; VPS may use root's MySQL socket for evidence commands. Do not print URIs,
 environment contents or archive rows.
 
 ```text
-python scripts/audit_legacy_progress_retirement.py --help
+python scripts/audit_legacy_progress_retirement.py [connection options] \
+  --output <private-dir>/progress-before.json
 python scripts/archive_retired_tables.py [connection options] archive \
   --output <private-dir>/retirement-archive.json --tables \
   cards card_progress vocabulary_column_preferences \

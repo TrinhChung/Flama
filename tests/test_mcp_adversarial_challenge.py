@@ -26,6 +26,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 from scripts.flama_mcp_server import process_mcp_message, run_stdio_server
 
 
@@ -47,23 +48,23 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
             db.create_all()
 
             # Create test users
-            author = User(
+            author = create_note_user(
+                db.session,
                 username="adversarial_author",
                 email="author@flama.vn",
                 timezone="UTC",
                 is_admin=False,
             )
             author.set_password("pass123")
-            db.session.add(author)
 
-            victim = User(
+            victim = create_note_user(
+                db.session,
                 username="victim_learner",
                 email="victim@flama.vn",
                 timezone="Asia/Tokyo",
                 is_admin=False,
             )
             victim.set_password("secretpass123")
-            db.session.add(victim)
             db.session.flush()
 
             self.author_id = author.id
@@ -79,14 +80,16 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                 FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0, required=True),
                 FieldDef(note_type_id=note_type.id, name="Reading", field_type="text", position=1, required=True),
                 FieldDef(note_type_id=note_type.id, name="Meaning", field_type="text", position=2, required=True),
-                Template(
-                    note_type_id=note_type.id,
-                    name="Recognition",
-                    front_html="<div>{{Word}}</div>",
-                    back_html="<div>{{Reading}} - {{Meaning}}</div>",
-                    position=0,
-                ),
             ])
+            template = attach_template(
+                db.session,
+                note_type_id=note_type.id,
+                owner_user_id=author.id,
+                name="Recognition",
+                front_html="<div>{{Word}}</div>",
+                back_html="<div>{{Reading}} - {{Meaning}}</div>",
+                position=0,
+            )
 
             # Author's Public Deck with 25 cards (to stress test anti-scraping card limits)
             pub_deck = Deck(name="Mega Public JLPT Deck", owner_user_id=author.id)
@@ -108,7 +111,7 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
+                c = Card.query.filter_by(note_id=n.id, template_id=template.id).one()
 
             # Published Marketplace Item for Mega Public Deck
             # Has 25 real cards in DB, but preview_samples_json has 3
@@ -153,7 +156,7 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
+                c = Card.query.filter_by(note_id=n.id, template_id=template.id).one()
 
             pub_market_item_fallback = DeckMarketplaceItem(
                 id="pub-fallback-deck-002",
@@ -229,7 +232,7 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
+                c = Card.query.filter_by(note_id=n.id, template_id=template.id).one()
 
             # Author's OWN personal private deck (author has a public deck, but also private notes)
             author_private_deck = Deck(name="Author Secret Private Deck", owner_user_id=author.id)

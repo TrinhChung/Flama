@@ -10,6 +10,7 @@ from app.connect import create_connect_app
 from app.services import daily_rate_limit_service, mcp_access_token_service
 from models import db
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 from models.user_role import UserRole
 
 
@@ -38,7 +39,7 @@ class DailyRateLimitUnitTests(unittest.TestCase):
             admin_role = UserRole.query.filter_by(code="admin").first()
             enterprise_role = UserRole.query.filter_by(code="enterprise").first()
 
-            regular_user = User(
+            regular_user = create_note_user(db.session,
                 username="regular_student",
                 email="regular@example.com",
                 role_id=regular_role.id if regular_role else None,
@@ -46,7 +47,7 @@ class DailyRateLimitUnitTests(unittest.TestCase):
             )
             regular_user.set_password("password")
 
-            creator_user = User(
+            creator_user = create_note_user(db.session,
                 username="deck_creator",
                 email="creator@example.com",
                 role_id=creator_role.id if creator_role else None,
@@ -54,7 +55,7 @@ class DailyRateLimitUnitTests(unittest.TestCase):
             )
             creator_user.set_password("password")
 
-            admin_user = User(
+            admin_user = create_note_user(db.session,
                 username="sysadmin",
                 email="admin@example.com",
                 role_id=admin_role.id if admin_role else None,
@@ -62,7 +63,7 @@ class DailyRateLimitUnitTests(unittest.TestCase):
             )
             admin_user.set_password("password")
 
-            enterprise_user = User(
+            enterprise_user = create_note_user(db.session,
                 username="enterprise_user",
                 email="enterprise@example.com",
                 role_id=enterprise_role.id if enterprise_role else None,
@@ -210,7 +211,7 @@ class McpDailyRateLimitIntegrationTests(unittest.TestCase):
             db.session.add_all([regular_role, creator_role, admin_role])
             db.session.flush()
 
-            regular = User(
+            regular = create_note_user(db.session,
                 username="mcp_regular",
                 email="mcp_regular@example.com",
                 role_id=regular_role.id,
@@ -218,7 +219,7 @@ class McpDailyRateLimitIntegrationTests(unittest.TestCase):
             )
             regular.set_password("password")
 
-            creator = User(
+            creator = create_note_user(db.session,
                 username="mcp_creator",
                 email="mcp_creator@example.com",
                 role_id=creator_role.id,
@@ -226,7 +227,7 @@ class McpDailyRateLimitIntegrationTests(unittest.TestCase):
             )
             creator.set_password("password")
 
-            admin = User(
+            admin = create_note_user(db.session,
                 username="mcp_admin",
                 email="mcp_admin@example.com",
                 role_id=admin_role.id,

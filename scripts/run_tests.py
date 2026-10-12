@@ -100,6 +100,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/archive_retired_tables.py",
             "scripts/bootstrap_historical_schema.py",
             "scripts/prepare_retirement_mysql_rehearsal.py",
+            "scripts/verify_retirement_protected_state.py",
+            "scripts/probe_retirement_fresh_chain_mysql.py",
+            "scripts/benchmark_note_queue_endpoint.py",
             "scripts/probe_note_queue_queries.py",
             "migrations/*retirement*.py",
             "migrations/retired_*.py",
@@ -1015,6 +1018,11 @@ REDIS_CONTRACT_SOURCE_PATTERNS = (
 )
 
 MYSQL_CONTRACT_SOURCE_PATTERNS = (
+    "scripts/archive_retired_tables.py",
+    "scripts/bootstrap_historical_schema.py",
+    "scripts/prepare_retirement_mysql_rehearsal.py",
+    "scripts/verify_retirement_protected_state.py",
+    "scripts/probe_retirement_fresh_chain_mysql.py",
     "migrations/**",
     "models/**",
     "requirements.txt",

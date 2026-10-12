@@ -15,6 +15,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class FlashcardAudioScanTests(unittest.TestCase):
@@ -35,10 +36,8 @@ class FlashcardAudioScanTests(unittest.TestCase):
         with self.app.app_context():
             db.create_all()
 
-            user = User(username="audiotester", email="audio@example.com")
+            user = create_note_user(db.session, username="audiotester", email="audio@example.com")
             user.set_password("password")
-            db.session.add(user)
-            db.session.flush()
             self.user_id = user.id
 
             # Create Deck
@@ -61,9 +60,7 @@ class FlashcardAudioScanTests(unittest.TestCase):
             f_vi_audio = FieldDef(note_type_id=self.note_type_id, name="VietnameseAudio", field_type="audio", position=5)
             db.session.add_all([f_front, f_front_audio, f_reading, f_reading_audio, f_vi, f_vi_audio])
 
-            tmpl = Template(note_type_id=self.note_type_id, name="Card 1", front_html="{{Front}}", back_html="{{Back}}")
-            db.session.add(tmpl)
-            db.session.flush()
+            tmpl = attach_template(db.session, owner_user_id=self.user_id, note_type_id=self.note_type_id, name="Card 1", front_html="{{Front}}", back_html="{{Back}}")
             self.template_id = tmpl.id
 
             # Note 1: Missing audio

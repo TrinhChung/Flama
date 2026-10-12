@@ -129,6 +129,8 @@ class Probe:
                 user = User(username=f"{prefix}-{label}", email=email, timezone="UTC")
                 session.add(user)
                 session.flush()
+                from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+                enroll_new_learner_note_authority(session, user=user)
                 self.fixtures[int(user.id)] = email
                 self.users[label] = int(user.id)
             session.commit()

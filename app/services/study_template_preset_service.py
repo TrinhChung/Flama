@@ -74,12 +74,18 @@ def template_inputs_for_compositions(compositions, *, user_id, clone_scope=None)
         return {}
     template_ids = sorted({item.template_id for item in compositions})
     note_type_ids = sorted({item.note_type_id for item in compositions})
+    application_ids = sorted({item.study_application_id for item in compositions
+                              if item.study_application_id})
     templates, note_types, applications = {}, {}, {}
     for offset in range(0, len(template_ids), 500):
         ids = template_ids[offset:offset + 500]
         templates.update({item.id: item for item in db.session.scalars(select(Template).where(Template.id.in_(ids)))})
-        for application in db.session.scalars(select(StudyApplication).where(StudyApplication.template_id.in_(ids), StudyApplication.status_code == "ACTIVE")):
-            applications[(application.note_type_id, application.template_id)] = application
+    # The authorized compositions carry exact presentation identities. A
+    # captured install can still present a source application after retirement.
+    for offset in range(0, len(application_ids), 500):
+        for application in db.session.scalars(select(StudyApplication).where(
+                StudyApplication.id.in_(application_ids[offset:offset + 500]))):
+            applications[application.id] = application
     for offset in range(0, len(note_type_ids), 500):
         note_types.update({item.id: item for item in db.session.scalars(select(NoteType).where(
             NoteType.id.in_(note_type_ids[offset:offset + 500]),
@@ -92,7 +98,7 @@ def template_inputs_for_compositions(compositions, *, user_id, clone_scope=None)
     )
     result = {}
     for composition in compositions:
-        application = applications.get((composition.note_type_id, composition.template_id))
+        application = applications.get(composition.study_application_id)
         template, fields = binding_context(composition, clone_scope=clone_scope,
             template_overrides=overrides, templates=templates, note_types=note_types)
         source = resolve_effective_template(SimpleNamespace(

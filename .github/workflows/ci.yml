@@ -328,12 +328,16 @@ jobs:
           from app import create_audit_app
           from models import db
           from models.user import User
+          from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
           url = URL.create('mysql+pymysql', username=os.environ['DB_USER'], password=os.environ['DB_PASSWORD'], host=os.environ['DB_HOST'], port=int(os.environ['DB_PORT']), database=os.environ['DB_NAME'], query={'charset':'utf8mb4'})
           assert url.database == 'ci' and url.host == '127.0.0.1'
           app = create_audit_app({'SQLALCHEMY_DATABASE_URI':url.render_as_string(hide_password=False)})
           with app.app_context():
               if db.session.get(User, 1) is None:
-                  db.session.add(User(id=1, username='ci-analytics-anchor', email='ci-analytics-anchor@example.invalid', timezone='UTC'))
+                  anchor = User(id=1, username='ci-analytics-anchor', email='ci-analytics-anchor@example.invalid', timezone='UTC')
+                  db.session.add(anchor)
+                  db.session.flush()
+                  enroll_new_learner_note_authority(db.session, user=anchor)
                   db.session.commit()
           path = Path('output/analytics-counts-ci.env')
           path.parent.mkdir(exist_ok=True)

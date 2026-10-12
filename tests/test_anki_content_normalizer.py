@@ -25,6 +25,7 @@ from models.connect_note_ref import ConnectNoteRef
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 _HTML_TAG_RE = re.compile(r"(?is)<\s*/?\s*[a-z!][^>]*>")
@@ -71,10 +72,8 @@ class AnkiNormalizerTestBase(unittest.TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
-            owner = User(username="yomitan-user", email="yomitan@example.com")
+            owner = create_note_user(db.session, username="yomitan-user", email="yomitan@example.com")
             owner.set_password("securepassword")
-            db.session.add(owner)
-            db.session.flush()
             self.user_id = owner.id
 
             # Standard Vocabulary Note Type (Text fields)
@@ -171,19 +170,22 @@ class AnkiNormalizerTestBase(unittest.TestCase):
             ])
 
             # Templates for card generation
-            template_std = Template(
+            template_std = attach_template(
+                db.session,
+                owner_user_id=owner.id,
                 note_type_id=note_type.id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{Reading}}<br>{{Meaning}}",
             )
-            template_rich = Template(
+            template_rich = attach_template(
+                db.session,
+                owner_user_id=owner.id,
                 note_type_id=rich_type.id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{Reading}}<br>{{Glossary}}",
             )
-            db.session.add_all([template_std, template_rich])
 
             # Standard Deck
             inbox = Deck(owner_user_id=owner.id, name="Default")

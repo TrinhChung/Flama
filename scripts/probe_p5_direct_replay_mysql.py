@@ -41,7 +41,7 @@ from tests.test_study_pristine_bulk_materialization import StudyPristineBulkMate
 from tests.test_study_availability_snapshot import StudyAvailabilitySnapshotTests
 from tests.test_study_algorithm_switch import StudyAlgorithmSwitchTests
 from tests.test_study_phase6_continuity import (
-    StudyPhase6ContinuityTests, StudyRepeatedApplicationTests,
+    StudyPhase6ContinuityTests, StudyMultipleTemplateAttachmentTests,
 )
 
 PROBE_NAME_PATTERN = re.compile(r"^flama_p5_direct_probe_[0-9]+_[a-f0-9]{8}$")
@@ -288,7 +288,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
             def setUpClass(cls):
                 cls.app = app
 
-        class MySQLRepeatedApplicationTests(StudyRepeatedApplicationTests):
+        class MySQLMultipleTemplateAttachmentTests(StudyMultipleTemplateAttachmentTests):
             @classmethod
             def setUpClass(cls):
                 cls.app = app
@@ -324,7 +324,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
         if content_delete_only:
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLContentDeleteTests)
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLPhase6ContinuityTests))
-            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLRepeatedApplicationTests))
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLMultipleTemplateAttachmentTests))
             report["scope"] = "content-delete"
         elif overlay_only:
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteOverlayTests)
@@ -341,7 +341,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLAvailabilitySnapshotTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLContentDeleteTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLPhase6ContinuityTests))
-            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLRepeatedApplicationTests))
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLMultipleTemplateAttachmentTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLDirectReplayTests))
             suite.addTests(MySQLNumericReplayTests(name) for name in (
                 "test_direct_note_answers_use_same_numeric_profile_for_all_ratings",

@@ -9,6 +9,7 @@ from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 class FieldArrayConversionTests(unittest.TestCase):
@@ -26,9 +27,9 @@ class FieldArrayConversionTests(unittest.TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
-            owner = User(username="owner", email="owner@example.com")
+            owner = create_note_user(db.session, username="owner", email="owner@example.com")
             owner.set_password("password")
-            other = User(username="other", email="other@example.com")
+            other = create_note_user(db.session, username="other", email="other@example.com")
             other.set_password("password")
             db.session.add_all([owner, other])
             db.session.commit()

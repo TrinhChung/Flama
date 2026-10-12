@@ -33,6 +33,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class AdversarialGT01DefaultTemplateSourcesTests(unittest.TestCase):
@@ -58,10 +59,8 @@ class AdversarialGT01DefaultTemplateSourcesTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin_gt01", email="admin_gt01@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin_gt01", email="admin_gt01@example.com", is_admin=True)
             user.set_password("password")
-            db.session.add(user)
-            db.session.flush()
             self.user_id = user.id
 
             deck = Deck(name="Deck GT01", owner_user_id=self.user_id)
@@ -196,12 +195,10 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            self.user_a = User(username="user_a", email="user_a@example.com")
+            self.user_a = create_note_user(db.session, username="user_a", email="user_a@example.com")
             self.user_a.set_password("pass_a")
-            self.user_b = User(username="user_b", email="user_b@example.com")
+            self.user_b = create_note_user(db.session, username="user_b", email="user_b@example.com")
             self.user_b.set_password("pass_b")
-            db.session.add_all([self.user_a, self.user_b])
-            db.session.flush()
             self.user_a_id = self.user_a.id
             self.user_b_id = self.user_b.id
 
@@ -233,16 +230,16 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(
+            t1 = attach_template(
+                db.session,
                 note_type_id=nt_id,
+                owner_user_id=self.user_a_id,
                 name="T1",
                 front_html="{{Front}}",
                 back_html="{{Back}}",
                 position=0,
                 is_default=True,
             )
-            db.session.add(t1)
-            db.session.flush()
             t1_id = t1.id
 
             n1 = Note(user_id=self.user_a_id, deck_id=self.deck_a_id, note_type_id=nt_id, field_values={"Front": "val"})
@@ -266,7 +263,6 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
         items = response.get_json()["items"]
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["id"], t1_id)
-        # MUST BE EXACTLY 1, NOT 10
         self.assertEqual(items[0]["note_count"], 1)
 
     def test_high_cardinality_and_unbalanced_distribution(self):
@@ -277,11 +273,9 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(note_type_id=nt_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
-            t2 = Template(note_type_id=nt_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
-            t3 = Template(note_type_id=nt_id, name="T3", front_html="3", back_html="3", position=2, is_default=False)
-            db.session.add_all([t1, t2, t3])
-            db.session.flush()
+            t1 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
+            t2 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
+            t3 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T3", front_html="3", back_html="3", position=2, is_default=False)
             t1_id, t2_id, t3_id = t1.id, t2.id, t3.id
 
             notes = [
@@ -313,8 +307,7 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             nt_a = NoteType(name="NT Private A", user_id=self.user_a_id)
             db.session.add(nt_a)
             db.session.flush()
-            t_a = Template(note_type_id=nt_a.id, name="T_A", front_html="A", back_html="A", position=0, is_default=True)
-            db.session.add(t_a)
+            t_a = attach_template(db.session, note_type_id=nt_a.id, owner_user_id=self.user_a_id, name="T_A", front_html="A", back_html="A", position=0, is_default=True)
             db.session.commit()
             nt_a_id = nt_a.id
 
@@ -338,9 +331,8 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(note_type_id=nt_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
-            t2 = Template(note_type_id=nt_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
-            db.session.add_all([t1, t2])
+            t1 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
+            t2 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
             db.session.flush()
 
             n1 = Note(user_id=self.user_a_id, deck_id=self.deck_a_id, note_type_id=nt_id, field_values={})
@@ -386,10 +378,8 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            self.user = User(username="admin_gt03", email="admin_gt03@example.com", is_admin=True)
+            self.user = create_note_user(db.session, username="admin_gt03", email="admin_gt03@example.com", is_admin=True)
             self.user.set_password("pass_gt03")
-            db.session.add(self.user)
-            db.session.flush()
             self.user_id = self.user.id
 
             self.parent_deck = Deck(name="Parent Deck", owner_user_id=self.user_id)
@@ -412,10 +402,8 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
             db.session.flush()
             self.nt_id = self.note_type.id
 
-            self.t1 = Template(note_type_id=self.nt_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
-            self.t2 = Template(note_type_id=self.nt_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
-            db.session.add_all([self.t1, self.t2])
-            db.session.flush()
+            self.t1 = attach_template(db.session, note_type_id=self.nt_id, owner_user_id=self.user_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
+            self.t2 = attach_template(db.session, note_type_id=self.nt_id, owner_user_id=self.user_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
             self.t1_id = self.t1.id
             self.t2_id = self.t2.id
             # Only T1 presents Cards until a test activates T2 (ADR P11).
@@ -508,11 +496,9 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
         with self.app.app_context():
             # Keep template references in scope so id() is stable during Card flush
             all_templates = [
-                Template(note_type_id=self.nt_id, name=f"T_stress_{i}", front_html="f", back_html="b", position=i, is_default=(i == 0))
+                attach_template(db.session, note_type_id=self.nt_id, owner_user_id=self.user_id, name=f"T_stress_{i}", front_html="f", back_html="b", position=i, is_default=(i == 0))
                 for i in range(5)
             ]
-            db.session.add_all(all_templates)
-            db.session.flush()
             all_template_ids = [t.id for t in all_templates]
 
             # Create 100 notes across parent deck and subdeck

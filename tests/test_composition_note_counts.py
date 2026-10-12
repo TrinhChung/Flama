@@ -22,6 +22,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class CompositionNoteCountTests(unittest.TestCase):
@@ -38,16 +39,17 @@ class CompositionNoteCountTests(unittest.TestCase):
         db.create_all()
 
         uid = uuid4().hex[:8]
-        self.user = User(username=f"user_{uid}", email=f"user_{uid}@example.com")
+        self.user = create_note_user(db.session, username=f"user_{uid}", email=f"user_{uid}@example.com")
         self.user.set_password("pass")
-        db.session.add(self.user)
         db.session.commit()
 
         self.note_type = NoteType(name="Test NoteType", user_id=self.user.id)
         db.session.add(self.note_type)
         db.session.commit()
 
-        self.template_1 = Template(
+        self.template_1 = attach_template(
+            db.session,
+            owner_user_id=self.user.id,
             note_type_id=self.note_type.id,
             name="Forward (Front -> Back)",
             front_html="<div>{{Front}}</div>",
@@ -55,7 +57,9 @@ class CompositionNoteCountTests(unittest.TestCase):
             position=0,
             is_default=True,
         )
-        self.template_2 = Template(
+        self.template_2 = attach_template(
+            db.session,
+            owner_user_id=self.user.id,
             note_type_id=self.note_type.id,
             name="Reverse (Back -> Front)",
             front_html="<div>{{Back}}</div>",
@@ -63,7 +67,6 @@ class CompositionNoteCountTests(unittest.TestCase):
             position=1,
             is_default=False,
         )
-        db.session.add_all([self.template_1, self.template_2])
         db.session.commit()
 
         self.deck = Deck(
@@ -152,9 +155,7 @@ class CompositionNoteCountTests(unittest.TestCase):
         self.assertEqual(counts, {})
 
     def test_installed_source_and_local_split(self):
-        source_user = User(username=f"source_{uuid4().hex[:8]}", email=f"{uuid4().hex}@example.com")
-        db.session.add(source_user)
-        db.session.flush()
+        source_user = create_note_user(db.session, username=f"source_{uuid4().hex[:8]}", email=f"{uuid4().hex}@example.com")
         source_deck = Deck(name="Source", owner_user_id=source_user.id)
         db.session.add(source_deck)
         db.session.flush()
@@ -251,10 +252,8 @@ class CompositionNoteCountsRouteTests(unittest.TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin", email="admin@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin", email="admin@example.com", is_admin=True)
             user.set_password("password")
-            db.session.add(user)
-            db.session.flush()
             self.user_id = user.id
 
             deck = Deck(name="Deck A", owner_user_id=self.user_id)
@@ -270,7 +269,9 @@ class CompositionNoteCountsRouteTests(unittest.TestCase):
             fd = FieldDef(note_type_id=nt.id, name="Front", field_type="text", position=0)
             db.session.add(fd)
 
-            t1 = Template(
+            t1 = attach_template(
+                db.session,
+                owner_user_id=self.user_id,
                 note_type_id=nt.id,
                 name="T1",
                 front_html="<div>{{Front}}</div>",
@@ -278,7 +279,9 @@ class CompositionNoteCountsRouteTests(unittest.TestCase):
                 position=0,
                 is_default=True,
             )
-            t2 = Template(
+            t2 = attach_template(
+                db.session,
+                owner_user_id=self.user_id,
                 note_type_id=nt.id,
                 name="T2",
                 front_html="<div>{{Front}} 2</div>",
@@ -286,8 +289,6 @@ class CompositionNoteCountsRouteTests(unittest.TestCase):
                 position=1,
                 is_default=False,
             )
-            db.session.add_all([t1, t2])
-            db.session.flush()
             self.template_1_id = str(t1.id)
             self.template_2_id = str(t2.id)
 

@@ -393,9 +393,10 @@ def lock_study_authority_route(
     )
     # Shared, like the User row: the profile switch takes it exclusively and
     # so waits for every NOTE transaction that started under the old profile.
-    return _with_supported_profile(
-        route, read_study_storage_profile(session, lock="share")
-    )
+    with session.no_autoflush:
+        return _with_supported_profile(
+            route, read_study_storage_profile(session, lock="share")
+        )
 
 
 def _validate_hash(value: object, *, nullable: bool, field_name: str) -> bytes | None:
