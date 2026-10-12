@@ -240,34 +240,37 @@ class RestApiV1Tests(unittest.TestCase):
             note_type_id = note_type.id
 
         self._login_admin()
-        legacy = self.client.get("/api/dashboard").get_json()
-        # Compact reads must not sign tokens that the numeric deck REST API never uses.
-        with patch("app.services.dashboard_service.create_deck_move_token", side_effect=AssertionError("unexpected signing")):
-            response = self.client.get("/api/dashboard?compact=1")
-            repeated = self.client.get("/api/dashboard?compact=true")
-        self.assertEqual(response.status_code, 200)
-        compact = response.get_json()
-        self.assertEqual(compact, repeated.get_json())
-        self.assertEqual(compact["summary"], legacy["summary"])
-        self.assertEqual(compact["summary"]["new"], 1)
-        self.assertEqual(compact["items"][0]["children"][0]["note_type_id"], note_type_id)
+        for count_by_note, expected_new in ((False, 2), (True, 1)):
+            with self.subTest(count_by_note=count_by_note):
+                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = count_by_note
+                legacy = self.client.get("/api/dashboard").get_json()
+                # Compact reads must not sign tokens that the numeric deck REST API never uses.
+                with patch("app.services.dashboard_service.create_deck_move_token", side_effect=AssertionError("unexpected signing")):
+                    response = self.client.get("/api/dashboard?compact=1")
+                    repeated = self.client.get("/api/dashboard?compact=true")
+                self.assertEqual(response.status_code, 200)
+                compact = response.get_json()
+                self.assertEqual(compact, repeated.get_json())
+                self.assertEqual(compact["summary"], legacy["summary"])
+                self.assertEqual(compact["summary"]["new"], expected_new)
+                self.assertEqual(compact["items"][0]["children"][0]["note_type_id"], note_type_id)
 
-        omitted = {"move_token", "parent_move_token", "parent_move_alias", "href"}
-        aliases = []
+                omitted = {"move_token", "parent_move_token", "parent_move_alias", "href"}
+                aliases = []
 
-        def compare_rows(old_rows, new_rows):
-            self.assertEqual(len(old_rows), len(new_rows))
-            for old, new in zip(old_rows, new_rows):
-                self.assertTrue(omitted.isdisjoint(new))
-                for key in ("deck_id", "parent_id", "label", "depth", "new_count", "learn_count", "due_count", "note_type_id"):
-                    self.assertEqual(new[key], old[key], key)
-                self.assertRegex(new["move_alias"], r"^MID-[A-F0-9]{10,64}$")
-                aliases.append(new["move_alias"])
-                compare_rows(old["children"], new["children"])
+                def compare_rows(old_rows, new_rows):
+                    self.assertEqual(len(old_rows), len(new_rows))
+                    for old, new in zip(old_rows, new_rows):
+                        self.assertTrue(omitted.isdisjoint(new))
+                        for key in ("deck_id", "parent_id", "label", "depth", "new_count", "learn_count", "due_count", "note_type_id"):
+                            self.assertEqual(new[key], old[key], key)
+                        self.assertRegex(new["move_alias"], r"^MID-[A-F0-9]{10,64}$")
+                        aliases.append(new["move_alias"])
+                        compare_rows(old["children"], new["children"])
 
-        compare_rows(legacy["items"], compact["items"])
-        self.assertEqual(len(aliases), len(set(aliases)))
-        self.assertLess(len(response.data), len(self.client.get("/api/dashboard").data))
+                compare_rows(legacy["items"], compact["items"])
+                self.assertEqual(len(aliases), len(set(aliases)))
+                self.assertLess(len(response.data), len(self.client.get("/api/dashboard").data))
         moved = self.client.patch(
             f"/api/decks/{self.child_deck_id}", json={"parent_id": None}
         )
