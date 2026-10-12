@@ -57,6 +57,26 @@
   },
   "yomitan": {
     "loading": "Loading Yomitan tokens…",
+    "cta_question": "Ready to connect the Yomitan extension with Flama?",
+    "tabs": {
+      "overview": {
+        "title": "1. Benefits & How It Works",
+        "badge": "Featured",
+        "desc": "Learn about 0.1s hover lookups and 1-click automatic card generation",
+        "cta_btn": "Proceed to Token Setup & Management",
+        "cta_question": "Ready to connect the Yomitan extension with Flama?"
+      },
+      "tokens": {
+        "title": "2. Token Setup & Management",
+        "badge": "Connect",
+        "desc": "Issue Flama Connect Server URLs and manage devices"
+      },
+      "docs": {
+        "title": "3. Guides & Documentation",
+        "badge": "Docs",
+        "desc": "Extension setup, 55 field markers table and mobile guide"
+      }
+    },
     "header": {
       "title": "Yomitan Token & Flama Connect Management",
       "description": "Integrate the browser Yomitan dictionary extension with Flama to automatically mine Flashcards in 1 click.",
@@ -79,6 +99,28 @@
       "immersion_sub": "PC Web & Mobile",
       "connect_title": "Flama Connect",
       "connect_sub": "Cloud integration"
+    },
+    "value_intro": {
+      "badge": "Reading Master",
+      "title": "Why combine Yomitan with Flama?",
+      "subtitle": "Turn any web page, news article, or manga into an automatic vocabulary mining ground without manual typing.",
+      "toggle_hide": "Collapse intro",
+      "toggle_show": "How it works",
+      "before_title": "Traditional Workflow",
+      "before_badge": "Time consuming",
+      "before_p1": "Highlighting text, switching tabs to dictionaries ➔ Breaks reading flow and focus.",
+      "before_p2": "Manually typing words, looking up Kanji, pasting meanings ➔ Takes 3–5 mins per card.",
+      "before_p3": "Procrastinating on card creation means forgetting everything after reading.",
+      "after_title": "With Flama Integration",
+      "after_badge": "Instant 0.1s",
+      "after_p1": "Hover to view Hiragana, Sino-Vietnamese / pitch accents, and definitions in place.",
+      "after_p2": "1-Click (+) button sends term, definition, and audio directly into Flama.",
+      "after_p3": "Spaced Repetition (SRS) automatically schedules reviews right before you forget.",
+      "steps_label": "3-Step Immersion Flow:",
+      "step_1": "1. Read articles, web, or manga you enjoy",
+      "step_2": "2. Hover over any word for instant 0.1s popup",
+      "step_3": "3. Click (+) to auto-save Flashcard into Flama",
+      "cta_label": "Ready to connect the Yomitan extension with Flama?"
     },
     "form": {
       "title": "Create Flama Connect API Token",
@@ -133,6 +175,29 @@
       "card3_title": "Mobile & Troubleshooting",
       "card3_desc": "Guide for Kiwi Browser, Firefox Android, and resolving connection issues."
     },
+    "guide_tab": {
+      "download_title": "Download Official Yomitan Extension",
+      "download_desc": "Install Yomitan on desktop or Android browsers to start looking up words and mining flashcards.",
+      "chrome_desc": "Install directly from official Chrome Web Store (also supports Kiwi Browser on Android).",
+      "firefox_desc": "Install from official Firefox Add-ons repository for desktop and mobile.",
+      "github_title": "GitHub Source Code",
+      "github_desc": "View open-source repository, contribution guidelines, and standalone releases.",
+      "markers_title": "Integrated 55 Field Markers Reference",
+      "markers_desc": "Quickly reference data field syntax to map into your flashcard note types in Yomitan.",
+      "markers_link": "Full guide",
+      "mobile_title": "Mobile Usage Guide (Kiwi Browser / Firefox Android)",
+      "mobile_desc": "Read Japanese news, manga, and 1-tap mine vocabulary directly on your phone.",
+      "step1_title": "Install Browser",
+      "step1_desc": "Download Kiwi Browser or Firefox Android from Google Play Store.",
+      "step2_title": "Add Extension",
+      "step2_desc": "Open Chrome Web Store link in Kiwi Browser and tap Add to Chrome.",
+      "step3_title": "Paste Server URL",
+      "step3_desc": "Go to Yomitan Settings ➔ Anki / Connect, paste the Server URL issued in Tab 2: Setup & Connect.",
+      "step4_title": "Read & Mine",
+      "step4_desc": "Tap and hold a word on web pages to show definition popup and tap (+) to save into Flama.",
+      "troubleshoot_title": "Troubleshooting & Deep Documentation",
+      "troubleshoot_desc": "Answers to common questions and issues during connection setup and usage."
+    },
     "messages": {
       "create_success": "Flama Connect token created successfully.",
       "revoke_success": "Token was revoked immediately.",
@@ -144,6 +209,26 @@
   },
   "asbplayer": {
     "loading": "Loading asbplayer tokens…",
+    "cta_question": "Ready to connect the asbplayer extension to mine movies & anime?",
+    "tabs": {
+      "overview": {
+        "title": "1. Benefits & How It Works",
+        "badge": "Featured",
+        "desc": "Mine subtitle sentences, capture MP3 audio and screenshot anime",
+        "cta_btn": "Proceed to Token Setup & Management",
+        "cta_question": "Ready to connect the asbplayer extension to mine movies & anime?"
+      },
+      "tokens": {
+        "title": "2. Token Setup & Management",
+        "badge": "Connect",
+        "desc": "Issue AnkiConnect API keys and manage devices"
+      },
+      "docs": {
+        "title": "3. Guides & Documentation",
+        "badge": "Docs",
+        "desc": "Extension setup, 7 field mapping table and mining shortcuts"
+      }
+    },
     "header": {
       "title": "asbplayer & Flama Connect Token Management",
       "description": "Integrate asbplayer extension with Flama Connect to mine sentences, images, and audio from video and anime directly into Flama.",
@@ -166,6 +251,28 @@
       "sentences_sub": "Context-based Learning",
       "protocol_title": "Flama Connect Platform",
       "protocol_sub": "Anki-compatible Standard"
+    },
+    "value_intro": {
+      "badge": "Listening Master",
+      "title": "Why combine asbplayer with Flama?",
+      "subtitle": "Mine subtitle sentences, capture crystal-clear MP3 audio, and snapshot visual context directly from movies & anime.",
+      "toggle_hide": "Collapse intro",
+      "toggle_show": "How it works",
+      "before_title": "Traditional Video Watching",
+      "before_badge": "Passive & Fleeting",
+      "before_p1": "Subtitles distract your eyes while fast-paced native speech slips past unnoticed.",
+      "before_p2": "Rewinding key dialogue on video progress bars is clunky and breaks immersion.",
+      "before_p3": "Closing the video loses the audio context with no structured way to review spoken nuance.",
+      "after_title": "With Flama Integration",
+      "after_badge": "Full Context",
+      "after_p1": "Millisecond-precise subtitle syncing with smart loop replay for difficult sentences.",
+      "after_p2": "1 Hotkey automatically cuts the exact dialogue MP3 and takes a visual snapshot.",
+      "after_p3": "Review flashcards with authentic native voice acting and emotional intonation.",
+      "steps_label": "3-Step Listening Immersion Flow:",
+      "step_1": "1. Play subtitled videos, Netflix, or anime",
+      "step_2": "2. Press 1 hotkey to grab dialogue & MP3",
+      "step_3": "3. Card appears in Flama ready for SRS review",
+      "cta_label": "Ready to connect the asbplayer extension to mine movies & anime?"
     },
     "form": {
       "title": "Create asbplayer API Token (Flama Connect)",
@@ -231,6 +338,57 @@
       "card2_desc": "Configure mapping for Sentence, Word, Definition, Image, Audio, Source, URL.",
       "card3_title": "Shortcuts & Video Mining",
       "card3_desc": "Use Ctrl+Shift+X shortcut to create cards while watching anime and videos."
+    },
+    "guide_tab": {
+      "download_title": "Download asbplayer Extension & Player",
+      "download_desc": "Install browser extension or use standalone web player to mine movies and videos.",
+      "chrome_desc": "Extension for Chrome, Brave, Edge & Kiwi Browser.",
+      "firefox_desc": "Extension for Mozilla Firefox desktop.",
+      "web_player_desc": "Web subtitle video player without local installation.",
+      "github_title": "GitHub Source Code",
+      "github_desc": "Download desktop app and view open-source technical documentation.",
+      "mapping_title": "Canonical 7-Field Mapping Standard",
+      "mapping_desc": "Field mapping configuration from asbplayer to Sentence Card Note Type on Flama.",
+      "btn_copy_scheme": "Copy Sample JSON",
+      "btn_copied": "Copied",
+      "copy_scheme_success": "Copied sample JSON mapping configuration to clipboard",
+      "copy_scheme_error": "Failed to copy configuration",
+      "th_asb_field": "asbplayer Field",
+      "th_flama_field": "Flama Field",
+      "th_data_type": "Data Type",
+      "th_role": "Role & Function",
+      "th_desc": "Description",
+      "role_primary": "Primary (Required)",
+      "role_word": "Target Vocabulary",
+      "role_definition": "Glossary / Meaning",
+      "role_image": "Video Screenshot",
+      "role_audio": "Voice Audio Clip",
+      "role_source": "Context / Title",
+      "role_url": "Source Link",
+      "field_sentence_desc": "Japanese dialogue in video subtitles (used as unique identifier to prevent duplicates)",
+      "field_word_desc": "Target vocabulary to learn (automatically populated when hovering to look up via Yomitan on subtitles)",
+      "field_definition_desc": "Definition of target word extracted from Yomitan popup",
+      "field_image_desc": "Video screenshot captured at exact moment dialogue is spoken (optimized compression)",
+      "field_audio_desc": "Character voice audio clip speaking the dialogue automatically trimmed accurately",
+      "field_source_desc": "Video title, anime series, or playing media file name",
+      "field_url_desc": "Direct hyperlink to video source (YouTube, Netflix...) with timestamp",
+      "quick_tip": "Quick setup tip: Simply click \"Prepare deck and model\" in Tab 2: Setup & Connect, Flama will automatically generate the Sentences deck and configure all 7 canonical fields for you.",
+      "shortcuts_title": "Mining & Video Navigation Shortcuts",
+      "shortcuts_desc": "Keyboard shortcuts to capture subtitle context while watching anime and videos.",
+      "shortcut_mine_title": "Instant Card Mining",
+      "shortcut_mine_desc": "On Mac use Cmd + Shift + X: Automatically captures dialogue, trims original audio MP3, and takes video screenshot into Flama.",
+      "shortcut_nav_title": "Subtitle Navigation",
+      "shortcut_nav_desc": "A: Seek previous subtitle • S: Replay current subtitle • D: Seek next subtitle.",
+      "shortcut_yomitan_title": "Combine with Yomitan",
+      "shortcut_yomitan_badge": "Recommended",
+      "shortcut_yomitan_desc": "Hover to look up words on subtitles with Yomitan before pressing Ctrl+Shift+X to auto-fill both word and definition!",
+      "docs_title": "Documentation & Troubleshooting",
+      "docs_desc": "Reference detailed guides and steps to resolve asbplayer connection issues.",
+      "doc_install_desc": "Guide for installing extension and configuring AnkiConnect.",
+      "doc_mapping_desc": "Map Sentence, Word, Audio, Image properly.",
+      "doc_shortcuts_desc": "Use shortcut Ctrl+Shift+X for lightning-fast mining.",
+      "doc_troubleshoot_title": "Troubleshooting Connections",
+      "doc_troubleshoot_desc": "Resolve port 4790 errors and missing MP3 audio issues."
     },
     "messages": {
       "create_success": "asbplayer token created successfully.",

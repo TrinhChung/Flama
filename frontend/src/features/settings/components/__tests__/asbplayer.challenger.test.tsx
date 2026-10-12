@@ -179,12 +179,22 @@ describe('Adversarial & Empirical Challenger Suite for asbplayer & Yomitan Isola
       )
     })
 
+    // Switch to Tab 3: Hướng dẫn & Tra cứu (guide) where detailed documentation links reside
     await waitFor(() => {
-      // Check ContextHelpButton
-      const helpLink = host.querySelector('a[href="/guide/integrations/asbplayer"]')
-      expect(helpLink).not.toBeNull()
+      const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button[role="tab"], [data-slot="tabs-trigger"]'))
+      const guideTrigger = tabs.find((b) => b.textContent?.includes('Hướng dẫn') || b.textContent?.includes('Guide'))
+      expect(guideTrigger).toBeDefined()
+    })
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button[role="tab"], [data-slot="tabs-trigger"]'))
+    const guideTrigger = tabs.find((b) => b.textContent?.includes('Hướng dẫn') || b.textContent?.includes('Guide'))
+    await act(async () => {
+      guideTrigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      guideTrigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+      guideTrigger?.click()
+    })
 
-      // Check Quick Links
+    await waitFor(() => {
+      // Check Guide links in Tab 3
       const allLinks = Array.from(host.querySelectorAll('a')).map((a) => a.getAttribute('href'))
       expect(allLinks).toContain('/guide/integrations/asbplayer')
       expect(allLinks).toContain('/guide/integrations/asbplayer#mapping')
