@@ -15,6 +15,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class McpNoteConcurrencyIdentityTests(unittest.TestCase):
@@ -30,16 +31,14 @@ class McpNoteConcurrencyIdentityTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(
+            user = create_note_user(
+                db.session,
                 username="incident_test_user",
                 email="incident@example.com",
                 timezone="UTC",
                 is_admin=False,
             )
             user.set_password("password123")
-            db.session.add(user)
-            db.session.flush()
-
             self.user_id = user.id
 
             issued_token = user_api_token_service.issue_token(user_id=user.id, name="Test Token")
@@ -63,8 +62,10 @@ class McpNoteConcurrencyIdentityTests(unittest.TestCase):
             db.session.add_all([f_stt, f_voc, f_mean])
             db.session.flush()
 
-            tmpl = Template(
+            tmpl = attach_template(
+                db.session,
                 note_type_id=nt.id,
+                owner_user_id=user.id,
                 name="Vocabulary Card",
                 front_html="<div>{{Vocabulary}}</div>",
                 back_html="<div>{{Vocabulary}}</div><hr><div>{{Meaning}}</div>",
@@ -72,7 +73,6 @@ class McpNoteConcurrencyIdentityTests(unittest.TestCase):
                 position=0,
                 is_default=True,
             )
-            db.session.add(tmpl)
             db.session.commit()
 
     def tearDown(self):

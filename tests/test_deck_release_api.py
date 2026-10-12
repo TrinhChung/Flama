@@ -23,6 +23,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 class DeckReleaseApiTests(unittest.TestCase):
@@ -38,12 +39,12 @@ class DeckReleaseApiTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            owner = User(
+            owner = create_note_user(db.session,
                 username="release-owner",
                 email="release-owner@example.com",
             )
             owner.set_password("password")
-            learner = User(
+            learner = create_note_user(db.session,
                 username="release-learner",
                 email="release-learner@example.com",
             )

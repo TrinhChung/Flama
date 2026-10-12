@@ -8,6 +8,7 @@ from models.deck import Deck
 from models.field_def import FieldDef
 from models.flashcard import Note, NoteType, Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 
@@ -24,10 +25,8 @@ class BatchFlashcardImportTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin", email="admin@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin", email="admin@example.com", is_admin=True)
             user.set_password("password")
-            db.session.add(user)
-            db.session.flush()
             self.user_id = user.id
 
             # Create Parent Deck
@@ -61,14 +60,15 @@ class BatchFlashcardImportTests(unittest.TestCase):
 
 
             # Template
-            template = Template(
+            template = attach_template(
+                db.session,
+                owner_user_id=self.user_id,
                 note_type_id=self.note_type_id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{FrontSide}}<hr>{{Reading}}<br>{{Meaning}}",
                 position=0,
             )
-            db.session.add(template)
 
             # Add existing notes to child1 (Bài 01)
             n1 = Note(

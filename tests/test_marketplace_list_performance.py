@@ -19,6 +19,7 @@ from models.note_type_install import NoteTypeInstall
 from models.template import Template
 from models.user import User
 
+from tests.study_note_fixtures import attach_template, create_note_user
 
 class MarketplaceListPerformanceTests(unittest.TestCase):
     def setUp(self):
@@ -30,8 +31,8 @@ class MarketplaceListPerformanceTests(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
-        self.learner = User(username="list-learner", email="list-learner@example.com")
-        self.authors = [User(username=f"list-author-{i}", email=f"list-author-{i}@example.com") for i in range(20)]
+        self.learner = create_note_user(db.session, username="list-learner", email="list-learner@example.com")
+        self.authors = [create_note_user(db.session, username=f"list-author-{i}", email=f"list-author-{i}@example.com") for i in range(20)]
         db.session.add_all([self.learner, *self.authors])
         db.session.flush()
         self.learner_id = self.learner.id
@@ -59,7 +60,7 @@ class MarketplaceListPerformanceTests(unittest.TestCase):
             db.session.add(row)
             db.session.flush()
             db.session.add(FieldDef(note_type_id=row.id, name="Word", field_type="text", position=0))
-            db.session.add(Template(note_type_id=row.id, name="Card", front_html="{{Word}}" + "x" * 8192, back_html="{{Word}}", position=0))
+            db.session.add(attach_template(db.session, owner_user_id=row.user_id, note_type_id=row.id, name="Card", front_html="{{Word}}" + "x" * 8192, back_html="{{Word}}", position=0))
             rows.append(row)
         for name, status, owner in (("Own private", "private", self.learner_id), ("Own archive", "archived", self.learner_id), ("Unlisted", "unlisted", self.author_ids[0])):
             row = NoteType(user_id=owner, name=name, publish_status=status)

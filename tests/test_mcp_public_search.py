@@ -26,6 +26,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 from scripts.flama_mcp_server import process_mcp_message, run_stdio_server
 
 
@@ -47,23 +48,23 @@ class TestMcpPublicSearch(unittest.TestCase):
             db.create_all()
 
             # 1. Create author and learner users
-            author = User(
+            author = create_note_user(
+                db.session,
                 username="deck_creator",
                 email="creator@flama.vn",
                 timezone="UTC",
                 is_admin=False,
             )
             author.set_password("password123")
-            db.session.add(author)
 
-            learner = User(
+            learner = create_note_user(
+                db.session,
                 username="private_learner",
                 email="learner@flama.vn",
                 timezone="UTC",
                 is_admin=False,
             )
             learner.set_password("password123")
-            db.session.add(learner)
             db.session.flush()
 
             self.author_id = author.id
@@ -79,14 +80,16 @@ class TestMcpPublicSearch(unittest.TestCase):
                 FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0, required=True),
                 FieldDef(note_type_id=note_type.id, name="Reading", field_type="text", position=1, required=True),
                 FieldDef(note_type_id=note_type.id, name="Meaning", field_type="text", position=2, required=True),
-                Template(
-                    note_type_id=note_type.id,
-                    name="Recognition",
-                    front_html="<div>{{Word}}</div>",
-                    back_html="<div>{{Reading}} - {{Meaning}}</div>",
-                    position=0,
-                ),
             ])
+            template = attach_template(
+                db.session,
+                note_type_id=note_type.id,
+                owner_user_id=author.id,
+                name="Recognition",
+                front_html="<div>{{Word}}</div>",
+                back_html="<div>{{Reading}} - {{Meaning}}</div>",
+                position=0,
+            )
 
             # 3. Public Source Deck for Author
             pub_deck = Deck(name="JLPT N5 Core Vocabulary", owner_user_id=author.id)
@@ -114,8 +117,7 @@ class TestMcpPublicSearch(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card(note_id=n.id, template_id=note_type.templates[0].id)
-                db.session.add(c)
+                c = Card.query.filter_by(note_id=n.id, template_id=template.id).one()
 
             # 4. Published Marketplace Deck
             pub_market_item = DeckMarketplaceItem(

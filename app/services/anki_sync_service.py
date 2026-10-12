@@ -35,8 +35,7 @@ from app.validators.review_event import (
     build_anki_revlog_review_event_payload,
 )
 from models import db
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import Card, get_card
 from models.connect_import_session import ConnectImportSession
 from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_card_ref import ConnectSourceCardRef
@@ -119,7 +118,7 @@ def _card_for_ord(note_ref: ConnectSourceNoteRef, source_ord: int) -> Card:
 
     cards = sorted(
         list(note_ref.note.cards),
-        key=lambda card: (int(card.template.position), str(card.template_id)),
+        key=lambda card: (int(card.application.position), str(card.application_id)),
     )
     bound = [
         card
@@ -135,7 +134,7 @@ def _card_for_ord(note_ref: ConnectSourceNoteRef, source_ord: int) -> Card:
     from app.services.study_retirement_telemetry_service import record_legacy_usage
 
     record_legacy_usage("anki.ordinal")
-    by_position = {int(card.template.position): card for card in cards}
+    by_position = {int(card.application.position): card for card in cards}
     card = by_position.get(source_ord)
     if card is None and 0 <= source_ord < len(cards):
         card = cards[source_ord]
@@ -272,60 +271,6 @@ def _progress_snapshot_values(
     return values
 
 
-def _apply_progress_snapshot(
-    session: ConnectImportSession,
-    source_card: ConnectSourceCardRef,
-    record: dict[str, Any],
-) -> tuple[str, str, bool]:
-    control = _progress_snapshot_control(record)
-    previous_snapshot_hash = source_card.snapshot_hash
-
-    progress = CardProgress.query.filter_by(
-        user_id=session.user_id,
-        card_id=source_card.card_id,
-    ).with_for_update().first()
-    local_diverged = progress is not None and (
-        source_card.applied_local_revision is None
-        or int(progress.revision or 0) != int(source_card.applied_local_revision)
-    )
-    same_snapshot = previous_snapshot_hash == control.snapshot_hash
-    force_reapply = control.force and (local_diverged or progress is None)
-    if same_snapshot and not force_reapply:
-        return "unchanged", "PROGRESS_UNCHANGED", control.legacy_unversioned
-    if (
-        control.base_snapshot_supplied
-        and (control.base_snapshot_hash or "") != (previous_snapshot_hash or "")
-        and not control.force
-    ):
-        return "source_conflict", "SOURCE_SNAPSHOT_CHANGED", control.legacy_unversioned
-    if local_diverged and not control.force:
-        return "local_conflict", "LOCAL_PROGRESS_CHANGED", control.legacy_unversioned
-
-    values = _progress_snapshot_values(session, record)
-    if values is None:
-        return "due_unresolved", "ANKI_DUE_UNRESOLVED", control.legacy_unversioned
-
-    if progress is None:
-        progress = CardProgress(user_id=session.user_id, card_id=source_card.card_id)
-        db.session.add(progress)
-    for field_name, value in values.items():
-        setattr(progress, field_name, value)
-
-    progress.revision = int(progress.revision or 0) + 1
-    try:
-        db.session.flush()
-    except IntegrityError as exc:
-        raise AnkiProgressConflict(
-            "CONCURRENT_PROGRESS_WRITE",
-            "card progress changed while the Anki snapshot was being applied",
-        ) from exc
-    source_card.snapshot_hash = control.snapshot_hash
-    source_card.applied_local_revision = int(progress.revision or 0)
-    return (
-        "applied",
-        "FORCED_PROGRESS_APPLIED" if control.force else "PROGRESS_APPLIED",
-        control.legacy_unversioned,
-    )
 
 
 def _lock_note_source_card_refs(
@@ -335,9 +280,7 @@ def _lock_note_source_card_refs(
     """Lock current-source sibling refs before entering the NOTE authority graph."""
 
     db.session.flush()
-    requested_card = (
-        db.session.get(Card, source_card.card_id) if source_card.card_id is not None else None
-    )
+    requested_card = get_card(db.session, source_card.card_id) if source_card.card_id is not None else None
     if requested_card is None:
         raise AnkiSyncError("source card no longer maps to a local Card")
     card_ids = tuple(
@@ -670,25 +613,18 @@ def import_progress(
                     source_card,
                 )
                 source_note_ref = _source_note(session, source_card.external_note_id)
-                if authority_route.mode_code == "NOTE":
-                    state, code, legacy_unversioned = (
-                        _apply_note_authority_progress_snapshot(
-                            session,
-                            route=authority_route,
-                            requested_card=requested_card,
-                            source_card=source_card,
-                            sibling_source_refs=sibling_source_refs,
-                            source_note=source_note_ref,
-                            record=record,
-                            now_utc=datetime.utcnow().replace(microsecond=0),
-                        )
-                    )
-                else:
-                    state, code, legacy_unversioned = _apply_progress_snapshot(
+                state, code, legacy_unversioned = (
+                    _apply_note_authority_progress_snapshot(
                         session,
-                        source_card,
-                        record,
+                        route=authority_route,
+                        requested_card=requested_card,
+                        source_card=source_card,
+                        sibling_source_refs=sibling_source_refs,
+                        source_note=source_note_ref,
+                        record=record,
+                        now_utc=datetime.utcnow().replace(microsecond=0),
                     )
+                )
                 db.session.flush()
             result = {
                 "sourceCardId": external_card_id,
@@ -816,7 +752,12 @@ def _import_review(
         source_key=session.source_key,
         external_card_id=external_card_id,
     ).with_for_update().first()
-    if source_card is None or source_card.card is None:
+    mapped_card = (
+        get_card(db.session, source_card.card_id)
+        if source_card is not None and source_card.card_id is not None
+        else None
+    )
+    if source_card is None or mapped_card is None:
         raise AnkiSyncError("source card has not been mapped")
     if existing is None:
         ref = ConnectReviewEventRef(
@@ -836,7 +777,7 @@ def _import_review(
         ref.status = "ignored"
         ref.ignored_reason = "manual_or_rescheduled"
     else:
-        card = source_card.card
+        card = mapped_card
         note = card.note
         review_kind = {0: "learn", 1: "review", 2: "relearn", 3: "cram"}.get(review_type, "review")
         mode = "learn" if review_kind in {"learn", "relearn"} else "review"
@@ -932,7 +873,7 @@ def import_reviews(
                         external_card_id=source_card_id,
                     ).with_for_update().first()
                     source_card_obj = (
-                        db.session.get(Card, source_card.card_id)
+                        get_card(db.session, source_card.card_id)
                         if source_card is not None and source_card.card_id is not None
                         else None
                     )

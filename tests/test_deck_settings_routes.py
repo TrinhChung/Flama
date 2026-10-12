@@ -10,7 +10,9 @@ from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplac
 from models.user import User
 from models.user_role import UserRole
 from models.deck import Deck
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
@@ -34,14 +36,14 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             assert admin_role is not None
             assert regular_role is not None
 
-            admin = User(
+            admin = create_note_user(db.session,
                 username="admin",
                 email="admin@example.com",
                 is_admin=True,
                 role_id=admin_role.id,
             )
             admin.set_password("password")
-            other = User(
+            other = create_note_user(db.session,
                 username="other",
                 email="other@example.com",
                 is_admin=False,
@@ -185,8 +187,10 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             db.session.flush()
 
             note_type = NoteType(user_id=self.admin_id, name="Deck Reset Note Type")
-            template = Template(
-                note_type=note_type,
+            db.session.add(note_type)
+            db.session.flush()
+            template = attach_template(db.session, owner_user_id=note_type.user_id,
+                note_type_id=note_type.id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{Word}}",
@@ -200,17 +204,22 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 deck_id=deck.id,
                 field_values={"Word": "test"},
             )
-            card = Card(note=note, template=template)
-            db.session.add_all([note_type, template, note, card])
+            db.session.add_all([note_type, template, note])
             db.session.flush()
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
 
-            admin_progress = CardProgress(
+            from tests.study_note_fixtures import archive_wire_alias
+            from uuid import uuid4
+            wire_id = str(uuid4())
+            archive_wire_alias(db.session, card, wire_id)
+
+            admin_progress = stage_note_state(db.session,
                 user_id=self.admin_id,
                 card_id=card.id,
                 queue="learning",
                 step_index=1,
             )
-            other_progress = CardProgress(
+            other_progress = stage_note_state(db.session,
                 user_id=self.other_user_id,
                 card_id=card.id,
                 queue="learning",
@@ -244,7 +253,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 [
                     StudySessionCard(
                         session_id=admin_session.id,
-                        card_id=card.id,
+                        card_id=wire_id,
                         local_deck_id=deck.id,
                         base_progress_revision=0,
                         base_state_hash="admin-state",
@@ -254,7 +263,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                     ),
                     StudySessionCard(
                         session_id=other_session.id,
-                        card_id=card.id,
+                        card_id=wire_id,
                         local_deck_id=deck.id,
                         base_progress_revision=0,
                         base_state_hash="other-state",
@@ -279,15 +288,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         with self.app.app_context():
-            admin_progress_count = CardProgress.query.filter_by(
-                user_id=self.admin_id,
-                card_id=card_id,
-            ).count()
-            other_progress_count = CardProgress.query.filter_by(
-                user_id=self.other_user_id,
-                card_id=card_id,
-            ).count()
-            self.assertEqual(admin_progress_count, 0)
+            admin_progress_count = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id, live_note_id=db.session.get(Card, card_id).note_id).filter(StudyProgressSubject.state_payload.isnot(None)).count()
+            other_progress_count = StudyProgressSubject.query.filter_by(learner_user_id=self.other_user_id, live_note_id=db.session.get(Card, card_id).note_id).filter(StudyProgressSubject.state_payload.isnot(None)).count()
+            self.assertEqual(admin_progress_count, 1)
+            self.assertEqual(decode_note_state(subject_for_card(db.session, user_id=self.admin_id,
+                                                              card_id=card_id)).type, "new")
             self.assertEqual(other_progress_count, 1)
             self.assertEqual(
                 db.session.get(StudySession, admin_session_id).status,
@@ -297,9 +302,8 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 db.session.get(StudySession, other_session_id).status,
                 "open",
             )
-            # LEGACY progress lives only in card_progress (P10-09): no row, no lifecycle event.
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.count(), 2)
+            self.assertGreater(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_non_admin_owner_can_reset_owned_deck_without_clone_install(self):
         with self.app.app_context():
@@ -313,8 +317,10 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             db.session.flush()
 
             note_type = NoteType(user_id=self.other_user_id, name="Owned Reset Note Type")
-            template = Template(
-                note_type=note_type,
+            db.session.add(note_type)
+            db.session.flush()
+            template = attach_template(db.session, owner_user_id=note_type.user_id,
+                note_type_id=note_type.id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{Word}}",
@@ -328,17 +334,17 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 deck_id=owned_deck.id,
                 field_values={"Word": "mine"},
             )
-            card = Card(note=note, template=template)
-            db.session.add_all([note_type, template, note, card])
+            db.session.add_all([note_type, template, note])
             db.session.flush()
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
 
-            owner_progress = CardProgress(
+            owner_progress = stage_note_state(db.session,
                 user_id=self.other_user_id,
                 card_id=card.id,
                 queue="review",
                 reps=3,
             )
-            admin_progress = CardProgress(
+            admin_progress = stage_note_state(db.session,
                 user_id=self.admin_id,
                 card_id=card.id,
                 queue="review",
@@ -358,15 +364,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         with self.app.app_context():
-            owner_progress_count = CardProgress.query.filter_by(
-                user_id=self.other_user_id,
-                card_id=card_id,
-            ).count()
-            admin_progress_count = CardProgress.query.filter_by(
-                user_id=self.admin_id,
-                card_id=card_id,
-            ).count()
-            self.assertEqual(owner_progress_count, 0)
+            owner_progress_count = StudyProgressSubject.query.filter_by(learner_user_id=self.other_user_id, live_note_id=db.session.get(Card, card_id).note_id).filter(StudyProgressSubject.state_payload.isnot(None)).count()
+            admin_progress_count = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id, live_note_id=db.session.get(Card, card_id).note_id).filter(StudyProgressSubject.state_payload.isnot(None)).count()
+            self.assertEqual(owner_progress_count, 1)
+            self.assertEqual(decode_note_state(subject_for_card(db.session, user_id=self.other_user_id,
+                                                              card_id=card_id)).type, "new")
             self.assertEqual(admin_progress_count, 1)
 
     def test_clone_owner_can_reset_progress_for_overlay_source_cards(self):
@@ -377,8 +379,10 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             db.session.flush()
 
             note_type = NoteType(user_id=self.admin_id, name="Clone Reset Note Type")
-            template = Template(
-                note_type=note_type,
+            db.session.add(note_type)
+            db.session.flush()
+            template = attach_template(db.session, owner_user_id=note_type.user_id,
+                note_type_id=note_type.id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{Word}}",
@@ -392,9 +396,9 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 deck_id=source_root.id,
                 field_values={"Word": "overlay"},
             )
-            source_card = Card(note=source_note, template=template)
-            db.session.add_all([note_type, template, source_note, source_card])
+            db.session.add_all([note_type, template, source_note])
             db.session.flush()
+            source_card = Card.query.filter_by(note_id=source_note.id, template_id=template.id).one()
 
             shared_item = DeckMarketplaceItem(
                 owner_user_id=self.admin_id,
@@ -431,13 +435,13 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 )
             )
 
-            owner_progress = CardProgress(
+            owner_progress = stage_note_state(db.session,
                 user_id=self.other_user_id,
                 card_id=source_card.id,
                 queue="review",
                 reps=5,
             )
-            admin_progress = CardProgress(
+            admin_progress = stage_note_state(db.session,
                 user_id=self.admin_id,
                 card_id=source_card.id,
                 queue="review",
@@ -484,15 +488,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         with self.app.app_context():
-            owner_progress_count = CardProgress.query.filter_by(
-                user_id=self.other_user_id,
-                card_id=source_card_id,
-            ).count()
-            admin_progress_count = CardProgress.query.filter_by(
-                user_id=self.admin_id,
-                card_id=source_card_id,
-            ).count()
-            self.assertEqual(owner_progress_count, 0)
+            owner_progress_count = StudyProgressSubject.query.filter_by(learner_user_id=self.other_user_id, live_note_id=db.session.get(Card, source_card_id).note_id).filter(StudyProgressSubject.state_payload.isnot(None)).count()
+            admin_progress_count = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id, live_note_id=db.session.get(Card, source_card_id).note_id).filter(StudyProgressSubject.state_payload.isnot(None)).count()
+            self.assertEqual(owner_progress_count, 1)
+            self.assertEqual(decode_note_state(subject_for_card(db.session, user_id=self.other_user_id,
+                                                              card_id=source_card_id)).type, "new")
             self.assertEqual(admin_progress_count, 1)
             self.assertEqual(
                 db.session.get(StudySession, overlay_session_id).status,
@@ -651,6 +651,8 @@ class DeckSettingsRoutesTests(unittest.TestCase):
     def test_deleting_shared_source_archives_it_without_breaking_installed_clone(self):
         with self.app.app_context():
             note_type = NoteType(user_id=self.admin_id, name="Protected Source Type")
+            db.session.add(note_type)
+            db.session.flush()
             source_root = Deck(
                 name="Protected Source",
                 parent_id=None,
@@ -665,7 +667,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             )
             db.session.add_all([note_type, source_root, local_root])
             db.session.flush()
-            template = Template(
+            template = attach_template(db.session, owner_user_id=db.session.get(NoteType, note_type.id).user_id,
                 note_type_id=note_type.id,
                 name="Protected Source Template",
                 front_html="{{word}}",
@@ -698,8 +700,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             )
             db.session.add_all([source_note, shared_item])
             db.session.flush()
-            source_card = Card(note_id=source_note.id, template_id=template.id)
-            db.session.add(source_card)
+            source_card = Card.query.filter_by(note_id=source_note.id, template_id=template.id).one()
             db.session.flush()
             install = DeckInstall(
                 deck_item_id=shared_item.id,

@@ -30,7 +30,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+from app.repositories.template_library_repository import create_attached_template
 from app.services.study_composition_service import make_compatibility_composition_id
 from app.services.user_roles import ensure_default_user_roles
 from models import db
@@ -55,14 +56,11 @@ def _add_pristine_notes(app, learner: dict, count: int) -> None:
 
     with app.app_context():
         deck = db.session.get(Deck, learner["deck_id"])
-        template = db.session.execute(
-            db.select(Template).order_by(Template.id)).scalars().first()
-        rows = [Note(user_id=learner["user_id"], deck_id=deck.id, note_type_id=template.note_type_id,
+        rows = [Note(user_id=learner["user_id"], deck_id=deck.id, note_type_id=learner["note_type_id"],
                      field_values={"Word": f"p{i}", "Meaning": f"pm{i}", "Reading": f"pr{i}"})
                 for i in range(count)]
         db.session.add_all(rows)
         db.session.flush()
-        db.session.add_all(Card(note_id=note.id, template_id=template.id) for note in rows)
         db.session.commit()
 
 
@@ -80,13 +78,14 @@ def _seed_overlay(app, learner: dict, count: int) -> int:
         publisher = User(username="bench-publisher", email="bench-publisher@example.test")
         db.session.add(publisher)
         db.session.flush()
+        enroll_new_learner_note_authority(db.session, user=publisher)
         source_deck = Deck(name="Bench shared", owner_user_id=publisher.id)
         local_deck = Deck(name="Bench installed", owner_user_id=learner["user_id"])
         note_type = NoteType(name="Bench shared type", user_id=publisher.id)
         db.session.add_all([source_deck, local_deck, note_type])
         db.session.flush()
         db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-        template = Template(note_type_id=note_type.id, name="Shared", front_html="{{Word}}",
+        template = create_attached_template(db.session, note_type=note_type, name="Shared", front_html="{{Word}}",
                             back_html="{{Word}}", is_default=True)
         db.session.add(template)
         db.session.flush()
@@ -94,7 +93,6 @@ def _seed_overlay(app, learner: dict, count: int) -> int:
                      field_values={"Word": f"s{i}"}, created_at=before) for i in range(count)]
         db.session.add_all(rows)
         db.session.flush()
-        db.session.add_all(Card(note_id=note.id, template_id=template.id, created_at=before) for note in rows)
         item = DeckMarketplaceItem(owner_user_id=publisher.id, source_deck_id=source_deck.id,
                                    source_note_type_id=note_type.id, title="Bench shared",
                                    publish_status="published", pricing_mode="free")
@@ -119,6 +117,7 @@ def _seed(app, *, notes: int, child_decks: int = 5) -> dict:
         user = User(username="bench-learner", email="bench-learner@example.test")
         db.session.add(user)
         db.session.flush()
+        enroll_new_learner_note_authority(db.session, user=user)
         root = Deck(name="Bench root", owner_user_id=user.id)
         db.session.add(root)
         db.session.flush()
@@ -130,7 +129,7 @@ def _seed(app, *, notes: int, child_decks: int = 5) -> dict:
         db.session.flush()
         for position, name in enumerate(("Word", "Meaning", "Reading")):
             db.session.add(FieldDef(note_type_id=note_type.id, name=name, field_type="text", position=position))
-        template = Template(note_type_id=note_type.id, name="Card 1",
+        template = create_attached_template(db.session, note_type=note_type, name="Card 1",
                             front_html="{{Word}}", back_html="{{Meaning}} {{Reading}}", is_default=True)
         db.session.add(template)
         db.session.flush()
@@ -139,11 +138,8 @@ def _seed(app, *, notes: int, child_decks: int = 5) -> dict:
                 for i in range(notes)]
         db.session.add_all(rows)
         db.session.flush()
-        db.session.add_all(Card(note_id=note.id, template_id=template.id) for note in rows)
         db.session.commit()
-        stage_note_authority_enrollment(db.session, learner_user_id=int(user.id), now_utc=datetime.utcnow())
-        db.session.commit()
-        return {"user_id": int(user.id), "deck_id": root.id,
+        return {"user_id": int(user.id), "deck_id": root.id, "note_type_id": str(note_type.id),
                 "composition_id": make_compatibility_composition_id(note_type.id, template.id)}
 
 

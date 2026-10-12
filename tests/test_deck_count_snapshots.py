@@ -21,7 +21,8 @@ from app.services import deck_count_snapshot_service as service
 from app.services.review_analytics_policy import ReviewAnalyticsPolicy
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import attach_template, enroll_note_user
+from tests.note_progress_fixtures import stage_note_state
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_count_snapshot import (
@@ -47,7 +48,7 @@ class DeckCountSnapshotTests(unittest.TestCase):
             "TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
             "STARTUP_RUN_MAINTENANCE": False, "STARTUP_CHECK_DB_CONNECTIVITY": False,
             "DECK_COUNT_WRITE_ENABLED": False, "DECK_COUNT_READ_MODE": "raw",
-            "REVIEW_ANALYTICS_WRITE_ENABLED": False, "REDIS_URL": "",
+            "REVIEW_ANALYTICS_WRITE_ENABLED": False, "REDIS_URL": "", "STUDY_NOTE_COUNT_ENABLED": False,
         })
         self.context = self.app.app_context()
         self.context.push()
@@ -55,40 +56,46 @@ class DeckCountSnapshotTests(unittest.TestCase):
         users = [User(username=name, email=f"{name}@example.test", timezone="UTC") for name in ("counts-owner", "counts-other")]
         db.session.add_all(users)
         db.session.flush()
+        for user in users:
+            enroll_note_user(db.session, user)
         self.user_id, self.other_id = [int(row.id) for row in users]
         decks = [Deck(name="populated", owner_user_id=self.user_id), Deck(name="empty", owner_user_id=self.user_id), Deck(name="other", owner_user_id=self.other_id)]
         db.session.add_all(decks)
         db.session.flush()
         self.deck_id, self.empty_id, self.other_deck_id = [int(row.id) for row in decks]
-        note_type = NoteType(user_id=self.user_id, name="Count fixture")
-        db.session.add(note_type)
+        # Cards are derived per Note type (ADR P11): the first Note presents two
+        # Templates, the next four one, and the empty deck's Note none.
+        note_type, single_type, bare_type = [
+            NoteType(user_id=self.user_id, name=name)
+            for name in ("Count fixture", "Count fixture single", "Count fixture bare")
+        ]
+        db.session.add_all([note_type, single_type, bare_type])
         db.session.flush()
-        template = Template(note_type_id=note_type.id, name="Card")
-        second_template = Template(note_type_id=note_type.id, name="Reverse")
-        db.session.add_all([template, second_template])
+        template = attach_template(db.session, owner_user_id=self.user_id, note_type_id=note_type.id, name="Card")
+        second_template = attach_template(db.session, owner_user_id=self.user_id, note_type_id=note_type.id, name="Reverse")
+        db.session.add_all([template, second_template, attach_template(db.session, owner_user_id=self.user_id, note_type_id=single_type.id, name="Card")])
         db.session.flush()
-        self.cards = []
-        first_note = None
-        for index in range(6):
-            if index == 1:
-                note = first_note
-            else:
-                note = Note(user_id=self.user_id, deck_id=self.deck_id, note_type_id=note_type.id)
-                db.session.add(note)
-                db.session.flush()
-                if index == 0:
-                    first_note = note
-            card = Card(note_id=note.id, template_id=second_template.id if index == 1 else template.id)
-            db.session.add(card)
+        first_note = Note(user_id=self.user_id, deck_id=self.deck_id, note_type_id=note_type.id)
+        db.session.add(first_note)
+        db.session.flush()
+        others = []
+        for _index in range(4):
+            note = Note(user_id=self.user_id, deck_id=self.deck_id, note_type_id=single_type.id)
+            db.session.add(note)
             db.session.flush()
-            self.cards.append(str(card.id))
-        db.session.add(Note(user_id=self.user_id, deck_id=self.empty_id, note_type_id=note_type.id))
+            others.append(note)
+        self.cards = [
+            str(Card.query.filter_by(note_id=first_note.id, template_id=template.id).one().id),
+            str(Card.query.filter_by(note_id=first_note.id, template_id=second_template.id).one().id),
+            *[str(Card.query.filter_by(note_id=note.id).one().id) for note in others],
+        ]
+        db.session.add(Note(user_id=self.user_id, deck_id=self.empty_id, note_type_id=bare_type.id))
         db.session.add_all([
-            CardProgress(user_id=self.user_id, card_id=self.cards[0], queue="review", due_day=DAY, due_at=CUTOFF + timedelta(days=1)),
-            CardProgress(user_id=self.user_id, card_id=self.cards[1], queue="review", due_at=CUTOFF),
-            CardProgress(user_id=self.user_id, card_id=self.cards[3], queue="learning", due_at=CUTOFF + timedelta(days=1)),
-            CardProgress(user_id=self.user_id, card_id=self.cards[4], queue="review", due_day=DAY, is_buried=True, buried_until_day=DAY),
-            CardProgress(user_id=self.user_id, card_id=self.cards[5], queue="review", due_day=DAY, is_suspended=True),
+            stage_note_state(db.session, user_id=self.user_id, card_id=self.cards[0], queue="review", due_day=DAY, due_at=CUTOFF + timedelta(days=1)),
+
+            stage_note_state(db.session, user_id=self.user_id, card_id=self.cards[3], queue="learning", due_at=CUTOFF + timedelta(days=1)),
+            stage_note_state(db.session, user_id=self.user_id, card_id=self.cards[4], queue="review", due_day=DAY, is_buried=True, buried_until_day=DAY),
+            stage_note_state(db.session, user_id=self.user_id, card_id=self.cards[5], queue="review", due_day=DAY, is_suspended=True),
         ])
         db.session.commit()
         self.app.config.update(DECK_COUNT_WRITE_ENABLED=True, DECK_COUNT_READ_MODE="summary")
@@ -103,7 +110,7 @@ class DeckCountSnapshotTests(unittest.TestCase):
         values = dict(
             learner_user_id=self.user_id, visible_deck_ids=[self.deck_id, self.empty_id],
             today_day_index=DAY, day_cutoff_utc=CUTOFF, timezone_name="UTC",
-            day_boundary_hour_local=4, is_note_mode=False, now_utc=NOW,
+            day_boundary_hour_local=4, is_note_mode=True, now_utc=NOW,
         )
         values.update(changes)
         return values
@@ -121,7 +128,7 @@ class DeckCountSnapshotTests(unittest.TestCase):
         report = self.prewarm()
         self.assertEqual((report["eligible"], report["computed"], report["published"]), (2, 2, 2))
         cached, dirty = self.resolve(visible_deck_ids=[self.deck_id, self.empty_id, self.other_deck_id])
-        self.assertEqual(cached[self.deck_id], {"total": 6, "new": 1, "learn": 1, "due": 1})
+        self.assertEqual(cached[self.deck_id], {"total": 6, "new": 1, "learn": 1, "due": 2})
         self.assertEqual(cached[self.empty_id], {"total": 0, "new": 0, "learn": 0, "due": 0})
         self.assertEqual(dirty, [self.other_deck_id])
 
@@ -203,23 +210,22 @@ class DeckCountSnapshotTests(unittest.TestCase):
         self.assertEqual(self.resolve(timezone_name="Asia/Tokyo")[1], [self.deck_id, self.empty_id])
         with patch.object(service, "COUNT_IMPLEMENTATION_VERSION", "dashboard-direct-counts.v2"):
             self.assertEqual(self.resolve()[1], [self.deck_id, self.empty_id])
-        db.session.add(StudyAuthorityEnrollment(learner_user_id=self.user_id, mode_code="LEGACY", epoch=1, created_at=NOW, updated_at=NOW))
+        StudyAuthorityEnrollment.query.filter_by(learner_user_id=self.user_id).one().epoch += 1
         db.session.commit()
         self.assertEqual(self.resolve()[1], [self.deck_id, self.empty_id])
 
     def test_note_unit_and_card_unit_have_separate_snapshots(self):
-        db.session.add(StudyAuthorityEnrollment(learner_user_id=self.user_id, mode_code="NOTE", epoch=1, created_at=NOW, updated_at=NOW))
         db.session.commit()
         self.app.config["STUDY_NOTE_COUNT_ENABLED"] = True
         report = self.prewarm()
         self.assertEqual(report["unit_code"], NOTE_UNIT)
-        cached, dirty = self.resolve(is_note_mode=True, count_by_note=True)
+        cached, dirty = self.resolve(count_by_note=True)
         self.assertFalse(dirty)
-        self.assertEqual(cached[self.deck_id], {"total": 5, "new": 5, "learn": 0, "due": 0})
-        self.assertEqual(self.resolve(is_note_mode=True, count_by_note=False)[1], [self.deck_id, self.empty_id])
+        self.assertEqual(cached[self.deck_id], {"total": 5, "new": 1, "learn": 1, "due": 1})
+        self.assertEqual(self.resolve(count_by_note=False)[1], [self.deck_id, self.empty_id])
         self.app.config["STUDY_NOTE_COUNT_ENABLED"] = False
         self.assertEqual(self.prewarm()["unit_code"], CARD_UNIT)
-        self.assertEqual(self.resolve(is_note_mode=True)[0][self.deck_id]["total"], 6)
+        self.assertEqual(self.resolve()[0][self.deck_id]["total"], 6)
 
     def test_any_overlay_mapping_and_unmapped_install_descendant_remain_raw(self):
         child = Deck(name="unmapped child", owner_user_id=self.user_id, parent_id=self.deck_id)

@@ -6,6 +6,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from tests import test_study_direct_note_replay as fixtures
+from tests.study_note_fixtures import create_note_user, attach_template
 from app.services import flashcards_share_service
 from models import db
 from models.card import Card
@@ -33,7 +34,7 @@ class StudySessionInstallUsageTests(unittest.TestCase):
 
     def _install_overlay(self, notes):
         with self.app.app_context():
-            publisher = User(username="usage-publisher", email="usage-publisher@example.test")
+            publisher = create_note_user(db.session, username="usage-publisher", email="usage-publisher@example.test")
             db.session.add(publisher)
             db.session.flush()
             source_deck = Deck(name="Shared source", owner_user_id=publisher.id)
@@ -43,15 +44,13 @@ class StudySessionInstallUsageTests(unittest.TestCase):
             db.session.add_all([source_deck, local_deck, note_type, installed_copy])
             db.session.flush()
             db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-            template = Template(note_type_id=note_type.id, name="Source", front_html="{{Word}}",
+            template = attach_template(db.session, note_type_id=note_type.id, owner_user_id=publisher.id, name="Source", front_html="{{Word}}",
                 back_html="{{Word}}", is_default=True)
             db.session.add(template)
             rows = [Note(user_id=publisher.id, note_type_id=note_type.id, deck_id=source_deck.id,
                 field_values={"Word": f"w{index}"}, created_at=_now() - timedelta(days=1)) for index in range(notes)]
             db.session.add_all(rows)
             db.session.flush()
-            db.session.add_all(Card(note_id=note.id, template_id=template.id,
-                created_at=_now() - timedelta(days=1)) for note in rows)
             item = DeckMarketplaceItem(owner_user_id=publisher.id, source_deck_id=source_deck.id,
                 source_note_type_id=note_type.id, title="Shared", publish_status="published", pricing_mode="free")
             db.session.add(item)

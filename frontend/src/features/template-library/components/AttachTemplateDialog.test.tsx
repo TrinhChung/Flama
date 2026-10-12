@@ -93,21 +93,14 @@ describe('AttachTemplateDialog', () => {
     expect(props.onApplied).toHaveBeenCalledWith(expect.objectContaining({ id: 'server/application' }))
     expect(props.onOpenChange).toHaveBeenCalledWith(false)
   })
-  it('offers the existing use by application ID and generates a duplicate occurrence only on an explicit choice', async () => {
+  it('links to the existing use by application ID and blocks attaching the same template a second time', async () => {
     existing = [application({ template_id: template.id, occurrence_key: 'compat', display_name: 'Reading practice', input_bindings: { Word: 'field-word' } })]
-    const generated = '00000000-0000-4000-8000-000000000001'
-    const uuid = vi.spyOn(crypto, 'randomUUID').mockReturnValue(generated)
     await render(); await pickTemplate()
     expect(document.body.textContent).toContain('Template này đã có trong Note Type.')
     expect(document.querySelector('a[href="/flashcards/note-types/nt%2F1/templates/server%2Fapplication"]')?.textContent).toContain('Mở lần dùng hiện có: Reading practice')
-    expect(uuid).not.toHaveBeenCalled()
-    await act(async () => button('Gắn thêm lần nữa').click()); await flush()
-    expect(uuid).toHaveBeenCalledOnce()
-    expect(document.body.textContent).not.toContain(generated)
+    expect(document.body.textContent).not.toContain('Gắn thêm lần nữa')
+    expect(button('Tiếp tục').disabled).toBe(true)
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
-    await act(async () => button('Gắn và lưu mapping').click()); await flush()
-    const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === 'POST')!
-    expect(JSON.parse(String(init.body)).occurrence_key).toBe(generated)
   })
   it('cancels selection or mapping without creating an empty application', async () => {
     await render(); await pickTemplate()

@@ -31,6 +31,7 @@ from app.services.student_verification_service import (
     serialize_student_profile,
 )
 
+from tests.study_note_fixtures import attach_template, create_note_user
 
 class StudentEmailVerificationTests(unittest.TestCase):
     def setUp(self):
@@ -48,7 +49,7 @@ class StudentEmailVerificationTests(unittest.TestCase):
             db.create_all()
 
             # Creator user
-            creator = User(
+            creator = create_note_user(db.session,
                 username="deck_creator",
                 email="creator@example.com",
                 is_admin=False,
@@ -57,7 +58,7 @@ class StudentEmailVerificationTests(unittest.TestCase):
             db.session.add(creator)
 
             # Normal user (non-student)
-            user_normal = User(
+            user_normal = create_note_user(db.session,
                 username="normal_user",
                 email="user@gmail.com",
                 is_admin=False,
@@ -66,7 +67,7 @@ class StudentEmailVerificationTests(unittest.TestCase):
             db.session.add(user_normal)
 
             # Unverified student user (.edu.vn)
-            student_unverified = User(
+            student_unverified = create_note_user(db.session,
                 username="sv_unverified",
                 email="sv123@hcmut.edu.vn",
                 is_admin=False,
@@ -75,7 +76,7 @@ class StudentEmailVerificationTests(unittest.TestCase):
             db.session.add(student_unverified)
 
             # Verified student user (.edu.vn)
-            student_verified = User(
+            student_verified = create_note_user(db.session,
                 username="sv_verified",
                 email="sv999@vnu.edu.vn",
                 is_admin=False,
@@ -101,7 +102,7 @@ class StudentEmailVerificationTests(unittest.TestCase):
             f2 = FieldDef(note_type_id="nt_test_1", name="Back", position=1)
             db.session.add_all([f1, f2])
 
-            tmpl = Template(
+            tmpl = attach_template(db.session, owner_user_id=creator.id,
                 note_type_id="nt_test_1",
                 name="Card 1",
                 front_html="{{Front}}",

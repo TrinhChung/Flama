@@ -41,7 +41,6 @@ from app.validators.flashcard_input import RequestValidationError, validate_note
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.connect_import_media import ConnectImportMedia
 from models.connect_import_package import ConnectImportPackage
 from models.connect_import_session import ConnectImportSession
@@ -283,9 +282,6 @@ def _anki_card_slots(note_type: NoteType) -> list[str]:
     retired ones included so later ordinals never shift). A received NoteType
     has none and uses its active occurrences instead (application IDs).
     """
-    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
-    if templates:
-        return [template.id for template in templates]
     return [row.id for row in template_library_repository.applications(db.session, note_type.id)]
 
 
@@ -319,16 +315,14 @@ def _create_note_type_from_plan(user_id: int, plan: NormalizedNoteTypePlan) -> N
             )
         )
     for index, template in enumerate(plan.templates):
-        db.session.add(
-            Template(
-                note_type_id=note_type.id,
+        template_library_repository.create_attached_template(
+                db.session, note_type=note_type, source_ord=index,
                 name=template["name"],
                 front_html=template["front_html"],
                 back_html=template["back_html"],
                 shared_css=template["shared_css"],
                 position=index,
                 is_default=index == 0,
-            )
         )
     db.session.flush()
     return note_type
@@ -355,7 +349,7 @@ def _target_note_type_hash(note_type: NoteType) -> str:
                 "shared_css": template.shared_css,
                 "position": template.position,
             }
-            for template in sorted(note_type.templates, key=lambda item: (item.position, item.id))
+            for template in template_library_repository.attached_templates(db.session, note_type.id)
         ],
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

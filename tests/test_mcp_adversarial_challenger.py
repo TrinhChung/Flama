@@ -26,6 +26,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 from scripts.flama_mcp_server import process_mcp_message, run_stdio_server
 
 
@@ -47,23 +48,23 @@ class TestMcpAdversarialChallenger(unittest.TestCase):
             db.create_all()
 
             # 1. Users
-            public_author = User(
+            public_author = create_note_user(
+                db.session,
                 username="public_sensei",
                 email="sensei@flama.vn",
                 timezone="Asia/Tokyo",
                 is_admin=False,
             )
             public_author.set_password("pass1234")
-            db.session.add(public_author)
 
-            secret_learner = User(
+            secret_learner = create_note_user(
+                db.session,
                 username="agent_007",
                 email="secret@mi6.gov.uk",
                 timezone="UTC",
                 is_admin=False,
             )
             secret_learner.set_password("pass1234")
-            db.session.add(secret_learner)
             db.session.flush()
 
             self.author_id = public_author.id
@@ -79,14 +80,16 @@ class TestMcpAdversarialChallenger(unittest.TestCase):
                 FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0, required=True),
                 FieldDef(note_type_id=note_type.id, name="Reading", field_type="text", position=1, required=True),
                 FieldDef(note_type_id=note_type.id, name="Meaning", field_type="text", position=2, required=True),
-                Template(
-                    note_type_id=note_type.id,
-                    name="Default",
-                    front_html="<div>{{Word}}</div>",
-                    back_html="<div>{{Reading}} - {{Meaning}}</div>",
-                    position=0,
-                ),
             ])
+            template = attach_template(
+                db.session,
+                note_type_id=note_type.id,
+                owner_user_id=public_author.id,
+                name="Default",
+                front_html="<div>{{Word}}</div>",
+                back_html="<div>{{Reading}} - {{Meaning}}</div>",
+                position=0,
+            )
 
             # 3. Published Deck with 15 cards (to test sample preview truncation)
             pub_deck = Deck(name="Published Deck 101", owner_user_id=public_author.id)
@@ -108,8 +111,7 @@ class TestMcpAdversarialChallenger(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card(note_id=n.id, template_id=note_type.templates[0].id)
-                db.session.add(c)
+                c = Card.query.filter_by(note_id=n.id, template_id=template.id).one()
 
             # Published Marketplace Item
             pub_item = DeckMarketplaceItem(
@@ -178,8 +180,7 @@ class TestMcpAdversarialChallenger(unittest.TestCase):
                 )
                 db.session.add(sn)
                 db.session.flush()
-                sc = Card(note_id=sn.id, template_id=note_type.templates[0].id)
-                db.session.add(sc)
+                sc = Card.query.filter_by(note_id=sn.id, template_id=template.id).one()
                 db.session.flush()
 
                 # Also add study logs to check if review data could leak

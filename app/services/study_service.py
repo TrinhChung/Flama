@@ -51,8 +51,7 @@ from app.validators.review_event import (
 from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import Card, CardWireIdentity
 from models.deck import Deck
 from models.review_event import ReviewEvent
 
@@ -74,7 +73,7 @@ class NativeReviewCommandResult:
     local_deck_id: int | None
     progress_revision: int
     scheduler_config_hash: str
-    authority_mode: str = "LEGACY"
+    authority_mode: str = "NOTE"
     authority_revision: int | None = None
     operation_key: str | None = None
     replayed: bool = False
@@ -96,7 +95,7 @@ class NativeReviewProvenance:
 class NativeReviewProgressInput:
     """Final progress state applied by the non-committing mutation core."""
 
-    progress: CardProgress
+    progress: Any
     state: CardState
     last_reviewed_at: datetime
     revision: int
@@ -147,7 +146,7 @@ class NativeReviewMutationResult:
     """Objects mutated by the core; the caller still owns flush/commit/rollback."""
 
     review_event: ReviewEvent
-    progress: CardProgress | None
+    progress: Any | None
     progress_revision: int | None
 
 
@@ -707,8 +706,10 @@ def _execute_note_authority_review_command(
         siblings=siblings,
     )
     locked_card = next(
-        sibling for sibling in siblings.cards if str(sibling.id) == str(card.id)
+        sibling for sibling in siblings.cards if str(sibling.key) == str(card.key)
     )
+    if str(locked_card.id) != str(card.id):
+        locked_card = CardWireIdentity(locked_card, str(card.id))
     # A first-state review was already checked against its pristine version.
     if require_review_state_version and not pristine:
         requested_version = str(review_state_version or "").strip()
@@ -897,174 +898,26 @@ def execute_native_review_command(
         raise
 
     try:
-        if authority_route.mode_code == "NOTE":
-            return _execute_note_authority_review_command(
-                route=authority_route,
-                user=user,
-                card=card,
-                action=action,
-                validated_payload=validated_payload,
-                clone_scope=clone_scope,
-                local_deck_id=local_deck_id,
-                requested_scope_id=requested_scope_id,
-                local_deck=local_deck,
-                options=options,
-                timezone_name=timezone_name,
-                require_review_state_version=require_review_state_version,
-                review_state_version=review_state_version,
-                reviewed_at=reviewed_at.replace(microsecond=0),
-                algorithm_key=algorithm_key,
-                algorithm_version=algorithm_version,
-                client_event_id=client_event_id,
-                review_mode=review_mode,
-                source_path=source_path,
-            )
-        if "operation_key" in validated_payload:
-            raise StudyReviewError(
-                "AUTHORITY_OPERATION_KEY_UNAVAILABLE",
-                "operation_key is available only for NOTE authority reviews.",
-                status=422,
-            )
-        progress = (
-            CardProgress.query.filter_by(
-                user_id=int(user.id),
-                card_id=str(card.id),
-            )
-            .with_for_update()
-            .first()
-        )
-        if require_review_state_version:
-            requested_version = str(review_state_version or "").strip()
-            current_version = study_artifact_service.review_state_version(
-                progress=progress,
-                deck_options=options,
-                timezone_name=timezone_name,
-            )
-            if not requested_version or requested_version != current_version:
-                raise StudyReviewError(
-                    "STALE_REVIEW_STATE",
-                    "Review state changed; reload the study manifest.",
-                )
-
-        if progress is not None and is_progress_suspended(progress):
-            raise StudyReviewError("CARD_SUSPENDED", "Card is suspended.")
-
-        if progress is None:
-            progress = CardProgress(
-                user_id=int(user.id),
-                card_id=str(card.id),
-                queue="new",
-                step_index=0,
-                due_at=None,
-                due_day=None,
-                interval_days=0,
-                ease_factor=options.startingEase,
-                reps=0,
-                lapses=0,
-                revision=0,
-            )
-            db.session.add(progress)
-            try:
-                db.session.flush()
-            except IntegrityError as exc:
-                raise StudyReviewError(
-                    "CONCURRENT_REVIEW",
-                    "This card was reviewed concurrently. Reload its latest state.",
-                ) from exc
-
-        current_state = card_state_from_progress(
-            progress,
-            reviewed_at,
-            timezone_name=timezone_name,
-            user_id=int(user.id),
+        return _execute_note_authority_review_command(
+            route=authority_route,
+            user=user,
+            card=card,
+            action=action,
+            validated_payload=validated_payload,
+            clone_scope=clone_scope,
+            local_deck_id=local_deck_id,
+            requested_scope_id=requested_scope_id,
+            local_deck=local_deck,
             options=options,
-        )
-        intervals_preview = compute_review_previews(
-            state=current_state,
-            options=options,
-            now=reviewed_at,
             timezone_name=timezone_name,
+            require_review_state_version=require_review_state_version,
+            review_state_version=review_state_version,
+            reviewed_at=reviewed_at.replace(microsecond=0),
             algorithm_key=algorithm_key,
             algorithm_version=algorithm_version,
-        )
-        transition = execute_native_review_transition(
-            NativeReviewTransitionInput(
-                state=current_state,
-                deck_options=options,
-                reviewed_at=reviewed_at,
-                action=action,
-                timezone_name=timezone_name,
-                algorithm_key=algorithm_key,
-                algorithm_version=algorithm_version,
-            )
-        )
-        policy = build_scheduler_policy(
-            options=options,
-            timezone_name=timezone_name,
-            algorithm=transition.algorithm,
-        )
-
-        effective_review_mode = review_mode or normalize_review_mode(current_state.type)
-        try:
-            mutation_result = apply_native_review_mutation(
-                NativeReviewMutationInput(
-                    user_id=int(user.id),
-                    card=card,
-                    current_state=current_state,
-                    transition=transition,
-                    reviewed_at=reviewed_at,
-                    duration_ms=validate_review_duration(
-                        validated_payload.get("duration_ms")
-                    ),
-                    review_mode=effective_review_mode,
-                    payload=validated_payload,
-                    local_deck_id=local_deck_id,
-                    scheduler_preset_id=(
-                        int(local_deck.scheduler_preset_id)
-                        if local_deck is not None
-                        and local_deck.scheduler_preset_id is not None
-                        else None
-                    ),
-                    scheduler_config_hash=policy["config_hash"],
-                    timezone_name=timezone_name,
-                    deck_options=options,
-                    provenance=NativeReviewProvenance(
-                        source_path=source_path,
-                        study_session_id=study_session_id,
-                        client_event_id=client_event_id,
-                        sequence_no=sequence_no,
-                    ),
-                    progress_input=NativeReviewProgressInput(
-                        progress=progress,
-                        state=transition.state,
-                        last_reviewed_at=reviewed_at,
-                        revision=int(progress.revision or 0) + 1,
-                    ),
-                )
-            )
-        except ReviewEventPayloadError as exc:
-            raise StudyReviewError(exc.code, str(exc), status=exc.status) from exc
-        review_event = mutation_result.review_event
-        db.session.flush()
-        if review_event.id is not None:
-            progress.last_review_event_id = int(review_event.id)
-        _append_audit(
-            user_id=int(user.id),
-            action="study.answer",
-            payload={
-                "card_id": str(card.id),
-                "rating": transition.action.rating,
-            },
-        )
-        flush_review_analytics_deltas(db.session)
-        db.session.commit()
-        return NativeReviewCommandResult(
-            current_state=current_state,
-            transition=transition,
-            intervals_preview=intervals_preview,
-            local_deck_id=local_deck_id,
-            progress_revision=int(progress.revision),
-            scheduler_config_hash=policy["config_hash"],
+            client_event_id=client_event_id,
+            review_mode=review_mode,
+            source_path=source_path,
         )
     except StudyReviewError:
         db.session.rollback()

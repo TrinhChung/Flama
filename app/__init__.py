@@ -120,7 +120,6 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from models.support_donation_config import SupportDonationConfig  # noqa: F401  # register model
     from models.support_ticket import SupportTicket  # noqa: F401  # register model
     from models.support_ticket_reply import SupportTicketReply  # noqa: F401  # register model
-    from models.card_progress import CardProgress  # noqa: F401  # register model
     from models.study_session import StudySession  # noqa: F401  # register model
     from models.study_session_card import StudySessionCard  # noqa: F401
     from models.study_session_commit import StudySessionCommit  # noqa: F401
@@ -137,18 +136,12 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
     from app.services import template_version_service as _template_versions
     from models.study_progress_history_fact import StudyProgressHistoryFact  # noqa: F401
     from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent  # noqa: F401
-    from models.study_progress_backfill_run import StudyProgressBackfillRun  # noqa: F401
-    from models.study_progress_backfill_checkpoint import StudyProgressBackfillCheckpoint  # noqa: F401
-    from models.study_progress_backfill_disposition import StudyProgressBackfillDisposition  # noqa: F401
     from models.study_authority_enrollment import StudyAuthorityEnrollment  # noqa: F401
     from models.study_authority_command_receipt import StudyAuthorityCommandReceipt  # noqa: F401
     from models.study_authority_storage_profile import StudyAuthorityStorageProfile  # noqa: F401
     from models.payment_order import PaymentOrder  # noqa: F401  # register model
     from models.payment_order_item import PaymentOrderItem  # noqa: F401  # register model
     from models.payment_webhook_event import PaymentWebhookEvent  # noqa: F401  # register model
-    from models.column_preference import (
-        VocabularyColumnPreference,
-    )  # noqa: F401  # register model
     from models.marketplace_saved_item import MarketplaceSavedItem  # noqa: F401  # register model
     from models.shared_image_asset import SharedImageAsset  # noqa: F401  # register model
     from models.image_asset import ImageAsset  # noqa: F401  # register model

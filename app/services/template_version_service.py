@@ -13,6 +13,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from app.repositories import template_version_repository as repository
 from models import db
+from models.note_type import NoteType
 from models.template import Template
 from models.template_version import TemplateVersion
 
@@ -229,9 +230,13 @@ def restore_version(*, user_id, template_id, version_id, payload, note_type_id=N
     # A content restore follows the existing #138 author hotfix rule. A schema
     # change remains closed until attachment/release support is implemented.
     same_schema = (template.input_schema or []) == version.input_schema
-    if template.note_type is not None:
+    from models.study_application import StudyApplication
+    note_types = db.session.execute(select(NoteType).join(StudyApplication).where(
+        StudyApplication.template_id == template.id, StudyApplication.status_code == "ACTIVE",
+    ).distinct()).scalars().all()
+    for attached_note_type in note_types:
         flashcard_content_service._ensure_version_safe_template_mutation(
-            note_type=template.note_type, owner_user_id=user_id,
+            note_type=attached_note_type, owner_user_id=user_id,
             allow_released_template_content_hotfix=same_schema,
         )
     mark_template_version(template, origin="restore", actor_user_id=user_id, change_note=change_note, force=True)
@@ -241,14 +246,14 @@ def restore_version(*, user_id, template_id, version_id, payload, note_type_id=N
     template.input_schema = version.input_schema
     try:
         render_template_pair(
-            template=template, field_defs=getattr(template.note_type, "field_defs", ()),
+            template=template, field_defs=(),
             field_values={}, media_assets=[], preview_note_key="version-restore-validation",
         )
     except TemplateCompileError as exc:
         db.session.rollback()
         raise TemplateVersionError("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html") from exc
     flashcard_content_service._audit(user_id, "template.restore", {
-        "note_type_id": template.note_type_id, "template_id": template.id,
+        "template_id": template.id,
         "restored_version_id": version.id,
     })
     db.session.commit()

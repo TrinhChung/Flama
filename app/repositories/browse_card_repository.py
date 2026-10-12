@@ -9,13 +9,13 @@ from sqlalchemy.orm import aliased, selectinload
 
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from models import db
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from models.deck_release import DeckRelease
 from models.deck_release_change import DeckReleaseChange
 from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
+from models.card import get_card
 from models.flashcard import Card, Note, NoteType
 from models.field_def import FieldDef
 
@@ -333,20 +333,30 @@ def effective_fields_search_condition(
 
 def load_card_for_browse_update(*, card_id: str) -> Card | None:
     """Return a browse card with note, note type, media, and template preloaded."""
-    return (
+    return get_card(db.session, card_id, query=(
         Card.query.join(Note, Card.note_id == Note.id)
-        .filter(Card.id == card_id)
         .options(
             selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
             selectinload(Card.note).selectinload(Note.media_assets),
             selectinload(Card.template),
         )
-        .first()
-    )
+    ))
 
 
-def load_browse_progress(*, user_id: int, card_id: str) -> CardProgress | None:
-    return CardProgress.query.filter_by(user_id=user_id, card_id=card_id).first()
+def page_total_and_integrity(query, *, eligible, violation) -> tuple[int, int]:
+    """One aggregate for exact filtered total and envelope integrity.
+
+    COUNT already visits the content candidates. Checking cheap identity and
+    all-or-none presence here avoids a second full-candidate preflight query.
+    Invalid envelopes outside the requested status are still rejected.
+    Payload/hash decoding stays bounded to the page's locking authority read.
+    """
+
+    row = query.order_by(None).with_entities(
+        func.count(func.distinct(case((eligible, Card.id), else_=None))),
+        func.max(violation),
+    ).one()
+    return int(row[0] or 0), int(row[1] or 0)
 
 
 def load_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:

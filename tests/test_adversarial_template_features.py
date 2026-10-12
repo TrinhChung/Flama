@@ -33,6 +33,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class AdversarialGT01DefaultTemplateSourcesTests(unittest.TestCase):
@@ -58,10 +59,8 @@ class AdversarialGT01DefaultTemplateSourcesTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin_gt01", email="admin_gt01@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin_gt01", email="admin_gt01@example.com", is_admin=True)
             user.set_password("password")
-            db.session.add(user)
-            db.session.flush()
             self.user_id = user.id
 
             deck = Deck(name="Deck GT01", owner_user_id=self.user_id)
@@ -196,12 +195,10 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            self.user_a = User(username="user_a", email="user_a@example.com")
+            self.user_a = create_note_user(db.session, username="user_a", email="user_a@example.com")
             self.user_a.set_password("pass_a")
-            self.user_b = User(username="user_b", email="user_b@example.com")
+            self.user_b = create_note_user(db.session, username="user_b", email="user_b@example.com")
             self.user_b.set_password("pass_b")
-            db.session.add_all([self.user_a, self.user_b])
-            db.session.flush()
             self.user_a_id = self.user_a.id
             self.user_b_id = self.user_b.id
 
@@ -233,16 +230,16 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(
+            t1 = attach_template(
+                db.session,
                 note_type_id=nt_id,
+                owner_user_id=self.user_a_id,
                 name="T1",
                 front_html="{{Front}}",
                 back_html="{{Back}}",
                 position=0,
                 is_default=True,
             )
-            db.session.add(t1)
-            db.session.flush()
             t1_id = t1.id
 
             n1 = Note(user_id=self.user_a_id, deck_id=self.deck_a_id, note_type_id=nt_id, field_values={"Front": "val"})
@@ -251,40 +248,34 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
 
             from models.study_application import StudyApplication
 
-            # Create 5 distinct StudyApplication occurrences for the same template
+            # Create 5 distinct StudyApplication occurrences for the same template:
+            # the Note presents one derived Card per occurrence (ADR P11).
             apps = [
                 StudyApplication(note_type_id=nt_id, template_id=t1_id, occurrence_key=f"occ_{i}")
                 for i in range(5)
             ]
             db.session.add_all(apps)
-            db.session.flush()
-
-            # Create 5 cards pointing to the same note & template across different occurrences
-            cards = [Card(note_id=n1.id, template_id=t1_id, application_id=app.id) for app in apps]
-            db.session.add_all(cards)
             db.session.commit()
+            self.assertEqual(Card.query.filter_by(note_id=n1.id).count(), 6)
 
         response = self.client.get(f"/api/note-types/{nt_id}/templates")
         self.assertEqual(response.status_code, 200)
         items = response.get_json()["items"]
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["id"], t1_id)
-        # MUST BE EXACTLY 1, NOT 10
         self.assertEqual(items[0]["note_count"], 1)
 
     def test_high_cardinality_and_unbalanced_distribution(self):
-        """Stress: 50 distinct notes on T1, 15 notes on T2, 0 cards on T3."""
+        """Stress: 50 distinct notes on T1 and T2; T3 retired presents none (ADR P11)."""
         with self.app.app_context():
             nt = NoteType(name="NT High Card", user_id=self.user_a_id)
             db.session.add(nt)
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(note_type_id=nt_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
-            t2 = Template(note_type_id=nt_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
-            t3 = Template(note_type_id=nt_id, name="T3", front_html="3", back_html="3", position=2, is_default=False)
-            db.session.add_all([t1, t2, t3])
-            db.session.flush()
+            t1 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
+            t2 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
+            t3 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T3", front_html="3", back_html="3", position=2, is_default=False)
             t1_id, t2_id, t3_id = t1.id, t2.id, t3.id
 
             notes = [
@@ -294,23 +285,21 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             db.session.add_all(notes)
             db.session.flush()
 
-            # All 50 notes have T1
-            cards_t1 = [Card(note_id=n.id, template_id=t1_id) for n in notes]
-            # Only first 15 notes have T2
-            cards_t2 = [Card(note_id=n.id, template_id=t2_id) for n in notes[:15]]
-            # T3 has 0 cards
-            db.session.add_all(cards_t1 + cards_t2)
+            # Every Note presents every ACTIVE occurrence; T3's is retired.
+            from models.study_application import StudyApplication
+
+            StudyApplication.query.filter_by(template_id=t3_id).one().status_code = "RETIRED"
             db.session.commit()
 
         response = self.client.get(f"/api/note-types/{nt_id}/templates")
         self.assertEqual(response.status_code, 200)
         items = response.get_json()["items"]
-        self.assertEqual(len(items), 3)
+        self.assertEqual(len(items), 2)
 
         counts_by_id = {item["id"]: item["note_count"] for item in items}
         self.assertEqual(counts_by_id[t1_id], 50)
-        self.assertEqual(counts_by_id[t2_id], 15)
-        self.assertEqual(counts_by_id[t3_id], 0)
+        self.assertEqual(counts_by_id[t2_id], 50)
+        self.assertNotIn(t3_id, counts_by_id)
 
     def test_cross_user_isolation(self):
         """Verify User B cannot access User A's templates or inspect counts (returns 404)."""
@@ -318,8 +307,7 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             nt_a = NoteType(name="NT Private A", user_id=self.user_a_id)
             db.session.add(nt_a)
             db.session.flush()
-            t_a = Template(note_type_id=nt_a.id, name="T_A", front_html="A", back_html="A", position=0, is_default=True)
-            db.session.add(t_a)
+            t_a = attach_template(db.session, note_type_id=nt_a.id, owner_user_id=self.user_a_id, name="T_A", front_html="A", back_html="A", position=0, is_default=True)
             db.session.commit()
             nt_a_id = nt_a.id
 
@@ -343,16 +331,12 @@ class AdversarialGT02TemplateNoteCountTests(unittest.TestCase):
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(note_type_id=nt_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
-            t2 = Template(note_type_id=nt_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
-            db.session.add_all([t1, t2])
+            t1 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
+            t2 = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.user_a_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
             db.session.flush()
 
             n1 = Note(user_id=self.user_a_id, deck_id=self.deck_a_id, note_type_id=nt_id, field_values={})
             db.session.add(n1)
-            db.session.flush()
-            c1 = Card(note_id=n1.id, template_id=t1.id)
-            db.session.add(c1)
             db.session.commit()
 
         # Check detail endpoint
@@ -394,10 +378,8 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            self.user = User(username="admin_gt03", email="admin_gt03@example.com", is_admin=True)
+            self.user = create_note_user(db.session, username="admin_gt03", email="admin_gt03@example.com", is_admin=True)
             self.user.set_password("pass_gt03")
-            db.session.add(self.user)
-            db.session.flush()
             self.user_id = self.user.id
 
             self.parent_deck = Deck(name="Parent Deck", owner_user_id=self.user_id)
@@ -420,12 +402,14 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
             db.session.flush()
             self.nt_id = self.note_type.id
 
-            self.t1 = Template(note_type_id=self.nt_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
-            self.t2 = Template(note_type_id=self.nt_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
-            db.session.add_all([self.t1, self.t2])
-            db.session.flush()
+            self.t1 = attach_template(db.session, note_type_id=self.nt_id, owner_user_id=self.user_id, name="T1", front_html="1", back_html="1", position=0, is_default=True)
+            self.t2 = attach_template(db.session, note_type_id=self.nt_id, owner_user_id=self.user_id, name="T2", front_html="2", back_html="2", position=1, is_default=False)
             self.t1_id = self.t1.id
             self.t2_id = self.t2.id
+            # Only T1 presents Cards until a test activates T2 (ADR P11).
+            from models.study_application import StudyApplication
+
+            StudyApplication.query.filter_by(template_id=self.t2_id).one().status_code = "RETIRED"
             db.session.commit()
 
         self.client.post(
@@ -444,9 +428,6 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
         with self.app.app_context():
             n = Note(user_id=self.user_id, deck_id=self.parent_deck_id, note_type_id=self.nt_id, field_values={})
             db.session.add(n)
-            db.session.flush()
-            c = Card(note_id=n.id, template_id=self.t1_id)
-            db.session.add(c)
             db.session.commit()
 
         truthy_values = ["1", "true", "True", "TRUE", "tRuE", "yes", "YES", "YeS", " 1 ", " true\t", "\nYES "]
@@ -463,9 +444,6 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
         with self.app.app_context():
             n = Note(user_id=self.user_id, deck_id=self.parent_deck_id, note_type_id=self.nt_id, field_values={})
             db.session.add(n)
-            db.session.flush()
-            c = Card(note_id=n.id, template_id=self.t1_id)
-            db.session.add(c)
             db.session.commit()
 
         falsy_values = ["0", "false", "False", "FALSE", "no", "NO", "No", "random", "-1", "2", "none", "null", "undefined", "", "   "]
@@ -488,20 +466,15 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
     def test_subdeck_hierarchy_distinct_note_aggregation(self):
         """Stress: Parent deck scope must accurately aggregate distinct notes across subdecks."""
         with self.app.app_context():
-            # Note 1 in Parent Deck has Card for T1
+            # Note 1 in Parent Deck; Notes 2 and 3 in Subdeck. With T2 active
+            # every Note presents both Templates (ADR P11).
+            from models.study_application import StudyApplication
+
             n1 = Note(user_id=self.user_id, deck_id=self.parent_deck_id, note_type_id=self.nt_id, field_values={"F": "1"})
-            # Note 2 in Subdeck has Cards for BOTH T1 and T2
             n2 = Note(user_id=self.user_id, deck_id=self.subdeck_id, note_type_id=self.nt_id, field_values={"F": "2"})
-            # Note 3 in Subdeck has Card for T1
             n3 = Note(user_id=self.user_id, deck_id=self.subdeck_id, note_type_id=self.nt_id, field_values={"F": "3"})
             db.session.add_all([n1, n2, n3])
-            db.session.flush()
-
-            c1_1 = Card(note_id=n1.id, template_id=self.t1_id)
-            c2_1 = Card(note_id=n2.id, template_id=self.t1_id)
-            c2_2 = Card(note_id=n2.id, template_id=self.t2_id)
-            c3_1 = Card(note_id=n3.id, template_id=self.t1_id)
-            db.session.add_all([c1_1, c2_1, c2_2, c3_1])
+            StudyApplication.query.filter_by(template_id=self.t2_id).one().status_code = "ACTIVE"
             db.session.commit()
 
         # Query parent deck with include_counts=1
@@ -514,21 +487,18 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
         t1_comp_id = next(c["composition_id"] for c in body["compositions"] if c["template_id"] == self.t1_id)
         t2_comp_id = next(c["composition_id"] for c in body["compositions"] if c["template_id"] == self.t2_id)
 
-        # T1 has Note 1 (parent) + Note 2 (subdeck) + Note 3 (subdeck) = 3 distinct notes
+        # Each Template has Note 1 (parent) + Notes 2 and 3 (subdeck) = 3 distinct notes
         self.assertEqual(body["note_counts"][t1_comp_id], 3)
-        # T2 has Note 2 (subdeck) = 1 distinct note
-        self.assertEqual(body["note_counts"][t2_comp_id], 1)
+        self.assertEqual(body["note_counts"][t2_comp_id], 3)
 
     def test_single_sql_query_stress_under_high_cardinality(self):
         """Stress: 100 notes with multiple templates executed in exactly ONE single SELECT query."""
         with self.app.app_context():
             # Keep template references in scope so id() is stable during Card flush
             all_templates = [
-                Template(note_type_id=self.nt_id, name=f"T_stress_{i}", front_html="f", back_html="b", position=i, is_default=(i == 0))
+                attach_template(db.session, note_type_id=self.nt_id, owner_user_id=self.user_id, name=f"T_stress_{i}", front_html="f", back_html="b", position=i, is_default=(i == 0))
                 for i in range(5)
             ]
-            db.session.add_all(all_templates)
-            db.session.flush()
             all_template_ids = [t.id for t in all_templates]
 
             # Create 100 notes across parent deck and subdeck
@@ -542,22 +512,10 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
                 for i in range(100)
             ]
             db.session.add_all(notes)
-            db.session.flush()
+            # Every Note presents every stress Template; T1/T2 are retired.
+            from models.study_application import StudyApplication
 
-            # Create cards: each note has cards for 1 to 3 templates
-            cards = []
-            for idx, n in enumerate(notes):
-                # Always template 0
-                cards.append(Card(note_id=n.id, template_id=all_template_ids[0]))
-                if idx % 3 == 0:
-                    cards.append(Card(note_id=n.id, template_id=all_template_ids[1]))
-                if idx % 5 == 0:
-                    cards.append(Card(note_id=n.id, template_id=all_template_ids[2]))
-                if idx % 7 == 0:
-                    cards.append(Card(note_id=n.id, template_id=all_template_ids[3]))
-                if idx % 11 == 0:
-                    cards.append(Card(note_id=n.id, template_id=all_template_ids[4]))
-            db.session.add_all(cards)
+            StudyApplication.query.filter_by(template_id=self.t1_id).one().status_code = "RETIRED"
             db.session.commit()
 
             # Now build query and capture SQL statement count
@@ -584,20 +542,8 @@ class AdversarialGT03CompositionNoteCountsTests(unittest.TestCase):
             # STRICT REQUIREMENT: exactly 1 SELECT query!
             self.assertEqual(len(select_queries), 1, f"Expected 1 SELECT query, got {len(select_queries)}: {select_queries}")
 
-            # Verify exact expected counts
-            expected_t0 = 100
-            expected_t1 = sum(1 for i in range(100) if i % 3 == 0)  # 34
-            expected_t2 = sum(1 for i in range(100) if i % 5 == 0)  # 20
-            expected_t3 = sum(1 for i in range(100) if i % 7 == 0)  # 15
-            expected_t4 = sum(1 for i in range(100) if i % 11 == 0)  # 10
-
-            id_map = {
-                all_template_ids[0]: expected_t0,
-                all_template_ids[1]: expected_t1,
-                all_template_ids[2]: expected_t2,
-                all_template_ids[3]: expected_t3,
-                all_template_ids[4]: expected_t4,
-            }
+            # Every Note presents every ACTIVE occurrence (ADR P11).
+            id_map = {template_id: 100 for template_id in all_template_ids}
 
             for comp in compositions:
                 exp_count = id_map[comp.template_id]

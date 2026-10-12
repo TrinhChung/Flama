@@ -1,6 +1,6 @@
 """Learner authority fence and NOTE progress-row locking (ADR P10).
 
-LEGACY learners keep ``card_progress``. A NOTE learner's progress for a Note
+Only NOTE authority is executable. A learner's progress for a Note
 is one ``study_progress_subjects`` row under the ``CONSOLIDATED_V1`` storage
 profile; the token and state of a locked subject are views of that row.
 Callers hold the learner fence and own the transaction; nothing here commits
@@ -73,13 +73,9 @@ def read_study_storage_profile(session: Session, *, lock: str | None = None) -> 
 
 
 def projection_is_live(session: Session) -> bool:
-    """Whether ``card_progress`` can still name a learner of some Content.
+    """The retired CardProgress projection is never a runtime data source."""
 
-    LEGACY learners keep writing it, and frozen rows of NOTE learners stay
-    until it is retired, so content-wide learner discovery still reads it.
-    """
-
-    return True
+    return False
 
 
 def bind_storage_profile(session: Session, route: "StudyAuthorityRoute") -> "StudyAuthorityRoute":
@@ -90,7 +86,9 @@ def bind_storage_profile(session: Session, route: "StudyAuthorityRoute") -> "Stu
     """
 
     if route.mode_code != "NOTE":
-        return route
+        raise StudyAuthorityFenceError(
+            "STUDY_AUTHORITY_MIGRATION_REQUIRED", "Only NOTE authority is supported by this release.",
+        )
     return _with_supported_profile(route, read_study_storage_profile(session, lock="share"))
 
 
@@ -204,7 +202,11 @@ def consolidated_locked_subject(subject: StudyProgressSubject) -> LockedStudyAut
 
 @dataclass(frozen=True)
 class LockedStudyAuthoritySiblings:
-    """The live Card siblings of a locked Note (read-locked); Cards carry no progress."""
+    """Every Card of a share-locked Note, retired occurrences included.
+
+    Cards are derived (ADR P11) and carry no progress. ``legacy_card_ids``
+    are the pre-P11 IDs of these Cards, which history and old sessions keep.
+    """
 
     learner_user_id: int
     subject_id: int
@@ -212,10 +214,55 @@ class LockedStudyAuthoritySiblings:
     live_note_id: str
     cards: tuple[Card, ...]
     progress_by_card_id: Mapping[str, object] = MappingProxyType({})
+    legacy_card_ids: tuple[str, ...] = ()
 
     @property
     def card_ids(self) -> tuple[str, ...]:
         return tuple(str(card.id) for card in self.cards)
+
+    @property
+    def history_card_ids(self) -> tuple[str, ...]:
+        """Every ID this Note's Cards were ever named by: keys, then legacy IDs."""
+        return (*self.card_ids, *self.legacy_card_ids)
+
+
+def _note_siblings(session: Session, note_types: Mapping[str, object]) -> dict[str, tuple[tuple[Card, ...], tuple[str, ...]]]:
+    """``{note_id: (Cards, legacy IDs)}`` of Notes whose rows this transaction locked.
+
+    ``note_types`` holds each Note's ``note_type_id`` as read under its lock.
+    A Card is a Note shown through an occurrence of that NoteType, retired
+    ones included (an open session may have dealt one). The Card read cannot
+    lock (MySQL locks no row read through a derived table) and may see an
+    older snapshot of the Note than its lock did, so a Card of another
+    NoteType is dropped: the Note then has no sibling and the caller fails
+    closed. Occurrences are not locked: they hold no learner state.
+    """
+
+    from models.card import PresentationAlias, INCLUDE_RETIRED_CARDS
+    from models.study_application import StudyApplication
+
+    note_ids = sorted(note_types)
+    cards: dict[str, list[Card]] = {note_id: [] for note_id in note_ids}
+    legacy: dict[str, list[str]] = {note_id: [] for note_id in note_ids}
+    if not note_ids:
+        return {}
+    for card, note_type_id in session.execute(
+        select(Card, StudyApplication.note_type_id)
+        .join(StudyApplication, StudyApplication.id == Card.application_id)
+        .where(Card.note_id.in_(note_ids))
+        .order_by(Card.note_id.asc(), Card.id.asc())
+        .execution_options(**{INCLUDE_RETIRED_CARDS: True})
+    ).all():
+        note_id = str(card.note_id)
+        if str(note_type_id) == str(note_types[note_id]):
+            cards[note_id].append(card)
+    for legacy_id, note_id in session.execute(
+        select(PresentationAlias.id, PresentationAlias.note_id)
+        .where(PresentationAlias.note_id.in_(note_ids))
+        .order_by(PresentationAlias.note_id.asc(), PresentationAlias.id.asc())
+    ).all():
+        legacy[str(note_id)].append(str(legacy_id))
+    return {note_id: (tuple(cards[note_id]), tuple(legacy[note_id])) for note_id in note_ids}
 
 
 @dataclass(frozen=True)
@@ -248,18 +295,17 @@ def _decode_route(
     persisted: bool,
     allow_note_authority: bool = False,
 ) -> StudyAuthorityRoute:
-    if not isinstance(mode_code, str) or mode_code not in {"LEGACY", "NOTE"}:
+    if mode_code == "LEGACY":
+        raise StudyAuthorityFenceError(
+            "STUDY_AUTHORITY_MIGRATION_REQUIRED", "Legacy progress must be migrated before this release can serve the learner.",
+        )
+    if not isinstance(mode_code, str) or mode_code != "NOTE":
         raise StudyAuthorityFenceError(
             "INVALID_AUTHORITY_MODE", "Persisted study authority mode is invalid."
         )
     if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
         raise StudyAuthorityFenceError(
             "INVALID_AUTHORITY_EPOCH", "Persisted study authority epoch is invalid."
-        )
-    if mode_code == "NOTE" and not allow_note_authority:
-        raise StudyAuthorityFenceError(
-            "NOTE_AUTHORITY_UNAVAILABLE",
-            "Note authority is not enabled by the current runtime contract.",
         )
     if mode_code == "NOTE" and (not persisted or epoch < 1):
         raise StudyAuthorityFenceError(
@@ -288,13 +334,13 @@ def read_study_authority_route(session: Session, *, learner_user_id: int) -> Stu
         .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if enrollment is None:
-        return StudyAuthorityRoute(learner_id, "LEGACY", 0, False)
+        raise StudyAuthorityFenceError(
+            "STUDY_AUTHORITY_MIGRATION_REQUIRED", "Learner enrollment is missing; an explicit migration is required.",
+        )
     route = _decode_route(
         learner_user_id=learner_id, mode_code=enrollment.mode_code,
         epoch=enrollment.epoch, persisted=True, allow_note_authority=True,
     )
-    if route.mode_code != "NOTE":
-        return route
     return _with_supported_profile(route, read_study_storage_profile(session))
 
 
@@ -307,11 +353,11 @@ def lock_study_authority_route(
     """Hold the stable learner shared fence and resolve the current route.
 
     The User row is deliberately locked before reading enrollment because an
-    absent enrollment row is the normal LEGACY/0 state and is not a portable
-    row-lock target.  A future mode switch must take the same User row FOR
-    UPDATE, never upgrade this shared lock, and retain it until transaction end.
-    NOTE remains fail-closed unless the caller explicitly opts into the native
-    authority contract; existing LEGACY call sites therefore cannot drift.
+    absent enrollment row is not a portable row-lock target. Missing or
+    LEGACY enrollment is refused; only the explicit signup/enrollment service
+    may bootstrap a new NOTE learner. The shared lock stays until transaction
+    end. ``allow_note_authority`` remains a source-compatible argument; this
+    release serves NOTE authority exclusively.
     """
 
     learner_id = _positive_learner_id(learner_user_id)
@@ -335,11 +381,8 @@ def lock_study_authority_route(
             .execution_options(populate_existing=True)
         ).scalar_one_or_none()
     if enrollment is None:
-        return StudyAuthorityRoute(
-            learner_user_id=learner_id,
-            mode_code="LEGACY",
-            epoch=0,
-            persisted=False,
+        raise StudyAuthorityFenceError(
+            "STUDY_AUTHORITY_MIGRATION_REQUIRED", "Learner enrollment is missing; an explicit migration is required.",
         )
     route = _decode_route(
         learner_user_id=learner_id,
@@ -348,13 +391,12 @@ def lock_study_authority_route(
         persisted=True,
         allow_note_authority=allow_note_authority,
     )
-    if route.mode_code != "NOTE":
-        return route
     # Shared, like the User row: the profile switch takes it exclusively and
     # so waits for every NOTE transaction that started under the old profile.
-    return _with_supported_profile(
-        route, read_study_storage_profile(session, lock="share")
-    )
+    with session.no_autoflush:
+        return _with_supported_profile(
+            route, read_study_storage_profile(session, lock="share")
+        )
 
 
 def _validate_hash(value: object, *, nullable: bool, field_name: str) -> bytes | None:
@@ -423,13 +465,13 @@ def lock_study_authority_siblings(
     locked: LockedStudyAuthoritySubject,
     requested_card_id: str | None = None,
 ) -> LockedStudyAuthoritySiblings:
-    """Lock the complete live Card/progress vector for one current Note.
+    """Share-lock one current Note and read its complete Card vector.
 
     The caller must already hold learner/enrollment, subject, token and state
     locks. Source Notes in logical-overlay installs may belong to the publisher;
-    progress ownership is therefore checked on ``CardProgress.user_id`` rather
-    than ``Note.user_id``. Missing compatibility rows fail closed until the
-    first-state/new-sibling materialization contract is implemented.
+    progress ownership is therefore checked on the subject learner rather
+    than ``Note.user_id``. The Cards are derived from the locked Note
+    (``_note_siblings``); a Note without one fails closed.
     """
 
     if not isinstance(route, StudyAuthorityRoute) or route.mode_code != "NOTE":
@@ -468,20 +510,13 @@ def lock_study_authority_siblings(
         raise StudyAuthorityFenceError(
             "AUTHORITY_NOTE_NOT_FOUND", "Authority Note no longer exists."
         )
-    cards = tuple(
-        session.execute(
-            select(Card)
-            .where(Card.note_id == live_note_id)
-            .order_by(Card.id.asc())
-            .with_for_update(read=True)
-        ).scalars()
-    )
+    cards, legacy_card_ids = _note_siblings(session, {live_note_id: note.note_type_id})[live_note_id]
     if not cards:
         raise StudyAuthorityFenceError(
             "AUTHORITY_SIBLINGS_EMPTY", "Authority Note has no active Card sibling."
         )
     card_ids = tuple(str(card.id) for card in cards)
-    if requested_id is not None and requested_id not in set(card_ids):
+    if requested_id is not None and requested_id not in {*card_ids, *legacy_card_ids}:
         raise StudyAuthorityFenceError(
             "CARD_OUTSIDE_AUTHORITY_SUBJECT",
             "Requested Card is outside the locked authority subject.",
@@ -492,6 +527,7 @@ def lock_study_authority_siblings(
         subject_generation=int(subject.subject_generation),
         live_note_id=live_note_id,
         cards=cards,
+        legacy_card_ids=legacy_card_ids,
     )
 
 
@@ -543,12 +579,13 @@ def lock_study_authority_siblings_many(
     route: StudyAuthorityRoute,
     locked_by_logical_note_key: Mapping[str, LockedStudyAuthoritySubject],
 ) -> Mapping[str, LockedStudyAuthoritySiblings]:
-    """Read-lock complete sibling vectors after all session Subjects are locked.
+    """Read complete sibling vectors after all session Subjects are locked.
 
     Session callers already hold learner -> session -> every Subject lock in
-    logical-key order. Acquire shared Note/Card locks in bounded, deterministic
-    groups; direct review continues using its single-Subject helper. No learner
-    ownership predicate is applied to Notes: overlay source Notes belong to the
+    logical-key order. Acquire shared Note locks in bounded, deterministic
+    groups and derive each Note's Cards from them (``_note_siblings``); direct
+    review continues using its single-Subject helper. No learner ownership
+    predicate is applied to Notes: overlay source Notes belong to the
     publisher, while progress ownership remains on the locked Subject.
     """
     if not isinstance(route, StudyAuthorityRoute) or route.mode_code != "NOTE":
@@ -578,10 +615,9 @@ def lock_study_authority_siblings_many(
     result: dict[str, LockedStudyAuthoritySiblings] = {}
     for offset in range(0, len(keys), 500):
         chunk = keys[offset:offset + 500]
-        # Only existence is needed, but this is a current locking read just as
-        # in the per-Note helper. Keep the full Card vector, including siblings
-        # outside the selected session composition.
-        note_read = select(Note.id).where(Note.id.in_(chunk))
+        # A current locking read just as in the per-Note helper. Keep the full
+        # Card vector, including siblings outside the selected composition.
+        note_read = select(Note.id, Note.note_type_id).where(Note.id.in_(chunk))
         if session.get_bind().dialect.name == "mysql":
             # A covering PRIMARY scan for IN(...) can lock unrelated Notes
             # under REPEATABLE READ, even with FORCE INDEX. Drive point reads
@@ -591,25 +627,22 @@ def lock_study_authority_siblings_many(
                 select(literal(key).label("note_id")) for key in chunk
             )).subquery("session_note_keys")
             note_read = (
-                select(Note.id).select_from(key_rows)
+                select(Note.id, Note.note_type_id).select_from(key_rows)
                 .join(Note, Note.id == key_rows.c.note_id)
                 .prefix_with("STRAIGHT_JOIN", dialect="mysql")
                 .with_hint(Note, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
             )
-        existing = set(session.execute(
-            note_read.order_by(Note.id.asc()).with_for_update(read=True)
-        ).scalars())
-        if existing != set(chunk):
+        note_types = {
+            str(note_id): note_type_id
+            for note_id, note_type_id in session.execute(
+                note_read.order_by(Note.id.asc()).with_for_update(read=True)
+            ).all()
+        }
+        if set(note_types) != set(chunk):
             raise StudyAuthorityFenceError("AUTHORITY_NOTE_NOT_FOUND", "Authority Note no longer exists.")
-        cards_by_note: dict[str, list[Card]] = {key: [] for key in chunk}
-        for card in session.execute(
-            select(Card).where(Card.note_id.in_(chunk))
-            .with_hint(Card, "FORCE INDEX (ix_cards_note_id)", dialect_name="mysql")
-            .order_by(Card.note_id.asc(), Card.id.asc()).with_for_update(read=True)
-        ).scalars():
-            cards_by_note[str(card.note_id)].append(card)
+        siblings_by_note = _note_siblings(session, note_types)
         for key in chunk:
-            cards = tuple(cards_by_note[key])
+            cards, legacy_card_ids = siblings_by_note[key]
             if not cards:
                 raise StudyAuthorityFenceError("AUTHORITY_SIBLINGS_EMPTY", "Authority Note has no active Card sibling.")
             subject = locked_by_logical_note_key[key].subject
@@ -619,5 +652,6 @@ def lock_study_authority_siblings_many(
                 subject_generation=int(subject.subject_generation),
                 live_note_id=key,
                 cards=cards,
+                legacy_card_ids=legacy_card_ids,
             )
     return MappingProxyType(result)

@@ -18,6 +18,7 @@ from models.note_type import NoteType
 from models.template import Template
 from models.user import User
 from models.user_role import UserRole
+from tests.study_note_fixtures import attach_template, create_note_user
 from app.services import creator_key_entitlement_service, deck_access_key_service
 
 
@@ -38,7 +39,8 @@ class DeckAccessKeysTests(unittest.TestCase):
             creator_role = UserRole.query.filter_by(code="creator").first()
 
             # Create Teacher / Creator user
-            creator = User(
+            creator = create_note_user(
+                db.session,
                 username="sensei",
                 email="sensei@example.com",
                 is_admin=False,
@@ -46,28 +48,24 @@ class DeckAccessKeysTests(unittest.TestCase):
                 balance_amount_minor=50000,
             )
             creator.set_password("password123")
-            db.session.add(creator)
-
 
             # Create Student 1
-            student1 = User(
+            student1 = create_note_user(
+                db.session,
                 username="student1",
                 email="student1@example.com",
                 is_admin=False,
             )
             student1.set_password("password123")
-            db.session.add(student1)
 
             # Create Student 2
-            student2 = User(
+            student2 = create_note_user(
+                db.session,
                 username="student2",
                 email="student2@example.com",
                 is_admin=False,
             )
             student2.set_password("password123")
-            db.session.add(student2)
-
-            db.session.flush()
 
             self.creator_id = creator.id
             self.student1_id = student1.id
@@ -85,14 +83,16 @@ class DeckAccessKeysTests(unittest.TestCase):
 
             field_word = FieldDef(note_type_id=note_type.id, name="Word", position=1)
             field_meaning = FieldDef(note_type_id=note_type.id, name="Meaning", position=2)
-            template = Template(
+            template = attach_template(
+                db.session,
+                owner_user_id=creator.id,
                 note_type_id=note_type.id,
                 name="Card 1",
                 front_html="<div>{{Word}}</div>",
                 back_html="<div>{{FrontSide}}<hr>{{Meaning}}</div>",
                 position=1,
             )
-            db.session.add_all([field_word, field_meaning, template])
+            db.session.add_all([field_word, field_meaning])
 
             # Create Deck
             deck = Deck(
@@ -167,7 +167,7 @@ class DeckAccessKeysTests(unittest.TestCase):
 
     def test_creator_create_and_list_keys(self):
         self._login("sensei@example.com")
-        
+
         # Create single key
         res = self.client.post(
             f"/api/creator/decks/{self.deck_item_id}/keys",
@@ -211,7 +211,7 @@ class DeckAccessKeysTests(unittest.TestCase):
 
     def test_creator_update_and_revoke_key(self):
         self._login("sensei@example.com")
-        
+
         # Create key
         res = self.client.post(
             f"/api/creator/decks/{self.deck_item_id}/keys",

@@ -1,8 +1,7 @@
 """Flashcard domain models exported from flat model modules."""
 
 from models.audit_log import AuditLog
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import Card, PresentationAlias
 from models.deck import Deck
 from models.deck_access_key import DeckAccessKey
 from models.deck_access_key_redemption import DeckAccessKeyRedemption
@@ -45,7 +44,7 @@ from models.template import Template
 __all__ = [
     "AuditLog",
     "Card",
-    "CardProgress",
+    "PresentationAlias",
     "CreatorFeaturePolicy",
     "Deck",
     "DeckAccessKey",

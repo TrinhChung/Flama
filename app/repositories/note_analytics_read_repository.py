@@ -3,13 +3,14 @@
 Dashboard, overview and queue counts read each Note's availability from its
 ``study_progress_subjects`` row in one consistent snapshot. Nothing here
 locks, writes or materializes state, so these reads may run inside
-``analytics_read_transaction()``. There is no cross-table evidence left to
-check on the read path: the offline audit re-derives availability from state.
+``analytics_read_transaction()``. Cheap envelope identity and presence checks
+can share required aggregates. The offline audit re-derives whole-store
+availability and hashes from state; Browse validates its returned page fully.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, and_, case, cast, literal, null, select
+from sqlalchemy import LargeBinary, and_, case, cast, literal, null, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from models.card import Card
@@ -44,6 +45,45 @@ def violation_error(rank: int | None) -> tuple[str, str] | None:
     return code, _VIOLATION_MESSAGES[code]
 
 
+def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
+    """Cheap identity/presence guard folded into an existing aggregate.
+
+    This does not re-decode every state payload or recompute hashes. The
+    canonical writer owns availability; full state/hash validation is bounded
+    to returned rows, and the read-only retirement audit checks whole stores.
+    A detached or partial envelope must never silently count as pristine.
+    """
+
+    from app.services.study_progress_contract import (
+        SUBJECT_AVAILABILITY_NULLABLE_COLUMNS, SUBJECT_PROGRESS_COLUMNS,
+    )
+
+    present = and_(*(getattr(subject, key).isnot(None) for key in SUBJECT_PROGRESS_COLUMNS))
+    absent = and_(*(getattr(subject, key).is_(None) for key in (
+        *SUBJECT_PROGRESS_COLUMNS, *SUBJECT_AVAILABILITY_NULLABLE_COLUMNS,
+    )))
+    # The canonical logical-key join cannot see a row whose key was damaged.
+    # A second indexed live-Note probe catches that relevant evidence even
+    # when the canonical envelope is absent, without an OR join/full scan.
+    live = aliased(StudyProgressSubject)
+    wrong_live_identity = select(literal(1)).where(
+        live.learner_user_id == int(learner_user_id), live.live_note_id == note_id,
+        live.logical_note_key != cast(note_id, LargeBinary),
+    ).correlate_except(live).exists()
+    return case(
+        (wrong_live_identity, 2),
+        (subject.id.is_(None), 0),
+        (or_(subject.live_note_id.is_(None), subject.live_note_id != note_id,
+             subject.logical_note_key != cast(note_id, LargeBinary),
+             subject.status_code.in_(['TOMBSTONED_RESET', 'TOMBSTONED_SUBJECT_DELETED',
+                                     'REKEYED_CLONE_CUTOVER'])), 2),
+        (or_(and_(subject.semantic_state_hash.isnot(None), ~present),
+             and_(subject.semantic_state_hash.is_(None),
+                  or_(~absent, subject.status_code != 'NO_CURRENT_PROGRESS'))), 1),
+        else_=0,
+    )
+
+
 def note_card_rows(scope, *, learner_user_id: int, storage_profile: str | None = None):
     """Each Note row's availability for each Card in ``scope``.
 
@@ -66,7 +106,8 @@ def note_card_rows(scope, *, learner_user_id: int, storage_profile: str | None =
             subject.is_suspended.label("is_suspended"),
             subject.is_buried.label("is_buried"),
             subject.buried_until_day.label("buried_until_day"),
-            literal(0).label("violation"),
+            subject_integrity_violation(subject, note_id=scope.c.note_id,
+                                        learner_user_id=learner_user_id).label("violation"),
         )
         .select_from(scope)
         .outerjoin(subject, and_(
@@ -83,18 +124,26 @@ def subject_vector_violation(session: Session, *, scope, learner_user_id: int, s
 
 
 def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None):
-    """Every Card of a Note the learner holds current NOTE state on."""
+    """Visible owned/install presentations whose Note holds current state.
 
+    The shared scope preserves release-pinned retired applications and local
+    added Notes. An outer ORM statement embedding this scope must retain
+    ``include_retired_cards=True``; its owned branch explicitly selects ACTIVE
+    applications, while the overlay branch enforces its release pin.
+    """
+
+    from app.repositories.stats_query_repository import learner_presentation_scope
+
+    visible = learner_presentation_scope(learner_user_id=learner_user_id)
     cards = (
-        select(
-            Card.id.label("card_id"),
-            Card.note_id.label("note_id"),
-        )
+        select(visible.c.card_id, visible.c.note_id)
+        .select_from(visible)
         .join(StudyProgressSubject, and_(
             StudyProgressSubject.learner_user_id == int(learner_user_id),
-            StudyProgressSubject.live_note_id == Card.note_id,
+            StudyProgressSubject.live_note_id == visible.c.note_id,
         ))
         .where(StudyProgressSubject.semantic_state_hash.isnot(None))
+        .distinct()
     ).subquery("learner_cards")
     return select(
         null().label("deck_id"),

@@ -17,5 +17,8 @@ class Note(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     note_type = db.relationship("NoteType", back_populates="notes")
-    cards = db.relationship("Card", back_populates="note", cascade="all, delete-orphan")
+    # Derived presentations (ADR P11): one per ACTIVE application of the NoteType.
+    cards = db.relationship(
+        "Card", primaryjoin="foreign(Card.note_id) == Note.id", viewonly=True, order_by="Card.id"
+    )
     media_assets = db.relationship("MediaAsset", back_populates="note", cascade="all, delete-orphan")

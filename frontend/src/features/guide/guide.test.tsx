@@ -170,7 +170,7 @@ describe('Guide Feature Localization & Components', () => {
     expect(container.textContent).toContain('Field Mapping Matrix')
     expect(container.textContent).toContain('Card Simulator')
     expect(container.textContent).toContain('Automated Subtitle Mining')
-    expect(container.textContent).toContain('Zero Desktop Anki Required')
+    expect(container.textContent).toContain('Direct Sync via Flama Connect')
     expect(container.textContent).toContain('Yomitan Popup Synergy')
   })
 })

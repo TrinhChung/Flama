@@ -16,6 +16,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class NoteSyncAndMcpTests(unittest.TestCase):
@@ -32,23 +33,23 @@ class NoteSyncAndMcpTests(unittest.TestCase):
         with self.app.app_context():
             db.create_all()
 
-            user = User(
+            user = create_note_user(
+                db.session,
                 username="sync_user",
                 email="sync_user@example.com",
                 timezone="Asia/Tokyo",
                 is_admin=False,
             )
             user.set_password("password")
-            db.session.add(user)
 
-            other_user = User(
+            other_user = create_note_user(
+                db.session,
                 username="other_user",
                 email="other@example.com",
                 timezone="UTC",
                 is_admin=False,
             )
             other_user.set_password("password")
-            db.session.add(other_user)
             db.session.flush()
 
             self.user_id = user.id
@@ -98,14 +99,16 @@ class NoteSyncAndMcpTests(unittest.TestCase):
                         position=3,
                         required=False,
                     ),
-                    Template(
-                        note_type_id=note_type.id,
-                        name="Card 1: Recognition",
-                        front_html="<div>{{Word}}</div>",
-                        back_html="<div>{{IPA}}<br>{{Meaning}}<br>{{Example}}</div>",
-                        position=0,
-                    ),
                 ]
+            )
+            attach_template(
+                db.session,
+                note_type_id=note_type.id,
+                owner_user_id=user.id,
+                name="Card 1: Recognition",
+                front_html="<div>{{Word}}</div>",
+                back_html="<div>{{IPA}}<br>{{Meaning}}<br>{{Example}}</div>",
+                position=0,
             )
 
             # Create initial deck hierarchy: English -> Luyện Đề -> Bài 1

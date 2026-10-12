@@ -41,7 +41,7 @@ from tests.test_study_pristine_bulk_materialization import StudyPristineBulkMate
 from tests.test_study_availability_snapshot import StudyAvailabilitySnapshotTests
 from tests.test_study_algorithm_switch import StudyAlgorithmSwitchTests
 from tests.test_study_phase6_continuity import (
-    StudyPhase6ContinuityTests, StudyRepeatedApplicationTests,
+    StudyPhase6ContinuityTests, StudyMultipleTemplateAttachmentTests,
 )
 
 PROBE_NAME_PATTERN = re.compile(r"^flama_p5_direct_probe_[0-9]+_[a-f0-9]{8}$")
@@ -111,7 +111,6 @@ def _concurrent_first_state_answers(case):
     from uuid import uuid4
 
     from app.services import study_service
-    from models.card_progress import CardProgress
     from models.review_event import ReviewEvent
     from models.study_progress_subject import StudyProgressSubject
 
@@ -156,8 +155,7 @@ def _concurrent_first_state_answers(case):
         case.assertEqual(
             ReviewEvent.query.filter(ReviewEvent.card_id.in_(case.source_card_ids)).count(), len(succeeded))
         # The Note's one row holds the state; no Card carries progress (ADR P10).
-        case.assertEqual(
-            CardProgress.query.filter(CardProgress.card_id.in_(case.source_card_ids)).count(), 0)
+        case.assertFalse(sa.inspect(db.engine).has_table("card_progress"))
 
 
 def _template_preview_race(case, *, change_count):
@@ -290,7 +288,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
             def setUpClass(cls):
                 cls.app = app
 
-        class MySQLRepeatedApplicationTests(StudyRepeatedApplicationTests):
+        class MySQLMultipleTemplateAttachmentTests(StudyMultipleTemplateAttachmentTests):
             @classmethod
             def setUpClass(cls):
                 cls.app = app
@@ -326,7 +324,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
         if content_delete_only:
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLContentDeleteTests)
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLPhase6ContinuityTests))
-            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLRepeatedApplicationTests))
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLMultipleTemplateAttachmentTests))
             report["scope"] = "content-delete"
         elif overlay_only:
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(MySQLNoteOverlayTests)
@@ -343,7 +341,7 @@ def run_probe(*, templates_only=False, content_delete_only=False, overlay_only=F
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLAvailabilitySnapshotTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLContentDeleteTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLPhase6ContinuityTests))
-            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLRepeatedApplicationTests))
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLMultipleTemplateAttachmentTests))
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(MySQLDirectReplayTests))
             suite.addTests(MySQLNumericReplayTests(name) for name in (
                 "test_direct_note_answers_use_same_numeric_profile_for_all_ratings",

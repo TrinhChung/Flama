@@ -22,6 +22,7 @@ from app.services.media_field_codec import (
 )
 from models import db
 from models.field_types import field_value_text
+from models.card import card_id_clause
 from models.flashcard import Card, MediaAsset, Note, NoteType
 
 
@@ -116,7 +117,7 @@ def precheck_voicevox(
 
     query = (
         Card.query.join(Note, Card.note_id == Note.id)
-        .filter(Card.id.in_(card_ids))
+        .filter(card_id_clause(db.session, card_ids))
         .options(
             selectinload(Card.note)
             .selectinload(Note.note_type)
@@ -245,7 +246,7 @@ def generate_voicevox(
 
     query = (
         Card.query.join(Note, Card.note_id == Note.id)
-        .filter(Card.id.in_(card_ids))
+        .filter(card_id_clause(db.session, card_ids))
         .options(
             selectinload(Card.note)
             .selectinload(Note.note_type)

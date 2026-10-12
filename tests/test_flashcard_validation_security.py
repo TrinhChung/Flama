@@ -17,6 +17,7 @@ from models import db
 from models.deck import Deck
 from models.flashcard import MediaAsset, Note
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 _MIN_PNG_BYTES = (
@@ -65,7 +66,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin", email="admin-security@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin", email="admin-security@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
@@ -621,7 +622,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
 
         # Create other user
         with self.app.app_context():
-            other_user = User(username="other", email="other-security@example.com", is_admin=False)
+            other_user = create_note_user(db.session, username="other", email="other-security@example.com", is_admin=False)
             other_user.set_password("otherpassword")
             db.session.add(other_user)
             db.session.commit()

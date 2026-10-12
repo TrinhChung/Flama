@@ -40,7 +40,6 @@ from app.validators import (
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.field_def import FieldDef
 from models.field_types import ARRAY_FIELD_TYPE, FIELD_TYPES
 from models.field_rename_job import FieldRenameJob
@@ -104,7 +103,7 @@ def list_note_types(*, user_id: int, compact: bool = False) -> dict[str, Any]:
         rows = (
             query.options(
                 selectinload(NoteType.field_defs),
-                selectinload(NoteType.templates),
+                selectinload(NoteType.study_applications).selectinload(StudyApplication.template),
                 selectinload(NoteType.owner),
             )
             .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
@@ -296,12 +295,7 @@ def _note_type_purge_scope(
     projection_live = projection_is_live(db.session)
     for offset in range(0, len(card_ids), 500):
         card_chunk = card_ids[offset : offset + 500]
-        if projection_live:
-            collect_learner_ids(
-                db.session.query(CardProgress.user_id).filter(
-                    CardProgress.card_id.in_(card_chunk)
-                )
-            )
+        pass
         collect_learner_ids(
             db.session.query(StudySession.user_id)
             .join(StudySessionCard, StudySessionCard.session_id == StudySession.id)
@@ -414,9 +408,7 @@ def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is
 
         # 6. Delete NoteType itself, which cascades
         if scope.card_ids:
-            CardProgress.query.filter(CardProgress.card_id.in_(scope.card_ids)).delete(
-                synchronize_session=False
-            )
+            pass  # NOTE lifecycle state is handled by the fenced deletion plan.
         finalize_content_delete(
             lifecycle_plan,
             source_path="flashcards.note_type_purge",
@@ -808,10 +800,14 @@ def list_templates(*, user_id: int, note_type_id: str) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     # Preserve the compatibility list DTO; input schema/bindings are exposed by
     # library/application APIs. Order/default/membership still come from use.
-    items = [
-        {key: value for key, value in item.items() if key not in {"input_schema", "input_bindings"}}
-        for item in marketplace_query_service.serialize_note_type_templates(note_type)
-    ]
+    items = []
+    seen_template_ids = set()
+    for item in marketplace_query_service.serialize_note_type_templates(note_type):
+        if item["id"] in seen_template_ids:
+            continue
+        seen_template_ids.add(item["id"])
+        items.append({key: value for key, value in item.items()
+                      if key not in {"input_schema", "input_bindings"}})
     template_ids = [str(item["id"]) for item in items]
     note_counts: dict[str, int] = {}
     if template_ids:
@@ -850,71 +846,21 @@ def create_template(
         note_type=note_type,
         owner_user_id=user_id,
     )
-    from app.services import study_content_delete_service as content_topology
-
-    try:
-        note_ids = [
-            str(row[0])
-            for row in db.session.query(Note.id)
-            .filter(
-                Note.note_type_id == note_type.id,
-                Note.user_id == int(user_id),
-            )
-            .order_by(Note.id.asc())
-            .all()
-            if row and row[0]
-        ]
-        # Any NOTE learner with state on these Notes gets the new sibling too.
-        authority_routes = content_topology.lock_content_expansion_routes(
-            db.session,
-            actor_user_ids=(int(user_id),),
-            note_ids=note_ids,
-        )
-        expansion_plan = content_topology.prepare_content_expansion(
-            db.session,
-            routes=authority_routes,
-            note_ids=note_ids,
-        )
-        content_topology.verify_content_expansion_scope(
-            db.session,
-            routes=authority_routes,
-            note_ids=note_ids,
-        )
-        template, error = flashcards_share_service.create_template(
-            note_type_id=note_type.id,
-            user_id=user_id,
-            payload=payload,
-            commit=False,
-        )
-    except StudyAuthorityFenceError as exc:
-        db.session.rollback()
-        raise ContentApiError(exc.code, str(exc), status=409) from exc
+    # A new Template sibling writes no learner progress (ADR P10 §2.3).
+    template, error = flashcards_share_service.create_template(
+        note_type_id=note_type.id,
+        user_id=user_id,
+        payload=payload,
+        commit=False,
+    )
     if template is None:
         db.session.rollback()
         raise ContentApiError(
             "VALIDATION_ERROR",
             error or "Unable to create template.",
         )
-    new_cards = (
-        Card.query.filter(
-            Card.template_id == template.id,
-            Card.note_id.in_(note_ids),
-        )
-        .order_by(Card.note_id.asc(), Card.id.asc())
-        .all()
-        if note_ids
-        else []
-    )
-    try:
-        content_topology.finalize_content_expansion(
-            expansion_plan,
-            new_cards=new_cards,
-        )
-    except StudyAuthorityFenceError as exc:
-        db.session.rollback()
-        raise ContentApiError(exc.code, str(exc), status=409) from exc
     db.session.commit()
-    return marketplace_query_service.serialize_template(template)
+    return _serialize_attached_template(template, note_type_id=note_type.id)
 
 
 def update_template(
@@ -969,7 +915,7 @@ def update_template(
         {"note_type_id": note_type.id, "template_id": template.id},
     )
     db.session.commit()
-    return marketplace_query_service.serialize_template(template)
+    return _serialize_attached_template(template, note_type_id=note_type.id)
 
 
 def reset_template(
@@ -990,7 +936,7 @@ def reset_template(
     template.back_html = LEGACY_BACK_TEMPLATE.strip()
     template.shared_css = LEGACY_SHARED_CSS.strip()
     db.session.commit()
-    return marketplace_query_service.serialize_template(template)
+    return _serialize_attached_template(template, note_type_id=note_type.id)
 
 
 def delete_template(
@@ -1011,97 +957,22 @@ def delete_template(
     # active occurrences, as listed by the editor.
     active = library_repository.applications(db.session, note_type.id)
     own = [row for row in active if row.template_id == template.id]
-    if any(row.is_default for row in own) if own else template.is_default:
+    if any(row.is_default for row in own):
         raise ContentApiError(
             "VALIDATION_ERROR",
             "Cannot delete default template.",
             status=409,
         )
-    remaining = [row for row in active if row.template_id != template.id] or [
-        row for row in library_repository.legacy_fallback_templates(db.session, note_type.id)
-        if row.id != template.id
-    ]
+    remaining = [row for row in active if row.template_id != template.id]
     if not remaining:
         raise ContentApiError(
             "VALIDATION_ERROR",
             "A note type requires at least one template.",
             status=409,
         )
-    if str(template.note_type_id or "") != str(note_type.id) or library_repository.template_used_outside(
-        db.session, template.id, note_type.id,
-    ):
-        # A shared definition is only removed from this NoteType. Deleting it
-        # would erase other NoteTypes' Cards and progress.
-        library_repository.detach_template(db.session, note_type.id, template)
-        _audit(
-            user_id,
-            "template.detach",
-            {"note_type_id": note_type.id, "template_id": template.id},
-        )
-        db.session.commit()
-        return {"success": True}
-    from app.services import study_content_delete_service as content_delete
-
-    card_ids = [
-        str(row[0])
-        for row in db.session.query(Card.id)
-        .filter(Card.template_id == template.id)
-        .all()
-        if row and row[0]
-    ]
-    # Removing one Template is a partial sibling removal for every Note, and
-    # every learner holding state on those Cards keeps one Note state.
-    try:
-        authority_routes = content_delete.lock_content_delete_routes(
-            db.session,
-            actor_user_ids=(int(user_id),),
-            card_ids=card_ids,
-            deleted_note_ids=(),
-        )
-        lifecycle_plan = content_delete.prepare_content_delete(
-            db.session,
-            routes=authority_routes,
-            card_ids=card_ids,
-            note_ids=(),
-            cancel_legacy_sessions=False,
-        )
-        content_delete.verify_content_delete_scope(
-            db.session,
-            routes=authority_routes,
-            card_ids=card_ids,
-            deleted_note_ids=(),
-        )
-        current_card_ids = {
-            str(row[0])
-            for row in db.session.query(Card.id)
-            .filter(Card.template_id == template.id)
-            .with_for_update(read=True)
-            .all()
-        }
-        if current_card_ids != set(card_ids):
-            raise StudyAuthorityFenceError(
-                "CONTENT_SCOPE_CHANGED",
-                "Template Cards changed while the deletion was admitted; retry.",
-            )
-        if card_ids:
-            CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
-                synchronize_session=False
-            )
-        content_delete.finalize_content_delete(
-            lifecycle_plan,
-            source_path="flashcards.template_delete",
-            operation_key=f"template-delete:{template.id}",
-        )
-    except StudyAuthorityFenceError as exc:
-        db.session.rollback()
-        raise ContentApiError(exc.code, str(exc), status=409) from exc
-    Card.query.filter_by(template_id=template.id).delete()
-    db.session.delete(template)
-    _audit(
-        user_id,
-        "template.delete",
-        {"note_type_id": note_type.id, "template_id": template.id},
-    )
+    # Removing an attachment preserves the independent definition and old leases.
+    library_repository.detach_template(db.session, note_type.id, template)
+    _audit(user_id, "template.detach", {"note_type_id": note_type.id, "template_id": template.id})
     db.session.commit()
     return {"success": True}
 
@@ -1398,8 +1269,7 @@ def create_note(
     if committed_values != note.field_values:
         note.field_values = committed_values
         db.session.flush()
-    _create_cards(note)
-    db.session.flush()
+    # The Note's Cards are derived from its NoteType's occurrences (ADR P11).
     cards = Card.query.filter_by(note_id=note.id).order_by(Card.id.asc()).all()
     try:
         study_progress_lifecycle_mirror_service.materialize_new_note_authority(
@@ -1587,9 +1457,7 @@ def delete_note(*, user_id: int, note_id: str) -> dict[str, bool]:
             deleted_note_ids=deleted_note_ids,
         )
         if card_ids:
-            CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
-                synchronize_session=False
-            )
+            pass  # NOTE lifecycle state is handled by the fenced deletion plan.
         content_delete.finalize_content_delete(
             lifecycle_plan,
             source_path="flashcards.note_delete",
@@ -1705,23 +1573,24 @@ def _field(*, note_type_id: str, field_id: str) -> FieldDef:
     return row
 
 
+def _serialize_attached_template(template: Template, *, note_type_id: str):
+    application = StudyApplication.query.filter_by(
+        note_type_id=note_type_id, template_id=template.id, status_code="ACTIVE",
+    ).order_by(StudyApplication.position, StudyApplication.id).first()
+    return marketplace_query_service.serialize_template(template, application=application,
+                                                        note_type_id=note_type_id)
+
+
 def _template(*, note_type_id: str, template_id: str) -> Template:
-    row = Template.query.filter_by(
-        id=template_id,
-        note_type_id=note_type_id,
+    row = Template.query.filter(
+        Template.id == template_id,
+        Template.id.in_(
+            db.session.query(StudyApplication.template_id).filter(
+                StudyApplication.note_type_id == note_type_id,
+                StudyApplication.status_code == "ACTIVE",
+            )
+        ),
     ).first()
-    if row is None:
-        # Reusable definitions and received copies belong to this NoteType
-        # through an ACTIVE occurrence, not through their legacy origin.
-        row = Template.query.filter(
-            Template.id == template_id,
-            Template.id.in_(
-                db.session.query(StudyApplication.template_id).filter(
-                    StudyApplication.note_type_id == note_type_id,
-                    StudyApplication.status_code == "ACTIVE",
-                )
-            ),
-        ).first()
     if row is None:
         raise ContentApiError(
             "FIELD_NOT_FOUND",
@@ -1802,11 +1671,6 @@ def _serialize_note(note: Note) -> dict[str, Any]:
         "created_at": note.created_at.isoformat() if note.created_at else None,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }
-
-
-def _create_cards(note: Note) -> None:
-    from app.repositories.template_library_repository import create_cards_for_note
-    create_cards_for_note(db.session, note)
 
 
 def _refresh_source_note_type_stats(

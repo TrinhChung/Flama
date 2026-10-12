@@ -15,12 +15,8 @@ class StudySessionCard(db.Model):
         nullable=False,
         index=True,
     )
-    card_id = db.Column(
-        db.String(36),
-        db.ForeignKey("cards.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    # Presentation key of the dealt Card (ADR P11); Cards are derived, no FK.
+    card_id = db.Column(db.String(80), nullable=False, index=True)
     source_deck_id = db.Column(db.Integer, nullable=True)
     local_deck_id = db.Column(
         db.Integer,

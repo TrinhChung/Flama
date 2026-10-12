@@ -13,6 +13,7 @@ from models import db
 from models.deck import Deck
 from models.flashcard import MediaAsset, Note
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 _MIN_PNG_BYTES = (
@@ -44,7 +45,7 @@ class FlashcardMediaBatchApiTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="batchuser", email="batch@example.com", is_admin=True)
+            user = create_note_user(db.session, username="batchuser", email="batch@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
             db.session.flush()

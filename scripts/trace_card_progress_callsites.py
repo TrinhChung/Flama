@@ -1,31 +1,10 @@
-"""P9-00: trace every SQL statement that touches ``card_progress``.
+"""Trace forbidden retired-table SQL in selected current NOTE test flows.
 
-Runs chosen test modules in-process with a SQLAlchemy cursor listener and
-records, for each statement on ``card_progress`` (or the projection-linked
-contributor columns), the operation, the innermost ``app/`` frame (the code
-that issued it) and the outermost ``app/`` frame (the entrypoint). The
-result is the runtime callsite list the Phase 9 plan asks for instead of a
-grep. Nothing is written to any configured database: the tests use their
-own in-memory SQLite.
+Historical migration/audit fixture statements are reported separately from
+application callsites. --guard-note-writes rejects runtime statements touching
+retired tables without creating any legacy model, table or trigger.
 
-    python scripts/trace_card_progress_callsites.py --tests tests/test_study_session_api.py ...
-    python scripts/trace_card_progress_callsites.py --module study --json out.json
-    python scripts/trace_card_progress_callsites.py --module study --profile CANONICAL_V1
-
-``--profile CANONICAL_V1`` runs every NOTE route as if the storage profile had
-been switched (P9-06) and this release supported it: what still touches
-``card_progress`` is the remaining P9-05 work, and failing tests show NOTE
-flows that do not work without the projection yet.
-
-``--profile CONSOLIDATED_V1`` (ADR P10) runs NOTE routes on the consolidated
-subject row and traces the five tables it replaces as well as ``card_progress``:
-any statement listed is P10 work left, except declared cleanup DELETEs.
-
-``--guard-note-writes`` adds a SQLite trigger that aborts any INSERT/UPDATE of
-``card_progress`` for a learner enrolled in NOTE and lists, per issuing app
-frame, the tests that hit it. Under ``CANONICAL_V1`` the list must only hold
-tests that write the projection themselves (no app frame) or build a route by
-hand without a storage profile.
+    python scripts/trace_card_progress_callsites.py --tests tests/test_study_session_api.py --guard-note-writes --json output/retired-sql.json
 """
 
 from __future__ import annotations
@@ -50,7 +29,8 @@ from sqlalchemy.engine import Engine  # noqa: E402
 _TABLE = re.compile(r"\bcard_progress\b", re.IGNORECASE)
 # The tables CONSOLIDATED_V1 must not touch (ADR P10 §2.1).
 _CONSOLIDATED_TABLES = re.compile(
-    r"\b(card_progress|study_progress_states|study_authority_subject_tokens|"
+    r"\b(cards|card_progress|study_progress_backfill_runs|study_progress_backfill_checkpoints|"
+    r"study_progress_backfill_dispositions|vocabulary_column_preferences|study_progress_states|study_authority_subject_tokens|"
     r"study_progress_contributors|study_progress_availability|study_progress_lineage_refs)\b",
     re.IGNORECASE,
 )
@@ -95,24 +75,14 @@ note_write_hits: dict[str, set[str]] = defaultdict(set)
 
 
 def _guard_note_writes() -> None:
-    from sqlalchemy import DDL
-
-    from models.card_progress import CardProgress
-
-    for operation in ("INSERT", "UPDATE"):
-        event.listen(CardProgress.__table__, "after_create", DDL(
-            f"CREATE TRIGGER IF NOT EXISTS guard_note_card_progress_{operation.lower()} "
-            f"BEFORE {operation} ON card_progress WHEN EXISTS (SELECT 1 FROM study_authority_enrollments e "
-            "WHERE e.learner_user_id = NEW.user_id AND e.mode_code = 'NOTE') "
-            "BEGIN SELECT RAISE(ABORT, 'NOTE_PROJECTION_WRITE'); END"
-        ).execute_if(dialect="sqlite"))
-
-    # The app may turn the abort into an HTTP error, so record it at the source.
-    @event.listens_for(Engine, "handle_error")
-    def _record(context):
-        if "NOTE_PROJECTION_WRITE" in str(context.original_exception):
-            inner, _outer = _frames()
-            note_write_hits[inner or "<no app frame>"].add(current_test["id"])
+    @event.listens_for(Engine, "before_cursor_execute")
+    def _reject_runtime_retired_sql(_connection, _cursor, statement, *_args):
+        if _TABLE.search(statement) is None:
+            return
+        inner, _outer = _frames()
+        if inner is not None:
+            note_write_hits[inner].add(current_test["id"])
+            raise RuntimeError("RETIRED_RUNTIME_TABLE_SQL")
 
 
 class _Result(unittest.TextTestResult):
@@ -132,8 +102,7 @@ def main() -> int:
     parser.add_argument("--tests", nargs="*", default=[])
     parser.add_argument("--module", action="append", default=[])
     parser.add_argument("--json", dest="json_path")
-    parser.add_argument("--profile", choices=("PROJECTION_V1", "CANONICAL_V1", "CONSOLIDATED_V1"),
-                        default="PROJECTION_V1")
+    parser.add_argument("--profile", choices=("CONSOLIDATED_V1",), default="CONSOLIDATED_V1")
     parser.add_argument("--guard-note-writes", action="store_true")
     args = parser.parse_args()
     global _TABLE
@@ -141,13 +110,6 @@ def main() -> int:
         _TABLE = _CONSOLIDATED_TABLES
     if args.guard_note_writes:
         _guard_note_writes()
-    if args.profile != "PROJECTION_V1":
-        from unittest import mock
-
-        from app.repositories import study_authority_repository as repository
-
-        mock.patch.object(repository, "SUPPORTED_STORAGE_PROFILES", frozenset({"PROJECTION_V1", args.profile})).start()
-        mock.patch.object(repository, "read_study_storage_profile", lambda *_a, **_k: args.profile).start()
     files = list(args.tests)
     for module in args.module:
         files.extend(_tests_for_module(module))
@@ -175,7 +137,7 @@ def main() -> int:
     for issuer, tests in sorted(report.get("note_projection_writes", {}).items()):
         print(f"NOTE projection write from {issuer}: {len(tests)} test(s), e.g. {tests[0]}")
     print(json.dumps({key: report[key] for key in ("tests_run", "failures", "errors", "files", "profile")}))
-    return 0
+    return 0 if result.wasSuccessful() and not note_write_hits else 1
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy.orm import Session
+from models.card import CardWireIdentity, PresentationAlias, card_key
 
 from app.repositories.study_authority_repository import (
     LockedStudyAuthorityCompatibility,
@@ -88,6 +89,7 @@ def _fail(code: str, message: str) -> StudyAuthorityCommandError:
 
 def _validate_and_build_state_write(
     command: ExistingStateNoteReviewCommand,
+    *, session: Session,
 ) -> tuple[StudyAuthorityStateWrite, bytes]:
     route = command.route
     locked = command.locked
@@ -155,17 +157,23 @@ def _validate_and_build_state_write(
         )
 
     card_id = str(review.card.id or "")
+    presented_card = review.card._card if isinstance(review.card, CardWireIdentity) else review.card
+    canonical_key = str(getattr(presented_card, "key", presented_card.id))
     card_by_id = {str(card.id): card for card in siblings.cards}
-    if card_id not in card_by_id:
+    if canonical_key not in card_by_id:
         raise _fail(
             "CARD_OUTSIDE_AUTHORITY_SUBJECT",
             "Reviewed Card is outside the locked authority subject.",
         )
-    if review.card is not card_by_id[card_id]:
+    if presented_card is not card_by_id[canonical_key]:
         raise _fail(
             "LOCKED_CARD_REQUIRED",
             "Native review must use the Card instance from the locked sibling vector.",
         )
+    if card_id != canonical_key:
+        alias = session.get(PresentationAlias, card_id)
+        if alias is None or card_key(alias.note_id, alias.application_id) != canonical_key:
+            raise _fail("CARD_OUTSIDE_AUTHORITY_SUBJECT", "Wire alias does not name the locked presentation.")
     if str(review.card.note_id or "") != siblings.live_note_id:
         raise _fail(
             "CARD_OUTSIDE_AUTHORITY_SUBJECT",
@@ -244,7 +252,7 @@ def apply_existing_state_note_review(
 
     if not isinstance(command, ExistingStateNoteReviewCommand):
         raise _fail("INVALID_AUTHORITY_COMMAND", "NOTE review command is missing.")
-    next_state, before_state_hash = _validate_and_build_state_write(command)
+    next_state, before_state_hash = _validate_and_build_state_write(command, session=session)
 
     review_event = stage_native_review_event(command.review, session=session)
     session.flush()

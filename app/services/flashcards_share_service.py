@@ -21,10 +21,11 @@ from app.services.deck_publish_index import DeckPublishSummary, build_deck_publi
 from app.repositories import flashcards_share_repository
 from app.repositories.deck_tree_query import collect_ancestor_ids, collect_subtree_ids
 from app.services import marketplace_query_service, marketplace_taxonomy_service
+from app.repositories import template_library_repository
+from models.study_application import StudyApplication
 from models import db
 from models.flashcard import (
     Card,
-    CardProgress,
     DeckCloneAddedFieldDef,
     DeckCloneAddedNote,
     DeckCloneDeckMap,
@@ -265,15 +266,7 @@ def create_note_type(
     front_html = (template_payload.get("front_html") or default_front).strip()
     back_html = (template_payload.get("back_html") or default_back).strip()
     shared_css = (template_payload.get("shared_css") or "").strip()
-    template = Template(
-        note_type_id=note_type.id,
-        name=(template_payload.get("name") or "Card 1").strip() or "Card 1",
-        front_html=front_html,
-        back_html=back_html,
-        shared_css=shared_css,
-        position=0,
-        is_default=True,
-    )
+    template = template_library_repository.create_attached_template(db.session, note_type=note_type, name=(template_payload.get("name") or "Card 1").strip() or "Card 1", front_html=front_html, back_html=back_html, shared_css=shared_css, position=0, is_default=True)
     db.session.add(template)
     from app.services.template_version_service import mark_template_version
     mark_template_version(template, origin="create", actor_user_id=user_id)
@@ -304,7 +297,7 @@ def create_template(
     if not note_type:
         return None, "Note type not found."
         
-    name = (payload.get("name") or "").strip() or f"Card {Template.query.filter_by(note_type_id=note_type.id).count() + 1}"
+    name = (payload.get("name") or "").strip() or f"Card {len(template_library_repository.applications(db.session, note_type.id)) + 1}"
     try:
         default_front, default_back = default_template_sources(
             [(int(field.position or 0), str(field.name or "")) for field in note_type.field_defs]
@@ -315,25 +308,16 @@ def create_template(
     back_html = (payload.get("back_html") or default_back).strip()
     shared_css = (payload.get("shared_css") or "").strip()
     
-    max_pos = db.session.query(db.func.max(Template.position)).filter_by(
+    max_pos = db.session.query(db.func.max(StudyApplication.position)).filter_by(
         note_type_id=note_type.id
     ).scalar()
-    template = Template(
-        note_type_id=note_type.id,
-        name=name,
-        front_html=front_html,
-        back_html=back_html,
-        shared_css=shared_css,
-        position=(int(max_pos) + 1) if max_pos is not None else 0,
-        is_default=False,
-    )
+    template = template_library_repository.create_attached_template(db.session, note_type=note_type, name=name, front_html=front_html, back_html=back_html, shared_css=shared_css, position=(int(max_pos) + 1) if max_pos is not None else 0, is_default=False)
     db.session.add(template)
     from app.services.template_version_service import mark_template_version
     mark_template_version(template, origin="create", actor_user_id=user_id)
+    # The flush gives the Template its compatibility occurrence, which presents
+    # it on every Note of the NoteType; nothing is written per Note (ADR P11).
     db.session.flush()
-    notes = Note.query.filter_by(note_type_id=note_type.id, user_id=user_id).all()
-    for note in notes:
-        db.session.add(Card(note_id=note.id, template_id=template.id))
 
     _audit(user_id, "template.create", {"note_type_id": note_type.id, "template_id": template.id})
     if commit:
@@ -344,7 +328,7 @@ def create_template(
 
 
 def update_template(template: Template, user_id: int) -> None:
-    _audit(user_id, "template.update", {"note_type_id": template.note_type_id, "template_id": template.id})
+    _audit(user_id, "template.update", {"template_id": template.id})
     db.session.commit()
 
 
@@ -1570,22 +1554,6 @@ def _pair_legacy_local_source_notes_for_cutover(
 
     return pairs
 
-def _merge_card_progress_rows_for_cutover(
-    *,
-    user_id: int,
-    local_card_id: str,
-    source_card_id: str,
-) -> int:
-    from app.services.share.cutover import (
-        _merge_card_progress_rows_for_cutover as merge_progress_rows,
-    )
-
-    return merge_progress_rows(
-        user_id=user_id,
-        local_card_id=local_card_id,
-        source_card_id=source_card_id,
-    )
-
 def _assert_cutover_note_equivalence(
     *,
     install: DeckInstall,
@@ -1957,7 +1925,9 @@ def is_card_visible_in_clone_scope(
         return False
     # Share the exact membership policy with discovery and direct artifact
     # reads, including immutable presentation pins and retired local apps.
-    return query_clone_scope_cards(scope).filter(Card.id == card_obj.id).first() is not None
+    return query_clone_scope_cards(scope).filter(
+        Card.note_id == card_obj.note_id, Card.application_id == card_obj.application_id,
+    ).first() is not None
 
 
 def is_note_type_visible_for_shared(
@@ -2341,245 +2311,6 @@ def can_user_rate_deck_item(
         deck_active_review_threshold=deck_active_review_threshold,
     )
 
-def _legacy_migrate_legacy_clone_install_to_overlay_unused(
-    install: DeckInstall,
-) -> dict[str, int]:
-    deck_item = db.session.get(DeckMarketplaceItem, install.deck_item_id)
-    source_deck_id = install.source_deck_id or (deck_item.source_deck_id if deck_item else None)
-    if source_deck_id is None:
-        raise ShareControllerError(
-            f"Install {install.id}: source_deck_id is required for cutover.",
-            status=409,
-        )
-    source_deck = db.session.get(Deck, source_deck_id)
-    if source_deck is None:
-        raise ShareControllerError(
-            f"Install {install.id}: source deck not found ({source_deck_id}).",
-            status=404,
-        )
-    if install.local_deck_id is None:
-        raise ShareControllerError(
-            f"Install {install.id}: local_deck_id is required for cutover.",
-            status=409,
-        )
-    local_deck = db.session.get(Deck, install.local_deck_id)
-    if local_deck is None:
-        raise ShareControllerError(
-            f"Install {install.id}: local deck not found ({install.local_deck_id}).",
-            status=404,
-        )
-
-    source_owner_user_id = install.source_owner_user_id or (deck_item.owner_user_id if deck_item else None)
-    source_note_type_id = (
-        (install.source_note_type_id or "").strip()
-        or ((deck_item.source_note_type_id or "").strip() if deck_item else "")
-    )
-    snapshot_at = install.base_snapshot_at or install.installed_at
-
-    map_rows = _ensure_clone_map_rows_for_cutover(
-        install=install,
-        source_root_deck_id=source_deck.id,
-        local_root_deck_id=local_deck.id,
-    )
-    source_to_local = {
-        int(row.source_deck_id): int(row.local_deck_id)
-        for row in map_rows
-        if row.source_deck_id is not None and row.local_deck_id is not None
-    }
-    if not source_to_local:
-        raise ShareControllerError(
-            f"Install {install.id}: source/local deck map is empty for cutover.",
-            status=409,
-        )
-
-    pairs = _pair_legacy_local_source_notes_for_cutover(
-        install=install,
-        source_to_local_deck_id=source_to_local,
-        source_owner_user_id=source_owner_user_id,
-        source_note_type_id=source_note_type_id or None,
-        snapshot_at=snapshot_at,
-    )
-
-    local_note_type_ids = sorted(
-        {
-            str(local_note.note_type_id).strip()
-            for local_note, _source_note in pairs
-            if (local_note.note_type_id or "").strip()
-        }
-    )
-    local_note_type_id = local_note_type_ids[0] if len(local_note_type_ids) == 1 else None
-    if len(local_note_type_ids) > 1:
-        raise ShareControllerError(
-            f"Install {install.id}: local legacy clone has multiple note types; cutover is ambiguous.",
-            status=409,
-        )
-
-    if not source_note_type_id:
-        source_note_type_ids = sorted(
-            {
-                str(source_note.note_type_id).strip()
-                for _local_note, source_note in pairs
-                if (source_note.note_type_id or "").strip()
-            }
-        )
-        if len(source_note_type_ids) == 1:
-            source_note_type_id = source_note_type_ids[0]
-        elif len(source_note_type_ids) > 1:
-            raise ShareControllerError(
-                f"Install {install.id}: source clone scope has multiple note types; source_note_type_id is required.",
-                status=409,
-            )
-
-    install.clone_mode = "logical_overlay"
-    DeckCloneFieldDefOverride.query.filter_by(deck_install_id=install.id).delete(synchronize_session=False)
-    DeckCloneAddedFieldDef.query.filter_by(deck_install_id=install.id).delete(synchronize_session=False)
-    DeckCloneFieldOrderOverride.query.filter_by(deck_install_id=install.id).delete(synchronize_session=False)
-    DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=install.id).delete(synchronize_session=False)
-    db.session.flush()
-
-    if source_note_type_id:
-        schema_payload = _build_schema_overlay_payload_for_cutover(
-            source_note_type_id=source_note_type_id,
-            local_note_type_id=local_note_type_id,
-        )
-        if schema_payload:
-            _counters, validation_error = upsert_clone_overlay(
-                deck_install=install,
-                payload=schema_payload,
-            )
-            if validation_error:
-                raise ShareControllerError(
-                    f"Install {install.id}: schema cutover failed: {validation_error}",
-                    status=409,
-                )
-    elif local_note_type_id:
-        raise ShareControllerError(
-            f"Install {install.id}: source_note_type_id is required for schema cutover.",
-            status=409,
-        )
-
-    if source_note_type_id:
-        schema_view = build_clone_schema_view(
-            install=install,
-            source_note_type_id=source_note_type_id,
-        )
-    else:
-        schema_view = CloneSchemaView(field_defs=[], removed_field_names=set(), renamed_field_names={})
-
-    note_override_payload: list[dict[str, Any]] = []
-    progress_migrated = 0
-    local_note_ids: list[str] = []
-    template_map_cache: dict[str, dict[str, str]] = {}
-
-    for local_note, source_note in pairs:
-        local_note_ids.append(local_note.id)
-        note_override_payload.extend(
-            _build_note_override_payload_for_cutover(
-                install=install,
-                source_note=source_note,
-                local_note=local_note,
-                schema_view=schema_view,
-            )
-        )
-
-        local_note_type_key = str(local_note.note_type_id or "").strip()
-        source_note_type_key = str(source_note.note_type_id or "").strip()
-        template_key = f"{local_note_type_key}->{source_note_type_key}"
-        template_map = template_map_cache.get(template_key)
-        if template_map is None:
-            local_templates = (
-                Template.query.filter_by(note_type_id=local_note_type_key)
-                .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
-                .all()
-            )
-            source_templates = (
-                Template.query.filter_by(note_type_id=source_note_type_key)
-                .order_by(Template.position.asc(), Template.created_at.asc(), Template.id.asc())
-                .all()
-            )
-            if len(local_templates) != len(source_templates):
-                raise ShareControllerError(
-                    (
-                        f"Install {install.id}: template count mismatch for note type pair "
-                        f"({local_note_type_key} -> {source_note_type_key})."
-                    ),
-                    status=409,
-                )
-            template_map = {
-                str(local_templates[idx].id): str(source_templates[idx].id)
-                for idx in range(len(local_templates))
-            }
-            template_map_cache[template_key] = template_map
-
-        source_cards_by_template = {
-            str(card.template_id): card
-            for card in Card.query.filter_by(note_id=source_note.id).all()
-        }
-        local_cards = Card.query.filter_by(note_id=local_note.id).all()
-        for local_card in local_cards:
-            source_template_id = template_map.get(str(local_card.template_id))
-            if not source_template_id:
-                raise ShareControllerError(
-                    (
-                        f"Install {install.id}: cannot map local template_id={local_card.template_id} "
-                        f"for local_note_id={local_note.id}."
-                    ),
-                    status=409,
-                )
-            source_card = source_cards_by_template.get(str(source_template_id))
-            if source_card is None:
-                raise ShareControllerError(
-                    (
-                        f"Install {install.id}: source card not found for template_id={source_template_id} "
-                        f"(source_note_id={source_note.id})."
-                    ),
-                    status=409,
-                )
-            progress_migrated += _merge_card_progress_rows_for_cutover(
-                user_id=install.user_id,
-                local_card_id=local_card.id,
-                source_card_id=source_card.id,
-            )
-
-    if note_override_payload:
-        _counters, validation_error = upsert_clone_overlay(
-            deck_install=install,
-            payload={"note_field_overrides": note_override_payload},
-        )
-        if validation_error:
-            raise ShareControllerError(
-                f"Install {install.id}: note cutover failed: {validation_error}",
-                status=409,
-            )
-
-    if source_note_type_id:
-        schema_view = build_clone_schema_view(
-            install=install,
-            source_note_type_id=source_note_type_id,
-        )
-    _assert_cutover_note_equivalence(
-        install=install,
-        pairs=pairs,
-        schema_view=schema_view,
-    )
-
-    if local_note_ids:
-        Note.query.filter(Note.id.in_(local_note_ids)).delete(synchronize_session=False)
-
-    install.clone_mode = "logical_overlay"
-    install.source_deck_id = source_deck.id
-    install.source_note_type_id = source_note_type_id or None
-    install.source_owner_user_id = source_owner_user_id
-    install.base_snapshot_at = snapshot_at
-
-    return {
-        "deck_map_rows": len(source_to_local),
-        "note_pairs": len(pairs),
-        "note_overrides": len(note_override_payload),
-        "progress_rows": progress_migrated,
-    }
-
-
 @dataclass
 class CloneDeckScope:
     install: DeckInstall
@@ -2590,11 +2321,13 @@ class CloneDeckScope:
     source_owner_user_id: int | None
     base_snapshot_at: datetime | None
 
+
 @dataclass
 class CloneSchemaView:
     field_defs: list[SimpleNamespace]
     removed_field_names: set[str]
     renamed_field_names: dict[str, str]
+
 
 def clone_note_type_for_user(source_note_type: NoteType, user_id: int, *, copy_legacy_templates=True) -> NoteType:
     clone = NoteType(
@@ -2632,25 +2365,31 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int, *, copy_l
         )
 
     raw_copies = []
-    for template in sorted(source_note_type.templates if copy_legacy_templates else [], key=lambda item: item.position):
-        copied_template = Template(
-                note_type_id=clone.id,
-                owner_user_id=user_id,
-                origin="market_copy",
-                source_template_id=template.id,
-                source_version_id=template.current_version_id,
-                input_schema=template.input_schema,
-                name=template.name,
-                front_html=template.front_html,
-                back_html=template.back_html,
-                shared_css=template.shared_css,
-                position=template.position,
-                is_default=bool(template.is_default),
+    by_source_definition = {}
+    source_field_names = {str(field.id): field.name for field in source_note_type.field_defs}
+    clone_field_ids = {field.name: str(field.id) for field in clone.field_defs}
+    for view in (template_library_repository.attached_templates(db.session, source_note_type.id)
+                 if copy_legacy_templates else []):
+        source_application = view.application
+        mapped_bindings = {key: clone_field_ids.get(source_field_names.get(str(value)))
+                           for key, value in (source_application.input_bindings or {}).items()}
+        copied_template = by_source_definition.get(view.id)
+        if copied_template is None:
+            copied_template = template_library_repository.create_attached_template(
+                db.session, note_type=clone, owner_user_id=user_id, origin="market_copy",
+                source_template_id=view.id, source_version_id=view.current_version_id,
+                input_schema=view.input_schema, name=view.name, front_html=view.front_html,
+                back_html=view.back_html, shared_css=view.shared_css, position=view.position,
+                is_default=bool(view.is_default), occurrence_key=source_application.occurrence_key,
+                source_ord=source_application.source_ord, input_bindings=mapped_bindings,
             )
-        db.session.add(copied_template)
-        raw_copies.append(copied_template)
-    # Exact provenance for this transaction only; never guess which templates
-    # in an existing installed NoteType were authored by the learner.
+            by_source_definition[view.id] = copied_template
+            raw_copies.append(copied_template)
+        else:
+            db.session.add(StudyApplication(note_type=clone, template=copied_template,
+                occurrence_key=source_application.occurrence_key, source_ord=source_application.source_ord,
+                position=source_application.position, is_default=bool(source_application.is_default),
+                display_name=source_application.display_name, input_bindings=mapped_bindings, status_code="ACTIVE"))
     db.session.info.setdefault("flama.template_clone_compat", {})[clone.id] = raw_copies
 
     return clone
@@ -2980,7 +2719,9 @@ def resolve_clone_scope_for_local_deck(
     )
 
 def query_clone_scope_cards(scope: CloneDeckScope):
-    from app.repositories.template_library_repository import active_card_condition
+    from models.card import INCLUDE_RETIRED_CARDS
+
+    active = Card.application_status == "ACTIVE"
     source_conditions = [Note.deck_id.in_(scope.source_deck_ids)]
     if scope.source_owner_user_id is not None:
         source_conditions.append(Note.user_id == scope.source_owner_user_id)
@@ -2994,10 +2735,11 @@ def query_clone_scope_cards(scope: CloneDeckScope):
             for offset in range(0, len(application_ids), 500):
                 application_conditions.append(and_(Card.template_id == template_id, Card.application_id.in_(application_ids[offset:offset + 500])))
         # A fully initialized empty manifest intentionally exposes no source
-        # presentations. Author draft attachments cannot enter old installs.
+        # presentations. Author draft attachments cannot enter old installs,
+        # and a pinned occurrence the author later retired stays visible.
         source_conditions.append(or_(*application_conditions) if application_conditions else false())
     else:
-        source_conditions.append(active_card_condition())
+        source_conditions.append(active)
     release_membership = release_note_membership_filter(scope.install, Note.id)
     if release_membership is not None:
         source_conditions.append(release_membership)
@@ -3013,11 +2755,13 @@ def query_clone_scope_cards(scope: CloneDeckScope):
         Note.user_id == scope.install.user_id,
         Note.deck_id.in_(scope.local_deck_ids),
         local_added_exists,
-        active_card_condition(),
+        active,
     )
+    # Pins decide source membership here, so the default ACTIVE-only Card
+    # criteria is replaced by the explicit conditions above (ADR P11).
     return Card.query.join(Note, Card.note_id == Note.id).filter(
         or_(and_(*source_conditions), local_condition)
-    )
+    ).execution_options(**{INCLUDE_RETIRED_CARDS: True})
 
 
 def is_clone_added_note(*, scope: CloneDeckScope, note_id: str) -> bool:
@@ -3054,7 +2798,9 @@ def resolve_clone_scope_for_card(
         if local_deck_id is None:
             continue
         scope = resolve_clone_scope_for_local_deck(user_id=user_id, local_deck_id=int(local_deck_id))
-        if scope is not None and query_clone_scope_cards(scope).filter(Card.id == card_obj.id).first() is not None:
+        if scope is not None and query_clone_scope_cards(scope).filter(
+            Card.note_id == card_obj.note_id, Card.application_id == card_obj.application_id,
+        ).first() is not None:
             return scope
     return None
 
@@ -3767,53 +3513,6 @@ def _build_note_override_payload_for_cutover(
                 }
             )
     return override_items
-
-def _legacy_cutover_clone_model_to_overlay_only_unused(*, fail_on_mismatch: bool = True) -> dict[str, Any]:
-    legacy_installs = (
-        DeckInstall.query.filter(
-            db.or_(
-                DeckInstall.clone_mode.is_(None),
-                DeckInstall.clone_mode != "logical_overlay",
-            )
-        )
-        .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
-        .all()
-    )
-    summary = {
-        "total_installs": len(legacy_installs),
-        "migrated": 0,
-        "failed": 0,
-        "deck_map_rows": 0,
-        "note_pairs": 0,
-        "note_overrides": 0,
-        "progress_rows": 0,
-        "errors": [],
-    }
-
-    for install in legacy_installs:
-        try:
-            with db.session.begin_nested():
-                counters = _legacy_migrate_legacy_clone_install_to_overlay_unused(install)
-                db.session.flush()
-            summary["migrated"] += 1
-            summary["deck_map_rows"] += int(counters.get("deck_map_rows") or 0)
-            summary["note_pairs"] += int(counters.get("note_pairs") or 0)
-            summary["note_overrides"] += int(counters.get("note_overrides") or 0)
-            summary["progress_rows"] += int(counters.get("progress_rows") or 0)
-        except ShareControllerError as exc:
-            summary["failed"] += 1
-            summary["errors"].append(
-                {
-                    "deck_install_id": install.id,
-                    "message": exc.message,
-                    "status": exc.status,
-                }
-            )
-            if fail_on_mismatch:
-                raise
-
-    return summary
-
 
 # Compatibility exports delegate the complete cutover lifecycle to the modular
 # implementation so startup, CLI and package imports cannot drift.

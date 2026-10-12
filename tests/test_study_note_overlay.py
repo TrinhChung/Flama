@@ -7,6 +7,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from tests import test_study_direct_note_replay as fixtures
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent
 from app.services import browse_card_service, deck_management_service
 from app.services.study_authority_enrollment_service import (
     StudyAuthorityEnrollmentError,
@@ -18,7 +19,6 @@ from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_progress_shadow_codec import decode_float
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
@@ -54,18 +54,18 @@ class StudyNoteOverlayTests(unittest.TestCase):
             db.session.add_all([source_deck, local_deck, note_type])
             db.session.flush()
             db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-            templates = [Template(note_type_id=note_type.id, name=f"Source {index}", front_html="{{Word}}",
+            templates = [attach_template(db.session, note_type_id=note_type.id, owner_user_id=note_type.user_id, name=f"Source {index}", front_html="{{Word}}",
                 back_html="{{Word}}", is_default=index == 0) for index in range(2)]
             db.session.add_all(templates)
             note = Note(user_id=publisher.id, note_type_id=note_type.id, deck_id=source_deck.id,
                 field_values={"Word": "共有"}, created_at=_now() - timedelta(days=1))
             db.session.add(note)
             db.session.flush()
-            cards = [Card(note_id=note.id, template_id=template.id, created_at=_now() - timedelta(days=1))
+            cards = [Card.query.filter_by(note_id=note.id, template_id=template.id).one()
                 for template in templates]
             item = DeckMarketplaceItem(owner_user_id=publisher.id, source_deck_id=source_deck.id,
                 source_note_type_id=note_type.id, title="Shared", publish_status="published", pricing_mode="free")
-            db.session.add_all(cards + [item])
+            db.session.add(item)
             db.session.flush()
             install = DeckInstall(deck_item_id=item.id, user_id=learner_id, local_deck_id=local_deck.id,
                 clone_mode=clone_mode, source_deck_id=source_deck.id, source_note_type_id=note_type.id,
@@ -142,7 +142,7 @@ class StudyNoteOverlayTests(unittest.TestCase):
                 enrollment_epoch=1, logical_note_key=self.source_note_id, deck_options=options, timezone_name="UTC"))
             db.session.rollback()
             self.assertIsNone(self._source_subject())
-            self.assertEqual(CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(StudyProgressSubject.query.count(), enrollment)
 
     def test_first_overlay_answer_materializes_learner_state_without_touching_source(self):
@@ -155,7 +155,7 @@ class StudyNoteOverlayTests(unittest.TestCase):
             self.assertTrue(subject.status_code.startswith("MIRRORED_"))
             self.assertEqual(subject.authority_revision, 1)
             # The learner's state is the Note's one row; no Card carries progress.
-            self.assertEqual(CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(ReviewEvent.query.filter_by(card_id=self.source_card_ids[0]).count(), 1)
             source = db.session.get(Note, self.source_note_id)
             self.assertEqual(source.field_values, {"Word": "共有"})
@@ -198,7 +198,7 @@ class StudyNoteOverlayTests(unittest.TestCase):
             self.assertEqual(subject.authority_revision, 0)
             self.assertIsNotNone(subject.state_payload)
             self.assertEqual(StudySessionAuthorityPin.query.filter_by(subject_id=subject.id).count(), 1)
-            self.assertEqual(CardProgress.query.filter(CardProgress.card_id.in_(self.source_card_ids)).count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
     def test_readers_share_the_note_row_for_pristine_and_studied_overlay(self):
         self._install_overlay()

@@ -12,6 +12,7 @@ from models import db
 from models.deck import Deck
 from models.flashcard import FieldDef, NoteType, Template
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class McpProductionHandshakeTests(unittest.TestCase):
@@ -36,14 +37,13 @@ class McpProductionHandshakeTests(unittest.TestCase):
         mcp_access_token_service.reset_rate_limit_state()
 
         with self.app.app_context():
-            self.user = User(
+            self.user = create_note_user(
+                db.session,
                 username="testuser",
                 email="testuser@example.com",
                 timezone="UTC",
             )
             self.user.set_password("password123")
-            db.session.add(self.user)
-            db.session.flush()
             self.user_id = self.user.id
 
             deck = Deck(
@@ -66,14 +66,14 @@ class McpProductionHandshakeTests(unittest.TestCase):
 
             db.session.add(FieldDef(note_type_id=note_type.id, name="Front", field_type="text", position=0))
             db.session.add(FieldDef(note_type_id=note_type.id, name="Back", field_type="text", position=1))
-            db.session.add(
-                Template(
-                    note_type_id=note_type.id,
-                    name="Card 1",
-                    front_html="{{Front}}",
-                    back_html="{{FrontSide}}<hr id='answer'>{{Back}}",
-                    position=0,
-                )
+            attach_template(
+                db.session,
+                note_type_id=note_type.id,
+                owner_user_id=self.user_id,
+                name="Card 1",
+                front_html="{{Front}}",
+                back_html="{{FrontSide}}<hr id='answer'>{{Back}}",
+                position=0,
             )
 
             # Issue an MCP access token with full scopes

@@ -12,6 +12,9 @@ from models import db
 from models.deck import Deck
 from models.flashcard import Card, Note, NoteType, Template
 from models.user import User
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from app.utils.deck_move_token import parse_deck_move_token
 from app.repositories.deck_tree_query import collect_accessible_decks
 
@@ -29,7 +32,7 @@ class RestApiV1Tests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            admin = User(
+            admin = create_note_user(db.session,
                 username="admin",
                 email="admin@example.com",
                 is_admin=True,
@@ -228,44 +231,46 @@ class RestApiV1Tests(unittest.TestCase):
             note_type = NoteType(user_id=self.admin_id, name="Dashboard type")
             db.session.add(note_type)
             db.session.flush()
-            templates = [Template(note_type_id=note_type.id, name=name) for name in ("Front", "Reverse")]
+            templates = [attach_template(db.session, owner_user_id=db.session.get(NoteType, note_type.id).user_id, note_type_id=note_type.id, name=name) for name in ("Front", "Reverse")]
             db.session.add_all(templates)
             note = Note(user_id=self.admin_id, note_type_id=note_type.id, deck_id=self.child_deck_id)
             db.session.add(note)
             db.session.flush()
-            db.session.add_all([Card(note_id=note.id, template_id=template.id) for template in templates])
             db.session.commit()
             note_type_id = note_type.id
 
         self._login_admin()
-        legacy = self.client.get("/api/dashboard").get_json()
-        # Compact reads must not sign tokens that the numeric deck REST API never uses.
-        with patch("app.services.dashboard_service.create_deck_move_token", side_effect=AssertionError("unexpected signing")):
-            response = self.client.get("/api/dashboard?compact=1")
-            repeated = self.client.get("/api/dashboard?compact=true")
-        self.assertEqual(response.status_code, 200)
-        compact = response.get_json()
-        self.assertEqual(compact, repeated.get_json())
-        self.assertEqual(compact["summary"], legacy["summary"])
-        self.assertEqual(compact["summary"]["new"], 2)
-        self.assertEqual(compact["items"][0]["children"][0]["note_type_id"], note_type_id)
+        for count_by_note, expected_new in ((False, 2), (True, 1)):
+            with self.subTest(count_by_note=count_by_note):
+                self.app.config["STUDY_NOTE_COUNT_ENABLED"] = count_by_note
+                legacy = self.client.get("/api/dashboard").get_json()
+                # Compact reads must not sign tokens that the numeric deck REST API never uses.
+                with patch("app.services.dashboard_service.create_deck_move_token", side_effect=AssertionError("unexpected signing")):
+                    response = self.client.get("/api/dashboard?compact=1")
+                    repeated = self.client.get("/api/dashboard?compact=true")
+                self.assertEqual(response.status_code, 200)
+                compact = response.get_json()
+                self.assertEqual(compact, repeated.get_json())
+                self.assertEqual(compact["summary"], legacy["summary"])
+                self.assertEqual(compact["summary"]["new"], expected_new)
+                self.assertEqual(compact["items"][0]["children"][0]["note_type_id"], note_type_id)
 
-        omitted = {"move_token", "parent_move_token", "parent_move_alias", "href"}
-        aliases = []
+                omitted = {"move_token", "parent_move_token", "parent_move_alias", "href"}
+                aliases = []
 
-        def compare_rows(old_rows, new_rows):
-            self.assertEqual(len(old_rows), len(new_rows))
-            for old, new in zip(old_rows, new_rows):
-                self.assertTrue(omitted.isdisjoint(new))
-                for key in ("deck_id", "parent_id", "label", "depth", "new_count", "learn_count", "due_count", "note_type_id"):
-                    self.assertEqual(new[key], old[key], key)
-                self.assertRegex(new["move_alias"], r"^MID-[A-F0-9]{10,64}$")
-                aliases.append(new["move_alias"])
-                compare_rows(old["children"], new["children"])
+                def compare_rows(old_rows, new_rows):
+                    self.assertEqual(len(old_rows), len(new_rows))
+                    for old, new in zip(old_rows, new_rows):
+                        self.assertTrue(omitted.isdisjoint(new))
+                        for key in ("deck_id", "parent_id", "label", "depth", "new_count", "learn_count", "due_count", "note_type_id"):
+                            self.assertEqual(new[key], old[key], key)
+                        self.assertRegex(new["move_alias"], r"^MID-[A-F0-9]{10,64}$")
+                        aliases.append(new["move_alias"])
+                        compare_rows(old["children"], new["children"])
 
-        compare_rows(legacy["items"], compact["items"])
-        self.assertEqual(len(aliases), len(set(aliases)))
-        self.assertLess(len(response.data), len(self.client.get("/api/dashboard").data))
+                compare_rows(legacy["items"], compact["items"])
+                self.assertEqual(len(aliases), len(set(aliases)))
+                self.assertLess(len(response.data), len(self.client.get("/api/dashboard").data))
         moved = self.client.patch(
             f"/api/decks/{self.child_deck_id}", json={"parent_id": None}
         )
@@ -298,7 +303,7 @@ class RestApiV1Tests(unittest.TestCase):
 
     def test_admin_deck_collection_keeps_foreign_ancestors_and_excludes_deleted_decks(self):
         with self.app.app_context():
-            outsider = User(username="outsider", email="outsider@example.com")
+            outsider = create_note_user(db.session, username="outsider", email="outsider@example.com")
             db.session.add(outsider)
             db.session.flush()
             ancestor = Deck(name="Foreign ancestor", owner_user_id=outsider.id, position=-1)
@@ -487,7 +492,7 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(register_response.status_code, 409)
 
         with self.app.app_context():
-            managed = User(
+            managed = create_note_user(db.session,
                 email="managed@example.com",
                 username="managed",
                 is_admin=False,
@@ -555,7 +560,6 @@ class RestApiV1Tests(unittest.TestCase):
         from models.note_type import NoteType
         from models.note import Note
         from models.card import Card
-        from models.card_progress import CardProgress
         from models.deck_install import DeckInstall
         from models.deck_marketplace_item import DeckMarketplaceItem
         from models.review_event import ReviewEvent
@@ -572,18 +576,19 @@ class RestApiV1Tests(unittest.TestCase):
             db.session.flush()
             deck_id = deck.id
 
-            # Create a Note, Card, CardProgress
+            # Create NOTE content, its derived presentation and canonical state
             note = Note(note_type_id=nt_id, user_id=self.admin_id, deck_id=deck_id)
             db.session.add(note)
             db.session.flush()
             note_id = note.id
 
-            card = Card(note_id=note_id, template_id="some-template")
-            db.session.add(card)
+            template = attach_template(db.session, note_type_id=nt_id, owner_user_id=self.admin_id,
+                                       name="Purge presentation")
+            card = Card.query.filter_by(note_id=note_id, template_id=template.id).one()
             db.session.flush()
             card_id = card.id
 
-            prog = CardProgress(user_id=self.admin_id, card_id=card_id, queue="new")
+            prog = stage_note_state(db.session, user_id=self.admin_id, card_id=card_id, queue="new")
             db.session.add(prog)
 
             # Create some dependent objects

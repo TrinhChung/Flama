@@ -139,14 +139,11 @@ class StudyStorageProfileTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "STORAGE_PROFILE_UNSUPPORTED")
             db.session.rollback()
 
-    def test_legacy_routes_ignore_the_profile(self):
-        from app.repositories.study_authority_repository import is_consolidated
-
+    def test_missing_enrollment_requires_migration_even_under_an_old_profile(self):
         self._set_profile("CANONICAL_V1")
-        route = lock_study_authority_route(db.session, learner_user_id=self.user.id)
-        self.assertEqual(route.mode_code, "LEGACY")
-        # LEGACY progress lives only in card_progress, whatever the profile.
-        self.assertFalse(is_consolidated(route))
+        with self.assertRaises(StudyAuthorityFenceError) as raised:
+            lock_study_authority_route(db.session, learner_user_id=self.user.id)
+        self.assertEqual(raised.exception.code, "STUDY_AUTHORITY_MIGRATION_REQUIRED")
         db.session.rollback()
 
     def test_profile_row_is_a_checked_singleton(self):

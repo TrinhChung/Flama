@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from app.repositories import template_library_repository
 from app.services.flashcard_renderer import is_field_empty
 from app.services.media_field_codec import (
     MEDIA_FIELD_TYPES,
@@ -674,12 +673,6 @@ def run_import(
     chunk_limit = max(50, int(chunk_size or IMPORT_DEFAULT_CHUNK_SIZE))
     pending_writes = 0
 
-    # Cards follow the NoteType's active occurrences, including reusable and
-    # received templates whose legacy origin is another (or no) NoteType.
-    card_slots: list[tuple[str, str | None]] = []
-    if apply_changes and normalized_mode in {"insert_only", "upsert"}:
-        card_slots = template_library_repository.card_slots(db.session, note_type.id)
-
     insert_payload_buffer: list[dict[str, Any]] = []
     pending_updated_dirty: list[tuple[Note, set[str]]] = []
 
@@ -722,10 +715,7 @@ def run_import(
                 )
             db.session.add_all(notes)
             db.session.flush()
-
-            cards = template_library_repository.build_cards([note.id for note in notes], card_slots)
-            if cards:
-                db.session.add_all(cards)
+            # Their Cards are derived from the NoteType's occurrences (ADR P11).
 
             from app.services import deck_working_tree_service
 

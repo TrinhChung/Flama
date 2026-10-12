@@ -29,6 +29,7 @@ from models.media_asset import MediaAsset
 from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
+from tests.study_note_fixtures import attach_template
 
 
 class ConnectProtocolTests(unittest.TestCase):
@@ -276,7 +277,7 @@ class ConnectProtocolTests(unittest.TestCase):
             db.session.add(source_type)
             db.session.flush()
             db.session.add(FieldDef(note_type_id=source_type.id, name="Sentence", field_type="text", required=True, identity_role="primary"))
-            db.session.add(Template(note_type_id=source_type.id, name="Source", front_html="{{Sentence}}", back_html="{{Sentence}}"))
+            attach_template(db.session, note_type_id=source_type.id, owner_user_id=self.other_user_id, name="Source", front_html="{{Sentence}}", back_html="{{Sentence}}")
             own_type = NoteType.query.filter_by(user_id=self.user_id, name="Sentence Card").one()
             source_deck = Deck(owner_user_id=self.other_user_id, name="Source", note_type_id=source_type.id)
             local_deck = Deck(owner_user_id=self.user_id, name="Installed", note_type_id=own_type.id)

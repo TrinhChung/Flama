@@ -169,7 +169,7 @@ class TemplateAttachmentMigrationTests(unittest.TestCase):
         self.assertIn("'RETIRED'", app_sql)
 
 
-class TemplateAttachmentCompatHookTests(unittest.TestCase):
+class TemplateAttachmentRuntimeTests(unittest.TestCase):
     def setUp(self):
         from app import create_app
         from models import db
@@ -189,7 +189,9 @@ class TemplateAttachmentCompatHookTests(unittest.TestCase):
         from models.note_type import NoteType
         from models.note import Note
         from models.card import Card
-        user = User(username="attachments", email="attachments@example.test")
+        from tests.study_note_fixtures import create_note_user
+        from app.services import template_library_service
+        user = create_note_user(self.db.session, username="attachments", email="attachments@example.test")
         self.db.session.add(user)
         self.db.session.flush()
         first = NoteType(user_id=user.id, name="First")
@@ -200,31 +202,41 @@ class TemplateAttachmentCompatHookTests(unittest.TestCase):
         self.assertEqual(StudyApplication.query.count(), 0)
         note_a = Note(note_type_id=first.id, user_id=user.id)
         note_b = Note(note_type_id=second.id, user_id=user.id)
-        card_a = Card(note=note_a, template=standalone)
-        card_b = Card(note=note_b, template=standalone)
-        self.db.session.add_all([note_a, note_b, card_a, card_b])
+        self.db.session.add_all([note_a, note_b])
         self.db.session.commit()
+        self.assertEqual(Card.query.count(), 0)
+        for note_type_id in (first.id, second.id):
+            template_library_service.attach_template(user_id=user.id,
+                note_type_id=note_type_id, payload={"template_id": standalone.id})
+        card_a = Card.query.filter_by(note_id=note_a.id).one()
+        card_b = Card.query.filter_by(note_id=note_b.id).one()
         self.assertNotEqual(card_a.application_id, card_b.application_id)
         self.assertEqual(card_a.application.note_type_id, first.id)
         self.assertEqual(card_b.application.note_type_id, second.id)
         self.assertEqual(card_a.application.template_id, standalone.id)
         self.assertEqual(card_b.application.template_id, standalone.id)
 
-    def test_notetype_delete_sets_origin_null_and_keeps_template_and_versions(self):
+    def test_notetype_delete_keeps_independent_template_and_versions(self):
         from models.user import User
         from models.note_type import NoteType
         from models.template_version import TemplateVersion
         self.db.session.execute(sa.text("PRAGMA foreign_keys=ON"))
-        user = User(username="detach", email="detach@example.test")
+        from tests.study_note_fixtures import create_note_user, attach_template
+        user = create_note_user(self.db.session, username="detach", email="detach@example.test")
         self.db.session.add(user)
         self.db.session.flush()
         note_type = NoteType(user_id=user.id, name="Origin")
-        template = Template(note_type=note_type, name="Reusable")
-        self.db.session.add_all([note_type, template])
+        self.db.session.add(note_type)
+        self.db.session.flush()
+        template = attach_template(self.db.session, note_type_id=note_type.id,
+            owner_user_id=user.id, name="Reusable")
         self.db.session.commit()
         template_id = template.id
         self.db.session.delete(note_type)
         self.db.session.commit()
         self.db.session.expire_all()
-        self.assertIsNone(self.db.session.get(Template, template_id).note_type_id)
+        retained = self.db.session.get(Template, template_id)
+        self.assertEqual(retained.owner_user_id, user.id)
+        self.assertFalse(hasattr(retained, "note_type_id"))
+        self.assertEqual(StudyApplication.query.count(), 0)
         self.assertEqual(TemplateVersion.query.filter_by(template_id=template_id).count(), 1)

@@ -4,6 +4,7 @@ import unittest
 from app import create_app
 from models import db
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 from models.user_role import UserRole
 from models.deck import Deck
 
@@ -21,7 +22,7 @@ class HierarchicalDeckCreateTests(unittest.TestCase):
 
         with self.app.app_context():
             regular_role = UserRole.query.filter_by(code="regular").first()
-            user = User(
+            user = create_note_user(db.session,
                 username="testuser",
                 email="test@example.com",
                 is_admin=False,

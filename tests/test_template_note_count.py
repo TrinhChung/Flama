@@ -13,6 +13,7 @@ from models.note_type import NoteType
 from models.template import Template
 from models.user import User
 
+from tests.study_note_fixtures import attach_template, create_note_user
 
 class TemplateNoteCountTests(unittest.TestCase):
     @classmethod
@@ -35,7 +36,7 @@ class TemplateNoteCountTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin", email="admin@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin", email="admin@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
@@ -68,7 +69,7 @@ class TemplateNoteCountTests(unittest.TestCase):
             fd = FieldDef(note_type_id=nt_id, name="Front", field_type="text", position=0)
             db.session.add(fd)
 
-            t1 = Template(
+            t1 = attach_template(db.session, owner_user_id=self.user_id,
                 note_type_id=nt_id,
                 name="T1",
                 front_html="{{Front}}",
@@ -76,7 +77,7 @@ class TemplateNoteCountTests(unittest.TestCase):
                 position=0,
                 is_default=True,
             )
-            t2 = Template(
+            t2 = attach_template(db.session, owner_user_id=self.user_id,
                 note_type_id=nt_id,
                 name="T2",
                 front_html="{{Front}}",
@@ -95,11 +96,20 @@ class TemplateNoteCountTests(unittest.TestCase):
             db.session.add_all([n1, n2, n3])
             db.session.flush()
 
-            c1 = Card(note_id=n1.id, template_id=t1_id)
-            c2 = Card(note_id=n2.id, template_id=t1_id)
-            c3 = Card(note_id=n3.id, template_id=t1_id)
-            c4 = Card(note_id=n1.id, template_id=t2_id)
-            db.session.add_all([c1, c2, c3, c4])
+            # Explicit pre-cutover evidence preserves historical missing pairs:
+            # all three Notes had T1, while only n1 had T2.
+            from models.card import cutover_notes, cutover_applications
+            from tests.study_note_fixtures import archive_wire_alias
+            pairs = [(n1, t1), (n2, t1), (n3, t1), (n1, t2)]
+            applications = {row.template_id: row.application_id
+                            for row in Card.query.filter_by(note_id=n1.id)}
+            for note, template in pairs:
+                card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
+                archive_wire_alias(db.session, card, str(uuid4()))
+            db.session.connection().execute(cutover_notes.insert(),
+                [{"note_id": note.id} for note in (n1, n2, n3)])
+            db.session.connection().execute(cutover_applications.insert(),
+                [{"application_id": value} for value in applications.values()])
             db.session.commit()
 
         response = self.client.get(f"/api/note-types/{nt_id}/templates")
@@ -118,7 +128,7 @@ class TemplateNoteCountTests(unittest.TestCase):
             db.session.flush()
             nt_id = nt.id
 
-            t3 = Template(
+            t3 = attach_template(db.session, owner_user_id=self.user_id,
                 note_type_id=nt_id,
                 name="T3",
                 front_html="{{Front}}",
@@ -137,14 +147,14 @@ class TemplateNoteCountTests(unittest.TestCase):
         self.assertEqual(items[0]["id"], t3_id)
         self.assertEqual(items[0]["note_count"], 0)
 
-    def test_existing_keys_unchanged(self):
+    def test_scoped_template_keys_preserve_values_and_expose_application_identity(self):
         with self.app.app_context():
             nt = NoteType(name="NT Keys", user_id=self.user_id)
             db.session.add(nt)
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(
+            t1 = attach_template(db.session, owner_user_id=self.user_id,
                 note_type_id=nt_id,
                 name="T1",
                 front_html="<div>Front</div>",
@@ -175,6 +185,7 @@ class TemplateNoteCountTests(unittest.TestCase):
             "updated_at",
             "note_count",
             "current_version_id",
+            "application_id",
         }
         self.assertEqual(set(item.keys()), expected_keys)
         self.assertEqual(item["id"], t1_id)
@@ -186,10 +197,14 @@ class TemplateNoteCountTests(unittest.TestCase):
         self.assertEqual(item["position"], 0)
         self.assertTrue(item["is_default"])
         self.assertIsInstance(item["current_version_id"], str)
+        with self.app.app_context():
+            from models.study_application import StudyApplication
+            application = db.session.get(StudyApplication, item["application_id"])
+            self.assertEqual((application.note_type_id, application.template_id), (nt_id, t1_id))
 
     def test_other_users_note_type_is_404(self):
         with self.app.app_context():
-            other_user = User(
+            other_user = create_note_user(db.session,
                 username=f"other_{uuid4().hex[:8]}",
                 email=f"other_{uuid4().hex[:8]}@example.com",
             )
@@ -214,7 +229,7 @@ class TemplateNoteCountTests(unittest.TestCase):
             db.session.flush()
             nt_id = nt.id
 
-            t1 = Template(
+            t1 = attach_template(db.session, owner_user_id=self.user_id,
                 note_type_id=nt_id,
                 name="T1",
                 front_html="{{Front}}",

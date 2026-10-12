@@ -29,6 +29,7 @@ from models.note_type import NoteType
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import create_note_user, attach_template
 
 
 def _mysql_error(number: int) -> OperationalError:
@@ -92,7 +93,7 @@ class NoteWriteGapLockTests(unittest.TestCase):
         self.addCleanup(self._cleanup)
         with self.app.app_context():
             db.create_all()
-            user = User(username="gap-locks", email="gap-locks@example.test")
+            user = create_note_user(db.session, username="gap-locks", email="gap-locks@example.test")
             db.session.add(user)
             db.session.flush()
             deck = Deck(name="Gap locks", owner_user_id=user.id)
@@ -103,12 +104,12 @@ class NoteWriteGapLockTests(unittest.TestCase):
             note = Note(user_id=user.id, note_type_id=note_type.id, deck_id=deck.id, field_values={"Word": "w"})
             db.session.add(note)
             db.session.flush()
-            template = Template(note_type_id=note_type.id, name="Card 1",
+            template = attach_template(db.session, note_type_id=note_type.id, owner_user_id=user.id,
+                name="Card 1",
                 front_html="{{Word}}", back_html="{{Word}}", is_default=True)
             db.session.add(template)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
             db.session.commit()
             self.user_id, self.deck_id, self.card_id = user.id, deck.id, card.id
             stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,

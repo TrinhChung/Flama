@@ -14,7 +14,9 @@ from app.services.share.install import (
 )
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
@@ -43,9 +45,9 @@ class MarketCounterDeletionTests(unittest.TestCase):
         self.context.push()
         db.create_all()
 
-        self.owner = User(username="owner", email="owner@example.com")
+        self.owner = create_note_user(db.session, username="owner", email="owner@example.com")
         self.owner.set_password("password")
-        self.learner = User(username="learner", email="learner@example.com")
+        self.learner = create_note_user(db.session, username="learner", email="learner@example.com")
         self.learner.set_password("password")
         db.session.add_all([self.owner, self.learner])
         db.session.flush()
@@ -62,11 +64,15 @@ class MarketCounterDeletionTests(unittest.TestCase):
             install_count=1,
             active_usage_count=1,
         )
+        db.session.add(source)
+        db.session.flush()
         installed = NoteType(
             user_id=self.learner.id,
             name="Installed",
             publish_status="private",
         )
+        db.session.add(installed)
+        db.session.flush()
         db.session.add_all([source, installed])
         db.session.flush()
         install = NoteTypeInstall(
@@ -82,6 +88,8 @@ class MarketCounterDeletionTests(unittest.TestCase):
 
     def _enroll_note_authority(self, learner_id: int) -> None:
         now = datetime(2026, 9, 23)
+        if db.session.get(StudyAuthorityEnrollment, learner_id) is not None:
+            return
         db.session.add(
             StudyAuthorityEnrollment(
                 learner_user_id=learner_id,
@@ -128,6 +136,8 @@ class MarketCounterDeletionTests(unittest.TestCase):
     def test_note_authority_owner_can_purge_empty_note_type(self):
         note_type = NoteType(user_id=self.owner.id, name="NOTE owner")
         db.session.add(note_type)
+        db.session.flush()
+        db.session.add(note_type)
         db.session.commit()
         note_type_id = note_type.id
         self._enroll_note_authority(self.owner.id)
@@ -139,14 +149,13 @@ class MarketCounterDeletionTests(unittest.TestCase):
 
     def test_note_authority_learners_frozen_progress_goes_with_the_purged_content(self):
         source, installed, install = self._note_type_install()
-        template = Template(note_type_id=source.id, name="Front")
+        template = attach_template(db.session, owner_user_id=db.session.get(NoteType, source.id).user_id, note_type_id=source.id, name="Front")
         note = Note(note_type_id=source.id, user_id=self.owner.id)
         db.session.add_all([template, note])
         db.session.flush()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
-        progress = CardProgress(user_id=self.learner.id, card_id=card.id)
+        progress = stage_note_state(db.session, user_id=self.learner.id, card_id=card.id)
         review = ReviewEvent(
             user_id=self.owner.id,
             card_id=card.id,
@@ -174,7 +183,10 @@ class MarketCounterDeletionTests(unittest.TestCase):
         self.assertIsNone(db.session.get(NoteType, source_id))
         self.assertIsNone(db.session.get(Note, note_id))
         self.assertIsNone(db.session.get(Card, card_id))
-        self.assertIsNone(db.session.get(CardProgress, progress_id))
+        tombstone = db.session.get(StudyProgressSubject, progress_id)
+        self.assertIsNotNone(tombstone)
+        self.assertIsNone(tombstone.live_note_id)
+        self.assertTrue(tombstone.status_code.startswith("TOMBSTONED"))
         self.assertIsNotNone(db.session.get(ReviewEvent, review_id))
         self.assertIsNone(db.session.get(NoteTypeInstall, install_id))
         self.assertIsNone(db.session.get(ReviewEvent, review_id).note_type_id)
@@ -222,6 +234,8 @@ class MarketCounterDeletionTests(unittest.TestCase):
     def test_note_authority_installs_overlay_like_legacy_from_both_entrypoints(self):
         source_deck = Deck(name="Source", owner_user_id=self.owner.id)
         source_type = NoteType(user_id=self.owner.id, name="Source type")
+        db.session.add(source_type)
+        db.session.flush()
         db.session.add_all([source_deck, source_type])
         db.session.flush()
         item = DeckMarketplaceItem(
@@ -231,7 +245,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
             title="NOTE install",
             publish_status="published",
         )
-        legacy = User(username="legacy-installer", email="legacy-installer@example.com")
+        legacy = create_note_user(db.session, username="legacy-installer", email="legacy-installer@example.com")
         db.session.add_all([item, legacy])
         db.session.commit()
         self._enroll_note_authority(self.learner.id)
@@ -314,12 +328,14 @@ class MarketCounterDeletionTests(unittest.TestCase):
 
     def test_deck_purge_takes_a_note_learners_frozen_progress_with_the_content(self):
         source_type = NoteType(user_id=self.owner.id, name="Deck source type")
+        db.session.add(source_type)
+        db.session.flush()
         source_deck = Deck(
             name="Deck source", owner_user_id=self.owner.id, note_type=source_type
         )
         db.session.add_all([source_type, source_deck])
         db.session.flush()
-        template = Template(note_type_id=source_type.id, name="Front")
+        template = attach_template(db.session, owner_user_id=db.session.get(NoteType, source_type.id).user_id, note_type_id=source_type.id, name="Front")
         note = Note(
             note_type_id=source_type.id,
             user_id=self.owner.id,
@@ -327,10 +343,9 @@ class MarketCounterDeletionTests(unittest.TestCase):
         )
         db.session.add_all([template, note])
         db.session.flush()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
-        progress = CardProgress(user_id=self.learner.id, card_id=card.id)
+        progress = stage_note_state(db.session, user_id=self.learner.id, card_id=card.id)
         item = DeckMarketplaceItem(
             owner_user_id=self.owner.id,
             source_deck_id=source_deck.id,
@@ -377,20 +392,25 @@ class MarketCounterDeletionTests(unittest.TestCase):
         self.assertIsNone(db.session.get(Deck, deck_id))
         self.assertIsNone(db.session.get(Note, note_id))
         self.assertIsNone(db.session.get(Card, card_id))
-        self.assertIsNone(db.session.get(CardProgress, progress_id))
+        tombstone = db.session.get(StudyProgressSubject, progress_id)
+        self.assertIsNotNone(tombstone)
+        self.assertIsNone(tombstone.live_note_id)
+        self.assertTrue(tombstone.status_code.startswith("TOMBSTONED"))
         self.assertIsNotNone(db.session.get(ReviewEvent, review_id))
         self.assertIsNone(db.session.get(DeckInstall, install_id))
         self.assertIsNone(db.session.get(ReviewEvent, review_id).deck_id)
 
     def _note_authority_clone_session_without_progress(self) -> tuple[str, int, int]:
         source_type = NoteType(user_id=self.owner.id, name="Session source type")
+        db.session.add(source_type)
+        db.session.flush()
         source_deck = Deck(
             name="Session source", owner_user_id=self.owner.id, note_type=source_type
         )
         clone_deck = Deck(name="Session clone", owner_user_id=self.learner.id)
         db.session.add_all([source_type, source_deck, clone_deck])
         db.session.flush()
-        template = Template(note_type_id=source_type.id, name="Front")
+        template = attach_template(db.session, owner_user_id=db.session.get(NoteType, source_type.id).user_id, note_type_id=source_type.id, name="Front")
         note = Note(
             note_type_id=source_type.id,
             user_id=self.owner.id,
@@ -398,8 +418,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
         )
         db.session.add_all([template, note])
         db.session.flush()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
         session = StudySession(
             user_id=self.learner.id,

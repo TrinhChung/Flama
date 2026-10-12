@@ -29,7 +29,9 @@ from app.services.anki_scheduler import _day_index
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
 from models.deck_marketplace_item import DeckMarketplaceItem
@@ -60,14 +62,15 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
                 "WTF_CSRF_ENABLED": False,
                 "FLASHCARD_MEDIA_UPLOAD_ROOT": self.upload_tmp.name,
                 "FLASHCARD_MEDIA_MAX_BYTES": 1024 * 1024,
+                "STUDY_WIRE_V4_ENABLED": True,
             }
         )
 
         with self.app.app_context():
             db.create_all()
-            owner = User(username="dirty-owner", email="dirty-owner@example.com")
+            owner = create_note_user(db.session, username="dirty-owner", email="dirty-owner@example.com")
             owner.set_password("password")
-            learner = User(username="dirty-learner", email="dirty-learner@example.com")
+            learner = create_note_user(db.session, username="dirty-learner", email="dirty-learner@example.com")
             learner.set_password("password")
             db.session.add_all([owner, learner])
             db.session.flush()
@@ -75,6 +78,8 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             self.learner_id = learner.id
 
             note_type = NoteType(user_id=owner.id, name="Tracked vocabulary")
+            db.session.add(note_type)
+            db.session.flush()
             db.session.add(note_type)
             db.session.flush()
             fields = [
@@ -101,7 +106,7 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
                     required=False,
                 ),
             ]
-            template = Template(
+            template = attach_template(db.session, owner_user_id=db.session.get(NoteType, note_type.id).user_id,
                 note_type_id=note_type.id,
                 name="Recognition",
                 front_html="{{Word}}",
@@ -139,8 +144,8 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             )
             db.session.add_all([first_note, second_note])
             db.session.flush()
-            first_card = Card(note_id=first_note.id, template_id=template.id)
-            second_card = Card(note_id=second_note.id, template_id=template.id)
+            first_card = Card.query.filter_by(note_id=first_note.id, template_id=template.id).one()
+            second_card = Card.query.filter_by(note_id=second_note.id, template_id=template.id).one()
             db.session.add_all([first_card, second_card])
 
             item = DeckMarketplaceItem(
@@ -661,12 +666,8 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             self.assertTrue(self._dirty_rows())
             self.assertIsNone(db.session.get(Note, self.second_note_id))
 
-    def test_legacy_study_keeps_leech_state_without_mutating_released_tags(self):
+    def test_note_study_keeps_leech_state_without_mutating_released_tags(self):
         with self.app.app_context(), patch.object(
-            study_service,
-            "create_review_event_record",
-            return_value=SimpleNamespace(id=None),
-        ), patch.object(
             study_service.flashcards_share_service,
             "touch_note_type_install_usage",
         ), patch.object(
@@ -683,7 +684,7 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
                 (self.first_card_id, self.first_note_id, ["animal"]),
                 (self.second_card_id, self.second_note_id, ["leech"]),
             ):
-                progress = CardProgress(
+                progress = stage_note_state(db.session,
                     user_id=self.owner_id,
                     card_id=card_id,
                     queue="review",
@@ -708,19 +709,16 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
                 )
                 self.assertTrue(result.transition.state.leeched)
 
-                stored_progress = CardProgress.query.filter_by(
-                    user_id=self.owner_id,
-                    card_id=card_id,
-                ).one()
-                self.assertTrue(stored_progress.is_suspended)
+                stored_progress = decode_note_state(subject_for_card(db.session, user_id=self.owner_id, card_id=card_id))
+                self.assertTrue(stored_progress.suspended)
                 self.assertEqual(int(stored_progress.lapses), 8)
                 self.assertEqual(db.session.get(Note, note_id).tags, expected_tags)
 
     def test_study_session_keeps_leech_state_without_mutating_released_tags(self):
-        now = datetime.utcnow()
+        now = datetime.utcnow().replace(microsecond=0)
         with self.app.app_context():
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.owner_id,
                     card_id=self.first_card_id,
                     queue="review",
@@ -743,45 +741,34 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200)
         opened = client.post(
             "/api/study/sessions",
-            json={"scope": "deck", "scope_id": self.root_deck_id},
+            json={"scope": "deck", "scope_id": self.root_deck_id,
+                  "accepted_session_schema_versions": ["study-session.v4"],
+                  "accepted_note_storage_profiles": ["note-mysql-float-text.v1"]},
         )
         self.assertEqual(opened.status_code, 201, opened.get_json())
         snapshot = opened.get_json()
+        self.assertEqual(snapshot["schema_version"], "study-session.v4")
         card_payload = next(
             card
             for card in snapshot["cards"]
             if card["card_id"] == self.first_card_id
         )
+        from tests.test_study_session_api import StudySessionApiTests
+        payload = StudySessionApiTests._commit_payload(
+            {**snapshot, "cards": [card_payload]}
+        )
+        payload["events"][0].update(rating="again", action_key="review.again",
+                                    trigger_key="scheduler.review.again")
         committed = client.post(
             f"/api/study/sessions/{snapshot['session_id']}/commit",
-            json={
-                "schema_version": "study-commit.v1",
-                "commit_id": str(uuid4()),
-                "session_token": snapshot["session_token"],
-                "snapshot_hash": snapshot["snapshot_hash"],
-                "events": [
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 1,
-                        "card_id": self.first_card_id,
-                        "rating": "again",
-                        "policy_key": card_payload["policy_key"],
-                        "scheduler_offset_ms": 1000,
-                        "duration_ms": 500,
-                    }
-                ],
-                "final_states": [],
-            },
+            json=payload,
         )
         self.assertEqual(committed.status_code, 200, committed.get_json())
 
         with self.app.app_context():
             self.assertEqual(db.session.get(Note, self.first_note_id).tags, ["animal"])
-            progress = CardProgress.query.filter_by(
-                user_id=self.owner_id,
-                card_id=self.first_card_id,
-            ).one()
-            self.assertTrue(progress.is_suspended)
+            progress = decode_note_state(subject_for_card(db.session, user_id=self.owner_id, card_id=self.first_card_id))
+            self.assertTrue(progress.suspended)
             self.assertEqual(int(progress.lapses), 8)
 
 

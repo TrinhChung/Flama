@@ -9,6 +9,7 @@ from models.study_application import StudyApplication
 from models.template import Template
 from models.template_version import TemplateVersion
 from models.user import User
+from tests.study_note_fixtures import create_note_user, attach_template
 
 
 class TemplateLibraryFrontendContractTests(unittest.TestCase):
@@ -25,7 +26,7 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
         with self.app.app_context():
             db.create_all()
             for name in ("owner", "other"):
-                user = User(username=name, email=f"{name}@example.com")
+                user = create_note_user(db.session, username=name, email=f"{name}@example.com")
                 user.set_password("password")
                 db.session.add(user)
             db.session.commit()
@@ -66,7 +67,7 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
 
     def test_compact_pages_omit_source_and_preserve_detail_and_usage(self):
         self._attach(0)
-        self._attach(0, "reverse")
+        self._attach(1)
         with self.app.app_context():
             owner = User.query.filter_by(username="owner").one()
             other = User.query.filter_by(username="other").one()
@@ -97,7 +98,7 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
             self.assertFalse({"front_html", "back_html", "shared_css"} & item.keys())
         reusable = next(item for item in data["items"] if item["id"] == self.template["id"])
         self.assertEqual(reusable["id"], self.template["id"])
-        self.assertEqual((reusable["application_count"], reusable["note_type_count"]), (2, 1))
+        self.assertEqual((reusable["application_count"], reusable["note_type_count"]), (2, 2))
         detail = self.client.get(self.path).get_json()
         self.assertEqual(detail["front_html"], "<b>{{term}}</b>")
         self.assertEqual(detail["input_schema"], reusable["input_schema"])
@@ -106,7 +107,10 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
 
     def test_compact_list_preserves_legacy_input_inference(self):
         with self.app.app_context():
-            legacy = Template(note_type_id=self.note_types[0]["id"], name="Legacy", front_html="{{Word}}", back_html="{{FrontSide}}", input_schema=[])
+            owner = User.query.filter_by(username="owner").one()
+            legacy = attach_template(db.session, note_type_id=self.note_types[0]["id"],
+                owner_user_id=owner.id, name="Legacy", front_html="{{Word}}",
+                back_html="{{FrontSide}}", input_schema=[])
             db.session.add(legacy)
             db.session.commit()
             template_id = legacy.id
@@ -126,21 +130,25 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
         self.assertIn(template_id, self._items("standalone"))
         self.assertNotIn(template_id, self._items("in_use"))
         first = self._attach(0)
-        self._attach(0, "reverse")
+        duplicate = self.client.post(f"/api/note-types/{self.note_types[0]['id']}/template-applications", json={
+            "template_id": self.template["id"], "occurrence_key": "reverse",
+        })
+        self.assertEqual(duplicate.status_code, 409, duplicate.get_json())
+        self.assertEqual(duplicate.get_json()["error"], "APPLICATION_EXISTS")
         self._attach(1)
         item = self._items("in_use")[template_id]
-        self.assertEqual((item["application_count"], item["note_type_count"]), (3, 2))
+        self.assertEqual((item["application_count"], item["note_type_count"]), (2, 2))
         self.assertNotIn(template_id, self._items("standalone"))
         response = self.client.get(self.path)
         data = response.get_json()
-        self.assertEqual(data["application_count"], 3)
+        self.assertEqual(data["application_count"], 2)
         self.assertEqual({row["note_type_name"] for row in data["applications"]}, {"First", "Second"})
         self.assertEqual({row["application_id"] for row in data["applications"]}, {
             row["id"] for row in data["applications"]
         })
         response = self.client.delete(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{first['id']}")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.client.get(self.path).get_json()["application_count"], 2)
+        self.assertEqual(self.client.get(self.path).get_json()["application_count"], 1)
 
     def test_origin_groups_and_invalid_group(self):
         self.assertIn(self.template["id"], self._items("mine"))
@@ -154,24 +162,42 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["field"], "group")
 
+    def test_legacy_multiple_applications_list_one_definition_with_distinct_note_count(self):
+        from models.note import Note
+        self._attach(0)
+        with self.app.app_context():
+            owner = User.query.filter_by(username="owner").one()
+            note = Note(user_id=owner.id, note_type_id=self.note_types[0]["id"],
+                        field_values={"Word": "word"})
+            db.session.add(note)
+            db.session.add(StudyApplication(note_type_id=self.note_types[0]["id"],
+                template_id=self.template["id"], occurrence_key="historical-repeat",
+                status_code="ACTIVE", position=9))
+            db.session.commit()
+        response = self.client.get(f"/api/note-types/{self.note_types[0]['id']}/templates")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        matches = [item for item in response.get_json()["items"]
+                   if item["id"] == self.template["id"]]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]["note_count"], 1)
+
     def test_note_type_template_list_includes_active_shared_definition_and_scopes_counts(self):
         from models.card import Card
         from models.note import Note
         first = self._attach(0)
-        reverse = self._attach(0, "reverse")
         second = self._attach(1)
         response = self.client.patch(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{first['id']}", json={"position": 7, "is_default": True})
         self.assertEqual(response.status_code, 200, response.get_json())
         with self.app.app_context():
             owner = User.query.filter_by(username="owner").one()
-            for index, applications in ((0, [first, reverse]), (1, [second])):
+            for index, applications in ((0, [first]), (1, [second])):
                 count = 1 if index == 0 else 2
                 for _ in range(count):
                     note = Note(user_id=owner.id, note_type_id=self.note_types[index]["id"], field_values={"Word": "word"})
                     db.session.add(note)
                     db.session.flush()
-                    for application in applications:
-                        db.session.add(Card(note_id=note.id, template_id=self.template["id"], application_id=application["id"]))
+                    self.assertEqual(Card.query.filter_by(note_id=note.id,
+                        template_id=self.template["id"]).count(), len(applications))
             db.session.commit()
         for index, expected in ((0, 1), (1, 2)):
             response = self.client.get(f"/api/note-types/{self.note_types[index]['id']}/templates")
@@ -181,15 +207,15 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
             self.assertEqual(matching[0]["note_count"], expected)
             self.assertEqual(matching[0]["note_type_id"], self.note_types[index]["id"])
             if index == 0:
-                # Unique definition list uses the first occurrence in application
-                # order; the earlier reverse occurrence remains position zero.
-                self.assertEqual(matching[0]["position"], reverse["position"])
+                self.assertEqual(matching[0]["position"], 7)
         self.client.delete(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{first['id']}")
-        self.client.delete(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{reverse['id']}")
         response = self.client.get(f"/api/note-types/{self.note_types[0]['id']}/templates")
         self.assertNotIn(self.template["id"], {item["id"] for item in response.get_json()["items"]})
         with self.app.app_context():
-            self.assertEqual(Card.query.filter_by(template_id=self.template["id"]).count(), 4)
+            self.assertEqual(Card.query.filter_by(template_id=self.template["id"]).count(), 2)
+            from models.card import INCLUDE_RETIRED_CARDS
+            self.assertEqual(Card.query.filter_by(template_id=self.template["id"])
+                .execution_options(**{INCLUDE_RETIRED_CARDS: True}).count(), 3)
 
     def test_preview_renders_draft_and_preserves_source_and_history(self):
         before = self.client.get(self.path).get_json()

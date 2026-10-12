@@ -14,7 +14,7 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from sqlalchemy import event, inspect, select, update
+from sqlalchemy import bindparam, event, inspect, select, update
 from app import create_audit_app
 from app.repositories.deck_count_snapshot_repository import read_revision_vectors
 from app.repositories.study_repository import _today_day_index
@@ -24,7 +24,10 @@ from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts, 
 from app.services.study_analytics_read_service import analytics_read_transaction
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import attach_template, enroll_note_user
+from tests.note_progress_fixtures import stage_note_state, subject_values
+from models.study_progress_subject import StudyProgressSubject
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.deck import Deck
 from models.deck_count_snapshot import DeckCountContentRevision
 from models.note import Note
@@ -40,7 +43,7 @@ CUTOFF = _day_index_to_datetime(DAY + 1, 4, timezone_name="UTC")
 
 def run(url, output):
     app = create_audit_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": url.render_as_string(hide_password=False),
-        "DECK_COUNT_WRITE_ENABLED": True, "DECK_COUNT_READ_MODE": "summary", "REDIS_URL": ""})
+        "DECK_COUNT_WRITE_ENABLED": True, "DECK_COUNT_READ_MODE": "summary", "REDIS_URL": "", "STUDY_NOTE_COUNT_ENABLED": False})
     result = {"host": url.host, "database": url.database, "passed": False}
     with app.app_context():
         probe = Probe(app)
@@ -56,6 +59,9 @@ def run(url, output):
             user_id = probe.users["basic"]
             fixture_tag = probe.fixtures[user_id].split("@")[0]
             with probe.session() as session:
+                for fixture_user_id in probe.users.values():
+                    if session.get(StudyAuthorityEnrollment, fixture_user_id) is None:
+                        enroll_note_user(session, session.get(User, fixture_user_id))
                 first = Deck(name=f"Count fixture {fixture_tag} A", owner_user_id=user_id)
                 second = Deck(name=f"Count fixture {fixture_tag} B", owner_user_id=user_id)
                 nt = NoteType(name="Count fixture", user_id=user_id)
@@ -64,20 +70,38 @@ def run(url, output):
                 decks = [int(first.id), int(second.id)]
                 result["fixture_decks"] = {deck_id: user_id for deck_id in decks}
                 _write_result(output, result)
-                templates = [Template(note_type_id=nt.id, name=f"Fixture {index}", front_html="x", back_html="y") for index in range(2)]
+                templates = [attach_template(session, owner_user_id=user_id, note_type_id=nt.id, name=f"Fixture {index}", front_html="x", back_html="y") for index in range(2)]
                 session.add_all(templates)
                 session.flush()
                 cards = []
-                for deck_id in decks:
+                note_ids = []
+                # Siblings on the first Note share one state. The concurrent
+                # second-deck writers target two distinct Notes in that deck.
+                for index, deck_id in enumerate((decks[0], decks[1], decks[1])):
                     note = Note(user_id=user_id, deck_id=deck_id, note_type_id=nt.id, field_values={})
                     session.add(note)
                     session.flush()
-                    for template in templates:
-                        card = Card(note_id=note.id, template_id=template.id)
-                        session.add(card)
-                        session.flush()
-                        cards.append(str(card.id))
+                    presentations = session.query(Card).filter_by(note_id=note.id).order_by(Card.template_id).all()
+                    cards.extend(str(card.id) for card in (presentations if index == 0 else presentations[:1]))
+                    note_ids.append(str(note.id))
                 session.commit()
+
+            def set_fixture_suspension(suspended):
+                columns = ('algorithm_key','algorithm_version','state_schema_version','storage_codec','state_payload',
+                    'state_payload_size','algorithm_state_hash','semantic_state_hash','projection_version','normalized_queue',
+                    'due_at','due_day','is_suspended','is_buried','buried_until_day')
+                parameters = []
+                for index, note_id in enumerate(note_ids):
+                    values = subject_values(user_id=user_id, note_id=note_id, now=NOW,
+                        queue='review' if index == 0 else 'learn', due_day=DAY if index == 0 else None,
+                        is_suspended=suspended)
+                    parameters.append({'fixture_key':values['logical_note_key'], **{key:values[key] for key in columns}})
+                table = StudyProgressSubject.__table__
+                statement = update(table).where(table.c.learner_user_id == user_id,
+                    table.c.logical_note_key == bindparam('fixture_key')).values({key:bindparam(key) for key in columns})
+                with probe.session() as session:
+                    session.execute(statement, parameters)
+                    session.commit()
 
             def vector():
                 with probe.session() as session:
@@ -87,13 +111,13 @@ def run(url, output):
                 with analytics_read_transaction():
                     return resolve_cached_owned_deck_counts(db.session, learner_user_id=user_id,
                         visible_deck_ids=decks, today_day_index=DAY, day_cutoff_utc=CUTOFF,
-                        timezone_name="UTC", day_boundary_hour_local=4, is_note_mode=False, now_utc=NOW)
+                        timezone_name="UTC", day_boundary_hour_local=4, is_note_mode=True, now_utc=NOW)
 
             def raw():
                 with analytics_read_transaction():
                     return aggregate_deck_study_counts(db.session, learner_user_id=user_id,
                         visible_deck_ids=decks, today_day_index=DAY, day_cutoff_utc=CUTOFF,
-                        is_note_mode=False, include_note_types=False)[0]
+                        include_note_types=False)[0]
 
             warm = prewarm_owned_deck_counts(user_id=user_id, now_utc=NOW)
             hits, misses = cached()
@@ -101,7 +125,7 @@ def run(url, output):
             probe.check("valid_prewarm_skips_raw_work", prewarm_owned_deck_counts(user_id=user_id, now_utc=NOW)["computed"] == 0)
             initial = vector()
             with probe.session() as session:
-                session.add(CardProgress(user_id=user_id, card_id=cards[0], queue="review", due_day=DAY))
+                session.add(stage_note_state(session, user_id=user_id, card_id=cards[0], queue="review", due_day=DAY))
                 session.commit()
             hits, misses = cached()
             probe.check("orm_progress_invalidates_only_affected_deck", misses == [decks[0]] and list(hits) == [decks[1]]
@@ -110,15 +134,14 @@ def run(url, output):
             probe.check("post_review_snapshot_exact_parity", cached()[0] == raw())
             baseline = vector()
             with probe.session() as session:
-                session.add(CardProgress(user_id=user_id, card_id=cards[1], queue="learn"))
+                session.add(stage_note_state(session, user_id=user_id, card_id=cards[1], queue="learn"))
                 session.flush()
                 session.rollback()
             probe.check("outer_rollback_preserves_tokens", vector() == baseline)
             with probe.session() as session:
                 outer = session.begin_nested()
                 child = session.begin_nested()
-                row = session.execute(select(CardProgress).where(CardProgress.card_id == cards[0])).scalar_one()
-                row.queue = "learn"
+                stage_note_state(session, user_id=user_id, card_id=cards[0], queue="learn")
                 session.flush()
                 child.commit()
                 outer.rollback()
@@ -128,7 +151,7 @@ def run(url, output):
             barrier = threading.Barrier(2)
             def writer(card_id):
                 with app.app_context(), probe.session() as session:
-                    session.add(CardProgress(user_id=user_id, card_id=card_id, queue="learn"))
+                    session.add(stage_note_state(session, user_id=user_id, card_id=card_id, queue="learn"))
                     session.flush()
                     barrier.wait(timeout=5)
                     session.commit()
@@ -140,9 +163,7 @@ def run(url, output):
             prewarm_owned_deck_counts(user_id=user_id, now_utc=NOW)
             probe.check("concurrent_updates_snapshot_exact_parity", cached()[0] == raw())
             db.session.remove()
-            with probe.session() as session:
-                session.execute(update(CardProgress).where(CardProgress.user_id == user_id).values(is_suspended=True))
-                session.commit()
+            set_fixture_suspension(True)
             probe.check("first_statement_bulk_invalidates_global_epoch", cached()[1] == decks)
             prewarm_owned_deck_counts(user_id=user_id, now_utc=NOW)
             probe.check("bulk_refresh_exact_parity", cached()[0] == raw())
@@ -162,8 +183,7 @@ def run(url, output):
             from app.services.study_service import execute_native_review_command
             from app.services.review_analytics_backfill_service import run_review_analytics_backfill
             from app.services.deck_count_projection_service import invalidate_all_deck_counts
-            db.session.execute(update(CardProgress).where(CardProgress.user_id == user_id).values(is_suspended=False))
-            db.session.commit()
+            set_fixture_suspension(False)
             write_metrics = {}
             for enabled in (False, True):
                 app.config["REVIEW_ANALYTICS_WRITE_ENABLED"] = enabled

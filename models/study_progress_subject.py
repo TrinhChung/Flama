@@ -87,6 +87,10 @@ class StudyProgressSubject(db.Model):
             "learner_user_id", "logical_note_key", name="uq_sp_subject_user_note"
         ),
         db.Index("ix_sp_subject_live_note", "live_note_id"),
+        # Queue equality then anchor range: due_day steps, or due_day NULL and
+        # due_at intraday steps. One index serves both disjoint NOTE branches.
+        db.Index("ix_sp_subject_note_due", "learner_user_id", "normalized_queue",
+                 "is_suspended", "due_day", "due_at", "live_note_id"),
         db.Index("ix_sp_subject_status_updated", "status_code", "updated_at", "id"),
         db.CheckConstraint("subject_generation >= 1", name="ck_sp_subject_generation"),
         db.CheckConstraint("mirror_revision >= 0", name="ck_sp_subject_revision"),

@@ -304,11 +304,11 @@ describe('Adversarial & Empirical Challenger Suite for asbplayer & Yomitan Isola
     }
 
     // 2. Shell dictionary
-    expect(viShell.sidebar.item.asbplayer).toBe('Kết nối asbplayer')
+    expect(viShell.sidebar.item.asbplayer).toBe('Cao thủ luyện nghe')
     expect(enShell.sidebar.item.asbplayer).toBe('Connect asbplayer')
     expect(viShell.footer.link_asbplayer).toBe('Tích hợp asbplayer')
     expect(enShell.footer.link_asbplayer).toBe('asbplayer Integration')
-    expect(viShell.page_titles.settings_asbplayer).toBe('Cài đặt Kết nối asbplayer')
+    expect(viShell.page_titles.settings_asbplayer).toBe('Cao thủ luyện nghe')
     expect(enShell.page_titles.settings_asbplayer).toBe('asbplayer Integration')
   })
 })

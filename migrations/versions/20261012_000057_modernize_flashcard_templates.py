@@ -24,12 +24,12 @@ from types import SimpleNamespace
 from alembic import op
 import sqlalchemy as sa
 
-from app.services.flashcard_renderer import (
+from migrations.template_modernization_20261012 import (
     _rewrite_media_url_attribute_tokens,
     _upgrade_html_field_double_brace_tokens,
 )
-from app.services.template_tokens import template_content_hash
-from app.validators.template_library import infer_input_schema
+from migrations.template_modernization_20261012 import template_content_hash
+from migrations.template_modernization_20261012 import infer_input_schema
 
 
 revision = "20261012_000057"

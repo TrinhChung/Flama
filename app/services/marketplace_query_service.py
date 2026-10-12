@@ -49,16 +49,21 @@ def serialize_field(field: FieldDef) -> dict[str, Any]:
     }
 
 
-def serialize_template(template: Template) -> dict[str, Any]:
+def serialize_template(template: Template, *, application=None, note_type_id=None) -> dict[str, Any]:
+    application = application or getattr(template, 'application', None)
+    template = getattr(template, 'template', template)
     return {
         "id": template.id,
-        "note_type_id": template.note_type_id,
+        "note_type_id": application.note_type_id if application is not None else note_type_id,
+        "application_id": application.id if application is not None else None,
         "name": template.name,
         "front_html": template.front_html,
         "back_html": template.back_html,
         "shared_css": template.shared_css,
-        "position": template.position,
-        "is_default": bool(template.is_default),
+        "position": application.position if application is not None else 0,
+        "is_default": bool(application.is_default) if application is not None else False,
+        "input_schema": template.input_schema or [],
+        "input_bindings": application.input_bindings or {} if application is not None else {},
         "current_version_id": template.current_version_id,
         "updated_at": template.updated_at.isoformat() if template.updated_at else None,
     }
@@ -66,17 +71,13 @@ def serialize_template(template: Template) -> dict[str, Any]:
 
 def serialize_note_type_templates(note_type: NoteType, *, published=False):
     if not note_type.id or not has_app_context():
-        return [serialize_template(template) for template in sorted(note_type.templates, key=lambda item: item.position)]
-    applications = {}
+        return [serialize_template(app.template, application=app)
+                for app in sorted(note_type.study_applications, key=lambda app: (app.position, app.id or ''))
+                if app.status_code == 'ACTIVE']
     attached = flashcards_share_repository.get_template_applications_by_note_type(note_type.id)
-    for template, app in attached:
-        applications.setdefault(template.id, app)
     result = []
-    for template in flashcards_share_repository.get_templates_by_note_type(note_type.id, applications=attached):
-        payload = serialize_template(template)
-        app = applications.get(template.id)
-        if app is not None:
-            payload.update(note_type_id=note_type.id, position=app.position, is_default=bool(app.is_default), input_schema=template.input_schema or [], input_bindings=app.input_bindings or {})
+    for template, app in attached:
+        payload = serialize_template(template, application=app)
         if published:
             publication = template_release_repository.publication(db.session, template.id)
             release = template_release_repository.release(db.session, publication["current_release_id"], template.id) if publication and publication["current_release_id"] else None

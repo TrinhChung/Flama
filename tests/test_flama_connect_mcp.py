@@ -15,7 +15,6 @@ from app.connect import create_connect_app
 from app.services import mcp_access_token_service, user_api_token_service
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -23,6 +22,9 @@ from models.note_type import NoteType
 from models.review_event import ReviewEvent
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.shared_image_asset import SharedImageAsset
 
 
@@ -55,7 +57,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(
+            user = create_note_user(db.session,
                 username="mcp_user",
                 email="mcp_user@example.com",
                 timezone="UTC",
@@ -64,7 +66,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             user.set_password("password")
             db.session.add(user)
 
-            other_user = User(
+            other_user = create_note_user(db.session,
                 username="other_user",
                 email="other@example.com",
                 timezone="UTC",
@@ -120,7 +122,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
                         position=2,
                         required=True,
                     ),
-                    Template(
+                    attach_template(db.session, owner_user_id=db.session.get(NoteType, note_type.id).user_id,
                         note_type_id=note_type.id,
                         name="Recognition",
                         front_html="<div>{{Word}}</div>",
@@ -174,9 +176,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             self.note_id = note.id
             self.other_note_id = other_note.id
 
-            card = Card(note_id=note.id, template_id=note_type.templates[0].id)
-            db.session.add(card)
-            db.session.add(Card(note_id=other_note.id, template_id=note_type.templates[0].id))
+            card = Card.query.filter_by(note_id=note.id).one()
             db.session.flush()
             self.card_id = card.id
 
@@ -909,7 +909,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
     def test_submit_review_rejects_suspended_card(self):
         with self.app.app_context():
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=str(self.card_id),
                     is_suspended=True,
@@ -938,11 +938,8 @@ class FlamaConnectMcpTests(unittest.TestCase):
         error = response.get_json()["error"]
         self.assertEqual(error["data"]["code"], "CARD_SUSPENDED")
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=str(self.card_id),
-            ).one()
-            self.assertEqual(progress.revision, 0)
+            progress = subject_for_card(db.session, user_id=self.user_id, card_id=str(self.card_id))
+            self.assertEqual(progress.authority_revision, 0)
             self.assertEqual(
                 ReviewEvent.query.filter_by(
                     user_id=self.user_id,
@@ -997,16 +994,16 @@ class FlamaConnectMcpTests(unittest.TestCase):
             self.assertEqual(StudyProgressSubject.query.one().authority_revision, 2)
 
     def test_submit_review_operation_key_is_note_only_and_validated(self):
-        response = self._submit_with_operation_key("legacy-must-not-promise-replay")
-        self.assertEqual(response.status_code, 422, response.get_json())
-        self.assertEqual(response.get_json()["error"]["data"]["code"], "AUTHORITY_OPERATION_KEY_UNAVAILABLE")
+        response = self._submit_with_operation_key("note-operation")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["result"]["structuredContent"]["authority"]["mode"], "NOTE")
         for key in ("", " spaces ", "x" * 37, "x" * 129, 42, True, {}, []):
             with self.subTest(key=key):
                 response = self._submit_with_operation_key(key)
                 self.assertEqual(response.status_code, 400, response.get_json())
                 self.assertEqual(response.get_json()["error"]["data"]["code"], "INVALID_PARAMS")
         with self.app.app_context():
-            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(ReviewEvent.query.count(), 1)
 
     # -----------------------------------------------------------------------
     # Statistics Tests
@@ -2007,9 +2004,8 @@ class FlamaConnectMcpTests(unittest.TestCase):
             )
             db.session.add_all([note1, note2])
             db.session.flush()
-            card1 = Card(note_id=note1.id, template_id=Template.query.filter_by(note_type_id=self.note_type_id).first().id)
-            card2 = Card(note_id=note2.id, template_id=Template.query.filter_by(note_type_id=self.note_type_id).first().id)
-            db.session.add_all([card1, card2])
+            card1 = Card.query.filter_by(note_id=note1.id).one()
+            card2 = Card.query.filter_by(note_id=note2.id).one()
             db.session.commit()
 
         # 2. Check publish options

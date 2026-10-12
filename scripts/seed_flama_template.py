@@ -14,7 +14,6 @@ from app import create_app
 from models import db
 from models.flashcard import Note, Card
 from models.deck import Deck
-from models.card_progress import CardProgress
 from app.services.flashcard_legacy import (
     LEGACY_BACK_TEMPLATE,
     LEGACY_FRONT_TEMPLATE,
@@ -161,7 +160,6 @@ def _seed_quiz_dump_for_user(*, user_id: int, note_type_id: str, template_id: st
                 removed_card_ids=existing_card_ids,
                 deleted_note_ids=existing_note_ids,
             )
-            CardProgress.query.filter(CardProgress.card_id.in_(existing_card_ids)).delete(synchronize_session=False)
         else:
             lifecycle_plan = study_progress_lifecycle_mirror_service.prepare_lifecycle_mirror(
                 db.session,
@@ -174,7 +172,6 @@ def _seed_quiz_dump_for_user(*, user_id: int, note_type_id: str, template_id: st
             source_path="seed.flama_template_replace",
             operation_key=f"seed-flama-template-replace:{deck.id}:{dump_file.name}",
         )
-        Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
         Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
 
     notes: list[Note] = []
@@ -198,8 +195,6 @@ def _seed_quiz_dump_for_user(*, user_id: int, note_type_id: str, template_id: st
     db.session.add_all(notes)
     db.session.flush()
 
-    db.session.add_all([Card(note_id=note.id, template_id=template_id) for note in notes])
-    db.session.flush()
     return deck, len(notes)
 
 def seed_template():
@@ -229,6 +224,9 @@ def seed_template():
             )
             user.set_password(admin_password)
             db.session.add(user)
+            db.session.flush()
+            from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+            enroll_new_learner_note_authority(db.session, user=user)
             db.session.commit()
             print(f"Đã tạo admin user mới: {admin_email}")
         else:
@@ -269,6 +267,9 @@ def seed_template():
                 )
                 test_user.set_password(test_password)
                 db.session.add(test_user)
+                db.session.flush()
+                from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+                enroll_new_learner_note_authority(db.session, user=test_user)
                 db.session.commit()
                 print(f"Đã tạo test user: {test_email}")
             else:

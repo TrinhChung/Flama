@@ -54,6 +54,12 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
             self.note_id = card.note_id
             self.note_type_id = card.note.note_type_id
             self.template_ids = [db.session.get(Card, card_id).template_id for card_id in self.card_ids]
+            from app.repositories.study_authority_repository import lock_study_authority_route
+            from app.services.study_note_pristine_service import materialize_pristine_notes
+            route = lock_study_authority_route(db.session, learner_user_id=self.user_id)
+            materialize_pristine_notes(db.session, route=route, cards=Card.query.all(),
+                                      starting_ease_by_note_id={self.note_id: 2.5}, now_utc=_now())
+            db.session.commit()
             engine = db.engine
         self.old_table_statements = []
 
@@ -148,7 +154,6 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
                         field_values={"Word": word})
             db.session.add(note)
             db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=template_card.template_id))
             db.session.commit()
             return note.id
 
@@ -246,7 +251,7 @@ class StudyConsolidatedProgressTests(unittest.TestCase):
 
         reset = self.client.post(f"/api/decks/{self.deck_id}/progress-reset")
         self.assertEqual(reset.status_code, 200, reset.get_json())
-        self.assertEqual(reset.get_json()["deleted_progress_count"], 2)
+        self.assertEqual(reset.get_json()["deleted_progress_count"], 3)
         with self.app.app_context():
             after_reset = self._row()
             self.assertEqual(

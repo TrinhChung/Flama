@@ -12,7 +12,9 @@ from app.services import (
 )
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from models.deck_install import DeckInstall
@@ -54,16 +56,18 @@ class DeckAutoPublishAndAutoUpdateTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
 
     def _seed_fixture(self):
-        creator = User(username="creator", email="creator@example.com")
+        creator = create_note_user(db.session, username="creator", email="creator@example.com")
         creator.set_password("password")
-        subscriber1 = User(username="sub1", email="sub1@example.com")
+        subscriber1 = create_note_user(db.session, username="sub1", email="sub1@example.com")
         subscriber1.set_password("password")
-        subscriber2 = User(username="sub2", email="sub2@example.com")
+        subscriber2 = create_note_user(db.session, username="sub2", email="sub2@example.com")
         subscriber2.set_password("password")
         db.session.add_all([creator, subscriber1, subscriber2])
         db.session.flush()
 
         note_type = NoteType(user_id=creator.id, name="Vocabulary")
+        db.session.add(note_type)
+        db.session.flush()
         db.session.add(note_type)
         db.session.flush()
 
@@ -84,7 +88,7 @@ class DeckAutoPublishAndAutoUpdateTests(unittest.TestCase):
         db.session.add_all([front_field, back_field])
         db.session.flush()
 
-        template = Template(
+        template = attach_template(db.session, owner_user_id=db.session.get(NoteType, note_type.id).user_id,
             note_type_id=note_type.id,
             name="Card 1",
             front_html="{{Front}}",
@@ -112,12 +116,7 @@ class DeckAutoPublishAndAutoUpdateTests(unittest.TestCase):
         db.session.add(note)
         db.session.flush()
 
-        card = Card(
-            note_id=note.id,
-            template_id=template.id,
-        )
-        db.session.add(card)
-        db.session.flush()
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
 
         item = DeckMarketplaceItem(
             owner_user_id=creator.id,
@@ -171,7 +170,7 @@ class DeckAutoPublishAndAutoUpdateTests(unittest.TestCase):
         db.session.add(install1)
         db.session.flush()
 
-        sub1_progress = CardProgress(
+        sub1_progress = stage_note_state(db.session,
             user_id=subscriber1.id,
             card_id=card.id,
             queue="review",
@@ -282,14 +281,11 @@ class DeckAutoPublishAndAutoUpdateTests(unittest.TestCase):
         self.assertIsNotNone(install1.last_auto_updated_at)
 
         # 6. Verify Subscriber 1 Card learning progress is 100% PRESERVED
-        progress1 = CardProgress.query.filter_by(
-            user_id=self.ids["subscriber1_id"],
-            card_id=self.ids["card_id"],
-        ).first()
+        progress1 = decode_note_state(subject_for_card(db.session, user_id=self.ids["subscriber1_id"], card_id=self.ids["card_id"]))
         self.assertIsNotNone(progress1)
-        self.assertEqual(progress1.interval_days, 14)
-        self.assertEqual(progress1.ease_factor, 2.5)
-        self.assertEqual(progress1.queue, "review")
+        self.assertEqual(progress1.intervalDays, 14)
+        self.assertEqual(progress1.ease, 2.5)
+        self.assertEqual(progress1.type, "review")
 
         # 7. Verify Subscriber 2 (auto_update_enabled=False) remained on release 1.0.0
         install2 = DeckInstall.query.get(self.ids["install2_id"])

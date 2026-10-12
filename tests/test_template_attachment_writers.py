@@ -12,11 +12,13 @@ import unittest
 from datetime import datetime, timezone
 
 from app import create_app
+from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+from app.repositories import template_library_repository
 from app.connect import create_connect_app
 from app.services import mcp_tool_service, user_api_token_service
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -42,6 +44,7 @@ class NoteTypeTemplateMembershipTests(unittest.TestCase):
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
+            enroll_new_learner_note_authority(db.session, user=user)
             deck = Deck(owner_user_id=user.id, name="Sync")
             db.session.add(deck)
             db.session.commit()
@@ -66,9 +69,9 @@ class NoteTypeTemplateMembershipTests(unittest.TestCase):
     def _nt(self, index):
         return self.types[index]["id"]
 
-    def _legacy(self, index):
+    def _default_template(self, index):
         with self.app.app_context():
-            return Template.query.filter_by(note_type_id=self._nt(index)).order_by(Template.position).first().id
+            return next(row.template_id for row in template_library_repository.applications(db.session, self._nt(index)) if row.is_default)
 
     def _attach(self, index, template_id=None, bindings=True):
         data = {"template_id": template_id or self.template_id}
@@ -87,16 +90,16 @@ class NoteTypeTemplateMembershipTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()["id"]
 
-    def _second_legacy_template(self):
+    def _second_template(self):
         response = self.client.post(f"/api/note-types/{self._nt(0)}/templates", json={"name": "Card 2", "front_html": "{{Word}}", "back_html": "{{Word}}"})
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()["id"]
 
-    def _detach_legacy_origin(self, index):
-        # Received copies are attached with no origin NoteType.
+    def _assert_independent_attachment(self, index):
+        # Every definition is independent; only an application attaches it.
         with self.app.app_context():
-            Template.query.filter_by(note_type_id=self._nt(index)).one().note_type_id = None
-            db.session.commit()
+            self.assertNotIn("note_type_id", Template.__table__.c)
+            self.assertTrue(template_library_repository.applications(db.session, self._nt(index)))
 
     def _card_templates(self, note_ids):
         with self.app.app_context():
@@ -142,7 +145,7 @@ class NoteTypeTemplateMembershipTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_delete_from_note_type_detaches_shared_definition(self):
-        shared = self._second_legacy_template()
+        shared = self._second_template()
         notes = [self._note(0, "猫"), self._note(1, "犬")]
         self._attach(1, shared, bindings=False)
         before = self._card_templates(notes)
@@ -151,7 +154,11 @@ class NoteTypeTemplateMembershipTests(unittest.TestCase):
 
         response = self.client.delete(f"/api/note-types/{self._nt(0)}/templates/{shared}")
         self.assertEqual(response.status_code, 200, response.get_json())
-        self.assertEqual(self._card_templates(notes), before)
+        # One stops presenting the shared definition; Two keeps it (ADR P11).
+        self.assertEqual(self._card_templates(notes), {
+            notes[0]: [item for item in before[notes[0]] if item != shared],
+            notes[1]: before[notes[1]],
+        })
         with self.app.app_context():
             self.assertIsNotNone(db.session.get(Template, shared))
         self.assertEqual(self._application(0, shared).status_code, "RETIRED")
@@ -164,14 +171,19 @@ class NoteTypeTemplateMembershipTests(unittest.TestCase):
         self._attach(1)
         response = self.client.delete(f"/api/note-types/{self._nt(1)}/templates/{self.template_id}")
         self.assertEqual(response.status_code, 200, response.get_json())
-        self.assertEqual(self._application(1, self.template_id).status_code, "RETIRED")
-        self.assertIn(self.template_id, self._card_templates([note])[note])
+        application = self._application(1, self.template_id)
+        self.assertEqual(application.status_code, "RETIRED")
+        # The retired occurrence presents nothing; its Card stays addressable (ADR P11).
+        self.assertNotIn(self.template_id, self._card_templates([note])[note])
         with self.app.app_context():
+            from models.card import card_key, get_card
+
+            self.assertIsNotNone(get_card(db.session, card_key(note, application.id)))
             self.assertIsNone(db.session.get(Template, self.template_id).archived_at)
 
     def test_delete_requires_an_active_template_to_remain(self):
-        second = self._second_legacy_template()
-        first = self._application(0, self._legacy(0))
+        second = self._second_template()
+        first = self._application(0, self._default_template(0))
         response = self.client.delete(f"/api/note-types/{self._nt(0)}/template-applications/{first.id}")
         self.assertEqual(response.status_code, 200, response.get_json())
         response = self.client.delete(f"/api/note-types/{self._nt(0)}/templates/{second}")
@@ -180,36 +192,41 @@ class NoteTypeTemplateMembershipTests(unittest.TestCase):
         with self.app.app_context():
             self.assertIsNotNone(db.session.get(Template, second))
 
-    def test_unshared_legacy_delete_still_removes_definition_and_cards(self):
-        second = self._second_legacy_template()
+    def test_unshared_attachment_delete_preserves_definition_and_history(self):
+        second = self._second_template()
         note = self._note(0)
+        with self.app.app_context():
+            history_count = TemplateVersion.query.filter_by(template_id=second).count()
         response = self.client.delete(f"/api/note-types/{self._nt(0)}/templates/{second}")
         self.assertEqual(response.status_code, 200, response.get_json())
         with self.app.app_context():
-            self.assertIsNone(db.session.get(Template, second))
-        self.assertEqual(self._card_templates([note])[note], [self._legacy(0)])
+            self.assertIsNotNone(db.session.get(Template, second))
+            self.assertEqual(TemplateVersion.query.filter_by(template_id=second).count(), history_count)
+            self.assertEqual(StudyApplication.query.filter_by(note_type_id=self._nt(0), template_id=second).one().status_code,
+                             "RETIRED")
+        self.assertEqual(self._card_templates([note])[note], [self._default_template(0)])
 
     def test_csv_import_creates_cards_for_active_occurrences_only(self):
-        retired = self._second_legacy_template()
+        retired = self._second_template()
         response = self.client.delete(f"/api/note-types/{self._nt(0)}/template-applications/{self._application(0, retired).id}")
         self.assertEqual(response.status_code, 200, response.get_json())
         self._attach(0)
         notes = self._csv_import(0, ["犬", "猫"])
-        expected = sorted([self._legacy(0), self.template_id])
+        expected = sorted([self._default_template(0), self.template_id])
         self.assertEqual(self._card_templates(notes), {note: expected for note in notes})
         with self.app.app_context():
             statuses = {card.application.status_code for card in Card.query.filter(Card.note_id.in_(notes))}
         self.assertEqual(statuses, {"ACTIVE"})
 
     def test_csv_import_into_note_type_without_legacy_templates(self):
-        legacy = self._legacy(1)
-        self._detach_legacy_origin(1)
+        legacy = self._default_template(1)
+        self._assert_independent_attachment(1)
         notes = self._csv_import(1, ["犬"])
         self.assertEqual(self._card_templates(notes), {notes[0]: [legacy]})
 
     def test_sync_notes_materializes_attached_occurrences(self):
-        legacy = self._legacy(1)
-        self._detach_legacy_origin(1)
+        legacy = self._default_template(1)
+        self._assert_independent_attachment(1)
         self._attach(1)
         with self.app.app_context():
             result = mcp_tool_service.sync_notes(
@@ -245,6 +262,8 @@ class _ConnectHarness(unittest.TestCase):
             db.session.add(owner)
             db.session.flush()
             self.user_id = owner.id
+            from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+            enroll_new_learner_note_authority(db.session, user=owner)
             self.note_type_id, self.word_field_id, self.legacy_id = self._note_type("Yomitan Vocabulary")
             definition = Template(owner_user_id=owner.id, name="Reusable", front_html="{{term}}", back_html="{{FrontSide}}", input_schema=_SCHEMA)
             db.session.add_all([definition, Deck(owner_user_id=owner.id, name="Inbox")])
@@ -265,9 +284,12 @@ class _ConnectHarness(unittest.TestCase):
         db.session.flush()
         word = FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0, required=True, identity_role="primary")
         meaning = FieldDef(note_type_id=note_type.id, name="Meaning", field_type="text", position=1)
-        templates = [Template(note_type_id=note_type.id, name="Card 1", front_html="{{Word}}", back_html="{{Meaning}}", position=0, is_default=True)]
+        db.session.add_all([word, meaning])
+        db.session.flush()
+        templates = [template_library_repository.create_attached_template(db.session, note_type=note_type,
+                     name="Card 1", front_html="{{Word}}", back_html="{{Meaning}}", position=0, is_default=True)]
         if extra_template:
-            templates.append(Template(note_type_id=note_type.id, name="Card 2", front_html="{{Meaning}}", back_html="{{Word}}", position=1))
+            templates.append(template_library_repository.create_attached_template(db.session, note_type=note_type, name="Card 2", front_html="{{Meaning}}", back_html="{{Word}}", position=1))
         db.session.add_all([word, meaning, *templates])
         db.session.flush()
         return note_type.id, word.id, templates[0].id
@@ -317,12 +339,22 @@ class ConnectAttachmentImportTests(_ConnectHarness):
         cards = self._cards()
         self.assertEqual(set(cards), {self.legacy_id, self.template_id})
         with self.app.app_context():
-            db.session.add(CardProgress(user_id=self.user_id, card_id=cards[self.template_id]))
+            note_id = Card.query.filter_by(id=cards[self.template_id]).one().note_id
+            subject = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id, live_note_id=note_id).first()
+            if subject is None:
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
+                subject = StudyProgressSubject(learner_user_id=self.user_id, live_note_id=note_id,
+                    logical_note_key=note_id.encode("utf-8"), subject_generation=1, mirror_revision=0,
+                    status_code="NO_CURRENT_PROGRESS", contributor_count=0, created_at=now, updated_at=now)
+                db.session.add(subject)
             db.session.commit()
+            subject_id, generation, revision = subject.id, subject.subject_generation, subject.authority_revision
         self._import(session_id, "kitten", "2" * 64)
         self.assertEqual(self._cards(), cards)
         with self.app.app_context():
-            self.assertEqual(CardProgress.query.filter_by(card_id=cards[self.template_id]).count(), 1)
+            preserved = db.session.get(StudyProgressSubject, subject_id)
+            self.assertEqual((preserved.live_note_id, preserved.subject_generation, preserved.authority_revision),
+                             (note_id, generation, revision))
 
     def test_import_creates_and_reimport_preserves_attached_definition_cards(self):
         self._assert_reimport_keeps_attached_card()
@@ -339,7 +371,7 @@ class ConnectAttachmentImportTests(_ConnectHarness):
     def test_import_targets_note_type_without_legacy_templates(self):
         with self.app.app_context():
             # A received NoteType reaches its copy only through an occurrence.
-            db.session.get(Template, self.legacy_id).note_type_id = None
+            self.assertNotIn("note_type_id", Template.__table__.c)
             StudyApplication.query.filter_by(template_id=self.template_id).one().status_code = "RETIRED"
             db.session.commit()
         self._import(self._session(), "cat", "1" * 64)
@@ -351,14 +383,11 @@ class McpTemplateRemovalTests(_ConnectHarness):
         super().setUp()
         with self.app.app_context():
             self.source_id, _word, _legacy = self._note_type("Source", extra_template=True)
-            self.shared_id = Template.query.filter_by(note_type_id=self.source_id, name="Card 2").one().id
+            self.shared_id = next(row.id for row in template_library_repository.attached_templates(db.session, self.source_id) if row.name == "Card 2")
             db.session.add(StudyApplication(note_type_id=self.note_type_id, template_id=self.shared_id, occurrence_key="compat", status_code="ACTIVE", input_bindings={}, position=2))
             for note_type_id in (self.source_id, self.note_type_id):
-                note = Note(user_id=self.user_id, note_type_id=note_type_id, field_values={"Word": "猫", "Meaning": "cat"})
-                db.session.add(note)
-                db.session.flush()
-                from app.repositories.template_library_repository import create_cards_for_note
-                create_cards_for_note(db.session, note)
+                # Each Note presents its NoteType's occurrences (ADR P11).
+                db.session.add(Note(user_id=self.user_id, note_type_id=note_type_id, field_values={"Word": "猫", "Meaning": "cat"}))
             db.session.commit()
 
     def _remove_shared(self):

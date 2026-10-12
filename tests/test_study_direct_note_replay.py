@@ -8,12 +8,12 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app import create_app
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent, archive_wire_alias
 from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
 from app.services.study_progress_shadow_codec import canonical_document
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -41,6 +41,7 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
             user = User(username="direct-replay", email="direct-replay@example.test")
             db.session.add(user)
             db.session.flush()
+            enroll_note_user(db.session, user)
             deck = Deck(name="Direct replay", owner_user_id=user.id)
             note_type = NoteType(name="Direct replay", user_id=user.id)
             db.session.add_all([deck, note_type])
@@ -51,14 +52,12 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
             db.session.flush()
             cards = []
             for index in range(2):
-                template = Template(note_type_id=note_type.id, name=f"Card {index}",
+                template = attach_template(db.session, note_type_id=note_type.id, owner_user_id=note_type.user_id, name=f"Card {index}",
                     front_html="{{Word}}", back_html="{{Word}}", is_default=index == 0)
                 db.session.add(template)
                 db.session.flush()
-                card = Card(note_id=note.id, template_id=template.id)
-                db.session.add(card)
-                cards.append(card)
-            db.session.flush()
+                # The Template's occurrence presents it on the Note (ADR P11).
+                cards.append(Card.query.filter_by(note_id=note.id, template_id=template.id).one())
             self.user_id, self.deck_id = user.id, deck.id
             self.card_ids = [card.id for card in cards]
             db.session.commit()
@@ -90,7 +89,7 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
             self.assertEqual(AuditLog.query.filter_by(action="study.answer").count(), count)
             self.assertEqual(StudyProgressSubject.query.one().authority_revision, count)
             # The Note's one row holds its state; no Card carries progress (ADR P10).
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
     def test_retry_returns_original_result_without_executing_scheduler_or_side_effects(self):
         original = self._answer()
@@ -127,6 +126,69 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
                 self.assertEqual(result["error"], "AUTHORITY_OPERATION_REUSED")
         result = self._answer(card_id=self.card_ids[1], expected=409)
         self.assertEqual(result["error"], "AUTHORITY_OPERATION_REUSED")
+        self._counts()
+
+    def test_old_uuid_replays_exact_receipt_without_canonicalizing_wire_identity(self):
+        old_uuid = str(uuid4())
+        with self.app.app_context():
+            archive_wire_alias(db.session, db.session.get(Card, self.card_ids[0]), old_uuid)
+            db.session.commit()
+
+        original = self._answer(card_id=old_uuid)
+        with self.app.app_context():
+            event = ReviewEvent.query.one()
+            receipt = StudyAuthorityCommandReceipt.query.one()
+            self.assertEqual(event.card_id, old_uuid)
+            evidence_before = (event.payload_json, receipt.request_fingerprint, receipt.response_payload)
+
+        with patch("app.services.study_service.execute_native_review_transition",
+                   side_effect=AssertionError("old UUID receipt executed twice")):
+            replay = self._answer(card_id=old_uuid)
+        self.assertEqual(replay["authority"], {**original["authority"], "replayed": True})
+        self.assertEqual(replay["intervals_preview"], original["intervals_preview"])
+        canonical_retry = self._answer(card_id=self.card_ids[0], expected=409)
+        self.assertEqual(canonical_retry["error"], "AUTHORITY_OPERATION_REUSED")
+        with self.app.app_context():
+            event = ReviewEvent.query.one()
+            receipt = StudyAuthorityCommandReceipt.query.one()
+            self.assertEqual(event.card_id, old_uuid)
+            self.assertEqual((event.payload_json, receipt.request_fingerprint, receipt.response_payload), evidence_before)
+        self._counts()
+
+    def test_pre_cutover_uuid_only_revision_vector_replays_without_being_expanded(self):
+        old_ids = [str(uuid4()) for _ in self.card_ids]
+        with self.app.app_context():
+            for card_id, old_id in zip(self.card_ids, old_ids):
+                archive_wire_alias(db.session, db.session.get(Card, card_id), old_id)
+            db.session.commit()
+        original = self._answer(card_id=old_ids[0])
+        with self.app.app_context():
+            receipt = StudyAuthorityCommandReceipt.query.one()
+            # Reconstruct the accepted pre-P11 response vector: its keys were
+            # only physical Card UUIDs. The current runtime must replay it as
+            # stored, even though current discovery uses Note/application keys.
+            payload = deepcopy(receipt.response_payload)
+            payload["projected_card_revisions"] = {
+                old_id: payload["projected_card_revisions"][old_id] for old_id in old_ids
+            }
+            frozen = canonical_document(payload, too_large_code="TOO_LARGE")
+            receipt.response_payload = frozen.payload
+            receipt.response_payload_size = frozen.size
+            receipt.response_payload_hash = frozen.digest
+            db.session.commit()
+            before = (bytes(receipt.request_fingerprint), receipt.response_payload,
+                receipt.response_payload_size, bytes(receipt.response_payload_hash))
+        with patch("app.services.study_service.execute_native_review_transition",
+                   side_effect=AssertionError("historical UUID receipt executed twice")):
+            replay = self._answer(card_id=old_ids[0])
+        self.assertEqual(replay["authority"], {**original["authority"], "replayed": True})
+        self.assertEqual(replay["intervals_preview"], original["intervals_preview"])
+        with self.app.app_context():
+            receipt = StudyAuthorityCommandReceipt.query.one()
+            self.assertEqual((bytes(receipt.request_fingerprint), receipt.response_payload,
+                receipt.response_payload_size, bytes(receipt.response_payload_hash)), before)
+            self.assertEqual(set(receipt.response_payload["projected_card_revisions"]), set(old_ids))
+            self.assertEqual(ReviewEvent.query.one().card_id, old_ids[0])
         self._counts()
 
     def test_uncertain_commit_replays_receipt_without_second_event(self):

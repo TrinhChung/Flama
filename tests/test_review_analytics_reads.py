@@ -21,6 +21,7 @@ from models.deck import Deck
 from models.flashcard import ReviewEvent
 from models.review_analytics import DailyReviewCount, ReviewAnalyticsGeneration, ReviewAnalyticsHead
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 class ReviewAnalyticsReadTests(unittest.TestCase):
@@ -32,7 +33,7 @@ class ReviewAnalyticsReadTests(unittest.TestCase):
         })
         self.context = self.app.app_context()
         self.context.push()
-        user = User(username="projection-reader", email="projection-reader@example.com", timezone="UTC")
+        user = create_note_user(db.session, username="projection-reader", email="projection-reader@example.com", timezone="UTC")
         user.set_password("password")
         db.session.add(user)
         db.session.flush()

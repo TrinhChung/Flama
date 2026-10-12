@@ -17,7 +17,6 @@ from app.repositories.study_repository import (
     effective_due_at_for_progress_values,
     normalize_progress_queue as _normalize_progress_queue,
 )
-from models.card_progress import CardProgress
 from models.field_types import field_value_text
 from models.flashcard import Card, Note
 
@@ -229,7 +228,7 @@ def browse_status_code(*, queue: str | None, due_at: datetime | None, now: datet
 
 def resolve_browse_queue_due(
     *,
-    progress_obj: CardProgress | None,
+    progress_obj: Any | None,
     now: datetime,
     timezone_name: str = "UTC",
 ) -> tuple[str, datetime | None]:
@@ -251,7 +250,7 @@ def build_browse_row(
     card_obj: Card,
     deck_name_lookup: dict[int, str],
     now: datetime,
-    progress_obj: CardProgress | None = None,
+    progress_obj: Any | None = None,
     timezone_name: str = "UTC",
 ) -> dict[str, Any]:
     note_obj = card_obj.note
@@ -296,7 +295,7 @@ def build_browse_card_detail(
     card_obj: Card,
     deck_name_lookup: dict[int, str],
     now: datetime,
-    progress_obj: CardProgress | None = None,
+    progress_obj: Any | None = None,
     timezone_name: str = "UTC",
 ) -> dict[str, Any]:
     note_obj = card_obj.note

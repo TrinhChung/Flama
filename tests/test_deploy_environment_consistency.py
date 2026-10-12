@@ -14,6 +14,7 @@ from models import db
 from models.deck import Deck
 from models.flashcard import MediaAsset
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _BOOTSTRAP_SCRIPT = _REPO_ROOT / "deploy" / "bootstrap_hostinger.sh"
@@ -57,7 +58,7 @@ class DeployEnvironmentConsistencyTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin", email="admin-consistency@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin", email="admin-consistency@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
             db.session.flush()

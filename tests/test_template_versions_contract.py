@@ -22,6 +22,7 @@ from models.note_type import NoteType
 from models.template import Template
 from models.template_version import TemplateVersion
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 class TemplateVersionsContractTests(TestCase):
@@ -39,9 +40,9 @@ class TemplateVersionsContractTests(TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
-            user = User(username="owner", email="owner@example.com", is_admin=True)
+            user = create_note_user(db.session, username="owner", email="owner@example.com", is_admin=True)
             user.set_password("password")
-            other = User(username="other", email="other@example.com")
+            other = create_note_user(db.session, username="other", email="other@example.com")
             other.set_password("password")
             db.session.add_all([user, other])
             db.session.flush()
@@ -363,7 +364,7 @@ class TemplateVersionsContractTests(TestCase):
         with self.app.app_context():
             db.session.execute(insert(Template.__table__).values(
                 id=template_id,
-                note_type_id=self.nt_id,
+                owner_user_id=self.user_id,
                 name="Raw SQL Template",
                 front_html="<raw>{{Kanji}}</raw>",
                 back_html="<raw>{{Meaning}}</raw>",

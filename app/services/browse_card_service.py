@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from flask import current_app
-from sqlalchemy import case, false, func, select
+from sqlalchemy import LargeBinary, case, cast, false, func
 from sqlalchemy.orm import aliased, selectinload
 
 UTC = timezone.utc
@@ -26,8 +26,6 @@ from app.repositories.study_repository import (
     RELEARNING_QUEUE,
     REVIEW_QUEUE,
     active_progress_expr,
-    load_card_progress_map,
-    normalized_queue_expr,
     review_due_expr,
 )
 from app.services.scheduler_config_service import (
@@ -51,8 +49,8 @@ from app.validators import (
     validate_legacy_browse_note_update_request,
 )
 from models import db
-from models.card_progress import CardProgress
 from models.study_progress_subject import StudyProgressSubject
+from models.card import forget_card_identities, get_card, load_cards
 from models.deck import Deck
 from models.field_types import stored_field_value
 from models.flashcard import Card, DeckInstall, Note, NoteType
@@ -183,60 +181,58 @@ def build_browse_deck_tree(
             admin_mode=admin_mode,
             timezone_name=timezone_name,
             # NOTE recounts every node below; skip the projection aggregate.
-            progress_counts=authority_route.mode_code != "NOTE",
+            progress_counts=False,
         )
-        if authority_route.mode_code == "NOTE":
-            deck_ids: set[int] = set()
+        deck_ids: set[int] = set()
 
-            def collect_deck_ids(nodes: list[dict[str, Any]]) -> None:
-                for node in nodes:
-                    deck_ids.add(int(node["id"]))
-                    collect_deck_ids(node.get("children", []))
+        def collect_deck_ids(nodes: list[dict[str, Any]]) -> None:
+            for node in nodes:
+                deck_ids.add(int(node["id"]))
+                collect_deck_ids(node.get("children", []))
 
-            collect_deck_ids(tree)
-            # Same scope as the LEGACY tree: admin-wide counts every Note in the
-            # visible decks (with the admin's own state); a learner counts owned
-            # Notes plus logical-overlay source Cards under their local deck.
-            # Counted set-wise from canonical availability, like the dashboard,
-            # instead of one locking authority read per Card (P5-11e).
-            boundary_hour = int(resolve_scheduler_runtime_settings(user_id=user_id).day_boundary_hour_local)
-            today_day_index = study_repository._today_day_index(
-                now=_utcnow(),
-                timezone_name=timezone_name,
-                day_boundary_hour_local=boundary_hour,
-            )
-            direct_counts, _note_types = aggregate_deck_study_counts(
-                db.session,
-                learner_user_id=user_id,
-                visible_deck_ids=sorted(deck_ids),
-                today_day_index=today_day_index,
-                day_cutoff_utc=_day_index_to_datetime(
-                    today_day_index + 1, boundary_hour, timezone_name=timezone_name,
-                ),
-                is_note_mode=True,
-                admin_mode=admin_mode,
-                # D6-04: all Cards of a Note share one NOTE state.
-                count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
-                owned_by_any_user=admin_mode,
-                include_note_types=False,
-            )
+        collect_deck_ids(tree)
+        # Admin-wide counts every Note in the
+        # visible decks (with the admin's own state); a learner counts owned
+        # Notes plus logical-overlay source Cards under their local deck.
+        # Counted set-wise from canonical availability, like the dashboard,
+        # instead of one locking authority read per Card (P5-11e).
+        boundary_hour = int(resolve_scheduler_runtime_settings(user_id=user_id).day_boundary_hour_local)
+        today_day_index = study_repository._today_day_index(
+            now=_utcnow(),
+            timezone_name=timezone_name,
+            day_boundary_hour_local=boundary_hour,
+        )
+        direct_counts, _note_types = aggregate_deck_study_counts(
+            db.session,
+            learner_user_id=user_id,
+            visible_deck_ids=sorted(deck_ids),
+            today_day_index=today_day_index,
+            day_cutoff_utc=_day_index_to_datetime(
+                today_day_index + 1, boundary_hour, timezone_name=timezone_name,
+            ),
+            admin_mode=admin_mode,
+            # D6-04: all Cards of a Note share one NOTE state.
+            count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
+            owned_by_any_user=admin_mode,
+            include_note_types=False,
+        )
 
-            def rebuild_counts(node: dict[str, Any]) -> dict[str, int]:
-                counts = dict(
-                    direct_counts.get(
-                        int(node["id"]),
-                        {"total": 0, "new": 0, "learn": 0, "due": 0},
-                    )
+        def rebuild_counts(node: dict[str, Any]) -> dict[str, int]:
+            counts = dict(
+                direct_counts.get(
+                    int(node["id"]),
+                    {"total": 0, "new": 0, "learn": 0, "due": 0},
                 )
-                for child in node.get("children", []):
-                    child_counts = rebuild_counts(child)
-                    for key in ("total", "new", "learn", "due"):
-                        counts[key] += int(child_counts[key])
-                node["counts"] = counts
-                return counts
+            )
+            for child in node.get("children", []):
+                child_counts = rebuild_counts(child)
+                for key in ("total", "new", "learn", "due"):
+                    counts[key] += int(child_counts[key])
+            node["counts"] = counts
+            return counts
 
-            for root in tree:
-                rebuild_counts(root)
+        for root in tree:
+            rebuild_counts(root)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         raise BrowseApiError(
@@ -305,44 +301,43 @@ def _load_mode_aware_browse_progress(
             learner_user_id=user_id,
             allow_note_authority=True,
         )
-        if route.mode_code == "NOTE":
-            if card_obj.note is None:
+        if card_obj.note is None:
+            raise StudyAuthorityReadError(
+                "NOTE_BROWSE_CONTEXT_UNAVAILABLE",
+                "NOTE authority Browse cannot read a Card without a Note.",
+            )
+        options_deck_id = card_obj.note.deck_id
+        if int(card_obj.note.user_id) != int(user_id) and not admin_mode:
+            # Only a visible logical-overlay source Card may be read.
+            from app.services import flashcards_share as share_ctrl
+
+            clone_scope = share_ctrl.resolve_clone_scope_for_card(
+                user_id=user_id,
+                card_obj=card_obj,
+            )
+            if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
+                scope=clone_scope,
+                card_obj=card_obj,
+            ):
                 raise StudyAuthorityReadError(
                     "NOTE_BROWSE_CONTEXT_UNAVAILABLE",
-                    "NOTE authority Browse cannot read a Card without a Note.",
+                    "NOTE authority Browse cannot read a foreign source Card.",
                 )
-            options_deck_id = card_obj.note.deck_id
-            if int(card_obj.note.user_id) != int(user_id) and not admin_mode:
-                # Only a visible logical-overlay source Card may be read.
-                from app.services import flashcards_share as share_ctrl
-
-                clone_scope = share_ctrl.resolve_clone_scope_for_card(
-                    user_id=user_id,
-                    card_obj=card_obj,
-                )
-                if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
-                    scope=clone_scope,
-                    card_obj=card_obj,
-                ):
-                    raise StudyAuthorityReadError(
-                        "NOTE_BROWSE_CONTEXT_UNAVAILABLE",
-                        "NOTE authority Browse cannot read a foreign source Card.",
-                    )
-                options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
-                    int(card_obj.note.deck_id or 0)
-                ) or clone_scope.install.local_deck_id
-            authority_read = load_study_authority_card_read(
-                db.session,
-                learner_user_id=user_id,
-                card=card_obj,
-                now_utc=now_utc,
-                timezone_name=timezone_name,
-                deck_options=resolve_deck_options(
-                    user_id=user_id,
-                    deck_id=options_deck_id,
-                ),
-            )
-            return _authority_progress_view(authority_read)
+            options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
+                int(card_obj.note.deck_id or 0)
+            ) or clone_scope.install.local_deck_id
+        authority_read = load_study_authority_card_read(
+            db.session,
+            learner_user_id=user_id,
+            card=card_obj,
+            now_utc=now_utc,
+            timezone_name=timezone_name,
+            deck_options=resolve_deck_options(
+                user_id=user_id,
+                deck_id=options_deck_id,
+            ),
+        )
+        return _authority_progress_view(authority_read)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         raise BrowseApiError(
@@ -350,19 +345,15 @@ def _load_mode_aware_browse_progress(
             status=409,
             code=str(exc.code),
         ) from exc
-    return browse_card_repository.load_browse_progress(
-        user_id=user_id,
-        card_id=card_obj.id,
-    )
 
 
 def _join_note_availability(query, *, learner_user_id: int):
-    """Outer-join each Card's Note row; expose CardProgress-named columns (ADR P10 §2.7)."""
+    """Outer-join each Card's canonical Note availability (ADR P10 §2.7)."""
 
     subject = aliased(StudyProgressSubject)
     query = query.outerjoin(subject, db.and_(
         subject.learner_user_id == int(learner_user_id),
-        subject.live_note_id == Card.note_id,
+        subject.logical_note_key == cast(Card.note_id, LargeBinary),
     ))
     return query, SimpleNamespace(
         id=case((subject.semantic_state_hash.isnot(None), subject.id), else_=None),
@@ -372,6 +363,9 @@ def _join_note_availability(query, *, learner_user_id: int):
         is_suspended=subject.is_suspended,
         is_buried=subject.is_buried,
         buried_until_day=subject.buried_until_day,
+        integrity_violation=note_analytics_read_repository.subject_integrity_violation(
+            subject, note_id=Card.note_id, learner_user_id=learner_user_id,
+        ),
     )
 
 
@@ -461,16 +455,9 @@ def list_browse_cards(
             selected_ids = {selected_deck_id}
 
     query = Card.query.join(Note, Card.note_id == Note.id)
-    if authority_route.mode_code == "NOTE":
-        # Status and due order come from the learner's Note row (verified
-        # below), NULL for pristine Notes; card_progress is LEGACY only.
-        query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
-    else:
-        progress_alias = aliased(CardProgress)
-        query = query.outerjoin(progress_alias, db.and_(
-            progress_alias.card_id == Card.id,
-            progress_alias.user_id == user_id,
-        ))
+    # Status and due order come from the learner's Note row (verified
+    # on the returned page), NULL for pristine Notes.
+    query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
     query = query.options(
         selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
         selectinload(Card.template),
@@ -747,57 +734,37 @@ def list_browse_cards(
         )
 
     now = _utcnow()
-    authority_reads: Mapping[str, StudyAuthorityCardRead] | None = None
-    is_note_mode = authority_route.mode_code == "NOTE"
-    if is_note_mode:
-        # Verify every visible candidate (owned and logical-overlay source)
-        # against canonical NOTE state before the shared status/sort SQL runs,
-        # set-wise with the locking reader's codes as the dashboard does
-        # (P5-11e); the page's Cards get the full locking read below. A
-        # never-studied Note has no row in either model; any divergence fails
-        # closed instead of silently serving CardProgress.
-        candidate_scope = (
-            query.with_entities(
-                Note.deck_id.label("deck_id"),
-                Card.id.label("card_id"),
-                Card.note_id.label("note_id"),
-            )
-            .order_by(None)
-            .subquery("browse_candidates")
-        )
-        verified = note_analytics_read_repository.note_card_rows(
-            candidate_scope,
-            learner_user_id=user_id,
-            storage_profile=authority_route.storage_profile,
-        ).subquery("browse_candidate_rows")
-        worst = int(db.session.execute(select(func.max(verified.c.violation))).scalar() or 0)
-        if not worst:
-            worst = note_analytics_read_repository.subject_vector_violation(
-                db.session, scope=candidate_scope, learner_user_id=user_id,
-                storage_profile=authority_route.storage_profile,
-            )
-        violation = note_analytics_read_repository.violation_error(worst)
-        if violation is not None:
-            db.session.rollback()
-            raise BrowseApiError(violation[1], status=409, code=violation[0])
-    normalized_progress_queue = normalized_queue_expr(progress_alias)
-    query = query.filter(active_progress_expr(progress_alias))
+    # Consolidated availability is already a normalized, writer-owned enum.
+    normalized_progress_queue = progress_alias.queue
+    eligible = active_progress_expr(progress_alias)
     if status == NEW_QUEUE:
-        query = query.filter(
+        eligible = db.and_(eligible,
             db.or_(
                 progress_alias.id.is_(None),
                 normalized_progress_queue == NEW_QUEUE,
             )
         )
     elif status == "learn":
-        query = query.filter(
+        eligible = db.and_(eligible,
             normalized_progress_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE])
         )
     elif status in {"due", REVIEW_QUEUE}:
-        query = query.filter(
+        eligible = db.and_(eligible,
             normalized_progress_queue == REVIEW_QUEUE,
-            review_due_expr(progress_alias, now=now),
+            review_due_expr(progress_alias, now=now, timezone_name=timezone_name,
+                            day_boundary_hour_local=int(resolve_scheduler_runtime_settings(
+                                user_id=user_id,
+                            ).day_boundary_hour_local)),
         )
+
+    total, worst = browse_card_repository.page_total_and_integrity(
+        query, eligible=eligible, violation=progress_alias.integrity_violation,
+    )
+    violation = note_analytics_read_repository.violation_error(worst)
+    if violation is not None:
+        db.session.rollback()
+        raise BrowseApiError(violation[1], status=409, code=violation[0])
+    query = query.filter(eligible)
 
     if sort_by == "deck":
         query = query.outerjoin(Deck, Note.deck_id == Deck.id)
@@ -855,42 +822,39 @@ def list_browse_cards(
                 Card.updated_at.desc(),
             )
 
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    if is_note_mode:
-        options_by_deck_id: dict[int | None, Any] = {}
-        deck_options_by_card_id: dict[str, Any] = {}
-        for card_obj in pagination.items:
-            note_obj = card_obj.note
-            # Overlay source Cards use the learner's mapped local deck options.
-            effective_deck_id = int(note_obj.deck_id) if note_obj.deck_id is not None else None
-            if effective_deck_id is not None and note_obj.user_id != user_id:
-                effective_deck_id = source_to_local_deck_id.get(effective_deck_id, effective_deck_id)
-            if effective_deck_id not in options_by_deck_id:
-                options_by_deck_id[effective_deck_id] = resolve_deck_options(
-                    user_id=user_id,
-                    deck_id=effective_deck_id,
-                )
-            deck_options_by_card_id[str(card_obj.id)] = options_by_deck_id[effective_deck_id]
-        try:
-            authority_reads = load_study_authority_card_reads(
-                db.session,
-                learner_user_id=user_id,
-                cards=tuple(pagination.items),
-                now_utc=now,
-                timezone_name=timezone_name,
-                deck_options_by_card_id=deck_options_by_card_id,
+    query = query.order_by(Card.id.asc())
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False, count=False)
+    pagination.total = total
+    options_by_deck_id: dict[int | None, Any] = {}
+    deck_options_by_card_id: dict[str, Any] = {}
+    for card_obj in pagination.items:
+        note_obj = card_obj.note
+        # Overlay source Cards use the learner's mapped local deck options.
+        effective_deck_id = int(note_obj.deck_id) if note_obj.deck_id is not None else None
+        if effective_deck_id is not None and note_obj.user_id != user_id:
+            effective_deck_id = source_to_local_deck_id.get(effective_deck_id, effective_deck_id)
+        if effective_deck_id not in options_by_deck_id:
+            options_by_deck_id[effective_deck_id] = resolve_deck_options(
+                user_id=user_id,
+                deck_id=effective_deck_id,
             )
-        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-            db.session.rollback()
-            raise BrowseApiError(
-                str(exc),
-                status=409,
-                code=str(exc.code),
-            ) from exc
-    progress_map = {} if authority_reads is not None else load_card_progress_map(
-        user_id=user_id,
-        card_ids=[card_obj.id for card_obj in pagination.items],
-    )
+        deck_options_by_card_id[str(card_obj.id)] = options_by_deck_id[effective_deck_id]
+    try:
+        authority_reads = load_study_authority_card_reads(
+            db.session,
+            learner_user_id=user_id,
+            cards=tuple(pagination.items),
+            now_utc=now,
+            timezone_name=timezone_name,
+            deck_options_by_card_id=deck_options_by_card_id,
+        )
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        raise BrowseApiError(
+            str(exc),
+            status=409,
+            code=str(exc.code),
+        ) from exc
     clone_scope_by_card_id: dict[str, Any] = {}
     release_note_ids: dict[str, set[str]] = {}
     release_install_by_id: dict[str, Any] = {}
@@ -950,11 +914,7 @@ def list_browse_cards(
             card_obj,
             deck_lookup,
             now,
-            progress_obj=(
-                _authority_progress_view(authority_reads[str(card_obj.id)])
-                if authority_reads is not None
-                else progress_map.get(card_obj.id)
-            ),
+            progress_obj=_authority_progress_view(authority_reads[str(card_obj.id)]),
             timezone_name=timezone_name,
         )
         if not admin_mode and card_obj.note and card_obj.note.user_id != user_id:
@@ -1032,44 +992,38 @@ def get_browse_card_detail(
             if local_name:
                 deck_lookup.setdefault(int(source_deck_id), local_name)
 
-    if authority_route.mode_code == "NOTE":
-        # Admin-wide detail reads the admin's own state on any Card, as LEGACY.
-        if not admin_mode and clone_scope is None and card_obj.note.user_id != user_id:
-            raise BrowseApiError(
-                "NOTE authority Browse detail is unavailable for this Card context.",
-                status=409,
-                code="NOTE_BROWSE_CONTEXT_UNAVAILABLE",
-            )
-        options_deck_id = card_obj.note.deck_id
-        if clone_scope is not None:
-            options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
-                int(card_obj.note.deck_id or 0)
-            ) or clone_scope.install.local_deck_id
-        try:
-            authority_read = load_study_authority_card_read(
-                db.session,
-                learner_user_id=user_id,
-                card=card_obj,
-                now_utc=_utcnow(),
-                timezone_name=timezone_name,
-                deck_options=resolve_deck_options(
-                    user_id=user_id,
-                    deck_id=options_deck_id,
-                ),
-            )
-        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
-            db.session.rollback()
-            raise BrowseApiError(
-                str(exc),
-                status=409,
-                code=str(exc.code),
-            ) from exc
-        progress = _authority_progress_view(authority_read)
-    else:
-        progress = browse_card_repository.load_browse_progress(
-            user_id=user_id,
-            card_id=card_obj.id,
+    # Admin-wide detail reads the admin's own state on any Card.
+    if not admin_mode and clone_scope is None and card_obj.note.user_id != user_id:
+        raise BrowseApiError(
+            "NOTE authority Browse detail is unavailable for this Card context.",
+            status=409,
+            code="NOTE_BROWSE_CONTEXT_UNAVAILABLE",
         )
+    options_deck_id = card_obj.note.deck_id
+    if clone_scope is not None:
+        options_deck_id = (clone_scope.source_to_local_deck_id or {}).get(
+            int(card_obj.note.deck_id or 0)
+        ) or clone_scope.install.local_deck_id
+    try:
+        authority_read = load_study_authority_card_read(
+            db.session,
+            learner_user_id=user_id,
+            card=card_obj,
+            now_utc=_utcnow(),
+            timezone_name=timezone_name,
+            deck_options=resolve_deck_options(
+                user_id=user_id,
+                deck_id=options_deck_id,
+            ),
+        )
+    except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        db.session.rollback()
+        raise BrowseApiError(
+            str(exc),
+            status=409,
+            code=str(exc.code),
+        ) from exc
+    progress = _authority_progress_view(authority_read)
     payload = vocabulary_ctrl.build_browse_card_detail(
         card_obj,
         deck_lookup,
@@ -1124,9 +1078,6 @@ def _stage_browse_card_removal(
             card_ids=card_ids,
             deleted_note_ids=deleted_note_ids,
         )
-        CardProgress.query.filter(CardProgress.card_id.in_(list(card_ids))).delete(
-            synchronize_session=False
-        )
         content_delete.finalize_content_delete(
             lifecycle_plan,
             source_path=source_path,
@@ -1144,12 +1095,12 @@ def delete_browse_card(
     card_id: str,
 ) -> dict[str, bool]:
     clean_card_id = str(card_id).strip()
-    query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == clean_card_id)
+    query = Card.query.join(Note, Card.note_id == Note.id)
     if not admin_mode:
         query = query.filter(Note.user_id == user_id)
-    card_obj = query.first()
+    card_obj = get_card(db.session, clean_card_id, query=query)
     if not card_obj:
-        existing_card = Card.query.filter(Card.id == clean_card_id).first()
+        existing_card = get_card(db.session, clean_card_id)
         if existing_card is not None and not admin_mode:
             raise BrowseApiError(
                 "Không thể xóa thẻ thuộc bộ bài gốc được chia sẻ/clone. Bộ bài gốc được bảo vệ để không ảnh hưởng đến tác giả và những người học khác.",
@@ -1169,35 +1120,54 @@ def delete_browse_card(
             code="SHARED_ENTITY_RETIRE_REQUIRED",
         )
 
-    note_id = card_obj.note_id
-    note_will_be_deleted = (
-        Card.query.filter(Card.note_id == note_id).count() == 1
-    )
+    note_id = str(card_obj.note_id)
+    _require_whole_notes({note_id: {str(card_obj.id)}})
     _stage_browse_card_removal(
         user_id=user_id,
         owner_user_ids=(card_obj.note.user_id,),
         card_ids=(str(card_obj.id),),
-        deleted_note_ids=((str(note_id),) if note_will_be_deleted else ()),
+        deleted_note_ids=(note_id,),
         source_path="browse.card_delete",
         operation_key=f"browse-card-delete:{card_obj.id}",
     )
-    db.session.delete(card_obj)
-    db.session.flush()
-    if Card.query.filter(Card.note_id == note_id).count() == 0:
-        note_obj = db.session.get(Note, note_id)
-        if note_obj:
-            deck_working_tree_service.mark_note_field_batches_changed(
-                mutations=[
-                    {
-                        "note": note_obj,
-                        "field_names": (note_obj.field_values or {}).keys(),
-                        "operation": "remove",
-                    }
-                ],
-            )
-            db.session.delete(note_obj)
+    _delete_browse_notes([note_id])
     db.session.commit()
     return {"success": True}
+
+
+def _require_whole_notes(selected_by_note: dict[str, set[str]]) -> None:
+    """A Card is a Note shown through one occurrence (ADR P11): it is removed
+    with its Note, never alone. Selecting only some of a Note's Cards is
+    refused; retire the Template on the NoteType to stop presenting it."""
+    current: dict[str, set[str]] = {note_id: set() for note_id in selected_by_note}
+    for card in Card.query.filter(Card.note_id.in_(sorted(selected_by_note))).all():
+        current[str(card.note_id)].add(str(card.id))
+    if any(selected != current.get(note_id, set()) for note_id, selected in selected_by_note.items()):
+        raise BrowseApiError(
+            "Thẻ này là một mặt của note có nhiều template. Hãy xóa cả note, hoặc gỡ template khỏi note type.",
+            status=409,
+            code="CARD_PARTIAL_DELETE_UNSUPPORTED",
+        )
+
+
+def _delete_browse_notes(note_ids) -> None:
+    from app.services import deck_working_tree_service
+
+    for note_id in sorted(set(note_ids)):
+        note_obj = db.session.get(Note, note_id)
+        if note_obj is None:
+            continue
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=[
+                {
+                    "note": note_obj,
+                    "field_names": (note_obj.field_values or {}).keys(),
+                    "operation": "remove",
+                }
+            ],
+        )
+        forget_card_identities(db.session, (note_id,))
+        db.session.delete(note_obj)
 
 
 def delete_browse_cards_batch(
@@ -1215,16 +1185,13 @@ def delete_browse_cards_batch(
     if not clean_card_ids:
         return {"success": True, "deleted_count": 0}
 
-    query = (
-        Card.query.join(Note, Card.note_id == Note.id)
-        .filter(Card.id.in_(clean_card_ids))
-    )
+    query = Card.query.join(Note, Card.note_id == Note.id)
     if not admin_mode:
         query = query.filter(Note.user_id == user_id)
 
-    cards_to_delete = query.all()
+    cards_to_delete = list({card.id: card for card in load_cards(db.session, clean_card_ids, query=query).values()}.values())
     if not cards_to_delete:
-        existing_cards = Card.query.filter(Card.id.in_(clean_card_ids)).all()
+        existing_cards = load_cards(db.session, clean_card_ids)
         if existing_cards and not admin_mode:
             raise BrowseApiError(
                 "Không thể xóa các thẻ thuộc bộ bài gốc được chia sẻ/clone. Bộ bài gốc được bảo vệ để không ảnh hưởng đến tác giả và những người học khác.",
@@ -1244,50 +1211,22 @@ def delete_browse_cards_batch(
                 code="SHARED_ENTITY_RETIRE_REQUIRED",
             )
 
-    note_ids = {card_obj.note_id for card_obj in cards_to_delete if card_obj.note_id}
     deleted_count = len(cards_to_delete)
-
     selected_by_note: dict[str, set[str]] = {}
     for card_obj in cards_to_delete:
         selected_by_note.setdefault(str(card_obj.note_id), set()).add(str(card_obj.id))
-    all_cards_by_note: dict[str, set[str]] = {str(note_id): set() for note_id in note_ids}
-    for current in Card.query.filter(Card.note_id.in_(sorted(note_ids))).all():
-        all_cards_by_note[str(current.note_id)].add(str(current.id))
-    deleted_note_ids = {
-        note_id
-        for note_id, selected_ids in selected_by_note.items()
-        if selected_ids == all_cards_by_note.get(note_id, set())
-    }
+    _require_whole_notes(selected_by_note)
     deleted_card_ids = {str(card_obj.id) for card_obj in cards_to_delete}
     _stage_browse_card_removal(
         user_id=user_id,
         owner_user_ids={card_obj.note.user_id for card_obj in cards_to_delete if card_obj.note},
         card_ids=sorted(deleted_card_ids),
-        deleted_note_ids=sorted(deleted_note_ids),
+        deleted_note_ids=sorted(selected_by_note),
         source_path="browse.card_batch_delete",
         operation_key="browse-card-batch-delete:"
         + hashlib.sha256("\n".join(sorted(deleted_card_ids)).encode("utf-8")).hexdigest(),
     )
-
-    for card_obj in cards_to_delete:
-        db.session.delete(card_obj)
-    db.session.flush()
-
-    for note_id in note_ids:
-        remaining_cards_count = Card.query.filter(Card.note_id == note_id).count()
-        if remaining_cards_count == 0:
-            note_obj = db.session.get(Note, note_id)
-            if note_obj:
-                deck_working_tree_service.mark_note_field_batches_changed(
-                    mutations=[
-                        {
-                            "note": note_obj,
-                            "field_names": (note_obj.field_values or {}).keys(),
-                            "operation": "remove",
-                        }
-                    ],
-                )
-                db.session.delete(note_obj)
+    _delete_browse_notes(selected_by_note)
 
     db.session.commit()
     return {"success": True, "deleted_count": deleted_count}

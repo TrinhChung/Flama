@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from models import db
-from models.flashcard import Card, DeckInstall, Note
+from models.flashcard import DeckInstall, Note
 from models.deck import Deck
-from models.card_progress import CardProgress
+from models.study_progress_subject import StudyProgressSubject
 from sqlalchemy import or_
 
 
@@ -164,11 +164,10 @@ def query_accessible_stats_decks(*, user_id: int, admin_mode: bool) -> list[Deck
     # Backward-compatible fallback for decks created before owner_user_id was populated.
     note_deck_rows = (
         db.session.query(Note.deck_id)
-        .select_from(CardProgress)
-        .join(Card, CardProgress.card_id == Card.id)
-        .join(Note, Card.note_id == Note.id)
+        .select_from(StudyProgressSubject)
+        .join(Note, Note.id == StudyProgressSubject.live_note_id)
         .filter(
-            CardProgress.user_id == user_id,
+            StudyProgressSubject.learner_user_id == user_id,
             Note.deck_id.isnot(None),
         )
         .distinct()

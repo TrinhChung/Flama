@@ -47,7 +47,7 @@ def upgrade():
     op.execute(
         sa.text(
             "UPDATE users SET "
-            "email_verified_at = COALESCE(created_at, NOW()), "
+            "email_verified_at = COALESCE(created_at, CURRENT_TIMESTAMP), "
             "email_verification_source = 'legacy' "
             "WHERE email_verified_at IS NULL"
         )

@@ -39,7 +39,6 @@ from app.validators.flashcard_input import RequestValidationError, validate_note
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.connect_import_media import ConnectImportMedia
 from models.connect_import_package import ConnectImportPackage
 from models.connect_import_session import ConnectImportSession

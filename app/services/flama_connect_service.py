@@ -28,6 +28,5 @@ from app.services.connect import (
     _upsert_note_type_ref,
     _get_import_session,
     _reconcile_note_cards,
-    _migrate_cards_progress,
     _upsert_import_card,
 )

@@ -11,7 +11,7 @@ from app.repositories.study_repository import (
     select_next_due_card_from_loaded,
     summarize_pending_learning_from_loaded,
 )
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import mapper_state_input
 
 
 class TestDayIndexHelpers(unittest.TestCase):
@@ -160,32 +160,32 @@ class TestCounterLogic(unittest.TestCase):
             SimpleNamespace(id="review-tomorrow"),
         ]
         progress_map = {
-            "learn-future": CardProgress(
+            "learn-future": mapper_state_input(
                 user_id=1,
                 card_id="learn-future",
                 queue="learning",
                 due_at=self.now + timedelta(minutes=15),
             ),
-            "learn-due": CardProgress(
+            "learn-due": mapper_state_input(
                 user_id=1,
                 card_id="learn-due",
                 queue="learning",
                 due_at=self.now - timedelta(minutes=1),
             ),
-            "learn-tomorrow": CardProgress(
+            "learn-tomorrow": mapper_state_input(
                 user_id=1,
                 card_id="learn-tomorrow",
                 queue="learning",
                 due_at=self.next_boundary + timedelta(hours=1),
             ),
-            "review-due": CardProgress(
+            "review-due": mapper_state_input(
                 user_id=1,
                 card_id="review-due",
                 queue="review",
                 due_at=self.now - timedelta(days=1),
                 due_day=self.today_idx,
             ),
-            "review-tomorrow": CardProgress(
+            "review-tomorrow": mapper_state_input(
                 user_id=1,
                 card_id="review-tomorrow",
                 queue="review",
@@ -207,19 +207,19 @@ class TestCounterLogic(unittest.TestCase):
             SimpleNamespace(id="learn-tomorrow"),
         ]
         progress_map = {
-            "learn-future": CardProgress(
+            "learn-future": mapper_state_input(
                 user_id=1,
                 card_id="learn-future",
                 queue="learning",
                 due_at=self.now + timedelta(minutes=15),
             ),
-            "learn-due": CardProgress(
+            "learn-due": mapper_state_input(
                 user_id=1,
                 card_id="learn-due",
                 queue="learning",
                 due_at=self.now - timedelta(minutes=1),
             ),
-            "learn-tomorrow": CardProgress(
+            "learn-tomorrow": mapper_state_input(
                 user_id=1,
                 card_id="learn-tomorrow",
                 queue="learning",
@@ -243,13 +243,13 @@ class TestCounterLogic(unittest.TestCase):
             SimpleNamespace(id="new-card", created_at=self.now + timedelta(seconds=2)),
         ]
         progress_map = {
-            "learn-future": CardProgress(
+            "learn-future": mapper_state_input(
                 user_id=1,
                 card_id="learn-future",
                 queue="learning",
                 due_at=self.now + timedelta(minutes=15),
             ),
-            "review-due": CardProgress(
+            "review-due": mapper_state_input(
                 user_id=1,
                 card_id="review-due",
                 queue="review",
@@ -268,7 +268,7 @@ class TestCounterLogic(unittest.TestCase):
             SimpleNamespace(id="learn-future", created_at=self.now),
         ]
         progress_map = {
-            "learn-future": CardProgress(
+            "learn-future": mapper_state_input(
                 user_id=1,
                 card_id="learn-future",
                 queue="learning",
@@ -287,7 +287,7 @@ class TestCounterLogic(unittest.TestCase):
             SimpleNamespace(id="review-due", created_at=self.now + timedelta(seconds=1)),
         ]
         progress_map = {
-            "suspended-review": CardProgress(
+            "suspended-review": mapper_state_input(
                 user_id=1,
                 card_id="suspended-review",
                 queue="review",
@@ -295,7 +295,7 @@ class TestCounterLogic(unittest.TestCase):
                 due_day=self.today_idx,
                 is_suspended=True,
             ),
-            "review-due": CardProgress(
+            "review-due": mapper_state_input(
                 user_id=1,
                 card_id="review-due",
                 queue="review",
@@ -315,14 +315,14 @@ class TestCounterLogic(unittest.TestCase):
             SimpleNamespace(id="review-today", created_at=self.now + timedelta(seconds=1)),
         ]
         progress_map = {
-            "review-overdue": CardProgress(
+            "review-overdue": mapper_state_input(
                 user_id=1,
                 card_id="review-overdue",
                 queue="review",
                 due_at=self.now + timedelta(days=2),
                 due_day=self.today_idx - 1,
             ),
-            "review-today": CardProgress(
+            "review-today": mapper_state_input(
                 user_id=1,
                 card_id="review-today",
                 queue="review",
@@ -342,14 +342,14 @@ class TestCounterLogic(unittest.TestCase):
             SimpleNamespace(id="missing-day", created_at=self.now),
         ]
         progress_map = {
-            "explicit-day": CardProgress(
+            "explicit-day": mapper_state_input(
                 user_id=1,
                 card_id="explicit-day",
                 queue="review",
                 due_day=self.today_idx - 1,
                 due_at=self.now - timedelta(hours=1),
             ),
-            "missing-day": CardProgress(
+            "missing-day": mapper_state_input(
                 user_id=1,
                 card_id="missing-day",
                 queue="review",

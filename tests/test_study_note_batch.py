@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import event as sql_event
 
 from app import create_app
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent
 from app.services.study_artifact_service import canonical_digest
 from app.services.study_authority_enrollment_service import (
     StudyAuthorityEnrollmentError,
@@ -23,7 +24,6 @@ from app.services.study_worker_service import drain_study_queue, process_single_
 from app.services.study_queue_service import clear_study_queue, enqueue_study_batch, pop_study_batch
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -63,6 +63,7 @@ class StudyNoteBatchTests(unittest.TestCase):
             user = User(username="note-batch", email="note-batch@example.test")
             db.session.add(user)
             db.session.flush()
+            enroll_note_user(db.session, user)
             deck = Deck(name="Note batches", owner_user_id=user.id)
             note_type = NoteType(name="Note batches", user_id=user.id)
             db.session.add_all([deck, note_type])
@@ -75,7 +76,7 @@ class StudyNoteBatchTests(unittest.TestCase):
             db.session.add_all(notes)
             db.session.flush()
             for number in range(2):
-                template = Template(
+                template = attach_template(db.session, owner_user_id=note_type.user_id,
                     note_type_id=note_type.id, name=f"Card {number}",
                     front_html="{{Word}}", back_html="{{Word}}", is_default=number == 0,
                 )
@@ -83,7 +84,6 @@ class StudyNoteBatchTests(unittest.TestCase):
                 db.session.flush()
                 if number == 0:
                     self.composition_id = make_compatibility_composition_id(note_type.id, template.id)
-                db.session.add_all(Card(note_id=note.id, template_id=template.id) for note in notes)
             self.user_id, self.deck_id = user.id, deck.id
             db.session.commit()
             stage_note_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=datetime.utcnow())
@@ -172,7 +172,7 @@ class StudyNoteBatchTests(unittest.TestCase):
                 StudyProgressHistoryFact.review_event_id.isnot(None),
             ).count(), revision)
             # The Note's one row holds the state; no Card carries progress (ADR P10).
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(db.session.get(StudySession, self.snapshot["session_id"]).status, session_status)
             self.assertTrue(all(pin.base_authority_revision == 0 for pin in StudySessionAuthorityPin.query.all()))
 
@@ -607,7 +607,7 @@ class StudyNoteBatchTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(
                 [row.authority_revision for row in StudyProgressSubject.query.order_by(StudyProgressSubject.id)], [2, 2])
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(ReviewEvent.query.count(), 4)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 4)
             self.assertEqual(StudySessionCommit.query.count(), 1)

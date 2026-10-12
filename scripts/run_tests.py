@@ -96,6 +96,20 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/bench_p9_profile_migration_mysql.py",
             "scripts/probe_p9_connect_fence_mysql.py",
             "scripts/trace_card_progress_callsites.py",
+            "scripts/audit_legacy_progress_retirement.py",
+            "scripts/archive_retired_tables.py",
+            "scripts/bootstrap_historical_schema.py",
+            "scripts/prepare_retirement_mysql_rehearsal.py",
+            "scripts/verify_retirement_protected_state.py",
+            "scripts/probe_retirement_fresh_chain_mysql.py",
+            "scripts/benchmark_note_queue_endpoint.py",
+            "scripts/probe_note_queue_queries.py",
+            "migrations/*retirement*.py",
+            "migrations/retired_*.py",
+            "migrations/historical_bootstrap_core.py",
+            "migrations/versions/20261012_000058_*.py",
+            "migrations/versions/20261012_00005*.py",
+            "migrations/versions/20261012_00006*.py",
             "scripts/collect_study_retirement_observation.py",
             "scripts/probe_p9_backup_restore_mysql.py",
             "scripts/probe_p10_schema_mysql.py",
@@ -160,6 +174,15 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_study_consolidated_schema.py",
             "tests/test_study_retired_tables_migration.py",
             "tests/test_study_consolidated_progress.py",
+            "tests/test_legacy_progress_retirement_audit.py",
+            "tests/test_legacy_model_retirement.py",
+            "tests/test_card_progress_retirement_migration.py",
+            "tests/test_derived_card_retirement_migration.py",
+            "tests/test_derived_card_retirement_scope.py",
+            "tests/test_note_query_retirement.py",
+            "tests/test_note_due_index_migration.py",
+            "tests/test_note_stats_retirement.py",
+            "tests/test_retirement_fresh_migration_chain.py",
             "tests/test_study_consolidated_connect.py",
             "tests/test_study_phase9_readiness.py",
             "tests/test_study_retirement_telemetry.py",
@@ -377,6 +400,9 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_template_release_service.py",
             "tests/test_template_deck_release.py",
             "tests/test_template_attachment_writers.py",
+            "tests/test_template_origin_retirement.py",
+            "tests/test_template_origin_retirement_migration.py",
+            "tests/test_template_pinned_new_install.py",
             "tests/test_study_template_application_sessions.py",
             "tests/test_study_template_presets.py"
         ],
@@ -992,6 +1018,11 @@ REDIS_CONTRACT_SOURCE_PATTERNS = (
 )
 
 MYSQL_CONTRACT_SOURCE_PATTERNS = (
+    "scripts/archive_retired_tables.py",
+    "scripts/bootstrap_historical_schema.py",
+    "scripts/prepare_retirement_mysql_rehearsal.py",
+    "scripts/verify_retirement_protected_state.py",
+    "scripts/probe_retirement_fresh_chain_mysql.py",
     "migrations/**",
     "models/**",
     "requirements.txt",
@@ -1412,6 +1443,11 @@ def build_backend_test_environment(media_root: str) -> dict[str, str]:
     # Rate-limit tests opt in explicitly through their app config. Disabling the
     # default here prevents module-level counters from leaking across test apps.
     env["RATE_LIMIT_DAILY_ENABLED"] = "0"
+    # A developer's .env may configure real SMTP/Resend credentials. Tests
+    # opt into their provider fixtures explicitly instead of sending mail.
+    env["EMAIL_ENABLED"] = "0"
+    env["EMAIL_PROVIDER"] = "memory"
+    env["EMAIL_ENVIRONMENT"] = "test"
     return env
 
 def run_backend_tests(

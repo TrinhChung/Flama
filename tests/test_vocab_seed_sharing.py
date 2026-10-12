@@ -17,7 +17,9 @@ from app.services.flashcard_legacy import (
 )
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from models import db
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.flashcard import Card, DeckMarketplaceItem, Note, NoteType, Template
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.user import User
@@ -35,7 +37,7 @@ class VocabSeedSharingTests(unittest.TestCase):
         self.runner = self.app.test_cli_runner()
         with self.app.app_context():
             db.create_all()
-            user = User(username="seed-owner", email="seed-owner@example.com", is_admin=True)
+            user = create_note_user(db.session, username="seed-owner", email="seed-owner@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
             db.session.commit()
@@ -111,17 +113,9 @@ class VocabSeedSharingTests(unittest.TestCase):
                 args=["seed-data-ensure", "--path", str(self.seed_dir)]
             )
 
-    def test_vocab_seed_rejects_note_authority_before_creating_content(self):
+    def test_vocab_seed_rejects_legacy_authority_before_creating_content(self):
         with self.app.app_context():
-            db.session.add(
-                StudyAuthorityEnrollment(
-                    learner_user_id=self.user_id,
-                    mode_code="NOTE",
-                    epoch=1,
-                    created_at=datetime(2026, 9, 23, 1, 0, 0),
-                    updated_at=datetime(2026, 9, 23, 1, 0, 0),
-                )
-            )
+            db.session.get(StudyAuthorityEnrollment, self.user_id).mode_code = "LEGACY"
             db.session.commit()
 
         result = self.runner.invoke(
@@ -134,7 +128,7 @@ class VocabSeedSharingTests(unittest.TestCase):
             ]
         )
         self.assertNotEqual(result.exit_code, 0)
-        self.assertIn("NOTE_AUTHORITY_UNAVAILABLE", result.output)
+        self.assertIn("STUDY_AUTHORITY_MIGRATION_REQUIRED", result.output)
         with self.app.app_context():
             self.assertEqual(NoteType.query.count(), 0)
             self.assertEqual(Deck.query.count(), 0)
@@ -168,7 +162,7 @@ class VocabSeedSharingTests(unittest.TestCase):
             )
             self.assertIsNotNone(card)
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=card.id,  # type: ignore[union-attr]
                     reps=7,
@@ -184,10 +178,7 @@ class VocabSeedSharingTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertIsNotNone(db.session.get(Card, card_id))
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=card_id,
-            ).one()
+            progress = decode_note_state(subject_for_card(db.session, user_id=self.user_id, card_id=card_id))
             self.assertEqual(progress.reps, 7)
 
     def test_seed_data_ensure_adds_new_bundle_without_replacing_existing(self):
@@ -228,7 +219,7 @@ class VocabSeedSharingTests(unittest.TestCase):
             )
             self.assertIsNotNone(quiz_card)
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=quiz_card.id,  # type: ignore[union-attr]
                     reps=11,
@@ -266,10 +257,7 @@ class VocabSeedSharingTests(unittest.TestCase):
                 if note.id in unit_one_note_ids
             }
             self.assertEqual(current_unit_one_note_ids, unit_one_note_ids)
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=quiz_card_id,
-            ).one()
+            progress = decode_note_state(subject_for_card(db.session, user_id=self.user_id, card_id=quiz_card_id))
             self.assertEqual(progress.reps, 11)
 
     def test_seed_data_ensure_reuses_existing_owner_after_bootstrap_admin_changes(self):
@@ -277,7 +265,7 @@ class VocabSeedSharingTests(unittest.TestCase):
         self.assertEqual(first_result.exit_code, 0, msg=first_result.output)
 
         with self.app.app_context():
-            new_admin = User(
+            new_admin = create_note_user(db.session,
                 username="replacement-admin",
                 email="replacement-admin@example.com",
                 is_admin=True,
@@ -381,7 +369,7 @@ class VocabSeedSharingTests(unittest.TestCase):
 
     def test_vocab_seed_keeps_same_named_decks_scoped_to_owner_and_reattaches_listing(self):
         with self.app.app_context():
-            other = User(username="other-seed-owner", email="other-seed-owner@example.com")
+            other = create_note_user(db.session, username="other-seed-owner", email="other-seed-owner@example.com")
             other.set_password("password")
             db.session.add(other)
             db.session.flush()
@@ -453,7 +441,7 @@ class VocabSeedSharingTests(unittest.TestCase):
                 name="Unit 1",
                 position=1,
             )
-            other = User(username="stale-owner", email="stale-owner@example.com")
+            other = create_note_user(db.session, username="stale-owner", email="stale-owner@example.com")
             other.set_password("password")
             db.session.add_all([current_deck, other])
             db.session.flush()
@@ -575,9 +563,10 @@ class VocabSeedSharingTests(unittest.TestCase):
                 if field.identity_role == "primary"
             ]
 
-            template = Template.query.filter_by(
-                note_type_id=note_type.id,  # type: ignore[union-attr]
-                is_default=True,
+            from models.study_application import StudyApplication
+            template = Template.query.join(StudyApplication, StudyApplication.template_id == Template.id).filter(
+                StudyApplication.note_type_id == note_type.id,
+                StudyApplication.status_code == "ACTIVE", StudyApplication.is_default.is_(True),
             ).first()
             self.assertIsNotNone(template)
             note_type_names = {
@@ -589,7 +578,8 @@ class VocabSeedSharingTests(unittest.TestCase):
             template_names = {
                 row[0]
                 for row in db.session.query(Template.name)
-                .join(NoteType, Template.note_type_id == NoteType.id)
+                .join(StudyApplication, StudyApplication.template_id == Template.id)
+                .join(NoteType, StudyApplication.note_type_id == NoteType.id)
                 .filter(NoteType.user_id == self.user_id)
                 .all()
             }
@@ -864,19 +854,11 @@ class VocabSeedSharingTests(unittest.TestCase):
         self.assertNotIn("default-flama-vocab-000000000000", seed_source)
         self.assertNotIn("default-template-000000000000", seed_source)
 
-    def test_reseed_quiz_helper_rejects_note_authority_before_content(self):
+    def test_reseed_quiz_helper_rejects_legacy_authority_before_content(self):
         seed_script = Path(__file__).resolve().parents[1] / "scripts" / "seed_flama_template.py"
         seed_globals = runpy.run_path(str(seed_script))
         with self.app.app_context():
-            db.session.add(
-                StudyAuthorityEnrollment(
-                    learner_user_id=self.user_id,
-                    mode_code="NOTE",
-                    epoch=1,
-                    created_at=datetime(2026, 9, 23, 1, 0, 0),
-                    updated_at=datetime(2026, 9, 23, 1, 0, 0),
-                )
-            )
+            db.session.get(StudyAuthorityEnrollment, self.user_id).mode_code = "LEGACY"
             db.session.commit()
             with self.assertRaises(StudyAuthorityFenceError) as caught:
                 seed_globals["_seed_quiz_dump_for_user"](
@@ -884,7 +866,7 @@ class VocabSeedSharingTests(unittest.TestCase):
                     note_type_id="unused",
                     template_id="unused",
                 )
-            self.assertEqual(caught.exception.code, "NOTE_AUTHORITY_UNAVAILABLE")
+            self.assertEqual(caught.exception.code, "STUDY_AUTHORITY_MIGRATION_REQUIRED")
             db.session.rollback()
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Deck.query.count(), 0)

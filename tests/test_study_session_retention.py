@@ -26,6 +26,7 @@ from models.study_session_card import StudySessionCard
 from models.study_session_commit import StudySessionCommit
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template
 
 
 class StudySessionRetentionTests(unittest.TestCase):
@@ -45,21 +46,20 @@ class StudySessionRetentionTests(unittest.TestCase):
             user = User(username="retention", email="retention@example.test")
             db.session.add(user)
             db.session.flush()
+            stage_note_authority_enrollment(db.session, learner_user_id=int(user.id), now_utc=datetime.utcnow())
             deck = Deck(name="Retention", owner_user_id=user.id)
             note_type = NoteType(name="Retention", user_id=user.id)
             db.session.add_all([deck, note_type])
             db.session.flush()
             db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-            template = Template(note_type_id=note_type.id, name="Card", front_html="{{Word}}",
+            template = attach_template(db.session, note_type_id=note_type.id, owner_user_id=user.id,
+                                name="Card", front_html="{{Word}}",
                                 back_html="{{Word}}", is_default=True)
             db.session.add(template)
             notes = [Note(user_id=user.id, deck_id=deck.id, note_type_id=note_type.id,
                           field_values={"Word": f"w{i}"}) for i in range(6)]
             db.session.add_all(notes)
             db.session.flush()
-            db.session.add_all(Card(note_id=note.id, template_id=template.id) for note in notes)
-            db.session.commit()
-            stage_note_authority_enrollment(db.session, learner_user_id=int(user.id), now_utc=datetime.utcnow())
             db.session.commit()
             self.user_id, self.deck_id = int(user.id), int(deck.id)
             self.composition_id = make_compatibility_composition_id(note_type.id, template.id)

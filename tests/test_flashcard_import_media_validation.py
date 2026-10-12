@@ -19,6 +19,7 @@ from models.flashcard import Note, NoteType, Template
 from models.media_asset import MediaAsset
 from models.shared_image_asset import SharedImageAsset
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class FlashcardImportMediaValidationTests(unittest.TestCase):
@@ -34,10 +35,8 @@ class FlashcardImportMediaValidationTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="import_user", email="import_user@example.com", is_admin=True)
+            user = create_note_user(db.session, username="import_user", email="import_user@example.com", is_admin=True)
             user.set_password("password")
-            db.session.add(user)
-            db.session.flush()
             self.user_id = user.id
 
             deck = Deck(name="Test Deck", owner_user_id=self.user_id, position=0)
@@ -58,14 +57,15 @@ class FlashcardImportMediaValidationTests(unittest.TestCase):
             db.session.add_all([f_word, f_audio, f_image, f_diagram])
             db.session.flush()
 
-            t = Template(
+            t = attach_template(
+                db.session,
+                owner_user_id=self.user_id,
                 note_type_id=note_type.id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{FrontSide}}<hr>{{Audio}}<br>{{Image}}<br>{{Diagram}}",
                 position=0,
             )
-            db.session.add(t)
 
             # Non-media note type
             nm_note_type = NoteType(name="Non-Media Note Type", user_id=self.user_id)
@@ -78,14 +78,15 @@ class FlashcardImportMediaValidationTests(unittest.TestCase):
             f_nm_md = FieldDef(note_type_id=nm_note_type.id, name="Notes", required=False, field_type="markdown", position=2)
             db.session.add_all([f_nm_word, f_nm_rich, f_nm_md])
 
-            t_nm = Template(
+            t_nm = attach_template(
+                db.session,
+                owner_user_id=self.user_id,
                 note_type_id=nm_note_type.id,
                 name="Card 1",
                 front_html="{{Word}}",
                 back_html="{{FrontSide}}<hr>{{Description}}<br>{{Notes}}",
                 position=0,
             )
-            db.session.add(t_nm)
 
             db.session.commit()
 

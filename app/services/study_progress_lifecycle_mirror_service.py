@@ -29,7 +29,7 @@ from app.repositories.study_authority_repository import (
 )
 from app.repositories.study_inserted_rows import SUBJECT, remember_inserted
 from app.services.study_progress_contract import MAPPER_VERSION
-from models.card import Card
+from models.card import Card, load_cards
 from models.note import Note
 from models.study_progress_subject import StudyProgressSubject
 
@@ -96,16 +96,14 @@ def prepare_note_authority_reset(
     if not card_ids:
         return None
     prepared_at = _utc_naive(now_utc)
-    card_rows = tuple(
-        session.execute(
-            select(Card).where(Card.id.in_(sorted(card_ids))).order_by(Card.note_id, Card.id)
-        ).scalars()
-    )
-    if {str(card.id) for card in card_rows} != set(card_ids):
+    by_given_id = load_cards(session, card_ids)
+    card_rows = tuple(sorted(by_given_id.values(), key=lambda card: (str(card.note_id), str(card.id))))
+    if set(by_given_id) != set(card_ids):
         raise StudyAuthorityFenceError(
             "AUTHORITY_CARD_MISSING",
             "NOTE reset contains a Card that no longer exists.",
         )
+    card_ids = frozenset(str(card.id) for card in card_rows)  # presentation keys
     note_ids = sorted({str(card.note_id) for card in card_rows}, key=lambda value: value.encode("utf-8"))
     subjects = tuple(
         session.execute(
@@ -136,7 +134,10 @@ def prepare_note_authority_reset(
         if locked.state is None:
             continue
         siblings = lock_study_authority_siblings(session, route=route, locked=locked)
-        if not set(siblings.card_ids).issubset(card_ids):
+        # Cards of a retired occurrence still belong to the Note but are no
+        # longer offered (ADR P11), so callers need only name the offered ones.
+        offered = {str(card.id) for card in siblings.cards if card.application_status == "ACTIVE"}
+        if not offered.issubset(card_ids):
             raise StudyAuthorityFenceError(
                 "PARTIAL_AUTHORITY_SUBJECT_RESET",
                 "A NOTE reset must include every Card sibling of the authority Note.",
@@ -354,7 +355,7 @@ def materialize_pristine_notes_bulk(
 ) -> int:
     """First-state materialize many pristine Notes with set-wise statements.
 
-    Lock order: sibling Cards shared, then rows in key order. The caller has
+    Lock order: rows in key order. The caller has
     classified every Note as pristine under the learner fence. Returns the
     number of Notes.
     """
@@ -368,9 +369,9 @@ def materialize_pristine_notes_bulk(
 
     cards_by_note: dict[str, list[Card]] = {note_id: [] for note_id in ordered}
     for chunk in _chunked(ordered):
+        # Offered Cards are derived (ADR P11); a derived read takes no lock.
         for card in session.execute(
             select(Card).where(Card.note_id.in_(chunk)).order_by(Card.note_id.asc(), Card.id.asc())
-            .with_for_update(read=True)
         ).scalars():
             cards_by_note[str(card.note_id)].append(card)
     if any(not cards for cards in cards_by_note.values()):
@@ -402,7 +403,9 @@ def materialize_pristine_notes_bulk(
             statement = dialect_insert(table).values(values).on_conflict_do_nothing(
                 index_elements=[table.c.learner_user_id, table.c.logical_note_key]
             )
-        session.execute(statement)
+        # A missing subject and its pristine NEW envelope have the same
+        # availability. Keep subsequent ORM state changes scoped to the Note.
+        session.execute(statement.execution_options(flama_pristine_subject_envelope=True))
     subject_by_note: dict[str, StudyProgressSubject] = {}
     for chunk in _chunked(ordered):
         for subject in session.execute(

@@ -49,10 +49,10 @@ from app.services.share.constants import (
     SHARED_DECK_INSTALL_MAX_RETRIES,
     UTC,
 )
+from app.repositories import template_library_repository
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_change_request import DeckChangeRequest
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
@@ -76,6 +76,7 @@ from models.taxonomy import (
     TaxonomyFrameworkLevel,
     TaxonomySubject,
 )
+from models.study_application import StudyApplication
 from models.template import Template
 from models.user import User
 
@@ -163,15 +164,7 @@ def create_note_type(
     front_html = (template_payload.get("front_html") or "{{Word}}").strip()
     back_html = (template_payload.get("back_html") or "{{Word}}").strip()
     shared_css = (template_payload.get("shared_css") or "").strip()
-    template = Template(
-        note_type_id=note_type.id,
-        name=(template_payload.get("name") or "Card 1").strip() or "Card 1",
-        front_html=front_html,
-        back_html=back_html,
-        shared_css=shared_css,
-        position=0,
-        is_default=True,
-    )
+    template = template_library_repository.create_attached_template(db.session, note_type=note_type, name=(template_payload.get("name") or "Card 1").strip() or "Card 1", front_html=front_html, back_html=back_html, shared_css=shared_css, position=0, is_default=True)
     db.session.add(template)
     
     metadata_error = flashcards_share.apply_note_type_marketplace_payload(
@@ -195,27 +188,17 @@ def create_template(note_type_id: str, user_id: int, payload: dict) -> tuple[Tem
     if not note_type:
         return None, "Note type not found."
         
-    name = (payload.get("name") or "").strip() or f"Card {Template.query.filter_by(note_type_id=note_type.id).count() + 1}"
+    name = (payload.get("name") or "").strip() or f"Card {len(template_library_repository.applications(db.session, note_type.id)) + 1}"
     front_html = (payload.get("front_html") or "{{Word}}").strip()
     back_html = (payload.get("back_html") or "{{Word}}").strip()
     shared_css = (payload.get("shared_css") or "").strip()
     
-    max_pos = db.session.query(db.func.max(Template.position)).filter_by(note_type_id=note_type.id).scalar() or -1
-    template = Template(
-        note_type_id=note_type.id,
-        name=name,
-        front_html=front_html,
-        back_html=back_html,
-        shared_css=shared_css,
-        position=max_pos + 1,
-        is_default=False,
-    )
+    max_pos = db.session.query(db.func.max(StudyApplication.position)).filter_by(note_type_id=note_type.id).scalar()
+    template = template_library_repository.create_attached_template(db.session, note_type=note_type, name=name, front_html=front_html, back_html=back_html, shared_css=shared_css, position=(int(max_pos) + 1) if max_pos is not None else 0, is_default=False)
     db.session.add(template)
+    # Its compatibility occurrence presents it on every Note (ADR P11).
     db.session.flush()
-    notes = Note.query.filter_by(note_type_id=note_type.id, user_id=user_id).all()
-    for note in notes:
-        db.session.add(Card(note_id=note.id, template_id=template.id))
-        
+
     _audit(user_id, "template.create", {"note_type_id": note_type.id, "template_id": template.id})
     db.session.commit()
     return template, None
@@ -223,7 +206,7 @@ def create_template(note_type_id: str, user_id: int, payload: dict) -> tuple[Tem
 
 
 def update_template(template: Template, user_id: int) -> None:
-    _audit(user_id, "template.update", {"note_type_id": template.note_type_id, "template_id": template.id})
+    _audit(user_id, "template.update", {"template_id": template.id})
     db.session.commit()
 
 
@@ -547,23 +530,31 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int, *, copy_l
         )
 
     raw_copies = []
-    for template in sorted(source_note_type.templates if copy_legacy_templates else [], key=lambda item: item.position):
-        copied_template = Template(
-                note_type_id=clone.id,
-                owner_user_id=user_id,
-                origin="market_copy",
-                source_template_id=template.id,
-                source_version_id=template.current_version_id,
-                input_schema=template.input_schema,
-                name=template.name,
-                front_html=template.front_html,
-                back_html=template.back_html,
-                shared_css=template.shared_css,
-                position=template.position,
-                is_default=bool(template.is_default),
+    by_source_definition = {}
+    source_field_names = {str(field.id): field.name for field in source_note_type.field_defs}
+    clone_field_ids = {field.name: str(field.id) for field in clone.field_defs}
+    for view in (template_library_repository.attached_templates(db.session, source_note_type.id)
+                 if copy_legacy_templates else []):
+        source_application = view.application
+        mapped_bindings = {key: clone_field_ids.get(source_field_names.get(str(value)))
+                           for key, value in (source_application.input_bindings or {}).items()}
+        copied_template = by_source_definition.get(view.id)
+        if copied_template is None:
+            copied_template = template_library_repository.create_attached_template(
+                db.session, note_type=clone, owner_user_id=user_id, origin="market_copy",
+                source_template_id=view.id, source_version_id=view.current_version_id,
+                input_schema=view.input_schema, name=view.name, front_html=view.front_html,
+                back_html=view.back_html, shared_css=view.shared_css, position=view.position,
+                is_default=bool(view.is_default), occurrence_key=source_application.occurrence_key,
+                source_ord=source_application.source_ord, input_bindings=mapped_bindings,
             )
-        db.session.add(copied_template)
-        raw_copies.append(copied_template)
+            by_source_definition[view.id] = copied_template
+            raw_copies.append(copied_template)
+        else:
+            db.session.add(StudyApplication(note_type=clone, template=copied_template,
+                occurrence_key=source_application.occurrence_key, source_ord=source_application.source_ord,
+                position=source_application.position, is_default=bool(source_application.is_default),
+                display_name=source_application.display_name, input_bindings=mapped_bindings, status_code="ACTIVE"))
     db.session.info.setdefault("flama.template_clone_compat", {})[clone.id] = raw_copies
 
     return clone

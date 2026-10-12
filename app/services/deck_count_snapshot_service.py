@@ -290,7 +290,7 @@ def prewarm_owned_deck_counts(*, user_id, deck_ids=None, now_utc=None, session_f
         raw, _metadata = aggregate_deck_study_counts(
             session, learner_user_id=user_id, visible_deck_ids=list(captured.deck_ids),
             today_day_index=captured.day_index, day_cutoff_utc=captured.cutoff,
-            is_note_mode=captured.is_note_mode, admin_mode=captured.admin_mode,
+            admin_mode=captured.admin_mode,
             count_by_note=captured.unit_code == NOTE_UNIT, include_note_types=False,
         )
         counts = _ComputedCounts(raw)

@@ -8,6 +8,7 @@ from app.connect import create_connect_app
 from app.services import user_api_token_service
 from models import db
 from models.user import User
+from tests.study_note_fixtures import create_note_user
 
 
 class FlamaConnectAuthTests(unittest.TestCase):
@@ -27,7 +28,7 @@ class FlamaConnectAuthTests(unittest.TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
-            user = User(username="authtest", email="auth@example.com")
+            user = create_note_user(db.session, username="authtest", email="auth@example.com")
             user.set_password("password")
             db.session.add(user)
             db.session.flush()

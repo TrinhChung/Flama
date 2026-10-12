@@ -20,6 +20,7 @@ from app.services.strokes.dataset_builder import (
 )
 from models import db
 from models.field_types import field_value_text
+from models.card import card_id_clause
 from models.flashcard import Card, Note, NoteType
 from models.shared_image_asset import SharedImageAsset
 
@@ -234,7 +235,7 @@ def _collect_notes(
     notes: list[Note] = []
     if card_ids:
         card_query = (
-            Card.query.filter(Card.id.in_(card_ids))
+            Card.query.filter(card_id_clause(db.session, card_ids))
             .options(
                 selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
             )

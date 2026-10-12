@@ -37,9 +37,7 @@ def template(session, template_id, *, lock=False):
 
 
 def template_owner(session, row):
-    if row.get("owner_user_id") is not None:
-        return row["owner_user_id"]
-    return session.execute(select(NoteType.user_id).where(NoteType.id == row.get("note_type_id"))).scalar_one_or_none()
+    return row.get("owner_user_id")
 
 
 def publication(session, template_id, *, lock=False):
@@ -106,12 +104,12 @@ def source_access(session, *, user_id, source_template_id):
     for model, column in ((DeckInstall, DeckInstall.source_note_type_id), (NoteTypeInstall, NoteTypeInstall.source_note_type_id)):
         statement = select(model.id).where(
             model.user_id == user_id,
-            or_(column.in_(note_types), column == template_row.get("note_type_id")),
+            column.in_(note_types),
         ).limit(1)
         if session.execute(statement).first():
             return True
     free_published = select(NoteType.id).where(
-        or_(NoteType.id.in_(note_types), NoteType.id == template_row.get("note_type_id")),
+        NoteType.id.in_(note_types),
         NoteType.publish_status.in_(["published", "unlisted"]),
         NoteType.pricing_mode == "free",
     ).limit(1)

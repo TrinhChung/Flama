@@ -2,17 +2,14 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, select
 from app.repositories import template_library_repository as repository
 from app.repositories import template_version_repository
 from app.validators.template_library import (TemplateLibraryError, body, text, validate_input_schema, infer_input_schema, validate_bindings, binding_warnings)
 from app.services import template_version_service
 from models import db
-from models.card import Card
-from models.model_uuid import uuid_str
-from models.note import Note
 from models.note_type import NoteType
-from models.study_application import StudyApplication
+from models.study_application import COMPAT_OCCURRENCE_KEY, StudyApplication
 from models.template import Template
 
 CONTENT_KEYS = {"front_html", "back_html", "shared_css", "input_schema"}
@@ -63,7 +60,7 @@ def _iso(value):
 
 
 def serialize_template(template, *, include_source=True):
-    result = {"id": template.id, "owner_user_id": template.owner_user_id, "name": template.name, "description": template.description or "", "primary_category": template.primary_category, "origin": template.origin, "source_template_id": template.source_template_id, "source_version_id": template.source_version_id, "current_version_id": template.current_version_id, "input_schema": effective_input_schema(template, getattr(template.note_type, "field_defs", ())), "archived_at": _iso(template.archived_at), "created_at": _iso(template.created_at), "updated_at": _iso(template.updated_at)}
+    result = {"id": template.id, "owner_user_id": template.owner_user_id, "name": template.name, "description": template.description or "", "primary_category": template.primary_category, "origin": template.origin, "source_template_id": template.source_template_id, "source_version_id": template.source_version_id, "current_version_id": template.current_version_id, "input_schema": effective_input_schema(template, ()), "archived_at": _iso(template.archived_at), "created_at": _iso(template.created_at), "updated_at": _iso(template.updated_at)}
     if include_source:
         result.update(front_html=template.front_html, back_html=template.back_html, shared_css=template.shared_css)
     return result
@@ -116,7 +113,7 @@ def preview_template(*, user_id, template_id, payload):
         key: text(payload.get(key, getattr(template, key)), field=key)
         for key in ("front_html", "back_html", "shared_css")
     })
-    schema = validate_input_schema(payload["input_schema"]) if "input_schema" in payload else effective_input_schema(template, getattr(template.note_type, "field_defs", ()))
+    schema = validate_input_schema(payload["input_schema"]) if "input_schema" in payload else effective_input_schema(template, ())
     values = payload.get("sample_values", {})
     if not isinstance(values, dict):
         raise TemplateLibraryError("VALIDATION_ERROR", "sample_values must be an object.", field="sample_values")
@@ -236,49 +233,15 @@ def delete_template(*, user_id, template_id):
         db.session.execute(
             delete(TemplatePublication).where(TemplatePublication.template_id == template.id)
         )
-        card_ids = [
-            str(row[0])
-            for row in db.session.query(Card.id)
-            .filter(Card.template_id == template.id)
-            .all()
-            if row and row[0]
-        ]
-        if card_ids:
-            from app.services import study_content_delete_service as content_delete
-            from models.card_progress import CardProgress
-            try:
-                authority_routes = content_delete.lock_content_delete_routes(
-                    db.session,
-                    actor_user_ids=(int(user_id),),
-                    card_ids=card_ids,
-                    deleted_note_ids=(),
-                )
-                lifecycle_plan = content_delete.prepare_content_delete(
-                    db.session,
-                    routes=authority_routes,
-                    card_ids=card_ids,
-                    note_ids=(),
-                    cancel_legacy_sessions=False,
-                )
-                content_delete.verify_content_delete_scope(
-                    db.session,
-                    routes=authority_routes,
-                    card_ids=card_ids,
-                    deleted_note_ids=(),
-                )
-                CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
-                    synchronize_session=False
-                )
-                content_delete.finalize_content_delete(
-                    lifecycle_plan,
-                    source_path="flashcards.template_library_delete",
-                    operation_key=f"template-library-delete:{template.id}",
-                )
-            except Exception as exc:
-                db.session.rollback()
-                raise TemplateLibraryError("DELETE_FAILED", str(exc), status=409) from exc
-            Card.query.filter_by(template_id=template.id).delete()
-
+        # Every occurrence is retired here and is now deleted with the
+        # Template: forget their Cards (ADR P11).
+        from app.services import study_content_delete_service as content_delete
+        content_delete.stop_presenting(
+            db.session,
+            application_ids=db.session.execute(
+                select(StudyApplication.id).where(StudyApplication.template_id == template.id)
+            ).scalars().all(),
+        )
         db.session.execute(
             delete(StudyApplication).where(StudyApplication.template_id == template.id)
         )
@@ -327,45 +290,36 @@ def _application_payload(application, payload, note_type):
 def attach_template(*, user_id, note_type_id, payload):
     body(payload, {"template_id", "occurrence_key", "input_bindings", "display_name", "position", "is_default"})
     template_id = text(payload.get("template_id"), field="template_id", required=True)
-    occurrence = text(payload.get("occurrence_key", "compat"), field="occurrence_key", maximum=64, required=True)
+    if "occurrence_key" in payload and payload.get("occurrence_key") is not None:
+        text(payload.get("occurrence_key"), field="occurrence_key", maximum=64, required=True)
     def operation():
         template = _owned(user_id, template_id, lock=True)
         note_type = _note_type(user_id, note_type_id, lock=True)
         if template.archived_at:
             raise TemplateLibraryError("TEMPLATE_ARCHIVED", "Archived template cannot be attached.", status=409)
-        application = db.session.execute(select(StudyApplication).where(StudyApplication.note_type_id == note_type.id, StudyApplication.template_id == template.id, StudyApplication.occurrence_key == occurrence).with_for_update()).scalar_one_or_none()
-        if application is not None and application.status_code == "ACTIVE":
-            raise TemplateLibraryError("APPLICATION_EXISTS", "This occurrence is already attached.", status=409)
-        from app.services import study_content_delete_service as topology
-        note_ids = list(db.session.execute(select(Note.id).where(Note.note_type_id == note_type.id, Note.user_id == user_id).order_by(Note.id)).scalars())
-        routes = topology.lock_content_expansion_routes(db.session, actor_user_ids=(user_id,), note_ids=note_ids)
-        plan = topology.prepare_content_expansion(db.session, routes=routes, note_ids=note_ids)
-        topology.verify_content_expansion_scope(db.session, routes=routes, note_ids=note_ids)
+        existing_rows = db.session.execute(
+            select(StudyApplication)
+            .where(
+                StudyApplication.note_type_id == note_type.id,
+                StudyApplication.template_id == template.id,
+            )
+            .order_by(
+                db.case((StudyApplication.occurrence_key == COMPAT_OCCURRENCE_KEY, 0), else_=1),
+                StudyApplication.id,
+            )
+            .with_for_update()
+        ).scalars().all()
+        if any(row.status_code == "ACTIVE" for row in existing_rows):
+            raise TemplateLibraryError("APPLICATION_EXISTS", "This template is already attached.", status=409)
+        application = existing_rows[0] if existing_rows else None
+        # Derived presentations need one attachment row, not per-Note writes.
         if application is None:
-            application = StudyApplication(note_type=note_type, template=template, occurrence_key=occurrence, status_code="ACTIVE", input_bindings={}, position=0, is_default=False)
+            application = StudyApplication(note_type=note_type, template=template, occurrence_key=COMPAT_OCCURRENCE_KEY, status_code="ACTIVE", input_bindings={}, position=0, is_default=False)
             db.session.add(application)
         else:
             application.status_code = "ACTIVE"
         _application_payload(application, payload, note_type)
         db.session.flush()
-        existing = set(db.session.execute(select(Card.note_id).where(Card.application_id == application.id)).scalars())
-        missing_note_ids = [note_id for note_id in note_ids if note_id not in existing]
-        if missing_note_ids:
-            now = datetime.utcnow()
-            card_rows = [
-                {
-                    "id": uuid_str(),
-                    "note_id": note_id,
-                    "template_id": template.id,
-                    "application_id": application.id,
-                    "created_at": now,
-                    "updated_at": now,
-                }
-                for note_id in missing_note_ids
-            ]
-            db.session.execute(insert(Card), card_rows)
-            db.session.flush()
-        topology.finalize_content_expansion(plan, new_cards=())
         return lambda: serialize_application(application)
     return _commit(operation)
 
@@ -384,6 +338,8 @@ def update_application(*, user_id, note_type_id, application_id, payload):
 def retire_application(*, user_id, note_type_id, application_id):
     def operation():
         application = _application(user_id, note_type_id, application_id, lock=True)
+        # A retired occurrence presents no Card to new discovery; its Cards stay
+        # addressable and reactivation restores the same keys (ADR P11).
         application.status_code = "RETIRED"
         return lambda: serialize_application(application)
     return _commit(operation)

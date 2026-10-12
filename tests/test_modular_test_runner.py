@@ -38,6 +38,9 @@ class ModularTestRunnerTests(unittest.TestCase):
         self.assertEqual(env["FLASHCARD_MEDIA_UPLOAD_ROOT"], media_root)
         self.assertEqual(env["FLAMA_TEST_MEDIA_UPLOAD_ROOT"], media_root)
         self.assertEqual(env["RATE_LIMIT_DAILY_ENABLED"], "0")
+        self.assertEqual(env["EMAIL_ENABLED"], "0")
+        self.assertEqual(env["EMAIL_PROVIDER"], "memory")
+        self.assertEqual(env["EMAIL_ENVIRONMENT"], "test")
 
     def test_changed_frontend_source_selects_colocated_feature_tests(self):
         modules, backend_tests, frontend_tests = run_tests.map_files_to_modules(

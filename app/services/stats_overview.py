@@ -20,10 +20,7 @@ from app.repositories.stats_query_repository import (
     query_daily_review_aggregates,
 )
 from app.repositories.review_event_repository import create_review_event_record
-from app.repositories.stats_query_repository import query_future_due_day_counts
 from models import db
-from models.card import Card
-from models.card_progress import CardProgress
 from models.flashcard import ReviewEvent
 
 UTC = timezone.utc
@@ -159,11 +156,10 @@ def _canonical_future_due_day_counts(
     day_boundary_hour_local: int,
     storage_profile: str,
 ) -> dict[date, int]:
-    """NOTE future-due days from canonical availability, LEGACY semantics.
+    """Future due days from the learner's current Note availability.
 
-    Same row set and day mapping as ``query_future_due_day_counts`` (every
-    learner Card with a due value, not suspended; overdue counts today).
-    Divergent NOTE evidence raises; there is no ``card_progress`` fallback.
+    Every unsuspended presentation with a due value contributes one count;
+    overdue items count today. Divergent current Note evidence fails closed.
     """
     from app.repositories.stats_query_repository import (
         _progress_due_local_day,
@@ -210,7 +206,7 @@ def _canonical_future_due_day_counts(
                     or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),
                 ),
             )
-        )
+        ).execution_options(include_retired_cards=True)
     ).all()
     worst = max((int(row[0] or 0) for row in fetched), default=0)
     if not worst:
@@ -420,25 +416,15 @@ def build_stats_overview(
                 day_boundary_hour,
                 timezone_name=effective_timezone_name,
             )
-            if authority_route.mode_code == "NOTE":
-                due_day_map = _canonical_future_due_day_counts(
-                    user_id=user_id,
-                    timezone_name=effective_timezone_name,
-                    timezone_obj=timezone_obj,
-                    start_utc=future_start_utc,
-                    end_utc=year_end_utc,
-                    day_boundary_hour_local=day_boundary_hour,
-                    storage_profile=authority_route.storage_profile,
-                )
-            else:
-                due_day_map = query_future_due_day_counts(
-                    user_id=user_id,
-                    timezone_name=effective_timezone_name,
-                    timezone_obj=timezone_obj,
-                    start_utc=future_start_utc,
-                    end_utc=year_end_utc,
-                    day_boundary_hour_local=day_boundary_hour,
-                )
+            due_day_map = _canonical_future_due_day_counts(
+                user_id=user_id,
+                timezone_name=effective_timezone_name,
+                timezone_obj=timezone_obj,
+                start_utc=future_start_utc,
+                end_utc=year_end_utc,
+                day_boundary_hour_local=day_boundary_hour,
+                storage_profile=authority_route.storage_profile,
+            )
 
     tomorrow_start_utc = _day_index_to_datetime(
         today_day_index + 1,

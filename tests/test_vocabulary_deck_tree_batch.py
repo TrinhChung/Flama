@@ -7,7 +7,8 @@ from app import create_app
 from app.repositories import vocabulary_repository
 from app.repositories.deck_tree_query import query_accessible_stats_decks
 from models import db
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import attach_template, enroll_note_user
+from tests.note_progress_fixtures import stage_note_state
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
@@ -36,13 +37,14 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
         db.session.add_all([owner, learner])
         db.session.flush()
         self.owner_id = owner.id
+        enroll_note_user(db.session, learner)
         self.learner_id = learner.id
 
         # Create note type & template
         nt = NoteType(name="Standard", user_id=owner.id)
         db.session.add(nt)
         db.session.flush()
-        tmpl = Template(name="Card 1", note_type_id=nt.id)
+        tmpl = attach_template(db.session, owner_user_id=owner.id, name="Card 1", note_type_id=nt.id)
         db.session.add(tmpl)
         db.session.flush()
 
@@ -88,10 +90,9 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
             note = Note(user_id=self.owner_id, deck_id=deck.id, note_type_id=self.note_type_id)
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template_id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template_id).one()
             db.session.flush()
-            db.session.add(CardProgress(user_id=self.learner_id, card_id=card.id))
+            db.session.add(stage_note_state(db.session, user_id=self.learner_id, card_id=card.id))
         expected = [other.id, parent.id, child.id]
         db.session.commit()
         db.session.expunge_all()
@@ -160,16 +161,12 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
                 )
                 db.session.add(note)
                 db.session.flush()
-                card = Card(
-                    note_id=note.id,
-                    template_id=self.template_id,
-                )
-                db.session.add(card)
+                card = Card.query.filter_by(note_id=note.id, template_id=self.template_id).one()
                 db.session.flush()
 
                 # For the first card in each deck, simulate a learning progress
                 if n_idx == 0:
-                    prog = CardProgress(
+                    prog = stage_note_state(db.session,
                         user_id=self.learner_id,
                         card_id=card.id,
                         queue="learn",
@@ -210,8 +207,10 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
 
         # Check total SELECT statements executed:
         # With 5 installs, exactly 1 batch query for maps and 1 batch query for counts
-        # (Total 11 queries across the entire tree building operation regardless of M installs)
-        self.assertEqual(len(select_statements), 11)
+        # Authority and identity guards add two fixed statements; the total
+        # remains independent of the number of installs or Notes.
+        self.assertEqual(len(select_statements), 13)
+        self.assertFalse(any("card_progress" in sql.lower() for sql in select_statements))
 
     def test_overlap_guard_fallback_on_cross_install_overlap(self):
         # Simulate edge-case where two installs map the same source_deck_id
@@ -252,7 +251,6 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
         note = Note(deck_id=src_deck.id, note_type_id=self.note_type_id, user_id=self.owner_id)
         db.session.add(note)
         db.session.flush()
-        db.session.add(Card(note_id=note.id, template_id=self.template_id))
         db.session.commit()
 
         tree_payload = vocabulary_repository.build_browse_deck_tree_payload(

@@ -16,10 +16,11 @@ from app.repositories.study_authority_repository import (
 )
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import attach_template, enroll_note_user, archive_wire_alias, assert_retired_progress_absent
 from models.deck import Deck
 from models.note import Note
 from models.note_type import NoteType
+from models.study_application import StudyApplication
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
@@ -48,12 +49,16 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
         )
         db.session.add_all([learner, publisher])
         db.session.flush()
+        enroll_note_user(db.session, learner)
+        enroll_note_user(db.session, publisher)
         self.learner_id = int(learner.id)
         self.publisher_id = int(publisher.id)
         note_type = NoteType(user_id=self.publisher_id, name="Published source")
+        db.session.add(note_type)
+        db.session.flush()
         templates = (
-            Template(id="sibling-template-b", note_type=note_type, name="B", position=1),
-            Template(id="sibling-template-a", note_type=note_type, name="A", position=0),
+            attach_template(db.session, owner_user_id=self.publisher_id, note_type_id=note_type.id, id="sibling-template-b", name="B", position=1),
+            attach_template(db.session, owner_user_id=self.publisher_id, note_type_id=note_type.id, id="sibling-template-a", name="A", position=0),
         )
         deck = Deck(
             owner_user_id=self.publisher_id,
@@ -67,11 +72,8 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
             field_values={"Front": "source"},
             tags=[],
         )
-        cards = (
-            Card(id="sibling-card-b", note=note, template=templates[0]),
-            Card(id="sibling-card-a", note=note, template=templates[1]),
-        )
-        db.session.add_all([note_type, *templates, deck, note, *cards])
+        # Both Templates present the Note (ADR P11); no Card is stored.
+        db.session.add_all([note_type, *templates, deck, note])
         db.session.flush()
         note.deck_id = int(deck.id)
         subject = StudyProgressSubject(
@@ -88,7 +90,8 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
         db.session.add(subject)
         db.session.commit()
         self.subject_id = int(subject.id)
-        self.card_ids = ("sibling-card-a", "sibling-card-b")
+        self.card_ids = tuple(sorted(card.id for card in Card.query.filter_by(note_id=note.id)))
+        self.assertEqual(len(self.card_ids), 2)
 
     def tearDown(self):
         db.session.remove()
@@ -118,19 +121,37 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
         )
 
     def test_source_owned_overlay_note_resolves_its_cards_without_card_progress(self):
-        # A frozen card_progress row kept from before NOTE is never read (ADR P10).
-        db.session.add(CardProgress(user_id=self.learner_id, card_id="sibling-card-b"))
-        db.session.commit()
+        assert_retired_progress_absent(self, db.session)
         locked = self._locked()
         siblings = lock_study_authority_siblings(
             db.session,
             route=self._route(),
             locked=locked,
-            requested_card_id="sibling-card-b",
+            requested_card_id=self.card_ids[1],
         )
         self.assertNotEqual(self.publisher_id, self.learner_id)
         self.assertEqual(siblings.card_ids, self.card_ids)
         self.assertEqual(dict(siblings.progress_by_card_id), {})
+
+    def test_retired_occurrence_card_stays_a_sibling_with_its_legacy_id(self):
+        # An open session may have dealt a Card before its occurrence retired,
+        # and history may name it by its pre-P11 ID (ADR P11).
+        retired = StudyApplication.query.filter_by(template_id="sibling-template-b").one()
+        card = Card.query.filter_by(note_id="sibling-source-note", application_id=retired.id).one()
+        archive_wire_alias(db.session, card, "sibling-card-b")
+        retired.status_code = "RETIRED"
+        db.session.commit()
+        retired_card_id = f"sibling-source-note.{retired.id}"
+        self.assertEqual(Card.query.filter_by(note_id="sibling-source-note").count(), 1)
+        siblings = lock_study_authority_siblings(
+            db.session,
+            route=self._route(),
+            locked=self._locked(),
+            requested_card_id=retired_card_id,
+        )
+        self.assertEqual(siblings.card_ids, self.card_ids)
+        self.assertEqual(siblings.legacy_card_ids, ("sibling-card-b",))
+        self.assertEqual(siblings.history_card_ids, (*self.card_ids, "sibling-card-b"))
 
     def test_requested_card_must_belong_to_the_locked_subject(self):
         locked = self._locked()
@@ -176,8 +197,8 @@ class StudyAuthoritySiblingRepositoryTests(unittest.TestCase):
         self.assertEqual(mode.exception.code, "AUTHORITY_MODE_CONFLICT")
         db.session.rollback()
 
-        for card in Card.query.filter_by(note_id="sibling-source-note").all():
-            db.session.delete(card)
+        # A NoteType without any occurrence presents its Notes through nothing.
+        StudyApplication.query.delete(synchronize_session=False)
         db.session.commit()
         locked = self._locked()
         with self.assertRaises(StudyAuthorityFenceError) as empty:

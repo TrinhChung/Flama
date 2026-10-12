@@ -18,6 +18,7 @@ from models.connect_source_card_ref import ConnectSourceCardRef
 from models.note import Note
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
+from tests.study_note_fixtures import attach_template
 from models.user import User
 
 
@@ -55,11 +56,10 @@ class StudyConsolidatedConnectTests(unittest.TestCase):
         self.assertTrue(imported["results"][0]["imported"])
         with self.app.app_context():
             note = Note.query.filter_by(user_id=self.admin_id).one()
-            template = Template(note_type_id=note.note_type_id, name="Authority sibling",
+            template = attach_template(db.session, note_type_id=note.note_type_id, owner_user_id=self.admin_id, name="Authority sibling",
                                 front_html="{{Meaning}}", back_html="{{Word}}", position=1)
             db.session.add(template)
             db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=template.id))
             db.session.flush()
             # The P10 switch requires every account on NOTE authority, as in production.
             for user_id in sorted(user.id for user in User.query.all()):

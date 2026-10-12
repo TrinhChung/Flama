@@ -1,11 +1,11 @@
-"""Card study-state reads: LEGACY ``card_progress`` or the NOTE progress row (ADR P10)."""
+"""Card study-state reads from the canonical NOTE progress row."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +29,6 @@ from app.services.study_session_authority_pin_service import (
 from app.services.study_note_card_projection import NoteCardBurial
 from app.services.study_progress_shadow_codec import StudyProgressCodecError
 from models.card import Card
-from models.card_progress import CardProgress
 
 
 @dataclass(frozen=True)
@@ -49,7 +48,7 @@ class StudyAuthorityCardRead:
     route: StudyAuthorityRoute
     state: CardState
     state_version: str
-    progress: CardProgress | None
+    progress: Any | None
     authority_revision: int | None
     availability: StudyAuthorityAvailabilityRead
 
@@ -72,10 +71,10 @@ class StudyAuthorityReadError(RuntimeError):
         self.code = str(code)
 
 
-def _availability_from_legacy(
+def _pristine_availability(
     *,
     card: Card,
-    progress: CardProgress | None,
+    progress: Any | None,
     now_utc: datetime,
 ) -> StudyAuthorityAvailabilityRead:
     return StudyAuthorityAvailabilityRead(
@@ -90,7 +89,7 @@ def _availability_from_legacy(
             progress.buried_until_day if progress is not None else None
         ),
         card_created_at=card.created_at or now_utc,
-        card_order_key=str(card.id).encode("utf-8"),
+        card_order_key=str(getattr(card, "order_key", card.id)).encode("utf-8"),
     )
 
 
@@ -105,11 +104,11 @@ def _availability_from_subject(subject, *, card) -> StudyAuthorityAvailabilityRe
             int(subject.buried_until_day) if subject.buried_until_day is not None else None
         ),
         card_created_at=card.created_at,
-        card_order_key=str(card.id).encode("utf-8"),
+        card_order_key=str(getattr(card, "order_key", card.id)).encode("utf-8"),
     )
 
 
-def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilityRead:
+def validate_consolidated_subject_state(*, subject, note_id: str) -> None:
     """A locked consolidated row must agree with its own state (ADR P10 §2.7).
 
     In memory only: the row's availability and semantic hash are recomputed
@@ -131,7 +130,7 @@ def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilit
     except StudyProgressCodecError as exc:
         raise StudyAuthorityReadError(
             "AUTHORITY_READ_PARITY_DIVERGED",
-            f"Note {card.note_id} NOTE state cannot be projected: {exc}",
+            f"Note {note_id} NOTE state cannot be projected: {exc}",
         ) from exc
     if (
         projected.semantic_state_hash != bytes(subject.semantic_state_hash)
@@ -143,8 +142,14 @@ def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilit
     ):
         raise StudyAuthorityReadError(
             "AUTHORITY_READ_PARITY_DIVERGED",
-            f"Note {card.note_id} availability differs from its NOTE state.",
+            f"Note {note_id} availability differs from its NOTE state.",
         )
+
+
+
+def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilityRead:
+    """Validate a locked Note state, then attach presentation ordering metadata."""
+    validate_consolidated_subject_state(subject=subject, note_id=str(card.note_id))
     return _availability_from_subject(subject, card=card)
 
 
@@ -162,6 +167,7 @@ def load_study_authority_availability_snapshot(
     cards: Sequence[Card | StudyQueueCardRef],
     scope,
     now_utc: datetime,
+    scope_options: Mapping | None = None,
 ) -> Mapping[str, StudyAuthorityAvailabilitySnapshot]:
     """Non-locking canonical availability for a whole NOTE queue (P5-11e).
 
@@ -171,8 +177,9 @@ def load_study_authority_availability_snapshot(
     reads the same values set-wise, without locks or per-Card verification,
     and checks evidence integrity with the dashboard's set-wise rules and the
     locking reader's error codes. ``scope`` is a subquery with ``deck_id``,
-    ``card_id`` and ``note_id`` covering ``cards``. Callers still take a full
-    locking read of the Cards they return or answer.
+    ``card_id`` and ``note_id`` covering ``cards``; ``scope_options`` are the
+    execution options it was built under (``card_scope_options``). Callers
+    still take a full locking read of the Cards they return or answer.
     """
 
     from sqlalchemy import LargeBinary, and_, cast
@@ -199,6 +206,7 @@ def load_study_authority_availability_snapshot(
                 StudyProgressSubject.logical_note_key == cast(scope.c.note_id, LargeBinary),
             ))
             .where(StudyProgressSubject.semantic_state_hash.isnot(None))
+            .execution_options(**dict(scope_options or {}))
         ).all()
     }
     return MappingProxyType({
@@ -206,7 +214,7 @@ def load_study_authority_availability_snapshot(
             availability=(
                 _availability_from_subject(stateful[str(card.id)], card=card)
                 if str(card.id) in stateful
-                else _availability_from_legacy(card=card, progress=None, now_utc=now_utc)
+                else _pristine_availability(card=card, progress=None, now_utc=now_utc)
             )
         )
         for card in cards
@@ -255,44 +263,6 @@ def load_study_authority_card_reads(
         return MappingProxyType({})
     if set(requested_card_by_id) != set(deck_options_by_card_id):
         raise ValueError("Every authority read Card requires frozen deck options.")
-    if route.mode_code == "LEGACY":
-        progress_by_card_id = {
-            str(row.card_id): row
-            for row in session.query(CardProgress)
-            .filter(
-                CardProgress.user_id == learner_user_id,
-                CardProgress.card_id.in_(sorted(requested_card_by_id)),
-            )
-            .all()
-        }
-        return MappingProxyType(
-            {
-                card_id: StudyAuthorityCardRead(
-                    route=route,
-                    state=card_state_from_progress(
-                        progress_by_card_id.get(card_id),
-                        now_utc,
-                        timezone_name=timezone_name,
-                        user_id=learner_user_id,
-                        options=deck_options_by_card_id[card_id],
-                    ),
-                    state_version=review_state_version(
-                        progress=progress_by_card_id.get(card_id),
-                        deck_options=deck_options_by_card_id[card_id],
-                        timezone_name=timezone_name,
-                    ),
-                    progress=progress_by_card_id.get(card_id),
-                    authority_revision=None,
-                    availability=_availability_from_legacy(
-                        card=requested_card_by_id[card_id],
-                        progress=progress_by_card_id.get(card_id),
-                        now_utc=now_utc,
-                    ),
-                )
-                for card_id in sorted(requested_card_by_id)
-            }
-        )
-
     from app.repositories.study_authority_repository import StudyAuthorityFenceError
     from app.services.study_artifact_service import pristine_note_review_state_version
     from app.services.study_note_pristine_service import classify_note_authority_keys
@@ -325,7 +295,7 @@ def load_study_authority_card_reads(
             ),
             progress=None,
             authority_revision=0,
-            availability=_availability_from_legacy(
+            availability=_pristine_availability(
                 card=card,
                 progress=None,
                 now_utc=now_utc,
@@ -348,23 +318,8 @@ def load_study_authority_card_reads(
         logical_note_keys=logical_note_keys,
         now_utc=now_utc,
     )
-    # A Card detail or a scoped list may request only one Card from a Note.
-    # Verify every live sibling before returning any NOTE authority read;
-    # otherwise a divergent, unrequested sibling can be silently ignored.
-    sibling_cards = tuple(
-        session.execute(
-            select(Card)
-            .where(Card.note_id.in_(logical_note_keys))
-            .order_by(Card.id.asc())
-        ).scalars()
-    )
-    card_by_id = {str(card.id): card for card in sibling_cards}
-    if not set(requested_card_by_id).issubset(card_by_id):
-        raise StudyAuthorityReadError(
-            "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            "NOTE read Card is missing from the live sibling vector.",
-        )
-    # ADR P10 §2.7: the locked subject row holds state and availability.
+    # Caller supplies authorized presentations; validate each requested Note once.
+    card_by_id = requested_card_by_id
     validated_note_keys: set[str] = set()
     for card_id in sorted(card_by_id):
         if card_id not in requested_card_by_id:

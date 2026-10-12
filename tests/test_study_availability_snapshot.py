@@ -42,11 +42,10 @@ class StudyAvailabilitySnapshotTests(unittest.TestCase):
                         deck_id=self.deck_id, field_values={"Word": "pristine"})
             db.session.add(note)
             db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=db.session.get(Card, self.card_ids[0]).template_id))
             db.session.commit()
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             scope, cards = self._scope_and_cards()
-            self.assertEqual(len(cards), 3)
+            self.assertEqual(len(cards), 4)
             snapshot = load_study_authority_availability_snapshot(
                 db.session, learner_user_id=self.user_id, cards=cards, scope=scope, now_utc=now)
             lock_study_authority_route(db.session, learner_user_id=self.user_id, allow_note_authority=True)
@@ -127,7 +126,7 @@ class StudyAvailabilitySnapshotTests(unittest.TestCase):
             self.assertEqual(projected.call_count, 1)
             self.assertEqual(set(reads), set(self.card_ids))
             for card in cards:
-                self.assertEqual(reads[str(card.id)].availability.card_order_key, str(card.id).encode())
+                self.assertEqual(reads[str(card.id)].availability.card_order_key, str(card.order_key).encode())
                 self.assertEqual(reads[str(card.id)].availability.card_created_at, card.created_at)
             db.session.rollback()
 

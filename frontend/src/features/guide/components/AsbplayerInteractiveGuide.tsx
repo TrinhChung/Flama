@@ -106,7 +106,7 @@ export function AsbplayerInteractiveGuide() {
       await navigator.clipboard.writeText(ankiConnectUrl)
       setCopiedUrl(true)
       window.setTimeout(() => setCopiedUrl(false), 2000)
-      toast.success(t('asbplayer.step_4_copied', { defaultValue: 'Đã sao chép URL AnkiConnect!' }))
+      toast.success(t('asbplayer.step_4_copied', { defaultValue: 'Đã sao chép Server URL Flama Connect!' }))
     } catch {
       toast.error('Không thể sao chép URL.')
     }
@@ -160,7 +160,7 @@ export function AsbplayerInteractiveGuide() {
               <Film className="size-3" /> {t('asbplayer.hero_badge_video', { defaultValue: 'Khai thác video & phụ đề' })}
             </Badge>
             <Badge variant="secondary" className="text-xs gap-1.5">
-              <Cloud className="size-3 text-primary" /> {t('asbplayer.hero_badge_bridge', { defaultValue: 'Cầu nối AnkiConnect' })}
+              <Cloud className="size-3 text-primary" /> {t('asbplayer.hero_badge_bridge', { defaultValue: 'Nền tảng Flama Connect' })}
             </Badge>
           </div>
           <div className="space-y-1.5">
@@ -199,12 +199,12 @@ export function AsbplayerInteractiveGuide() {
                 <Zap className="size-5" />
               </div>
               <div className="font-bold text-xs sm:text-sm text-foreground">
-                {t('asbplayer.pillar_2_title', { defaultValue: 'Kết Nối Không Cần Anki Desktop' })}
+                {t('asbplayer.pillar_2_title', { defaultValue: 'Đồng Bộ Trực Tiếp Qua Flama Connect' })}
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {t('asbplayer.pillar_2_desc', {
                   defaultValue:
-                    'Flama Connect tích hợp sẵn cầu nối AnkiConnect đám mây qua /v1/anki-connect. Bạn có thể tạo thẻ trực tiếp vào Flama mọi lúc mọi nơi.',
+                    'Flama Connect tiếp nhận dữ liệu khai thác trực tiếp qua cổng kết nối tương thích (/v1/anki-connect). Flashcard được lưu thẳng vào Flama mà không cần phần mềm Anki Desktop.',
                 })}
               </p>
             </div>
@@ -410,7 +410,7 @@ export function AsbplayerInteractiveGuide() {
                     3
                   </div>
                   <h4 className="font-bold text-sm sm:text-base text-foreground">
-                    {t('asbplayer.step_3_title', { defaultValue: 'Bước 3: Tạo API Token trên Flama' })}
+                    {t('asbplayer.step_3_title', { defaultValue: 'Bước 3: Tạo API Token trên Flama Connect' })}
                   </h4>
                 </div>
                 <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-semibold text-muted-foreground">
@@ -420,7 +420,7 @@ export function AsbplayerInteractiveGuide() {
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-9">
                 {t('asbplayer.step_3_desc', {
                   defaultValue:
-                    'Truy cập /settings/asbplayer, chọn preset "Khai thác đa phương tiện (mining-media)" để cấp quyền lưu câu thoại, ảnh chụp và âm thanh MP3. Sao chép API Key được cấp.',
+                    'Truy cập /settings/asbplayer, chọn preset "Khai thác đa phương tiện (mining-media)" để Flama Connect cấp quyền lưu câu thoại, ảnh chụp và âm thanh MP3. Sao chép API Key được cấp.',
                 })}
               </p>
               <div className="pl-9">
@@ -441,23 +441,23 @@ export function AsbplayerInteractiveGuide() {
                     4
                   </div>
                   <h4 className="font-bold text-sm sm:text-base text-foreground">
-                    {t('asbplayer.step_4_title', { defaultValue: 'Bước 4: Cấu hình AnkiConnect trong asbplayer' })}
+                    {t('asbplayer.step_4_title', { defaultValue: 'Bước 4: Cấu hình kết nối Flama Connect trong asbplayer' })}
                   </h4>
                 </div>
                 <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-semibold text-muted-foreground">
-                  asbplayer
+                  Flama Connect
                 </Badge>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-9">
                 {t('asbplayer.step_4_desc', {
                   defaultValue:
-                    'Mở Cài đặt (Settings) trong asbplayer ➔ chọn mục "Anki" ➔ Bật "Anki integration" ➔ Dán URL AnkiConnect và mã API Key vào asbplayer ➔ Nhấn "Test Connection" để kiểm tra.',
+                    'Mở Cài đặt (Settings) trong asbplayer ➔ chọn mục "Anki" (tiện ích asbplayer tích hợp qua chuẩn giao thức này) ➔ Bật "Anki integration" ➔ Dán Server URL Flama Connect và mã API Key vào asbplayer ➔ Nhấn "Test Connection" để kiểm tra kết nối với Flama.',
                 })}
               </p>
 
               <div className="pl-9 space-y-2">
                 <div className="text-xs font-semibold text-foreground">
-                  {t('asbplayer.step_4_url_label', { defaultValue: 'URL AnkiConnect của Flama:' })}
+                  {t('asbplayer.step_4_url_label', { defaultValue: 'Server URL Flama Connect (Endpoint tương thích):' })}
                 </div>
                 <div className="flex items-center gap-2 max-w-xl">
                   <code className="flex-1 overflow-x-auto rounded-xl bg-zinc-950 p-2.5 font-mono text-xs text-zinc-100 dark:bg-zinc-900 border border-zinc-800">
@@ -472,10 +472,19 @@ export function AsbplayerInteractiveGuide() {
                     {copiedUrl ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
                     <span>
                       {copiedUrl
-                        ? t('asbplayer.step_4_copied', { defaultValue: 'Đã chép!' })
-                        : t('asbplayer.step_4_copy_btn', { defaultValue: 'Sao chép URL' })}
+                        ? t('asbplayer.step_4_copied', { defaultValue: 'Đã sao chép Server URL Flama Connect!' })
+                        : t('asbplayer.step_4_copy_btn', { defaultValue: 'Sao chép Server URL' })}
                     </span>
                   </Button>
+                </div>
+                <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground leading-relaxed">
+                  <span className="font-semibold text-foreground">
+                    {t('asbplayer.step_4_note_title', { defaultValue: 'Lưu ý về mục "Anki" trong asbplayer:' })}
+                  </span>{' '}
+                  {t('asbplayer.step_4_note_desc', {
+                    defaultValue:
+                      'asbplayer sử dụng giao thức chuẩn AnkiConnect để giao tiếp với bên ngoài. Nền tảng Flama Connect đóng vai trò máy chủ tiếp nhận độc lập tương thích chuẩn này, lưu trữ toàn bộ thẻ học trực tiếp vào hệ thống Flama mà không cần cài đặt hay mở ứng dụng Anki Desktop.',
+                  })}
                 </div>
               </div>
             </div>
@@ -498,7 +507,7 @@ export function AsbplayerInteractiveGuide() {
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-9">
                 {t('asbplayer.step_5_desc', {
                   defaultValue:
-                    'Trong cài đặt Anki của asbplayer, chọn Deck "Sentences" và Note Type "Sentence Card". Ánh xạ lần lượt 7 trường: Sentence, Word, Definition, Image, Audio, Source, URL theo bảng quy chuẩn của Flama.',
+                    'Trong cài đặt Anki của asbplayer, chọn Deck "Sentences" và Note Type "Sentence Card" do Flama Connect chuẩn bị. Ánh xạ lần lượt 7 trường: Sentence, Word, Definition, Image, Audio, Source, URL theo bảng quy chuẩn của Flama.',
                 })}
               </p>
               <div className="pl-9 flex flex-wrap gap-2 pt-1">
@@ -539,7 +548,7 @@ export function AsbplayerInteractiveGuide() {
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pl-9">
                 {t('asbplayer.step_6_desc', {
                   defaultValue:
-                    'Khi xem video có phụ đề, bấm Ctrl+Shift+X để bắt trọn câu thoại, âm thanh MP3 và ảnh chụp màn hình gửi vào Flama. Nếu muốn có từ vựng và nghĩa, hãy rê chuột tra từ bằng Yomitan trên phụ đề trước khi bấm phím tắt!',
+                    'Khi xem video có phụ đề, bấm Ctrl+Shift+X để bắt trọn câu thoại, âm thanh MP3 và ảnh chụp màn hình gửi vào Flama qua Flama Connect. Nếu muốn có từ vựng và nghĩa, hãy rê chuột tra từ bằng Yomitan trên phụ đề trước khi bấm phím tắt!',
                 })}
               </p>
               <div className="pl-9 flex flex-wrap gap-2 pt-1">

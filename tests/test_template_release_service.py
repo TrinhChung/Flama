@@ -22,6 +22,7 @@ from models.template_version import TemplateVersion
 from models.user import User
 from models.field_def import FieldDef
 from models.study_application import StudyApplication
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class TemplateReleaseServiceTests(unittest.TestCase):
@@ -30,16 +31,16 @@ class TemplateReleaseServiceTests(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
-        owner = User(username="template-publisher", email="template-publisher@example.com")
-        learner = User(username="template-receiver", email="template-receiver@example.com")
-        stranger = User(username="template-stranger", email="template-stranger@example.com")
+        owner = create_note_user(db.session, username="template-publisher", email="template-publisher@example.com")
+        learner = create_note_user(db.session, username="template-receiver", email="template-receiver@example.com")
+        stranger = create_note_user(db.session, username="template-stranger", email="template-stranger@example.com")
         db.session.add_all([owner, learner, stranger])
         db.session.flush()
         self.owner_id, self.learner_id, self.stranger_id = owner.id, learner.id, stranger.id
         nt = NoteType(user_id=owner.id, name="Source")
         db.session.add(nt)
         db.session.flush()
-        source = Template(note_type_id=nt.id, owner_user_id=owner.id, name="Reusable", front_html="FRONT", back_html="BACK", shared_css=".card{}", input_schema=[])
+        source = attach_template(db.session, note_type_id=nt.id, owner_user_id=owner.id, name="Reusable", front_html="FRONT", back_html="BACK", shared_css=".card{}", input_schema=[])
         db.session.add(source)
         db.session.flush()
         self.source_id, self.nt_id = source.id, nt.id

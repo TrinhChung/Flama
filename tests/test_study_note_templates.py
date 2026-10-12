@@ -13,7 +13,8 @@ from app.services.study_composition_service import make_compatibility_compositio
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from models.study_application import StudyApplication
+from tests.study_note_fixtures import assert_retired_progress_absent
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
@@ -27,7 +28,16 @@ from models.user import User
 
 class StudyNoteTemplateTests(unittest.TestCase):
     setUpClass = classmethod(fixtures.StudyDirectNoteReplayTests.setUpClass.__func__)
-    setUp = fixtures.StudyDirectNoteReplayTests.setUp
+    def setUp(self):
+        fixtures.StudyDirectNoteReplayTests.setUp(self)
+        with self.app.app_context():
+            from app.repositories.study_authority_repository import lock_study_authority_route
+            from app.services.study_progress_lifecycle_mirror_service import materialize_new_note_authority
+            route = lock_study_authority_route(db.session, learner_user_id=self.user_id, allow_note_authority=True)
+            note = Note.query.filter_by(user_id=self.user_id).one()
+            materialize_new_note_authority(db.session, route=route, note=note,
+                cards=tuple(Card.query.filter_by(note_id=note.id).all()))
+            db.session.commit()
     _cleanup = fixtures.StudyDirectNoteReplayTests._cleanup
     _answer = fixtures.StudyDirectNoteReplayTests._answer
 
@@ -36,7 +46,7 @@ class StudyNoteTemplateTests(unittest.TestCase):
         self._answer({**self.payload, "rating": "hard", "operation_key": str(uuid4())})
 
     def _identity(self):
-        subject = StudyProgressSubject.query.one()
+        subject = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one()
         return (deepcopy(subject.state_payload), bytes(subject.semantic_state_hash),
                 subject.subject_generation, subject.authority_revision)
 
@@ -52,8 +62,8 @@ class StudyNoteTemplateTests(unittest.TestCase):
         # Template topology changes neither the Note's state nor its row's generation.
         self.assertEqual(self._identity(), before)
         self.assertEqual(Card.query.count(), cards)
-        self.assertEqual(CardProgress.query.count(), 0)
-        self.assertEqual(Template.query.filter_by(is_default=True).count(), 1)
+        assert_retired_progress_absent(self, db.session)
+        self.assertEqual(StudyApplication.query.filter_by(status_code="ACTIVE", is_default=True).count(), 1)
         self.assertEqual(ReviewEvent.query.count(), before[3])
         self.assertEqual(StudyAuthorityCommandReceipt.query.count(), before[3])
 
@@ -106,16 +116,16 @@ class StudyNoteTemplateTests(unittest.TestCase):
     def test_second_expansion_fault_rolls_back_fields_metadata_and_all_cards(self):
         with self.app.app_context():
             before = self._identity()
-            original = content_topology.finalize_content_expansion
+            original = Template.__init__
             calls = 0
-            def fail_second(*args, **kwargs):
+            def fail_second(template, *args, **kwargs):
+                # Fault while staging the second addition, after the first was flushed.
                 nonlocal calls
                 calls += 1
-                result = original(*args, **kwargs)
                 if calls == 2:
                     raise RuntimeError("injected expansion fault")
-                return result
-            with patch.object(content_topology, "finalize_content_expansion", side_effect=fail_second):
+                original(template, *args, **kwargs)
+            with patch.object(Template, "__init__", fail_second):
                 with self.assertRaisesRegex(RuntimeError, "injected expansion fault"):
                     self._update({"added": [{"name": "A"}, {"name": "B"}]}, name="Uncommitted name",
                         fields={"added": [{"name": "Extra"}]})
@@ -124,29 +134,50 @@ class StudyNoteTemplateTests(unittest.TestCase):
             self.assertEqual(NoteType.query.one().name, "Direct replay")
             self.assertEqual(FieldDef.query.count(), 1)
 
-    def test_removal_fault_rolls_back_prior_additions(self):
+    def test_retirement_flush_fault_rolls_back_additions_and_application_state(self):
         with self.app.app_context():
             before = self._identity()
-            original = content_topology.finalize_content_delete
-            def fail_after_removal(*args, **kwargs):
-                original(*args, **kwargs)
-                raise RuntimeError("injected removal fault")
-            with patch.object(content_topology, "finalize_content_delete", side_effect=fail_after_removal):
-                with self.assertRaisesRegex(RuntimeError, "injected removal fault"):
+            original = db.session().flush
+            def fail_after_retirement(*args, **kwargs):
+                retiring = any(isinstance(row, StudyApplication) and row.status_code == "RETIRED"
+                    for row in db.session.dirty)
+                result = original(*args, **kwargs)
+                if retiring:
+                    raise RuntimeError("injected retirement fault")
+                return result
+            with patch.object(db.session(), "flush", side_effect=fail_after_retirement):
+                with self.assertRaisesRegex(RuntimeError, "injected retirement fault"):
                     self._update([{"name": "Replacement"}], confirmed=True)
             self.assertFalse(db.session().in_transaction())
             self._assert_state(before, cards=2)
+            self.assertEqual(Template.query.count(), 2)
+            self.assertEqual(StudyApplication.query.filter_by(status_code="RETIRED").count(), 0)
 
     def test_empty_list_and_ambiguous_identity_reject_without_writes(self):
         with self.app.app_context():
             before = self._identity()
             template_id = Template.query.first().id
             for changes in ([], [{"id": "not-owned", "name": "A"}],
-                    [{"id": template_id}, {"id": template_id}], {"added": [{"name": "Card 0"}]}):
+                    [{"id": template_id}, {"id": template_id}], {"removed": ["not-an-attachment"]}):
                 with self.subTest(changes=changes), self.assertRaises(RequestValidationError):
                     self._update(changes, confirmed=True, name="Must roll back")
                 self._assert_state(before, cards=2)
                 self.assertEqual(NoteType.query.one().name, "Direct replay")
+
+    def test_duplicate_definition_names_require_explicit_attachment_identity(self):
+        with self.app.app_context():
+            before = self._identity()
+            result = self._update({"added": [{"name": "Card 0"}]})
+            self.assertEqual(len(result["templates"]), 3)
+            self._assert_state(before, cards=3)
+            with self.assertRaises(RequestValidationError):
+                self._update({"removed": ["Card 0"]}, confirmed=True)
+            self._assert_state(before, cards=3)
+            views = [row for row in result["templates"] if row["name"] == "Card 0"]
+            self.assertEqual(len(views), 2)
+            self.assertNotEqual(views[0]["application_id"], views[1]["application_id"])
+            self._update({"removed": [views[0]["application_id"]]}, confirmed=True)
+            self._assert_state(before, cards=2)
 
     def test_preview_rejects_same_count_template_edit_without_timestamp_change(self):
         with self.app.app_context():
@@ -174,18 +205,17 @@ class StudyNoteTemplateTests(unittest.TestCase):
             self.assertEqual(failure.exception.code, "SHARED_SCHEMA_VERSIONING_REQUIRED")
             self._assert_state(before, cards=2)
 
-    def test_other_legacy_learner_progress_is_retired_with_removed_template(self):
+    def test_other_note_learner_keeps_state_when_application_is_retired(self):
         with self.app.app_context():
+            reader_id = content_delete_tests.StudyContentDeleteTests._add_note_source_reader(self)
             before = self._identity()
-            other = User(username="other-template", email="other-template@example.test")
-            db.session.add(other)
-            db.session.flush()
-            other_id = other.id
-            db.session.add(CardProgress(user_id=other_id, card_id=self.card_ids[0]))
-            db.session.commit()
+            reader = StudyProgressSubject.query.filter_by(learner_user_id=reader_id).one()
+            token = (reader.id, reader.authority_revision, reader.semantic_state_hash)
             self._update({"removed": ["Card 0"]}, confirmed=True)
             self._assert_state(before, cards=1)
-            self.assertEqual(CardProgress.query.filter_by(user_id=other_id).count(), 0)
+            reader = StudyProgressSubject.query.filter_by(learner_user_id=reader_id).one()
+            self.assertEqual((reader.id, reader.authority_revision, reader.semantic_state_hash), token)
+            self.assertEqual(Template.query.count(), 2)
 
     def test_second_note_learner_keeps_one_state_across_mcp_add_and_remove(self):
         with self.app.app_context():
@@ -196,12 +226,12 @@ class StudyNoteTemplateTests(unittest.TestCase):
             self._update({"added": [{"name": "Reverse"}]})
             db.session.expire_all()
             self.assertEqual(Card.query.count(), 3)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(tokens(), before)
             self._update({"removed": ["Card 0"]}, confirmed=True)
             db.session.expire_all()
             self.assertEqual(Card.query.count(), 2)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(tokens(), before)
             self.assertEqual(StudyProgressSubject.query.filter(
                 StudyProgressSubject.state_payload.isnot(None)).count(), 2)

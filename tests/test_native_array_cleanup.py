@@ -18,6 +18,8 @@ from models.template import Template
 from models.template_publication import TemplatePublication
 from models.template_version import TemplateVersion
 from models.user import User
+from models.study_application import StudyApplication
+from tests.study_note_fixtures import create_note_user, attach_template
 
 
 class NativeArrayCleanupTests(TestCase):
@@ -30,7 +32,7 @@ class NativeArrayCleanupTests(TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
-        user = User(username='owner', email='owner@example.com')
+        user = create_note_user(db.session, username='owner', email='owner@example.com')
         db.session.add(user)
         db.session.flush()
         nt = NoteType(user_id=user.id, name='Array')
@@ -41,7 +43,9 @@ class NativeArrayCleanupTests(TestCase):
             field_values={'Answer': 'one; literal\ntwo\none; literal', 'Other': '<b>keep</b>'})
         self.native = Note(user_id=user.id, note_type_id=nt.id,
             field_values={'Answer': ['a,b', '', ['nested', 'items'], 'a,b']})
-        self.template = Template(owner_user_id=user.id, note_type_id=nt.id, name='Array',
+        db.session.add(self.field)
+        db.session.flush()
+        self.template = attach_template(db.session, owner_user_id=user.id, note_type_id=nt.id, name='Array',
             front_html='{{#Answer}}<div>{{Answer}}</div>{{/Answer}}', back_html='', shared_css='.card{color:red}')
         db.session.add_all([self.field, self.note, self.native, self.template])
         db.session.commit()
@@ -95,6 +99,50 @@ class NativeArrayCleanupTests(TestCase):
         self.assertEqual(self.template.front_html, '{{#Answer}}<div>{{Answer}}</div>{{/Answer}}')
         self.assertEqual(TemplateVersion.query.count(), len(old_versions) + 2)
         self.assertTrue(self.publication.auto_publish_enabled)
+
+    def test_changed_binding_or_application_scope_blocks_apply_before_any_write(self):
+        plan = self.plan()
+        application = StudyApplication.query.filter_by(template_id=self.template.id).one()
+        application.input_bindings = {'Answer': None}
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, 'attachment scope changed'):
+            cleanup.apply_plan(db.session, plan)
+        db.session.rollback()
+        self.assertIsInstance(self.note.field_values['Answer'], str)
+        self.assertEqual(AuditLog.query.count(), 0)
+
+    def test_reused_definition_requires_reviewed_array_fields_in_every_active_scope(self):
+        original_application = StudyApplication.query.filter_by(template_id=self.template.id).one()
+        second_type = NoteType(user_id=self.note.user_id, name='Second array scope')
+        db.session.add(second_type)
+        db.session.flush()
+        second_field = FieldDef(note_type_id=second_type.id, name='Answer', field_type='array')
+        second_note = Note(user_id=self.note.user_id, note_type_id=second_type.id, field_values={'Answer': 'two\nthree'})
+        db.session.add_all([second_field, second_note])
+        db.session.flush()
+        db.session.add(StudyApplication(template_id=self.template.id, note_type_id=second_type.id,
+            occurrence_key='second-scope', input_bindings={'Answer': second_field.id}))
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, 'outside the reviewed field scope'):
+            self.plan()
+        self.manifest['fields'].append({'id': second_field.id, 'note_type_id': second_type.id,
+            'name': 'Answer', 'owner_user_id': self.note.user_id})
+        plan = self.plan()
+        self.assertEqual(len(plan['templates'][0]['application_scope']), 2)
+        cleanup.apply_plan(db.session, plan)
+        db.session.commit()
+        cleanup.verify_plan(db.session, plan)
+        self.assertEqual(second_note.field_values['Answer'], ['two', 'three'])
+        self.assertEqual(original_application.status_code, 'ACTIVE')
+        self.assertEqual(StudyApplication.query.count(), 2)
+
+    def test_matching_definition_owner_cannot_substitute_unrelated_note_type_scope(self):
+        other = NoteType(user_id=self.note.user_id, name='Unattached')
+        db.session.add(other)
+        db.session.commit()
+        self.manifest['templates'][0]['note_type_id'] = other.id
+        with self.assertRaisesRegex(ValueError, 'Template scope mismatch'):
+            self.plan()
 
     def test_injected_failure_rollback(self):
         plan = self.plan()

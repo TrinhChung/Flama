@@ -27,6 +27,7 @@ from models.deck import Deck
 from models.flashcard import FieldDef, Note, NoteType, Template
 from models.oauth_client import OAuthClient
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class OAuthMcpSecurityRegressionTests(unittest.TestCase):
@@ -43,16 +44,14 @@ class OAuthMcpSecurityRegressionTests(unittest.TestCase):
         mcp_access_token_service.reset_rate_limit_state()
 
         with self.app.app_context():
-            self.user = User(
+            self.user = create_note_user(
+                db.session,
                 username="alice",
                 email="alice@example.com",
                 timezone="UTC",
                 can_use_mcp=True,
             )
             self.user.set_password("password123")
-
-            db.session.add(self.user)
-            db.session.flush()
             self.user_id = self.user.id
 
             self.deck = Deck(
@@ -77,14 +76,15 @@ class OAuthMcpSecurityRegressionTests(unittest.TestCase):
             f3 = FieldDef(note_type_id=self.nt.id, name="Extra", position=2, required=False)
             db.session.add_all([f1, f2, f3])
 
-            t1 = Template(
+            t1 = attach_template(
+                db.session,
                 note_type_id=self.nt.id,
+                owner_user_id=self.user_id,
                 name="Card 1",
                 front_html="{{Front}}",
                 back_html="{{FrontSide}}<hr>{{Back}}",
                 position=0,
             )
-            db.session.add(t1)
             db.session.commit()
 
     def _login_session(self):
@@ -342,8 +342,8 @@ class OAuthMcpSecurityRegressionTests(unittest.TestCase):
             db.session.flush()
             f_a = FieldDef(note_type_id=nt2.id, name="Front", position=0, required=True, identity_role="primary")
             f_b = FieldDef(note_type_id=nt2.id, name="Back", position=1, required=False)
-            t_a = Template(note_type_id=nt2.id, name="Card 1", front_html="{{Front}}", back_html="{{Back}}", position=0)
-            db.session.add_all([f_a, f_b, t_a])
+            db.session.add_all([f_a, f_b])
+            t_a = attach_template(db.session, note_type_id=nt2.id, owner_user_id=self.user_id, name="Card 1", front_html="{{Front}}", back_html="{{Back}}", position=0)
             db.session.commit()
 
             # Initial sync with NoteType 1

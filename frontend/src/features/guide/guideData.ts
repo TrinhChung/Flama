@@ -756,17 +756,17 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
       },
       {
         slug: 'asbplayer',
-        title: 'Khai Thác Câu & Từ Vựng Từ Phim, Anime Có Phụ Đề Với asbplayer',
-        shortDescription: 'Tự động tạo Flashcard chứa trọn câu văn, ảnh chụp màn hình và âm thanh cắt chuẩn xác khi xem video hoặc phim hoạt hình Nhật Bản.',
+        title: 'Khai Thác Câu & Từ Vựng Từ Phim, Anime Có Phụ Đề Với asbplayer & Flama Connect',
+        shortDescription: 'Tự động tạo Flashcard chứa trọn câu văn, ảnh chụp màn hình và âm thanh cắt chuẩn xác qua Flama Connect khi xem video hoặc anime.',
         categorySlug: 'integrations',
         readTimeMinutes: 6,
-        updatedAt: '2026-10-11',
-        intro: 'asbplayer là công cụ và tiện ích mở rộng trình duyệt chuyên dụng cho người học ngôn ngữ qua phim ảnh, anime và video trực tuyến (YouTube, Netflix, Crunchyroll, TVer) hoặc tệp video cục bộ. Kết hợp cùng Flama Connect và Yomitan, bạn có thể tạo flashcard đa phương tiện (câu thoại, audio giọng nhân vật, ảnh chụp video) chỉ với một phím tắt duy nhất mà không cần cài đặt Anki Desktop.',
+        updatedAt: '2026-10-12',
+        intro: 'asbplayer là công cụ và tiện ích mở rộng trình duyệt chuyên dụng cho người học ngôn ngữ qua phim ảnh, anime và video trực tuyến (YouTube, Netflix, Crunchyroll, TVer) hoặc tệp video cục bộ. Thông qua nền tảng Flama Connect, bạn có thể tạo flashcard đa phương tiện (câu thoại, audio giọng nhân vật, ảnh chụp video) từ asbplayer trực tiếp vào tài khoản Flama chỉ với một phím tắt duy nhất mà không cần cài đặt hay mở phần mềm Anki Desktop.',
         keyTakeaways: [
           'Bắt trọn câu thoại, âm thanh giọng nhân vật và ảnh chụp màn hình video đúng thời điểm với 1 phím tắt Ctrl+Shift+X.',
-          'Flama Connect tích hợp sẵn cầu nối AnkiConnect đám mây qua endpoint /v1/anki-connect, không cần cài Anki Desktop.',
+          'Flama Connect là nền tảng tiếp nhận trực tiếp qua giao thức tương thích AnkiConnect (/v1/anki-connect), đồng bộ thẳng vào Flama mà không cần phần mềm Anki Desktop.',
           'Hỗ trợ xem video trực tuyến trên YouTube, Netflix, Crunchyroll cũng như video/phụ đề lưu cục bộ trên máy tính.',
-          'Kết hợp hoàn hảo với tiện ích Yomitan để tra từ và lấy nghĩa trực tiếp ngay trên phụ đề phụ.',
+          'Kết hợp hoàn hảo với tiện ích Yomitan để tra từ và lấy nghĩa trực tiếp ngay trên phụ đề.',
         ],
         steps: [
           {
@@ -782,25 +782,26 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
             tip: 'Nếu đã có sẵn bộ thẻ và model này từ trước, hệ thống sẽ xác nhận trạng thái sẵn sàng mà không tạo trùng lặp.',
           },
           {
-            title: 'Bước 3: Tạo API Token tích hợp trên Flama',
-            description: 'Tại trang Cài đặt asbplayer (/settings/asbplayer), chọn cấu hình preset "Khai thác đa phương tiện (mining-media)", nhập tên thiết bị và bấm "Tạo token mới". Sau đó sao chép URL AnkiConnect và mã API Key.',
+            title: 'Bước 3: Tạo API Token tích hợp trên Flama Connect',
+            description: 'Tại trang Cài đặt asbplayer (/settings/asbplayer), chọn cấu hình preset "Khai thác đa phương tiện (mining-media)", nhập tên thiết bị và bấm "Tạo token mới". Sau đó sao chép Server URL của Flama Connect và mã API Key.',
             badge: 'Bảo mật',
-            tip: 'Preset mining-media cung cấp đầy đủ quyền lưu câu thoại, tải ảnh chụp và ghi âm tệp MP3 lên kho lưu trữ đám mây của Flama.',
+            tip: 'Preset mining-media cung cấp đầy đủ quyền lưu câu thoại, tải ảnh chụp và ghi âm tệp MP3 lên kho lưu trữ đám mây của Flama qua Flama Connect.',
           },
           {
-            title: 'Bước 4: Cấu hình AnkiConnect URL và API Key trong asbplayer',
-            description: 'Mở Cài đặt (Settings) của asbplayer ➔ chọn mục "Anki" ➔ Bật kích hoạt "Anki integration" ➔ Nhập URL AnkiConnect (http://localhost:4790/v1/anki-connect hoặc URL máy chủ Flama của bạn) và dán API Key vào ô API Key.',
-            badge: 'asbplayer',
+            title: 'Bước 4: Cấu hình kết nối Flama Connect trong asbplayer',
+            description: 'Mở Cài đặt (Settings) của asbplayer ➔ chọn mục "Anki" (tiện ích asbplayer tích hợp qua chuẩn giao thức này) ➔ Bật kích hoạt "Anki integration" ➔ Nhập Server URL của Flama Connect (http://localhost:4790/v1/anki-connect hoặc URL máy chủ Flama của bạn) và dán API Key được cấp.',
+            badge: 'Flama Connect',
+            tip: 'Mục Anki trong asbplayer là chuẩn giao diện kết nối bên ngoài. Toàn bộ dữ liệu sau khi gửi sẽ do máy chủ Flama Connect tiếp nhận và lưu vào tài khoản Flama.',
           },
           {
             title: 'Bước 5: Cấu hình ánh xạ các trường (Field Mapping)',
-            description: 'Trong phần Cài đặt Anki của asbplayer, chọn Deck là "Sentences" và Note Type là "Sentence Card". Tiến hành ánh xạ 7 trường dữ liệu tương ứng: Sentence ➔ Sentence, Word ➔ Word, Definition ➔ Definition, Image ➔ Image, Audio ➔ Audio, Source ➔ Source, URL ➔ URL.',
+            description: 'Trong phần Cài đặt Anki của asbplayer, chọn Deck là "Sentences" và Note Type là "Sentence Card" do Flama Connect chuẩn bị. Tiến hành ánh xạ 7 trường dữ liệu tương ứng: Sentence ➔ Sentence, Word ➔ Word, Definition ➔ Definition, Image ➔ Image, Audio ➔ Audio, Source ➔ Source, URL ➔ URL.',
             badge: 'Ánh xạ',
-            tip: 'Trường "Sentence" bắt buộc phải có nội dung và đóng vai trò nhận diện để tránh tạo các thẻ trùng lặp.',
+            tip: 'Trường "Sentence" bắt buộc phải có nội dung và đóng vai trò nhận diện để tránh tạo các thẻ trùng lặp trên Flama.',
           },
           {
             title: 'Bước 6: Khai thác khi xem video bằng phím tắt',
-            description: 'Khi đang xem video có phụ đề tiếng Nhật, nhấn phím tắt Ctrl+Shift+X (hoặc Cmd+Shift+X trên macOS) để ghi nhớ câu thoại hiện tại. Để kèm từ vựng và nghĩa, hãy rê chuột tra từ bằng Yomitan trên phụ đề trước khi bấm phím tắt!',
+            description: 'Khi đang xem video có phụ đề tiếng Nhật, nhấn phím tắt Ctrl+Shift+X (hoặc Cmd+Shift+X trên macOS) để ghi nhớ câu thoại hiện tại vào Flama qua Flama Connect. Để kèm từ vựng và nghĩa, hãy rê chuột tra từ bằng Yomitan trên phụ đề trước khi bấm phím tắt!',
             badge: 'Khai thác',
             tip: 'Sử dụng phím A để lùi về câu phụ đề trước, S để nghe lại câu hiện tại, và D để chuyển sang câu kế tiếp.',
           },
@@ -809,12 +810,12 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
           {
             key: 'Ctrl + Shift + X',
             action: 'Khai thác câu thoại & tạo thẻ (Mine sentence)',
-            description: 'Tự động cắt âm thanh câu hiện tại, chụp ảnh khung hình video và gửi toàn bộ dữ liệu vào Flama.',
+            description: 'Tự động cắt âm thanh câu hiện tại, chụp ảnh khung hình video và gửi toàn bộ dữ liệu vào Flama qua Flama Connect.',
           },
           {
             key: 'Ctrl + Shift + Z',
             action: 'Cập nhật thẻ vừa tạo (Update last card)',
-            description: 'Ghi đè hoặc bổ sung âm thanh/ảnh chụp vào thẻ flashcard vừa được tạo gần nhất.',
+            description: 'Ghi đè hoặc bổ sung âm thanh/ảnh chụp vào thẻ flashcard vừa được tạo gần nhất trên Flama.',
           },
           {
             key: 'A / S / D',
@@ -845,13 +846,13 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
             name: 'Image',
             type: 'Image',
             defaultValue: 'Ảnh chụp màn hình',
-            description: 'Hình ảnh khung hình video tại thời điểm phát câu thoại phụ đề (được nén và tối ưu hiển thị).',
+            description: 'Hình ảnh khung hình video tại thời điểm phát câu thoại phụ đề (được nén và tối ưu hiển thị trên Flama).',
           },
           {
             name: 'Audio',
             type: 'Audio',
             defaultValue: 'Âm thanh MP3',
-            description: 'Đoạn audio âm thanh giọng nhân vật nói câu thoại tương ứng được cắt tự động.',
+            description: 'Đoạn audio âm thanh giọng nhân vật nói câu thoại tương ứng được cắt tự động và lưu trên Flama.',
           },
           {
             name: 'Source',
@@ -868,19 +869,19 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
         ],
         troubleshoot: [
           {
-            symptom: 'asbplayer báo lỗi kết nối "Anki connection failed" hoặc không thể kiểm tra kết nối',
-            cause: 'Địa chỉ URL AnkiConnect chưa chính xác, thiếu API Key hoặc dịch vụ Flama Connect chưa hoạt động.',
+            symptom: 'asbplayer báo lỗi kết nối "Anki connection failed" khi kiểm tra kết nối với Flama Connect',
+            cause: 'Địa chỉ Server URL Flama Connect chưa chính xác, thiếu API Key hoặc dịch vụ Flama Connect chưa hoạt động.',
             solution: [
-              'Kiểm tra xem URL AnkiConnect có đúng định dạng kết thúc bằng /v1/anki-connect hay chưa.',
+              'Kiểm tra xem URL Flama Connect có đúng định dạng kết thúc bằng /v1/anki-connect hay chưa.',
               'Đảm bảo đã sao chép đầy đủ chuỗi API Key từ trang /settings/asbplayer vào ô API Key của asbplayer.',
-              'Nếu chạy môi trường phát triển cục bộ, kiểm tra cổng 4790 của Flama Connect đang chạy bình thường.',
+              'Nếu chạy môi trường phát triển cục bộ, kiểm tra cổng 4790 của Flama Connect (qua connect_wsgi.py) đang chạy bình thường.',
             ],
           },
           {
             symptom: 'Thẻ được tạo trên Flama nhưng bị thiếu ảnh chụp màn hình hoặc âm thanh audio',
-            cause: 'Token Flama được tạo với preset chỉ văn bản (mining-text) hoặc video bị chặn chụp màn hình bởi bản quyền DRM.',
+            cause: 'Token Flama Connect được tạo với preset chỉ văn bản (mining-text) hoặc video bị chặn chụp màn hình bởi bản quyền DRM.',
             solution: [
-              'Truy cập /settings/asbplayer và tạo token mới với preset "Khai thác đa phương tiện (mining-media)" để cấp quyền lưu trữ tệp media.',
+              'Truy cập /settings/asbplayer và tạo token mới với preset "Khai thác đa phương tiện (mining-media)" để cấp quyền lưu trữ tệp media trên Flama.',
               'Một số nền tảng phim có bảo vệ DRM (như Netflix trên một số trình duyệt) chặn chụp màn hình; bạn hãy thử dùng extension asbplayer với chế độ capture tab trong cài đặt.',
             ],
           },
@@ -891,8 +892,8 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
             content: '• Chrome / Edge / Brave / Cốc Cốc (Chrome Web Store): https://chromewebstore.google.com/detail/asbplayer-language-learni/hkbdipohnchifahbgackallnndjgnbdm\n• Mozilla Firefox (Firefox Add-ons): https://addons.mozilla.org/en-US/firefox/addon/asbplayer/\n• Trình phát Web Player trực tiếp: https://asbplayer.dev\n• Mã nguồn mở & Bản phát hành Desktop GitHub: https://github.com/killergerbah/asbplayer',
           },
           {
-            title: '2. Quy Trình Khai Thác Kết Hợp Cùng Yomitan (Pro-Tip)',
-            content: 'Khi xem anime hoặc phim truyền hình Nhật Bản:\n1. Mở tiện ích asbplayer để hiển thị phụ đề tương tác.\n2. Rê chuột lên từ vựng khó trên dòng phụ đề để cửa sổ tra từ Yomitan hiện lên.\n3. Nhấn tổ hợp phím Ctrl+Shift+X: asbplayer sẽ tự động nhúng từ vựng và nghĩa đang hiển thị trong popup Yomitan vào thẻ Flashcard cùng với câu thoại, hình ảnh và âm thanh.',
+            title: '2. Quy Trình Khai Thác Kết Hợp Cùng Yomitan & Flama Connect (Pro-Tip)',
+            content: 'Khi xem anime hoặc phim truyền hình Nhật Bản:\n1. Mở tiện ích asbplayer để hiển thị phụ đề tương tác.\n2. Rê chuột lên từ vựng khó trên dòng phụ đề để cửa sổ tra từ Yomitan hiện lên.\n3. Nhấn tổ hợp phím Ctrl+Shift+X: asbplayer sẽ tự động nhúng từ vựng và nghĩa đang hiển thị trong popup Yomitan vào thẻ Flashcard cùng với câu thoại, hình ảnh và âm thanh gửi thẳng vào Flama qua Flama Connect.',
           },
         ],
         relatedArticleSlugs: ['yomitan', 'yomitan-markers', 'mcp-ai'],

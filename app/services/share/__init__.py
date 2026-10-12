@@ -107,7 +107,6 @@ from app.services.share.cutover import (
     _build_schema_overlay_payload_for_cutover,
     _deck_paths_for_cutover,
     _ensure_clone_map_rows_for_cutover,
-    _merge_card_progress_rows_for_cutover,
     _normalize_note_field_values_for_cutover,
     _pair_legacy_local_source_notes_for_cutover,
 )

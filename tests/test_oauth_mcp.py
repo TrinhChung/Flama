@@ -16,6 +16,7 @@ from models.deck import Deck
 from models.flashcard import FieldDef, NoteType, Template
 from models.oauth_client import OAuthClient
 from models.user import User
+from tests.study_note_fixtures import attach_template, create_note_user
 
 
 class OAuthRemoteMcpTests(unittest.TestCase):
@@ -39,7 +40,8 @@ class OAuthRemoteMcpTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            self.user = User(
+            self.user = create_note_user(
+                db.session,
                 username="alice",
                 email="alice@example.com",
                 timezone="UTC",
@@ -47,7 +49,8 @@ class OAuthRemoteMcpTests(unittest.TestCase):
             )
             self.user.set_password("password123")
 
-            self.other_user = User(
+            self.other_user = create_note_user(
+                db.session,
                 username="bob",
                 email="bob@example.com",
                 timezone="UTC",
@@ -55,7 +58,8 @@ class OAuthRemoteMcpTests(unittest.TestCase):
             )
             self.other_user.set_password("password123")
 
-            self.admin_user = User(
+            self.admin_user = create_note_user(
+                db.session,
                 username="admin",
                 email="admin@example.com",
                 timezone="UTC",
@@ -63,8 +67,6 @@ class OAuthRemoteMcpTests(unittest.TestCase):
                 can_use_mcp=True,
             )
             self.admin_user.set_password("adminpass123")
-
-            db.session.add_all([self.user, self.other_user, self.admin_user])
             db.session.flush()
 
             self.user_id = self.user.id
@@ -109,14 +111,16 @@ class OAuthRemoteMcpTests(unittest.TestCase):
                         field_type="text",
                         position=1,
                     ),
-                    Template(
-                        note_type_id=note_type.id,
-                        name="Forward Card",
-                        front_html="{{word}}",
-                        back_html="{{FrontSide}}<hr>{{meaning_vi}}",
-                        position=0,
-                    ),
                 ]
+            )
+            attach_template(
+                db.session,
+                note_type_id=note_type.id,
+                owner_user_id=self.user_id,
+                name="Forward Card",
+                front_html="{{word}}",
+                back_html="{{FrontSide}}<hr>{{meaning_vi}}",
+                position=0,
             )
 
             # Register OAuth Client (ChatGPT)

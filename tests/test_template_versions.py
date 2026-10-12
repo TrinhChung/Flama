@@ -1,12 +1,14 @@
 """Transactional source history and owner API tests (CT-03, contract A2)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest import TestCase
 from unittest.mock import patch
 
 from sqlalchemy import insert
 
 from app import create_app
+from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+from app.repositories import template_library_repository
 from app.services import template_version_service
 from app.services.template_tokens import template_content_hash
 from models import db
@@ -38,6 +40,8 @@ class TemplateVersionsTests(TestCase):
             other.set_password("password")
             db.session.add_all([user, other])
             db.session.flush()
+            for learner in (user, other):
+                enroll_new_learner_note_authority(db.session, user=learner)
             self.user_id, self.other_id = user.id, other.id
             deck = Deck(name="History deck", owner_user_id=user.id)
             db.session.add(deck)
@@ -90,7 +94,8 @@ class TemplateVersionsTests(TestCase):
         self.assertEqual(detail["content_hash"], template_content_hash(
             detail["front_html"], detail["back_html"], detail["shared_css"],
         ))
-        self.assertEqual(detail["input_schema"], [])
+        self.assertEqual([(item["key"], item["type"]) for item in detail["input_schema"]],
+                         [("Kanji", "text"), ("Meaning", "text")])
         self.assertTrue(detail["created_at"].endswith("+00:00"))
 
     def test_legacy_alias_and_ownership_hide_other_templates(self):
@@ -179,7 +184,7 @@ class TemplateVersionsTests(TestCase):
 
     def test_multiple_flushes_coalesce_at_outer_commit_and_rollback_is_clean(self):
         with self.app.app_context():
-            template = Template(note_type_id=self.nt_id, name="Imported", front_html="intermediate", back_html="")
+            template = template_library_repository.create_attached_template(db.session, note_type=db.session.get(NoteType, self.nt_id), name="Imported", front_html="intermediate", back_html="")
             db.session.add(template)
             db.session.flush()
             template_id = template.id
@@ -232,7 +237,7 @@ class TemplateVersionsTests(TestCase):
             template_id = uuid_str()
             now = datetime.utcnow()
             db.session.execute(insert(Template.__table__).values(
-                id=template_id, note_type_id=self.nt_id, name="Unversioned", front_html="original\r\n漢字",
+                id=template_id, owner_user_id=self.user_id, name="Unversioned", front_html="original\r\n漢字",
                 back_html="", shared_css="", position=2, is_default=False, created_at=now, updated_at=now,
             ))
             db.session.commit()

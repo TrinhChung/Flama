@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import event, inspect as sa_inspect, select
+from sqlalchemy import event, inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from models import db
@@ -31,15 +31,10 @@ class ConnectSourceCardRef(db.Model):
     external_card_id = db.Column(db.String(128), nullable=False)
     external_note_id = db.Column(db.String(128), nullable=False)
     source_ord = db.Column(db.Integer, nullable=False)
-    # NULL once the Card is removed (Template deletion): the ref, its ordinal
-    # and its sync cursors survive on the Note instead of cascading away
-    # (Phase 6, D6-05). The next sync re-binds the ordinal or refuses it.
-    card_id = db.Column(
-        db.String(36),
-        db.ForeignKey("cards.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
+    # Presentation key of the mapped Card (ADR P11). A key whose application
+    # is gone names no Card: the ref, its ordinal and its sync cursors survive
+    # on the Note (Phase 6, D6-05) and the next sync re-binds the ordinal.
+    card_id = db.Column(db.String(80), nullable=True, index=True)
     note_id = db.Column(db.String(36), nullable=True, index=True)
     snapshot_hash = db.Column(db.String(64), nullable=True)
     applied_local_revision = db.Column(db.BigInteger, nullable=True)
@@ -62,8 +57,6 @@ class ConnectSourceCardRef(db.Model):
         onupdate=datetime.utcnow,
         nullable=False,
     )
-
-    card = db.relationship("Card", foreign_keys=[card_id])
 
     __table_args__ = (
         db.UniqueConstraint(
@@ -92,7 +85,7 @@ def _snapshot_source_card_notes(session: Session, _flush_context, _instances) ->
     its sync cursors can be re-bound to the learning subject afterwards.
     """
 
-    from models.card import Card
+    from models.card import card_key_pairs
 
     changed = [
         item
@@ -103,13 +96,13 @@ def _snapshot_source_card_notes(session: Session, _flush_context, _instances) ->
     ]
     if not changed:
         return
-    card_ids = sorted({str(item.card_id) for item in changed})
     with session.no_autoflush:
+        # A presentation key names its Note; a legacy ID resolves through the registry.
         note_by_card = {
-            str(card_id): str(note_id)
-            for card_id, note_id in session.execute(
-                select(Card.id, Card.note_id).where(Card.id.in_(card_ids))
-            )
+            card_id: note_id
+            for card_id, (note_id, _application_id) in card_key_pairs(
+                session, {str(item.card_id) for item in changed}
+            ).items()
         }
     for item in changed:
         note_id = note_by_card.get(str(item.card_id))

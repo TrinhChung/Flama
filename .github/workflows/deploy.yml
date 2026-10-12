@@ -391,6 +391,7 @@ jobs:
             --property=Group=flama \
             --property="WorkingDirectory=$release_dir" \
             --property="EnvironmentFile=$desired_environment_file" \
+            --property='Environment=STARTUP_RUN_MAINTENANCE=0 STARTUP_RUN_DB_CREATE_ALL=0 STARTUP_RUN_CLONE_CUTOVER=0' \
             "$PROJECT_DIR/venv/bin/flask" --app wsgi.py db upgrade
           systemd-run --quiet --wait --collect --pipe \
             --unit="flama-bootstrap-admin-$RELEASE_ID" \

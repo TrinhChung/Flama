@@ -50,7 +50,6 @@ from models.flashcard import (
 from models.user import User
 from models.user_role import UserRole
 from models.deck import Deck
-from models.card_progress import CardProgress
 
 SEED_REQUIRED_FIELDS = ("deck", "word")
 SEED_OPTIONAL_FIELDS = (
@@ -446,6 +445,11 @@ def register_cli_commands(app: Flask) -> None:
             StudyAuthorityReadError,
             load_study_authority_card_reads,
             summarize_study_authority_queue,
+            validate_consolidated_subject_state,
+        )
+        from app.services.study_session_authority_pin_service import (
+            StudySessionAuthorityPinError,
+            lock_study_session_authority_subjects,
         )
         from models.card import Card
         from models.note import Note
@@ -503,12 +507,6 @@ def register_cli_commands(app: Flask) -> None:
                     )
                 )
                 return
-            owned_note_ids = {
-                str(note_id).encode("utf-8")
-                for (note_id,) in db.session.query(Note.id)
-                .filter(Note.user_id == user_id)
-                .all()
-            }
             active_subject_keys = {
                 bytes(logical_note_key)
                 for (logical_note_key,) in db.session.query(
@@ -516,15 +514,29 @@ def register_cli_commands(app: Flask) -> None:
                 )
                 .filter(
                     StudyProgressSubject.learner_user_id == user_id,
-                    StudyProgressSubject.status_code.in_(
-                        tuple(
-                            status for status in SUBJECT_STATUSES
-                            if status.startswith("MIRRORED_")
-                        )
+                    db.or_(
+                        StudyProgressSubject.status_code.in_(tuple(
+                            status for status in SUBJECT_STATUSES if status.startswith("MIRRORED_")
+                        )),
+                        StudyProgressSubject.state_payload.isnot(None),
+                        StudyProgressSubject.semantic_state_hash.isnot(None),
                     ),
                 )
                 .all()
             }
+            # Retiring the last application hides a Note from discovery but
+            # preserves its current state. Validate that state independently
+            # of Card availability; neither invent a Card nor skip old evidence.
+            if active_subject_keys:
+                locked_subjects = lock_study_session_authority_subjects(
+                    db.session,
+                    route=route,
+                    logical_note_keys=sorted(key.decode("utf-8") for key in active_subject_keys),
+                    now_utc=observed_at,
+                    create_token_if_missing=False,
+                )
+                for note_key, locked in locked_subjects.locked_by_logical_note_key.items():
+                    validate_consolidated_subject_state(subject=locked.subject, note_id=note_key)
             # Audit vector: every owned Card (never-studied Notes read as
             # pristine NEW) plus every Card of a Note the learner holds state
             # on, including logical-overlay source Notes and uninstalled ones.
@@ -540,14 +552,6 @@ def register_cli_commands(app: Flask) -> None:
 
             # The query joins Note: load it with each Card, not once per Card.
             cards = cards_query.options(contains_eager(Card.note)).order_by(Card.id.asc()).all()
-            card_note_ids = {str(card.note_id).encode("utf-8") for card in cards}
-            if not owned_note_ids.issubset(card_note_ids) or not active_subject_keys.issubset(
-                card_note_ids
-            ):
-                raise StudyAuthorityReadError(
-                    "INCOMPLETE_AUTHORITY_COVERAGE",
-                    "NOTE read audit requires Cards for every owned Note and active subject.",
-                )
             # Options depend only on (learner, deck): resolve each deck once.
             options_by_deck_id = {}
             for card in cards:
@@ -601,7 +605,7 @@ def register_cli_commands(app: Flask) -> None:
                 },
             }
             db.session.rollback()
-        except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
+        except (StudyAuthorityFenceError, StudyAuthorityReadError, StudySessionAuthorityPinError) as exc:
             db.session.rollback()
             code = getattr(exc, "code", "AUTHORITY_READ_AUDIT_FAILED")
             raise click.ClickException(f"{code}: {exc}") from exc
@@ -617,35 +621,6 @@ def register_cli_commands(app: Flask) -> None:
             raise click.ClickException(
                 "AUTHORITY_READ_PARITY_DIVERGED: canonical and rollback reads differ."
             )
-
-    @app.cli.command("study-phase6-attribution-backfill")
-    @click.option(
-        "--apply",
-        is_flag=True,
-        default=False,
-        help="Stamp occurrences and Note attribution in committed batches; default only counts.",
-    )
-    @click.option(
-        "--batch-size",
-        type=click.IntRange(100, 20_000),
-        default=2000,
-        show_default=True,
-        help="Rows per committed batch.",
-    )
-    def study_phase6_attribution_backfill(apply: bool, batch_size: int) -> None:
-        """Bind Cards to occurrences and old rows to their Note after migration 46."""
-
-        from app.services.study_note_attribution_service import backfill_phase6_attribution
-
-        result = backfill_phase6_attribution(apply=apply, batch_size=batch_size)
-        click.echo(
-            json.dumps(
-                result.to_dict(),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-        )
 
     @app.cli.command("study-session-retention")
     @click.option(

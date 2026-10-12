@@ -1,18 +1,14 @@
 """Queries for personal definitions and active NoteType applications."""
 
-from dataclasses import dataclass
-
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import defer, joinedload, selectinload, undefer
-from models.card import Card
-from models.note import Note
 from models.note_type import NoteType
-from models.study_application import COMPAT_OCCURRENCE_KEY, StudyApplication
+from models.study_application import StudyApplication
 from models.template import Template
 
 
 def owner_filter(user_id):
-    return or_(Template.owner_user_id == int(user_id), and_(Template.owner_user_id.is_(None), Template.note_type.has(NoteType.user_id == int(user_id))))
+    return Template.owner_user_id == int(user_id)
 
 
 def _library_statement(user_id, *, include_archived=False, category=None, search=None, group="all"):
@@ -45,7 +41,6 @@ def library_query(session, user_id, *, include_archived=False, category=None, se
     if page is not None:
         total = session.scalar(select(func.count()).select_from(statement.subquery()))
         statement = statement.offset((page - 1) * page_size).limit(page_size)
-    statement = statement.options(joinedload(Template.note_type).selectinload(NoteType.field_defs))
     if compact:
         statement = statement.options(defer(Template.front_html), defer(Template.back_html), defer(Template.shared_css))
     items = session.execute(statement.order_by(Template.name, Template.id)).scalars().all()
@@ -90,114 +85,102 @@ def applications(session, note_type_id, *, include_retired=False):
     ).order_by(StudyApplication.position, StudyApplication.id)).scalars().all()
 
 
-def active_card_condition():
-    # Legacy pre-cutover rows retain their old visibility until attributed.
-    return or_(Card.application_id.is_(None), Card.application.has(StudyApplication.status_code == "ACTIVE"))
+class AttachedTemplate:
+    """A definition presented through one explicitly scoped application.
+
+    Definition identity/content remain on Template; attachment ordering,
+    default and occurrence identity remain on StudyApplication.
+    """
+
+    def __init__(self, application):
+        self.application = application
+        self.template = application.template
+
+    @property
+    def application_id(self):
+        return self.application.id
+
+    @property
+    def position(self):
+        return self.application.position
+
+    @property
+    def is_default(self):
+        return self.application.is_default
+
+    def __getattr__(self, name):
+        return getattr(self.template, name)
 
 
-def legacy_fallback_templates(session, note_type_id):
-    """Pre-attachment definitions of this NoteType that never had an occurrence."""
-    note_type_id = str(note_type_id)
-    return session.execute(select(Template).where(
-        Template.note_type_id == note_type_id,
-        ~select(StudyApplication.id).where(StudyApplication.template_id == Template.id, StudyApplication.note_type_id == note_type_id).exists(),
-    ).order_by(Template.position, Template.id)).scalars().all()
+def attached_templates(session, note_type_id, *, include_retired=False):
+    return [AttachedTemplate(row) for row in applications(session, note_type_id, include_retired=include_retired)]
+
+
+_UNSPECIFIED_ORD = object()
+
+
+def create_attached_template(session, *, note_type, source_ord=_UNSPECIFIED_ORD, occurrence_key="compat", **values):
+    """Stage one owned definition and one attachment; caller owns transaction.
+
+    No commit or per-Note writer runs here. Source ordinal, position and
+    default belong to the explicitly created application.
+    """
+    position = int(values.pop("position", 0))
+    is_default = bool(values.pop("is_default", False))
+    owner = values.pop("owner_user_id", note_type.user_id)
+    if int(owner) != int(note_type.user_id):
+        raise ValueError("Attached template ownership must match its authoring NoteType owner.")
+    from app.validators.template_library import infer_input_schema
+    from models.field_def import FieldDef
+    # Normal autoflush gives newly staged FieldDefs their stable IDs. Reading
+    # the relation cache can miss additions staged by note_type_id after the
+    # collection was loaded (seed/import/schema creation paths).
+    fields = session.execute(select(FieldDef).where(FieldDef.note_type_id == note_type.id)
+                             .order_by(FieldDef.position, FieldDef.id)).scalars().all()
+    if values.get("input_schema") is None:
+        values["input_schema"] = infer_input_schema(values.get("front_html", ""), values.get("back_html", ""), fields)
+    bindings = values.pop("input_bindings", None)
+    if bindings is None:
+        bindings = {item["key"]: next((str(field.id) for field in fields if field.id and field.name == item["key"]), None)
+                    for item in values["input_schema"]}
+    template = Template(owner_user_id=owner, **values)
+    application = StudyApplication(
+        note_type=note_type, template=template, occurrence_key=occurrence_key,
+        source_ord=position if source_ord is _UNSPECIFIED_ORD else source_ord,
+        position=position, is_default=is_default, status_code="ACTIVE", input_bindings=bindings,
+    )
+    session.add_all([template, application])
+    return template
 
 
 def card_slots(session, note_type_id, *, rows=None):
-    """(template_id, application_id) per Card a new Note receives.
+    """(template_id, application_id) of every ACTIVE occurrence: the Cards a Note has.
 
-    ACTIVE occurrences decide membership, wherever the definition originated.
-    Only a NoteType without any active occurrence falls back to old templates
-    that never had one; a fully retired NoteType intentionally stays empty.
+    Cards are derived from these occurrences (ADR P11); a NoteType without an
+    ACTIVE occurrence presents no Card.
     """
     rows = applications(session, note_type_id) if rows is None else [row for row in rows if row.status_code == "ACTIVE"]
-    if rows:
-        return [(row.template_id, row.id) for row in rows]
-    return [(row.id, None) for row in legacy_fallback_templates(session, note_type_id)]
-
-
-def build_cards(note_ids, slots):
-    """New Cards for Notes without any; a ``None`` application uses the compat seam."""
-    from models.model_uuid import uuid_str
-    return [Card(id=uuid_str(), note_id=note_id, template_id=template_id, application_id=application_id)
-            for note_id in note_ids for template_id, application_id in slots]
-
-
-def create_cards_for_note(session, note):
-    """Materialize all active occurrences without creating learner progress."""
-    existing = session.execute(select(Card.template_id, Card.application_id).where(Card.note_id == note.id)).all()
-    applied = {application_id for _template_id, application_id in existing if application_id}
-    templated = {template_id for template_id, _application_id in existing}
-    slots = [(template_id, application_id) for template_id, application_id in card_slots(session, note.note_type_id)
-             if (application_id not in applied if application_id else template_id not in templated)]
-    session.add_all(build_cards([note.id], slots))
-
-
-@dataclass(frozen=True)
-class NoteCardPlan:
-    missing: tuple
-    removable: tuple
-    has_slots: bool
-
-
-def plan_note_cards(session, note_type_id, cards):
-    """Reconcile an existing Note's Cards with its NoteType's occurrences.
-
-    A Card is removable only when its occurrence (or, for an unattributed
-    legacy Card, its definition) is not this NoteType's, for example after a
-    NoteType change. Cards of retired occurrences stay with their progress.
-    """
-    note_type_id = str(note_type_id)
-    rows = applications(session, note_type_id, include_retired=True)
-    application_ids = {row.id for row in rows}
-    compat = {row.template_id: row.id for row in rows if row.occurrence_key == COMPAT_OCCURRENCE_KEY}
-    known_templates = {row.template_id for row in rows} | set(
-        session.execute(select(Template.id).where(Template.note_type_id == note_type_id)).scalars())
-    removable, applied, templated = [], set(), set()
-    for card in cards:
-        application_id = card.application_id or getattr(card.application, "id", None)
-        if application_id is None:
-            if card.template_id not in known_templates:
-                removable.append(card)
-                continue
-            application_id = compat.get(card.template_id)
-        elif application_id not in application_ids:
-            removable.append(card)
-            continue
-        if application_id is not None:
-            applied.add(application_id)
-        templated.add(card.template_id)
-    slots = card_slots(session, note_type_id, rows=rows)
-    missing = tuple((template_id, application_id) for template_id, application_id in slots
-                    if (application_id not in applied if application_id else template_id not in templated))
-    return NoteCardPlan(missing=missing, removable=tuple(removable), has_slots=bool(slots))
+    return [(row.template_id, row.id) for row in rows]
 
 
 def template_used_outside(session, template_id, note_type_id):
-    """Whether removing a definition from one NoteType would touch another's Cards."""
+    """Whether removing a definition from one NoteType would touch another NoteType's Cards."""
     note_type_id = str(note_type_id)
-    if session.execute(select(StudyApplication.id).where(
+    return session.execute(select(StudyApplication.id).where(
         StudyApplication.template_id == template_id, StudyApplication.note_type_id != note_type_id,
-    ).limit(1)).first() is not None:
-        return True
-    return session.execute(select(Card.id).join(Note, Note.id == Card.note_id).where(
-        Card.template_id == template_id, Note.note_type_id != note_type_id,
     ).limit(1)).first() is not None
 
 
 def detach_template(session, note_type_id, template):
-    """Retire this NoteType's occurrences; definition, Cards and progress stay."""
+    """Retire this NoteType's occurrences; the definition and progress stay.
+
+    A retired occurrence's Cards leave discovery but stay addressable by key,
+    and reactivating it brings the same keys back (ADR P11).
+    """
     note_type_id = str(note_type_id)
     rows = session.execute(select(StudyApplication).where(
         StudyApplication.note_type_id == note_type_id, StudyApplication.template_id == template.id,
     ).order_by(StudyApplication.id).with_for_update()).scalars().all()
-    if not rows:
-        # A never-attached legacy definition needs an explicit retired marker,
-        # otherwise the compatibility fallback would keep presenting it.
-        rows = [StudyApplication(note_type_id=note_type_id, template_id=template.id, occurrence_key=COMPAT_OCCURRENCE_KEY,
-                                 source_ord=template.position or 0, position=template.position or 0, status_code="RETIRED")]
-        session.add(rows[0])
     for row in rows:
         row.status_code = "RETIRED"
     return rows

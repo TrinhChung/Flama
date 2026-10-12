@@ -109,6 +109,11 @@ def _captured_selects(call):
     return value, statements
 
 
+def _is_note_lock_read(statement):
+    return re.match(r"SELECT\s+(?:STRAIGHT_JOIN\s+)?notes\.id,\s+notes\.note_type_id\b",
+                    statement.lstrip()) is not None
+
+
 def _explain_actual(statements):
     """Explain captured production-helper SQL; never emit parameters or raw SQL."""
     plans = []
@@ -155,10 +160,9 @@ def _run_probe(app, settings, database_name):
                             deck_id=fixture.deck_id, field_values={"Word": "outside-lease"})
         db.session.add(outside_note)
         db.session.flush()
-        outside_card = Card(note=outside_note, template_id=source.template_id)
-        db.session.add(outside_card)
+        outside_card = Card.query.filter_by(note_id=outside_note.id, application_id=source.application_id).one()
         db.session.commit()
-        outside_note_id, outside_card_id = outside_note.id, outside_card.id
+        outside_note_id = outside_note.id
         db.session.rollback()
 
         route, subjects, memberships = _context(fixture, fixture.snapshot, database_name)
@@ -177,36 +181,25 @@ def _run_probe(app, settings, database_name):
         result["checks"]["owned_complete_vector_parity"] = {
             key: _vector(value) for key, value in old.items()
         } == {key: _vector(value) for key, value in many.items()}
-        result["checks"]["both_reads_shared_locking"] = all(
-            "LOCK IN SHARE MODE" in sql.upper() or "FOR SHARE" in sql.upper() for sql, _params in new_sql
-        )
+        note_lock_sql = [(sql, params) for sql, params in new_sql
+                         if _is_note_lock_read(sql)]
+        result["checks"]["note_rows_shared_locked"] = bool(note_lock_sql) and all(
+            "LOCK IN SHARE MODE" in sql.upper() or "FOR SHARE" in sql.upper()
+            for sql, _params in note_lock_sql)
         result["small_fixture_plans"] = _explain_actual(new_sql)
         db.session.rollback()
 
         source = db.session.get(Card, fixture.snapshot["cards"][0]["card_id"])
-        candidate = StudyApplication(note_type_id=source.note.note_type_id, template_id=source.template_id,
-                                     occurrence_key="lock-probe", source_ord=None, status_code="ACTIVE")
-        db.session.add(candidate)
-        db.session.commit()
-        application_id, template_id, note_id = candidate.id, source.template_id, source.note_id
+        note_id = source.note_id
         db.session.rollback()
         route, subjects, memberships = _context(fixture, fixture.snapshot, database_name)
         vectors = lock_study_authority_siblings_many(db.session, route=route, locked_by_logical_note_key=subjects)
-        selected_ids = {row.card_id for row in memberships}
-        sibling_id = next(card.id for row in vectors.values() for card in row.cards if card.id not in selected_ids)
         subject_id = next(iter(subjects.values())).subject.id
         probes = {
-            "unselected_card_update": ("UPDATE cards SET updated_at=updated_at WHERE id=%s", (sibling_id,)),
             "note_update": ("UPDATE notes SET updated_at=updated_at WHERE id=%s", (note_id,)),
             "subject_update": ("UPDATE study_progress_subjects SET authority_revision=authority_revision WHERE id=%s", (subject_id,)),
-            "new_sibling_insert": (
-                "INSERT INTO cards(id,note_id,template_id,application_id,created_at,updated_at) "
-                "VALUES(%s,%s,%s,%s,UTC_TIMESTAMP(),UTC_TIMESTAMP())",
-                (str(uuid4()), note_id, template_id, application_id),
-            ),
         }
         outside = {
-            "outside_card_update": ("UPDATE cards SET updated_at=updated_at WHERE id=%s", (outside_card_id,)),
             "outside_note_update": ("UPDATE notes SET updated_at=updated_at WHERE id=%s", (outside_note_id,)),
         }
         writer = _writer(settings, database_name)
@@ -283,15 +276,16 @@ def _run_probe(app, settings, database_name):
             "sibling_selects": len(captured), "plans": plans,
         }
         result["checks"]["chunk_boundary_complete_vector"] = len(many) == 501 and all(len(row.cards) == 2 for row in many.values())
-        result["checks"]["chunk_boundary_four_selects"] = len(captured) == 4
-        result["checks"]["note_point_plans_at_high_fraction"] = all(
+        result["checks"]["chunk_boundary_six_selects"] = len(captured) == 6
+        locked_note_plans = _explain_actual([
+            (sql, params) for sql, params in captured
+            if _is_note_lock_read(sql)])
+        result["checks"]["note_point_plans_at_high_fraction"] = bool(locked_note_plans) and all(
             row["type"] in {"eq_ref", "const"} and row["key"] == "PRIMARY"
-            for plan in plans for row in plan if row["table"] == "notes"
+            for plan in locked_note_plans for row in plan if row["table"] == "notes"
         )
-        result["checks"]["card_index_plans_at_high_fraction"] = all(
-            row["type"] in {"range", "ref"} and row["key"] == "ix_cards_note_id"
-            for plan in plans for row in plan if row["table"] == "cards"
-        )
+        from sqlalchemy import inspect
+        result["checks"]["physical_card_table_absent"] = "cards" not in inspect(db.engine).get_table_names()
         writer = _writer(settings, database_name)
         try:
             result["checks"]["high_fraction_outside_updates_unblocked"] = all(

@@ -1,0 +1,411 @@
+{
+  "code_commit": "fb685882099d20d90479d234402ae3b098076f89",
+  "github_pr": "https://github.com/TrinhChung/Flama/pull/233",
+  "local": {
+    "status": "PASS",
+    "before": {
+      "schema_version": "retirement-protected-state.v1",
+      "captured_at_utc": "2026-10-12T12:48:09.173439+00:00",
+      "database": "nihongo",
+      "revision": "20261012_000057",
+      "protected": {
+        "study_progress_subjects": {
+          "rows": 42793,
+          "sha256": "e7c294b9ba6cbfbb50625522d25b8b580bd81acbccf8aaee1e2cf31837dad5d6"
+        },
+        "study_authority_enrollments": {
+          "rows": 32,
+          "sha256": "fdc3b7fa1645e69b7c05f74aabe89fa616d7cf12bf999d05bcb34a09d81fd40f"
+        },
+        "study_authority_storage_profile": {
+          "rows": 1,
+          "sha256": "cdade327280f779284003a1107ed79e6353f040b04e688bf15057fd49be35d25"
+        },
+        "review_events": {
+          "rows": 132283,
+          "sha256": "7b64a714c0bead520bdf981387d866c256e320cb25166578b0ecfec025d0b7b8"
+        },
+        "study_authority_command_receipts": {
+          "rows": 1320,
+          "sha256": "da18ba47ff97c762cc4c1f6ecbd0d191e7306aaaa86cda882fd3aec68d432482"
+        },
+        "study_progress_history_facts": {
+          "rows": 3038,
+          "sha256": "c0b16169bcedc2fcb1117140865e3addb2a59c438355efb22489f3488dbd8147"
+        },
+        "study_progress_lifecycle_events": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_sessions": {
+          "rows": 641,
+          "sha256": "391b724cb2a8f78935c528216b0fdd416ce096af8bb56b5e6de4330d6ab19f90"
+        },
+        "study_session_cards": {
+          "rows": 14905,
+          "sha256": "6b9eaf80b183eedaeb926f8bc15a2ee154b717fa76d8043459b978d0cc573fce"
+        },
+        "study_session_commits": {
+          "rows": 488,
+          "sha256": "e51550668f189543f4466732374c1e9bdfb970bc93563256a8116c8319678a27"
+        },
+        "study_session_batches": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_session_authority_pins": {
+          "rows": 3482,
+          "sha256": "7543d6a29be7a3b546de4734a0218b7c2e76c743b6b04cd073597db41dee29e4"
+        },
+        "connect_source_note_refs": {
+          "rows": 17144,
+          "sha256": "d07eec952786cbaa612a4f51fdaa6c961c084923d2ae5bd15015237180d30e66"
+        },
+        "connect_source_card_refs": {
+          "rows": 17144,
+          "sha256": "ab1ca60041d9bd29a2b69f6c85156590a26eb4f506fee6e5ea32379680878fe1"
+        },
+        "template_versions": {
+          "rows": 92,
+          "sha256": "b89ae10d3a386f88887de2b3468e498783e9fbe3f747b30a032dd3e6875f1a65"
+        },
+        "template_releases": {
+          "rows": 2,
+          "sha256": "c5e76626b5b3900ae3c4c6ebe748325fe8ba4ca3eda284cd7d7b0e8867e33ff0"
+        },
+        "deck_release_template_pins": {
+          "rows": 2,
+          "sha256": "d01dd983be98c66107ad262058082d2e22e2ce3bdfdedd892a3968022688de1d"
+        },
+        "deck_releases": {
+          "rows": 24,
+          "sha256": "16349b61ba56aa15c08104ba45ff9f88ab3dbff16564ac352448db11aa8c2517"
+        },
+        "study_applications": {
+          "rows": 36,
+          "sha256": "b78f3d2dc7b9a54174c3f650b441ffc950d5c7663d99d9ca2ee711c973d075ba"
+        },
+        "notes": {
+          "rows": 41533,
+          "sha256": "9e5c28f2ad5df59d41516093885ba2c233f6dc1aba9c400f67bbc4492ae2b367"
+        }
+      },
+      "retired_tables_present": [
+        "card_progress",
+        "cards",
+        "study_progress_backfill_checkpoints",
+        "study_progress_backfill_dispositions",
+        "study_progress_backfill_runs",
+        "vocabulary_column_preferences"
+      ],
+      "template_origin_present": true,
+      "alias_rows": null,
+      "failures": [],
+      "status": "PASS"
+    },
+    "after": {
+      "schema_version": "retirement-protected-state.v1",
+      "captured_at_utc": "2026-10-12T12:49:13.232559+00:00",
+      "database": "nihongo",
+      "revision": "20261012_000062",
+      "protected": {
+        "study_progress_subjects": {
+          "rows": 42793,
+          "sha256": "e7c294b9ba6cbfbb50625522d25b8b580bd81acbccf8aaee1e2cf31837dad5d6"
+        },
+        "study_authority_enrollments": {
+          "rows": 32,
+          "sha256": "fdc3b7fa1645e69b7c05f74aabe89fa616d7cf12bf999d05bcb34a09d81fd40f"
+        },
+        "study_authority_storage_profile": {
+          "rows": 1,
+          "sha256": "cdade327280f779284003a1107ed79e6353f040b04e688bf15057fd49be35d25"
+        },
+        "review_events": {
+          "rows": 132283,
+          "sha256": "7b64a714c0bead520bdf981387d866c256e320cb25166578b0ecfec025d0b7b8"
+        },
+        "study_authority_command_receipts": {
+          "rows": 1320,
+          "sha256": "da18ba47ff97c762cc4c1f6ecbd0d191e7306aaaa86cda882fd3aec68d432482"
+        },
+        "study_progress_history_facts": {
+          "rows": 3038,
+          "sha256": "c0b16169bcedc2fcb1117140865e3addb2a59c438355efb22489f3488dbd8147"
+        },
+        "study_progress_lifecycle_events": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_sessions": {
+          "rows": 641,
+          "sha256": "391b724cb2a8f78935c528216b0fdd416ce096af8bb56b5e6de4330d6ab19f90"
+        },
+        "study_session_cards": {
+          "rows": 14905,
+          "sha256": "6b9eaf80b183eedaeb926f8bc15a2ee154b717fa76d8043459b978d0cc573fce"
+        },
+        "study_session_commits": {
+          "rows": 488,
+          "sha256": "e51550668f189543f4466732374c1e9bdfb970bc93563256a8116c8319678a27"
+        },
+        "study_session_batches": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_session_authority_pins": {
+          "rows": 3482,
+          "sha256": "7543d6a29be7a3b546de4734a0218b7c2e76c743b6b04cd073597db41dee29e4"
+        },
+        "connect_source_note_refs": {
+          "rows": 17144,
+          "sha256": "d07eec952786cbaa612a4f51fdaa6c961c084923d2ae5bd15015237180d30e66"
+        },
+        "connect_source_card_refs": {
+          "rows": 17144,
+          "sha256": "ab1ca60041d9bd29a2b69f6c85156590a26eb4f506fee6e5ea32379680878fe1"
+        },
+        "template_versions": {
+          "rows": 92,
+          "sha256": "b89ae10d3a386f88887de2b3468e498783e9fbe3f747b30a032dd3e6875f1a65"
+        },
+        "template_releases": {
+          "rows": 2,
+          "sha256": "c5e76626b5b3900ae3c4c6ebe748325fe8ba4ca3eda284cd7d7b0e8867e33ff0"
+        },
+        "deck_release_template_pins": {
+          "rows": 2,
+          "sha256": "d01dd983be98c66107ad262058082d2e22e2ce3bdfdedd892a3968022688de1d"
+        },
+        "deck_releases": {
+          "rows": 24,
+          "sha256": "16349b61ba56aa15c08104ba45ff9f88ab3dbff16564ac352448db11aa8c2517"
+        },
+        "study_applications": {
+          "rows": 36,
+          "sha256": "b78f3d2dc7b9a54174c3f650b441ffc950d5c7663d99d9ca2ee711c973d075ba"
+        },
+        "notes": {
+          "rows": 41533,
+          "sha256": "9e5c28f2ad5df59d41516093885ba2c233f6dc1aba9c400f67bbc4492ae2b367"
+        }
+      },
+      "retired_tables_present": [],
+      "template_origin_present": false,
+      "alias_rows": 41533,
+      "failures": [],
+      "status": "PASS"
+    },
+    "backup_sha256": "7973733515c5487fdbfbc9d01d41b56a25c3db319abc01f5eba09eef48caab31",
+    "archive": {
+      "verified_mysql_restore": true,
+      "tables": 7
+    }
+  },
+  "vps": {
+    "status": "PASS",
+    "commit": "fb685882099d20d90479d234402ae3b098076f89",
+    "revision": "20261012_000062",
+    "protected_tables_unchanged": 20,
+    "original_card_aliases": 111743,
+    "backup_sha256": "d1d37c532c91fc42e13e4e7eae640cce7d6cb56c19c32638ccd0337da9080b9a",
+    "retention_timer_restored": true,
+    "before": {
+      "schema_version": "retirement-protected-state.v1",
+      "captured_at_utc": "2026-10-12T12:56:40.859966+00:00",
+      "database": "flama",
+      "revision": "20261012_000057",
+      "protected": {
+        "study_progress_subjects": {
+          "rows": 42848,
+          "sha256": "87270da83a6e2837a7e4dc00b5926598558dc047830ef6e59f4634c3ddc833f9"
+        },
+        "study_authority_enrollments": {
+          "rows": 32,
+          "sha256": "fdc3b7fa1645e69b7c05f74aabe89fa616d7cf12bf999d05bcb34a09d81fd40f"
+        },
+        "study_authority_storage_profile": {
+          "rows": 1,
+          "sha256": "cdade327280f779284003a1107ed79e6353f040b04e688bf15057fd49be35d25"
+        },
+        "review_events": {
+          "rows": 132563,
+          "sha256": "6e6d646cadd30419971938ca03a8196d434e0206d994212578c0af6a9acc09ae"
+        },
+        "study_authority_command_receipts": {
+          "rows": 1600,
+          "sha256": "d948659c36d79d226547845bb61cec8db65c8e374b0c6acd9363fe72fd4d0810"
+        },
+        "study_progress_history_facts": {
+          "rows": 3318,
+          "sha256": "7be3bcb00e560846960310c91383617de22890c323b29b5794bd9c8276554e7b"
+        },
+        "study_progress_lifecycle_events": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_sessions": {
+          "rows": 652,
+          "sha256": "6f936cd54f13387c9470c457dc0632ce2c0dbb53b5959faaf42d1564ff00f938"
+        },
+        "study_session_cards": {
+          "rows": 14408,
+          "sha256": "29c247cbbbe1cfa0fe5cb9f292dd42d7e4d541b567254c9590c59be06429557d"
+        },
+        "study_session_commits": {
+          "rows": 498,
+          "sha256": "8cca9ced3e033e456c2330ffc8cbb98fe9569a257ed3c2c0d09112598d241d36"
+        },
+        "study_session_batches": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_session_authority_pins": {
+          "rows": 4567,
+          "sha256": "17bd66df4d2d7cc9b7d416b6a1534c457da4c75ca9b68d94b1d7d324f2af6bb3"
+        },
+        "connect_source_note_refs": {
+          "rows": 17144,
+          "sha256": "d07eec952786cbaa612a4f51fdaa6c961c084923d2ae5bd15015237180d30e66"
+        },
+        "connect_source_card_refs": {
+          "rows": 17144,
+          "sha256": "ab1ca60041d9bd29a2b69f6c85156590a26eb4f506fee6e5ea32379680878fe1"
+        },
+        "template_versions": {
+          "rows": 51,
+          "sha256": "9ad1c402ee5f31b6ca290ed752e2a22d0f7d04c94db0e03f491e1dc82a2cd2e8"
+        },
+        "template_releases": {
+          "rows": 3,
+          "sha256": "e79cba9c6d57c8fc33fa21a1bb6aa277319408ff40ee4332a74b939a07f6c47b"
+        },
+        "deck_release_template_pins": {
+          "rows": 5,
+          "sha256": "7bd95d32bd9b92cf8c51892fdcb5804840b9aeb5362fd3403942375d781f8daf"
+        },
+        "deck_releases": {
+          "rows": 24,
+          "sha256": "e8ce55227a221074db5ee8ef182e33a29b5ee059e23ef492b11553571e58a83e"
+        },
+        "study_applications": {
+          "rows": 33,
+          "sha256": "9347f506e60e89ac18aedbdc39514cd98b9b2073bc2c862ebc314df3460e9588"
+        },
+        "notes": {
+          "rows": 41519,
+          "sha256": "c395415370195388375900dcbf1332e9107ae70f5a3513f58aa9d66b91a23fda"
+        }
+      },
+      "retired_tables_present": [
+        "card_progress",
+        "cards",
+        "study_progress_backfill_checkpoints",
+        "study_progress_backfill_dispositions",
+        "study_progress_backfill_runs",
+        "vocabulary_column_preferences"
+      ],
+      "template_origin_present": true,
+      "alias_rows": null,
+      "failures": [],
+      "status": "PASS"
+    },
+    "after": {
+      "schema_version": "retirement-protected-state.v1",
+      "captured_at_utc": "2026-10-12T12:58:07.375754+00:00",
+      "database": "flama",
+      "revision": "20261012_000062",
+      "protected": {
+        "study_progress_subjects": {
+          "rows": 42848,
+          "sha256": "87270da83a6e2837a7e4dc00b5926598558dc047830ef6e59f4634c3ddc833f9"
+        },
+        "study_authority_enrollments": {
+          "rows": 32,
+          "sha256": "fdc3b7fa1645e69b7c05f74aabe89fa616d7cf12bf999d05bcb34a09d81fd40f"
+        },
+        "study_authority_storage_profile": {
+          "rows": 1,
+          "sha256": "cdade327280f779284003a1107ed79e6353f040b04e688bf15057fd49be35d25"
+        },
+        "review_events": {
+          "rows": 132563,
+          "sha256": "6e6d646cadd30419971938ca03a8196d434e0206d994212578c0af6a9acc09ae"
+        },
+        "study_authority_command_receipts": {
+          "rows": 1600,
+          "sha256": "d948659c36d79d226547845bb61cec8db65c8e374b0c6acd9363fe72fd4d0810"
+        },
+        "study_progress_history_facts": {
+          "rows": 3318,
+          "sha256": "7be3bcb00e560846960310c91383617de22890c323b29b5794bd9c8276554e7b"
+        },
+        "study_progress_lifecycle_events": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_sessions": {
+          "rows": 652,
+          "sha256": "6f936cd54f13387c9470c457dc0632ce2c0dbb53b5959faaf42d1564ff00f938"
+        },
+        "study_session_cards": {
+          "rows": 14408,
+          "sha256": "29c247cbbbe1cfa0fe5cb9f292dd42d7e4d541b567254c9590c59be06429557d"
+        },
+        "study_session_commits": {
+          "rows": 498,
+          "sha256": "8cca9ced3e033e456c2330ffc8cbb98fe9569a257ed3c2c0d09112598d241d36"
+        },
+        "study_session_batches": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "study_session_authority_pins": {
+          "rows": 4567,
+          "sha256": "17bd66df4d2d7cc9b7d416b6a1534c457da4c75ca9b68d94b1d7d324f2af6bb3"
+        },
+        "connect_source_note_refs": {
+          "rows": 17144,
+          "sha256": "d07eec952786cbaa612a4f51fdaa6c961c084923d2ae5bd15015237180d30e66"
+        },
+        "connect_source_card_refs": {
+          "rows": 17144,
+          "sha256": "ab1ca60041d9bd29a2b69f6c85156590a26eb4f506fee6e5ea32379680878fe1"
+        },
+        "template_versions": {
+          "rows": 51,
+          "sha256": "9ad1c402ee5f31b6ca290ed752e2a22d0f7d04c94db0e03f491e1dc82a2cd2e8"
+        },
+        "template_releases": {
+          "rows": 3,
+          "sha256": "e79cba9c6d57c8fc33fa21a1bb6aa277319408ff40ee4332a74b939a07f6c47b"
+        },
+        "deck_release_template_pins": {
+          "rows": 5,
+          "sha256": "7bd95d32bd9b92cf8c51892fdcb5804840b9aeb5362fd3403942375d781f8daf"
+        },
+        "deck_releases": {
+          "rows": 24,
+          "sha256": "e8ce55227a221074db5ee8ef182e33a29b5ee059e23ef492b11553571e58a83e"
+        },
+        "study_applications": {
+          "rows": 33,
+          "sha256": "9347f506e60e89ac18aedbdc39514cd98b9b2073bc2c862ebc314df3460e9588"
+        },
+        "notes": {
+          "rows": 41519,
+          "sha256": "c395415370195388375900dcbf1332e9107ae70f5a3513f58aa9d66b91a23fda"
+        }
+      },
+      "retired_tables_present": [],
+      "template_origin_present": false,
+      "alias_rows": 111743,
+      "failures": [],
+      "status": "PASS"
+    },
+    "archive": {
+      "verified_mysql_restore": true,
+      "tables": 7
+    }
+  }
+}

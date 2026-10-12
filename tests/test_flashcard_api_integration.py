@@ -34,10 +34,13 @@ from models.deck import Deck
 from models.deck_release import DeckRelease
 from models.field_def import FieldDef
 from models.template import Template
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from uuid import uuid4
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_subject import StudyProgressSubject
+from models.study_application import StudyApplication
 from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
 
@@ -68,7 +71,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(username="admin", email="admin@example.com", is_admin=True)
+            user = create_note_user(db.session, username="admin", email="admin@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
@@ -90,6 +93,40 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         with self.app.app_context():
             db.session.remove()
             db.drop_all()
+
+    def _seed_retired_full_copy(self, suffix='first'):
+        learner = create_note_user(db.session, username='retired-copy-'+suffix, email='retired-copy-'+suffix+'@example.test')
+        note_type = NoteType(name='Retired copy '+suffix, user_id=self.user_id)
+        source = Deck(name='Retired source '+suffix, owner_user_id=self.user_id)
+        local = Deck(name='Retired local '+suffix, owner_user_id=learner.id)
+        db.session.add_all([note_type, source, local])
+        db.session.flush()
+        attach_template(db.session, note_type_id=note_type.id, owner_user_id=self.user_id, name='Card')
+        values = {'Word':'retained', 'Array':['a', ['b','c']], 'Empty':[]}
+        source_note = Note(user_id=self.user_id, note_type_id=note_type.id, deck_id=source.id, field_values=values)
+        local_note = Note(user_id=learner.id, note_type_id=note_type.id, deck_id=local.id, field_values=values)
+        db.session.add_all([source_note,local_note])
+        db.session.flush()
+        stage_note_state(db.session, user_id=learner.id, note_id=local_note.id, queue='review', due_day=1,
+                         reps=5, interval_days=3, revision=4)
+        item = DeckMarketplaceItem(owner_user_id=self.user_id, source_deck_id=source.id, title='Retired '+suffix)
+        db.session.add(item)
+        db.session.flush()
+        install = DeckInstall(deck_item_id=item.id, user_id=learner.id, local_deck_id=local.id,
+            source_deck_id=source.id, source_owner_user_id=self.user_id, clone_mode='legacy_copy')
+        db.session.add(install)
+        db.session.commit()
+        return install
+
+    @staticmethod
+    def _cutover_snapshot():
+        from sqlalchemy import select
+        from models.review_event import ReviewEvent
+        from models.study_progress_history_fact import StudyProgressHistoryFact
+        from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
+        return {model.__tablename__:db.session.execute(select(model.__table__).order_by(*model.__table__.primary_key.columns)).all()
+                for model in (Note, StudyProgressSubject, ReviewEvent, StudyProgressHistoryFact,
+                              StudyAuthorityCommandReceipt, DeckInstall, DeckCloneDeckMap, DeckCloneNoteFieldOverride)}
 
     def _create_note_type(self):
         response = self.client.post(
@@ -130,7 +167,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def _create_installed_clone_decks(self) -> tuple[int, int]:
         with self.app.app_context():
-            source_owner = User(
+            source_owner = create_note_user(db.session,
                 username="market-source-owner",
                 email="market-source-owner@example.com",
             )
@@ -247,7 +284,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(note_response.status_code, 201, note_response.get_json())
 
         with self.app.app_context():
-            learner = User(
+            learner = create_note_user(db.session,
                 username="template-guard-learner",
                 email="template-guard-learner@example.com",
             )
@@ -307,8 +344,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 (str(card.id), str(card.template_id))
                 for card in Card.query.order_by(Card.id.asc()).all()
             ]
-            template_count = Template.query.filter_by(
-                note_type_id=note_type_id
+            template_count = StudyApplication.query.filter_by(
+                note_type_id=note_type_id, status_code="ACTIVE"
             ).count()
 
         blocked_requests = [
@@ -355,7 +392,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 template_snapshot,
             )
             self.assertEqual(
-                Template.query.filter_by(note_type_id=note_type_id).count(),
+                StudyApplication.query.filter_by(note_type_id=note_type_id, status_code="ACTIVE").count(),
                 template_count,
             )
             self.assertEqual(
@@ -405,7 +442,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(card)
             card_id = str(card.id)
 
-            learner = User(
+            learner = create_note_user(db.session,
                 username="hotfix-learner",
                 email="hotfix-learner@example.com",
             )
@@ -457,7 +494,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.add(install)
             db.session.flush()
 
-            progress = CardProgress(
+            progress = stage_note_state(db.session,
                 user_id=learner.id,
                 card_id=card_id,
                 queue="review",
@@ -519,18 +556,19 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(reloaded_template.back_html, '<div class="hotfix-back">{{Meaning}}</div>')
             self.assertEqual(reloaded_template.shared_css, '.hotfix-front { color: #ff0000; font-weight: bold; }')
 
-            # Physical Card row is preserved with identical ID
+            # The derived presentation retains its identity after the hotfix
             reloaded_card = db.session.get(Card, card_id)
             self.assertIsNotNone(reloaded_card)
             self.assertEqual(reloaded_card.template_id, template_id)
             self.assertEqual(Card.query.filter_by(note_id=note_id).count(), 1)
 
-            # CardProgress is preserved and attached to same Card row
-            reloaded_progress = db.session.get(CardProgress, progress_id)
+            # The learner Note state is preserved across the hotfix
+            reloaded_subject = db.session.get(StudyProgressSubject, progress_id)
+            reloaded_progress = decode_note_state(reloaded_subject)
             self.assertIsNotNone(reloaded_progress)
-            self.assertEqual(reloaded_progress.card_id, card_id)
+            self.assertEqual(reloaded_subject.live_note_id, note_id)
             self.assertEqual(reloaded_progress.reps, 5)
-            self.assertEqual(reloaded_progress.queue, "review")
+            self.assertEqual(reloaded_progress.type, "review")
 
             # Verify study artifact / render resolves updated live template
             from app.services import study_artifact_service
@@ -785,6 +823,54 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("\u732b", selected_preview["front_html"])
         self.assertIn("\u306d\u3053", selected_preview["back_html"])
 
+    def test_shared_deck_preview_scopes_membership_and_preserves_retired_release_pin(self):
+        note_type = self._create_note_type()
+        note_type_id, template_id = note_type['id'], note_type['templates'][0]['id']
+        note_response = self.client.post('/api/notes', json={'note_type_id':note_type_id, 'deck_id':self.deck_id,
+            'field_values':{'Word':'?','Reading':'??','Meaning':'dog'}})
+        self.assertEqual(note_response.status_code,201)
+        with self.app.app_context():
+            from app.services.template_tokens import template_content_hash
+            from models.deck_release_template_pin import DeckReleaseTemplatePin
+            from models.template_version import TemplateVersion
+            from models.template_release import TemplateRelease
+            word = FieldDef.query.filter_by(note_type_id=note_type_id,name='Word').one()
+            application = StudyApplication.query.filter_by(note_type_id=note_type_id,template_id=template_id).one()
+            foreign_type = NoteType(name='Unrelated preview type',user_id=self.user_id)
+            db.session.add(foreign_type)
+            db.session.flush()
+            foreign_template = attach_template(db.session,note_type_id=foreign_type.id,owner_user_id=self.user_id,name='Private',front_html='SECRET')
+            schema = [{'key':'Term','label':'Term','type':'text','required':False}]
+            version = TemplateVersion(template_id=template_id,version_no=99,front_html='PINNED {{Term}}',back_html='{{Term}}',
+                shared_css='',input_schema=schema,content_hash=template_content_hash('PINNED {{Term}}','{{Term}}',''),origin='authored')
+            db.session.add(version)
+            db.session.flush()
+            publication = TemplateRelease(template_id=template_id,version_id=version.id,sequence_no=1,version_label='v1')
+            item = DeckMarketplaceItem(owner_user_id=self.user_id,source_deck_id=self.deck_id,source_note_type_id=note_type_id,
+                title='Pinned preview',publish_status='published')
+            db.session.add_all([publication,item])
+            db.session.flush()
+            release = DeckRelease(deck_item_id=item.id,sequence_no=1,version_label='v1',status='published',template_pins_initialized=True)
+            db.session.add(release)
+            db.session.flush()
+            item.current_release_id=release.id
+            db.session.add(DeckReleaseTemplatePin(deck_release_id=release.id,source_template_id=template_id,
+                template_release_id=publication.id,applications_json={application.id:{'note_type_id':note_type_id,
+                    'input_bindings':{'Term':word.id},'position':0,'occurrence_key':'compat'}}))
+            application.status_code='RETIRED'
+            db.session.get(Template,template_id).front_html='LIVE {{Word}}'
+            db.session.commit()
+            item_id,foreign_id=item.id,foreign_template.id
+            before = self._cutover_snapshot()
+        preview = self.client.post(f'/api/shared/decks/{item_id}/templates/{template_id}/preview',json={})
+        self.assertEqual(preview.status_code,200,preview.get_json())
+        self.assertIn('PINNED ?',preview.get_json()['front_html'])
+        self.assertNotIn('LIVE',preview.get_json()['front_html'])
+        foreign = self.client.post(f'/api/shared/decks/{item_id}/templates/{foreign_id}/preview',json={})
+        self.assertEqual(foreign.status_code,404,foreign.get_json())
+        with self.app.app_context():
+            self.assertEqual(self._cutover_snapshot(),before)
+
     def test_share_deck_page_publishes_parent_deck_using_child_deck_note_type(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
@@ -987,7 +1073,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_shared_deck_api_rejects_foreign_note_type_and_source_mutation(self):
         with self.app.app_context():
-            victim = User(username="victim", email="victim@example.com")
+            victim = create_note_user(db.session, username="victim", email="victim@example.com")
             victim.set_password("password")
             db.session.add(victim)
             db.session.flush()
@@ -999,7 +1085,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.add(victim_note_type)
             db.session.flush()
             db.session.add(
-                Template(
+                attach_template(db.session, owner_user_id=victim.id,
                     note_type_id=victim_note_type.id,
                     name="Private Card",
                     front_html="TOP SECRET",
@@ -1151,7 +1237,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_standard_user_can_load_deck_publish_options(self):
         with self.app.app_context():
-            user = User(username="standard", email="standard@example.com", is_admin=False)
+            user = create_note_user(db.session, username="standard", email="standard@example.com", is_admin=False)
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
@@ -1170,7 +1256,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_archived_deck_listing_remains_visible_to_owner_only(self):
         with self.app.app_context():
-            viewer = User(username="archived-viewer", email="archived-viewer@example.com")
+            viewer = create_note_user(db.session, username="archived-viewer", email="archived-viewer@example.com")
             viewer.set_password("password")
             archived_item = DeckMarketplaceItem(
                 owner_user_id=self.user_id,
@@ -1291,7 +1377,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             note_type = NoteType(id="nt_bench", user_id=self.user_id, name="Benchmark NT")
             db.session.add(note_type)
             db.session.flush()
-            tpl = Template(id="tpl_bench", note_type_id=note_type.id, name="Card 1")
+            tpl = attach_template(db.session, owner_user_id=self.user_id, id="tpl_bench", note_type_id=note_type.id, name="Card 1")
             db.session.add(tpl)
             db.session.flush()
 
@@ -1308,8 +1394,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                     note = Note(id=f"bn_{r}_{c}", user_id=self.user_id, deck_id=child_d.id, note_type_id=note_type.id)
                     db.session.add(note)
                     db.session.flush()
-                    card = Card(id=f"bc_{r}_{c}", note_id=note.id, template_id=tpl.id)
-                    db.session.add(card)
+                    card = Card.query.filter_by(note_id=note.id, template_id=tpl.id).one()
 
             db.session.commit()
 
@@ -1361,20 +1446,26 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             nt_b = NoteType(id="nt_edge_b", user_id=self.user_id, name="Edge NT B")
             db.session.add_all([nt_a, nt_b])
             db.session.flush()
-            tpl_a = Template(id="tpl_edge_a", note_type_id=nt_a.id, name="Card A")
-            tpl_b = Template(id="tpl_edge_b", note_type_id=nt_b.id, name="Card B")
+            tpl_a = attach_template(db.session, owner_user_id=self.user_id, id="tpl_edge_a", note_type_id=nt_a.id, name="Card A")
+            tpl_b = attach_template(db.session, owner_user_id=self.user_id, id="tpl_edge_b", note_type_id=nt_b.id, name="Card B")
             db.session.add_all([tpl_a, tpl_b])
             db.session.flush()
 
             # Leaf has 1 note/card
             n_leaf = Note(id="n_edge_l", user_id=self.user_id, deck_id=l_deck.id, note_type_id=nt_a.id)
-            c_leaf = Card(id="c_edge_l", note_id=n_leaf.id, template_id=tpl_a.id)
+            db.session.add(n_leaf)
+            db.session.flush()
+            c_leaf = Card.query.filter_by(note_id=n_leaf.id, template_id=tpl_a.id).one()
             # Middle has 1 note/card
             n_mid = Note(id="n_edge_m", user_id=self.user_id, deck_id=m_deck.id, note_type_id=nt_a.id)
-            c_mid = Card(id="c_edge_m", note_id=n_mid.id, template_id=tpl_a.id)
+            db.session.add(n_mid)
+            db.session.flush()
+            c_mid = Card.query.filter_by(note_id=n_mid.id, template_id=tpl_a.id).one()
             # Root has 1 note/card
             n_root = Note(id="n_edge_r", user_id=self.user_id, deck_id=r_deck.id, note_type_id=nt_a.id)
-            c_root = Card(id="c_edge_r", note_id=n_root.id, template_id=tpl_a.id)
+            db.session.add(n_root)
+            db.session.flush()
+            c_root = Card.query.filter_by(note_id=n_root.id, template_id=tpl_a.id).one()
 
             # 2. Empty deck (0 cards)
             empty_deck = Deck(name="Empty Folder Deck", owner_user_id=self.user_id)
@@ -1386,9 +1477,13 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.add(multi_nt_deck)
             db.session.flush()
             n_m1 = Note(id="n_m1", user_id=self.user_id, deck_id=multi_nt_deck.id, note_type_id=nt_a.id)
-            c_m1 = Card(id="c_m1", note_id=n_m1.id, template_id=tpl_a.id)
+            db.session.add(n_m1)
+            db.session.flush()
+            c_m1 = Card.query.filter_by(note_id=n_m1.id, template_id=tpl_a.id).one()
             n_m2 = Note(id="n_m2", user_id=self.user_id, deck_id=multi_nt_deck.id, note_type_id=nt_b.id)
-            c_m2 = Card(id="c_m2", note_id=n_m2.id, template_id=tpl_b.id)
+            db.session.add(n_m2)
+            db.session.flush()
+            c_m2 = Card.query.filter_by(note_id=n_m2.id, template_id=tpl_b.id).one()
 
             # 4. Simulated cycle: C1 -> C2 -> C1
             c1_deck = Deck(name="Cycle 1", owner_user_id=self.user_id)
@@ -1406,7 +1501,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self_loop_deck.parent_id = self_loop_deck.id
 
             # 6. Cross-user parent reference
-            other_user = User(username="other_edge", email="other_edge@example.com")
+            other_user = create_note_user(db.session, username="other_edge", email="other_edge@example.com")
             other_user.set_password("pass")
             db.session.add(other_user)
             db.session.flush()
@@ -1418,9 +1513,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.add(cross_parent_deck)
             db.session.flush()
             n_cross = Note(id="n_cross", user_id=self.user_id, deck_id=cross_parent_deck.id, note_type_id=nt_a.id)
-            c_cross = Card(id="c_cross", note_id=n_cross.id, template_id=tpl_a.id)
+            db.session.add(n_cross)
+            db.session.flush()
+            c_cross = Card.query.filter_by(note_id=n_cross.id, template_id=tpl_a.id).one()
 
-            db.session.add_all([n_leaf, c_leaf, n_mid, c_mid, n_root, c_root, n_m1, c_m1, n_m2, c_m2, n_cross, c_cross])
+            db.session.add_all([n_leaf, n_mid, n_root, n_m1, n_m2, n_cross])
             db.session.commit()
 
             r_deck_id = r_deck.id
@@ -1683,7 +1780,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_shared_note_type_hub_includes_saved_library_and_detail_extras(self):
         with self.app.app_context():
-            seller = User(username="seller-one", email="seller-one@example.com")
+            seller = create_note_user(db.session, username="seller-one", email="seller-one@example.com")
             seller.set_password("password")
             db.session.add(seller)
             db.session.flush()
@@ -1747,7 +1844,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_shared_note_type_hub_handles_installed_note_type_library(self):
         with self.app.app_context():
-            seller = User(username="seller-installed", email="seller-installed@example.com")
+            seller = create_note_user(db.session, username="seller-installed", email="seller-installed@example.com")
             seller.set_password("password")
             db.session.add(seller)
             db.session.flush()
@@ -1781,7 +1878,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_shared_deck_hub_and_detail_include_saved_state(self):
         with self.app.app_context():
-            seller = User(username="seller-two", email="seller-two@example.com")
+            seller = create_note_user(db.session, username="seller-two", email="seller-two@example.com")
             seller.set_password("password")
             db.session.add(seller)
             db.session.flush()
@@ -1876,7 +1973,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(owner_note_resp.status_code, 201)
 
         with self.app.app_context():
-            learner = User(username="installed-page", email="installed-page@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="installed-page", email="installed-page@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -1986,7 +2083,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(owner_note_resp.status_code, 201)
 
         with self.app.app_context():
-            learner = User(username="learner", email="learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="learner", email="learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -2060,7 +2157,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         note_type_id = note_type["id"]
 
         with self.app.app_context():
-            learner = User(username="unreleased-learner", email="unreleased-learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="unreleased-learner", email="unreleased-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -2133,7 +2230,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(owner_note_resp.status_code, 201)
 
         with self.app.app_context():
-            learner = User(username="browse-learner", email="browse-learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="browse-learner", email="browse-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -2292,7 +2389,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(owner_note_resp.status_code, 201)
 
         with self.app.app_context():
-            learner = User(username="nt-clone-learner", email="nt-clone-learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="nt-clone-learner", email="nt-clone-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -2373,7 +2470,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(owner_note_resp.status_code, 201)
 
         with self.app.app_context():
-            learner = User(username="snapshot-learner", email="snapshot-learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="snapshot-learner", email="snapshot-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -2446,538 +2543,50 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("\u72ac", second_next_payload.get("rendered_front_html", ""))
         self.assertNotIn("\u732b", second_next_payload.get("rendered_front_html", ""))
 
-    def test_cutover_uses_per_install_savepoints_and_canonical_exports(self):
+    def test_cutover_exports_reject_each_full_copy_install(self):
         with self.app.app_context():
-            source_decks = [
-                Deck(name=f"Cutover Source {index}", owner_user_id=self.user_id)
-                for index in range(2)
-            ]
-            local_decks = [
-                Deck(name=f"Cutover Local {index}", owner_user_id=self.user_id)
-                for index in range(2)
-            ]
-            db.session.add_all([*source_decks, *local_decks])
-            db.session.flush()
-            items = [
-                DeckMarketplaceItem(
-                    owner_user_id=self.user_id,
-                    source_deck_id=source_decks[index].id,
-                    title=f"Cutover Item {index}",
-                    description="Cutover savepoint contract",
-                    primary_category="General",
-                    tags=[],
-                    pricing_mode="free",
-                    price_amount_minor=0,
-                    version="1.0.0",
-                    publish_status="private",
-                )
-                for index in range(2)
-            ]
-            db.session.add_all(items)
-            db.session.flush()
-            installs = [
-                DeckInstall(
-                    deck_item_id=items[index].id,
-                    user_id=self.user_id,
-                    local_deck_id=local_decks[index].id,
-                    source_deck_id=source_decks[index].id,
-                    source_owner_user_id=self.user_id,
-                    clone_mode="legacy_copy",
-                    installed_at=datetime.utcnow() + timedelta(seconds=index),
-                )
-                for index in range(2)
-            ]
-            db.session.add_all(installs)
-            db.session.commit()
+            first = self._seed_retired_full_copy()
+            second = self._seed_retired_full_copy(suffix='second')
+            self.assertIs(share_ctrl.cutover_clone_model_to_overlay_only, cutover_service.cutover_clone_model_to_overlay_only)
+            self.assertIs(flashcards_share_service.cutover_clone_model_to_overlay_only, cutover_service.cutover_clone_model_to_overlay_only)
+            before = self._cutover_snapshot()
+            summary = cutover_service.cutover_clone_model_to_overlay_only(fail_on_mismatch=False)
+            self.assertEqual((summary['migrated'], summary['failed']), (0, 2))
+            self.assertTrue(all(row['status'] == 409 for row in summary['errors']))
+            self.assertEqual(self._cutover_snapshot(), before)
+            assert_retired_progress_absent(self, db.session)
 
-            self.assertIs(
-                share_ctrl.cutover_clone_model_to_overlay_only,
-                cutover_service.cutover_clone_model_to_overlay_only,
-            )
-            self.assertIs(
-                flashcards_share_service.cutover_clone_model_to_overlay_only,
-                cutover_service.cutover_clone_model_to_overlay_only,
-            )
-
-            calls = 0
-
-            def fake_migrate(_install):
-                nonlocal calls
-                calls += 1
-                if calls == 1:
-                    raise ShareControllerError("expected mismatch", status=409)
-                return {
-                    "deck_map_rows": 1,
-                    "note_pairs": 2,
-                    "note_overrides": 3,
-                    "progress_rows": 4,
-                }
-
-            with patch.object(
-                cutover_service,
-                "migrate_legacy_clone_install_to_overlay",
-                side_effect=fake_migrate,
-            ):
-                summary = cutover_service.cutover_clone_model_to_overlay_only(
-                    fail_on_mismatch=False
-                )
-            self.assertEqual(calls, 2)
-            self.assertEqual((summary["migrated"], summary["failed"]), (1, 1))
-            self.assertEqual(summary["progress_rows"], 4)
-            self.assertEqual(summary["errors"][0]["status"], 409)
-
-            with patch.object(
-                cutover_service,
-                "migrate_legacy_clone_install_to_overlay",
-                side_effect=ShareControllerError("strict mismatch", status=409),
-            ):
-                with self.assertRaises(ShareControllerError):
-                    cutover_service.cutover_clone_model_to_overlay_only(
-                        fail_on_mismatch=True
-                    )
-
-    def test_cutover_rejects_note_learner_before_clone_map_or_progress_mutation(self):
+    def test_cutover_rejects_note_learner_without_mutating_current_state(self):
         with self.app.app_context():
-            learner = User(
-                username="note-cutover-learner",
-                email="note-cutover-learner@example.com",
-                is_admin=False,
-            )
-            learner.set_password("password")
-            source = Deck(name="NOTE cutover source", owner_user_id=self.user_id)
-            db.session.add_all([learner, source])
-            db.session.flush()
-            local = Deck(name="NOTE cutover local", owner_user_id=learner.id)
-            item = DeckMarketplaceItem(
-                owner_user_id=self.user_id,
-                source_deck_id=source.id,
-                title="NOTE cutover item",
-                description="Cutover authority fence",
-                primary_category="General",
-                tags=[],
-                pricing_mode="free",
-                price_amount_minor=0,
-                version="1.0.0",
-                publish_status="private",
-            )
-            db.session.add_all([local, item])
-            db.session.flush()
-            note_type = NoteType(user_id=learner.id, name="NOTE cutover type")
-            template = Template(
-                note_type=note_type,
-                name="Card 1",
-                front_html="{{Word}}",
-                back_html="{{Word}}",
-                position=0,
-                is_default=True,
-            )
-            note = Note(
-                note_type=note_type,
-                user_id=learner.id,
-                deck_id=local.id,
-                field_values={"Word": "retained"},
-            )
-            card = Card(note=note, template=template)
-            db.session.add_all([note_type, template, note, card])
-            db.session.flush()
-            db.session.add(
-                CardProgress(
-                    user_id=learner.id,
-                    card_id=card.id,
-                    queue="review",
-                    due_at=datetime.utcnow(),
-                    interval_days=3,
-                    revision=4,
-                )
-            )
-            install = DeckInstall(
-                deck_item_id=item.id,
-                user_id=learner.id,
-                local_deck_id=local.id,
-                source_deck_id=source.id,
-                source_owner_user_id=self.user_id,
-                clone_mode="legacy_copy",
-                installed_at=datetime.utcnow(),
-            )
-            db.session.add_all(
-                [
-                    install,
-                    StudyAuthorityEnrollment(
-                        learner_user_id=learner.id,
-                        mode_code="NOTE",
-                        epoch=1,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
-                    ),
-                ]
-            )
-            db.session.commit()
-
-            summary = cutover_service.cutover_clone_model_to_overlay_only(
-                fail_on_mismatch=False
-            )
-            self.assertEqual((summary["migrated"], summary["failed"]), (0, 1))
-            self.assertEqual(summary["errors"][0]["status"], 409)
-            self.assertIn("NOTE_AUTHORITY_UNAVAILABLE", summary["errors"][0]["message"])
-            self.assertEqual(DeckInstall.query.get(install.id).clone_mode, "legacy_copy")
-            self.assertEqual(
-                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id).count(), 0
-            )
-            self.assertIsNotNone(db.session.get(Note, note.id))
-            self.assertEqual(
-                CardProgress.query.filter_by(user_id=learner.id, card_id=card.id)
-                .one()
-                .revision,
-                4,
-            )
-
+            self._seed_retired_full_copy()
+            before = self._cutover_snapshot()
             with self.assertRaises(ShareControllerError) as failure:
-                cutover_service.cutover_clone_model_to_overlay_only(
-                    fail_on_mismatch=True
-                )
-            self.assertEqual(failure.exception.error, "CLONE_CUTOVER_NOT_READY")
-            self.assertEqual(DeckInstall.query.get(install.id).clone_mode, "legacy_copy")
-            self.assertEqual(
-                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id).count(), 0
-            )
+                cutover_service.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
+            self.assertEqual((failure.exception.status, failure.exception.error), (409, 'CLONE_CUTOVER_NOT_READY'))
+            self.assertEqual(self._cutover_snapshot(), before)
 
-    def test_cutover_progress_rekey_and_merge_revision_contract(self):
+    def test_legacy_progress_merge_writer_is_retired(self):
         with self.app.app_context():
-            note_type = NoteType(user_id=self.user_id, name="Cutover Progress Contract")
-            template = Template(
-                note_type=note_type,
-                name="Card 1",
-                front_html="{{Word}}",
-                back_html="{{Word}}",
-                position=0,
-                is_default=True,
-            )
-            notes = [
-                Note(
-                    note_type=note_type,
-                    user_id=self.user_id,
-                    deck_id=self.deck_id,
-                    field_values={"Word": f"card-{index}"},
-                )
-                for index in range(7)
-            ]
-            cards = [Card(note=note, template=template) for note in notes]
-            db.session.add_all([note_type, template, *notes, *cards])
-            db.session.flush()
+            self._seed_retired_full_copy()
+            before = self._cutover_snapshot()
+            self.assertFalse(hasattr(cutover_service, '_merge_card_progress_rows_for_cutover'))
+            assert_retired_progress_absent(self, db.session)
+            summary = cutover_service.cutover_clone_model_to_overlay_only(fail_on_mismatch=False)
+            self.assertEqual(summary['migrated'], 0)
+            self.assertEqual(self._cutover_snapshot(), before)
 
-            now = datetime.utcnow()
-            local_only = CardProgress(
-                user_id=self.user_id,
-                card_id=cards[0].id,
-                queue="learning",
-                interval_days=5,
-                reps=3,
-                revision=5,
-                updated_at=now,
-            )
-            local_newer = CardProgress(
-                user_id=self.user_id,
-                card_id=cards[2].id,
-                queue="review",
-                interval_days=20,
-                reps=5,
-                lapses=2,
-                revision=7,
-                updated_at=now,
-            )
-            source_older = CardProgress(
-                user_id=self.user_id,
-                card_id=cards[3].id,
-                queue="learning",
-                interval_days=2,
-                reps=9,
-                lapses=1,
-                revision=10,
-                updated_at=now - timedelta(days=1),
-            )
-            local_older = CardProgress(
-                user_id=self.user_id,
-                card_id=cards[4].id,
-                queue="learning",
-                interval_days=4,
-                reps=12,
-                lapses=1,
-                revision=4,
-                updated_at=now - timedelta(days=2),
-            )
-            source_newer = CardProgress(
-                user_id=self.user_id,
-                card_id=cards[5].id,
-                queue="review",
-                interval_days=30,
-                reps=8,
-                lapses=3,
-                revision=6,
-                updated_at=now,
-            )
-            db.session.add_all(
-                [local_only, local_newer, source_older, local_older, source_newer]
-            )
-            db.session.commit()
-
-            self.assertEqual(
-                cutover_service._merge_card_progress_rows_for_cutover(
-                    user_id=self.user_id,
-                    local_card_id=cards[0].id,
-                    source_card_id=cards[1].id,
-                ),
-                1,
-            )
-            self.assertEqual(
-                cutover_service._merge_card_progress_rows_for_cutover(
-                    user_id=self.user_id,
-                    local_card_id=cards[6].id,
-                    source_card_id=cards[1].id,
-                ),
-                0,
-            )
-            self.assertEqual(
-                cutover_service._merge_card_progress_rows_for_cutover(
-                    user_id=self.user_id,
-                    local_card_id=cards[2].id,
-                    source_card_id=cards[3].id,
-                ),
-                1,
-            )
-            self.assertEqual(
-                cutover_service._merge_card_progress_rows_for_cutover(
-                    user_id=self.user_id,
-                    local_card_id=cards[4].id,
-                    source_card_id=cards[5].id,
-                ),
-                1,
-            )
-            db.session.flush()
-
-            rekeyed = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=cards[1].id,
-            ).one()
-            self.assertEqual((rekeyed.queue, rekeyed.interval_days, rekeyed.revision), ("learning", 5, 6))
-
-            local_won = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=cards[3].id,
-            ).one()
-            self.assertEqual(local_won.queue, "review")
-            self.assertEqual(local_won.interval_days, 20)
-            self.assertEqual((local_won.reps, local_won.lapses), (9, 2))
-            self.assertEqual(int(local_won.revision or 0), 11)
-
-            source_won = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=cards[5].id,
-            ).one()
-            self.assertEqual(source_won.queue, "review")
-            self.assertEqual(source_won.interval_days, 30)
-            self.assertEqual((source_won.reps, source_won.lapses), (12, 3))
-            self.assertEqual(int(source_won.revision or 0), 7)
-
-            for local_card in (cards[0], cards[2], cards[4]):
-                self.assertIsNone(
-                    CardProgress.query.filter_by(
-                        user_id=self.user_id,
-                        card_id=local_card.id,
-                    ).first()
-                )
-            self.assertEqual(
-                [note.field_values["Word"] for note in notes],
-                [f"card-{index}" for index in range(7)],
-            )
-
-    def test_cutover_migrates_legacy_full_copy_install_to_overlay(self):
-        note_type = self._create_note_type()
-        note_type_id = note_type["id"]
-
+    def test_legacy_full_copy_requires_offline_migration_and_keeps_copied_content(self):
         with self.app.app_context():
-            source_child = Deck(name="Cutover Source Child", parent_id=self.deck_id)
-            db.session.add(source_child)
-            db.session.flush()
-            source_child_id = source_child.id
+            install = self._seed_retired_full_copy()
+            enrollment = StudyAuthorityEnrollment.query.filter_by(learner_user_id=install.user_id).one()
+            enrollment.mode_code = 'LEGACY'  # Historical account; current routes refuse it.
             db.session.commit()
-
-        source_note_resp = self.client.post(
-            "/api/notes",
-            json={
-                "note_type_id": note_type_id,
-                "deck_id": source_child_id,
-                "field_values": {
-                    "Word": "\u72ac",
-                    "Reading": "\u3044\u306c",
-                    "Meaning": "dog",
-                },
-            },
-        )
-        self.assertEqual(source_note_resp.status_code, 201)
-        source_note_id = source_note_resp.get_json()["id"]
-
-        with self.app.app_context():
-            source_note = Note.query.get(source_note_id)
-            self.assertIsNotNone(source_note)
-            source_card = Card.query.filter_by(note_id=source_note.id).first()
-            self.assertIsNotNone(source_card)
-
-            learner = User(username="legacy-cutover", email="legacy-cutover@example.com", is_admin=False)
-            learner.set_password("password")
-            db.session.add(learner)
-            db.session.flush()
-            learner_id = learner.id
-
-            deck_item = DeckMarketplaceItem(
-                owner_user_id=self.user_id,
-                source_deck_id=self.deck_id,
-                source_note_type_id=note_type_id,
-                title="Legacy Cutover Deck",
-                description="Deck description",
-                primary_category="General",
-                tags=[],
-                preview_text="Preview",
-                pricing_mode="free",
-                price_amount_minor=0,
-                version="1.0.0",
-                publish_status="published",
-            )
-            db.session.add(deck_item)
-            db.session.flush()
-
-            local_root = Deck(
-                name="Legacy Local Root",
-                parent_id=None,
-                owner_user_id=learner_id,
-            )
-            db.session.add(local_root)
-            db.session.flush()
-            local_child = Deck(
-                name="Legacy Local Child",
-                parent_id=local_root.id,
-                owner_user_id=learner_id,
-            )
-            db.session.add(local_child)
-            db.session.flush()
-
-            install = DeckInstall(
-                deck_item_id=deck_item.id,
-                user_id=learner_id,
-                local_deck_id=local_root.id,
-                clone_mode="legacy_copy",
-                source_deck_id=self.deck_id,
-                source_note_type_id=note_type_id,
-                source_owner_user_id=self.user_id,
-                base_snapshot_at=datetime.utcnow(),
-                installed_at=datetime.utcnow(),
-            )
-            db.session.add(install)
-            db.session.flush()
-
-            db.session.add(
-                DeckCloneDeckMap(
-                    deck_install_id=install.id,
-                    local_deck_id=local_root.id,
-                    source_deck_id=self.deck_id,
-                )
-            )
-            db.session.add(
-                DeckCloneDeckMap(
-                    deck_install_id=install.id,
-                    local_deck_id=local_child.id,
-                    source_deck_id=source_child_id,
-                )
-            )
-
-            legacy_note = Note(
-                note_type_id=note_type_id,
-                user_id=learner_id,
-                deck_id=local_child.id,
-                field_values={
-                    "Word": "\u72ac*",
-                    "Reading": "\u3044\u306c",
-                    "Meaning": "dog",
-                },
-                tags=[],
-            )
-            db.session.add(legacy_note)
-            db.session.flush()
-            legacy_note_id = legacy_note.id
-            legacy_card = Card(
-                note_id=legacy_note.id,
-                template_id=source_card.template_id,
-            )
-            db.session.add(legacy_card)
-            db.session.flush()
-            legacy_card_id = legacy_card.id
-            db.session.add(
-                CardProgress(
-                    user_id=learner_id,
-                    card_id=legacy_card.id,
-                    queue="review",
-                    step_index=0,
-                    due_at=datetime.utcnow(),
-                    due_day=_day_index(datetime.utcnow(), 4),
-                    interval_days=8,
-                    ease_factor=2.5,
-                    reps=5,
-                    lapses=1,
-                    revision=7,
-                )
-            )
-            db.session.commit()
-
-            self.assertIs(
-                share_ctrl.cutover_clone_model_to_overlay_only,
-                cutover_service.cutover_clone_model_to_overlay_only,
-            )
-            self.assertIs(
-                flashcards_share_service.cutover_clone_model_to_overlay_only,
-                cutover_service.cutover_clone_model_to_overlay_only,
-            )
-            summary = share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
-            db.session.commit()
-            self.assertEqual(int(summary.get("migrated") or 0), 1)
-            self.assertEqual(int(summary.get("failed") or 0), 0)
-
-            migrated_install = DeckInstall.query.get(install.id)
-            self.assertIsNotNone(migrated_install)
-            self.assertEqual((migrated_install.clone_mode or "").strip().lower(), "logical_overlay")
-
-            self.assertIsNone(Note.query.get(legacy_note_id))
-            override_row = DeckCloneNoteFieldOverride.query.filter_by(
-                deck_install_id=install.id,
-                source_note_id=source_note.id,
-                field_name="Word",
-            ).first()
-            self.assertIsNotNone(override_row)
-            self.assertEqual(override_row.operation, "set")
-            self.assertEqual(override_row.value, "\u72ac*")
-
-            source_progress = CardProgress.query.filter_by(
-                user_id=learner_id,
-                card_id=source_card.id,
-            ).first()
-            self.assertIsNotNone(source_progress)
-            self.assertEqual(int(source_progress.reps or 0), 5)
-            self.assertEqual(int(source_progress.revision or 0), 8)
-
-            surviving_source_note = db.session.get(Note, source_note.id)
-            surviving_source_card = db.session.get(Card, source_card.id)
-            self.assertIsNotNone(surviving_source_note)
-            self.assertIsNotNone(surviving_source_card)
-            self.assertEqual(surviving_source_note.field_values["Word"], "\u72ac")
-
-            legacy_progress = CardProgress.query.filter_by(
-                user_id=learner_id,
-                card_id=legacy_card_id,
-            ).first()
-            self.assertIsNone(legacy_progress)
-            # A LEGACY learner's progress is rekeyed in card_progress alone (P10-09).
-            self.assertEqual(
-                StudyProgressSubject.query.filter_by(learner_user_id=learner_id).count(), 0
-            )
-            self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
+            before = self._cutover_snapshot()
+            summary = share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=False)
+            self.assertEqual((summary['migrated'], summary['failed']), (0, 1))
+            self.assertEqual(summary['errors'][0]['status'], 409)
+            self.assertEqual(install.clone_mode, 'legacy_copy')
+            self.assertEqual(self._cutover_snapshot(), before)
 
     def test_shared_deck_clone_overlay_saves_delta_only_and_updates_render(self):
         note_type = self._create_note_type()
@@ -3007,7 +2616,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         source_note_id = owner_note_resp.get_json()["id"]
 
         with self.app.app_context():
-            learner = User(username="overlay-learner", email="overlay-learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="overlay-learner", email="overlay-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -3157,7 +2766,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             for index in range(12):
                 username = f"stress{index}"
                 email = f"stress{index}@example.com"
-                learner = User(username=username, email=email, is_admin=False)
+                learner = create_note_user(db.session, username=username, email=email, is_admin=False)
                 learner.set_password("password")
                 db.session.add(learner)
                 learner_specs.append((username, email))
@@ -3201,7 +2810,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         note_type_id = note_type["id"]
 
         with self.app.app_context():
-            learner = User(username="retry-learner", email="retry-learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="retry-learner", email="retry-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -3289,7 +2898,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(owner_note_resp.status_code, 201)
 
         with self.app.app_context():
-            learner = User(username="viewer", email="viewer@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="viewer", email="viewer@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -3522,13 +3131,13 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_shared_deck_detail_includes_other_users_recent_reviews(self):
         with self.app.app_context():
-            owner = User(username="review-owner", email="review-owner@example.com", is_admin=False)
+            owner = create_note_user(db.session, username="review-owner", email="review-owner@example.com", is_admin=False)
             owner.set_password("password")
-            viewer = User(username="review-viewer", email="review-viewer@example.com", is_admin=False)
+            viewer = create_note_user(db.session, username="review-viewer", email="review-viewer@example.com", is_admin=False)
             viewer.set_password("password")
-            reviewer_a = User(username="alice", email="alice@example.com", is_admin=False)
+            reviewer_a = create_note_user(db.session, username="alice", email="alice@example.com", is_admin=False)
             reviewer_a.set_password("password")
-            reviewer_b = User(username="bob", email="bob@example.com", is_admin=False)
+            reviewer_b = create_note_user(db.session, username="bob", email="bob@example.com", is_admin=False)
             reviewer_b.set_password("password")
             db.session.add_all([owner, viewer, reviewer_a, reviewer_b])
             db.session.flush()
@@ -3709,12 +3318,9 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertTrue(answer_resp.get_json()["success"])
 
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=payload["card_id"],
-            ).first()
+            progress = decode_note_state(subject_for_card(db.session, user_id=self.user_id, card_id=payload["card_id"]))
             self.assertIsNotNone(progress)
-            self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
+            self.assertIn(progress.type, {"learning", "review", "relearning", "new"})
             self.assertIsNotNone(progress.reps)
 
     def test_react_study_uses_versioned_artifacts_and_client_render(self):
@@ -3987,7 +3593,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             due_later_card = cards[1]
             now = datetime.utcnow()
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=due_now_card.id,
                     queue="learning",
@@ -3999,7 +3605,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 )
             )
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=due_later_card.id,
                     queue="learning",
@@ -4086,10 +3692,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn('<div id="root"></div>', study_resp.get_data(as_text=True))
 
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.user_id).first()
-            self.assertEqual(progress.queue, "learning")
-            self.assertEqual(progress.due_at, datetime(2026, 2, 22, 19, 0, 0))
-            self.assertEqual(progress.due_day, datetime(2026, 2, 23).date().toordinal())
+            progress = decode_note_state(StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).first())
+            self.assertEqual(progress.type, "learning")
+            self.assertEqual(progress.due, datetime(2026, 2, 22, 19, 0, 0))
+            self.assertEqual(progress.dueDay, datetime(2026, 2, 23).date().toordinal())
 
     def test_vocabulary_study_first_render_matches_next_card_review_priority(self):
         note_type = self._create_note_type()
@@ -4123,7 +3729,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             overdue_card = cards[0]
             today_card = cards[1]
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=overdue_card.id,
                     queue="review",
@@ -4133,7 +3739,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 )
             )
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=today_card.id,
                     queue="review",
@@ -4186,7 +3792,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             )
             self.assertIsNotNone(card)
             db.session.add(
-                CardProgress(
+                stage_note_state(db.session,
                     user_id=self.user_id,
                     card_id=card.id,
                     queue="learning",
@@ -4257,14 +3863,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             user = User.query.get(self.user_id)
             self.assertEqual(user.timezone, "UTC")
 
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=next_payload["card_id"],
-            ).first()
+            progress = decode_note_state(subject_for_card(db.session, user_id=self.user_id, card_id=next_payload["card_id"]))
             self.assertIsNotNone(progress)
-            self.assertEqual(progress.queue, "learning")
-            self.assertIsNone(progress.due_day)
-            self.assertEqual(progress.due_at, fixed_now + timedelta(minutes=10))
+            self.assertEqual(progress.type, "learning")
+            self.assertIsNone(progress.dueDay)
+            self.assertEqual(progress.due, fixed_now + timedelta(minutes=10))
 
     def test_study_and_browse_exclude_suspended_cards(self):
         note_type = self._create_note_type()
@@ -4285,7 +3888,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         with self.app.app_context():
             card = Card.query.join(Note, Card.note_id == Note.id).filter(Note.deck_id == self.deck_id).first()
-            progress = CardProgress(
+            progress = stage_note_state(db.session,
                 user_id=self.user_id,
                 card_id=card.id,
                 queue="review",
@@ -4340,7 +3943,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         with self.app.app_context():
             card = Card.query.join(Note, Card.note_id == Note.id).filter(Note.deck_id == self.deck_id).first()
-            progress = CardProgress(
+            progress = stage_note_state(db.session,
                 user_id=self.user_id,
                 card_id=card.id,
                 queue="review",
@@ -5156,7 +4759,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_flashcard_import_allows_non_admin_with_own_note_type(self):
         with self.app.app_context():
-            learner = User(username="import-learner", email="import-learner@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="import-learner", email="import-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
             db.session.flush()
@@ -5213,9 +4816,9 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_shared_note_type_rate_is_limited_to_two_submissions_per_user(self):
         with self.app.app_context():
-            owner = User(username="nt-owner", email="nt-owner@example.com", is_admin=False)
+            owner = create_note_user(db.session, username="nt-owner", email="nt-owner@example.com", is_admin=False)
             owner.set_password("password")
-            learner = User(username="nt-rater", email="nt-rater@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="nt-rater", email="nt-rater@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add_all([owner, learner])
             db.session.flush()
@@ -5281,9 +4884,9 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
     def test_shared_deck_rate_is_limited_to_two_submissions_per_user(self):
         with self.app.app_context():
-            owner = User(username="deck-owner", email="deck-owner@example.com", is_admin=False)
+            owner = create_note_user(db.session, username="deck-owner", email="deck-owner@example.com", is_admin=False)
             owner.set_password("password")
-            learner = User(username="deck-rater", email="deck-rater@example.com", is_admin=False)
+            learner = create_note_user(db.session, username="deck-rater", email="deck-rater@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add_all([owner, learner])
             db.session.flush()

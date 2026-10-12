@@ -37,7 +37,6 @@ from app.services.study_progress_shadow_codec import (
 )
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_progress_subject import StudyProgressSubject
 
@@ -114,6 +113,12 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
         self.addCleanup(registry_patch.stop)
         with self.app.app_context():
             self.note_key = str(Card.query.first().note_id)
+            from app.repositories.study_authority_repository import lock_study_authority_route
+            from app.services.study_note_pristine_service import materialize_pristine_notes
+            route = lock_study_authority_route(db.session, learner_user_id=self.user_id)
+            materialize_pristine_notes(db.session, route=route, cards=Card.query.all(),
+                                      starting_ease_by_note_id={self.note_key: 2.5}, now_utc=_now())
+            db.session.commit()
 
     def _switch(self, target=SYNTHETIC, *, operation_key=None, expected=None):
         request = StudyAlgorithmSwitchRequest(learner_user_id=self.user_id, logical_note_key=self.note_key,
@@ -134,7 +139,8 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
             self.assertEqual(result.response["to_algorithm"], {"key": SYNTHETIC.key, "version": "1.0.0"})
             self.assertEqual(self._token().authority_revision, before + 1)
             self.assertEqual(self._token().algorithm_key, SYNTHETIC.key)
-            self.assertEqual(CardProgress.query.count(), 0)
+            from sqlalchemy import inspect
+            self.assertFalse(inspect(db.engine).has_table("card_progress"))
             receipt = StudyAuthorityCommandReceipt.query.one()
             self.assertEqual(receipt.receipt_schema_version, SWITCH_RECEIPT_SCHEMA_VERSION)
             self.assertIsNone(receipt.review_event_id)

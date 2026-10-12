@@ -20,6 +20,7 @@ from models.note_type import NoteType
 from models.template import Template
 from models.user import User
 
+from tests.study_note_fixtures import attach_template, create_note_user
 
 class MarketplaceQueryServiceTestCase(unittest.TestCase):
     def test_parse_price_cents_treats_float_numbers_as_whole_vnd(self):
@@ -96,7 +97,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
         db.create_all()
 
         # Create user
-        self.user = User(username="teacher", email="teacher@example.com")
+        self.user = create_note_user(db.session, username="teacher", email="teacher@example.com")
         self.user.set_password("pass1234")
         db.session.add(self.user)
         db.session.flush()
@@ -106,7 +107,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
         db.session.add(self.nt)
         db.session.flush()
 
-        self.template = Template(
+        self.template = attach_template(db.session, owner_user_id=self.user.id,
             note_type_id=self.nt.id,
             name="Card 1",
             front_html="{{Front}}",
@@ -136,8 +137,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template.id).one()
 
         deck_item = DeckMarketplaceItem(
             owner_user_id=self.user.id,
@@ -180,8 +180,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template.id).one()
 
         for i in range(10):
             note = Note(
@@ -192,8 +191,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template.id).one()
 
         deck_item = DeckMarketplaceItem(
             owner_user_id=self.user.id,
@@ -253,7 +251,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=self.template.id))
+            self.assertEqual(Card.query.filter_by(note_id=note.id, template_id=self.template.id).count(), 1)
 
         root_item = DeckMarketplaceItem(
             owner_user_id=self.user.id,

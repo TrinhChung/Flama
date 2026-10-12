@@ -29,7 +29,7 @@ from app.services.worksheets.template_catalog import (
     list_templates,
 )
 from models import db
-from models.card import Card
+from models.card import Card, card_id_clause
 from models.deck import Deck
 from models.deck_install import DeckInstall
 from models.field_types import field_value_text
@@ -1034,7 +1034,7 @@ def generate_worksheet_preview(
 
         if card_ids and isinstance(card_ids, list):
             cards = (
-                Card.query.filter(Card.id.in_([str(cid) for cid in card_ids[:max_process_limit]]))
+                Card.query.filter(card_id_clause(db.session, [str(cid) for cid in card_ids[:max_process_limit]]))
                 .options(selectinload(Card.note))
                 .all()
             )

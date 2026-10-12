@@ -18,8 +18,7 @@ from sqlalchemy import func, or_, select
 from app.services.study_progress_contract import DEFAULT_STORAGE_PROFILE
 from app.validators.study_session_wire import SESSION_SCHEMA_V4
 from models import db
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import INCLUDE_RETIRED_CARDS, Card, card_key_join
 from models.connect_source_card_ref import ConnectSourceCardRef
 from models.study_application import StudyApplication
 from models.study_authority_enrollment import StudyAuthorityEnrollment
@@ -63,9 +62,10 @@ def build_phase9_readiness(
 def _build_phase9_readiness(
     *, now_utc, window_days, projection_since_utc, retirement_observation, connection_safety,
 ) -> dict:
-    """``projection_since_utc`` is the cutover instant T0 (P9-06): after it no
-    ``card_progress`` row may be created or updated. Without it the cutover
-    gate is ``unknown`` rather than silently zero.
+    """Report current gates; historical CP conservation is checked offline.
+
+    The runtime cannot count writes to retired storage or certify its archive.
+    ``projection_since_utc`` remains a diagnostic boundary for old evidence.
     """
 
     now = (now_utc or datetime.utcnow()).replace(microsecond=0)
@@ -106,34 +106,33 @@ def _build_phase9_readiness(
     )
     # Native occurrences need no Anki ordinal. Only external mappings can
     # block retirement; detached or mismatched refs cannot silently pass.
-    external_cards = select(ConnectSourceCardRef.card_id).where(ConnectSourceCardRef.card_id.isnot(None))
-    unbound_cards = _count(select(func.count()).select_from(Card).where(
-        Card.id.in_(external_cards), Card.application_id.is_(None)))
+    # A derived Card always has its occurrence (ADR P11); refs name Cards by
+    # presentation key, retired occurrences included.
+    any_card = {INCLUDE_RETIRED_CARDS: True}
+    unbound_cards = 0
     ordinal_less = _count(select(func.count()).select_from(ConnectSourceCardRef)
-                         .join(Card, Card.id == ConnectSourceCardRef.card_id)
+                         .join(Card, card_key_join(ConnectSourceCardRef.card_id))
                          .join(StudyApplication, StudyApplication.id == Card.application_id)
                          .where(or_(StudyApplication.source_ord.is_(None),
-                                    StudyApplication.source_ord != ConnectSourceCardRef.source_ord)))
-    duplicates = (select(Card.note_id, StudyApplication.source_ord).join(
-        StudyApplication, StudyApplication.id == Card.application_id
-    ).where(Card.id.in_(external_cards), StudyApplication.source_ord.isnot(None))
+                                    StudyApplication.source_ord != ConnectSourceCardRef.source_ord))
+                         .execution_options(**any_card))
+    duplicates = (select(Card.note_id, StudyApplication.source_ord)
+                  .select_from(ConnectSourceCardRef)
+                  .join(Card, card_key_join(ConnectSourceCardRef.card_id))
+                  .join(StudyApplication, StudyApplication.id == Card.application_id)
+                  .where(StudyApplication.source_ord.isnot(None))
                   .group_by(Card.note_id, StudyApplication.source_ord)
-                  .having(func.count() > 1).subquery())
-    duplicate_ordinals = _count(select(func.count()).select_from(duplicates))
+                  .having(func.count(func.distinct(Card.application_id)) > 1).subquery())
+    duplicate_ordinals = _count(select(func.count()).select_from(duplicates).execution_options(**any_card))
     unbound_refs = _count(
         select(func.count()).select_from(ConnectSourceCardRef)
-        .outerjoin(Card, Card.id == ConnectSourceCardRef.card_id)
-        .where(Card.id.is_(None))
+        .outerjoin(Card, card_key_join(ConnectSourceCardRef.card_id))
+        .where(Card.note_id.is_(None))
+        .execution_options(**any_card)
     )
-    card_progress_rows = _count(select(func.count()).select_from(CardProgress))
+    # Legacy row/write accounting is external archive evidence after retirement.
+    card_progress_rows = None
     projection_writes_since = None
-    if projection_since_utc is not None:
-        projection_writes_since = _count(
-            select(func.count()).select_from(CardProgress).where(or_(
-                CardProgress.created_at >= projection_since_utc,
-                CardProgress.updated_at >= projection_since_utc,
-            ))
-        )
     # Work issued under the current storage profile must drain before cutover:
     # a lease is valid until it expires, an admitted batch until it finishes.
     leases = [
@@ -180,7 +179,9 @@ def _build_phase9_readiness(
     gates = {
         "legacy_projection_writes": {
             "evidence": {"legacy_learners": legacy_learners, "unenrolled_users": unenrolled_users,
-                         "card_progress_rows": card_progress_rows},
+                         "card_progress_rows": card_progress_rows,
+                         "card_progress_evidence_status": "retired_offline",
+                         "archive_verified": None},
             "status": "waiting" if projection_blockers else "ready",
             "blocking_reasons": projection_blockers,
         },
@@ -193,12 +194,13 @@ def _build_phase9_readiness(
                 "storage_profile": storage_profile,
                 "since_utc": projection_since_utc.isoformat() + "Z" if projection_since_utc else None,
                 "card_progress_rows_written_since": projection_writes_since,
-                "evidence_scope": "surviving_rows_only",
+                "evidence_scope": "retired_storage_offline_archive",
+                "archive_verified": None,
+                "requires_offline_audit": True,
             },
             "blocking_reasons": [] if projection_free else ["PROFILE_NOT_CANONICAL"],
             "status": (
-                "unknown" if projection_writes_since is None
-                else "ready" if projection_writes_since == 0 and projection_free else "waiting"
+                "retired" if projection_free else "waiting"
             ),
         },
         "work_drain": {

@@ -29,6 +29,8 @@ from models.scheduler_preset import SchedulerPreset
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.template import Template
+from models.study_application import StudyApplication
+from app.repositories import template_library_repository
 from models.user import User
 
 
@@ -105,8 +107,8 @@ class StudySessionScalingTests(unittest.TestCase):
         response, statements = self._capture_sql(lambda: self.client.get(f"/api/study/sessions/{self.snapshot['session_id']}"))
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertFalse(response.get_json()["stale"])
-        sibling_reads = [s for s in statements if "FROM cards" in s and "cards.note_id IN" in s]
-        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id" and "notes.id IN" in s]
+        sibling_reads = [s for s in statements if s.lstrip().startswith("SELECT card_presentations.id, ") and "card_presentations.note_id IN" in s]
+        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id, notes.note_type_id" and "notes.id IN" in s]
         self.assertEqual((len(sibling_reads), len(note_locks)), (1, 1))
         self.assertFalse(any(s.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) for s in statements))
 
@@ -117,26 +119,31 @@ class StudySessionScalingTests(unittest.TestCase):
         response, statements = self._capture_sql(lambda: self.client.get(f"/api/study/sessions/{self.snapshot['session_id']}"))
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertFalse(response.get_json()["stale"])
-        sibling_reads = [s for s in statements if "FROM cards" in s and "cards.note_id IN" in s]
-        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id" and "notes.id IN" in s]
+        sibling_reads = [s for s in statements if s.lstrip().startswith("SELECT card_presentations.id, ") and "card_presentations.note_id IN" in s]
+        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id, notes.note_type_id" and "notes.id IN" in s]
         self.assertEqual((len(sibling_reads), len(note_locks)), (2, 2))
         self.assertFalse(any(s.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) for s in statements))
 
     def test_replay_identity_lookups_are_linear_and_updates_every_session_sibling(self):
-        from app.services.study_application_service import stage_repeated_application
-        from app.services.study_content_delete_service import lock_content_delete_routes
+        from app.services import template_library_service
         with self.app.app_context():
-            template = db.session.get(Card, self.snapshot["cards"][0]["card_id"]).template
-            card_ids = tuple(db.session.execute(select(Card.id)).scalars())
-            initial_card_count = len(card_ids)
-            routes = lock_content_delete_routes(
-                db.session, actor_user_ids=[self.user_id], card_ids=card_ids, deleted_note_ids=[],
+            first_card = db.session.get(Card, self.snapshot["cards"][0]["card_id"])
+            note_type_id = first_card.note.note_type_id
+            initial_card_count = db.session.query(Card.id).count()
+            second_template = Template(
+                owner_user_id=self.user_id,
+                name="Scaling Second Template",
+                front_html="{{Front}}",
+                back_html="{{Back}}",
             )
-            repeated_application = stage_repeated_application(
-                db.session, routes=routes, template=template, occurrence_key="scaling-repeat",
-            )
-            repeated_application_id = repeated_application.id
+            db.session.add(second_template)
             db.session.commit()
+            attached = template_library_service.attach_template(
+                user_id=self.user_id,
+                note_type_id=note_type_id,
+                payload={"template_id": second_template.id},
+            )
+            second_application_id = attached["id"]
         self.snapshot = self._open()
         self.assertEqual(len(self.snapshot["cards"]), 40)
         with self.app.app_context():
@@ -151,12 +158,12 @@ class StudySessionScalingTests(unittest.TestCase):
                     reads.append(key)
                     return super().__getitem__(key)
             authority_pins = replace(authority_pins, identity_by_session_card_id=CountingMap(authority_pins.identity_by_session_card_id))
-            # Each occurrence is selected separately. Review every selected
+            # Each attached template is selected separately. Review every selected
             # Note twice to retain the linear replay and state propagation gate.
             self.assertEqual(Card.query.count(), initial_card_count + len(members))
             projections = db.session.execute(select(Card.note_id, Card.application_id)).all()
             self.assertEqual(len(projections), len(set(projections)))
-            self.assertEqual(Card.query.filter_by(application_id=repeated_application_id).count(), len(members))
+            self.assertEqual(Card.query.filter_by(application_id=second_application_id).count(), len(members))
             events = [self._event(i, card=card) for i,card in enumerate(self.snapshot["cards"] * 2, 1)]
             states, replayed, touched, _ids = study_session_service._replay_session_events(
                 session=lease,
@@ -215,7 +222,7 @@ class StudySessionOverlayScalingTests(unittest.TestCase):
         self._install_overlay(notes=3)
         with self.app.app_context():
             install = db.session.get(DeckInstall, self.install_id)
-            template = Template.query.filter_by(note_type_id=install.source_note_type_id).one()
+            template = template_library_repository.applications(db.session, install.source_note_type_id)[0].template
             notes = [Note(
                 user_id=self.user_id, note_type_id=install.source_note_type_id,
                 deck_id=self.local_deck_id, field_values={"Word": f"local-{number}"},
@@ -223,7 +230,6 @@ class StudySessionOverlayScalingTests(unittest.TestCase):
             db.session.add_all(notes)
             db.session.flush()
             db.session.add_all(DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id) for note in notes)
-            db.session.add_all(Card(note_id=note.id, template_id=template.id) for note in notes)
             db.session.commit()
             local_note_ids = {note.id for note in notes}
         snapshot, statements = self._capture_sql(self._open)
@@ -281,7 +287,7 @@ class StudySessionSiblingLockTests(unittest.TestCase):
         with self.assertRaises(StudyAuthorityFenceError) as wrong:
             lock_study_authority_siblings_many(db.session, route=replace(self._route(), learner_user_id=self.user_id+1), locked_by_logical_note_key={self.note_id: locked})
         self.assertEqual(wrong.exception.code, "WRONG_LEARNER")
-        db.session.execute(delete(Card).where(Card.note_id == self.note_id))
+        db.session.execute(delete(StudyApplication).where(StudyApplication.note_type_id == db.session.get(Note, self.note_id).note_type_id))
         with self.assertRaises(StudyAuthorityFenceError) as missing:
             lock_study_authority_siblings_many(db.session, route=self._route(), locked_by_logical_note_key={self.note_id: locked})
         self.assertEqual(missing.exception.code, "AUTHORITY_SIBLINGS_EMPTY")

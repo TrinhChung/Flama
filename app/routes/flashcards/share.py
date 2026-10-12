@@ -456,9 +456,37 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
 
-    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
-    if not template:
-        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
+    from types import SimpleNamespace
+    from app.repositories import flashcards_share_repository, template_release_repository
+    from app.services.effective_template_service import resolve_effective_template
+
+    # Public preview follows the deck's immutable pin; personal subscriptions
+    # must not replace the source advertised by this release.
+    release = db.session.get(DeckRelease, deck_item.current_release_id) if deck_item.current_release_id else None
+    if release and release.deck_item_id != deck_item.id:
+        return _api_error("FIELD_NOT_FOUND", "Deck release not found.", status=404)
+    if release and release.template_pins_initialized:
+        pin = template_release_repository.deck_pins(db.session, release.id).get(template_id)
+        applications = [values for values in (pin.get("applications_json") or {}).values()
+                        if isinstance(values, dict) and str(values.get("note_type_id")) == str(note_type.id)] if pin else []
+        if not applications:
+            return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
+        applications.sort(key=lambda values: (int(values.get("position") or 0), str(values.get("occurrence_key") or "")))
+        template_release = template_release_repository.release(db.session, pin["template_release_id"], template_id)
+        version = template_release_repository.version(db.session, template_release["version_id"], template_id) if template_release else None
+        if not version:
+            return _api_error("FIELD_NOT_FOUND", "Template release not found.", status=404)
+        template = SimpleNamespace(id=template_id, **{key: version[key] for key in ("front_html", "back_html", "shared_css", "input_schema")},
+                                   input_bindings=applications[0].get("input_bindings") or {})
+    else:
+        attached = next(((definition, application) for definition, application in
+                         flashcards_share_repository.get_template_applications_by_note_type(note_type.id)
+                         if str(definition.id) == str(template_id)), None)
+        if attached is None:
+            return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
+        definition, application = attached
+        template = resolve_effective_template(SimpleNamespace(template=definition, application=application,
+                                                               application_id=application.id))
 
     payload = request.get_json(silent=True) or {}
     requested_note_id = (payload.get("note_id") or "").strip() or None
