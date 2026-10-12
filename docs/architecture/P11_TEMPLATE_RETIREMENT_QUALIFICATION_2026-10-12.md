@@ -39,7 +39,7 @@ evidence proportional to the old rows and entities; new Notes/applications do
 not create additional materialized presentation rows.
 
 Inferring Template ownership from a remaining attachment would conflate
-authorship with usage. Migration 60 backfills only a missing owner from its
+authorship with usage. Migration 61 backfills only a missing owner from its
 actual historical origin, requires a verified external archive, and refuses
 unknown authors or unconverted origin attachments. Typed live input metadata
 is frozen before origin contraction; source, timestamps, published versions,
@@ -75,3 +75,11 @@ passed after origin readers/writers and obsolete fixtures were migrated;
 earlier transient failures are not used as release evidence. No real local or
 VPS data was changed by this subtask. Root MySQL/deployment evidence belongs
 in its deployment report, independently of these SQLite proofs.
+
+## Root qualification added after the focused review
+
+The populated MySQL rehearsal upgraded the latest deployed revision 57 to 62. It preserved all 42,793 current Subjects and 17 protected tables exactly, including 132,283 ReviewEvents, command receipts, session memberships/pins, Connect refs and immutable releases. All 41,533 original Card IDs became archived aliases; none of the six retired physical tables remained. See [sanitized evidence](artifacts/legacy_progress_retirement_20261012/populated-local-rehearsal.json). The full backup and six-table archive were both restored on isolated MySQL before contraction.
+
+The baseline-to-head chain also passed on fresh MySQL. Actual MySQL batch admission/recovery and 19 direct/overlay replay cases passed, followed by the concurrent NOTE review/signup/create probe. SQL tracing over 192 tests recorded no runtime CardProgress or physical Card queries. Real old UUID sessions preserve membership, snapshot, authority pins, events and exact stored replay receipts; reset also cancels old UUID leases.
+
+Production gates are still pending: integrate the newer template attachment commits, complete backend release verification, then apply to actual local and only afterward VPS. This report does not label isolated rehearsal as production deployment.

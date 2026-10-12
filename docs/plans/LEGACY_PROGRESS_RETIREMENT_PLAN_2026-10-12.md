@@ -2,7 +2,7 @@
 
 > Ngày: 2026-10-12 (Asia/Tokyo). Yêu cầu: kiểm tra/chuyển local trước, ổn mới thực hiện trên VPS; lập kế hoạch loại bỏ legacy.
 > Baseline root: `9b5db52e`. VPS audit tại release `/opt/flama/releases/fde1cd882abe3cfc4158e473a8c53da2dd71de36`.
-> Chế độ: DESIGN, dựa trên [review 110 model](../architecture/LEGACY_MODEL_CLEANUP_REVIEW_2026-10-12.md) và audit MySQL thực tế dưới đây. Đây là kế hoạch implementation/retirement; chưa xóa model hay bảng nào.
+> Trạng thái: R1–R4 đã được triển khai trong worktree `nihongo-legacy-retirement`; diễn tập MySQL cách ly đã qua revision 57 → 62. **DB local thật và VPS chưa contraction**; kiểm tra phát hành toàn backend và tích hợp các commit template mới còn đang thực hiện. R5 đã hoàn thành thiết kế.
 
 ## 1. Kết quả hiện tại: không còn progress cần chuyển ở hai DB đã kiểm
 
@@ -142,10 +142,20 @@ Các kiểm tra toàn bộ collection hiện chỉ phục vụ audit offline. Kh
 | Đợt | Trạng thái |
 | --- | --- |
 | R0 local -> VPS: audit progress hiện hành | **DONE**, cả hai DATA_READY, không có progress pending để chuyển |
-| R1 bốn model không còn consumer | READY FOR IMPLEMENTATION; archive evidence + historical migration contract còn phải làm |
-| R2 CardProgress consumers -> archive/drop | PLANNED; data gate đã qua, code/wire/Connect gates chưa thực hiện |
-| R3 Card/P11 | IN PROGRESS ở worktree Claude; review này không chứng nhận diff chưa commit của worktree |
-| R4 origin Template | PLANNED, còn consumer sai nghĩa |
-| R5 Field-name identity | FOLLOW-UP DESIGN, không phải model có thể drop hiện tại |
+| R1 bốn model không còn consumer | IMPLEMENTED + MYSQL REHEARSAL PASS; migration 59, archive/restore và historical definitions đã có |
+| R2 CardProgress consumers -> archive/drop | IMPLEMENTED + MYSQL REHEARSAL PASS; migration 60 chưa chạy trên DB thật |
+| R3 Card/P11 | IMPLEMENTED + MYSQL REHEARSAL PASS; migration 58, 41.533 alias lịch sử, không còn bảng Card trong rehearsal |
+| R4 origin Template | IMPLEMENTED + MYSQL REHEARSAL PASS; migration 61, owner và application scope rõ ràng |
+| R5 Field-name identity | DESIGN COMPLETE; chưa đổi storage, vẫn giữ FieldRenameJob |
 
 Validation của công cụ: **12 test PASS**; modular runner sau khi cập nhật mapping: **25 test PASS**. Báo cáo không đánh dấu một bước retirement đã xong chỉ vì audit dữ liệu đã qua.
+
+## 7. Chứng cứ implementation và gate phát hành
+
+[Diễn tập populated local](../architecture/artifacts/legacy_progress_retirement_20261012/populated-local-rehearsal.json) giữ nguyên checksum 42.793 subjects và 17 bảng cần bảo toàn, gồm 132.283 ReviewEvents. Backup toàn DB đã restore thành schema cách ly; archive 6 bảng đã restore và đối chiếu trên MySQL trước DROP. Fresh migration chain 001 → 62 cũng đã qua MySQL. Revision 57 dành cho template modernization đã triển khai; retirement dùng các revision 58–62.
+
+SQL trace 192 test owner/clone/import/batch không phát hiện truy vấn runtime vào CardProgress hoặc Card vật lý. Probe MySQL NOTE batch/recovery, 19 ca direct/overlay replay và review đồng thời đã qua. Các báo cáo này chưa thay cho gate toàn backend và chưa chứng nhận local thật/VPS đã triển khai.
+
+Với queue 35k Notes, thời gian tổng gồm COUNT cải thiện khoảng 1,3–1,5× trong benchmark xen kẽ; riêng picker REVIEW lớn khoảng 18×. COUNT vẫn tuyến tính theo phạm vi. Không kết luận toàn endpoint O(1). Browse chỉ hash-validate các row của trang được trả về, giữ kiểm tra identity/presence trong aggregate.
+
+[Thiết kế Field identity](../architecture/FIELD_VALUE_IDENTITY_DESIGN_2026-10-12.md) đã hoàn tất; chưa thay cấu trúc lưu field. [Runbook chuyển đổi](../runbooks/LEGACY_RETIREMENT_CUTOVER_2026-10-12.md) quy định backup/restore riêng cho từng DB, dừng writer, audit mới, checksum trước/sau và khởi động code tương thích.
