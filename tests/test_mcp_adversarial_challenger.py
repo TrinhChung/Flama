@@ -108,8 +108,7 @@ class TestMcpAdversarialChallenger(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card(note_id=n.id, template_id=note_type.templates[0].id)
-                db.session.add(c)
+                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
 
             # Published Marketplace Item
             pub_item = DeckMarketplaceItem(
@@ -178,8 +177,7 @@ class TestMcpAdversarialChallenger(unittest.TestCase):
                 )
                 db.session.add(sn)
                 db.session.flush()
-                sc = Card(note_id=sn.id, template_id=note_type.templates[0].id)
-                db.session.add(sc)
+                sc = Card.query.filter_by(note_id=sn.id, template_id=note_type.templates[0].id).one()
                 db.session.flush()
 
                 # Also add study logs to check if review data could leak

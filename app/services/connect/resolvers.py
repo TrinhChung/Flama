@@ -36,10 +36,10 @@ from app.services import (
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.validators.flashcard_input import RequestValidationError, validate_note_create_request
 
+from models.study_application import StudyApplication
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.connect_import_media import ConnectImportMedia
 from models.connect_import_package import ConnectImportPackage
 from models.connect_import_session import ConnectImportSession
@@ -66,6 +66,7 @@ from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
 from models.review_event import ReviewEvent
 from models.template import Template
+from models.study_application import StudyApplication
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -186,7 +187,7 @@ def _accessible_note_types(
     if eager_schema:
         query = query.options(
             selectinload(NoteType.field_defs),
-            selectinload(NoteType.templates),
+            selectinload(NoteType.study_applications).selectinload(StudyApplication.template),
         )
     return query.order_by(NoteType.name.asc(), NoteType.id.asc()).all()
 

@@ -75,8 +75,7 @@ class FlashcardAudioScanTests(unittest.TestCase):
             )
             db.session.add(n1)
             db.session.flush()
-            c1 = Card(note_id=n1.id, template_id=self.template_id)
-            db.session.add(c1)
+            c1 = Card.query.filter_by(note_id=n1.id, template_id=self.template_id).one()
 
             # Note 2: Valid audio file on disk
             n2 = Note(
@@ -87,8 +86,7 @@ class FlashcardAudioScanTests(unittest.TestCase):
             )
             db.session.add(n2)
             db.session.flush()
-            c2 = Card(note_id=n2.id, template_id=self.template_id)
-            db.session.add(c2)
+            c2 = Card.query.filter_by(note_id=n2.id, template_id=self.template_id).one()
 
             media_file = self.upload_root / f"{self.user_id}" / n2.id / "valid_audio.wav"
             media_file.parent.mkdir(parents=True, exist_ok=True)
@@ -114,8 +112,7 @@ class FlashcardAudioScanTests(unittest.TestCase):
             )
             db.session.add(n3)
             db.session.flush()
-            c3 = Card(note_id=n3.id, template_id=self.template_id)
-            db.session.add(c3)
+            c3 = Card.query.filter_by(note_id=n3.id, template_id=self.template_id).one()
 
             asset_broken = MediaAsset(
                 note_id=n3.id,

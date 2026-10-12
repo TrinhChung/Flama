@@ -51,7 +51,6 @@ from app.validators.flashcard_input import RequestValidationError, validate_note
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.connect_import_media import ConnectImportMedia
 from models.connect_import_package import ConnectImportPackage
 from models.connect_import_session import ConnectImportSession
@@ -117,12 +116,9 @@ from app.services.connect.resolvers import (
 )
 
 def _note_card_plan(note: Note, note_type: NoteType):
-    # Active occurrences decide Cards; a reusable definition attached to this
-    # NoteType is not part of note_type.templates and must not be removed.
-    plan = template_library_repository.plan_note_cards(db.session, note_type.id, list(note.cards))
-    if not plan.has_slots:
+    """The Note's Cards are its NoteType's ACTIVE occurrences (ADR P11): require one."""
+    if not template_library_repository.card_slots(db.session, note_type.id):
         raise ConnectError("model has no card template")
-    return plan
 
 
 def _reconcile_note_cards(
@@ -133,25 +129,13 @@ def _reconcile_note_cards(
     preserve_released_history: bool | None = None,
     plan=None,
 ) -> None:
-    plan = plan or _note_card_plan(note, note_type)
-    requires_reconcile = bool(plan.missing or plan.removable)
-    if requires_reconcile and not is_new_note:
-        from app.services import deck_working_tree_service
+    """Cards are derived from the NoteType's occurrences: nothing to reconcile.
 
-        must_preserve_history = (
-            deck_working_tree_service.note_has_shared_release_dependents(note)
-            if preserve_released_history is None
-            else preserve_released_history
-        )
-        if must_preserve_history:
-            raise ConnectError(
-                "cannot change card templates for a released shared note; "
-                "template-aware deck releases are required to preserve study history"
-            )
-    for card in plan.removable:
-        db.session.delete(card)
-    db.session.add_all(template_library_repository.build_cards([note.id], plan.missing))
-
+    Kept for callers of the Connect facade; it only checks that the NoteType
+    presents at least one Card.
+    """
+    _note_card_plan(note, note_type)
+    db.session.expire(note, ["cards"])
 
 
 def _reconcile_note_authority_cards(
@@ -163,302 +147,11 @@ def _reconcile_note_authority_cards(
     preserve_released_history: bool | None,
     operation_key: str,
 ) -> None:
-    """Template reconcile under NOTE: add siblings first, then remove.
-
-    Every learner holding state on the Note keeps its one row: a new sibling
-    shares it and a removed sibling changes no progress (ADR P10 §2.3).
-    """
-    from app.services import study_content_delete_service as content_topology
-
-    plan = _note_card_plan(note, note_type)
-    if not plan.missing and not plan.removable:
-        return
-    if not is_new_note:
-        from app.services import deck_working_tree_service
-
-        must_preserve_history = (
-            deck_working_tree_service.note_has_shared_release_dependents(note)
-            if preserve_released_history is None
-            else preserve_released_history
-        )
-        if must_preserve_history:
-            raise ConnectError(
-                "cannot change card templates for a released shared note; "
-                "template-aware deck releases are required to preserve study history"
-            )
-    # A new sibling writes no learner progress (ADR P10 §2.3); only a removal
-    # fences the learners holding state on this Note, before any other lock.
-    removed_ids = [str(card.id) for card in plan.removable]
-    routes = content_topology.lock_content_delete_routes(
-        db.session,
-        actor_user_ids=(user_id,),
-        card_ids=[str(card.id) for card in note.cards],
-        deleted_note_ids=(),
-    ) if removed_ids else ()
-    if plan.missing:
-        db.session.add_all(template_library_repository.build_cards([note.id], plan.missing))
-        db.session.flush()
-    if removed_ids:
-        removal = content_topology.prepare_content_delete(
-            db.session, routes=routes, card_ids=removed_ids, note_ids=(),
-            cancel_legacy_sessions=False)
-        content_topology.verify_content_delete_scope(
-            db.session, routes=routes, card_ids=removed_ids, deleted_note_ids=())
-        CardProgress.query.filter(CardProgress.card_id.in_(removed_ids)).delete(
-            synchronize_session=False)
-        content_topology.finalize_content_delete(
-            removal, source_path="connect.import_cards.reconcile", operation_key=operation_key)
-        Card.query.filter(Card.id.in_(removed_ids)).delete(synchronize_session=False)
-    db.session.expire(note, ["cards"])
+    """Under NOTE as under LEGACY, a Note's Cards follow its NoteType (ADR P11)."""
+    _reconcile_note_cards(note, note_type, is_new_note=is_new_note,
+                          preserve_released_history=preserve_released_history)
 
 
-def _migrate_cards_progress(
-    user_id: int,
-    note: Note,
-    note_type: NoteType,
-    cards_progress_payload: list[dict[str, Any]],
-    source_note_ref: ConnectSourceNoteRef,
-) -> list[dict[str, Any]]:
-    if not cards_progress_payload:
-        return []
-
-    from datetime import datetime, timezone
-    from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
-    from app.services.anki_scheduler import _day_index, _day_index_to_datetime
-    from models.card import Card
-    from models.card_progress import CardProgress
-    from models.user import User
-
-    user = db.session.get(User, user_id)
-    timezone_name = getattr(user, "timezone", "UTC") or "UTC"
-    runtime = resolve_scheduler_runtime_settings(user_id=user_id)
-    boundary_hour = runtime.day_boundary_hour_local
-
-    now = datetime.utcnow()
-    today_day_index_flama = _day_index(now, boundary_hour, timezone_name=timezone_name)
-
-    slots = _anki_card_slots(note_type)
-
-    # Flush newly reconciled cards and query them directly
-    db.session.flush()
-    note_cards = Card.query.filter_by(note_id=note.id).all()
-    existing_cards = {card.template_id: card for card in note_cards}
-    existing_cards.update({card.application_id: card for card in note_cards if card.application_id})
-
-    if not isinstance(cards_progress_payload, list) or len(cards_progress_payload) > 100:
-        raise ConnectError("cardsProgress must be an array with at most 100 entries")
-    progress_map: dict[int, dict[str, Any]] = {}
-    for item in cards_progress_payload:
-        if not isinstance(item, dict):
-            raise ConnectError("cardsProgress entries must be objects")
-        ord_value = item.get("ord")
-        if isinstance(ord_value, bool) or not isinstance(ord_value, int) or not 0 <= ord_value <= 99:
-            raise ConnectError("cardsProgress ord must be an integer between 0 and 99")
-        if ord_value in progress_map:
-            raise ConnectError("cardsProgress contains duplicate ord values")
-        for field_name in ("type", "queue", "interval", "factor", "reps", "lapses"):
-            value = item.get(field_name, 0)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
-                raise ConnectError(f"cardsProgress {field_name} must be a finite number")
-        if int(item.get("type", 0)) not in {0, 1, 2, 3}:
-            raise ConnectError("cardsProgress type is invalid")
-        if int(item.get("queue", 0)) not in {-3, -2, -1, 0, 1, 2, 3, 4}:
-            raise ConnectError("cardsProgress queue is invalid")
-        if not 0 <= int(item.get("interval", 0)) <= 365000:
-            raise ConnectError("cardsProgress interval is out of range")
-        if not 0 <= int(item.get("factor", 0)) <= 10000:
-            raise ConnectError("cardsProgress factor is out of range")
-        if not 0 <= int(item.get("reps", 0)) <= 2_000_000_000:
-            raise ConnectError("cardsProgress reps is out of range")
-        if not 0 <= int(item.get("lapses", 0)) <= 2_000_000_000:
-            raise ConnectError("cardsProgress lapses is out of range")
-        progress_map[ord_value] = item
-
-    results: list[dict[str, Any]] = []
-    for ord_idx, slot_id in enumerate(slots):
-        card = existing_cards.get(slot_id)
-        if not card:
-            continue
-
-        progress_data = progress_map.get(ord_idx)
-        if not progress_data:
-            continue
-
-        progress = CardProgress.query.filter_by(
-            user_id=user_id,
-            card_id=card.id,
-        ).with_for_update().first()
-        anki_last_reviewed_at = None
-        last_rev_str = progress_data.get("lastReviewAt")
-        if last_rev_str:
-            if not isinstance(last_rev_str, str) or len(last_rev_str) > 64:
-                raise ConnectError("cardsProgress lastReviewAt is invalid")
-            try:
-                clean_str = last_rev_str.replace("Z", "+00:00")
-                anki_last_reviewed_at = datetime.fromisoformat(clean_str)
-                if anki_last_reviewed_at.tzinfo is not None:
-                    anki_last_reviewed_at = anki_last_reviewed_at.astimezone(timezone.utc).replace(tzinfo=None)
-            except ValueError as exc:
-                raise ConnectError("cardsProgress lastReviewAt is invalid") from exc
-
-        anki_type = int(progress_data.get("type", 0))
-        anki_queue = int(progress_data.get("queue", 0))
-
-        # 0=new, 1=learning, 2=review, 3=relearning
-        queue_map = {0: "new", 1: "learning", 2: "review", 3: "relearning"}
-        desired_queue = queue_map.get(anki_type, "new")
-
-        # queue: -1=suspended, -2=sched buried, -3=user buried
-        desired_suspended = anki_queue == -1
-        desired_buried = anki_queue in {-2, -3}
-        desired_buried_until_day = (
-            today_day_index_flama + 1 if desired_buried else None
-        )
-
-        relative_due = progress_data.get("relativeDue")
-        due_at_str = progress_data.get("dueAt")
-        desired_due_at = None
-        desired_due_day = None
-        compare_due_at = False
-        if relative_due is not None:
-            if isinstance(relative_due, bool) or not isinstance(relative_due, (int, float)):
-                raise ConnectError("cardsProgress relativeDue must be a number or null")
-            if not -365000 <= int(relative_due) <= 365000:
-                raise ConnectError("cardsProgress relativeDue is out of range")
-            desired_due_day = today_day_index_flama + int(relative_due)
-            desired_due_at = _day_index_to_datetime(
-                desired_due_day,
-                boundary_hour,
-                timezone_name=timezone_name,
-            )
-            compare_due_at = True
-        elif due_at_str:
-            if not isinstance(due_at_str, str) or len(due_at_str) > 64:
-                raise ConnectError("cardsProgress dueAt is invalid")
-            try:
-                clean_str = due_at_str.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(clean_str)
-                if dt.tzinfo is not None:
-                    dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-                desired_due_at = dt
-            except (TypeError, ValueError) as exc:
-                raise ConnectError("cardsProgress dueAt is invalid") from exc
-            compare_due_at = True
-        elif anki_type == 2:
-            desired_due_day = today_day_index_flama
-            desired_due_at = now
-        elif anki_type in {1, 3}:
-            desired_due_at = now
-        else:
-            desired_due_at = now
-
-        desired = {
-            "queue": desired_queue,
-            "step_index": 0,
-            "due_at": desired_due_at,
-            "due_day": desired_due_day,
-            "interval_days": int(progress_data.get("interval", 0)),
-            "interval_days_raw": float(progress_data.get("interval", 0)),
-            "ease_factor": float(progress_data.get("factor", 2500)) / 1000.0,
-            "is_suspended": desired_suspended,
-            "is_buried": desired_buried,
-            "buried_until_day": desired_buried_until_day,
-            "review_kind": "review",
-            "scheduler_mode": "anki",
-            "memory_stability": None,
-            "memory_difficulty": None,
-            "suspension_reason": "anki_import" if desired_suspended else None,
-            "reps": int(progress_data.get("reps", 0)),
-            "lapses": int(progress_data.get("lapses", 0)),
-            "last_reviewed_at": anki_last_reviewed_at,
-        }
-
-        def _matches_existing() -> bool:
-            if progress is None:
-                return False
-            for field_name, expected in desired.items():
-                if field_name == "due_at" and not compare_due_at:
-                    continue
-                actual = getattr(progress, field_name, None)
-                if isinstance(expected, float):
-                    if actual is None or abs(float(actual) - expected) > 1e-9:
-                        return False
-                elif actual != expected:
-                    return False
-            return True
-
-        if progress is not None:
-            current_reviewed_at = progress.last_reviewed_at
-            if (
-                current_reviewed_at is not None
-                and anki_last_reviewed_at is not None
-                and anki_last_reviewed_at < current_reviewed_at
-            ):
-                results.append(
-                    {
-                        "ord": ord_idx,
-                        "cardId": str(card.id),
-                        "state": "stale",
-                        "code": "PROGRESS_STALE",
-                        "revision": int(progress.revision or 0),
-                    }
-                )
-                continue
-            ambiguous_order = (
-                (current_reviewed_at is None and anki_last_reviewed_at is None)
-                or (current_reviewed_at is not None and anki_last_reviewed_at is None)
-                or (
-                    current_reviewed_at is not None
-                    and anki_last_reviewed_at == current_reviewed_at
-                )
-            )
-            if ambiguous_order:
-                if _matches_existing():
-                    results.append(
-                        {
-                            "ord": ord_idx,
-                            "cardId": str(card.id),
-                            "state": "unchanged",
-                            "code": "PROGRESS_UNCHANGED",
-                            "revision": int(progress.revision or 0),
-                        }
-                    )
-                else:
-                    results.append(
-                        {
-                            "ord": ord_idx,
-                            "cardId": str(card.id),
-                            "state": "conflict",
-                            "code": "AMBIGUOUS_PROGRESS_ORDER",
-                            "revision": int(progress.revision or 0),
-                        }
-                    )
-                continue
-        else:
-            progress = CardProgress(user_id=user_id, card_id=card.id)
-            db.session.add(progress)
-
-        for field_name, value in desired.items():
-            setattr(progress, field_name, value)
-        progress.revision = int(progress.revision or 0) + 1
-        try:
-            db.session.flush()
-        except IntegrityError as exc:
-            conflict = ConnectError(
-                "card progress changed while the imported snapshot was being applied"
-            )
-            setattr(conflict, "code", "CONCURRENT_PROGRESS_WRITE")
-            raise conflict from exc
-        results.append(
-            {
-                "ord": ord_idx,
-                "cardId": str(card.id),
-                "state": "applied",
-                "code": "PROGRESS_APPLIED",
-                "revision": int(progress.revision or 0),
-            }
-        )
-    return results
 
 
 
@@ -571,6 +264,11 @@ def _upsert_import_card(
                 "metadata is versioned in deck releases"
             )
         previous_values = dict(note.field_values or {})
+        if str(note.note_type_id) != str(prepared.note_type.id):
+            # The Note now presents the new NoteType's occurrences (ADR P11).
+            from app.services import study_content_delete_service as content_topology
+            content_topology.stop_note_presentations(
+                db.session, note_id=note.id, note_type_id=note.note_type_id)
         note.note_type_id = prepared.note_type.id
         note.deck_id = prepared.deck.id
         note.field_values = prepared.fields
@@ -652,32 +350,16 @@ def _upsert_import_card(
         learner_user_id=user_id,
         allow_note_authority=True,
     )
-    reconcile_operation_key = f"{session.id}:{external_note_id}:template-reconcile"
-    if authority_route.mode_code == "NOTE":
-        _reconcile_note_authority_cards(
-            user_id=user_id,
-            note=note,
-            note_type=prepared.note_type,
-            is_new_note=created,
-            preserve_released_history=preserve_released_history,
-            operation_key=reconcile_operation_key,
-        )
-    else:
-        card_plan = _note_card_plan(note, prepared.note_type)
-        if card_plan.removable:
-            CardProgress.query.filter(
-                CardProgress.card_id.in_([str(card.id) for card in card_plan.removable])
-            ).delete(synchronize_session=False)
-        _reconcile_note_cards(
-            note,
-            prepared.note_type,
-            is_new_note=created,
-            preserve_released_history=preserve_released_history,
-            plan=card_plan,
-        )
+    # The Note's Cards follow its NoteType's occurrences (ADR P11).
+    _reconcile_note_cards(
+        note,
+        prepared.note_type,
+        is_new_note=created,
+        preserve_released_history=preserve_released_history,
+    )
     cards_progress_payload = card_data.get("cardsProgress")
     progress_results: list[dict[str, Any]] = []
-    if cards_progress_payload and authority_route.mode_code == "NOTE":
+    if cards_progress_payload:
         # Per-Card legacy progress cannot express one learner/Note state.
         # Content is imported; progress must arrive as a Note snapshot.
         if not isinstance(cards_progress_payload, list) or len(cards_progress_payload) > 100:
@@ -690,14 +372,6 @@ def _upsert_import_card(
             }
             for item in cards_progress_payload
         ]
-    elif cards_progress_payload:
-        progress_results = _migrate_cards_progress(
-            user_id,
-            note,
-            prepared.note_type,
-            cards_progress_payload,
-            source_ref,
-        )
     materialized = flama_connect_media_service.materialize_import_media(
         user_id=user_id,
         note=note,
@@ -1084,14 +758,13 @@ def get_import_note_statuses(
         ConnectSourceCardRef.external_card_id.in_(requested_card_ids),
     ).all() if requested_card_ids else []
     card_refs_by_external_id = {row.external_card_id: row for row in card_refs}
-    if route.mode_code == "NOTE":
-        _verify_note_authority_import_status(
-            user_id=user_id,
-            requested_cards=requested_cards,
-            refs_by_external_id=refs_by_external_id,
-            card_refs_by_external_id=card_refs_by_external_id,
-            consolidated=route.storage_profile == "CONSOLIDATED_V1",
-        )
+    _verify_note_authority_import_status(
+        user_id=user_id,
+        requested_cards=requested_cards,
+        refs_by_external_id=refs_by_external_id,
+        card_refs_by_external_id=card_refs_by_external_id,
+        consolidated=route.storage_profile == "CONSOLIDATED_V1",
+    )
     orphan_review_card_ids = {
         row[0]
         for row in db.session.query(ConnectReviewEventRef.external_card_id)
@@ -1115,22 +788,30 @@ def get_import_note_statuses(
     # NOTE fences refs on the Note row's authority revision (ADR P9-03 §2.6).
     canonical = route.mode_code == "NOTE"
     token_revision_by_card_id: dict[str, int] = {}
-    if canonical:
-        from models.card import Card
-        from models.study_progress_subject import StudyProgressSubject
+    from models.card import Card
+    from models.study_progress_subject import StudyProgressSubject
 
-        fenced_card_ids = sorted({str(row.card_id) for row in card_refs if row.card_id})
-        if fenced_card_ids:
-            # ADR P10: the revision is a column of the Note's own row.
-            query = db.session.query(Card.id, StudyProgressSubject.authority_revision).join(
-                StudyProgressSubject, db.and_(
-                    StudyProgressSubject.learner_user_id == user_id,
-                    StudyProgressSubject.live_note_id == Card.note_id,
-                ))
-            token_revision_by_card_id = {
-                str(card_id): int(revision)
-                for card_id, revision in query.filter(Card.id.in_(fenced_card_ids)).all()
-            }
+    fenced_card_ids = sorted({str(row.card_id) for row in card_refs if row.card_id})
+    if fenced_card_ids:
+        from models.card import load_cards
+
+        # ADR P10: the revision is a column of the Note's own row.
+        note_by_card_id = {
+            card_id: str(card.note_id) for card_id, card in load_cards(db.session, fenced_card_ids).items()
+        }
+        revision_by_note_id = {
+            str(note_id): int(revision)
+            for note_id, revision in db.session.query(
+                StudyProgressSubject.live_note_id, StudyProgressSubject.authority_revision,
+            ).filter(
+                StudyProgressSubject.learner_user_id == user_id,
+                StudyProgressSubject.live_note_id.in_(sorted(set(note_by_card_id.values()))),
+            ).all()
+        } if note_by_card_id else {}
+        token_revision_by_card_id = {
+            card_id: revision_by_note_id[note_id]
+            for card_id, note_id in note_by_card_id.items() if note_id in revision_by_note_id
+        }
 
     results: list[dict[str, Any]] = []
     for external_id, content_hash in requested.items():
@@ -1149,30 +830,13 @@ def get_import_note_statuses(
             if card_ref is None:
                 progress_state = "new"
                 review_cursor = None
-            elif canonical:
-                # An unconfirmed (projection-era) ref is settled when its next
-                # snapshot is sent: confirmed if it equals the state, else a
-                # conflict. Only a confirmed ref can report a local change here.
-                revision = token_revision_by_card_id.get(str(card_ref.card_id))
-                local_changed = (
-                    card_ref.applied_local_revision_state == "AUTHORITY"
-                    and card_ref.applied_authority_revision is not None
-                    and revision is not None
-                    and int(card_ref.applied_authority_revision) != revision
-                )
-            else:
-                progress = CardProgress.query.filter_by(
-                    user_id=user_id,
-                    card_id=card_ref.card_id,
-                ).first()
-                local_changed = (
-                    progress is not None
-                    and (
-                        card_ref.applied_local_revision is None
-                        or int(progress.revision or 0)
-                        != int(card_ref.applied_local_revision)
-                    )
-                )
+            revision = token_revision_by_card_id.get(str(card_ref.card_id))
+            local_changed = (
+                card_ref.applied_local_revision_state == "AUTHORITY"
+                and card_ref.applied_authority_revision is not None
+                and revision is not None
+                and int(card_ref.applied_authority_revision) != revision
+            )
             if card_ref is not None:
                 if local_changed:
                     progress_state = "local_changed"

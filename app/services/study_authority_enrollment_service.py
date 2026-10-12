@@ -16,7 +16,6 @@ from app.repositories.study_authority_repository import (
 )
 from app.services import study_progress_lifecycle_mirror_service
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck_install import DeckInstall
 from models.note import Note
 from models.payment_order import PaymentOrder
@@ -150,6 +149,8 @@ def stage_note_authority_enrollment(
             "INVALID_AUTHORITY_ENROLLMENT",
             "Existing learner authority enrollment is invalid.",
         )
+    if enrollment is not None:
+        raise _fail("STUDY_AUTHORITY_MIGRATION_REQUIRED", "Existing LEGACY enrollment requires offline migration.")
     # Logical-overlay installs are supported: installed source Notes use the
     # (learner, source Note) subject and never-studied ones read as pristine.
     # A legacy full-copy install still awaits the startup clone cutover, whose
@@ -207,6 +208,8 @@ def stage_note_authority_enrollment(
             .order_by(Note.id.asc())
         ).scalars()
     )
+    if owned_notes:
+        raise _fail("STUDY_AUTHORITY_MIGRATION_REQUIRED", "An unenrolled account with existing Notes requires offline migration.")
     owned_note_by_id = {str(note.id): note for note in owned_notes}
     owned_cards = tuple(
         session.execute(
@@ -227,16 +230,6 @@ def stage_note_authority_enrollment(
         raise _fail(
             "INCOMPLETE_AUTHORITY_COVERAGE",
             f"Learner has {len(cardless_note_ids)} owned Note(s) without Card siblings.",
-        )
-    # ADR P10: NOTE progress is the Note row. LEGACY card_progress is not
-    # carried over, so a learner who still has some is refused, never reset.
-    has_legacy_progress = session.execute(
-        select(CardProgress.id).where(CardProgress.user_id == learner_user_id).limit(1)
-    ).first() is not None
-    if has_legacy_progress:
-        raise _fail(
-            "LEGACY_PROGRESS_NOT_MIGRATABLE",
-            "This learner has LEGACY progress; NOTE enrollment would not keep it.",
         )
     return _stage_canonical_enrollment(
         session,

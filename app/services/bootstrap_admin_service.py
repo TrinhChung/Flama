@@ -76,6 +76,10 @@ def sync_bootstrap_admin(
             changed_fields.append("role")
 
     session.flush()
+    if created:
+        from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+
+        enroll_new_learner_note_authority(session, user=user)
     return BootstrapAdminSyncResult(
         user_id=user.id,
         created=created,

@@ -1,13 +1,8 @@
-"""Single-query deck study counts for the dashboard.
+"""Single-query deck counts from current Note availability.
 
-LEGACY learners count their ``CardProgress`` rows. NOTE learners count the
-canonical availability of each Card (``note_analytics_read_repository``) and
-fail closed with the locking reader's codes on divergent NOTE evidence; the
-rollback projection is never a NOTE count source. Both modes count per Card:
-Note-level counting (D6-04) belongs to Phase 6.
-
-Buckets match ``study_repository.counter_bucket_for_progress_values``. The
-queries take no locks, so they may run inside ``analytics_read_transaction()``.
+Counts use consolidated subjects and fail closed on divergent evidence.
+Buckets match ``study_repository.counter_bucket_for_progress_values``.
+Queries take no locks and can run in ``analytics_read_transaction()``.
 """
 
 from __future__ import annotations
@@ -22,7 +17,6 @@ from sqlalchemy.orm import Session
 from app.repositories import note_analytics_read_repository as note_reads
 from app.services.study_authority_read_service import StudyAuthorityReadError
 from models.card import Card
-from models.card_progress import CardProgress
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
 
 _LEARNING_QUEUES = ("learn", "learning", "relearning")
@@ -104,7 +98,7 @@ def _overlay_scope(
     ]
     if not has_mapped_source:
         return None, overlay_types
-    snapshot_at = func.coalesce(DeckInstall.base_snapshot_at, DeckInstall.installed_at)
+    from app.repositories.flashcards_share_repository import clone_source_card_visibility
     overlay = (
         select(
             DeckCloneDeckMap.local_deck_id.label("deck_id"),
@@ -123,10 +117,7 @@ def _overlay_scope(
                 DeckInstall.source_owner_user_id.is_(None),
                 Note.user_id == DeckInstall.source_owner_user_id,
             ),
-            or_(
-                snapshot_at.is_(None),
-                and_(Note.created_at <= snapshot_at, Card.created_at <= snapshot_at),
-            ),
+            clone_source_card_visibility(DeckInstall),
         )
     )
     return overlay, overlay_types
@@ -150,7 +141,6 @@ def aggregate_deck_study_counts(
     visible_deck_ids: list[int],
     today_day_index: int,
     day_cutoff_utc: datetime,
-    is_note_mode: bool,
     admin_mode: bool = False,
     count_by_note: bool = False,
     owned_by_any_user: bool = False,
@@ -161,7 +151,7 @@ def aggregate_deck_study_counts(
 
     ``day_cutoff_utc`` is the start of the learner's next study day (naive UTC):
     a review with only ``due_at`` is due today exactly when it is before it.
-    ``count_by_note`` (NOTE learners, Phase 6 D6-04) counts each Note once:
+    ``count_by_note`` (Phase 6 D6-04) counts each Note once:
     all its Cards share one state, so a Note with two Templates is one due item.
     ``owned_by_any_user`` (admin-wide Browse) counts every Note in the visible
     decks with the learner's own state, not only the learner's Notes.
@@ -182,7 +172,7 @@ def aggregate_deck_study_counts(
         )
         .select_from(Card)
         .join(Note, Card.note_id == Note.id)
-        .where(Note.deck_id.in_(visible_deck_ids))
+        .where(Note.deck_id.in_(visible_deck_ids), Card.application_status == "ACTIVE")
     )
     if not owned_by_any_user:
         owned = owned.where(Note.user_id == learner_user_id)
@@ -199,35 +189,14 @@ def aggregate_deck_study_counts(
     scope = (union_all(owned, overlay) if overlay is not None else owned).subquery("counted_cards")
 
     storage_profile = None
-    if is_note_mode:
-        from app.repositories.study_authority_repository import read_study_storage_profile
+    from app.repositories.study_authority_repository import read_study_storage_profile
 
-        storage_profile = read_study_storage_profile(session)
-        rows = note_reads.note_card_rows(
-            scope,
-            learner_user_id=learner_user_id,
-            storage_profile=storage_profile,
-        ).subquery("rows")
-    else:
-        rows = (
-            select(
-                scope.c.deck_id,
-                scope.c.card_id,
-                CardProgress.queue.label("queue"),
-                CardProgress.due_day.label("due_day"),
-                CardProgress.due_at.label("due_at"),
-                CardProgress.is_suspended.label("is_suspended"),
-                CardProgress.is_buried.label("is_buried"),
-                CardProgress.buried_until_day.label("buried_until_day"),
-                literal(0).label("violation"),
-            )
-            .select_from(scope)
-            .outerjoin(CardProgress, and_(
-                CardProgress.card_id == scope.c.card_id,
-                CardProgress.user_id == learner_user_id,
-            ))
-            .subquery("rows")
-        )
+    storage_profile = read_study_storage_profile(session)
+    rows = note_reads.note_card_rows(
+        scope,
+        learner_user_id=learner_user_id,
+        storage_profile=storage_profile,
+    ).subquery("rows")
 
     # A Card without progress/state has NULL columns and reads as active NEW.
     is_active = and_(
@@ -253,7 +222,7 @@ def aggregate_deck_study_counts(
             ),
         ),
     )
-    unit = rows.c.note_id if is_note_mode and count_by_note else rows.c.card_id
+    unit = rows.c.note_id if count_by_note else rows.c.card_id
     aggregated = session.execute(
         select(
             rows.c.deck_id,
@@ -262,19 +231,18 @@ def aggregate_deck_study_counts(
             func.count(func.distinct(case((is_learn, unit), else_=None))),
             func.count(func.distinct(case((is_due, unit), else_=None))),
             func.max(rows.c.violation),
-        ).group_by(rows.c.deck_id)
+        ).group_by(rows.c.deck_id).execution_options(include_retired_cards=True)
     ).all()
 
-    if is_note_mode:
-        worst = max((int(row[5] or 0) for row in aggregated), default=0)
-        if not worst:
-            worst = note_reads.subject_vector_violation(
-                session, scope=scope, learner_user_id=learner_user_id,
-                storage_profile=storage_profile,
-            )
-        error = note_reads.violation_error(worst)
-        if error is not None:
-            raise StudyAuthorityReadError(*error)
+    worst = max((int(row[5] or 0) for row in aggregated), default=0)
+    if not worst:
+        worst = note_reads.subject_vector_violation(
+            session, scope=scope, learner_user_id=learner_user_id,
+            storage_profile=storage_profile,
+        )
+    error = note_reads.violation_error(worst)
+    if error is not None:
+        raise StudyAuthorityReadError(*error)
 
     counts: Dict[int, Dict[str, int]] = {
         int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}

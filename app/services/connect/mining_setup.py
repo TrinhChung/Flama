@@ -27,9 +27,11 @@ def prepare_sentence_mining(user_id):
             db.session.add(FieldDef(note_type_id=note_type.id, name=name, field_type=kind,
                                     position=position, required=name == "Sentence",
                                     identity_role="primary" if name == "Sentence" else None))
-        db.session.add(Template(note_type_id=note_type.id, owner_user_id=user_id,
-                               name="Sentence", front_html="{{Sentence}}<br>{{Image}}<br>{{Audio}}",
-                               back_html="{{Sentence}}<hr>{{Word}}<br>{{Definition}}<br>{{Source}}<br>{{URL}}"))
+        from app.repositories.template_library_repository import create_attached_template
+        create_attached_template(db.session, note_type=note_type, name="Sentence",
+                                 front_html="{{Sentence}}<br>{{Image}}<br>{{Audio}}",
+                                 back_html="{{Sentence}}<hr>{{Word}}<br>{{Definition}}<br>{{Source}}<br>{{URL}}",
+                                 is_default=True)
         db.session.flush()
     else:
         schema = {item.name: item for item in note_type.field_defs}

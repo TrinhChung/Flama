@@ -13,6 +13,7 @@ from app.utils.bootstrap_admin import BootstrapAdminCredentials
 from models import db
 from models.user import User
 from models.user_role import UserRole
+from models.study_authority_enrollment import StudyAuthorityEnrollment
 
 
 class BootstrapAdminSyncTests(unittest.TestCase):
@@ -49,6 +50,8 @@ class BootstrapAdminSyncTests(unittest.TestCase):
             self.assertTrue(user.is_admin)
             self.assertTrue(user.role.is_admin)
             self.assertFalse(user.is_disabled)
+            enrollment = db.session.get(StudyAuthorityEnrollment, user.id)
+            self.assertEqual((enrollment.mode_code, enrollment.epoch), ("NOTE", 1))
 
     def test_repairs_existing_user_found_by_username(self):
         with self.app.app_context():

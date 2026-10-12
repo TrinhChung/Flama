@@ -50,7 +50,6 @@ from models.flashcard import (
 from models.user import User
 from models.user_role import UserRole
 from models.deck import Deck
-from models.card_progress import CardProgress
 
 SEED_REQUIRED_FIELDS = ("deck", "word")
 SEED_OPTIONAL_FIELDS = (
@@ -617,35 +616,6 @@ def register_cli_commands(app: Flask) -> None:
             raise click.ClickException(
                 "AUTHORITY_READ_PARITY_DIVERGED: canonical and rollback reads differ."
             )
-
-    @app.cli.command("study-phase6-attribution-backfill")
-    @click.option(
-        "--apply",
-        is_flag=True,
-        default=False,
-        help="Stamp occurrences and Note attribution in committed batches; default only counts.",
-    )
-    @click.option(
-        "--batch-size",
-        type=click.IntRange(100, 20_000),
-        default=2000,
-        show_default=True,
-        help="Rows per committed batch.",
-    )
-    def study_phase6_attribution_backfill(apply: bool, batch_size: int) -> None:
-        """Bind Cards to occurrences and old rows to their Note after migration 46."""
-
-        from app.services.study_note_attribution_service import backfill_phase6_attribution
-
-        result = backfill_phase6_attribution(apply=apply, batch_size=batch_size)
-        click.echo(
-            json.dumps(
-                result.to_dict(),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-        )
 
     @app.cli.command("study-session-retention")
     @click.option(

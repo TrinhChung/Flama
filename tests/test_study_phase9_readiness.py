@@ -15,7 +15,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.study_session import StudySession
-from models.template import Template
+from tests.study_note_fixtures import attach_template, assert_retired_progress_absent
 from models.user import User
 from app.services.study_retirement_telemetry_service import ENTRYPOINTS, OBSERVATION_SCHEMA, SCHEMA_VERSION
 
@@ -38,11 +38,10 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         db.session.add_all([deck, note_type])
         db.session.flush()
         db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-        template = Template(note_type_id=note_type.id, name="Card", front_html="{{Word}}", back_html="{{Word}}")
+        template = attach_template(db.session, note_type_id=note_type.id, owner_user_id=user.id, name="Card", front_html="{{Word}}", back_html="{{Word}}")
         note = Note(user_id=user.id, deck_id=deck.id, note_type_id=note_type.id, field_values={"Word": "w"})
-        db.session.add_all([template, note])
+        db.session.add(note)
         db.session.flush()
-        db.session.add(Card(note_id=note.id, template_id=template.id))
         db.session.commit()
         self.user_id = int(user.id)
 
@@ -75,7 +74,11 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         self.assertEqual(report["gates"]["positional_anki_ordinals"]["status"], "unknown")
         self.assertFalse(report["destructive_steps_allowed"])
 
-        stage_note_authority_enrollment(db.session, learner_user_id=self.user_id, now_utc=now)
+        # Explicit fixture for already-migrated NOTE enrollment; live migration
+        # correctly refuses an old unenrolled account with existing Notes.
+        from models.study_authority_enrollment import StudyAuthorityEnrollment
+        db.session.add(StudyAuthorityEnrollment(learner_user_id=self.user_id, mode_code="NOTE",
+                       epoch=1, created_at=now, updated_at=now))
         db.session.commit()
         self._session("study-session.v2", now - timedelta(days=40))
         self._session("study-session.v4", now - timedelta(days=1))
@@ -98,46 +101,41 @@ class StudyPhase9ReadinessTests(unittest.TestCase):
         self.assertEqual(gate["evidence"]["sessions_in_window"]["study-session.v2"]["sessions"], 1)
 
     def test_projection_cutover_and_work_drain_gates(self):
-        from models.card_progress import CardProgress
+        from models.study_authority_storage_profile import StudyAuthorityStorageProfile
+        from sqlalchemy import event
 
         now = datetime(2026, 9, 30, 12, 0, 0)
-        report = build_phase9_readiness(now_utc=now)
-        # Without T0 the cutover gate is unknown, never a silent zero.
-        self.assertEqual(report["gates"]["projection_cutover"]["status"], "unknown")
+        statements = []
+        def capture(_conn, _cursor, sql, *_args):
+            statements.append(sql.lower())
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            report = build_phase9_readiness(now_utc=now)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+        gate = report["gates"]["projection_cutover"]
+        self.assertEqual(gate["status"], "retired")
+        self.assertIsNone(gate["evidence"]["card_progress_rows_written_since"])
+        self.assertIsNone(gate["evidence"]["archive_verified"])
+        self.assertTrue(gate["evidence"]["requires_offline_audit"])
+        self.assertFalse(any("card_progress" in sql for sql in statements))
+        assert_retired_progress_absent(self, db.session)
         self.assertEqual(report["gates"]["work_drain"]["status"], "ready")
 
-        card = Card.query.one()
-        db.session.add(CardProgress(user_id=self.user_id, card_id=card.id, queue="new", ease_factor=2.5,
-                                    revision=0, created_at=now - timedelta(hours=2),
-                                    updated_at=now - timedelta(hours=2)))
-        db.session.commit()
         t0 = now - timedelta(hours=1)
-        report = build_phase9_readiness(now_utc=now, projection_since_utc=t0)
-        # A database without a profile row is a fresh CONSOLIDATED_V1 install
-        # (P10-09); a row written before T0 does not block it.
-        self.assertEqual(report["gates"]["projection_cutover"]["status"], "ready")
-        from models.study_authority_storage_profile import StudyAuthorityStorageProfile
-
         db.session.add(StudyAuthorityStorageProfile(id=1, profile_code="CANONICAL_V1", epoch=2,
                                                    switched_at=t0, created_at=t0, updated_at=t0))
         db.session.commit()
-        # No caller-supplied T0 is required once the persisted profile switched.
-        report = build_phase9_readiness(now_utc=now)
-        self.assertEqual(report["gates"]["projection_cutover"]["status"], "ready")
-        # The P10 profile is reached from CANONICAL_V1 and stays projection-free.
-        profile = db.session.get(StudyAuthorityStorageProfile, 1)
-        profile.profile_code = "CONSOLIDATED_V1"
+        for code in ("CANONICAL_V1", "CONSOLIDATED_V1"):
+            profile = db.session.get(StudyAuthorityStorageProfile, 1)
+            profile.profile_code = code
+            db.session.commit()
+            self.assertEqual(build_phase9_readiness(now_utc=now)["gates"]["projection_cutover"]["status"], "retired")
+        profile.profile_code = "PROJECTION_V1"
         db.session.commit()
-        report = build_phase9_readiness(now_utc=now)
-        self.assertEqual(report["gates"]["projection_cutover"]["status"], "ready")
-        self.assertNotIn("UNKNOWN_STORAGE_PROFILE", report["gates"]["legacy_projection_writes"]["blocking_reasons"])
-        profile.profile_code = "CANONICAL_V1"
-        db.session.commit()
-        progress = CardProgress.query.one()
-        progress.updated_at = now - timedelta(minutes=5)
-        db.session.commit()
-        gate = build_phase9_readiness(now_utc=now, projection_since_utc=t0)["gates"]["projection_cutover"]
-        self.assertEqual((gate["status"], gate["evidence"]["card_progress_rows_written_since"]), ("waiting", 1))
+        gate = build_phase9_readiness(now_utc=now)["gates"]["projection_cutover"]
+        self.assertEqual(gate["status"], "waiting")
+        self.assertEqual(gate["blocking_reasons"], ["PROFILE_NOT_CANONICAL"])
 
         # An expired open lease does not block; a valid one does.
         self._session("study-session.v4", now - timedelta(days=2), status="open")

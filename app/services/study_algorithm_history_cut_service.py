@@ -280,12 +280,13 @@ def freeze_study_algorithm_history_cut(
             select(ReviewEvent)
             .where(
                 ReviewEvent.user_id == verified.learner_user_id,
-                ReviewEvent.card_id.in_(siblings.card_ids),
+                # Events recorded before P11 name the Card by its legacy ID.
+                ReviewEvent.card_id.in_(siblings.history_card_ids),
             )
             .order_by(ReviewEvent.id.asc())
             .with_for_update()
         ).scalars()
-    ) if siblings.card_ids else ()
+    ) if siblings.history_card_ids else ()
     review_event_ids = frozenset(int(row.id) for row in review_event_rows)
 
     blockers: set[str] = set()
@@ -347,7 +348,7 @@ def freeze_study_algorithm_history_cut(
     frozen_facts: list[FrozenStudyHistoryFact] = []
     fact_event_ids: list[int] = []
     previous_after: bytes | None = None
-    card_key_bytes = {card_id.encode("utf-8") for card_id in siblings.card_ids}
+    card_key_bytes = {card_id.encode("utf-8") for card_id in siblings.history_card_ids}
     event_by_id = {int(row.id): row for row in review_event_rows}
     for row in fact_rows:
         try:

@@ -12,7 +12,8 @@ from models import db
 from models.flashcard import Card, Note, NoteType, ReviewEvent, Template
 from models.user import User
 from models.deck import Deck
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state
 from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_progress_subject import StudyProgressSubject
 
@@ -37,6 +38,8 @@ class StatsOverviewTests(unittest.TestCase):
             db.session.flush()
             deck = Deck(name="Stats Deck", owner_user_id=user.id)
             db.session.add(deck)
+            db.session.commit()
+            enroll_note_user(db.session, user)
             db.session.commit()
             self.user_id = user.id
             self.deck_id = deck.id
@@ -76,16 +79,7 @@ class StatsOverviewTests(unittest.TestCase):
         due_day: int | None = None,
         is_suspended: bool = False,
     ):
-        db.session.add(
-            CardProgress(
-                user_id=self.user_id,
-                queue=queue,
-                due_at=due_at,
-                due_day=due_day,
-                interval_days=1,
-                is_suspended=is_suspended,
-            )
-        )
+        return self._add_canonical_due(due_at=due_at, due_day=due_day, queue=queue, suspended=is_suspended)
 
     def _add_canonical_due(
         self, *, due_at=None, due_day=None, queue="review", siblings=1,
@@ -99,14 +93,13 @@ class StatsOverviewTests(unittest.TestCase):
         note_type = NoteType(name=f"Canonical Stats {self._card_seq}", user_id=owner_id or self.user_id)
         db.session.add(note_type)
         db.session.flush()
-        templates = [Template(name=f"Stats Card {index}", note_type_id=note_type.id, position=index) for index in range(siblings)]
+        templates = [attach_template(db.session, owner_user_id=owner_id or self.user_id, name=f"Stats Card {index}", note_type_id=note_type.id, position=index) for index in range(siblings)]
         db.session.add_all(templates)
         db.session.flush()
         note = Note(note_type_id=note_type.id, user_id=owner_id or self.user_id, deck_id=self.deck_id)
         db.session.add(note)
         db.session.flush()
-        cards = [Card(note_id=note.id, template_id=template.id) for template in templates]
-        db.session.add_all(cards)
+        cards = Card.query.filter_by(note_id=note.id).all()
         db.session.flush()
         subject = StudyProgressSubject(
             learner_user_id=learner_id or self.user_id,
@@ -389,11 +382,9 @@ class StatsOverviewTests(unittest.TestCase):
         """R9: NOTE future due comes only from canonical availability, never card_progress."""
         with self.app.app_context():
             now_utc = datetime(2026, 1, 10, 12, 0, 0)
-            db.session.add(StudyAuthorityEnrollment(
-                learner_user_id=self.user_id, mode_code="NOTE", epoch=1,
-                created_at=now_utc, updated_at=now_utc))
             for hour in range(5):
-                self._add_progress(due_at=datetime(2026, 1, 12, 8 + hour, 0, 0))
+                self._add_progress(due_at=datetime(2026, 1, 12, 8 + hour, 0, 0), is_suspended=True)
+            assert_retired_progress_absent(self, db.session)
             db.session.commit()
 
             payload = build_stats_overview(
@@ -409,9 +400,6 @@ class StatsOverviewTests(unittest.TestCase):
         with self.app.app_context():
             now_utc = datetime(2026, 1, 10, 12, 0, 0)
             db.session.add_all([
-                StudyAuthorityEnrollment(
-                    learner_user_id=self.user_id, mode_code="NOTE", epoch=1,
-                    created_at=now_utc, updated_at=now_utc),
                 StudyProgressSubject(
                     learner_user_id=self.user_id, logical_note_key=b"note-missing-token-key",
                     created_at=now_utc, updated_at=now_utc),
@@ -432,20 +420,13 @@ class StatsOverviewTests(unittest.TestCase):
 
         with self.app.app_context():
             now_utc = datetime(2026, 1, 10, 12, 0, 0)
-            enrollment = StudyAuthorityEnrollment(
-                learner_user_id=self.user_id,
-                mode_code="NOTE",
-                epoch=1,
-                created_at=now_utc,
-                updated_at=now_utc,
-            )
             subject = StudyProgressSubject(
                 learner_user_id=self.user_id,
                 logical_note_key=b"note-non-locking-key",
                 created_at=now_utc,
                 updated_at=now_utc,
             )
-            db.session.add_all([enrollment, subject])
+            db.session.add(subject)
             db.session.commit()
 
             executed_clauses = []
@@ -514,14 +495,14 @@ class StatsOverviewTests(unittest.TestCase):
             db.session.add(publisher)
             db.session.flush()
             due = date(2026, 1, 11).toordinal()
-            # A learner's progress over publisher-owned source Notes remains visible.
+            # An uninstalled publisher Note is outside the learner presentation scope.
             self._add_canonical_due(due_day=due, siblings=2, owner_id=publisher.id)
             self._add_canonical_due(due_day=due, learner_id=publisher.id)
             self._add_canonical_due(due_day=due, detached=True)
             # The scope's live association does not substitute for logical-key availability.
             self._add_canonical_due(due_day=due, logical_key=b"mismatched-logical-key")
             db.session.commit()
-            self.assertEqual(self._canonical_day_counts(), {date(2026, 1, 11): 2})
+            self.assertEqual(self._canonical_day_counts(), {})
 
     def test_canonical_due_dst_timezone_uses_python_business_day_mapping(self):
         with self.app.app_context():

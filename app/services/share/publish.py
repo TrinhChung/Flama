@@ -50,10 +50,10 @@ from app.services.share.constants import (
     SHARED_DECK_INSTALL_MAX_RETRIES,
     UTC,
 )
+from app.repositories import template_library_repository
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_change_request import DeckChangeRequest
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
@@ -553,7 +553,7 @@ def validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | 
     )
     if provenance_error:
         return provenance_error
-    if not source_note_type.templates:
+    if not template_library_repository.attached_templates(db.session, source_note_type.id):
         return "source_note_type_id must reference a note type that has at least one template."
     mismatch_error = validate_marketplace_note_type_for_deck(
         deck_id=deck_item.source_deck_id,
@@ -779,7 +779,7 @@ def build_shared_deck_item_payload(
         source_note_type = db.session.get(NoteType, source_note_type_id)
         if source_note_type:
             ordered_templates = sorted(
-                source_note_type.templates,
+                template_library_repository.attached_templates(db.session, source_note_type.id),
                 key=lambda item: (int(item.position or 0), str(item.name or "").lower()),
             )
             source_note_type_payload = {

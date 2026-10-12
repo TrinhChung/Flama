@@ -17,6 +17,7 @@ from models.deck import Deck
 from models.deck_count_snapshot import DeckCountContentRevision, DeckCountLearnerRevision
 from models.note import Note
 from models.note_type import NoteType
+from models.study_application import StudyApplication
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
@@ -60,12 +61,13 @@ class DeckCountProjectionTests(unittest.TestCase):
         notes = [Note(user_id=self.user_id, deck_id=deck.id, note_type_id=note_type.id,
                       field_values={"Front": "Q"}) for deck in decks]
         db.session.add_all(notes)
+        # One presented Card per Note: the Reverse occurrence starts retired.
+        other_application = StudyApplication.query.filter_by(template_id=other_template.id).one()
+        other_application.status_code = "RETIRED"
         db.session.flush()
         self.note_ids = [note.id for note in notes]
-        cards = [Card(note_id=note.id, template_id=template.id) for note in notes]
-        db.session.add_all(cards)
-        db.session.flush()
-        self.card_ids = [card.id for card in cards]
+        self.card_ids = [Card.query.filter_by(note_id=note.id).one().id for note in notes]
+        self.other_application_id = other_application.id
         db.session.commit()
         db.session.remove()
         self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
@@ -83,18 +85,17 @@ class DeckCountProjectionTests(unittest.TestCase):
                    db.session.execute(select(DeckCountLearnerRevision)).scalars()}
         return content, learner
 
-    def _add_note(self, deck_id, *, add_card=True):
+    def _add_note(self, deck_id):
+        # The Note presents its type's occurrences; no Card is written (ADR P11).
         note = Note(user_id=self.user_id, deck_id=deck_id, note_type_id=self.note_type_id,
                     field_values={"Front": "new"})
         db.session.add(note)
-        if add_card:
-            db.session.add(Card(note=note, template_id=self.template_id))
         return note
 
-    def test_new_related_note_and_card_bump_the_deck_once_at_outer_commit(self):
-        note = self._add_note(self.deck_ids[0])
+    def test_new_notes_bump_the_deck_once_at_outer_commit(self):
+        self._add_note(self.deck_ids[0])
         db.session.flush()
-        db.session.add(Card(note=note, template_id=self.other_template_id))
+        self._add_note(self.deck_ids[0])
         db.session.flush()
         self.assertEqual(self._revisions(), ({}, {}), "Flush must not acquire revision locks")
         db.session.commit()
@@ -107,30 +108,37 @@ class DeckCountProjectionTests(unittest.TestCase):
         db.session.commit()
         self.assertEqual(self._revisions(), ({self.deck_ids[0]: 1, self.deck_ids[1]: 1}, {}))
 
-    def test_card_foreign_key_move_and_delete_retain_old_and_new_deck(self):
-        target = self._empty_target_note()
-        card = db.session.get(Card, self.card_ids[0])
-        card.note_id = target.id
+    def test_occurrence_attach_and_retire_invalidate_only_decks_of_the_note_type(self):
+        other_type = NoteType(name="Unrelated", user_id=self.user_id)
+        db.session.add(other_type)
         db.session.flush()
-        db.session.delete(card)
-        db.session.commit()
-        self.assertEqual(self._revisions(), ({self.deck_ids[0]: 1, self.deck_ids[1]: 1}, {}))
-
-    def test_card_relationship_move_invalidates_both_memberships(self):
-        target = self._empty_target_note()
-        card = db.session.get(Card, self.card_ids[0])
-        card.note = target
-        db.session.commit()
-        self.assertEqual(db.session.get(Card, self.card_ids[0]).note_id, target.id)
-        self.assertEqual(self._revisions(), ({self.deck_ids[0]: 1, self.deck_ids[1]: 1}, {}))
-
-    def _empty_target_note(self):
+        other_deck = Deck(name="Unrelated Deck", owner_user_id=self.user_id)
+        db.session.add(other_deck)
+        db.session.flush()
+        db.session.add(Note(user_id=self.user_id, deck_id=other_deck.id, note_type_id=other_type.id,
+                            field_values={"Front": "elsewhere"}))
         self.app.config["DECK_COUNT_WRITE_ENABLED"] = False
-        note = self._add_note(self.deck_ids[1], add_card=False)
         db.session.commit()
-        _ = note.id
         self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
-        return note
+        application = db.session.get(StudyApplication, self.other_application_id)
+        application.status_code = "ACTIVE"
+        db.session.commit()
+        self.assertEqual(Card.query.filter_by(note_id=self.note_ids[0]).count(), 2)
+        self.assertEqual(self._revisions(), ({deck_id: 1 for deck_id in self.deck_ids}, {}))
+        application.status_code = "RETIRED"
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({deck_id: 2 for deck_id in self.deck_ids}, {}))
+
+    def test_note_type_change_invalidates_the_note_deck(self):
+        other_type = NoteType(name="Target type", user_id=self.user_id)
+        db.session.add(other_type)
+        self.app.config["DECK_COUNT_WRITE_ENABLED"] = False
+        db.session.commit()
+        self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
+        db.session.get(Note, self.note_ids[0]).note_type_id = other_type.id
+        db.session.commit()
+        self.assertIsNone(Card.query.filter_by(note_id=self.note_ids[0]).first())
+        self.assertEqual(self._revisions(), ({self.deck_ids[0]: 1}, {}))
 
     def test_note_delete_invalidates_membership_before_cascade_removes_cards(self):
         db.session.delete(db.session.get(Note, self.note_ids[0]))
@@ -163,19 +171,6 @@ class DeckCountProjectionTests(unittest.TestCase):
         self.assertEqual(self._revisions(), ({}, {
             (user_id, deck_id): 1 for user_id in (self.user_id, self.other_user_id)
             for deck_id in self.deck_ids[:2]
-        }))
-
-    def test_legacy_progress_relationship_move_invalidates_both_card_scopes(self):
-        self.app.config["DECK_COUNT_WRITE_ENABLED"] = False
-        progress = CardProgress(user_id=self.user_id, card_id=self.card_ids[0], queue="new")
-        db.session.add(progress)
-        db.session.commit()
-        _ = progress.card_id
-        self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
-        progress.card = db.session.get(Card, self.card_ids[1])
-        db.session.commit()
-        self.assertEqual(self._revisions(), ({}, {
-            (self.user_id, self.deck_ids[0]): 1, (self.user_id, self.deck_ids[1]): 1,
         }))
 
     def test_subject_logical_key_is_tracked_even_with_wrong_live_pointer(self):

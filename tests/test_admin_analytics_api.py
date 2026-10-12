@@ -6,6 +6,8 @@ import unittest
 from app import create_app
 from models import db
 from models.card import Card
+from tests.study_note_fixtures import attach_template, archive_wire_alias
+from models.study_application import StudyApplication
 from models.deck import Deck
 from models.note import Note
 from models.note_type import NoteType
@@ -64,7 +66,7 @@ class AdminAnalyticsApiTests(unittest.TestCase):
 
             from models.template import Template
 
-            template = Template(
+            template = attach_template(db.session, owner_user_id=admin.id,
                 id="tpl-analytics-1",
                 note_type_id="nt-analytics-1",
                 name="Card 1",
@@ -79,12 +81,11 @@ class AdminAnalyticsApiTests(unittest.TestCase):
                 deck_id=deck.id,
                 field_values={"Front": "日", "Back": "Mặt trời, ngày"},
             )
-            card = Card(
-                id="card-101",
-                note_id="note-101",
-                template_id="tpl-analytics-1",
-            )
-            db.session.add_all([note, card])
+            # Review history from before P11 names the Card by its legacy ID.
+            db.session.add(note)
+            db.session.flush()
+            card = Card.query.filter_by(note_id=note.id).one()
+            archive_wire_alias(db.session, card, "card-101")
             db.session.commit()
 
             # Seed Review Events for student

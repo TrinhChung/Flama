@@ -60,29 +60,33 @@ class DeckCountSnapshotTests(unittest.TestCase):
         db.session.add_all(decks)
         db.session.flush()
         self.deck_id, self.empty_id, self.other_deck_id = [int(row.id) for row in decks]
-        note_type = NoteType(user_id=self.user_id, name="Count fixture")
-        db.session.add(note_type)
+        # Cards are derived per Note type (ADR P11): the first Note presents two
+        # Templates, the next four one, and the empty deck's Note none.
+        note_type, single_type, bare_type = [
+            NoteType(user_id=self.user_id, name=name)
+            for name in ("Count fixture", "Count fixture single", "Count fixture bare")
+        ]
+        db.session.add_all([note_type, single_type, bare_type])
         db.session.flush()
         template = Template(note_type_id=note_type.id, name="Card")
         second_template = Template(note_type_id=note_type.id, name="Reverse")
-        db.session.add_all([template, second_template])
+        db.session.add_all([template, second_template, Template(note_type_id=single_type.id, name="Card")])
         db.session.flush()
-        self.cards = []
-        first_note = None
-        for index in range(6):
-            if index == 1:
-                note = first_note
-            else:
-                note = Note(user_id=self.user_id, deck_id=self.deck_id, note_type_id=note_type.id)
-                db.session.add(note)
-                db.session.flush()
-                if index == 0:
-                    first_note = note
-            card = Card(note_id=note.id, template_id=second_template.id if index == 1 else template.id)
-            db.session.add(card)
+        first_note = Note(user_id=self.user_id, deck_id=self.deck_id, note_type_id=note_type.id)
+        db.session.add(first_note)
+        db.session.flush()
+        others = []
+        for _index in range(4):
+            note = Note(user_id=self.user_id, deck_id=self.deck_id, note_type_id=single_type.id)
+            db.session.add(note)
             db.session.flush()
-            self.cards.append(str(card.id))
-        db.session.add(Note(user_id=self.user_id, deck_id=self.empty_id, note_type_id=note_type.id))
+            others.append(note)
+        self.cards = [
+            str(Card.query.filter_by(note_id=first_note.id, template_id=template.id).one().id),
+            str(Card.query.filter_by(note_id=first_note.id, template_id=second_template.id).one().id),
+            *[str(Card.query.filter_by(note_id=note.id).one().id) for note in others],
+        ]
+        db.session.add(Note(user_id=self.user_id, deck_id=self.empty_id, note_type_id=bare_type.id))
         db.session.add_all([
             CardProgress(user_id=self.user_id, card_id=self.cards[0], queue="review", due_day=DAY, due_at=CUTOFF + timedelta(days=1)),
             CardProgress(user_id=self.user_id, card_id=self.cards[1], queue="review", due_at=CUTOFF),

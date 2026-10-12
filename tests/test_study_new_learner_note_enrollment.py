@@ -169,12 +169,8 @@ class NewLearnerNoteEnrollmentTests(unittest.TestCase):
             route = lock_study_authority_route(db.session, learner_user_id=user.id, allow_note_authority=True)
             self.assertEqual(route.storage_profile, "CONSOLIDATED_V1")
             db.session.rollback()
-        # Enrollment only probes for LEGACY progress it cannot migrate; it never writes it.
-        self.assertEqual(len(statements), 3)
-        self.assertTrue(all(
-            statement.split()[0].upper() == "SELECT" and "card_progress.user_id = ?" in statement
-            for statement in statements
-        ), statements)
+        # The archived legacy table is outside the runtime, including signup.
+        self.assertEqual(statements, [])
 
         # A database still on a retired profile is refused, fail closed.
         profile = db.session.get(StudyAuthorityStorageProfile, 1)

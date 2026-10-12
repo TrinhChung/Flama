@@ -10,13 +10,19 @@ from typing import Any, List, Optional
 from datetime import datetime
 from collections import defaultdict
 
+from sqlalchemy import and_, literal, or_, select
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.functions import GenericFunction
+from sqlalchemy.types import Boolean
 
 from models import db
-from models.card_progress import CardProgress
 from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.study_application import StudyApplication
+from models.deck_release import DeckRelease
+from models.deck_release_entity_membership import DeckReleaseEntityMembership
+from models.deck_release_template_pin import DeckReleaseTemplatePin
 from models.flashcard import (
     Card,
     DeckCloneAddedFieldDef,
@@ -34,6 +40,70 @@ from models.flashcard import (
     NoteTypeReview,
     Template,
 )
+
+
+class _pin_has_application(GenericFunction):
+    """Test a frozen applications_json key on MySQL and SQLite."""
+
+    type = Boolean()
+    inherit_cache = True
+
+
+@compiles(_pin_has_application, "mysql")
+def _mysql_pin_has_application(element, compiler, **kw):
+    document, application_id = [compiler.process(value, **kw) for value in element.clauses]
+    return f"JSON_CONTAINS_PATH({document}, 'one', CONCAT('$.\"', {application_id}, '\"'))"
+
+
+@compiles(_pin_has_application, "sqlite")
+def _sqlite_pin_has_application(element, compiler, **kw):
+    document, application_id = [compiler.process(value, **kw) for value in element.clauses]
+    return f"json_type({document}, '$.\"' || {application_id} || '\"') IS NOT NULL"
+
+
+def clone_source_card_visibility(install, *, card=Card, note=Note):
+    """Set-wise source membership for installed releases and timestamp fallback.
+
+    ``install`` may be DeckInstall, an ORM alias, or a loaded row. Callers
+    still constrain owner/deck scope and must propagate include_retired_cards
+    to the outer statement: a frozen release may pin a retired application.
+    """
+    def column(name):
+        value = getattr(install, name)
+        return value if hasattr(value, "__clause_element__") else literal(value)
+
+    release_id = column("applied_release_id")
+    releases = DeckRelease.__table__
+    memberships = DeckReleaseEntityMembership.__table__
+    pins = DeckReleaseTemplatePin.__table__
+    has_release = select(releases.c.id).where(releases.c.id == release_id).exists()
+    initialized = select(releases.c.id).where(
+        releases.c.id == release_id, releases.c.template_pins_initialized.is_(True),
+    ).exists()
+    pinned_application = select(pins.c.deck_release_id).where(
+        pins.c.deck_release_id == release_id,
+        pins.c.source_template_id == card.template_id,
+        _pin_has_application(pins.c.applications_json, card.application_id),
+    ).exists()
+    presentation = or_(
+        and_(initialized, pinned_application),
+        and_(~initialized, card.application_status == "ACTIVE"),
+    )
+    release_mode = and_(column("version_mode") == "release", has_release)
+    membership = select(memberships.c.id).select_from(
+        memberships.join(releases, releases.c.id == release_id),
+    ).where(
+        memberships.c.deck_item_id == column("deck_item_id"),
+        memberships.c.entity_kind == "note", memberships.c.entity_id == note.id,
+        memberships.c.introduced_sequence <= releases.c.sequence_no,
+        or_(memberships.c.removed_sequence.is_(None), memberships.c.removed_sequence > releases.c.sequence_no),
+    ).exists()
+    snapshot_at = db.func.coalesce(column("base_snapshot_at"), column("installed_at"))
+    legacy_membership = or_(
+        snapshot_at.is_(None), and_(note.created_at <= snapshot_at, card.created_at <= snapshot_at),
+    )
+    return and_(presentation, or_(and_(release_mode, membership), and_(~release_mode, legacy_membership)))
+
 
 def get_note_type_by_user_and_name(user_id: int, name: str) -> Optional[NoteType]:
     """Retrieve a note type by user ID and exact name."""
@@ -225,57 +295,26 @@ def get_source_notes_for_clone_scope(
         query = query.filter(Note.created_at <= snapshot_at)
     return query.order_by(Note.created_at.asc(), Note.id.asc()).all()
 
-def get_card_progress_for_user_and_card(user_id: int, card_id: str) -> List[CardProgress]:
-    """Retrieves all progress entries for a specific user and card."""
-    return (
-        CardProgress.query.filter_by(
-            user_id=user_id,
-            card_id=card_id,
-        )
-        .order_by(CardProgress.updated_at.desc(), CardProgress.id.desc())
-        .all()
-    )
-
-def get_latest_card_progress(user_id: int, card_id: str) -> Optional[CardProgress]:
-    """Retrieves the latest progress entry for a user and card."""
-    return CardProgress.query.filter_by(
-        user_id=user_id,
-        card_id=card_id,
-    ).first()
-
 def delete_notes_by_ids(note_ids: List[str]) -> None:
     """Deletes notes matching the specified IDs without synchronizing session state."""
     if note_ids:
         Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
 
 def _card_reps_query(user_id: int):
-    """Per-Card review reps summed over Card ⋈ Note; callers add the scope.
-
-    NOTE learners under CANONICAL_V1 read each Card's Note state, which the
-    frozen ``card_progress`` projection only copied to every sibling.
-    """
+    """Per-presentation reps from the current Note authority only."""
     from app.repositories.study_authority_repository import read_study_authority_route
 
-    route = read_study_authority_route(db.session, learner_user_id=user_id)
-    if route.mode_code == "NOTE":
-        # ADR P10: the Note's state is on its subject row.
-        reps = db.cast(StudyProgressSubject.state_payload["reps"].as_string(), db.Integer)
-        return (
-            db.session.query(db.func.coalesce(db.func.sum(reps), 0))
-            .select_from(Card)
-            .join(Note, Card.note_id == Note.id)
-            .join(StudyProgressSubject, db.and_(
-                StudyProgressSubject.learner_user_id == user_id,
-                StudyProgressSubject.live_note_id == Card.note_id,
-            ))
-            .filter(StudyProgressSubject.semantic_state_hash.isnot(None))
-        )
+    read_study_authority_route(db.session, learner_user_id=user_id)
+    reps = db.cast(StudyProgressSubject.state_payload["reps"].as_string(), db.Integer)
     return (
-        db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
-        .select_from(CardProgress)
-        .join(Card, CardProgress.card_id == Card.id)
+        db.session.query(db.func.coalesce(db.func.sum(reps), 0))
+        .select_from(Card)
         .join(Note, Card.note_id == Note.id)
-        .filter(CardProgress.user_id == user_id)
+        .join(StudyProgressSubject, db.and_(
+            StudyProgressSubject.learner_user_id == user_id,
+            StudyProgressSubject.live_note_id == Card.note_id,
+        ))
+        .filter(StudyProgressSubject.semantic_state_hash.isnot(None))
     )
 
 
@@ -404,16 +443,7 @@ def get_templates_by_note_type(note_type_id: str, *, applications=None) -> List[
         if template.id not in seen:
             result.append(template)
             seen.add(template.id)
-    # Explicit compatibility for imported pre-attachment definitions only.
-    # A retired occurrence never turns into this fallback.
-    legacy = Template.query.filter(
-        Template.note_type_id == note_type_id,
-        ~db.session.query(StudyApplication.id).filter(
-            StudyApplication.note_type_id == note_type_id,
-            StudyApplication.template_id == Template.id,
-        ).exists(),
-    ).order_by(Template.position, Template.created_at, Template.id).all()
-    return result + legacy
+    return result
 
 
 def get_template_applications_by_note_type(note_type_id: str):
@@ -548,46 +578,6 @@ def get_source_notes_for_cutover(
         source_owner_user_id=source_owner_user_id,
         source_note_type_id=source_note_type_id,
         snapshot_at=snapshot_at,
-    )
-
-
-def get_card_progress_rows_for_local_card(user_id: int, local_card_id: str) -> List[CardProgress]:
-    """Returns all progress rows for a local card."""
-    return get_card_progress_for_user_and_card(user_id, local_card_id)
-
-
-def get_card_progress_for_source_card(user_id: int, source_card_id: str) -> Optional[CardProgress]:
-    """Returns latest progress row for a source card."""
-    return (
-        CardProgress.query.filter_by(user_id=user_id, card_id=source_card_id)
-        .order_by(CardProgress.updated_at.desc(), CardProgress.id.desc())
-        .first()
-    )
-
-
-def get_card_progress_rows_for_cutover(
-    user_id: int,
-    card_ids: List[str],
-) -> List[CardProgress]:
-    """Lock cutover progress subjects in one deterministic card/id order."""
-
-    normalized_card_ids = sorted(
-        {
-            str(card_id).strip()
-            for card_id in card_ids
-            if card_id is not None and str(card_id).strip()
-        }
-    )
-    if not normalized_card_ids:
-        return []
-    return (
-        CardProgress.query.filter(
-            CardProgress.user_id == user_id,
-            CardProgress.card_id.in_(normalized_card_ids),
-        )
-        .order_by(CardProgress.card_id.asc(), CardProgress.id.asc())
-        .with_for_update()
-        .all()
     )
 
 

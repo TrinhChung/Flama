@@ -1,6 +1,8 @@
 """Reusable ownership, safe attachments, ID bindings and personal presets."""
 
 import unittest
+from datetime import datetime, timezone
+from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
 from app import create_app
 from models import db
 from models.user import User
@@ -27,6 +29,9 @@ class TemplateLibraryTests(unittest.TestCase):
             other = User(username="other", email="other@example.com")
             other.set_password("password")
             db.session.add_all([user, other])
+            db.session.flush()
+            for learner in (user, other):
+                enroll_new_learner_note_authority(db.session, user=learner)
             db.session.commit()
             self.user_id = user.id
         self.client.post("/login", data={"email": "owner@example.com", "password": "password"})
@@ -63,7 +68,8 @@ class TemplateLibraryTests(unittest.TestCase):
         self.assertTrue(self.definition["current_version_id"])
         with self.app.app_context():
             row = db.session.get(Template, self.template_id)
-            self.assertIsNone(row.note_type_id)
+            self.assertNotIn("note_type_id", Template.__table__.c)
+            self.assertEqual(row.owner_user_id, self.user_id)
             self.assertEqual(StudyApplication.query.filter_by(template_id=row.id).count(), 0)
             self.assertEqual(TemplateVersion.query.filter_by(template_id=row.id).count(), 1)
         response = self.client.get("/api/card-templates?q=Reusable")
@@ -83,22 +89,49 @@ class TemplateLibraryTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(Card.query.filter_by(template_id=self.template_id).count(), 5)
 
-    def test_retire_reactivate_preserves_cards_and_skips_future_notes(self):
+    def test_retire_hides_cards_and_reactivation_restores_the_same_keys(self):
+        from models.card import get_card
+
         application = self._attach()
         self._note()
         base = f"/api/note-types/{self.types[0]['id']}/template-applications/{application['id']}"
         with self.app.app_context():
             old_ids = {item.id for item in Card.query.filter_by(template_id=self.template_id)}
+            self.assertEqual(len(old_ids), 1)
         self.assertEqual(self.client.delete(base).status_code, 200)
         self._note()
         with self.app.app_context():
-            self.assertEqual({item.id for item in Card.query.filter_by(template_id=self.template_id)}, old_ids)
+            # A retired occurrence presents nothing; a dealt Card stays addressable.
+            self.assertEqual(Card.query.filter_by(template_id=self.template_id).count(), 0)
+            self.assertIsNotNone(get_card(db.session, next(iter(old_ids))))
         revived = self._attach()
         self.assertEqual(revived["id"], application["id"])
         with self.app.app_context():
             ids = {item.id for item in Card.query.filter_by(template_id=self.template_id)}
             self.assertEqual(len(ids), 2)
             self.assertTrue(old_ids <= ids)
+
+    def test_attach_writes_one_occurrence_and_no_row_per_note(self):
+        # Template is presentation: attaching it is O(1) whatever the Note count (ADR P11).
+        from sqlalchemy import event
+
+        for _ in range(5):
+            self._note()
+        statements = []
+
+        def capture(_conn, _cursor, statement, _params, _context, _executemany):
+            statements.append(statement.lower())
+
+        with self.app.app_context():
+            engine = db.engine
+            event.listen(engine, "before_cursor_execute", capture)
+            try:
+                self._attach()
+            finally:
+                event.remove(engine, "before_cursor_execute", capture)
+            self.assertEqual(Card.query.filter_by(template_id=self.template_id).count(), 5)
+        self.assertEqual([sql for sql in statements if sql.startswith("insert into cards")], [])
+        self.assertEqual(len([sql for sql in statements if sql.startswith("insert into study_applications")]), 1)
 
     def test_bound_input_survives_field_rename_without_source_rewrite(self):
         application = self._attach()

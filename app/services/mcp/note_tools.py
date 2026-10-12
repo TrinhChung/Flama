@@ -32,7 +32,6 @@ from app.services.mcp.base import (
 from app.validators.flashcard_input import RequestValidationError, clean_array_fields
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.field_types import field_value_text
@@ -128,75 +127,63 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
     deck = Deck.query.filter_by(id=note.deck_id).first() if note.deck_id else None
     note_type = note.note_type
     authority_reads = None
-    if route.mode_code == "NOTE":
-        if not note.cards:
-            db.session.rollback()
-            raise RequestValidationError(
-                "NOTE detail has no canonical Card siblings.",
-                field="note_id",
-                status=409,
-                code="INCOMPLETE_AUTHORITY_COMPATIBILITY",
-            )
-        user = db.session.get(User, user_id)
-        timezone_name = stats_overview.get_effective_timezone_name(
-            getattr(user, "timezone", "UTC")
+    if not note.cards:
+        db.session.rollback()
+        raise RequestValidationError(
+            "NOTE detail has no canonical Card siblings.",
+            field="note_id",
+            status=409,
+            code="INCOMPLETE_AUTHORITY_COMPATIBILITY",
         )
-        options = resolve_deck_options(user_id=user_id, deck_id=note.deck_id)
-        try:
-            authority_reads = load_study_authority_card_reads(
-                db.session,
-                learner_user_id=user_id,
-                cards=tuple(note.cards),
-                now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
-                timezone_name=timezone_name,
-                deck_options_by_card_id={str(card.id): options for card in note.cards},
+    user = db.session.get(User, user_id)
+    timezone_name = stats_overview.get_effective_timezone_name(
+        getattr(user, "timezone", "UTC")
+    )
+    options = resolve_deck_options(user_id=user_id, deck_id=note.deck_id)
+    try:
+        authority_reads = load_study_authority_card_reads(
+            db.session,
+            learner_user_id=user_id,
+            cards=tuple(note.cards),
+            now_utc=datetime.now(timezone.utc).replace(tzinfo=None),
+            timezone_name=timezone_name,
+            deck_options_by_card_id={str(card.id): options for card in note.cards},
+        )
+        subject = StudyProgressSubject.query.filter_by(
+            learner_user_id=user_id,
+            logical_note_key=str(note.id).encode("utf-8"),
+        ).one_or_none()
+        if (
+            subject is None
+            or str(subject.live_note_id or "") != str(note.id)
+            # CONSOLIDATED_V1 (ADR P10): Cards carry no progress, nothing to count.
+            or (
+                not is_consolidated(route)
+                and int(subject.contributor_count) != len(note.cards)
             )
-            subject = StudyProgressSubject.query.filter_by(
-                learner_user_id=user_id,
-                logical_note_key=str(note.id).encode("utf-8"),
-            ).one_or_none()
-            if (
-                subject is None
-                or str(subject.live_note_id or "") != str(note.id)
-                # CONSOLIDATED_V1 (ADR P10): Cards carry no progress, nothing to count.
-                or (
-                    not is_consolidated(route)
-                    and int(subject.contributor_count) != len(note.cards)
-                )
-            ):
-                raise StudyAuthorityReadError(
-                    "INCOMPLETE_AUTHORITY_COMPATIBILITY",
-                    "NOTE detail Card topology differs from its canonical subject.",
-                )
-        except Exception as exc:
-            code = domain_error_code(exc)
-            if code is None:
-                raise
-            db.session.rollback()
-            raise RequestValidationError(
-                str(exc), field="note_id", status=409, code=str(code)
-            ) from exc
+        ):
+            raise StudyAuthorityReadError(
+                "INCOMPLETE_AUTHORITY_COMPATIBILITY",
+                "NOTE detail Card topology differs from its canonical subject.",
+            )
+    except Exception as exc:
+        code = domain_error_code(exc)
+        if code is None:
+            raise
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc), field="note_id", status=409, code=str(code)
+        ) from exc
 
     cards_data: list[dict[str, Any]] = []
     for card in note.cards:
-        if authority_reads is not None:
-            read = authority_reads[str(card.id)]
-            queue = read.availability.normalized_queue
-            reps = int(read.state.reps or 0)
-            lapses = int(read.state.lapses or 0)
-            interval_days = float(read.state.intervalDays or 0)
-            ease_factor = float(read.state.ease or 2.5)
-            due_at = read.availability.due_at
-        else:
-            progress = CardProgress.query.filter_by(
-                card_id=card.id, user_id=user_id
-            ).first()
-            queue = progress.queue if progress else "new"
-            reps = int(progress.reps or 0) if progress else 0
-            lapses = int(progress.lapses or 0) if progress else 0
-            interval_days = float(progress.interval_days or 0) if progress else 0.0
-            ease_factor = float(progress.ease_factor or 2.5) if progress else 2.5
-            due_at = progress.due_at if progress else None
+        read = authority_reads[str(card.id)]
+        queue = read.availability.normalized_queue
+        reps = int(read.state.reps or 0)
+        lapses = int(read.state.lapses or 0)
+        interval_days = float(read.state.intervalDays or 0)
+        ease_factor = float(read.state.ease or 2.5)
+        due_at = read.availability.due_at
         cards_data.append(
             {
                 "card_id": str(card.id),
@@ -481,10 +468,8 @@ def _create_note(
 
     _auto_crawl_note_fields(user_id=user_id, note=note, field_defs=note_type.field_defs)
 
-    from app.repositories.template_library_repository import create_cards_for_note
-    create_cards_for_note(db.session, note)
-    db.session.flush()
-    card_rows = list(Card.query.filter_by(note_id=note.id).all())
+    # The Note's Cards are derived from its NoteType's occurrences (ADR P11).
+    card_rows = list(Card.query.filter_by(note_id=note.id).order_by(Card.id).all())
     if not card_rows:
         raise RequestValidationError(
             f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
@@ -955,7 +940,7 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
             deleted_note_ids=deleted_note_ids,
         )
         if all_card_ids:
-            CardProgress.query.filter(CardProgress.card_id.in_(all_card_ids)).delete(synchronize_session=False)
+            pass  # NOTE lifecycle state is handled by the fenced deletion plan.
         content_delete.finalize_content_delete(
             lifecycle_plan,
             source_path="mcp.note_batch_delete",

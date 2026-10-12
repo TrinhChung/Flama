@@ -35,7 +35,7 @@ from app.services.study_progress_shadow_mapper import (
     evaluate_availability,
     map_card_progress,
 )
-from models.card_progress import CardProgress
+from migrations.retired_card_tables import CardProgress
 
 
 RAW_GOLDEN = (

@@ -50,8 +50,6 @@ class StudySessionInstallUsageTests(unittest.TestCase):
                 field_values={"Word": f"w{index}"}, created_at=_now() - timedelta(days=1)) for index in range(notes)]
             db.session.add_all(rows)
             db.session.flush()
-            db.session.add_all(Card(note_id=note.id, template_id=template.id,
-                created_at=_now() - timedelta(days=1)) for note in rows)
             item = DeckMarketplaceItem(owner_user_id=publisher.id, source_deck_id=source_deck.id,
                 source_note_type_id=note_type.id, title="Shared", publish_status="published", pricing_mode="free")
             db.session.add(item)

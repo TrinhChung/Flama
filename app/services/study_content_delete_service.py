@@ -3,12 +3,12 @@
 Admission must discover/recheck the complete scope and acquire every learner
 fence in ID order before calling this coordinator. No commit or rollback here.
 
-Deletion: ``note_ids`` are Notes deleted outright; every one of their Cards
-must be in ``card_ids``. Any other Card in ``card_ids`` is a partial sibling
-removal that must leave at least one Card on its Note. A NOTE learner's row
-of a deleted Note is tombstoned; a removed sibling Card changes no progress
-(ADR P10 §2.3). LEGACY learners keep ``card_progress``, which the caller
-deletes.
+Deletion: ``note_ids`` are Notes deleted outright, with every Card they have,
+retired occurrences included (ADR P11). Any other Card in ``card_ids`` is a
+partial sibling removal that must leave at least one Card on its Note. A NOTE
+learner's row of a deleted Note is tombstoned; a removed sibling Card changes
+no progress (ADR P10 §2.3). LEGACY learners keep ``card_progress``: the caller
+deletes it for ``card_ids`` and finalization for the rest of a deleted Note.
 
 Adding a Template sibling is not a learner topology change: the new Card
 inherits its Note's row and writes no progress (ADR P10 §2.3, §2.5), so it
@@ -17,15 +17,24 @@ takes no learner fence.
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, literal, or_, select
 
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
     lock_study_authority_route,
 )
 from app.services import study_progress_lifecycle_mirror_service as lifecycle
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import (
+    CARD_KEY_SEPARATOR,
+    PresentationAlias,
+    card_key,
+    card_key_application_part,
+    card_key_pairs,
+    legacy_card_ids,
+    note_card_ids,
+)
+from models.note import Note
+from models.study_application import StudyApplication
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.study_progress_subject import StudyProgressSubject
@@ -39,6 +48,7 @@ class ContentDeletePlan:
     deleted_note_ids: frozenset = frozenset()
     partial: bool = False
     finalized: bool = False
+    session: object = None
 
 
 def _chunks(values):
@@ -48,40 +58,39 @@ def _chunks(values):
 
 
 def _card_note_ids(session, card_ids):
-    mapping = {}
-    for chunk in _chunks(sorted(set(card_ids))):
-        mapping.update(
-            (str(card_id), str(note_id))
-            for card_id, note_id in session.execute(
-                select(Card.id, Card.note_id).where(Card.id.in_(chunk))
-            ).all()
-        )
-    return mapping
+    """``{card id: note id}``; a presentation key names its Note (ADR P11)."""
+    return {
+        card_id: note_id
+        for card_id, (note_id, _application_id) in card_key_pairs(session, card_ids).items()
+    }
+
+
+def _lifecycle_card_ids(session, card_ids, deleted_note_ids):
+    """The given Cards and every Card of a deleted Note, retired ones included."""
+    return sorted({str(value) for value in card_ids} | set(note_card_ids(session, deleted_note_ids)))
 
 
 def discover_content_learner_ids(session, *, card_ids, note_ids, current_read=False):
-    """Learners with progress, rows or sessions on the affected content."""
+    """Learners with progress, rows or sessions on the affected content.
+
+    An open session may name a Card by its pre-P11 ID, so those are searched too.
+    """
 
     def read(statement):
         # A second plain SELECT would reuse MySQL's REPEATABLE READ snapshot.
         return statement.with_for_update() if current_read else statement
 
     learner_ids = set()
-    for chunk in _chunks(sorted(set(note_ids))):
+    # NOTE progress is the Note's row, including the Notes of the given Cards.
+    note_ids = set(note_ids) | set(_card_note_ids(session, card_ids).values())
+    for chunk in _chunks(sorted(note_ids)):
         learner_ids.update(session.execute(read(
             select(StudyProgressSubject.learner_user_id).where(
                 StudyProgressSubject.live_note_id.in_(chunk)
                 | StudyProgressSubject.logical_note_key.in_([value.encode("utf-8") for value in chunk])
             ))).scalars())
-    for chunk in _chunks(sorted(set(card_ids))):
-        # LEGACY learners keep card_progress.
-        learner_ids.update(session.execute(read(
-            select(CardProgress.user_id).where(CardProgress.card_id.in_(chunk)))).scalars())
-        # NOTE progress is the Card's Note's row.
-        learner_ids.update(session.execute(read(
-            select(StudyProgressSubject.learner_user_id).join(
-                Card, Card.note_id == StudyProgressSubject.live_note_id,
-            ).where(Card.id.in_(chunk)))).scalars())
+    card_ids = sorted(set(card_ids))
+    for chunk in _chunks(sorted(set(card_ids) | set(legacy_card_ids(session, card_ids)))):
         learner_ids.update(session.execute(read(
             select(StudySession.user_id).join(
                 StudySessionCard, StudySessionCard.session_id == StudySession.id
@@ -100,7 +109,8 @@ def lock_content_delete_routes(session, *, actor_user_ids, card_ids, deleted_not
     ``verify_content_delete_scope`` after ``prepare_content_delete``.
     """
     learner_ids = set(int(value) for value in actor_user_ids)
-    learner_ids |= discover_content_learner_ids(session, card_ids=card_ids,
+    learner_ids |= discover_content_learner_ids(session,
+        card_ids=_lifecycle_card_ids(session, card_ids, deleted_note_ids),
         note_ids=_affected_note_ids(session, card_ids=card_ids, deleted_note_ids=deleted_note_ids))
     return tuple(
         lock_study_authority_route(session, learner_user_id=learner_id, allow_note_authority=True)
@@ -113,21 +123,17 @@ def verify_content_delete_scope(session, *, routes, card_ids, deleted_note_ids):
 
     Locking reads here also block a new learner's progress insert until the
     caller commits, so no learner can gain state on a deleted Card unfenced.
+    A deleted Note takes every Card it has (ADR P11), so only the partially
+    removed Cards must still exist; Cards cannot be locked (they are derived),
+    the Notes and learner rows are.
     """
     card_ids, deleted_note_ids = set(card_ids), set(deleted_note_ids)
     note_ids = _affected_note_ids(session, card_ids=card_ids, deleted_note_ids=deleted_note_ids)
-    present = {}
-    for chunk in _chunks(sorted(note_ids)):
-        present.update(
-            (str(card_id), str(note_id))
-            for card_id, note_id in session.execute(
-                select(Card.id, Card.note_id).where(Card.note_id.in_(chunk)).with_for_update(read=True)
-            ).all()
-        )
-    deleted_cards = {card_id for card_id, note_id in present.items() if note_id in deleted_note_ids}
+    present = set(note_card_ids(session, note_ids))
     locked = {route.learner_user_id for route in routes}
-    current = discover_content_learner_ids(session, card_ids=card_ids, note_ids=note_ids, current_read=True)
-    if not card_ids.issubset(present) or not deleted_cards.issubset(card_ids) or current - locked:
+    current = discover_content_learner_ids(session, card_ids=_lifecycle_card_ids(session, card_ids, deleted_note_ids),
+        note_ids=note_ids, current_read=True)
+    if not card_ids.issubset(present) or current - locked:
         raise StudyAuthorityFenceError(
             "CONTENT_SCOPE_CHANGED",
             "Content or its learners changed while the deletion was admitted; retry.",
@@ -152,7 +158,8 @@ def prepare_content_delete(session, *, routes, card_ids, note_ids, now_utc=None,
     partial_card_ids = tuple(card_id for card_id in card_ids if card_note.get(card_id) not in deleted_note_ids)
     if any(card_id not in card_note for card_id in partial_card_ids):
         raise StudyAuthorityFenceError("AUTHORITY_CARD_MISSING", "Deletion contains a Card that no longer exists.")
-    full_card_ids = tuple(card_id for card_id in card_ids if card_note[card_id] in deleted_note_ids)
+    # Every Card of a deleted Note goes, whether or not the caller named it.
+    full_card_ids = tuple(note_card_ids(session, deleted_note_ids))
     note_plans = []
     note_learner_ids = []
     for route in routes:
@@ -176,18 +183,91 @@ def prepare_content_delete(session, *, routes, card_ids, note_ids, now_utc=None,
         elif route.mode_code != "LEGACY":
             raise StudyAuthorityFenceError("AUTHORITY_MODE_CONFLICT", "Unknown deletion authority mode.")
     cancelled_ids = learner_ids if cancel_legacy_sessions else tuple(note_learner_ids)
-    if card_ids and cancelled_ids:
-        affected_sessions = select(StudySessionCard.session_id).where(StudySessionCard.card_id.in_(card_ids))
+    dealt_ids = sorted(set(card_ids) | set(full_card_ids))
+    if dealt_ids and cancelled_ids:
+        # An open session may have dealt a Card under its pre-P11 ID.
+        dealt_ids = sorted(set(dealt_ids) | set(legacy_card_ids(session, dealt_ids)))
+        affected_sessions = select(StudySessionCard.session_id).where(StudySessionCard.card_id.in_(dealt_ids))
         sessions = session.execute(select(StudySession).where(
             StudySession.user_id.in_(cancelled_ids), StudySession.status == "open",
             StudySession.id.in_(affected_sessions)).order_by(StudySession.id).with_for_update()).scalars()
         for study_session in sessions:
             study_session.status = "cancelled"
-    return ContentDeletePlan(tuple(note_plans), deleted_note_ids, partial=bool(partial_card_ids))
+    return ContentDeletePlan(tuple(note_plans), deleted_note_ids, partial=bool(partial_card_ids), session=session)
+
+
+def stop_presenting(session, *, application_ids):
+    """Forget the Cards of occurrences that are being deleted (ADR P11).
+
+    Their Cards are derived, so they vanish with the occurrence; nothing is
+    deleted per Note and NOTE progress stays on the Note (ADR P10 §2.3). A
+    lease that dealt one of them can no longer commit it, so every open
+    session that did is cancelled, as for a removed sibling, and LEGACY
+    ``card_progress`` of those Cards goes, as the old Card cascade did. A
+    retired occurrence needs none of this: its Cards stay addressable.
+    Returns the cancelled session IDs.
+    """
+    ids = sorted({str(value) for value in application_ids if value})
+    if not ids:
+        return ()
+    cancelled = _cancel_open_sessions(session, or_(
+        card_key_application_part(StudySessionCard.card_id).in_(ids),
+        StudySessionCard.card_id.in_(select(PresentationAlias.id).where(PresentationAlias.application_id.in_(ids))),
+    ))
+    return cancelled
+
+
+def stop_note_presentations(session, *, note_id, note_type_id):
+    """A Note moved off ``note_type_id``: forget its Cards of that NoteType (ADR P11).
+
+    The Note now presents its new NoteType's occurrences; Cards are derived,
+    so only leases and LEGACY ``card_progress`` of the old ones need care.
+    """
+    application_ids = [
+        str(value) for value in session.execute(
+            select(StudyApplication.id).where(StudyApplication.note_type_id == str(note_type_id))
+        ).scalars()
+    ]
+    if not application_ids:
+        return ()
+    keys = [card_key(note_id, application_id) for application_id in application_ids]
+    cancelled = _cancel_open_sessions(session, or_(
+        StudySessionCard.card_id.in_(keys),
+        StudySessionCard.card_id.in_(select(PresentationAlias.id).where(
+            PresentationAlias.note_id == str(note_id), PresentationAlias.application_id.in_(application_ids),
+        )),
+    ))
+    return cancelled
+
+
+def _cancel_open_sessions(session, dealt):
+    """Cancel open sessions holding a Card matched by ``dealt``; lock only those.
+
+    The search is a plain read driven by the open sessions, so no unrelated
+    session or Card membership row is locked.
+    """
+    affected = sorted(set(session.execute(
+        select(StudySessionCard.session_id)
+        .join(StudySession, StudySession.id == StudySessionCard.session_id)
+        .where(StudySession.status == "open", dealt)
+    ).scalars()))
+    if not affected:
+        return ()
+    sessions = session.execute(select(StudySession).where(
+        StudySession.id.in_(affected), StudySession.status == "open",
+    ).order_by(StudySession.id).with_for_update()).scalars().all()
+    for study_session in sessions:
+        study_session.status = "cancelled"
+    return tuple(str(study_session.id) for study_session in sessions)
 
 
 def finalize_content_delete(plan, *, source_path, operation_key, now_utc=None):
-    """Call after deleting all affected CardProgress, before deleting Cards."""
+    """Call after deleting the CardProgress of ``card_ids``, before deleting Notes.
+
+    LEGACY progress on any other Card of a deleted Note (one the caller did
+    not name, such as a retired occurrence's) goes here, as the old Card
+    cascade took it.
+    """
     if plan.finalized:
         raise StudyAuthorityFenceError("AUTHORITY_LIFECYCLE_REPLAY", "Content deletion already finalized.")
     plan.finalized = True

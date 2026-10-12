@@ -75,7 +75,7 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
         db.session, learner_user_id=int(current_user.id), visible_deck_ids=visible_deck_ids,
         today_day_index=today_day_index, day_cutoff_utc=day_cutoff_utc,
         timezone_name=timezone_name, day_boundary_hour_local=boundary_hour,
-        is_note_mode=authority_route.mode_code == "NOTE", admin_mode=admin_mode,
+        is_note_mode=True, admin_mode=admin_mode,
         count_by_note=count_by_note, now_utc=now,
     )
     metadata_ids = [int(deck.id) for deck in decks if not deck.note_type_id]
@@ -87,7 +87,6 @@ def build_dashboard_data(current_user, *, include_move_tokens: bool = True) -> T
         include_note_types=not bool(cached_counts),
         today_day_index=today_day_index,
         day_cutoff_utc=day_cutoff_utc,
-        is_note_mode=authority_route.mode_code == "NOTE",
         admin_mode=admin_mode,
         count_by_note=count_by_note,
     )

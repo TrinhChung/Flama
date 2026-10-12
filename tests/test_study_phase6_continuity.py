@@ -17,7 +17,8 @@ from models.card import Card
 from models.connect_source_card_ref import ConnectSourceCardRef
 from models.review_event import ReviewEvent
 from models.study_application import StudyApplication
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import assert_retired_progress_absent
+from models.note_type import NoteType
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
 from models.template import Template
@@ -35,7 +36,7 @@ class StudyPhase6ContinuityTests(unittest.TestCase):
         with self.app.app_context():
             card = db.session.get(Card, removed_card_id)
             note_id, template_id = card.note_id, card.template_id
-            note_type_id = db.session.get(Template, template_id).note_type_id
+            note_type_id = card.note.note_type_id
             db.session.add(ConnectSourceCardRef(
                 user_id=self.user_id, source_key="anki", external_card_id="ext-1",
                 external_note_id="ext-n", source_ord=1, card_id=removed_card_id,
@@ -60,8 +61,9 @@ class StudyPhase6ContinuityTests(unittest.TestCase):
         with self.app.app_context():
             content.delete_template(user_id=self.user_id, note_type_id=note_type_id, template_id=template_id)
             self.assertIsNone(db.session.get(Card, removed_card_id))
-            self.assertEqual(StudyApplication.query.filter_by(template_id=template_id).count(), 0)
-            self.assertEqual(db.session.get(StudySession, snapshot["session_id"]).status, "cancelled")
+            self.assertEqual(StudyApplication.query.filter_by(template_id=template_id, status_code="ACTIVE").count(), 0)
+            self.assertIsNotNone(db.session.get(Template, template_id))
+            self.assertEqual(db.session.get(StudySession, snapshot["session_id"]).status, "open")
             row = StudyProgressSubject.query.one()
             self.assertEqual(
                 (row.authority_revision, bytes(row.semantic_state_hash), dict(row.state_payload)),
@@ -80,8 +82,7 @@ class StudyPhase6ContinuityTests(unittest.TestCase):
                 "session_token": snapshot["session_token"], "snapshot_hash": snapshot["snapshot_hash"],
                 "commit_reason": "manual_exit", "events": [], "final_states": [],
             })
-        self.assertEqual(committed.status_code, 409, committed.get_json())
-        self.assertEqual(committed.get_json()["error"], "SESSION_NOT_OPEN")
+        self.assertEqual(committed.status_code, 200, committed.get_json())
 
         # The surviving sibling still studies from the same Note state.
         self._answer(dict(self.payload, operation_key=str(uuid4())), card_id=self.card_ids[0])
@@ -106,14 +107,14 @@ class StudyRepeatedApplicationTests(unittest.TestCase):
             routes = (lock_study_authority_route(
                 db.session, learner_user_id=self.user_id, allow_note_authority=True),)
             occurrence = stage_repeated_application(
-                db.session, routes=routes, template=template, occurrence_key="repeat-1")
+                db.session, routes=routes, template=template, note_type=db.session.get(NoteType, db.session.get(Card, self.card_ids[0]).note.note_type_id), occurrence_key="repeat-1")
             db.session.commit()
             repeated = Card.query.filter_by(application_id=occurrence.id).one()
             self.assertEqual((repeated.note_id, repeated.template_id), (note_id, template.id))
             self.assertEqual(Card.query.filter_by(note_id=note_id, template_id=template.id).count(), 2)
             # The occurrence's Card shares the Note's one row; nothing is copied (ADR P10).
             self.assertEqual(StudyProgressSubject.query.count(), 1)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             revision = StudyProgressSubject.query.one().authority_revision
             repeated_id = repeated.id
 

@@ -19,6 +19,7 @@ from flask import current_app
 from sqlalchemy import and_, asc, desc, func, or_
 from sqlalchemy.orm import joinedload
 
+from app.repositories import template_library_repository
 from app.repositories import (
     flashcards_share_repository,
     study_repository,
@@ -43,9 +44,8 @@ from app.services.flashcard_legacy import (
     ensure_legacy_note_type,
     ensure_quiz_note_type,
 )
-from models.card_progress import CardProgress
 from models import db
-from models.card import Card
+from models.card import Card, forget_card_identities
 from models.deck import Deck
 from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
@@ -312,9 +312,7 @@ def _find_seed_data_gaps(
     if legacy_note_type is None:
         gaps.append(f"note type missing: {LEGACY_NOTE_TYPE_NAME}")
     elif (
-        Template.query.filter_by(note_type_id=legacy_note_type.id)
-        .order_by(Template.position.asc(), Template.created_at.asc())
-        .first()
+        next(iter(template_library_repository.attached_templates(db.session, legacy_note_type.id)), None)
         is None
     ):
         gaps.append(f"template missing for note type: {LEGACY_NOTE_TYPE_NAME}")
@@ -406,9 +404,7 @@ def _find_seed_data_gaps(
         if quiz_note_type is None:
             gaps.append(f"note type missing: {QUIZ_NOTE_TYPE_NAME}")
         elif (
-            Template.query.filter_by(note_type_id=quiz_note_type.id)
-            .order_by(Template.position.asc(), Template.created_at.asc())
-            .first()
+            next(iter(template_library_repository.attached_templates(db.session, quiz_note_type.id)), None)
             is None
         ):
             gaps.append(f"template missing for note type: {QUIZ_NOTE_TYPE_NAME}")
@@ -743,7 +739,7 @@ def _seed_rows_to_deck(
             operation_key=f"seed-deck-replace:{deck.id}:{source_label}",
         )
         if existing_note_ids:
-            Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
+            forget_card_identities(db.session, existing_note_ids)
             Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
         click.echo(f"  Replace seeded deck: {source_label}")
 
@@ -761,19 +757,9 @@ def _seed_rows_to_deck(
     db.session.add_all(notes)
     db.session.flush()
 
-    cards: list[Card] = []
-    for note in notes:
-        cards.append(
-            Card(
-                note_id=note.id,
-                template_id=template_id,
-            )
-        )
-    db.session.add_all(cards)
-    db.session.flush()
-
+    # One Card per Note: derived from the seed NoteType's one occurrence (ADR P11).
     stats.created_notes += len(notes)
-    stats.created_cards += len(cards)
+    stats.created_cards += len(notes)
     return "replaced" if existing_count else "seeded"
 
 
@@ -1306,7 +1292,7 @@ def _seed_quiz_dump_for_user(
             source_path="seed.quiz_replace",
             operation_key=f"seed-quiz-replace:{quiz_deck.id}:{dump_filename}",
         )
-        Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
+        forget_card_identities(db.session, existing_note_ids)
         Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
         stats.replaced_files += 1
 
@@ -1331,12 +1317,9 @@ def _seed_quiz_dump_for_user(
     db.session.add_all(notes)
     db.session.flush()
 
-    cards = [Card(note_id=note.id, template_id=template_id) for note in notes]
-    db.session.add_all(cards)
-    db.session.flush()
-
+    # One Card per Note: derived from the quiz NoteType's one occurrence (ADR P11).
     stats.created_notes += len(notes)
-    stats.created_cards += len(cards)
+    stats.created_cards += len(notes)
     stats.seeded_files += 1
     return quiz_deck, len(notes)
 
@@ -1358,5 +1341,5 @@ def _tombstone_replaced_notes(*, card_ids, note_ids, source_path: str, operation
         db.session, routes=routes, card_ids=card_ids, deleted_note_ids=note_ids
     )
     if card_ids:
-        CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(synchronize_session=False)
+        pass  # NOTE lifecycle state is handled by the fenced deletion plan.
     content_delete.finalize_content_delete(plan, source_path=source_path, operation_key=operation_key)

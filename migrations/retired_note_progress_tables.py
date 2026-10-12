@@ -33,15 +33,16 @@ from models.study_progress_types import (
     datetime6,
     register_mysql_parent_collations,
 )
-from models.card import Card
-from models.card_progress import CardProgress
 from models.study_progress_subject import StudyProgressSubject
+from migrations.retired_card_tables import Card, CardProgress
 
 RETIRED_METADATA = sa.MetaData()
 _RetiredBase = declarative_base(metadata=RETIRED_METADATA)
 
-# Live parents the retired tables reference; copied, never created from here.
-for _parent in (StudyProgressSubject.__table__, CardProgress.__table__, Card.__table__):
+# Only current subject metadata is copied; it is never created from here.
+StudyProgressSubject.__table__.to_metadata(RETIRED_METADATA)
+# Frozen historical parents, copied without importing retired runtime modules.
+for _parent in (Card.__table__, CardProgress.__table__):
     _parent.to_metadata(RETIRED_METADATA)
 
 

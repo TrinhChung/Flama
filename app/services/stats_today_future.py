@@ -14,8 +14,7 @@ from app.repositories.deck_tree_query import (
     query_accessible_stats_decks,
 )
 from app.repositories.stats_query_repository import (
-    query_due_progress_rows,
-    query_interval_days_rows,
+    query_consolidated_forecast_rows,
     query_today_review_summary,
     query_user_daily_study_time,
 )
@@ -25,8 +24,6 @@ from app.services.scheduler_config_service import resolve_day_boundary_hour_loca
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
 from models import db
-from models.card import Card
-from models.note import Note
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -291,19 +288,6 @@ def _build_future_series(
     return series, window_days, cumulative
 
 
-def _compute_daily_load(*, user_id: int, scope_deck_ids: list[int] | None) -> float:
-    rows = query_interval_days_rows(
-        user_id=user_id,
-        scope_deck_ids=scope_deck_ids,
-    )
-
-    total = 0.0
-    for interval_days, queue_value in rows:
-        if normalize_progress_queue(queue_value) != REVIEW_QUEUE:
-            continue
-        interval_value = float(interval_days or 0)
-        total += 1.0 / max(1.0, interval_value)
-    return total
 
 
 def _consolidated_due_rows_and_load(
@@ -313,26 +297,23 @@ def _consolidated_due_rows_and_load(
 ) -> tuple[list[tuple[Any, Any, Any]], float]:
     """CONSOLIDATED_V1: due rows and daily load from one non-locking SELECT.
 
-    Same Card set and arithmetic as the canonical path (``_canonical_due_rows``
-    and ``_canonical_daily_load``), read straight from each Note's row
-    (ADR P10 §2.7): no Card/Note entities, deck options or subject locks.
+    Preserve per-presentation arithmetic while resolving installed sources
+    onto their local decks and retaining release-pinned applications. Read
+    current Note subjects without entity hydration or subject locks.
     """
 
-    from app.repositories.note_analytics_read_repository import (
-        consolidated_card_rows,
-        state_interval_days,
-    )
+    from app.repositories.note_analytics_read_repository import state_interval_days, violation_error
+    from app.services.study_authority_read_service import StudyAuthorityReadError
 
     if scope_deck_ids is not None and not scope_deck_ids:
         return [], 0.0
-    query = Card.query.join(Note, Card.note_id == Note.id)
-    if scope_deck_ids is not None:
-        query = query.filter(Note.deck_id.in_(scope_deck_ids))
     rows: list[tuple[Any, Any, Any]] = []
     total = 0.0
-    for _card_id, queue, due_at, due_day, suspended, state_type, interval in consolidated_card_rows(
-        query, learner_user_id=user_id
-    ).all():
+    fetched = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=scope_deck_ids)
+    error = violation_error(max((int(row[1] or 0) for row in fetched), default=0))
+    if error is not None:
+        raise StudyAuthorityReadError(*error)
+    for _card_id, _violation, queue, due_at, due_day, suspended, state_type, interval in fetched:
         if suspended:
             continue
         if due_at is not None or due_day is not None:
@@ -367,7 +348,7 @@ def build_today_future_stats(
 
     timezone_effective = _effective_timezone_name(timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    authority_route = read_study_authority_route(
+    read_study_authority_route(
         db.session,
         learner_user_id=user_id,
     )
@@ -405,17 +386,10 @@ def build_today_future_stats(
 
     end_offset = _future_window_end_offset(effective_future_range)
 
-    consolidated_load = None
-    if authority_route.mode_code == "NOTE":
-        rows, consolidated_load = _consolidated_due_rows_and_load(
-            user_id=user_id,
-            scope_deck_ids=scope_deck_ids,
-        )
-    else:
-        rows = query_due_progress_rows(
-            user_id=user_id,
-            scope_deck_ids=scope_deck_ids,
-        )
+    rows, consolidated_load = _consolidated_due_rows_and_load(
+        user_id=user_id,
+        scope_deck_ids=scope_deck_ids,
+    )
     due_by_offset, min_negative_offset = _aggregate_future_due_python(
         rows=rows,
         timezone_name=timezone_effective,
@@ -435,11 +409,7 @@ def build_today_future_stats(
     )
     due_tomorrow = _safe_int((due_by_offset.get(1) or {}).get("due_count"))
     average = (float(total_reviews) / float(window_days)) if window_days > 0 else 0.0
-    daily_load = (
-        consolidated_load
-        if consolidated_load is not None
-        else _compute_daily_load(user_id=user_id, scope_deck_ids=scope_deck_ids)
-    )
+    daily_load = consolidated_load
 
     return {
         "scope": effective_scope,

@@ -10,6 +10,7 @@ Exit gate spec (study-interaction-trigger-algorithm-plan.md, line 1315):
 
 import unittest
 from uuid import uuid4
+from types import SimpleNamespace
 
 from app import create_app, db
 from models.card import Card
@@ -18,6 +19,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template
 from app.services.study_composition_service import (
     AppliedComposition,
     list_available_compositions_for_scope,
@@ -65,7 +67,7 @@ class CompositionExitGateTests(unittest.TestCase):
         tpl_specs = templates or [("Default", True)]
         created = []
         for pos, (tpl_name, is_default) in enumerate(tpl_specs):
-            tpl = Template(
+            tpl = attach_template(db.session, owner_user_id=self.user.id,
                 note_type_id=nt.id,
                 name=tpl_name,
                 front_html="<div>{{Front}}</div>",
@@ -98,8 +100,7 @@ class CompositionExitGateTests(unittest.TestCase):
         )
         db.session.add(note)
         db.session.commit()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.commit()
         return card
 
@@ -201,6 +202,7 @@ class CompositionExitGateTests(unittest.TestCase):
         expected_ids = {
             make_compatibility_composition_id(nt_jp.id, tpl_jp.id),
             make_compatibility_composition_id(nt_en.id, tpl_en_a.id),
+            make_compatibility_composition_id(nt_en.id, tpl_en_b.id),
         }
         self.assertEqual(comp_ids, expected_ids)
 
@@ -218,17 +220,10 @@ class CompositionExitGateTests(unittest.TestCase):
         deck = self._make_deck(note_type=nt)
         card = self._make_card(deck, nt, tpl)
 
-        # Point card to a non-existent template_id (bypass cascade)
+        # A damaged historical reference cannot resolve a missing definition.
+        # Current Cards are read-only, so no physical UPDATE is possible.
         fake_template_id = str(uuid4())
-        db.session.execute(
-            db.text("UPDATE cards SET template_id = :tid WHERE id = :cid"),
-            {"tid": fake_template_id, "cid": str(card.id)},
-        )
-        db.session.commit()
-        db.session.expire_all()
-
-        # Re-fetch the card
-        card_reloaded = db.session.get(Card, card.id)
+        card_reloaded = SimpleNamespace(id=card.id, template_id=fake_template_id, template=None)
 
         with self.assertRaises(ValueError) as ctx:
             resolve_compatibility_composition_for_card(card_reloaded)

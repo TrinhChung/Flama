@@ -949,8 +949,7 @@ class AnkiImportApiTests(unittest.TestCase):
                 position=1,
             )
             db.session.add(sibling_template)
-            db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=sibling_template.id))
+            # The sibling's occurrence presents the Note (ADR P11): no Card row.
             db.session.flush()
             enrollment = stage_note_authority_enrollment(
                 db.session,

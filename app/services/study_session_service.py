@@ -28,7 +28,6 @@ from app.repositories.study_authority_repository import (
 from app.repositories.study_repository import (
     card_state_from_progress,
     is_progress_suspended,
-    load_card_progress_map,
 )
 from app.repositories import template_release_repository
 from app.services import (
@@ -116,8 +115,7 @@ from app.validators.study_session_wire import (
 from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import Card, canonical_card_ids, load_cards
 from models.deck import Deck
 from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
@@ -737,14 +735,7 @@ def open_study_session(
         except StudyAuthorityFenceError as exc:
             db.session.rollback()
             raise StudySessionError(exc.code, str(exc), status=409) from exc
-    progress_map = (
-        {}
-        if authority_subjects is not None
-        else load_card_progress_map(
-            user_id=int(user.id),
-            card_ids=[str(card.id) for card in cards],
-        )
-    )
+    progress_map = {}
     session_id = str(uuid4())
     token = secrets.token_urlsafe(32)
     policies: dict[str, Any] = {}
@@ -1136,29 +1127,26 @@ def _get_study_session_status(
         else (session.created_at or session.opened_at)
     )
     if status == "open" and threshold:
-        has_updated_template = (
+        # The dealt Cards are named by presentation keys (or pre-P11 IDs).
+        dealt = load_cards(db.session, [
+            row[0] for row in db.session.query(StudySessionCard.card_id)
+            .filter(StudySessionCard.session_id == session.id).all()
+        ]).values()
+        template_ids = sorted({str(card.template_id) for card in dealt})
+        note_ids = sorted({str(card.note_id) for card in dealt})
+        has_updated_template = bool(template_ids) and (
             db.session.query(Template.id)
-            .join(Card, Card.template_id == Template.id)
-            .join(StudySessionCard, StudySessionCard.card_id == Card.id)
-            .filter(
-                StudySessionCard.session_id == session.id,
-                Template.updated_at > threshold,
-            )
+            .filter(Template.id.in_(template_ids), Template.updated_at > threshold)
             .with_for_update(read=True)
             .first()
             is not None
         )
         if has_updated_template:
             is_stale = True
-        else:
+        elif note_ids:
             has_updated_note = (
                 db.session.query(Note.id)
-                .join(Card, Card.note_id == Note.id)
-                .join(StudySessionCard, StudySessionCard.card_id == Card.id)
-                .filter(
-                    StudySessionCard.session_id == session.id,
-                    Note.updated_at > threshold,
-                )
+                .filter(Note.id.in_(note_ids), Note.updated_at > threshold)
                 .with_for_update(read=True)
                 .first()
                 is not None
@@ -1896,15 +1884,15 @@ def _lock_note_session_context(
     create_token_if_missing=True,
 ):
     # The scope checks below read every Card's Note: load them in one query.
-    card_rows = {
-        str(card.id): card
-        for card in Card.query.filter(Card.id.in_(event_card_ids))
-        .options(selectinload(Card.note))
-        .order_by(Card.id.asc())
+    # Keyed by the IDs the session dealt, legacy pre-P11 IDs included.
+    card_rows = load_cards(
+        db.session,
+        event_card_ids,
+        query=Card.query.options(selectinload(Card.note))
+        .order_by(Card.note_id.asc(), Card.application_id.asc())
         .populate_existing()
-        .with_for_update(read=True)
-        .all()
-    } if event_card_ids else {}
+        .with_for_update(read=True),
+    ) if event_card_ids else {}
     if set(card_rows) != set(event_card_ids):
         raise StudySessionError(
             "CARD_OUTSIDE_SESSION",
@@ -2529,286 +2517,4 @@ def commit_study_session(
             note_batch=_note_batch,
         )
 
-    card_rows: dict[str, Card] = {}
-    progress_rows = []
-    if touched_ids:
-        progress_rows = (
-            CardProgress.query.filter(
-                CardProgress.user_id == int(user.id),
-                CardProgress.card_id.in_(sorted(touched_ids)),
-            )
-            .order_by(CardProgress.card_id.asc())
-            .with_for_update()
-            .all()
-        )
-    progress_map = {
-        str(row.card_id): row
-        for row in progress_rows
-        if row.card_id is not None
-    }
-    conflicts = []
-    for card_id in sorted(touched_ids):
-        row = progress_map.get(card_id)
-        actual_revision = int(getattr(row, "revision", 0) or 0)
-        expected_revision = int(membership[card_id].base_progress_revision or 0)
-        if row is None:
-            actual_revision = 0
-        if actual_revision != expected_revision:
-            conflicts.append(
-                {
-                    "card_id": card_id,
-                    "expected_revision": expected_revision,
-                    "actual_revision": actual_revision,
-                }
-            )
-    if conflicts:
-        raise StudySessionError(
-            "CARD_PROGRESS_CONFLICT",
-            "One or more cards changed in another study session.",
-            status=409,
-            details=conflicts,
-        )
-
-    if touched_ids and not card_rows:
-        card_rows = {
-            str(card.id): card
-            for card in Card.query.filter(Card.id.in_(sorted(touched_ids))).all()
-        }
-    if session.clone_install_id is not None:
-        install = db.session.get(DeckInstall, session.clone_install_id)
-        if (
-            install is None
-            or int(install.user_id) != int(user.id)
-            or str(install.clone_mode or "") != "logical_overlay"
-        ):
-            raise StudySessionError(
-                "SESSION_SCOPE_CHANGED",
-                "The installed deck scope changed during this session.",
-                status=409,
-            )
-        map_rows = DeckCloneDeckMap.query.filter_by(
-            deck_install_id=install.id
-        ).all()
-        current_map = {
-            int(row.source_deck_id): int(row.local_deck_id)
-            for row in map_rows
-        }
-        for card_id in touched_ids:
-            session_card = membership[card_id]
-            card = card_rows.get(card_id)
-            is_local_added = bool(
-                card is not None
-                and DeckCloneAddedNote.query.filter_by(
-                    deck_install_id=install.id,
-                    note_id=card.note_id,
-                ).first()
-            )
-            if is_local_added:
-                if (
-                    card.note.user_id != int(user.id)
-                    or card.note.deck_id != session_card.source_deck_id
-                    or card.note.deck_id != session_card.local_deck_id
-                ):
-                    raise StudySessionError(
-                        "SESSION_SCOPE_CHANGED",
-                        "A locally-added clone card moved outside the session scope.",
-                        status=409,
-                    )
-                continue
-            if (
-                session_card.source_deck_id is None
-                or session_card.local_deck_id is None
-                or current_map.get(int(session_card.source_deck_id))
-                != int(session_card.local_deck_id)
-            ):
-                raise StudySessionError(
-                    "SESSION_SCOPE_CHANGED",
-                    "The installed deck mapping changed during this session.",
-                    status=409,
-                )
-    else:
-        for card_id, card in card_rows.items():
-            session_card = membership[card_id]
-            if (
-                int(card.note.user_id) != int(user.id)
-                or card.note.deck_id != session_card.source_deck_id
-            ):
-                raise StudySessionError(
-                    "SESSION_SCOPE_CHANGED",
-                    "A card moved outside the session scope.",
-                    status=409,
-                )
-    try:
-        created_progress_ids: list[str] = []
-        for card_id in sorted(touched_ids):
-            if card_id not in card_rows:
-                raise StudySessionError(
-                    "CARD_OUTSIDE_SESSION",
-                    f"Card {card_id} no longer exists.",
-                    status=409,
-                )
-            progress = progress_map.get(card_id)
-            if progress is not None and is_progress_suspended(progress):
-                raise StudySessionError(
-                    "CARD_SUSPENDED",
-                    f"Card {card_id} is suspended.",
-                    status=409,
-                )
-            if progress is None:
-                progress = CardProgress(
-                    user_id=int(user.id),
-                    card_id=card_id,
-                    revision=0,
-                )
-                db.session.add(progress)
-                progress_map[card_id] = progress
-                created_progress_ids.append(card_id)
-
-        if created_progress_ids:
-            try:
-                db.session.flush()
-            except IntegrityError as exc:
-                raise StudySessionError(
-                    "CARD_PROGRESS_CONFLICT",
-                    "Card progress changed while this study session was committing.",
-                    status=409,
-                    details=[
-                        {"card_id": card_id}
-                        for card_id in created_progress_ids
-                    ],
-                ) from exc
-
-        last_review_event_by_card: dict[str, Any] = {}
-        last_replay_index_by_card = {
-            session_card.card_id: index
-            for index, (_, session_card, *_rest) in enumerate(replayed_events)
-        }
-        rating_counts = {rating: 0 for rating in sorted(VALID_RATINGS)}
-        for replay_index, (
-            raw_event,
-            session_card,
-            before,
-            _after,
-            answer_at,
-            options,
-            transition,
-        ) in enumerate(replayed_events):
-            card = card_rows[session_card.card_id]
-            rating = str(raw_event["rating"]).lower()
-            rating_counts[rating] += 1
-            progress_input = None
-            if last_replay_index_by_card[session_card.card_id] == replay_index:
-                final_state = states[session_card.card_id]
-                progress_input = study_service.NativeReviewProgressInput(
-                    progress=progress_map[session_card.card_id],
-                    state=final_state,
-                    last_reviewed_at=final_state.lastReviewAt or committed_at,
-                    revision=(
-                        int(session_card.base_progress_revision or 0) + 1
-                    ),
-                )
-            try:
-                mutation_result = study_service.apply_native_review_mutation(
-                    study_service.NativeReviewMutationInput(
-                        user_id=int(user.id),
-                        card=card,
-                        current_state=before,
-                        transition=transition,
-                        reviewed_at=answer_at,
-                        duration_ms=study_service.normalize_review_duration(
-                            raw_event.get("duration_ms")
-                        ),
-                        payload=None,
-                        local_deck_id=session_card.local_deck_id,
-                        scheduler_preset_id=session_card.scheduler_preset_id,
-                        scheduler_config_hash=session_card.scheduler_config_hash,
-                        timezone_name=session.timezone,
-                        deck_options=options,
-                        note_type_id=session_card.note_type_id,
-                        provenance=study_service.NativeReviewProvenance(
-                            source_path="native.session.commit",
-                            study_session_id=session.id,
-                            client_event_id=str(raw_event["event_id"]),
-                            sequence_no=int(raw_event["sequence"]),
-                            request_id=commit_key,
-                            wire_schema_version=session.wire_schema_version,
-                        ),
-                        progress_input=progress_input,
-                    )
-                )
-            except ReviewEventPayloadError as exc:
-                raise StudySessionError(
-                    exc.code,
-                    str(exc),
-                    status=exc.status,
-                    details={"event_index": replay_index + 1, "field": exc.field},
-                ) from exc
-            review_event = mutation_result.review_event
-            last_review_event_by_card[session_card.card_id] = review_event
-
-        db.session.flush()
-        updated_cards = []
-        for card_id in sorted(touched_ids):
-            progress = progress_map[card_id]
-            last_event = last_review_event_by_card.get(card_id)
-            if last_event is not None and last_event.id is not None:
-                progress.last_review_event_id = int(last_event.id)
-            updated_cards.append(
-                {
-                    "card_id": card_id,
-                    "revision": int(progress.revision),
-                    "state": serialize_card_state(states[card_id]),
-                }
-            )
-
-        response = {
-            "schema_version": "study-commit-receipt.v1",
-            "success": True,
-            "session_id": session.id,
-            "commit_id": commit_key,
-            "commit_reason": commit_reason,
-            "applied_event_count": len(replayed_events),
-            "updated_cards": updated_cards,
-            "rating_counts": rating_counts,
-            "committed_at": _utc_iso(committed_at),
-        }
-        session.status = "committed"
-        session.committed_at = committed_at
-        commit_row = StudySessionCommit(
-            session_id=session.id,
-            user_id=int(user.id),
-            idempotency_key=commit_key,
-            request_hash=payload_hash,
-            response_json=_json_dumps(response),
-        )
-        db.session.add(commit_row)
-        db.session.add(
-            AuditLog(
-                user_id=int(user.id),
-                action="study.session.commit",
-                payload={
-                    "session_id": session.id,
-                    "scope_type": session.scope_type,
-                    "scope_id": session.scope_id,
-                    "event_count": len(replayed_events),
-                    "card_count": len(touched_ids),
-                    "commit_reason": commit_reason,
-                },
-            )
-        )
-        flush_review_analytics_deltas(db.session)
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        replayed = _idempotent_response(
-            session_id=session_id,
-            idempotency_key=commit_key,
-            request_hash=payload_hash,
-        )
-        if replayed is not None:
-            return replayed
-        raise
-    except Exception:
-        db.session.rollback()
-        raise
-    return response
+    raise StudySessionError("NOTE_AUTHORITY_REQUIRED", "This lease cannot execute the retired LEGACY scheduler.", status=409)

@@ -52,12 +52,9 @@ class NoteType(db.Model):
         cascade="all, delete-orphan",
         order_by="FieldDef.position",
     )
-    templates = db.relationship(
-        "Template",
-        back_populates="note_type",
-        cascade="save-update, merge",
-        passive_deletes=True,
-        order_by="Template.position",
+    study_applications = db.relationship(
+        "StudyApplication", back_populates="note_type", cascade="all, delete-orphan",
+        order_by="StudyApplication.position",
     )
     notes = db.relationship(
         "Note",

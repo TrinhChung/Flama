@@ -200,9 +200,9 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 deck_id=deck.id,
                 field_values={"Word": "test"},
             )
-            card = Card(note=note, template=template)
-            db.session.add_all([note_type, template, note, card])
+            db.session.add_all([note_type, template, note])
             db.session.flush()
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
 
             admin_progress = CardProgress(
                 user_id=self.admin_id,
@@ -328,9 +328,9 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 deck_id=owned_deck.id,
                 field_values={"Word": "mine"},
             )
-            card = Card(note=note, template=template)
-            db.session.add_all([note_type, template, note, card])
+            db.session.add_all([note_type, template, note])
             db.session.flush()
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
 
             owner_progress = CardProgress(
                 user_id=self.other_user_id,
@@ -392,9 +392,9 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 deck_id=source_root.id,
                 field_values={"Word": "overlay"},
             )
-            source_card = Card(note=source_note, template=template)
-            db.session.add_all([note_type, template, source_note, source_card])
+            db.session.add_all([note_type, template, source_note])
             db.session.flush()
+            source_card = Card.query.filter_by(note_id=source_note.id, template_id=template.id).one()
 
             shared_item = DeckMarketplaceItem(
                 owner_user_id=self.admin_id,
@@ -698,8 +698,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             )
             db.session.add_all([source_note, shared_item])
             db.session.flush()
-            source_card = Card(note_id=source_note.id, template_id=template.id)
-            db.session.add(source_card)
+            source_card = Card.query.filter_by(note_id=source_note.id, template_id=template.id).one()
             db.session.flush()
             install = DeckInstall(
                 deck_item_id=shared_item.id,

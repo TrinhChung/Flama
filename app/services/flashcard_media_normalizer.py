@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
+from types import SimpleNamespace
 
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -32,6 +33,7 @@ from models.media_field_migration import MediaFieldMigrationItem, MediaFieldMigr
 from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
+from models.study_application import StudyApplication
 
 
 _SOUND_RE = re.compile(r"^\[sound:(.+)\]$", re.IGNORECASE)
@@ -439,14 +441,19 @@ def backfill_media_field_values(
                 )
 
     if include_templates:
-        template_query = Template.query.options(joinedload(Template.note_type).selectinload(NoteType.field_defs))
+        template_query = Template.query
         if user_id is not None:
-            template_query = template_query.join(NoteType, Template.note_type_id == NoteType.id).filter(NoteType.user_id == user_id)
+            template_query = template_query.filter(Template.owner_user_id == user_id)
         if deck_id is not None:
             note_type_ids = [row[0] for row in db.session.query(Note.note_type_id).filter(Note.deck_id == deck_id).distinct().all()]
-            template_query = template_query.filter(Template.note_type_id.in_(note_type_ids))
+            template_query = template_query.filter(Template.id.in_(
+                db.session.query(StudyApplication.template_id).filter(
+                    StudyApplication.note_type_id.in_(note_type_ids),
+                )
+            ))
         for template in template_query.all():
-            template_defs = list(template.note_type.field_defs if template.note_type else [])
+            template_defs = [SimpleNamespace(name=item['key'], field_type=item['type'])
+                             for item in template.input_schema or []]
             for attr_name in ("front_html", "back_html"):
                 old_value = str(getattr(template, attr_name, "") or "")
                 new_value = rewrite_media_template_url_tokens(old_value, template_defs)
@@ -466,7 +473,7 @@ def backfill_media_field_values(
                         field_type=None,
                         old_value=old_value,
                         decision=decision,
-                        user_id=int(template.note_type.user_id) if template.note_type else None,
+                        user_id=int(template.owner_user_id),
                         deck_id=None,
                     )
 

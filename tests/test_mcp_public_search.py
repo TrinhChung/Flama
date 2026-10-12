@@ -114,8 +114,7 @@ class TestMcpPublicSearch(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card(note_id=n.id, template_id=note_type.templates[0].id)
-                db.session.add(c)
+                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
 
             # 4. Published Marketplace Deck
             pub_market_item = DeckMarketplaceItem(

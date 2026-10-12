@@ -28,13 +28,8 @@ def snapshots(session, template_ids, *, lock=True):
         if lock:
             statement = statement.with_for_update()
         result.update((row["id"], dict(row)) for row in session.execute(statement).mappings())
-    missing_owners = {row["note_type_id"] for row in result.values() if row["owner_user_id"] is None}
-    owners = dict(session.execute(
-        select(NoteType.id, NoteType.user_id).where(NoteType.id.in_(missing_owners))
-    ).all()) if missing_owners else {}
-    for row in result.values():
-        if row["owner_user_id"] is None:
-            row["owner_user_id"] = owners.get(row["note_type_id"])
+    if any(row["owner_user_id"] is None for row in result.values()):
+        raise TemplateVersionStateError("Template owner must be migrated before source history is written.")
     return result
 
 
@@ -82,16 +77,13 @@ def append_snapshot(session, snapshot, *, origin, actor_user_id=None, change_not
 
 
 def owned_template(session, *, user_id, template_id, note_type_id=None, lock=False):
-    statement = select(Template).outerjoin(NoteType, Template.note_type_id == NoteType.id).where(
-        Template.id == str(template_id),
-        or_(Template.owner_user_id == int(user_id), and_(Template.owner_user_id.is_(None), NoteType.user_id == int(user_id))),
-    )
+    statement = select(Template).where(Template.id == str(template_id), Template.owner_user_id == int(user_id))
     if note_type_id is not None:
         from models.study_application import StudyApplication
-        statement = statement.where(or_(Template.note_type_id == str(note_type_id), select(StudyApplication.id).where(
+        statement = statement.where(select(StudyApplication.id).where(
             StudyApplication.template_id == Template.id, StudyApplication.note_type_id == str(note_type_id),
             StudyApplication.status_code == "ACTIVE", StudyApplication.note_type.has(NoteType.user_id == int(user_id)),
-        ).exists()))
+        ).exists())
     if lock:
         statement = statement.with_for_update().execution_options(populate_existing=True)
     return session.execute(statement).scalar_one_or_none()

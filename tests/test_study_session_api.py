@@ -7,6 +7,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app import create_app
+from app.repositories import template_library_repository
+from tests.study_note_fixtures import attach_template, enroll_note_user, mapper_state_input, assert_retired_progress_absent
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.anki_scheduler import _day_index, applyAnswer
 from app.services.study_progress_contract import MAPPER_VERSION
@@ -42,7 +44,6 @@ from app.services.study_session_config import (
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
@@ -72,6 +73,7 @@ class StudySessionApiTests(unittest.TestCase):
                 "WTF_CSRF_ENABLED": False,
                 "STARTUP_RUN_MAINTENANCE": False,
                 "STARTUP_CHECK_DB_CONNECTIVITY": False,
+                "STUDY_WIRE_V4_ENABLED": True,
             }
         )
 
@@ -83,6 +85,7 @@ class StudySessionApiTests(unittest.TestCase):
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
+            enroll_note_user(db.session, user)
             self.user_id = user.id
             deck = Deck(name="Session Deck", owner_user_id=user.id)
             db.session.add(deck)
@@ -134,7 +137,9 @@ class StudySessionApiTests(unittest.TestCase):
     def _open_session(self):
         response = self.client.post(
             "/api/study/sessions",
-            json={"scope": "deck", "scope_id": self.deck_id},
+            json={"scope": "deck", "scope_id": self.deck_id,
+                  "accepted_session_schema_versions": ["study-session.v4"],
+                  "accepted_note_storage_profiles": ["note-mysql-float-text.v1"]},
         )
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
@@ -179,7 +184,7 @@ class StudySessionApiTests(unittest.TestCase):
             now = datetime(2026, 9, 21, 8, 0, 0)
             card = Card.query.filter_by(note_id=note.id).one()
             # A transient card_progress shape is only the source of the state.
-            progress = CardProgress(
+            progress = mapper_state_input(
                     id=1,
                     user_id=self.user_id,
                     card_id=str(card.id),
@@ -203,7 +208,8 @@ class StudySessionApiTests(unittest.TestCase):
                 setattr(progress, field_name, value)
             mapped = map_card_progress(progress, card_created_at=card.created_at, card_order_key=str(card.id))
             self.assertIsInstance(mapped, MappedCardProgress)
-            subject = StudyProgressSubject(
+            subject = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id, live_note_id=str(note.id)).one_or_none()
+            subject = subject or StudyProgressSubject(
                 learner_user_id=self.user_id,
                 logical_note_key=str(note.id).encode("utf-8"),
                 live_note_id=str(note.id),
@@ -239,15 +245,9 @@ class StudySessionApiTests(unittest.TestCase):
                 )
             db.session.add(subject)
             if enroll:
-                db.session.add(
-                    StudyAuthorityEnrollment(
-                        learner_user_id=self.user_id,
-                        mode_code="NOTE",
-                        epoch=epoch,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
+                enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
+                enrollment.mode_code = "NOTE"
+                enrollment.epoch = epoch
             db.session.commit()
             return str(note.id), expected_hash
 
@@ -293,7 +293,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.get_json()["deleted_progress_count"], 1)
 
         with self.app.app_context():
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             subject = StudyProgressSubject.query.one()
             lifecycle = StudyProgressLifecycleEvent.query.one()
             session = db.session.get(StudySession, snapshot["session_id"])
@@ -366,7 +366,7 @@ class StudySessionApiTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertEqual(Note.query.count(), 2)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(StudyProgressSubject.query.count(), 2)
             self.assertEqual(self._live_rows().count(), 2)
             new_subject = StudyProgressSubject.query.filter_by(
@@ -451,7 +451,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(deleted["deleted_cards_count"], 4)
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Card.query.count(), 0)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             subjects = StudyProgressSubject.query.all()
             self.assertEqual(len(subjects), 2)
             self.assertTrue(
@@ -497,7 +497,7 @@ class StudySessionApiTests(unittest.TestCase):
             new_card = Card.query.filter_by(template_id=template_id).one()
             new_card_id = str(new_card.id)
             # The new Card shares its Note's row; nothing is copied (ADR P10).
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             subject = StudyProgressSubject.query.one()
             old_session = db.session.get(
                 StudySession, old_snapshot["session_id"]
@@ -590,7 +590,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertIsNone(db.session.get(Card, removed_card_id))
             self.assertEqual(Template.query.count(), 1)
             self.assertEqual(Card.query.count(), 1)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             subject = StudyProgressSubject.query.one()
             old_session = db.session.get(StudySession, snapshot["session_id"])
             # Losing a Template's Card changes neither the Note's state nor its row.
@@ -641,7 +641,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(Note.query.count(), 2)
             self.assertEqual(Template.query.count(), 2)
             self.assertEqual(Card.query.count(), 4)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             subjects = StudyProgressSubject.query.order_by(
                 StudyProgressSubject.logical_note_key.asc()
             ).all()
@@ -669,7 +669,7 @@ class StudySessionApiTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Card.query.count(), 0)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(self._live_rows().count(), 0)
             subject = StudyProgressSubject.query.one()
             lifecycle = StudyProgressLifecycleEvent.query.one()
@@ -701,7 +701,7 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertIsNone(db.session.get(Deck, self.deck_id))
             self.assertEqual(Note.query.count(), 0)
             self.assertEqual(Card.query.count(), 0)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(self._live_rows().count(), 0)
             subject = StudyProgressSubject.query.one()
             lifecycle = StudyProgressLifecycleEvent.query.one()
@@ -971,7 +971,7 @@ class StudySessionApiTests(unittest.TestCase):
                 subject.history_completeness_code,
                 "HISTORY_NATIVE_COMPLETE",
             )
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
         snapshot = self._open_session_v4()
         self.assertEqual(snapshot["authority_mode"], "NOTE")
@@ -1013,7 +1013,7 @@ class StudySessionApiTests(unittest.TestCase):
             materialized = StudyProgressSubject.query.one()
             self.assertEqual(int(materialized.id), subject_id)
             self.assertEqual(materialized.status_code, "MIRRORED_SINGLE")
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(self._live_rows().count(), 1)
 
     def test_note_enrollment_refuses_legacy_progress_it_cannot_migrate(self):
@@ -1087,7 +1087,7 @@ class StudySessionApiTests(unittest.TestCase):
             )
             self.assertEqual(Note.query.count(), 2)
             self.assertEqual(Card.query.count(), 2)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(StudyProgressSubject.query.count(), 0)
 
     def test_note_enrollment_switch_rejects_in_flight_async_batch(self):
@@ -1342,7 +1342,7 @@ class StudySessionApiTests(unittest.TestCase):
     def test_note_read_audit_orders_mixed_review_due_day_like_legacy_sql(self):
         with self.app.app_context():
             first_note_id = str(Note.query.filter_by(user_id=self.user_id).one().id)
-            template = Template.query.filter_by(note_type_id=self.note_type_id).one()
+            template = next(row.template for row in template_library_repository.applications(db.session, self.note_type_id))
             second_note = Note(
                 note_type_id=self.note_type_id,
                 user_id=self.user_id,
@@ -1352,7 +1352,6 @@ class StudySessionApiTests(unittest.TestCase):
             )
             db.session.add(second_note)
             db.session.flush()
-            db.session.add(Card(note_id=str(second_note.id), template_id=str(template.id)))
             db.session.commit()
             second_note_id = str(second_note.id)
 
@@ -1400,16 +1399,9 @@ class StudySessionApiTests(unittest.TestCase):
     def test_note_single_card_read_rejects_divergent_unrequested_sibling(self):
         with self.app.app_context():
             note = Note.query.filter_by(user_id=self.user_id).one()
-            template = Template(
-                note_type_id=self.note_type_id,
-                name="Second card",
-                front_html="{{Word}}",
-                back_html="{{Word}}",
-                position=1,
-            )
+            template = attach_template(db.session, note_type_id=self.note_type_id, owner_user_id=self.user_id, name="Second card", front_html="{{Word}}", back_html="{{Word}}", position=1)
             db.session.add(template)
             db.session.flush()
-            db.session.add(Card(note_id=str(note.id), template_id=str(template.id)))
             db.session.commit()
 
             stage_note_authority_enrollment(
@@ -1495,7 +1487,7 @@ class StudySessionApiTests(unittest.TestCase):
             subject = StudyProgressSubject.query.one()
             self.assertEqual(int(subject.authority_revision), 1)
             self.assertNotEqual(bytes(subject.semantic_state_hash).hex(), base_hash)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             session = db.session.get(StudySession, snapshot["session_id"])
             self.assertEqual(session.status, "committed")
 
@@ -1541,7 +1533,7 @@ class StudySessionApiTests(unittest.TestCase):
             subject = StudyProgressSubject.query.one()
             self.assertEqual(int(subject.authority_revision), 1)
             self.assertEqual(subject.state_payload["reps"], "1")
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
     def test_mcp_review_routes_through_note_authority(self):
         self._enable_existing_state_note_authority(epoch=9)
@@ -1926,7 +1918,7 @@ class StudySessionApiTests(unittest.TestCase):
                 int(StudyProgressSubject.query.one().authority_revision),
                 2,
             )
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
     def test_wire_v4_commit_rejects_stale_pin_without_partial_writes(self):
         self._enable_existing_state_note_authority(epoch=7)
@@ -1951,7 +1943,7 @@ class StudySessionApiTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 0)
             self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 0)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
             self.assertEqual(
                 db.session.get(StudySession, snapshot["session_id"]).status,
                 "open",
@@ -2182,7 +2174,7 @@ class StudySessionApiTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 0)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
     def test_session_event_allowlist_failure_has_no_partial_write(self):
         snapshot = self._open_session()
@@ -2199,7 +2191,7 @@ class StudySessionApiTests(unittest.TestCase):
         )
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), 0)
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
     def test_status_reports_open_committed_and_expired_sessions(self):
         committed_snapshot = self._open_session()
@@ -2593,13 +2585,7 @@ class StudySessionApiTests(unittest.TestCase):
                 field_type="text",
                 position=0,
             )
-            template = Template(
-                note_type_id=note_type.id,
-                name="Card 1",
-                front_html="{{Word}}",
-                back_html="{{Word}}",
-                is_default=True,
-            )
+            template = attach_template(db.session, note_type_id=note_type.id, owner_user_id=self.user_id, name="Card 1", front_html="{{Word}}", back_html="{{Word}}", is_default=True)
             db.session.add_all([field, template])
             db.session.flush()
             note = Note(
@@ -2611,8 +2597,7 @@ class StudySessionApiTests(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
             db.session.flush()
             marketplace_item = DeckMarketplaceItem(
                 owner_user_id=source_user.id,
@@ -2718,14 +2703,7 @@ class StudySessionApiTests(unittest.TestCase):
             )
             db.session.add_all([second_type, child])
             db.session.flush()
-            template = Template(
-                note_type_id=second_type.id,
-                name="Another Card",
-                front_html="front",
-                back_html="back",
-                position=0,
-                is_default=True,
-            )
+            template = attach_template(db.session, note_type_id=second_type.id, owner_user_id=self.user_id, name="Another Card", front_html="front", back_html="back", position=0, is_default=True)
             db.session.add(template)
             db.session.flush()
             note = Note(
@@ -2736,7 +2714,6 @@ class StudySessionApiTests(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=template.id))
             db.session.commit()
             second_type_id = str(second_type.id)
 
@@ -2762,18 +2739,10 @@ class StudySessionApiTests(unittest.TestCase):
                 user_id=self.user_id,
                 deck_id=self.deck_id,
             ).one()
-            template = Template(
-                note_type_id=self.note_type_id,
-                name="Card 2",
-                front_html="Reverse {{Word}}",
-                back_html="{{Word}}",
-                position=1,
-                is_default=False,
-            )
+            template = attach_template(db.session, note_type_id=self.note_type_id, owner_user_id=self.user_id, name="Card 2", front_html="Reverse {{Word}}", back_html="{{Word}}", position=1, is_default=False)
             db.session.add(template)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
             db.session.commit()
             return str(template.id), str(card.id)
 
@@ -2841,13 +2810,7 @@ class StudySessionApiTests(unittest.TestCase):
             other_deck = Deck(name="Other Deck", owner_user_id=self.user_id)
             db.session.add_all([other_type, other_deck])
             db.session.flush()
-            other_template = Template(
-                note_type_id=other_type.id,
-                name="Other Card",
-                front_html="front",
-                back_html="back",
-                is_default=True,
-            )
+            other_template = attach_template(db.session, note_type_id=other_type.id, owner_user_id=self.user_id, name="Other Card", front_html="front", back_html="back", is_default=True)
             db.session.add(other_template)
             db.session.flush()
             other_note = Note(
@@ -2858,9 +2821,6 @@ class StudySessionApiTests(unittest.TestCase):
             )
             db.session.add(other_note)
             db.session.flush()
-            db.session.add(
-                Card(note_id=other_note.id, template_id=other_template.id)
-            )
             db.session.commit()
             composition_id = (
                 f"comp:notetype:{other_type.id}:template:{other_template.id}"

@@ -143,8 +143,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
         note = Note(note_type_id=source.id, user_id=self.owner.id)
         db.session.add_all([template, note])
         db.session.flush()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
         progress = CardProgress(user_id=self.learner.id, card_id=card.id)
         review = ReviewEvent(
@@ -327,8 +326,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
         )
         db.session.add_all([template, note])
         db.session.flush()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
         progress = CardProgress(user_id=self.learner.id, card_id=card.id)
         item = DeckMarketplaceItem(
@@ -398,8 +396,7 @@ class MarketCounterDeletionTests(unittest.TestCase):
         )
         db.session.add_all([template, note])
         db.session.flush()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
         session = StudySession(
             user_id=self.learner.id,

@@ -5,12 +5,14 @@ from uuid import uuid4
 from sqlalchemy import event
 
 from app import create_app, db
-from models.card import Card
+from models.card import Card, card_id_clause
 from models.deck import Deck
 from models.note import Note
 from models.note_type import NoteType
+from models.study_application import StudyApplication
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template
 from app.services.study_composition_service import (
     AppliedComposition,
     build_compatibility_composition,
@@ -21,6 +23,11 @@ from app.services.study_composition_service import (
     resolve_compatibility_composition_for_card,
     resolve_compatibility_compositions_for_note_type,
 )
+
+
+def _set_application_status(template, status):
+    StudyApplication.query.filter_by(template_id=template.id).one().status_code = status
+    db.session.flush()
 
 
 class StudyCompositionServiceTests(unittest.TestCase):
@@ -46,7 +53,7 @@ class StudyCompositionServiceTests(unittest.TestCase):
         db.session.add(self.note_type)
         db.session.commit()
 
-        self.template_1 = Template(
+        self.template_1 = attach_template(db.session, owner_user_id=self.user.id,
             note_type_id=self.note_type.id,
             name="Forward (Front -> Back)",
             front_html="<div>{{Front}}</div>",
@@ -54,7 +61,7 @@ class StudyCompositionServiceTests(unittest.TestCase):
             position=0,
             is_default=True,
         )
-        self.template_2 = Template(
+        self.template_2 = attach_template(db.session, owner_user_id=self.user.id,
             note_type_id=self.note_type.id,
             name="Reverse (Back -> Front)",
             front_html="<div>{{Back}}</div>",
@@ -80,14 +87,14 @@ class StudyCompositionServiceTests(unittest.TestCase):
             field_values={"Front": "test front", "Back": "test back"},
         )
         db.session.add(self.note)
+        # Cards are derived (ADR P11): only template_1 presents until a test
+        # activates template_2's occurrence. Other suites reuse this setUp.
+        _set_application_status(self.template_2, "RETIRED")
         db.session.commit()
+        self.card_1 = Card.query.filter_by(note_id=self.note.id, template_id=self.template_1.id).one()
 
-        self.card_1 = Card(
-            note_id=self.note.id,
-            template_id=self.template_1.id,
-        )
-        db.session.add(self.card_1)
-        db.session.commit()
+    def _set_template_2(self, status):
+        _set_application_status(self.template_2, status)
 
     def tearDown(self):
         db.session.rollback()
@@ -95,7 +102,9 @@ class StudyCompositionServiceTests(unittest.TestCase):
         self.app_ctx.pop()
 
     def test_build_compatibility_composition(self):
-        comp = build_compatibility_composition(self.template_1)
+        application = StudyApplication.query.filter_by(template_id=self.template_1.id).one()
+        comp = build_compatibility_composition(self.template_1, note_type=self.note_type,
+                                             application=application)
         self.assertEqual(
             comp.composition_id,
             make_compatibility_composition_id(self.note_type.id, self.template_1.id),
@@ -112,6 +121,7 @@ class StudyCompositionServiceTests(unittest.TestCase):
         self.assertEqual(comp.note_type_id, self.note_type.id)
 
     def test_resolve_compatibility_compositions_for_note_type(self):
+        self._set_template_2("ACTIVE")
         comps = resolve_compatibility_compositions_for_note_type(self.note_type.id)
         self.assertEqual(len(comps), 2)
         self.assertEqual(comps[0].template_id, self.template_1.id)
@@ -138,15 +148,13 @@ class StudyCompositionServiceTests(unittest.TestCase):
     def test_discovery_batches_metadata_without_loading_card_content(self):
         templates = [self.template_1, self.template_2]
         for position in range(2, 20):
-            templates.append(Template(
+            templates.append(attach_template(db.session, owner_user_id=self.user.id,
                 note_type_id=self.note_type.id,
                 name=f"Template {position}",
                 front_html="{{Front}}", back_html="{{Back}}", position=position,
             ))
         db.session.add_all(templates)
-        db.session.flush()
-        db.session.add_all(Card(note_id=self.note.id, template_id=item.id)
-                           for item in templates[1:])
+        self._set_template_2("ACTIVE")
         db.session.commit()
         note_id = str(self.note.id)
         expected_ids = [str(item.id) for item in templates]
@@ -184,11 +192,10 @@ class StudyCompositionServiceTests(unittest.TestCase):
         foreign_note = Note(user_id=source_user.id, deck_id=self.deck.id,
                             note_type_id=self.note_type.id, field_values={"Front": "foreign"})
         db.session.add_all([source_note, foreign_note])
-        db.session.flush()
-        source_card = Card(note_id=source_note.id, template_id=self.template_1.id)
-        foreign_card = Card(note_id=foreign_note.id, template_id=self.template_2.id)
-        db.session.add_all([source_card, foreign_card])
+        self._set_template_2("ACTIVE")
         db.session.commit()
+        source_card = Card.query.filter_by(note_id=source_note.id, template_id=self.template_1.id).one()
+        foreign_card = Card.query.filter_by(note_id=foreign_note.id, template_id=self.template_2.id).one()
         clone_scope = SimpleNamespace(
             local_deck_ids=[self.deck.id],
             install=SimpleNamespace(user_id=self.user.id, id="test-install"),
@@ -200,13 +207,13 @@ class StudyCompositionServiceTests(unittest.TestCase):
             for card in cards
         }
         query = Card.query.join(Note, Card.note_id == Note.id).filter(
-            Card.id.in_([card.id for card in cards])
+            card_id_clause(db.session, [card.id for card in cards])
         )
         comps = list_available_compositions_for_query(query, clone_scope=clone_scope)
         self.assertEqual({item.composition_id: item.to_dict() for item in comps}, expected)
 
     def test_empty_discovery_and_grouping(self):
-        query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == "missing")
+        query = Card.query.join(Note, Card.note_id == Note.id).filter(card_id_clause(db.session, ["missing"]))
         self.assertEqual(list_available_compositions_for_query(query, clone_scope=None), [])
         self.assertEqual(group_available_compositions([]), [])
 

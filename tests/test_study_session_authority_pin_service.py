@@ -41,6 +41,7 @@ from models.study_session_authority_pin import StudySessionAuthorityPin
 from models.study_session_card import StudySessionCard
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template
 
 
 NOW = datetime(2026, 9, 21, 7, 0, 0)
@@ -66,9 +67,13 @@ class StudySessionAuthorityPinServiceTests(unittest.TestCase):
         db.session.flush()
         self.user_id = int(user.id)
         note_type = NoteType(user_id=self.user_id, name="Pin type")
+        db.session.add(note_type)
+        db.session.flush()
         templates = (
-            Template(note_type=note_type, name="Pin template A", position=0),
-            Template(note_type=note_type, name="Pin template B", position=1),
+            attach_template(db.session, note_type_id=note_type.id, owner_user_id=self.user_id,
+                            name="Pin template A", position=0),
+            attach_template(db.session, note_type_id=note_type.id, owner_user_id=self.user_id,
+                            name="Pin template B", position=1),
         )
         deck = Deck(
             owner_user_id=self.user_id,
@@ -85,12 +90,9 @@ class StudySessionAuthorityPinServiceTests(unittest.TestCase):
             created_at=NOW,
             updated_at=NOW,
         )
-        cards = (
-            Card(note=note, template=templates[0], created_at=NOW, updated_at=NOW),
-            Card(note=note, template=templates[1], created_at=NOW, updated_at=NOW),
-        )
-        db.session.add_all([note_type, *templates, deck, note, *cards])
+        db.session.add_all([deck, note])
         db.session.flush()
+        cards = tuple(Card.query.filter_by(note_id=note.id).order_by(Card.id).all())
         note.deck_id = int(deck.id)
         subject = StudyProgressSubject(
             learner_user_id=self.user_id,

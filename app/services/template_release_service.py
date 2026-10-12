@@ -298,7 +298,7 @@ def ensure_subscription(session, *, user_id, source_template_id, release_id=None
     local_id = uuid_str()
     now = _now()
     session.execute(insert(Template.__table__).values(
-        id=local_id, note_type_id=None, owner_user_id=int(user_id), name=source["name"],
+        id=local_id, owner_user_id=int(user_id), name=source["name"],
         description=source.get("description") or "", primary_category=source.get("primary_category") or "",
         origin="market_copy", source_template_id=source_template_id, source_version_id=content["id"],
         **{key: deepcopy(content[key]) for key in CONTENT_KEYS}, position=0, is_default=False,

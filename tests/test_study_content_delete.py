@@ -26,6 +26,7 @@ from models.user import User
 from models.review_event import ReviewEvent
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
+from models.study_application import StudyApplication
 from models.study_session_card import StudySessionCard
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
@@ -50,11 +51,10 @@ class StudyContentDeleteTests(unittest.TestCase):
         deck = Deck(owner_user_id=other.id, name="Other learner")
         db.session.add(deck)
         db.session.flush()
+        # The Note presents every Template of its type (ADR P11).
         note = Note(user_id=other.id, deck_id=deck.id, note_type_id=note_type.id, field_values={"Word": "other"})
         db.session.add(note)
         db.session.flush()
-        for template in Template.query.all():
-            db.session.add(Card(note_id=note.id, template_id=template.id))
         db.session.add(CardProgress(user_id=legacy.id, card_id=self.card_ids[0]))
         db.session.commit()
         stage_note_authority_enrollment(db.session, learner_user_id=other.id,
@@ -146,7 +146,7 @@ class StudyContentDeleteTests(unittest.TestCase):
         with self.app.app_context():
             note_type_id = NoteType.query.one().id
             CardProgress.query.delete(synchronize_session=False)
-            Card.query.delete(synchronize_session=False)
+            StudyApplication.query.delete(synchronize_session=False)
             db.session.commit()
             with self.assertRaises(content.ContentApiError) as failure:
                 self._purge(note_type_id)
@@ -305,20 +305,21 @@ class StudyContentDeleteTests(unittest.TestCase):
                 "TOMBSTONED_SUBJECT_DELETED")
             self.assertEqual(self._live_states().count(), 1)
 
-    def test_browse_partial_card_delete_keeps_every_note_learner_state(self):
+    def test_browse_partial_card_delete_is_refused_and_keeps_every_note_learner_state(self):
+        # A Card is its Note shown through one occurrence (ADR P11): it goes with
+        # its Note or its Template, never alone.
         from app.services import browse_card_service
         with self.app.app_context():
             self._add_note_source_reader()
             before = self._state_tokens()
-            browse_card_service.delete_browse_card(user_id=self.user_id, admin_mode=False, card_id=self.card_ids[0])
-            self.assertEqual(Card.query.count(), 1)
+            with self.assertRaises(browse_card_service.BrowseApiError) as failure:
+                browse_card_service.delete_browse_card(user_id=self.user_id, admin_mode=False, card_id=self.card_ids[0])
+            self.assertEqual(failure.exception.code, "CARD_PARTIAL_DELETE_UNSUPPORTED")
+            db.session.rollback()
+            self.assertEqual(Card.query.count(), 2)
             self.assertEqual(Note.query.count(), 1)
-            self.assertEqual(CardProgress.query.count(), 0)
             self.assertEqual(self._state_tokens(), before)
             self.assertEqual(self._live_states().count(), 2)
-            self.assertTrue(all(subject.status_code.startswith("MIRRORED_")
-                for subject in StudyProgressSubject.query.all()))
-            # The Note's row is its state; losing one Card changes neither (ADR P10).
             self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
 
     def test_browse_batch_delete_of_every_card_tombstones_the_note(self):
@@ -406,7 +407,7 @@ class StudyContentDeleteTests(unittest.TestCase):
     def test_deck_purge_rejects_cardless_canonical_state(self):
         with self.app.app_context():
             CardProgress.query.delete(synchronize_session=False)
-            Card.query.delete(synchronize_session=False)
+            StudyApplication.query.delete(synchronize_session=False)
             db.session.commit()
             with self.assertRaises(StudyAuthorityFenceError) as failure:
                 self._purge_deck(self.deck_id)

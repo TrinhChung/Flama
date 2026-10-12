@@ -55,10 +55,10 @@ from app.services.share.constants import (
     SHARED_DECK_INSTALL_MAX_RETRIES,
     UTC,
 )
+from app.repositories import template_library_repository
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_change_request import DeckChangeRequest
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
@@ -339,7 +339,7 @@ def bind_deck_item_source_note_type(
     )
     if provenance_error:
         return provenance_error
-    if not source_note_type.templates:
+    if not template_library_repository.attached_templates(db.session, source_note_type.id):
         return "source_note_type_id must reference a note type with at least one template."
     return None
 

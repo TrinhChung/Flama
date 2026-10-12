@@ -107,8 +107,7 @@ class NoteWriteGapLockTests(unittest.TestCase):
                 front_html="{{Word}}", back_html="{{Word}}", is_default=True)
             db.session.add(template)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
             db.session.commit()
             self.user_id, self.deck_id, self.card_id = user.id, deck.id, card.id
             stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,

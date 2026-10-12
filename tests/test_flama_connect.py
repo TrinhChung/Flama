@@ -636,7 +636,7 @@ class FlamaConnectTests(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=Template.query.one().id)
+            card = Card.query.filter_by(note_id=note.id, template_id=Template.query.one().id).one()
             item = DeckMarketplaceItem(
                 owner_user_id=self.user_id,
                 source_deck_id=shared_root.id,
@@ -644,7 +644,7 @@ class FlamaConnectTests(unittest.TestCase):
                 title="Shared import source",
                 publish_status="published",
             )
-            db.session.add_all([card, item])
+            db.session.add(item)
             db.session.flush()
             release = DeckRelease(
                 deck_item_id=item.id,
@@ -1783,7 +1783,6 @@ class FlamaConnectTests(unittest.TestCase):
             )
             db.session.add(source_note)
             db.session.flush()
-            db.session.add(Card(note_id=source_note.id, template_id=source_template.id))
             item = DeckMarketplaceItem(
                 owner_user_id=self.other_user_id,
                 source_deck_id=source_deck.id,
@@ -1820,8 +1819,6 @@ class FlamaConnectTests(unittest.TestCase):
                 created_at=snapshot + timedelta(seconds=1),
             )
             db.session.add(late_source)
-            db.session.flush()
-            db.session.add(Card(note_id=late_source.id, template_id=source_template.id))
             db.session.commit()
             install_id = install.id
             local_deck_id = local_deck.id

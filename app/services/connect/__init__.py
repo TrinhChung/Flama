@@ -52,7 +52,6 @@ from app.services.connect.import_session import (
 )
 from app.services.connect.import_cards import (
     _reconcile_note_cards,
-    _migrate_cards_progress,
     _upsert_import_card,
     import_cards,
     get_import_status,

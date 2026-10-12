@@ -136,8 +136,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template.id).one()
 
         deck_item = DeckMarketplaceItem(
             owner_user_id=self.user.id,
@@ -180,8 +179,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template.id).one()
 
         for i in range(10):
             note = Note(
@@ -192,8 +190,7 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template.id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template.id).one()
 
         deck_item = DeckMarketplaceItem(
             owner_user_id=self.user.id,

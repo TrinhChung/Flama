@@ -496,9 +496,9 @@ def execute_sync_notes(
         note_type_name=note_type_name,
     )
     field_defs = sorted(note_type.field_defs, key=lambda f: f.position)
-    # Cards follow active occurrences, including reusable/received templates.
-    card_slots = template_library_repository.card_slots(db.session, note_type.id)
-    if not card_slots:
+    # Cards are derived from active occurrences, including reusable/received
+    # templates (ADR P11); a NoteType without one would present no Card.
+    if not template_library_repository.card_slots(db.session, note_type.id):
         raise RequestValidationError(
             f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
             field="note_type_id",
@@ -666,9 +666,6 @@ def execute_sync_notes(
                     "operation": "add",
                 }
             )
-
-            # Create Cards
-            db.session.add_all(template_library_repository.build_cards([new_note.id], card_slots))
 
             # Create ConnectSourceNoteRef if ext_id present
             if ext_id:

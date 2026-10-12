@@ -229,6 +229,9 @@ def seed_template():
             )
             user.set_password(admin_password)
             db.session.add(user)
+            db.session.flush()
+            from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+            enroll_new_learner_note_authority(db.session, user=user)
             db.session.commit()
             print(f"Đã tạo admin user mới: {admin_email}")
         else:
@@ -269,6 +272,9 @@ def seed_template():
                 )
                 test_user.set_password(test_password)
                 db.session.add(test_user)
+                db.session.flush()
+                from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+                enroll_new_learner_note_authority(db.session, user=test_user)
                 db.session.commit()
                 print(f"Đã tạo test user: {test_email}")
             else:

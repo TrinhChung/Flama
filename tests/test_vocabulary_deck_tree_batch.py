@@ -88,8 +88,7 @@ class VocabularyDeckTreeBatchTests(unittest.TestCase):
             note = Note(user_id=self.owner_id, deck_id=deck.id, note_type_id=self.note_type_id)
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template_id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template_id).one()
             db.session.flush()
             db.session.add(CardProgress(user_id=self.learner_id, card_id=card.id))
         expected = [other.id, parent.id, child.id]

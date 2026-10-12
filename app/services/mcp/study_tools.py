@@ -36,8 +36,7 @@ from app.services.study_service import (
 )
 from app.validators.flashcard_input import RequestValidationError
 from models import db
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import Card, card_id_clause, get_card as resolve_card
 from models.deck import Deck
 from models.note import Note
 from models.note_type import NoteType
@@ -117,47 +116,37 @@ def get_due_card_counts(*, user_id: int, deck_id: int | None = None) -> dict[str
     cards_query = db.session.query(Card).join(Note, Card.note_id == Note.id).filter(
         Note.user_id == user_id, Note.deck_id.in_(deck_ids)
     )
-    if authority_route.mode_code == "NOTE":
-        cards = query_study_queue_card_refs(cards_query)
-        try:
-            # Counts need availability only: read it set-wise (P5-11e).
-            authority_reads = load_study_authority_availability_snapshot(
-                db.session,
-                learner_user_id=user_id,
-                cards=tuple(cards),
-                scope=_card_scope(cards_query),
-                now_utc=now,
-            )
-            summary = summarize_study_authority_queue(
-                cards=tuple(cards),
-                reads_by_card_id=authority_reads,
-                learner_user_id=user_id,
-                now_utc=now,
-                timezone_name=timezone_name,
-            )
-        except Exception as exc:
-            code = domain_error_code(exc)
-            if code is None:
-                raise
-            db.session.rollback()
-            raise RequestValidationError(
-                str(exc),
-                field="card_id",
-                status=409,
-                code=str(code),
-            ) from exc
-        new_count = summary.new_count
-        learn_count = summary.learn_count
-        due_count = summary.due_count
-    else:
-        new_count, learn_count, due_count = (
-            study_repository.query_study_queue_counts(
-                cards_query,
-                user_id=user_id,
-                now=now,
-                timezone_name=timezone_name,
-            )
+    cards = query_study_queue_card_refs(cards_query)
+    try:
+        # Counts need availability only: read it set-wise (P5-11e).
+        authority_reads = load_study_authority_availability_snapshot(
+            db.session,
+            learner_user_id=user_id,
+            cards=tuple(cards),
+            scope=_card_scope(cards_query),
+            now_utc=now,
         )
+        summary = summarize_study_authority_queue(
+            cards=tuple(cards),
+            reads_by_card_id=authority_reads,
+            learner_user_id=user_id,
+            now_utc=now,
+            timezone_name=timezone_name,
+        )
+    except Exception as exc:
+        code = domain_error_code(exc)
+        if code is None:
+            raise
+        db.session.rollback()
+        raise RequestValidationError(
+            str(exc),
+            field="card_id",
+            status=409,
+            code=str(code),
+        ) from exc
+    new_count = summary.new_count
+    learn_count = summary.learn_count
+    due_count = summary.due_count
 
     return {
         "total_due": new_count + learn_count + due_count,
@@ -234,7 +223,7 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
             } if queue_summary.due_card_ids else set()
             returned_ids = [card_id for card_id in queue_summary.due_card_ids if card_id in renderable_ids][:limit]
             candidate_by_id = {
-                str(card.id): card for card in cards_query.filter(Card.id.in_(returned_ids))
+                str(card.id): card for card in cards_query.filter(card_id_clause(db.session, returned_ids))
                 .options(contains_eager(Card.note)).all()
             } if returned_ids else {}
             returned = [candidate_by_id[card_id] for card_id in returned_ids if card_id in candidate_by_id]
@@ -314,11 +303,9 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
 
 def get_card(*, user_id: int, card_id: str) -> dict[str, Any]:
     """Get single card detail with rendered HTML and scheduling intervals."""
-    card = (
-        Card.query.join(Note, Card.note_id == Note.id)
-        .filter(Card.id == card_id, Note.user_id == user_id)
-        .first()
-    )
+    card = resolve_card(db.session, card_id, query=(
+        Card.query.join(Note, Card.note_id == Note.id).filter(Note.user_id == user_id)
+    ))
     if card is None or card.note is None:
         raise RequestValidationError(
             f"Không tìm thấy card ID {card_id} của bạn.",
@@ -398,11 +385,9 @@ def submit_review(
     operation_key: str | None = None,
 ) -> dict[str, Any]:
     """Submit a review answer rating ('again', 'hard', 'good', 'easy') to update card schedule."""
-    card = (
-        Card.query.join(Note, Card.note_id == Note.id)
-        .filter(Card.id == card_id, Note.user_id == user_id)
-        .first()
-    )
+    card = resolve_card(db.session, card_id, query=(
+        Card.query.join(Note, Card.note_id == Note.id).filter(Note.user_id == user_id)
+    ))
     if card is None or card.note is None:
         raise RequestValidationError(
             f"Không tìm thấy card ID {card_id} của bạn.",
@@ -531,51 +516,38 @@ def get_deck_stats(*, user_id: int, deck_id: int) -> dict[str, Any]:
                     mature_count += 1
                 else:
                     young_count += 1
-        elif due_counts["authority_mode"] == "NOTE":
-            try:
-                authority_reads = load_study_authority_card_reads(
-                    db.session,
-                    learner_user_id=user_id,
-                    cards=tuple(cards),
-                    now_utc=datetime.utcnow(),
-                    timezone_name=stats_overview.get_effective_timezone_name(
-                        getattr(db.session.get(User, user_id), "timezone", "UTC")
-                    ),
-                    deck_options_by_card_id=_deck_options_by_card_id(
-                        user_id=user_id, cards=cards
-                    ),
-                )
-            except Exception as exc:
-                code = domain_error_code(exc)
-                if code is None:
-                    raise
-                db.session.rollback()
-                raise RequestValidationError(
-                    str(exc),
-                    field="card_id",
-                    status=409,
-                    code=str(code),
-                ) from exc
-            progress_states = [read.state for read in authority_reads.values()]
-            for state in progress_states:
-                if state.type != "review":
-                    continue
-                if float(state.intervalDays or 0) >= 21:
-                    mature_count += 1
-                else:
-                    young_count += 1
-        else:
-            progresses = CardProgress.query.filter(
-                CardProgress.user_id == user_id,
-                CardProgress.card_id.in_(card_ids),
-            ).all()
-            for progress in progresses:
-                if progress.queue != "review":
-                    continue
-                if float(progress.interval_days or 0) >= 21:
-                    mature_count += 1
-                else:
-                    young_count += 1
+        try:
+            authority_reads = load_study_authority_card_reads(
+                db.session,
+                learner_user_id=user_id,
+                cards=tuple(cards),
+                now_utc=datetime.utcnow(),
+                timezone_name=stats_overview.get_effective_timezone_name(
+                    getattr(db.session.get(User, user_id), "timezone", "UTC")
+                ),
+                deck_options_by_card_id=_deck_options_by_card_id(
+                    user_id=user_id, cards=cards
+                ),
+            )
+        except Exception as exc:
+            code = domain_error_code(exc)
+            if code is None:
+                raise
+            db.session.rollback()
+            raise RequestValidationError(
+                str(exc),
+                field="card_id",
+                status=409,
+                code=str(code),
+            ) from exc
+        progress_states = [read.state for read in authority_reads.values()]
+        for state in progress_states:
+            if state.type != "review":
+                continue
+            if float(state.intervalDays or 0) >= 21:
+                mature_count += 1
+            else:
+                young_count += 1
 
     return {
         "deck_id": int(deck.id),

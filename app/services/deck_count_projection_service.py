@@ -15,14 +15,14 @@ from sqlalchemy.orm.util import identity_key
 from app.repositories.deck_count_snapshot_repository import (
     bump_content_revisions, bump_learner_revisions,
 )
-from models.card import Card
-from models.card_progress import CardProgress
+from models.card import card_key_pairs
 from models.note import Note
+from models.study_application import StudyApplication
 from models.study_progress_subject import StudyProgressSubject
 
 _KEY = "flama.deck_counts.transaction"
 _BULK_TABLES = {
-    "notes", "cards", "card_progress", "study_progress_subjects",
+    "notes", "cards", "study_progress_subjects",
     "templates", "note_types", "study_applications", "users", "decks",
 }
 _SUBJECT_COLUMNS = (
@@ -114,23 +114,31 @@ def _capture_changes(session, flush_context, instances):
         return
     lifecycle = session.new | session.deleted
     affected = [obj for obj in lifecycle | session.dirty if (
-        isinstance(obj, Note) and (obj in lifecycle or _changed(obj, ("deck_id", "user_id")))
-        or isinstance(obj, Card) and (obj in lifecycle or _changed(obj, ("note_id", "template_id", "note")))
-        or isinstance(obj, CardProgress) and (obj in lifecycle or _changed(obj, (*_PROGRESS_COLUMNS, "card", "user")))
+        isinstance(obj, Note) and (obj in lifecycle or _changed(obj, ("deck_id", "user_id", "note_type_id")))
         or isinstance(obj, StudyProgressSubject) and (obj in lifecycle or _changed(obj, _SUBJECT_COLUMNS))
     )]
+    # Cards are derived (ADR P11): an occurrence that starts or stops being
+    # ACTIVE changes the Cards of every Note of its NoteType.
+    occurrences = [obj for obj in session.new | session.dirty if isinstance(obj, StudyApplication) and (
+        obj in session.new or _changed(obj, ("status_code", "note_type_id")))]
     cascade = [obj for obj in session.deleted
                if obj.__table__.name in {"templates", "note_types", "study_applications", "users"}]
-    if not affected and not cascade:
+    if not affected and not cascade and not occurrences:
         return
     frame = _frame(session)
     if cascade:
         frame.content.add(0)
+    note_type_ids = set().union(*(_values(obj, "note_type_id") for obj in occurrences))
+    if any(obj.note_type_id is None for obj in occurrences):
+        frame.content.add(0)  # A NoteType added in this flush has no ID yet.
+    if note_type_ids:
+        frame.content.update(int(value) for value in session.execute(
+            select(Note.deck_id).where(Note.note_type_id.in_(sorted(note_type_ids)), Note.deck_id.is_not(None)).distinct()
+        ).scalars())
     # Attribute replacement can hide an unloaded old foreign key. Do not
     # guess its prior scope; a single epoch safely covers that uncommon path.
     for obj in affected:
-        names = ("note_id",) if isinstance(obj, Card) else (
-            ("user_id", "card_id") if isinstance(obj, CardProgress) else
+        names = (
             ("learner_user_id", "logical_note_key", "live_note_id") if isinstance(obj, StudyProgressSubject)
             else ()
         )
@@ -140,21 +148,11 @@ def _capture_changes(session, flush_context, instances):
         ):
             frame.content.add(0)
     # Resolve before SQL flush so moved/deleted rows retain their old deck.
-    card_ids = set().union(*(_values(obj, "card_id") for obj in affected
-                             if isinstance(obj, CardProgress)))
-    cards = _loaded_foreign_keys(session, Card, card_ids, "note_id")
-    missing_cards = card_ids - cards.keys()
-    if missing_cards:
-        cards.update(session.execute(select(Card.id, Card.note_id).where(Card.id.in_(missing_cards))).all())
-    for obj in session.new | session.dirty | session.deleted:
-        if isinstance(obj, Card) and obj.id is not None:
-            cards.setdefault(obj.id, obj.note_id)
-    note_ids = set(cards.values()) - {None}
+    # A presentation key names its Note; a legacy Card ID resolves via its registry row.
+    note_ids = set()
     for obj in affected:
         if isinstance(obj, Note) and obj.id:
             note_ids.add(obj.id)
-        elif isinstance(obj, Card):
-            note_ids.update(_values(obj, "note_id"))
         elif isinstance(obj, StudyProgressSubject):
             note_ids.update(_values(obj, "live_note_id"))
             note_ids.update(key for value in _values(obj, "logical_note_key") if (key := _note_key(value)))
@@ -173,28 +171,11 @@ def _capture_changes(session, flush_context, instances):
         if isinstance(obj, Note):
             frame.content.update(decks_for({obj.id}))
             frame.content.update(int(value) for value in _values(obj, "deck_id"))
-        elif isinstance(obj, Card):
-            frame.content.update(decks_for(_values(obj, "note_id")))
-            for note in _relationships(obj, "note"):
-                if note.deck_id is not None:
-                    frame.content.add(int(note.deck_id))
-            # A newly related Note may not yet have its generated id.
-            note = inspect(obj).dict.get("note")
-            if not obj.note_id and note is not None and note.deck_id:
-                frame.content.add(int(note.deck_id))
         else:
-            if isinstance(obj, CardProgress):
-                users = _values(obj, "user_id")
-                users.update(user.id for user in _relationships(obj, "user") if user.id is not None)
-                ids = {cards[value] for value in _values(obj, "card_id") if value in cards}
-                for card in _relationships(obj, "card"):
-                    if card.note_id is not None:
-                        ids.add(card.note_id)
-            else:
-                users = _values(obj, "learner_user_id")
-                ids = _values(obj, "live_note_id") | {
-                    key for value in _values(obj, "logical_note_key") if (key := _note_key(value))
-                }
+            users = _values(obj, "learner_user_id")
+            ids = _values(obj, "live_note_id") | {
+                key for value in _values(obj, "logical_note_key") if (key := _note_key(value))
+            }
             decks = decks_for(ids) or {0}
             if not users:
                 frame.content.add(0)

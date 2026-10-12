@@ -234,7 +234,7 @@ def _finish_switch(session, *, request, route, locked, expected, siblings, prefl
     # Old leases pinned the previous token; cancel them like other topology
     # and state rewrites so a stale session cannot commit across the switch.
     affected_sessions = select(StudySessionCard.session_id).where(
-        StudySessionCard.card_id.in_(list(siblings.card_ids)))
+        StudySessionCard.card_id.in_(list(siblings.history_card_ids)))
     for study_session in session.execute(select(StudySession).where(
         StudySession.user_id == route.learner_user_id, StudySession.status == "open",
         StudySession.id.in_(affected_sessions)).order_by(StudySession.id).with_for_update()).scalars():

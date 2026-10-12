@@ -174,8 +174,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             self.note_id = note.id
             self.other_note_id = other_note.id
 
-            card = Card(note_id=note.id, template_id=note_type.templates[0].id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=note_type.templates[0].id).one()
             db.session.add(Card(note_id=other_note.id, template_id=note_type.templates[0].id))
             db.session.flush()
             self.card_id = card.id

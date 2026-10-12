@@ -8,12 +8,12 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app import create_app
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent
 from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
 from app.services.study_progress_shadow_codec import canonical_document
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -41,6 +41,7 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
             user = User(username="direct-replay", email="direct-replay@example.test")
             db.session.add(user)
             db.session.flush()
+            enroll_note_user(db.session, user)
             deck = Deck(name="Direct replay", owner_user_id=user.id)
             note_type = NoteType(name="Direct replay", user_id=user.id)
             db.session.add_all([deck, note_type])
@@ -51,14 +52,12 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
             db.session.flush()
             cards = []
             for index in range(2):
-                template = Template(note_type_id=note_type.id, name=f"Card {index}",
+                template = attach_template(db.session, note_type_id=note_type.id, owner_user_id=note_type.user_id, name=f"Card {index}",
                     front_html="{{Word}}", back_html="{{Word}}", is_default=index == 0)
                 db.session.add(template)
                 db.session.flush()
-                card = Card(note_id=note.id, template_id=template.id)
-                db.session.add(card)
-                cards.append(card)
-            db.session.flush()
+                # The Template's occurrence presents it on the Note (ADR P11).
+                cards.append(Card.query.filter_by(note_id=note.id, template_id=template.id).one())
             self.user_id, self.deck_id = user.id, deck.id
             self.card_ids = [card.id for card in cards]
             db.session.commit()
@@ -90,7 +89,7 @@ class StudyDirectNoteReplayTests(unittest.TestCase):
             self.assertEqual(AuditLog.query.filter_by(action="study.answer").count(), count)
             self.assertEqual(StudyProgressSubject.query.one().authority_revision, count)
             # The Note's one row holds its state; no Card carries progress (ADR P10).
-            self.assertEqual(CardProgress.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
 
     def test_retry_returns_original_result_without_executing_scheduler_or_side_effects(self):
         original = self._answer()

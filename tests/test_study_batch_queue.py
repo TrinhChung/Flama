@@ -39,7 +39,7 @@ from app.services.study_session_service import (
     enqueue_study_session_batch,
 )
 from models import db
-from models.card import Card
+from models.card import Card, split_card_key
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.note import Note
@@ -109,12 +109,7 @@ class StudyBatchQueueTests(unittest.TestCase):
                 )
                 db.session.add(note)
                 db.session.flush()
-                card = Card(
-                    note_id=note.id,
-                    template_id=template.id,
-                )
-                db.session.add(card)
-                db.session.flush()
+                card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
                 self.cards.append(card.id)
 
             db.session.commit()
@@ -445,9 +440,9 @@ class StudyBatchQueueTests(unittest.TestCase):
         snapshot = self._open_session()
         job = self._admit_single_event_job(snapshot)
         with self.app.app_context():
-            db.session.execute(text("DELETE FROM cards WHERE id = :id"), {
-                "id": job["events"][0]["card_id"],
-            })
+            # A Card is the Note's presentation (ADR P11): it disappears with its Note.
+            note_id, _application_id = split_card_key(job["events"][0]["card_id"])
+            db.session.execute(text("DELETE FROM notes WHERE id = :id"), {"id": note_id})
             db.session.commit()
             result = process_single_study_batch(job)
             self.assertIn(result.get("error_code"), {"CARD_OUTSIDE_SESSION", "BATCH_CARD_MISSING"})

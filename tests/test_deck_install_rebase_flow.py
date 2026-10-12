@@ -100,8 +100,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
         )
         db.session.add(note)
         db.session.flush()
-        card = Card(note_id=note.id, template_id=template.id)
-        db.session.add(card)
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
         progress = CardProgress(
             user_id=learner.id,
@@ -450,8 +449,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
         )
         db.session.add(second_note)
         db.session.flush()
-        second_card = Card(note_id=second_note.id, template_id=first_card.template_id)
-        db.session.add(second_card)
+        second_card = Card.query.filter_by(note_id=second_note.id, template_id=first_card.template_id).one()
         db.session.flush()
 
         first_release = db.session.get(DeckRelease, self.ids["first_release_id"])

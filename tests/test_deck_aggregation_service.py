@@ -24,6 +24,7 @@ from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
+from models.study_application import StudyApplication
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
 
@@ -97,19 +98,26 @@ class DeckAggregationServiceTests(unittest.TestCase):
             field_values={"Front": "Q", "Back": "A"},
         )
         db.session.add(note)
+        if note_type_id is not None:
+            self._ensure_applications(note_type_id, card_count)
         db.session.flush()
-
-        cards = []
-        for idx in range(card_count):
-            card = Card(
-                note_id=note.id,
-                template_id=f"tmpl-{idx + 1}",
-                created_at=created_at or datetime.utcnow(),
-            )
-            db.session.add(card)
-            cards.append(card)
-        db.session.flush()
+        # Cards are derived (ADR P11): every Note of the type presents each occurrence.
+        cards = Card.query.filter_by(note_id=note.id).order_by(Card.template_id).all()
         return note, cards
+
+    def _ensure_applications(self, note_type_id: str, count: int) -> None:
+        """Attach ``tmpl-1..count`` to the Note type, long before any Note."""
+        attached_at = datetime(2020, 1, 1)
+        for idx in range(count):
+            template_id = f"tmpl-{idx + 1}"
+            exists = StudyApplication.query.filter_by(
+                note_type_id=note_type_id, template_id=template_id,
+            ).first()
+            if exists is None:
+                db.session.add(StudyApplication(
+                    note_type_id=note_type_id, template_id=template_id, occurrence_key="compat",
+                    created_at=attached_at, updated_at=attached_at,
+                ))
 
     def _add_progress(
         self,
@@ -378,7 +386,10 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             # Add 2 new cards and 1 review card to owned deck
             _, cards_new = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id, card_count=2)
-            _, cards_rev = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
+            # A single-template Note type: a type presents its occurrences on every Note.
+            _, cards_rev = self._create_note_and_cards(
+                user_id=self.learner_id, deck_id=self.owned_deck_id, note_type_id="review-nt",
+            )
             # Due yesterday: the dashboard counts from the learner's study day
             # (day boundary 04:00), so "today in UTC" is not yet due before 04:00.
             self._add_progress(user_id=self.learner_id, card_id=cards_rev[0].id, queue="review", due_day=today_day - 1)
@@ -703,11 +714,14 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             # Fast bulk-insert 40,000 notes and cards via raw Core table insert
             note_table = Note.__table__
-            card_table = Card.__table__
             progress_table = CardProgress.__table__
+            # One occurrence presents every Note (ADR P11): no Card rows to insert.
+            db.session.add(StudyApplication(
+                id="bench-app", note_type_id="general-nt", template_id="tmpl-1", occurrence_key="compat",
+                created_at=now_utc, updated_at=now_utc,
+            ))
 
             notes_data = []
-            cards_data = []
             progress_data = []
 
             # 40,000 cards:
@@ -719,7 +733,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             total_cards = 40000
             for i in range(total_cards):
                 nid = f"bench-note-{i}"
-                cid = f"bench-card-{i}"
+                cid = f"{nid}.bench-app"
                 notes_data.append({
                     "id": nid,
                     "user_id": self.learner_id,
@@ -727,13 +741,6 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     "note_type_id": "general-nt",
                     "field_values": {},
                     "tags": [],
-                    "created_at": now_utc,
-                    "updated_at": now_utc,
-                })
-                cards_data.append({
-                    "id": cid,
-                    "note_id": nid,
-                    "template_id": "tmpl-1",
                     "created_at": now_utc,
                     "updated_at": now_utc,
                 })
@@ -781,7 +788,6 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     })
 
             db.session.execute(note_table.insert(), notes_data)
-            db.session.execute(card_table.insert(), cards_data)
             if progress_data:
                 db.session.execute(progress_table.insert(), progress_data)
             db.session.commit()
@@ -826,7 +832,6 @@ class DeckAggregationServiceTests(unittest.TestCase):
             for timezone_name, boundary, now_utc in contexts:
                 with self.subTest(timezone=timezone_name, boundary=boundary):
                     CardProgress.query.delete()
-                    Card.query.delete()
                     Note.query.delete()
                     today = _today_day_index(
                         now=now_utc, timezone_name=timezone_name, day_boundary_hour_local=boundary

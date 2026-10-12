@@ -112,12 +112,7 @@ class DeckAutoPublishAndAutoUpdateTests(unittest.TestCase):
         db.session.add(note)
         db.session.flush()
 
-        card = Card(
-            note_id=note.id,
-            template_id=template.id,
-        )
-        db.session.add(card)
-        db.session.flush()
+        card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
 
         item = DeckMarketplaceItem(
             owner_user_id=creator.id,

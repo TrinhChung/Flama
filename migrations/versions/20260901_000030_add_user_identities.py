@@ -23,12 +23,11 @@ def _has_table(table_name: str) -> bool:
 
 def upgrade():
     # 1. Make users.password_hash nullable
-    op.alter_column(
-        "users",
-        "password_hash",
-        existing_type=sa.String(255),
-        nullable=True,
-    )
+    password_column = next(column for column in sa.inspect(op.get_bind()).get_columns("users")
+                           if column["name"] == "password_hash")
+    if not password_column["nullable"]:
+        with op.batch_alter_table("users") as batch_op:
+            batch_op.alter_column("password_hash", existing_type=sa.String(255), nullable=True)
 
     # 2. Create user_identities table
     if not _has_table("user_identities"):

@@ -267,12 +267,14 @@ def append_native_history_fact(
     logical_card_key = str(event.card_id or "").strip()
     if not logical_card_key:
         raise _fail("INVALID_HISTORY_CONTEXT", "ReviewEvent has no Card identity.")
-    # The reviewed Card must belong to the subject's live Note.
-    from models.card import Card
+    # The reviewed Card must belong to the subject's live Note; a presentation
+    # key names it, a legacy ID resolves through its registry row (ADR P11).
+    from models.card import card_key_pairs
 
-    card_note_id = event.note_id or session.execute(
-        select(Card.note_id).where(Card.id == logical_card_key)
-    ).scalar_one_or_none()
+    card_note_id = event.note_id or next(
+        (note_id for note_id, _application_id in card_key_pairs(session, [logical_card_key]).values()),
+        None,
+    )
     if not subject.live_note_id or str(card_note_id or "") != str(subject.live_note_id):
         raise _fail(
             "HISTORY_CARD_MISMATCH",

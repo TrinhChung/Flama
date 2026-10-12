@@ -201,8 +201,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             )
             db.session.add(note_c)
             db.session.flush()
-            card_c = Card(note_id=note_c.id, template_id=self.template_id)
-            db.session.add(card_c)
+            card_c = Card.query.filter_by(note_id=note_c.id, template_id=self.template_id).one()
             db.session.flush()
             card_c_id = card_c.id
 
@@ -1068,8 +1067,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             note_d = Note(user_id=self.author_id, note_type_id=self.note_type_id, deck_id=self.deck_id, field_values={})
             db.session.add(note_d)
             db.session.flush()
-            card_d = Card(note_id=note_d.id, template_id=self.template_id)
-            db.session.add(card_d)
+            card_d = Card.query.filter_by(note_id=note_d.id, template_id=self.template_id).one()
             db.session.flush()
             p_susp = CardProgress(
                 user_id=self.author_id,
@@ -1083,8 +1081,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             note_e = Note(user_id=self.author_id, note_type_id=self.note_type_id, deck_id=self.deck_id, field_values={})
             db.session.add(note_e)
             db.session.flush()
-            card_e = Card(note_id=note_e.id, template_id=self.template_id)
-            db.session.add(card_e)
+            card_e = Card.query.filter_by(note_id=note_e.id, template_id=self.template_id).one()
             db.session.flush()
             p_buried = CardProgress(
                 user_id=self.author_id,

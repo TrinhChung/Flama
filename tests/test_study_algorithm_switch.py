@@ -37,7 +37,6 @@ from app.services.study_progress_shadow_codec import (
 )
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_progress_subject import StudyProgressSubject
 
@@ -134,7 +133,8 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
             self.assertEqual(result.response["to_algorithm"], {"key": SYNTHETIC.key, "version": "1.0.0"})
             self.assertEqual(self._token().authority_revision, before + 1)
             self.assertEqual(self._token().algorithm_key, SYNTHETIC.key)
-            self.assertEqual(CardProgress.query.count(), 0)
+            from sqlalchemy import inspect
+            self.assertFalse(inspect(db.engine).has_table("card_progress"))
             receipt = StudyAuthorityCommandReceipt.query.one()
             self.assertEqual(receipt.receipt_schema_version, SWITCH_RECEIPT_SCHEMA_VERSION)
             self.assertIsNone(receipt.review_event_id)

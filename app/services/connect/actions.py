@@ -43,7 +43,6 @@ from app.validators.flashcard_input import RequestValidationError, validate_note
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.connect_import_media import ConnectImportMedia
 from models.connect_import_package import ConnectImportPackage
 from models.connect_import_session import ConnectImportSession
@@ -458,7 +457,6 @@ def _add_note(user_id: int, raw_note: object, *, standard, uow, scopes) -> int:
     )
     db.session.add(note)
     db.session.flush()
-    from app.repositories.template_library_repository import create_cards_for_note
     from models.study_application import StudyApplication
     templates = StudyApplication.query.filter_by(note_type_id=prepared.note_type.id, status_code="ACTIVE").all()
     if not templates:
@@ -475,7 +473,7 @@ def _add_note(user_id: int, raw_note: object, *, standard, uow, scopes) -> int:
         )
         db.session.add(tmpl)
         db.session.flush()
-    create_cards_for_note(db.session, note)
+    # The Note's Cards are derived from these occurrences (ADR P11).
 
     materialized = flama_connect_media_service.materialize_audio(
         user_id=user_id,

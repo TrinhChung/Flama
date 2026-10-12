@@ -122,6 +122,10 @@ class StudyConsolidatedSchemaTests(unittest.TestCase):
         )
 
     def test_upgrade_is_idempotent_and_downgrade_refuses_consolidated_progress(self):
+        # Reverse the later due-index migration before exercising revision 49.
+        # Its queue columns do not exist in the historical pre-49 schema.
+        next(index for index in StudyProgressSubject.__table__.indexes
+             if index.name == "ix_sp_subject_note_due").drop(db.engine)
         self._run("upgrade")
         self.assertTrue(set(SUBJECT_PROGRESS_COLUMNS) | {"authority_revision"} <= self._columns())
         db.session.add(self._subject(authority_revision=1, **FULL_PROGRESS))

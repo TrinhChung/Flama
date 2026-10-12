@@ -51,8 +51,8 @@ from app.validators import (
 from app.services.stats_overview import get_effective_timezone_name
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services import study_artifact_service
-from app.repositories.template_library_repository import active_card_condition
 from app.validators.template_library import TemplateLibraryError
+from models.card import card_pairs_in, card_scope_options, get_card
 from app.repositories.study_authority_repository import is_consolidated, lock_study_authority_route
 from app.services.study_authority_read_service import (
     load_study_authority_availability_snapshot,
@@ -147,7 +147,6 @@ def _build_study_scope_query(
             query = Card.query.join(Note, Card.note_id == Note.id).filter(
                 Note.user_id == current_user.id,
                 Note.deck_id.in_(scope_deck_ids),
-                active_card_condition(),
             )
             has_owned_card = bool(query.with_entities(Card.id).first())
 
@@ -204,7 +203,6 @@ def _build_study_scope_query(
         query = Card.query.join(Note, Card.note_id == Note.id).filter(
             Note.user_id == current_user.id,
             Note.note_type_id == normalized_scope_id,
-            active_card_condition(),
         )
 
     if query is None:
@@ -235,91 +233,18 @@ def _build_study_next_payload(
         learner_user_id=int(current_user.id),
         allow_note_authority=True,
     )
-    authority_reads = None
-    selected_cards_by_id = None
-    if route.mode_code == "NOTE":
-        if is_consolidated(route):
-            cards = query_study_queue_card_refs(query)
-            # ADR P10 §2.7: count and order the scope set-wise from the rows,
-            # without locks or per-Card re-derivation (the offline audit does
-            # that); only the returned Card takes the full locking read below.
-            card_ids = query.with_entities(Card.id.label("id")).order_by(None).subquery("study_next_ids")
-            scope_rows = (
-                select(
-                    Note.deck_id.label("deck_id"),
-                    Card.id.label("card_id"),
-                    Card.note_id.label("note_id"),
-                )
-                .join(Note, Note.id == Card.note_id)
-                .where(Card.id.in_(select(card_ids.c.id)))
-                .subquery("study_next_scope")
-            )
-            ordering_reads = load_study_authority_availability_snapshot(
-                db.session,
-                learner_user_id=int(current_user.id),
-                cards=tuple(cards),
-                scope=scope_rows,
-                now_utc=now,
-            )
-        else:
-            cards = query.options(selectinload(Card.note)).order_by(Card.id.asc()).all()
-            selected_cards_by_id = {str(card.id): card for card in cards}
-            # Options depend only on (learner, deck): resolve each deck once.
-            options_by_deck_id: dict[Any, Any] = {}
-            deck_options_by_card_id = {}
-            for card in cards:
-                deck_id = _effective_scheduler_deck_id(card, clone_scope)
-                if deck_id not in options_by_deck_id:
-                    options_by_deck_id[deck_id] = resolve_deck_options(
-                        user_id=current_user.id,
-                        deck_id=deck_id,
-                    )
-                deck_options_by_card_id[str(card.id)] = options_by_deck_id[deck_id]
-            authority_reads = load_study_authority_card_reads(
-                db.session,
-                learner_user_id=int(current_user.id),
-                cards=tuple(cards),
-                now_utc=now,
-                timezone_name=timezone_name,
-                deck_options_by_card_id=deck_options_by_card_id,
-            )
-            ordering_reads = authority_reads
-        queue_summary = summarize_study_authority_queue(
-            cards=tuple(cards),
-            reads_by_card_id=ordering_reads,
-            learner_user_id=int(current_user.id),
-            now_utc=now,
-            timezone_name=timezone_name,
-        )
-        new_count = queue_summary.new_count
-        learn_count = queue_summary.learn_count
-        due_count = queue_summary.due_count
-        selected_card_id = queue_summary.selected_card_id
-        pending_learning_count = queue_summary.pending_learning_count
-        next_due_at = queue_summary.next_due_at
-    else:
-        new_count, learn_count, due_count = _query_study_queue_counts(
-            query,
-            user_id=current_user.id,
-            now=now,
-            timezone_name=timezone_name,
-        )
-        selected_card_id = _query_next_due_card_id(
-            query,
-            user_id=current_user.id,
-            now=now,
-            timezone_name=timezone_name,
-        )
-        pending_learning_count = 0
-        next_due_at = None
+    new_count, learn_count, due_count = _query_study_queue_counts(
+        query, user_id=current_user.id, now=now, timezone_name=timezone_name,
+    )
+    selected_card_id = _query_next_due_card_id(
+        query, user_id=current_user.id, now=now, timezone_name=timezone_name,
+        queue_counts=(new_count, learn_count, due_count),
+    )
+    pending_learning_count, next_due_at = (0, None)
     if not selected_card_id:
-        if route.mode_code == "LEGACY":
-            pending_learning_count, next_due_at = _query_pending_learning_summary(
-                query,
-                user_id=current_user.id,
-                now=now,
-                timezone_name=timezone_name,
-            )
+        pending_learning_count, next_due_at = _query_pending_learning_summary(
+            query, user_id=current_user.id, now=now, timezone_name=timezone_name,
+        )
         if pending_learning_count > 0:
             return {
                 "card_id": None,
@@ -345,11 +270,7 @@ def _build_study_next_payload(
             "authority_mode": route.mode_code,
         }
 
-    selected_card = (
-        selected_cards_by_id.get(selected_card_id)
-        if selected_cards_by_id is not None
-        else query.filter(Card.id == selected_card_id).first()
-    )
+    selected_card = get_card(db.session, selected_card_id, query=query)
     if not selected_card:
         return {"card_id": None, "message": "Card not found."}
     if clone_scope is not None and not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card):
@@ -367,17 +288,9 @@ def _build_study_next_payload(
         user_id=current_user.id,
         deck_id=_effective_scheduler_deck_id(selected_card, clone_scope),
     )
-    authority_read = (
-        authority_reads[selected_card_id]
-        if authority_reads is not None
-        else load_study_authority_card_read(
-            db.session,
-            learner_user_id=int(current_user.id),
-            card=selected_card,
-            now_utc=now,
-            timezone_name=timezone_name,
-            deck_options=deck_options,
-        )
+    authority_read = load_study_authority_card_read(
+        db.session, learner_user_id=int(current_user.id), card=selected_card,
+        now_utc=now, timezone_name=timezone_name, deck_options=deck_options,
     )
     effective_context = study_artifact_service.build_effective_study_card(
         card=selected_card,
@@ -603,7 +516,7 @@ def _load_private_artifact_context(
     card_id: str,
     install_id: str | None,
 ):
-    card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id).first()
+    card = get_card(db.session, card_id, query=Card.query.join(Note, Card.note_id == Note.id))
     if card is None or card.note is None:
         return None
     clone_scope = None
@@ -673,7 +586,7 @@ def study_public_artifact(deck_item_id: str, card_id: str, kind: str, version: s
     if kind not in {"template", "content"}:
         return _no_store_json({"error": "NOT_FOUND", "message": "Artifact not found."}, 404)
     item = db.session.get(DeckMarketplaceItem, deck_item_id)
-    card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id).first()
+    card = get_card(db.session, card_id, query=Card.query.join(Note, Card.note_id == Note.id))
     if (
         item is None
         or card is None
@@ -1192,7 +1105,8 @@ def study_answer(card_id: str):
     service_payload["timezone"] = validated_answer.timezone
     service_payload["duration_ms"] = validated_answer.duration_ms
 
-    card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id).first()
+    # A legacy Card ID from an old client resolves to its presentation key.
+    card = get_card(db.session, card_id, query=Card.query.join(Note, Card.note_id == Note.id))
     if not card:
         return _study_error("FIELD_NOT_FOUND", "Card not found.", status=404)
     clone_scope: flashcards_share.CloneDeckScope | None = None

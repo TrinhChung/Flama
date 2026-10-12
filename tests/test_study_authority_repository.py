@@ -41,15 +41,12 @@ class StudyAuthorityRepositoryTests(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_absent_enrollment_is_locked_legacy_epoch_zero(self):
-        route = lock_study_authority_route(
-            db.session, learner_user_id=self.user_id
-        )
-        self.assertEqual(route.mode_code, "LEGACY")
-        self.assertEqual(route.epoch, 0)
-        self.assertFalse(route.persisted)
+    def test_absent_enrollment_requires_explicit_migration(self):
+        with self.assertRaises(StudyAuthorityFenceError) as failure:
+            lock_study_authority_route(db.session, learner_user_id=self.user_id)
+        self.assertEqual(failure.exception.code, "STUDY_AUTHORITY_MIGRATION_REQUIRED")
 
-    def test_persisted_legacy_epoch_is_returned(self):
+    def test_persisted_legacy_enrollment_requires_explicit_migration(self):
         now = datetime(2026, 9, 21)
         db.session.add(
             StudyAuthorityEnrollment(
@@ -61,19 +58,15 @@ class StudyAuthorityRepositoryTests(unittest.TestCase):
             )
         )
         db.session.commit()
-        route = lock_study_authority_route(
-            db.session, learner_user_id=self.user_id
-        )
-        self.assertEqual(route.epoch, 4)
-        self.assertTrue(route.persisted)
+        with self.assertRaises(StudyAuthorityFenceError) as failure:
+            lock_study_authority_route(db.session, learner_user_id=self.user_id)
+        self.assertEqual(failure.exception.code, "STUDY_AUTHORITY_MIGRATION_REQUIRED")
 
     def test_pending_insert_is_not_autoflushed_before_fence(self):
         pending = User(email="pending@example.test", username="pending-user")
         db.session.add(pending)
-        route = lock_study_authority_route(
-            db.session, learner_user_id=self.user_id
-        )
-        self.assertEqual(route.mode_code, "LEGACY")
+        with self.assertRaises(StudyAuthorityFenceError):
+            lock_study_authority_route(db.session, learner_user_id=self.user_id)
         self.assertIsNone(pending.id)
 
     def test_missing_or_invalid_learner_fails_closed(self):
@@ -88,9 +81,9 @@ class StudyAuthorityRepositoryTests(unittest.TestCase):
 
     def test_note_unknown_mode_and_bad_epoch_fail_closed(self):
         cases = (
-            ("NOTE", 1, "NOTE_AUTHORITY_UNAVAILABLE"),
+            ("NOTE", 0, "INVALID_AUTHORITY_EPOCH"),
             ("UNKNOWN", 1, "INVALID_AUTHORITY_MODE"),
-            ("LEGACY", -1, "INVALID_AUTHORITY_EPOCH"),
+            ("NOTE", -1, "INVALID_AUTHORITY_EPOCH"),
         )
         for mode_code, epoch, code in cases:
             with self.subTest(code=code):
@@ -103,7 +96,7 @@ class StudyAuthorityRepositoryTests(unittest.TestCase):
                     )
                 self.assertEqual(failure.exception.code, code)
 
-    def test_tampered_note_row_is_not_served_by_legacy_runtime(self):
+    def test_note_enrollment_is_the_only_runtime_authority(self):
         now = "2026-09-21 00:00:00.000000"
         db.session.execute(text("PRAGMA ignore_check_constraints = ON"))
         db.session.execute(
@@ -115,9 +108,8 @@ class StudyAuthorityRepositoryTests(unittest.TestCase):
             {"user_id": self.user_id, "now": now},
         )
         db.session.commit()
-        with self.assertRaises(StudyAuthorityFenceError) as failure:
-            lock_study_authority_route(db.session, learner_user_id=self.user_id)
-        self.assertEqual(failure.exception.code, "NOTE_AUTHORITY_UNAVAILABLE")
+        route = lock_study_authority_route(db.session, learner_user_id=self.user_id)
+        self.assertEqual((route.mode_code, route.epoch), ("NOTE", 1))
 
         route = lock_study_authority_route(
             db.session,

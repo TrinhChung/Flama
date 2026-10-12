@@ -50,7 +50,6 @@ def _register_models() -> None:
     from models.flashcard import (  # noqa: F401
         AuditLog,
         Card,
-        CardProgress,
         Deck,
         DeckCloneAddedFieldDef,
         DeckCloneAddedNote,

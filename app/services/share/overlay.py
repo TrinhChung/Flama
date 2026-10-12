@@ -52,7 +52,6 @@ from app.services.share.constants import (
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_change_request import DeckChangeRequest
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef

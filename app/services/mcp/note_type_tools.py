@@ -28,11 +28,11 @@ from app.services.mcp_preview_service import (
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
+from models.study_application import StudyApplication
 from models.template import Template
 from models.user import User
 
@@ -62,7 +62,7 @@ def list_note_types(*, user_id: int) -> list[dict[str, Any]]:
                 "name": nt.name,
                 "description": _compact_description(nt.description),
                 "field_count": len(nt.field_defs),
-                "template_count": len(nt.templates),
+                "template_count": len(template_library_repository.attached_templates(db.session, nt.id)),
                 "is_official": bool(nt.is_official),
                 "is_owner": int(nt.user_id) == int(user_id),
             }
@@ -96,7 +96,7 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
 
     is_owner = int(nt.user_id) == int(user_id)
     sorted_field_defs = sorted(nt.field_defs, key=lambda item: item.position)
-    sorted_templates = sorted(nt.templates, key=lambda item: item.position)
+    sorted_templates = sorted(template_library_repository.attached_templates(db.session, nt.id), key=lambda item: item.position)
 
     fields = [
         {
@@ -121,6 +121,10 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
     templates = [
         {
             "id": str(t.id),
+            "application_id": t.application_id,
+            "occurrence_key": t.application.occurrence_key,
+            "input_bindings": t.application.input_bindings or {},
+            "display_name": t.application.display_name,
             "name": t.name,
             "position": t.position,
             "is_default": bool(t.is_default),
@@ -309,15 +313,7 @@ def create_note_type(
         back_html = str(t.get("back_html") or f"{{{{FrontSide}}}}\n<hr id=\"answer\">\n{{{{{field_defs_objs[0].name}}}}}").strip()
         shared_css = str(t.get("shared_css") or "").strip()
 
-        t_obj = Template(
-            note_type_id=note_type.id,
-            name=t_name,
-            front_html=front_html,
-            back_html=back_html,
-            shared_css=shared_css,
-            position=int(t.get("position", idx)),
-            is_default=(idx == 0),
-        )
+        t_obj = template_library_repository.create_attached_template(db.session, note_type=note_type, name=t_name, front_html=front_html, back_html=back_html, shared_css=shared_css, position=int(t.get("position", idx)), is_default=idx == 0)
 
         try:
             render_template_pair(
@@ -349,7 +345,9 @@ def _note_type_update_resource_version(nt, *, notes_count, cards_count):
         cards_count=cards_count, updated_at=nt.updated_at,
         templates=[{key: getattr(row, key) for key in (
             "id", "name", "front_html", "back_html", "shared_css", "position", "is_default",
-        )} for row in sorted(nt.templates, key=lambda row: row.id)],
+        )} | {"application_id": row.application_id, "occurrence_key": row.application.occurrence_key,
+              "input_bindings": row.application.input_bindings}
+         for row in sorted(template_library_repository.attached_templates(db.session, nt.id), key=lambda row: row.application_id)],
         fields=[{key: getattr(row, key) for key in (
             "id", "name", "field_type", "position", "required", "identity_role",
         )} for row in sorted(nt.field_defs, key=lambda row: row.id)],
@@ -375,8 +373,8 @@ def preview_note_type_update(
 
     current_field_map = {f.name: f for f in nt.field_defs}
     current_field_ids = {f.id: f for f in nt.field_defs}
-    current_template_map = {t.name: t for t in nt.templates}
-    current_template_ids = {t.id: t for t in nt.templates}
+    current_template_map = {t.name: t for t in template_library_repository.attached_templates(db.session, nt.id)}
+    current_template_ids = {t.id: t for t in template_library_repository.attached_templates(db.session, nt.id)}
 
     added_fields: list[dict[str, Any]] = []
     renamed_fields: list[dict[str, str]] = []
@@ -435,43 +433,17 @@ def preview_note_type_update(
             else:
                 warnings.append(f"Xóa trường '{rem_f}' (trường không chứa dữ liệu trong note nào).")
 
-    # Parse Templates
-    added_templates: list[str] = []
-    updated_templates: list[str] = []
-    removed_templates: list[str] = []
-
+    # Templates are explicitly scoped applications. Retirement hides future
+    # discovery while preserving definitions, NOTE progress and review history.
     if templates is not None:
-        template_regeneration_required = True
-        if isinstance(templates, dict):
-            for at in templates.get("added", []):
-                added_templates.append(at.get("name", "New Card"))
-            for ut in templates.get("updated", []):
-                updated_templates.append(ut.get("name", "Card"))
-            for rt in templates.get("removed", []):
-                removed_templates.append(str(rt))
-        elif isinstance(templates, list):
-            new_t_names = {t.get("name") for t in templates}
-            new_t_ids = {t.get("id") for t in templates if t.get("id")}
-            for t in templates:
-                t_name = t.get("name")
-                t_id = t.get("id")
-                if t_name not in current_template_map and not (t_id and t_id in current_template_ids):
-                    added_templates.append(t_name)
-                else:
-                    updated_templates.append(t_name)
-            for curr_t in current_template_map:
-                if curr_t not in new_t_names and current_template_map[curr_t].id not in new_t_ids:
-                    removed_templates.append(curr_t)
-
-    for rem_t in removed_templates:
-        tmpl_obj = current_template_map.get(rem_t)
-        if tmpl_obj:
-            cards_affected = Card.query.filter_by(template_id=tmpl_obj.id).count()
-            if cards_affected > 0:
-                data_loss_possible = True
-                warnings.append(
-                    f"⚠️ Xóa template '{rem_t}': Sẽ xóa vĩnh viễn {cards_affected} card(s) và toàn bộ lịch sử học tập liên quan."
-                )
+        from app.services.study_note_template_service import _plan
+        current = tuple(template_library_repository.attached_templates(db.session, nt.id))
+        updates, additions, removed_ids = _plan(current, templates)
+        added_templates = [dict(item) for item in additions]
+        updated_templates = [dict(data, id=view.id, application_id=view.application_id) for view, data in updates]
+        removed_templates = [view.name for view in current if view.application_id in removed_ids]
+        if removed_ids:
+            warnings.append("Retiring these presentations preserves Note progress and review history.")
 
     if renamed_fields:
         renamed_desc = ", ".join(f"{r['old_name']} -> {r['new_name']}" for r in renamed_fields)
@@ -546,8 +518,8 @@ def _detect_destructive_note_type_changes(
 ) -> tuple[bool, list[str]]:
     current_field_map = {f.name: f for f in nt.field_defs}
     current_field_ids = {f.id: f for f in nt.field_defs}
-    current_template_map = {t.name: t for t in nt.templates}
-    current_template_ids = {t.id: t for t in nt.templates}
+    current_template_map = {t.name: t for t in template_library_repository.attached_templates(db.session, nt.id)}
+    current_template_ids = {t.id: t for t in template_library_repository.attached_templates(db.session, nt.id)}
 
     reasons: list[str] = []
 
@@ -577,27 +549,10 @@ def _detect_destructive_note_type_changes(
         if notes_count > 0:
             reasons.append(f"Xóa trường '{rf}' khi có {notes_count} note(s) đang tồn tại")
 
-    # Check removed templates
-    removed_templates: list[str] = []
+    # Attachment retirement is not content/history deletion.
     if templates is not None:
-        if isinstance(templates, dict):
-            for rt in templates.get("removed", []):
-                removed_templates.append(str(rt))
-        elif isinstance(templates, list):
-            new_t_names = {t.get("name") for t in templates}
-            new_t_ids = {t.get("id") for t in templates if t.get("id")}
-            for curr_name, curr_t in current_template_map.items():
-                if curr_name not in new_t_names and curr_t.id not in new_t_ids:
-                    removed_templates.append(curr_name)
-
-    for rt in removed_templates:
-        tmpl_obj = current_template_map.get(rt)
-        if tmpl_obj:
-            t_cards = Card.query.filter_by(template_id=tmpl_obj.id).count()
-            if t_cards > 0 or cards_count > 0:
-                reasons.append(f"Xóa template '{rt}' làm mất các thẻ card và lịch sử ôn tập")
-        elif cards_count > 0:
-            reasons.append(f"Xóa template '{rt}'")
+        from app.services.study_note_template_service import _plan
+        _plan(tuple(template_library_repository.attached_templates(db.session, nt.id)), templates)
 
     return bool(reasons), reasons
 
@@ -650,6 +605,8 @@ def update_note_type(
                 for row in db.session.query(Card.id)
                 .join(Note, Card.note_id == Note.id)
                 .filter(Note.note_type_id == nt.id)
+                # A retired occurrence's Cards still belong to their Notes.
+                .execution_options(include_retired_cards=True)
                 .all()
             ]
             authority_routes = content_topology.lock_content_delete_routes(
@@ -664,7 +621,7 @@ def update_note_type(
             # Refresh after waiting for the learner fence; a repeatable-read
             # snapshot/cached relationship must not validate an older topology.
             nt = NoteType.query.filter_by(id=note_type_id, user_id=user_id).with_for_update().populate_existing().one()
-            for relationship, model in (("templates", Template), ("field_defs", FieldDef)):
+            for relationship, model in (("study_applications", StudyApplication), ("field_defs", FieldDef)):
                 rows = model.query.filter_by(note_type_id=nt.id).order_by(model.id).with_for_update().populate_existing().all()
                 set_committed_value(nt, relationship, rows)
         except StudyAuthorityFenceError as exc:
@@ -950,141 +907,11 @@ def update_note_type(
                 code="NOTE_TYPE_MUST_HAVE_FIELDS",
             )
 
-    # 3. Update Templates
-    if templates is not None and authority_route.mode_code == "NOTE":
+    # Attachment changes share one transaction with field edits and NOTE fences.
+    if templates is not None:
         from app.services.study_note_template_service import stage_note_template_changes
         stage_note_template_changes(db.session, routes=authority_routes, note_type=nt,
             changes=templates, operation_key=f"mcp-note-type-template-update:{nt.id}:{preview_id or 'direct'}")
-        templates = None  # The legacy mutation below must not run a second time.
-    if templates is not None:
-        current_templates = {t.name: t for t in nt.templates}
-        current_template_ids = {t.id: t for t in nt.templates}
-
-        removed_template_ids: set[str] = set()
-        if isinstance(templates, dict):
-            removed_template_ids = {
-                str(current_templates[name].id)
-                for name in (str(value) for value in templates.get("removed", []))
-                if name in current_templates
-            }
-        elif isinstance(templates, list):
-            requested_names = {t.get("name") for t in templates if t.get("name")}
-            requested_ids = {t.get("id") for t in templates if t.get("id")}
-            removed_template_ids = {
-                str(row.id)
-                for row in current_templates.values()
-                if row.name not in requested_names and row.id not in requested_ids
-            }
-        # A definition also used by another NoteType is only detached here;
-        # deleting it would erase that NoteType's Cards and progress.
-        shared_template_ids = {
-            template_id
-            for template_id in removed_template_ids
-            if template_library_repository.template_used_outside(db.session, template_id, nt.id)
-        }
-        for template_id in sorted(shared_template_ids):
-            template_library_repository.detach_template(db.session, nt.id, current_template_ids[template_id])
-        removed_template_ids -= shared_template_ids
-        removed_card_ids = [
-            str(row[0])
-            for row in db.session.query(Card.id)
-            .filter(Card.template_id.in_(sorted(removed_template_ids)))
-            .all()
-            if row and row[0]
-        ] if removed_template_ids else []
-        if removed_card_ids:
-            CardProgress.query.filter(
-                CardProgress.card_id.in_(removed_card_ids)
-            ).delete(synchronize_session=False)
-
-        if isinstance(templates, dict):
-            for rem_name in templates.get("removed", []):
-                t_obj = current_templates.get(str(rem_name))
-                if t_obj and str(t_obj.id) not in shared_template_ids:
-                    Card.query.filter_by(template_id=t_obj.id).delete(synchronize_session=False)
-                    db.session.delete(t_obj)
-
-            for upd in templates.get("updated", []):
-                t_id = upd.get("id")
-                t_name = upd.get("name")
-                t_obj = current_template_ids.get(t_id) if t_id else current_templates.get(t_name)
-                if t_obj:
-                    if "name" in upd:
-                        t_obj.name = upd["name"]
-                    if "front_html" in upd:
-                        t_obj.front_html = upd["front_html"]
-                    if "back_html" in upd:
-                        t_obj.back_html = upd["back_html"]
-                    if "shared_css" in upd:
-                        t_obj.shared_css = upd["shared_css"]
-                    if "position" in upd:
-                        t_obj.position = int(upd["position"])
-
-            for add_t in templates.get("added", []):
-                t_name = add_t.get("name", "New Card")
-                new_t = Template(
-                    note_type_id=nt.id,
-                    name=t_name,
-                    front_html=str(add_t.get("front_html") or ""),
-                    back_html=str(add_t.get("back_html") or ""),
-                    shared_css=str(add_t.get("shared_css") or ""),
-                    position=int(add_t.get("position", len(nt.templates))),
-                    is_default=False,
-                )
-                db.session.add(new_t)
-                db.session.flush()
-                for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
-                    db.session.add(Card(note_id=note.id, template_id=new_t.id))
-
-        elif isinstance(templates, list):
-            new_t_names = {t.get("name") for t in templates if t.get("name")}
-            new_t_ids = {t.get("id") for t in templates if t.get("id")}
-            for curr_name, curr_t in current_templates.items():
-                if curr_name not in new_t_names and curr_t.id not in new_t_ids and str(curr_t.id) not in shared_template_ids:
-                    Card.query.filter_by(template_id=curr_t.id).delete(synchronize_session=False)
-                    db.session.delete(curr_t)
-
-            for idx, t in enumerate(templates):
-                t_id = t.get("id")
-                t_name = t.get("name") or f"Card {idx + 1}"
-                t_obj = current_template_ids.get(t_id) if t_id else current_templates.get(t_name)
-
-                if t_obj:
-                    if "name" in t:
-                        t_obj.name = t["name"]
-                    if "front_html" in t:
-                        t_obj.front_html = t["front_html"]
-                    if "back_html" in t:
-                        t_obj.back_html = t["back_html"]
-                    if "shared_css" in t:
-                        t_obj.shared_css = t["shared_css"]
-                    if "position" in t:
-                        t_obj.position = int(t["position"])
-                else:
-                    # Create new template and create cards for existing notes
-                    new_t = Template(
-                        note_type_id=nt.id,
-                        name=t_name,
-                        front_html=str(t.get("front_html") or ""),
-                        back_html=str(t.get("back_html") or ""),
-                        shared_css=str(t.get("shared_css") or ""),
-                        position=int(t.get("position", idx)),
-                        is_default=False,
-                    )
-                    db.session.add(new_t)
-                    db.session.flush()
-                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
-                        db.session.add(Card(note_id=note.id, template_id=new_t.id))
-
-        db.session.flush()
-        if not template_library_repository.card_slots(db.session, nt.id):
-            db.session.rollback()
-            raise RequestValidationError(
-                "NoteType phải có ít nhất một Template.",
-                field="templates",
-                status=400,
-                code="NOTE_TYPE_MUST_HAVE_TEMPLATES",
-            )
 
     if preview_id:
         consume_preview_token(preview_id)

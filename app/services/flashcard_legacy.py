@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.repositories import template_library_repository
 from models.flashcard import FieldDef, NoteType, Template
 
 LEGACY_NOTE_TYPE_NAME = "Flama Standard Vocabulary"
@@ -361,26 +362,23 @@ def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Templat
 
     template = (
         db_session.query(Template)
-        .filter(Template.note_type_id == note_type.id)
-        .order_by(Template.position.asc(), Template.created_at.asc())
+        .join(StudyApplication, StudyApplication.template_id == Template.id)
+        .filter(StudyApplication.note_type_id == note_type.id, StudyApplication.status_code == "ACTIVE")
+        .order_by(StudyApplication.position.asc(), Template.created_at.asc())
         .first()
     )
     if template is None:
-        template = Template(
-            note_type_id=note_type.id,
-            name="Default Flama Flashcard",
-            front_html=LEGACY_FRONT_TEMPLATE.strip(),
-            back_html=LEGACY_BACK_TEMPLATE.strip(),
-            shared_css=LEGACY_SHARED_CSS.strip(),
-            position=0,
-            is_default=True,
-        )
+        template = template_library_repository.create_attached_template(db_session, note_type=note_type, name="Default Flama Flashcard", front_html=LEGACY_FRONT_TEMPLATE.strip(), back_html=LEGACY_BACK_TEMPLATE.strip(), shared_css=LEGACY_SHARED_CSS.strip(), position=0, is_default=True)
         db_session.add(template)
     else:
         template.front_html = LEGACY_FRONT_TEMPLATE.strip()
         template.back_html = LEGACY_BACK_TEMPLATE.strip()
         template.shared_css = LEGACY_SHARED_CSS.strip()
-        template.is_default = True
+        applications = template_library_repository.applications(db_session, note_type.id)
+        chosen = next((row for row in applications if row.template_id == template.id and row.occurrence_key == "compat"),
+                      next((row for row in applications if row.template_id == template.id), None))
+        for application in applications:
+            application.is_default = chosen is not None and application.id == chosen.id
 
     db_session.flush()
     return note_type, template
@@ -437,20 +435,13 @@ def ensure_quiz_note_type(db_session, user_id: int) -> tuple[NoteType, Template]
 
     template = (
         db_session.query(Template)
-        .filter(Template.note_type_id == note_type.id)
-        .order_by(Template.position.asc(), Template.created_at.asc())
+        .join(StudyApplication, StudyApplication.template_id == Template.id)
+        .filter(StudyApplication.note_type_id == note_type.id, StudyApplication.status_code == "ACTIVE")
+        .order_by(StudyApplication.position.asc(), Template.created_at.asc())
         .first()
     )
     if template is None:
-        template = Template(
-            note_type_id=note_type.id,
-            name="Default Quiz Flashcard",
-            front_html=QUIZ_FRONT_TEMPLATE.strip(),
-            back_html=QUIZ_BACK_TEMPLATE.strip(),
-            shared_css=QUIZ_SHARED_CSS.strip(),
-            position=0,
-            is_default=True,
-        )
+        template = template_library_repository.create_attached_template(db_session, note_type=note_type, name="Default Quiz Flashcard", front_html=QUIZ_FRONT_TEMPLATE.strip(), back_html=QUIZ_BACK_TEMPLATE.strip(), shared_css=QUIZ_SHARED_CSS.strip(), position=0, is_default=True)
         db_session.add(template)
     else:
         if not template.front_html:
@@ -459,7 +450,11 @@ def ensure_quiz_note_type(db_session, user_id: int) -> tuple[NoteType, Template]
             template.back_html = QUIZ_BACK_TEMPLATE.strip()
         if not template.shared_css:
             template.shared_css = QUIZ_SHARED_CSS.strip()
-        template.is_default = True
+        applications = template_library_repository.applications(db_session, note_type.id)
+        chosen = next((row for row in applications if row.template_id == template.id and row.occurrence_key == "compat"),
+                      next((row for row in applications if row.template_id == template.id), None))
+        for application in applications:
+            application.is_default = chosen is not None and application.id == chosen.id
 
     db_session.flush()
     return note_type, template
@@ -495,8 +490,9 @@ def _released_deck_template_if_schema_locked(
     }
     template = (
         db_session.query(Template)
-        .filter(Template.note_type_id == note_type.id)
-        .order_by(Template.position.asc(), Template.created_at.asc())
+        .join(StudyApplication, StudyApplication.template_id == Template.id)
+        .filter(StudyApplication.note_type_id == note_type.id, StudyApplication.status_code == "ACTIVE")
+        .order_by(StudyApplication.position.asc(), Template.created_at.asc())
         .first()
     )
     if required_field_names.issubset(existing_names) and template is not None:

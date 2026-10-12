@@ -371,8 +371,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
             )
             db.session.add(note)
             db.session.flush()
-            card = Card(note_id=note.id, template_id=self.template_id)
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note.id, template_id=self.template_id).one()
             db.session.commit()
 
             # Preview removing 'Meaning' and removing template

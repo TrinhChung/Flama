@@ -101,6 +101,10 @@ class TypingTemplateArtifactTests(unittest.TestCase):
             user = User(username="owner", email="owner@example.com")
             user.set_password("password")
             db.session.add(user)
+            db.session.flush()
+            from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+            from datetime import datetime
+            stage_note_authority_enrollment(db.session, learner_user_id=user.id, now_utc=datetime.utcnow())
             db.session.commit()
         self.client.post("/login", data={"email": "owner@example.com", "password": "password"})
         response = self.client.post("/api/note-types", json={

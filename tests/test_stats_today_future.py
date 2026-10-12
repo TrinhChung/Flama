@@ -12,7 +12,10 @@ from models import db
 from models.flashcard import ReviewEvent
 from models.user import User
 from models.deck import Deck
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import attach_template, enroll_note_user
+from tests.note_progress_fixtures import stage_note_state
+from models.note_type import NoteType
+from models.note import Note
 
 
 class StatsTodayFutureTests(unittest.TestCase):
@@ -32,12 +35,18 @@ class StatsTodayFutureTests(unittest.TestCase):
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
+            enroll_note_user(db.session, user)
             self.user_id = user.id
 
             deck = Deck(name="Deck A", owner_user_id=user.id)
             db.session.add(deck)
             db.session.flush()
             self.deck_id = deck.id
+            note_type = NoteType(name="Forecast fixture", user_id=user.id)
+            db.session.add(note_type)
+            db.session.flush()
+            attach_template(db.session, note_type_id=note_type.id, owner_user_id=user.id, name="Card")
+            self.note_type_id = note_type.id
             db.session.commit()
 
     def tearDown(self):
@@ -61,16 +70,11 @@ class StatsTodayFutureTests(unittest.TestCase):
         due_day: int | None = None,
         is_suspended: bool = False,
     ):
-        db.session.add(
-            CardProgress(
-                user_id=self.user_id,
-                queue=queue,
-                due_at=due_at,
-                due_day=due_day,
-                interval_days=interval_days,
-                is_suspended=is_suspended,
-            )
-        )
+        note = Note(user_id=self.user_id, deck_id=self.deck_id, note_type_id=self.note_type_id)
+        db.session.add(note)
+        db.session.flush()
+        return stage_note_state(db.session, user_id=self.user_id, note_id=note.id,
+            queue=queue, due_at=due_at, due_day=due_day, interval_days=interval_days, is_suspended=is_suspended)
 
     def test_backlog_on_off(self):
         with self.app.app_context():

@@ -108,8 +108,7 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card(note_id=n.id, template_id=note_type.templates[0].id)
-                db.session.add(c)
+                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
 
             # Published Marketplace Item for Mega Public Deck
             # Has 25 real cards in DB, but preview_samples_json has 3
@@ -154,8 +153,7 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card(note_id=n.id, template_id=note_type.templates[0].id)
-                db.session.add(c)
+                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
 
             pub_market_item_fallback = DeckMarketplaceItem(
                 id="pub-fallback-deck-002",
@@ -231,8 +229,7 @@ class TestMcpAdversarialChallenge(unittest.TestCase):
                 )
                 db.session.add(n)
                 db.session.flush()
-                c = Card(note_id=n.id, template_id=note_type.templates[0].id)
-                db.session.add(c)
+                c = Card.query.filter_by(note_id=n.id, template_id=note_type.templates[0].id).one()
 
             # Author's OWN personal private deck (author has a public deck, but also private notes)
             author_private_deck = Deck(name="Author Secret Private Deck", owner_user_id=author.id)

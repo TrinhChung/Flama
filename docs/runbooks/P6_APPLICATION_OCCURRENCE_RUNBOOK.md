@@ -1,3 +1,5 @@
+> Historical runbook (Phase 6, 2026-09-30). The two MySQL probes named below were retired on 2026-10-12 because they require the removed attribution writer and physical Card/CP tables. Recover their exact historical sources from commit `e077d275` with `git show e077d275:scripts/<filename>`. Do not run those commands against the current runtime. Current replacement qualification: `tests/test_retirement_fresh_migration_chain.py`, `tests/test_card_progress_retirement_migration.py`, `tests/test_legacy_model_retirement.py`, and `tests/test_note_stats_retirement.py`, plus the isolated MySQL migration rehearsal and verified external archive described in the current legacy retirement plan.
+
 # Runbook Phase 6 — phát hành application occurrence (migration 46) và đếm theo Note
 
 > Lập 2026-09-30. Nguồn: [P6 execution plan](../task/decoupling/P6_EXECUTION_PLAN_2026-09-29.md) §5 (G6-P), §7. Không bước nào ở đây tự chạy trong CI. Lệnh `flama_cli` giống [runbook P5](./P5_NOTE_AUTHORITY_RUNBOOK.md) (systemd-run, user `flama`, `/opt/flama/current`, `/etc/flama/flama.env`).

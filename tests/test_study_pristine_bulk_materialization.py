@@ -24,6 +24,7 @@ from models.note_type import NoteType
 from models.study_progress_subject import StudyProgressSubject
 from models.template import Template
 from models.user import User
+from tests.study_note_fixtures import attach_template
 
 NOW = datetime(2026, 9, 30, 12, 0, 0)
 
@@ -67,7 +68,8 @@ class StudyPristineBulkMaterializationTests(unittest.TestCase):
             db.session.add(note_type)
             db.session.flush()
             db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-            rows = [Template(note_type_id=note_type.id, name=f"T{index}", front_html="{{Word}}",
+            rows = [attach_template(db.session, note_type_id=note_type.id, owner_user_id=self.user_id,
+                             name=f"T{index}", front_html="{{Word}}",
                              back_html="{{Word}}", position=index, is_default=index == 0)
                     for index in range(templates)]
             db.session.add_all(rows)
@@ -77,7 +79,6 @@ class StudyPristineBulkMaterializationTests(unittest.TestCase):
                             field_values={"Word": f"w{templates}-{number}"})
                 db.session.add(note)
                 db.session.flush()
-                db.session.add_all(Card(note_id=note.id, template_id=template.id) for template in rows)
                 self.note_ids.append(str(note.id))
         db.session.commit()
         # Two Notes already have a pristine row without state.

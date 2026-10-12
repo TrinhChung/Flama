@@ -28,7 +28,6 @@ from app.repositories.study_repository import (
     normalize_progress_queue as _normalize_progress_queue,
 )
 from models import db
-from models.card_progress import CardProgress
 from models.field_types import field_value_text
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note, NoteType
@@ -431,7 +430,7 @@ def browse_status_code(*, queue: str | None, due_at: datetime | None, now: datet
 
 def resolve_browse_queue_due(
     *,
-    progress_obj: CardProgress | None,
+    progress_obj: Any | None,
     now: datetime,
     timezone_name: str = "UTC",
 ) -> tuple[str, datetime | None]:
@@ -453,7 +452,7 @@ def build_browse_row(
     card_obj: Card,
     deck_name_lookup: dict[int, str],
     now: datetime,
-    progress_obj: CardProgress | None = None,
+    progress_obj: Any | None = None,
     timezone_name: str = "UTC",
 ) -> dict[str, Any]:
     note_obj = card_obj.note
@@ -498,7 +497,7 @@ def build_browse_card_detail(
     card_obj: Card,
     deck_name_lookup: dict[int, str],
     now: datetime,
-    progress_obj: CardProgress | None = None,
+    progress_obj: Any | None = None,
     timezone_name: str = "UTC",
 ) -> dict[str, Any]:
     note_obj = card_obj.note
@@ -733,231 +732,52 @@ def build_browse_deck_tree_payload(
     timezone_name: str = "UTC",
     progress_counts: bool = True,
 ) -> list[dict[str, Any]]:
-    """Deck tree with per-deck counts from the ``card_progress`` rows.
+    """Build the accessible tree and optional current Note study counts.
 
-    ``progress_counts=False`` leaves every count at zero without reading
-    ``card_progress``: NOTE learners recount the whole tree from canonical
-    availability, and under ``CANONICAL_V1`` that projection is frozen.
+    ``progress_counts=False`` supplies the structural payload for the service's
+    set-wise recount, without issuing any progress query in this repository.
     """
-    from app.repositories.study_repository import (
-        _today_day_index,
-        active_progress_expr,
-        normalized_queue_expr,
-        review_due_expr,
-    )
+    from flask import current_app
+    from app.repositories.study_repository import _today_day_index
+    from app.services.anki_scheduler import _day_index_to_datetime
+    from app.services.deck_aggregation_service import aggregate_deck_study_counts
     from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
 
-    now = _utcnow()
     scoped_decks = collect_accessible_browse_decks(user_id=user_id, admin_mode=admin_mode)
     if not scoped_decks:
         return []
-
     scoped_ids = {deck.id for deck in scoped_decks}
     deck_lookup = {deck.id: deck for deck in scoped_decks}
     children_by_parent = deck_children_map(scoped_decks)
-
-    direct_counts = {
-        deck_id: {"total": 0, "new": 0, "learn": 0, "due": 0}
-        for deck_id in scoped_ids
-    }
-
-    runtime = resolve_scheduler_runtime_settings(user_id=user_id if not admin_mode else None)
-    day_boundary_hour = int(runtime.day_boundary_hour_local)
-    today_day_index = _today_day_index(
-        now=now,
-        timezone_name=timezone_name,
-        day_boundary_hour_local=day_boundary_hour,
-    )
-
-    progress_alias = CardProgress
-    progress_join = db.and_(
-        progress_alias.card_id == Card.id,
-        progress_alias.user_id == user_id,
-    )
-    active_expr = active_progress_expr(progress_alias, today_day_index=today_day_index)
-    norm_queue = normalized_queue_expr(progress_alias)
-    is_new = db.and_(active_expr, db.or_(progress_alias.id.is_(None), norm_queue == NEW_QUEUE))
-    is_learn = db.and_(active_expr, norm_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]))
-    is_due_review = db.and_(
-        active_expr,
-        norm_queue == REVIEW_QUEUE,
-        review_due_expr(
-            progress_alias,
-            now=now,
-            timezone_name=timezone_name,
-            day_boundary_hour_local=day_boundary_hour,
-        ),
-    )
-
-    counts_query = (
-        db.session.query(
-            Note.deck_id,
-            db.func.count(Card.id).label("total"),
-            db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
-            db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
-            db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
+    direct_counts = {deck_id: {"total": 0, "new": 0, "learn": 0, "due": 0}
+                     for deck_id in scoped_ids}
+    if progress_counts:
+        runtime = resolve_scheduler_runtime_settings(user_id=user_id)
+        boundary_hour = int(runtime.day_boundary_hour_local)
+        today_day_index = _today_day_index(now=_utcnow(), timezone_name=timezone_name,
+                                          day_boundary_hour_local=boundary_hour)
+        direct_counts, _ = aggregate_deck_study_counts(
+            db.session, learner_user_id=user_id, visible_deck_ids=sorted(scoped_ids),
+            today_day_index=today_day_index,
+            day_cutoff_utc=_day_index_to_datetime(today_day_index + 1, boundary_hour,
+                                                timezone_name=timezone_name),
+            admin_mode=admin_mode, owned_by_any_user=admin_mode,
+            count_by_note=bool(current_app.config.get("STUDY_NOTE_COUNT_ENABLED", False)),
+            include_note_types=False,
         )
-        .select_from(Card)
-        .join(Note, Card.note_id == Note.id)
-        .outerjoin(progress_alias, progress_join)
-        .filter(Note.deck_id.in_(scoped_ids))
-    )
+
+    logical_installs = []
+    maps_by_install: dict[str, dict[int, int]] = defaultdict(dict)
     if not admin_mode:
-        counts_query = counts_query.filter(Note.user_id == user_id)
-    counts_query = counts_query.group_by(Note.deck_id)
-
-    for row in counts_query.all() if progress_counts else ():
-        deck_id = row[0]
-        if deck_id is None:
-            continue
-        bucket = direct_counts.setdefault(
-            int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
-        )
-        bucket["total"] += int(row[1] or 0)
-        bucket["new"] += int(row[2] or 0)
-        bucket["learn"] += int(row[3] or 0)
-        bucket["due"] += int(row[4] or 0)
-
-    logical_installs: list[DeckInstall] = []
-    if not admin_mode:
-        logical_installs = (
-            DeckInstall.query.filter(
-                DeckInstall.user_id == user_id,
-                DeckInstall.clone_mode == "logical_overlay",
-                DeckInstall.local_deck_id.isnot(None),
-            )
-            .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
-            .all()
-        )
-        maps_by_install: dict[str, dict[int, int]] = defaultdict(dict)
-        if logical_installs:
-            install_ids = [str(inst.id) for inst in logical_installs if inst.id is not None]
-            if install_ids:
-                all_map_rows = (
-                    DeckCloneDeckMap.query.filter(DeckCloneDeckMap.deck_install_id.in_(install_ids))
-                    .all()
-                )
-                source_to_install: dict[int, str] = {}
-                source_to_local_all: dict[int, int] = {}
-                has_overlap = False
-
-                for row in all_map_rows:
-                    if (
-                        row.deck_install_id
-                        and row.source_deck_id is not None
-                        and row.local_deck_id is not None
-                        and int(row.local_deck_id) in scoped_ids
-                    ):
-                        sid = int(row.source_deck_id)
-                        lid = int(row.local_deck_id)
-                        iid = str(row.deck_install_id)
-
-                        prev_iid = source_to_install.get(sid)
-                        if prev_iid is not None and prev_iid != iid:
-                            logger.warning(
-                                "Cross-install source overlap detected for user %s: source_deck_id=%s mapped to installs %s and %s",
-                                user_id,
-                                sid,
-                                prev_iid,
-                                iid,
-                            )
-                            has_overlap = True
-                        else:
-                            source_to_install[sid] = iid
-                            source_to_local_all[sid] = lid
-
-                        maps_by_install[iid][sid] = lid
-
-                if not has_overlap:
-                    install_conditions = []
-                    for install in logical_installs:
-                        inst_key = str(install.id)
-                        source_to_local = maps_by_install.get(inst_key)
-                        if not source_to_local:
-                            continue
-                        conds = [Note.deck_id.in_(list(source_to_local.keys()))]
-                        if install.source_owner_user_id is not None:
-                            conds.append(Note.user_id == install.source_owner_user_id)
-                        snapshot_at = install.base_snapshot_at or install.installed_at
-                        if snapshot_at is not None:
-                            conds.append(Note.created_at <= snapshot_at)
-                            conds.append(Card.created_at <= snapshot_at)
-                        install_conditions.append(db.and_(*conds))
-
-                    if install_conditions and progress_counts:
-                        clone_counts_query = (
-                            db.session.query(
-                                Note.deck_id,
-                                db.func.count(Card.id).label("total"),
-                                db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
-                                db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
-                                db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
-                            )
-                            .select_from(Card)
-                            .join(Note, Card.note_id == Note.id)
-                            .outerjoin(progress_alias, progress_join)
-                            .filter(db.or_(*install_conditions))
-                            .group_by(Note.deck_id)
-                        )
-                        for row in clone_counts_query.all():
-                            source_deck_id = row[0]
-                            if source_deck_id is None:
-                                continue
-                            local_deck_id = source_to_local_all.get(int(source_deck_id))
-                            if local_deck_id is None:
-                                continue
-                            bucket = direct_counts.setdefault(
-                                int(local_deck_id),
-                                {"total": 0, "new": 0, "learn": 0, "due": 0},
-                            )
-                            bucket["total"] += int(row[1] or 0)
-                            bucket["new"] += int(row[2] or 0)
-                            bucket["learn"] += int(row[3] or 0)
-                            bucket["due"] += int(row[4] or 0)
-                else:
-                    for install in logical_installs if progress_counts else ():
-                        inst_key = str(install.id)
-                        source_to_local = maps_by_install.get(inst_key)
-                        if not source_to_local:
-                            continue
-                        clone_counts_query = (
-                            db.session.query(
-                                Note.deck_id,
-                                db.func.count(Card.id).label("total"),
-                                db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
-                                db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
-                                db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
-                            )
-                            .select_from(Card)
-                            .join(Note, Card.note_id == Note.id)
-                            .outerjoin(progress_alias, progress_join)
-                            .filter(Note.deck_id.in_(list(source_to_local.keys())))
-                        )
-                        if install.source_owner_user_id is not None:
-                            clone_counts_query = clone_counts_query.filter(Note.user_id == install.source_owner_user_id)
-                        snapshot_at = install.base_snapshot_at or install.installed_at
-                        if snapshot_at is not None:
-                            clone_counts_query = clone_counts_query.filter(
-                                Note.created_at <= snapshot_at,
-                                Card.created_at <= snapshot_at,
-                            )
-                        clone_counts_query = clone_counts_query.group_by(Note.deck_id)
-
-                        for row in clone_counts_query.all():
-                            source_deck_id = row[0]
-                            if source_deck_id is None:
-                                continue
-                            local_deck_id = source_to_local.get(int(source_deck_id))
-                            if local_deck_id is None:
-                                continue
-                            bucket = direct_counts.setdefault(
-                                int(local_deck_id),
-                                {"total": 0, "new": 0, "learn": 0, "due": 0},
-                            )
-                            bucket["total"] += int(row[1] or 0)
-                            bucket["new"] += int(row[2] or 0)
-                            bucket["learn"] += int(row[3] or 0)
-                            bucket["due"] += int(row[4] or 0)
+        logical_installs = (DeckInstall.query.filter(
+            DeckInstall.user_id == user_id, DeckInstall.clone_mode == "logical_overlay",
+            DeckInstall.local_deck_id.isnot(None),
+        ).order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc()).all())
+        install_ids = [str(install.id) for install in logical_installs]
+        if install_ids:
+            for row in DeckCloneDeckMap.query.filter(DeckCloneDeckMap.deck_install_id.in_(install_ids)).all():
+                if row.source_deck_id is not None and row.local_deck_id in scoped_ids:
+                    maps_by_install[str(row.deck_install_id)][int(row.source_deck_id)] = int(row.local_deck_id)
 
     deck_note_type_rows = (
         db.session.query(Note.deck_id, Note.note_type_id)
@@ -1190,7 +1010,7 @@ def query_study_cards_for_deck_ids(*, user_id: int, deck_ids: list[int]) -> list
 
 def count_due_note_cards(
     cards: list[Card],
-    progress_map: dict[str, CardProgress],
+    progress_map: dict[str, Any],
     *,
     now: datetime,
     timezone_name: str = "UTC",

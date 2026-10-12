@@ -39,11 +39,6 @@ class User(UserMixin, db.Model):
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    card_progress = db.relationship(
-        "CardProgress",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
     scheduler_settings = db.relationship(
         "UserSchedulerSettings",
         back_populates="user",

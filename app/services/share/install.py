@@ -52,7 +52,6 @@ from app.services.share.constants import (
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.deck_change_request import DeckChangeRequest
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
@@ -348,10 +347,15 @@ def install_shared_deck_item_for_user(
         )
     readiness_ms = _elapsed_ms(readiness_started)
     note_type_started = time.perf_counter()
+    from app.repositories import template_release_repository
+    applied_release = template_release_repository.one(
+        db.session, DeckRelease, DeckRelease.id == deck_item.current_release_id,
+    )
     note_type_install = ensure_note_type_install_for_user(
         source_note_type=source_note_type,
         user_id=user_id,
         installed_at=now,
+        copy_legacy_templates=not bool(applied_release and applied_release.get("template_pins_initialized")),
     )
     installed_note_type_id = (note_type_install.installed_note_type_id or "").strip()
     if installed_note_type_id:
@@ -394,6 +398,13 @@ def install_shared_deck_item_for_user(
         cloned_root.note_type_id = next(iter(note_type_id_map.values()))
     local_deck_id = cloned_root.id
     install.local_deck_id = local_deck_id
+
+    # Initialize from this release's immutable application/content manifest.
+    # A source occurrence may already be RETIRED; draft ACTIVE applications
+    # and an initialized empty manifest must not change the installed scope.
+    db.session.flush()
+    from app.services.template_release_service import stage_install_template_subscriptions
+    stage_install_template_subscriptions(db.session, install_id=install.id, user_id=user_id)
 
     counter_started = time.perf_counter()
     _increment_counter(

@@ -578,8 +578,7 @@ class RestApiV1Tests(unittest.TestCase):
             db.session.flush()
             note_id = note.id
 
-            card = Card(note_id=note_id, template_id="some-template")
-            db.session.add(card)
+            card = Card.query.filter_by(note_id=note_id, template_id="some-template").one()
             db.session.flush()
             card_id = card.id
 

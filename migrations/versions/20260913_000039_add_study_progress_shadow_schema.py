@@ -21,9 +21,9 @@ from migrations.retired_note_progress_tables import (
     StudyProgressLineageRef,
     StudyProgressState,
 )
-from models.study_progress_backfill_checkpoint import StudyProgressBackfillCheckpoint
-from models.study_progress_backfill_disposition import StudyProgressBackfillDisposition
-from models.study_progress_backfill_run import StudyProgressBackfillRun
+from migrations.retired_backfill_tables import StudyProgressBackfillCheckpoint
+from migrations.retired_backfill_tables import StudyProgressBackfillDisposition
+from migrations.retired_backfill_tables import StudyProgressBackfillRun
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_subject import StudyProgressSubject
