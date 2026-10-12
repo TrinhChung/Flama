@@ -1,7 +1,7 @@
 """Retire Template origin coupling after explicit attachment/owner cutover.
 
-Revision ID: 20261012_000060
-Revises: 20261012_000059
+Revision ID: 20261012_000061
+Revises: 20261012_000060
 
 Populated old templates require a verified full-row archive before any writes.
 Ownership is derived only for NULL owners from the actual old origin NoteType;
@@ -15,8 +15,8 @@ from alembic import op
 import sqlalchemy as sa
 from migrations.retirement_archive import assert_archive_matches
 
-revision = "20261012_000060"
-down_revision = "20261012_000059"
+revision = "20261012_000061"
+down_revision = "20261012_000060"
 branch_labels = None
 depends_on = None
 

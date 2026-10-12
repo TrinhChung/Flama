@@ -10,7 +10,7 @@ from alembic.operations import Operations
 import sqlalchemy as sa
 from app import create_audit_app  # Import application package before model contract modules.
 
-migration = importlib.import_module('migrations.versions.20261012_000061_index_note_due_selection')
+migration = importlib.import_module('migrations.versions.20261012_000062_index_note_due_selection')
 
 
 class NoteDueIndexMigrationTests(unittest.TestCase):

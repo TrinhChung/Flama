@@ -1,6 +1,6 @@
 """Archive old presentation IDs and derive new presentations without Card rows.
 
-Revision ID: 20261011_000057
+Revision ID: 20261012_000058
 Revises: 20261010_000056
 
 This contraction requires a stopped-writer deployment window. It keeps every
@@ -23,7 +23,7 @@ from datetime import datetime
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20261011_000057"
+revision = "20261012_000058"
 down_revision = "20261010_000056"
 branch_labels = None
 depends_on = None

@@ -1,7 +1,7 @@
 """Retire four unused runtime tables, preserving verified external evidence.
 
-Revision ID: 20261012_000058
-Revises: 20261011_000057
+Revision ID: 20261012_000059
+Revises: 20261012_000058
 
 Populated databases require FLAMA_RETIREMENT_ARCHIVE pointing to an archive
 verified by restoration on the same dialect. All live checksums must match
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 
 from migrations.retirement_archive import assert_archive_matches
 
-revision = "20261012_000058"
-down_revision = "20261011_000057"
+revision = "20261012_000059"
+down_revision = "20261012_000058"
 branch_labels = None
 depends_on = None
 

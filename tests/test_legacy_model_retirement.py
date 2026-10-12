@@ -18,7 +18,7 @@ from app.services.study_progress_contract import BACKFILL_RUN_KINDS, BACKFILL_ST
 from migrations.retired_backfill_tables import RETIRED_BACKFILL_METADATA
 from migrations.retirement_archive import ARCHIVE_ENV, DEAD_MODEL_TABLES, _column_descriptor, _restore_type, assert_archive_matches, load_bundle, verify_restore, write_bundle
 
-migration = importlib.import_module("migrations.versions.20261012_000058_retire_unused_backfill_models")
+migration = importlib.import_module("migrations.versions.20261012_000059_retire_unused_backfill_models")
 NOW = datetime(2026, 10, 12, 1, 2, 3, 123456)
 
 

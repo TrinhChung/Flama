@@ -104,7 +104,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "migrations/*retirement*.py",
             "migrations/retired_*.py",
             "migrations/historical_bootstrap_core.py",
-            "migrations/versions/20261011_000057_*.py",
+            "migrations/versions/20261012_000058_*.py",
             "migrations/versions/20261012_00005*.py",
             "migrations/versions/20261012_00006*.py",
             "scripts/collect_study_retirement_observation.py",

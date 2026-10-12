@@ -1,7 +1,7 @@
 """Index NOTE queue/anchor range selection without changing progress values.
 
-Revision ID: 20261012_000061
-Revises: 20261012_000060
+Revision ID: 20261012_000062
+Revises: 20261012_000061
 
 The current learner/Note index only narrows a picker to a learner's whole
 collection. Queue and suspension are equalities; due_day is either a day
@@ -14,8 +14,8 @@ filtered range; scheduling anchors and all state/history values are retained.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '20261012_000061'
-down_revision = '20261012_000060'
+revision = '20261012_000062'
+down_revision = '20261012_000061'
 branch_labels = None
 depends_on = None
 

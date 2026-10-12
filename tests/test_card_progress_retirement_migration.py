@@ -22,7 +22,7 @@ from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.study_authority_storage_profile import StudyAuthorityStorageProfile
 from models.study_progress_subject import StudyProgressSubject
 
-migration = importlib.import_module('migrations.versions.20261012_000059_retire_card_progress')
+migration = importlib.import_module('migrations.versions.20261012_000060_retire_card_progress')
 
 
 class CardProgressRetirementMigrationTests(unittest.TestCase):

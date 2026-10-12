@@ -14,8 +14,8 @@ from migrations.progress_retirement_gate import (
 )
 from migrations.retirement_archive import assert_archive_matches
 
-revision = '20261012_000059'
-down_revision = '20261012_000058'
+revision = '20261012_000060'
+down_revision = '20261012_000059'
 branch_labels = None
 depends_on = None
 

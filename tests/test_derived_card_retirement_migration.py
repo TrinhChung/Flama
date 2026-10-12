@@ -9,7 +9,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 import sqlalchemy as sa
 
-migration = importlib.import_module("migrations.versions.20261011_000057_derive_cards_from_occurrences")
+migration = importlib.import_module("migrations.versions.20261012_000058_derive_cards_from_occurrences")
 OLD = datetime(2026, 8, 1, 5, 0)
 NEW = datetime(2026, 9, 30, 12, 0)
 

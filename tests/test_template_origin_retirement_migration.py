@@ -13,7 +13,7 @@ from alembic.operations import Operations
 import sqlalchemy as sa
 from migrations.retirement_archive import ARCHIVE_ENV, write_bundle, verify_restore
 
-migration = importlib.import_module("migrations.versions.20261012_000060_retire_template_origin")
+migration = importlib.import_module("migrations.versions.20261012_000061_retire_template_origin")
 NOW = datetime(2026, 10, 1, 12)
 
 

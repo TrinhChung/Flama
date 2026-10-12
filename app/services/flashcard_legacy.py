@@ -49,9 +49,9 @@ LEGACY_BACK_TEMPLATE = r"""<div style='
         color: #e53c20;
         padding-top: 20px;'
     >
-        {{word}}
+        {{{word}}}
 {{#word_audio}}
-  <audio id="custom-audio" src="{{word_audio}}"></audio>
+  <audio id="custom-audio" src="{{word_audio_url}}"></audio>
   <button onclick="document.getElementById('custom-audio').play()">🔊</button>
 {{/word_audio}}
     </div>
@@ -91,7 +91,7 @@ LEGACY_BACK_TEMPLATE = r"""<div style='
 <!-- Ảnh minh hoạ stroke order -->
 {{#image}}
 <div class="kanji-stroke-images">
-  {{image}}
+  {{{image}}}
 </div>
 {{/image}}
 
