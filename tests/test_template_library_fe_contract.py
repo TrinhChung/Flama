@@ -66,7 +66,7 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
 
     def test_compact_pages_omit_source_and_preserve_detail_and_usage(self):
         self._attach(0)
-        self._attach(0, "reverse")
+        self._attach(1)
         with self.app.app_context():
             owner = User.query.filter_by(username="owner").one()
             other = User.query.filter_by(username="other").one()
@@ -97,7 +97,7 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
             self.assertFalse({"front_html", "back_html", "shared_css"} & item.keys())
         reusable = next(item for item in data["items"] if item["id"] == self.template["id"])
         self.assertEqual(reusable["id"], self.template["id"])
-        self.assertEqual((reusable["application_count"], reusable["note_type_count"]), (2, 1))
+        self.assertEqual((reusable["application_count"], reusable["note_type_count"]), (2, 2))
         detail = self.client.get(self.path).get_json()
         self.assertEqual(detail["front_html"], "<b>{{term}}</b>")
         self.assertEqual(detail["input_schema"], reusable["input_schema"])
@@ -126,21 +126,25 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
         self.assertIn(template_id, self._items("standalone"))
         self.assertNotIn(template_id, self._items("in_use"))
         first = self._attach(0)
-        self._attach(0, "reverse")
+        duplicate = self.client.post(f"/api/note-types/{self.note_types[0]['id']}/template-applications", json={
+            "template_id": self.template["id"], "occurrence_key": "reverse",
+        })
+        self.assertEqual(duplicate.status_code, 409, duplicate.get_json())
+        self.assertEqual(duplicate.get_json()["error"], "APPLICATION_EXISTS")
         self._attach(1)
         item = self._items("in_use")[template_id]
-        self.assertEqual((item["application_count"], item["note_type_count"]), (3, 2))
+        self.assertEqual((item["application_count"], item["note_type_count"]), (2, 2))
         self.assertNotIn(template_id, self._items("standalone"))
         response = self.client.get(self.path)
         data = response.get_json()
-        self.assertEqual(data["application_count"], 3)
+        self.assertEqual(data["application_count"], 2)
         self.assertEqual({row["note_type_name"] for row in data["applications"]}, {"First", "Second"})
         self.assertEqual({row["application_id"] for row in data["applications"]}, {
             row["id"] for row in data["applications"]
         })
         response = self.client.delete(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{first['id']}")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.client.get(self.path).get_json()["application_count"], 2)
+        self.assertEqual(self.client.get(self.path).get_json()["application_count"], 1)
 
     def test_origin_groups_and_invalid_group(self):
         self.assertIn(self.template["id"], self._items("mine"))
@@ -158,13 +162,12 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
         from models.card import Card
         from models.note import Note
         first = self._attach(0)
-        reverse = self._attach(0, "reverse")
         second = self._attach(1)
         response = self.client.patch(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{first['id']}", json={"position": 7, "is_default": True})
         self.assertEqual(response.status_code, 200, response.get_json())
         with self.app.app_context():
             owner = User.query.filter_by(username="owner").one()
-            for index, applications in ((0, [first, reverse]), (1, [second])):
+            for index, applications in ((0, [first]), (1, [second])):
                 count = 1 if index == 0 else 2
                 for _ in range(count):
                     note = Note(user_id=owner.id, note_type_id=self.note_types[index]["id"], field_values={"Word": "word"})
@@ -181,15 +184,12 @@ class TemplateLibraryFrontendContractTests(unittest.TestCase):
             self.assertEqual(matching[0]["note_count"], expected)
             self.assertEqual(matching[0]["note_type_id"], self.note_types[index]["id"])
             if index == 0:
-                # Unique definition list uses the first occurrence in application
-                # order; the earlier reverse occurrence remains position zero.
-                self.assertEqual(matching[0]["position"], reverse["position"])
+                self.assertEqual(matching[0]["position"], 7)
         self.client.delete(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{first['id']}")
-        self.client.delete(f"/api/note-types/{self.note_types[0]['id']}/template-applications/{reverse['id']}")
         response = self.client.get(f"/api/note-types/{self.note_types[0]['id']}/templates")
         self.assertNotIn(self.template["id"], {item["id"] for item in response.get_json()["items"]})
         with self.app.app_context():
-            self.assertEqual(Card.query.filter_by(template_id=self.template["id"]).count(), 4)
+            self.assertEqual(Card.query.filter_by(template_id=self.template["id"]).count(), 3)
 
     def test_preview_renders_draft_and_preserves_source_and_history(self):
         before = self.client.get(self.path).get_json()

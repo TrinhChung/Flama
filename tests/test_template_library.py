@@ -71,17 +71,23 @@ class TemplateLibraryTests(unittest.TestCase):
         response = self.client.get(f"/api/card-templates/{self.template_id}/versions")
         self.assertEqual(response.status_code, 200)
 
-    def test_cross_note_type_attachments_and_repeated_occurrences_create_cards(self):
+    def test_cross_note_type_attachments_create_cards_and_reject_duplicate_on_same_note_type(self):
         self._note(0)
         self._note(1)
-        applications = [self._attach(0), self._attach(1), self._attach(0, "reverse")]
+        applications = [self._attach(0), self._attach(1)]
+        duplicate = self.client.post(
+            f"/api/note-types/{self.types[0]['id']}/template-applications",
+            json={"template_id": self.template_id, "occurrence_key": "reverse"},
+        )
+        self.assertEqual(duplicate.status_code, 409, duplicate.get_json())
+        self.assertEqual(duplicate.get_json()["error"], "APPLICATION_EXISTS")
         with self.app.app_context():
             cards = Card.query.filter_by(template_id=self.template_id).all()
-            self.assertEqual(len(cards), 3)
+            self.assertEqual(len(cards), 2)
             self.assertEqual({item.application_id for item in cards}, {item["id"] for item in applications})
         self._note(0)
         with self.app.app_context():
-            self.assertEqual(Card.query.filter_by(template_id=self.template_id).count(), 5)
+            self.assertEqual(Card.query.filter_by(template_id=self.template_id).count(), 3)
 
     def test_retire_reactivate_preserves_cards_and_skips_future_notes(self):
         application = self._attach()
