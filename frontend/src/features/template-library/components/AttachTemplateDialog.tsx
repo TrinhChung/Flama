@@ -27,7 +27,6 @@ function useAttachTemplateSelection(noteTypeId: string) {
   const [composing, setComposing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [mapping, setMapping] = useState(false)
-  const [occurrence, setOccurrence] = useState('compat')
   useEffect(() => {
     if (composing) return
     const timer = setTimeout(() => setQuery(search.trim()), 250)
@@ -52,7 +51,7 @@ function useAttachTemplateSelection(noteTypeId: string) {
   const existing = applications.data?.items.filter((application) => application.status_code === 'ACTIVE' && application.template_id === selectedId) ?? []
   return {
     search, setSearch, setComposing, selectedId, setSelectedId, mapping, setMapping,
-    occurrence, setOccurrence, library, detail, applications, existing,
+    library, detail, applications, existing,
     libraryItems: library.data?.pages.flatMap((page) => page.items) ?? [],
   }
 }
@@ -65,11 +64,11 @@ function AttachTemplateContent({ noteTypeId, onOpenChange, onApplied, onPendingC
   const { t: commonT } = useTranslation('common')
   const state = useAttachTemplateSelection(noteTypeId)
   if (state.mapping && state.detail.data) return <ApplyTemplateForm
-    key={`${state.detail.data.id}:${state.occurrence}`}
-    template={state.detail.data} initialNoteTypeId={noteTypeId} initialOccurrenceKey={state.occurrence}
+    key={state.detail.data.id}
+    template={state.detail.data} initialNoteTypeId={noteTypeId}
     onOpenChange={onOpenChange} onApplied={onApplied} onPendingChange={onPendingChange}
     onBack={() => state.setMapping(false)} submitLabel={t('attach_save')} />
-  const canContinue = state.detail.isSuccess && state.applications.isSuccess && !state.detail.data.archived_at
+  const canContinue = state.detail.isSuccess && state.applications.isSuccess && !state.detail.data.archived_at && state.existing.length === 0
   return <>
     <DialogHeader>
       <DialogTitle>{t('select_template')}</DialogTitle>
@@ -86,7 +85,7 @@ function AttachTemplateContent({ noteTypeId, onOpenChange, onApplied, onPendingC
       {state.libraryItems.filter((template) => !template.archived_at).map((template) => <button
         key={template.id} type="button" aria-pressed={state.selectedId === template.id}
         className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${state.selectedId === template.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'}`}
-        onClick={() => { state.setSelectedId(template.id); state.setOccurrence('compat') }}>
+        onClick={() => state.setSelectedId(template.id)}>
         <span className="min-w-0 space-y-1">
           <span className="block break-words font-medium">{template.name}</span>
           <span className="block text-xs text-muted-foreground">{template.primary_category || (template.origin === 'market_copy' ? legacyT('library.badge_received') : legacyT('library.badge_mine'))}</span>
@@ -115,10 +114,7 @@ function AttachTemplateContent({ noteTypeId, onOpenChange, onApplied, onPendingC
     <DialogFooter>
       <Button variant="outline" asChild><Link to="/card-templates" onClick={() => onOpenChange(false)}>{t('open_library')}</Link></Button>
       <Button variant="outline" onClick={() => onOpenChange(false)}>{t('cancel')}</Button>
-      <Button disabled={!canContinue} onClick={() => {
-        state.setOccurrence(state.existing.length ? crypto.randomUUID() : 'compat')
-        state.setMapping(true)
-      }}>{state.existing.length ? t('attach_again') : t('next')}</Button>
+      <Button disabled={!canContinue} onClick={() => state.setMapping(true)}>{t('next')}</Button>
     </DialogFooter>
   </>
 }

@@ -594,8 +594,7 @@ def _attach_received_template(session, subscription, source_app, *, user_id):
     if not nt_install or not nt_install["installed_note_type_id"]:
         return
     local_nt = nt_install["installed_note_type_id"]
-    occurrence = source_app["occurrence_key"]
-    existing = repository.one(session, StudyApplication, StudyApplication.note_type_id == local_nt, StudyApplication.template_id == subscription["local_template_id"], StudyApplication.occurrence_key == occurrence)
+    existing = repository.one(session, StudyApplication, StudyApplication.note_type_id == local_nt, StudyApplication.template_id == subscription["local_template_id"])
     if existing:
         return  # reinstall never overwrites a user's customized binding
     source_fields = session.execute(select(FieldDef.__table__).where(FieldDef.note_type_id == source_nt)).mappings().all()
@@ -605,7 +604,7 @@ def _attach_received_template(session, subscription, source_app, *, user_id):
     bindings = {key: field_map.get(value) for key, value in (source_app.get("input_bindings") or {}).items()}
     session.execute(insert(StudyApplication.__table__).values(
         id=uuid_str(), note_type_id=local_nt, template_id=subscription["local_template_id"],
-        occurrence_key=occurrence, input_bindings=bindings, status_code="ACTIVE",
+        occurrence_key="compat", input_bindings=bindings, status_code="ACTIVE",
         display_name=source_app.get("display_name"), is_default=bool(source_app.get("is_default")), position=source_app.get("position", 0),
     ))
     # Retain compatibility IDs/history, but keep raw clone definitions out of

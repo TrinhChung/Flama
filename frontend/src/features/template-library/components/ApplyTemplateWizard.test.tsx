@@ -192,14 +192,14 @@ describe('ApplyTemplateWizard', () => {
     expect(Object.keys(bindings)).toEqual(keys)
     expect(bindings).toEqual(Object.fromEntries(keys.map((key, index) => [key, `field-${index}`])))
   })
-  it('accepts an explicit generated occurrence without exposing technical input controls', async () => {
+  it('always submits compat occurrence_key without exposing technical input controls', async () => {
     props.initialNoteTypeId = 'nt/owned'
     props.initialOccurrenceKey = 'generated-occurrence'
     await render()
     expect(document.body.textContent).not.toContain('Mã lần gắn')
     await act(async () => button('Gắn mẫu').click()); await flush()
     const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === 'POST')!
-    expect(JSON.parse(String(init.body)).occurrence_key).toBe('generated-occurrence')
+    expect(JSON.parse(String(init.body)).occurrence_key).toBe('compat')
   })
   it('prevents dismissing or submitting again while the attachment is pending', async () => {
     let resolvePost!: (response: Response) => void

@@ -9,7 +9,7 @@ from app.validators.template_library import (TemplateLibraryError, body, text, v
 from app.services import template_version_service
 from models import db
 from models.note_type import NoteType
-from models.study_application import StudyApplication
+from models.study_application import COMPAT_OCCURRENCE_KEY, StudyApplication
 from models.template import Template
 
 CONTENT_KEYS = {"front_html", "back_html", "shared_css", "input_schema"}
@@ -290,19 +290,31 @@ def _application_payload(application, payload, note_type):
 def attach_template(*, user_id, note_type_id, payload):
     body(payload, {"template_id", "occurrence_key", "input_bindings", "display_name", "position", "is_default"})
     template_id = text(payload.get("template_id"), field="template_id", required=True)
-    occurrence = text(payload.get("occurrence_key", "compat"), field="occurrence_key", maximum=64, required=True)
+    if "occurrence_key" in payload and payload.get("occurrence_key") is not None:
+        text(payload.get("occurrence_key"), field="occurrence_key", maximum=64, required=True)
     def operation():
         template = _owned(user_id, template_id, lock=True)
         note_type = _note_type(user_id, note_type_id, lock=True)
         if template.archived_at:
             raise TemplateLibraryError("TEMPLATE_ARCHIVED", "Archived template cannot be attached.", status=409)
-        application = db.session.execute(select(StudyApplication).where(StudyApplication.note_type_id == note_type.id, StudyApplication.template_id == template.id, StudyApplication.occurrence_key == occurrence).with_for_update()).scalar_one_or_none()
-        if application is not None and application.status_code == "ACTIVE":
-            raise TemplateLibraryError("APPLICATION_EXISTS", "This occurrence is already attached.", status=409)
-        # One occurrence row presents the Template for every Note of the
-        # NoteType: Cards are derived from it, nothing is written per Note (ADR P11).
+        existing_rows = db.session.execute(
+            select(StudyApplication)
+            .where(
+                StudyApplication.note_type_id == note_type.id,
+                StudyApplication.template_id == template.id,
+            )
+            .order_by(
+                db.case((StudyApplication.occurrence_key == COMPAT_OCCURRENCE_KEY, 0), else_=1),
+                StudyApplication.id,
+            )
+            .with_for_update()
+        ).scalars().all()
+        if any(row.status_code == "ACTIVE" for row in existing_rows):
+            raise TemplateLibraryError("APPLICATION_EXISTS", "This template is already attached.", status=409)
+        application = existing_rows[0] if existing_rows else None
+        # Derived presentations need one attachment row, not per-Note writes.
         if application is None:
-            application = StudyApplication(note_type=note_type, template=template, occurrence_key=occurrence, status_code="ACTIVE", input_bindings={}, position=0, is_default=False)
+            application = StudyApplication(note_type=note_type, template=template, occurrence_key=COMPAT_OCCURRENCE_KEY, status_code="ACTIVE", input_bindings={}, position=0, is_default=False)
             db.session.add(application)
         else:
             application.status_code = "ACTIVE"

@@ -37,7 +37,7 @@ type ApplyTemplateFormProps = Omit<ApplyTemplateWizardProps, 'open'> & {
   submitLabel?: string
 }
 
-function useApplyTemplate({ template, initialNoteTypeId, initialOccurrenceKey, onOpenChange, onApplied, onPendingChange }: ApplyTemplateFormProps) {
+function useApplyTemplate({ template, initialNoteTypeId, onOpenChange, onApplied, onPendingChange }: ApplyTemplateFormProps) {
   const { t } = useTranslation('card_templates')
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -48,7 +48,6 @@ function useApplyTemplate({ template, initialNoteTypeId, initialOccurrenceKey, o
   const [selectedId, setSelectedId] = useState('')
   const [bindings, setBindings] = useState<TemplateBindings>({})
   const [displayName, setDisplayName] = useState(template.name)
-  const occurrence = initialOccurrenceKey ?? 'compat'
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const noteTypes = useQuery({
@@ -87,7 +86,7 @@ function useApplyTemplate({ template, initialNoteTypeId, initialOccurrenceKey, o
     if (serverIssue && !issues.some((issue) => issue.key === key && issue.kind === serverIssue.kind)) issues.push(serverIssue)
   }
   const invalid = !selected || issues.some((issue) => issue.blocking)
-    || !displayName.trim() || displayName.length > 255 || !occurrence.trim() || occurrence.trim().length > 64
+    || !displayName.trim() || displayName.length > 255
     || Boolean(template.archived_at)
   const selectNoteType = (id: string) => {
     const next = noteTypes.data?.items.find((item) => item.id === id)
@@ -105,7 +104,7 @@ function useApplyTemplate({ template, initialNoteTypeId, initialOccurrenceKey, o
     try {
       const application = await attachLibraryTemplate(noteTypeId, {
         template_id: template.id,
-        occurrence_key: occurrence.trim(),
+        occurrence_key: 'compat',
         display_name: displayName,
         input_bindings: bindings,
       })

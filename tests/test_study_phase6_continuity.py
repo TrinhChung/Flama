@@ -90,36 +90,46 @@ class StudyPhase6ContinuityTests(unittest.TestCase):
             self.assertEqual(StudyProgressSubject.query.one().authority_revision, before[0] + 1)
 
 
-class StudyRepeatedApplicationTests(unittest.TestCase):
+class StudyMultipleTemplateAttachmentTests(unittest.TestCase):
     setUpClass = classmethod(fixtures.StudyDirectNoteReplayTests.setUpClass.__func__)
     setUp = fixtures.StudyDirectNoteReplayTests.setUp
     _cleanup = fixtures.StudyDirectNoteReplayTests._cleanup
     _answer = fixtures.StudyDirectNoteReplayTests._answer
 
-    def test_a_template_applied_twice_shares_one_note_state(self):
-        from app.repositories.study_authority_repository import lock_study_authority_route
-        from app.services.study_application_service import stage_repeated_application
+    def test_a_second_template_attached_to_note_type_shares_one_note_state(self):
+        from models.template import Template
+        from app.services import template_library_service
 
-        self._answer()  # state exists before the second occurrence is added
+        self._answer()  # state exists before the second template is attached
         with self.app.app_context():
-            template = db.session.get(Card, self.card_ids[0]).template
-            note_id = db.session.get(Card, self.card_ids[0]).note_id
-            routes = (lock_study_authority_route(
-                db.session, learner_user_id=self.user_id, allow_note_authority=True),)
-            occurrence = stage_repeated_application(
-                db.session, routes=routes, template=template, note_type=db.session.get(NoteType, db.session.get(Card, self.card_ids[0]).note.note_type_id), occurrence_key="repeat-1")
+            first_card = db.session.get(Card, self.card_ids[0])
+            note_id = first_card.note_id
+            note_type_id = first_card.note.note_type_id
+            initial_note_cards = Card.query.filter_by(note_id=note_id).count()
+            second_template = Template(
+                owner_user_id=self.user_id,
+                name="Second Template",
+                front_html="{{Front}}",
+                back_html="{{Back}}",
+            )
+            db.session.add(second_template)
             db.session.commit()
-            repeated = Card.query.filter_by(application_id=occurrence.id).one()
-            self.assertEqual((repeated.note_id, repeated.template_id), (note_id, template.id))
-            self.assertEqual(Card.query.filter_by(note_id=note_id, template_id=template.id).count(), 2)
-            # The occurrence's Card shares the Note's one row; nothing is copied (ADR P10).
+            attached = template_library_service.attach_template(
+                user_id=self.user_id,
+                note_type_id=note_type_id,
+                payload={"template_id": second_template.id},
+            )
+            second_card = Card.query.filter_by(application_id=attached["id"]).one()
+            self.assertEqual((second_card.note_id, second_card.template_id), (note_id, second_template.id))
+            self.assertEqual(Card.query.filter_by(note_id=note_id).count(), initial_note_cards + 1)
+            # The new template's Card shares the Note's one row; nothing is copied (ADR P10).
             self.assertEqual(StudyProgressSubject.query.count(), 1)
             assert_retired_progress_absent(self, db.session)
             revision = StudyProgressSubject.query.one().authority_revision
-            repeated_id = repeated.id
+            second_card_id = second_card.id
 
-        # Answering through the repeated occurrence schedules the one Note.
-        self._answer(dict(self.payload, operation_key=str(uuid4())), card_id=repeated_id)
+        # Answering through the second template's Card schedules the one Note.
+        self._answer(dict(self.payload, operation_key=str(uuid4())), card_id=second_card_id)
         with self.app.app_context():
             self.assertEqual(StudyProgressSubject.query.one().authority_revision, revision + 1)
             self.assertEqual(StudyProgressSubject.query.count(), 1)
