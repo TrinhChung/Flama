@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/native-select'
-import { MediaFieldPreview, ArrayFieldInput, type ArrayViewMode } from '@/entities/flashcard'
+import { MediaFieldPreview, ArrayFieldInput } from '@/entities/flashcard'
 import { fieldValueEditorText } from '@/lib/arrayField'
 
 export type StudyQuickEditFieldDef = {
@@ -22,7 +22,6 @@ export type StudyQuickEditFieldsProps = {
   fieldValues: Record<string, string>
   onFieldValueChange: (fieldName: string, value: string) => void
   resolveMediaUrl: (rawRef: string) => string | undefined
-  mode?: ArrayViewMode
 }
 
 export function StudyQuickEditFields({
@@ -33,7 +32,6 @@ export function StudyQuickEditFields({
   fieldValues,
   onFieldValueChange,
   resolveMediaUrl,
-  mode,
 }: StudyQuickEditFieldsProps) {
   const { t } = useTranslation('study')
 
@@ -86,7 +84,6 @@ export function StudyQuickEditFields({
               value={fieldValues[field.name]}
               onChange={(v) => onFieldValueChange(field.name, v)}
               required={field.required}
-              mode={mode}
               placeholderNormal={t('quick_edit.array_placeholder')}
             />
           )
