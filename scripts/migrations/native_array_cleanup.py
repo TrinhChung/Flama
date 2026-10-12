@@ -23,6 +23,58 @@ from native_array_templates import modernize
 SCHEMA = 'flama-native-array-cleanup.v1'
 
 
+def template_application_scope(session, template, note_type_id, *, lock=False):
+    """Read explicit attachment/render scope; no Template origin is inferred."""
+    from models.field_def import FieldDef
+    from models.study_application import StudyApplication
+
+    query = sa.select(StudyApplication).where(
+        StudyApplication.template_id == template.id).order_by(StudyApplication.id)
+    applications = session.execute(query.with_for_update() if lock else query).scalars().all()
+    if not any(application.note_type_id == note_type_id for application in applications):
+        raise ValueError(f'Template scope mismatch: {template.id}')
+    type_ids = {application.note_type_id for application in applications}
+    fields_query = sa.select(FieldDef).where(FieldDef.note_type_id.in_(type_ids)).order_by(FieldDef.id)
+    fields = session.execute(fields_query.with_for_update() if lock else fields_query).scalars().all()
+    by_type = defaultdict(list)
+    for field in fields:
+        by_type[field.note_type_id].append({
+            'id': field.id, 'name': field.name, 'field_type': field.field_type,
+        })
+    return [{
+        'id': application.id, 'note_type_id': application.note_type_id,
+        'occurrence_key': application.occurrence_key,
+        'status_code': application.status_code, 'input_bindings': application.input_bindings,
+        'field_defs': by_type[application.note_type_id],
+    } for application in applications]
+
+
+def verify_template_scope(session, template, entry, *, lock=False):
+    scope = template_application_scope(session, template, entry['note_type_id'], lock=lock)
+    if 'application_scope' in entry and scope != entry['application_scope']:
+        raise ValueError(f'Template attachment scope changed after preflight: {template.id}')
+    return scope
+
+
+def validate_reviewed_array_contexts(scope, array_names, reviewed_field_ids):
+    """Every active use affected by a definition edit needs reviewed array fields."""
+    for application in scope:
+        if application['status_code'] != 'ACTIVE':
+            continue
+        by_name = {field['name']: field for field in application['field_defs']}
+        by_id = {field['id']: field for field in application['field_defs']}
+        bindings = application['input_bindings']
+        for name in array_names:
+            if bindings is not None and name in bindings:
+                if bindings[name] is None:
+                    continue
+                field = by_id.get(bindings[name])
+            else:
+                field = by_name.get(name)
+            if field is None or field['field_type'] != 'array' or field['id'] not in reviewed_field_ids:
+                raise ValueError('Template array context is outside the reviewed field scope: ' + application['id'])
+
+
 def array_value(value):
     """Existing arrays retain structure/order; strings split only on line breaks."""
     from app.validators.flashcard_input import clean_array_fields
@@ -111,8 +163,11 @@ def build_plan(session, manifest, *, include_repairs=False):
             plan['absent_optional'].append(entry['id'])
             continue
         if (template is None or template.owner_user_id != entry['owner_user_id']
-                or template.note_type_id != entry['note_type_id']):
+                ):
             raise ValueError(f'Template scope mismatch: {entry["id"]}')
+        application_scope = verify_template_scope(session, template, entry)
+        validate_reviewed_array_contexts(application_scope, entry['array_names'],
+            {field.id for fields in by_type.values() for field in fields})
         before = template_snapshot(template)
         after = {**before, **{key: modernize(before[key], set(entry['array_names']))
                              for key in ('front_html', 'back_html')}}
@@ -120,7 +175,8 @@ def build_plan(session, manifest, *, include_repairs=False):
             if digest(before) not in entry['allowed_before_hashes']:
                 raise ValueError(f'Template differs from reviewed content: {template.id}')
             plan['templates'].append({'id': template.id, 'owner_user_id': template.owner_user_id,
-                                     'note_type_id': template.note_type_id, 'before': before, 'after': after})
+                                     'note_type_id': entry['note_type_id'],
+                                     'application_scope': application_scope, 'before': before, 'after': after})
     plan['summary'] = {'scanned_notes': sum(plan['note_counts'].values()), 'changed_notes': len(plan['notes']),
                        'updated_templates': len(plan['templates']), 'schema_changes': 0,
                        'reviewed_repairs': len(repairs), 'unresolved_notes': len(plan['unresolved']),
@@ -151,9 +207,9 @@ def verify_plan(session, plan, *, restored=False):
     for entry in plan['templates']:
         template = session.get(Template, entry['id'])
         if (template is None or template.owner_user_id != entry['owner_user_id']
-                or template.note_type_id != entry['note_type_id']
                 or template_snapshot(template) != entry[target]):
             raise ValueError(f'Verification failed for template: {entry["id"]}')
+        verify_template_scope(session, template, entry)
 
 
 def suppress_publication_until_commit(session):
@@ -229,9 +285,13 @@ def apply_plan(session, plan, *, restore=False, fail_after=None):
     locked_templates = []
     for entry in plan['templates']:
         template = session.execute(sa.select(Template).where(Template.id == entry['id']).with_for_update()).scalar_one_or_none()
-        if (template is None or template.owner_user_id != entry['owner_user_id'] or template.note_type_id != entry['note_type_id']
+        if (template is None or template.owner_user_id != entry['owner_user_id']
                 or template_snapshot(template) != entry[source]):
             raise ValueError(f'Stale/missing template: {entry["id"]}')
+        scope = verify_template_scope(session, template, entry, lock=True)
+        manifest_entry = next(item for item in plan['manifest']['templates'] if item['id'] == entry['id'])
+        validate_reviewed_array_contexts(scope, manifest_entry['array_names'],
+            {field['id'] for field in plan['manifest']['fields'] if field['id'] not in plan['absent_optional']})
         locked_templates.append((entry, template))
     suppress_publication_until_commit(session)
     mutations = []

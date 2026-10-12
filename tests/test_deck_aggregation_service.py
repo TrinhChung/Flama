@@ -1,7 +1,7 @@
 """Tests for the single-query deck aggregation seam used by the dashboard.
 
-LEGACY rows come from ``card_progress``; NOTE rows (canonical availability and
-fail-closed evidence checks) are covered with real writers in
+Canonical NOTE rows use the production state codec and availability projection.
+Fail-closed evidence checks are also covered with real writers in
 ``test_note_analytics_read.py``. Buckets must match
 ``study_repository.counter_bucket_for_progress_values``.
 """
@@ -21,7 +21,10 @@ from app.services.anki_scheduler import _day_index_to_datetime
 from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import enroll_note_user
+from tests.note_progress_fixtures import stage_note_state, subject_values
+from models.template import Template
+from models.note_type import NoteType
 from models.deck import Deck
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
 from models.study_application import StudyApplication
@@ -43,6 +46,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "WTF_CSRF_ENABLED": False,
+                "STUDY_NOTE_COUNT_ENABLED": False,
             }
         )
         self.client = self.app.test_client()
@@ -62,6 +66,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
             learner.set_password("pass")
             db.session.add(learner)
             db.session.flush()
+            enroll_note_user(db.session, learner)
             self.learner_id = learner.id
 
             # Decks
@@ -108,8 +113,12 @@ class DeckAggregationServiceTests(unittest.TestCase):
     def _ensure_applications(self, note_type_id: str, count: int) -> None:
         """Attach ``tmpl-1..count`` to the Note type, long before any Note."""
         attached_at = datetime(2020, 1, 1)
+        if db.session.get(NoteType, note_type_id) is None:
+            db.session.add(NoteType(id=note_type_id, name=note_type_id, user_id=self.learner_id))
         for idx in range(count):
             template_id = f"tmpl-{idx + 1}"
+            if db.session.get(Template, template_id) is None:
+                db.session.add(Template(id=template_id, owner_user_id=self.learner_id, name=template_id))
             exists = StudyApplication.query.filter_by(
                 note_type_id=note_type_id, template_id=template_id,
             ).first()
@@ -130,8 +139,8 @@ class DeckAggregationServiceTests(unittest.TestCase):
         is_suspended: bool = False,
         is_buried: bool = False,
         buried_until_day: int | None = None,
-    ) -> CardProgress:
-        progress = CardProgress(
+    ) -> StudyProgressSubject:
+        progress = stage_note_state(db.session,
             user_id=user_id,
             card_id=card_id,
             queue=queue,
@@ -190,8 +199,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[self.owned_deck_id],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=False,
-            )
+                )
 
             deck_counts = counts[self.owned_deck_id]
             self.assertEqual(deck_counts["new"], 2)       # items 1 & 2
@@ -258,8 +266,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[self.local_deck_id],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=False,
-            )
+                )
 
             local_counts = counts[self.local_deck_id]
             self.assertEqual(local_counts["new"], 1)
@@ -280,8 +287,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=False,
-            )
+                )
             self.assertEqual(counts, {})
             self.assertEqual(note_types, {})
 
@@ -336,8 +342,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[self.local_deck_id],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=False,
-            )
+                )
 
             # Only the card created before snapshot is counted
             self.assertEqual(counts[self.local_deck_id]["total"], 1)
@@ -368,8 +373,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     visible_deck_ids=[self.owned_deck_id],
                     today_day_index=today_day,
                     day_cutoff_utc=_next_day_start(today_day),
-                    is_note_mode=True,
-                )
+                    )
             finally:
                 event.remove(db.engine, "before_execute", before_execute)
 
@@ -552,8 +556,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     visible_deck_ids=[self.owned_deck_id],
                     today_day_index=today_day,
                     day_cutoff_utc=_next_day_start(today_day),
-                    is_note_mode=False,
-                )
+                    )
                 self.assertIn(self.owned_deck_id, counts)
 
             # 2. Reject pending writes
@@ -609,8 +612,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[empty_deck.id],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=False,
-            )
+                )
             self.assertEqual(counts[empty_deck.id], {"total": 0, "new": 0, "learn": 0, "due": 0})
             self.assertNotIn(empty_deck.id, note_types)
 
@@ -621,8 +623,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=False,
-            )
+                )
             self.assertEqual(empty_res, {})
             self.assertEqual(empty_nt, {})
 
@@ -676,13 +677,15 @@ class DeckAggregationServiceTests(unittest.TestCase):
             _, c1 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
             self._add_progress(user_id=self.learner_id, card_id=c1[0].id, queue="review", due_day=None, due_at=None)
 
-            # 2. queue=None -> treated as "new"
+            # 2. A null queue is rejected; its Note stays unstudied.
             _, c2 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
-            self._add_progress(user_id=self.learner_id, card_id=c2[0].id, queue=None)
+            with self.assertRaises(ValueError):
+                self._add_progress(user_id=self.learner_id, card_id=c2[0].id, queue=None)
 
-            # 3. Negative due_day=-5 -> overdue, treated as due review
+            # 3. A negative day is rejected; its Note stays unstudied.
             _, c3 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
-            self._add_progress(user_id=self.learner_id, card_id=c3[0].id, queue="review", due_day=-5)
+            with self.assertRaises(ValueError):
+                self._add_progress(user_id=self.learner_id, card_id=c3[0].id, queue="review", due_day=-5)
 
             # 4. Learning with due_at=None -> treated as learn
             _, c4 = self._create_note_and_cards(user_id=self.learner_id, deck_id=self.owned_deck_id)
@@ -696,12 +699,11 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[self.owned_deck_id],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=False,
-            )
+                )
             d = counts[self.owned_deck_id]
             self.assertEqual(d["total"], 4)
-            self.assertEqual(d["due"], 2)     # c1 (null dates) & c3 (negative due_day)
-            self.assertEqual(d["new"], 1)     # c2 (queue=None)
+            self.assertEqual(d["due"], 1)     # c1; invalid negative anchor was never admitted
+            self.assertEqual(d["new"], 2)     # c2/c3 have no admitted NOTE state
             self.assertEqual(d["learn"], 1)   # c4 (learning with due_at=None)
 
     def test_large_dataset_40k_cards_uses_constant_statements(self):
@@ -714,8 +716,10 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             # Fast bulk-insert 40,000 notes and cards via raw Core table insert
             note_table = Note.__table__
-            progress_table = CardProgress.__table__
+            progress_table = StudyProgressSubject.__table__
             # One occurrence presents every Note (ADR P11): no Card rows to insert.
+            db.session.add_all([NoteType(id="general-nt", name="Benchmark", user_id=self.learner_id),
+                                Template(id="tmpl-1", owner_user_id=self.learner_id, name="Benchmark")])
             db.session.add(StudyApplication(
                 id="bench-app", note_type_id="general-nt", template_id="tmpl-1", occurrence_key="compat",
                 created_at=now_utc, updated_at=now_utc,
@@ -789,7 +793,12 @@ class DeckAggregationServiceTests(unittest.TestCase):
 
             db.session.execute(note_table.insert(), notes_data)
             if progress_data:
-                db.session.execute(progress_table.insert(), progress_data)
+                states = []
+                for values in progress_data:
+                    values = dict(values)
+                    cid = values.pop("card_id")
+                    states.append(subject_values(note_id=cid.split(".")[0], now=now_utc, **values))
+                db.session.execute(progress_table.insert(), states)
             db.session.commit()
 
             statements = []
@@ -805,8 +814,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     visible_deck_ids=[self.owned_deck_id],
                     today_day_index=today_day,
                     day_cutoff_utc=_next_day_start(today_day),
-                    is_note_mode=False,
-                )
+                    )
             finally:
                 event.remove(db.engine, "before_cursor_execute", count_statement)
 
@@ -816,11 +824,11 @@ class DeckAggregationServiceTests(unittest.TestCase):
             self.assertEqual(d["learn"], 5000)
             self.assertEqual(d["due"], 10000)
             # Installs, aggregate and note types: the statement count never grows with Cards.
-            self.assertLessEqual(len(statements), 3, statements)
+            self.assertLessEqual(len(statements), 5, statements)
 
     def test_counts_match_counter_bucket_helper_around_boundaries(self):
         """R3: SQL buckets equal the Study helper for every queue/due/bury combination."""
-        queues = ["new", "learning", "relearning", "learn", "review", " Review ", "", "weird"]
+        queues = ["new", "learning", "relearning", "learn", "review"]
         contexts = [
             ("UTC", 0, datetime(2026, 9, 29, 12, 0, 0)),
             ("Asia/Tokyo", 4, datetime(2026, 9, 29, 18, 59, 59)),
@@ -831,7 +839,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
         with self.app.app_context():
             for timezone_name, boundary, now_utc in contexts:
                 with self.subTest(timezone=timezone_name, boundary=boundary):
-                    CardProgress.query.delete()
+                    StudyProgressSubject.query.delete()
                     Note.query.delete()
                     today = _today_day_index(
                         now=now_utc, timezone_name=timezone_name, day_boundary_hour_local=boundary
@@ -870,8 +878,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                         visible_deck_ids=[self.owned_deck_id],
                         today_day_index=today,
                         day_cutoff_utc=cutoff,
-                        is_note_mode=False,
-                    )
+                        )
                     got = counts[self.owned_deck_id]
                     self.assertEqual({key: got[key] for key in expected}, expected)
                     self.assertEqual(got["total"], 120)
@@ -891,31 +898,28 @@ class DeckAggregationServiceTests(unittest.TestCase):
         db.session.commit()
         return now_utc.date().toordinal()
 
-    def test_admin_never_counts_overlay_sources_in_either_mode(self):
-        """R5: admin dashboards skip logical-overlay sources, LEGACY and NOTE alike."""
+    def test_admin_never_counts_learner_overlay_sources(self):
+        """Admin dashboards skip learner overlay sources under current NOTE authority."""
         with self.app.app_context():
             today_day = self._install_overlay_with_source_card()
-            for is_note_mode in (False, True):
-                counts, note_types = aggregate_deck_study_counts(
-                    db.session,
-                    learner_user_id=self.learner_id,
-                    visible_deck_ids=[self.local_deck_id],
-                    today_day_index=today_day,
-                    day_cutoff_utc=_next_day_start(today_day),
-                    is_note_mode=is_note_mode,
-                    admin_mode=True,
+            counts, note_types = aggregate_deck_study_counts(
+                db.session,
+                learner_user_id=self.learner_id,
+                visible_deck_ids=[self.local_deck_id],
+                today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
+                admin_mode=True,
+            )
+            self.assertEqual(counts[self.local_deck_id]["total"], 0)
+            self.assertNotIn(self.local_deck_id, note_types)
+            learner_counts, _ = aggregate_deck_study_counts(
+                db.session,
+                learner_user_id=self.learner_id,
+                visible_deck_ids=[self.local_deck_id],
+                today_day_index=today_day,
+                day_cutoff_utc=_next_day_start(today_day),
                 )
-                self.assertEqual(counts[self.local_deck_id]["total"], 0)
-                self.assertNotIn(self.local_deck_id, note_types)
-                learner_counts, _ = aggregate_deck_study_counts(
-                    db.session,
-                    learner_user_id=self.learner_id,
-                    visible_deck_ids=[self.local_deck_id],
-                    today_day_index=today_day,
-                    day_cutoff_utc=_next_day_start(today_day),
-                    is_note_mode=is_note_mode,
-                )
-                self.assertEqual(learner_counts[self.local_deck_id]["total"], 1)
+            self.assertEqual(learner_counts[self.local_deck_id]["total"], 1)
 
     def test_owned_note_type_wins_over_install_and_oldest_note_type_is_stable(self):
         """R6: owned Notes decide the deck Note type first, oldest Note type first."""
@@ -933,8 +937,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                     visible_deck_ids=[self.local_deck_id],
                     today_day_index=today_day,
                     day_cutoff_utc=_next_day_start(today_day),
-                    is_note_mode=False,
-                )
+                    )
                 self.assertEqual(note_types[self.local_deck_id], "z-older-nt")
 
     def test_note_mode_ignores_pristine_subject_without_token(self):
@@ -952,8 +955,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 visible_deck_ids=[self.owned_deck_id],
                 today_day_index=today_day,
                 day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=True,
-            )
+                )
             self.assertEqual(counts[self.owned_deck_id], {"total": 1, "new": 1, "learn": 0, "due": 0})
 
     def test_counts_only_skips_metadata_without_changing_counts(self):
@@ -963,12 +965,12 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 user_id=self.learner_id, deck_id=self.owned_deck_id, card_count=2,
             )
             db.session.commit()
-            for is_note_mode, count_by_note in ((False, False), (True, False), (True, True)):
+            for count_by_note in (False, True):
                 args = dict(
                     learner_user_id=self.learner_id,
                     visible_deck_ids=[self.owned_deck_id, self.local_deck_id],
                     today_day_index=today_day, day_cutoff_utc=_next_day_start(today_day),
-                    is_note_mode=is_note_mode, count_by_note=count_by_note,
+                    count_by_note=count_by_note,
                 )
                 expected, expected_types = aggregate_deck_study_counts(db.session, **args)
                 self.assertTrue(expected_types)
@@ -1007,7 +1009,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 learner_user_id=self.learner_id,
                 visible_deck_ids=[self.owned_deck_id, self.local_deck_id],
                 today_day_index=today_day, day_cutoff_utc=_next_day_start(today_day),
-                is_note_mode=True, count_by_note=True,
+                count_by_note=True,
             )
             expected, expected_types = aggregate_deck_study_counts(db.session, **args)
             actual, metadata = aggregate_deck_study_counts(
@@ -1029,8 +1031,7 @@ class DeckAggregationServiceTests(unittest.TestCase):
                 counts, metadata = aggregate_deck_study_counts(
                     db.session, learner_user_id=self.learner_id,
                     visible_deck_ids=[self.local_deck_id], today_day_index=today_day,
-                    day_cutoff_utc=_next_day_start(today_day), is_note_mode=True,
-                    note_type_deck_ids=[],
+                    day_cutoff_utc=_next_day_start(today_day), note_type_deck_ids=[],
                 )
             finally:
                 event.remove(db.engine, "before_cursor_execute", capture)

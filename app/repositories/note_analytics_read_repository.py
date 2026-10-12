@@ -10,7 +10,7 @@ availability and hashes from state; Browse validates its returned page fully.
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, and_, case, cast, null, or_, select
+from sqlalchemy import LargeBinary, and_, case, cast, literal, null, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from models.card import Card
@@ -45,7 +45,7 @@ def violation_error(rank: int | None) -> tuple[str, str] | None:
     return code, _VIOLATION_MESSAGES[code]
 
 
-def subject_integrity_violation(subject, *, note_id):
+def subject_integrity_violation(subject, *, note_id, learner_user_id: int):
     """Cheap identity/presence guard folded into an existing aggregate.
 
     This does not re-decode every state payload or recompute hashes. The
@@ -62,7 +62,16 @@ def subject_integrity_violation(subject, *, note_id):
     absent = and_(*(getattr(subject, key).is_(None) for key in (
         *SUBJECT_PROGRESS_COLUMNS, *SUBJECT_AVAILABILITY_NULLABLE_COLUMNS,
     )))
+    # The canonical logical-key join cannot see a row whose key was damaged.
+    # A second indexed live-Note probe catches that relevant evidence even
+    # when the canonical envelope is absent, without an OR join/full scan.
+    live = aliased(StudyProgressSubject)
+    wrong_live_identity = select(literal(1)).where(
+        live.learner_user_id == int(learner_user_id), live.live_note_id == note_id,
+        live.logical_note_key != cast(note_id, LargeBinary),
+    ).correlate_except(live).exists()
     return case(
+        (wrong_live_identity, 2),
         (subject.id.is_(None), 0),
         (or_(subject.live_note_id.is_(None), subject.live_note_id != note_id,
              subject.logical_note_key != cast(note_id, LargeBinary),
@@ -97,7 +106,8 @@ def note_card_rows(scope, *, learner_user_id: int, storage_profile: str | None =
             subject.is_suspended.label("is_suspended"),
             subject.is_buried.label("is_buried"),
             subject.buried_until_day.label("buried_until_day"),
-            subject_integrity_violation(subject, note_id=scope.c.note_id).label("violation"),
+            subject_integrity_violation(subject, note_id=scope.c.note_id,
+                                        learner_user_id=learner_user_id).label("violation"),
         )
         .select_from(scope)
         .outerjoin(subject, and_(

@@ -1,4 +1,4 @@
-"""Probe LEGACY worker and internal NOTE batch commands in disposable MySQL.
+"""Probe canonical NOTE batch commands and durable worker recovery in disposable MySQL.
 
 No configured application rows are read or modified. Child-process recovery
 accepts only a validated generated probe database, never the configured DB.
@@ -30,13 +30,13 @@ if str(ROOT_DIR) not in sys.path:
 
 from app import create_app
 from app.services import study_session_service, study_worker_service
-from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+from app.services.study_authority_enrollment_service import stage_note_authority_enrollment, enroll_new_learner_note_authority
+from app.repositories.template_library_repository import create_attached_template
 from app.services.study_composition_service import make_compatibility_composition_id
 from app.services.study_note_batch_service import commit_note_study_session_batch
 from app.services.study_queue_service import clear_study_queue, pop_study_batch
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -83,173 +83,6 @@ def _probe_app(uri: str):
     })
 
 
-def _seed_client(app):
-    with app.app_context():
-        db.create_all()
-        user = User(username="batch-probe", email="batch-probe@example.test")
-        db.session.add(user)
-        db.session.flush()
-        note_type = NoteType(name="Batch probe", user_id=user.id)
-        deck = Deck(name="Batch probe", owner_user_id=user.id)
-        db.session.add_all([note_type, deck])
-        db.session.flush()
-        template = Template(
-            name="Batch probe", note_type_id=note_type.id,
-            front_html="{{Word}}", back_html="{{Word}}",
-        )
-        db.session.add(template)
-        db.session.flush()
-        for number in range(10):
-            note = Note(
-                user_id=user.id, deck_id=deck.id, note_type_id=note_type.id,
-                field_values={"Word": f"probe-{number}"},
-            )
-            db.session.add(note)
-            db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=template.id))
-        user_id, deck_id = user.id, deck.id
-        db.session.commit()
-    client = app.test_client()
-    with client.session_transaction() as login:
-        login["_user_id"] = str(user_id)
-        login["_fresh"] = True
-    return client, deck_id
-
-
-def _admit(client, deck_id: int, *, is_final: bool = False) -> dict:
-    opened = client.post(
-        "/api/study/sessions", json={"scope": "deck", "scope_id": deck_id}
-    )
-    if opened.status_code != 201:
-        raise AssertionError(f"Probe session did not open: {opened.get_json()}")
-    snapshot = opened.get_json()
-    card = snapshot["cards"][0]
-    response = client.post(
-        f"/api/study/sessions/{snapshot['session_id']}/batch",
-        json={
-            "schema_version": "study-batch.v1",
-            "batch_id": str(uuid4()),
-            "session_token": snapshot["session_token"],
-            "snapshot_hash": snapshot["snapshot_hash"],
-            "is_final": is_final,
-            "events": [{
-                "event_id": str(uuid4()), "sequence": 1,
-                "card_id": card["card_id"], "rating": "good",
-                "action_key": "review.good", "trigger_key": "scheduler.review.good",
-                "trigger_contract_version": "1", "policy_key": card["policy_key"],
-                "scheduler_offset_ms": 1000, "duration_ms": 500,
-            }],
-        },
-    )
-    if response.status_code != 202:
-        raise AssertionError(f"Probe batch was not admitted: {response.get_json()}")
-    with client.application.app_context():
-        job = pop_study_batch(timeout=0)
-    if job is None:
-        raise AssertionError("Probe admission did not publish its queue hint.")
-    return job
-
-
-def _verify_batch(app, job: dict, *, attempts: int) -> None:
-    with app.app_context():
-        batch = StudySessionBatch.query.filter_by(
-            session_id=job["session_id"], batch_id=job["batch_id"]
-        ).one()
-        if batch.status != "completed" or batch.attempt_count != attempts:
-            raise AssertionError("Batch receipt/retry budget changed unexpectedly.")
-        if ReviewEvent.query.filter_by(study_session_id=job["session_id"]).count() != 1:
-            raise AssertionError("Batch did not produce exactly one ReviewEvent.")
-
-
-def _probe_competing_workers(app, job: dict) -> None:
-    ready = threading.Barrier(2, timeout=10)
-    connection_ids: set[int] = set()
-    connection_guard = threading.Lock()
-
-    def run_worker():
-        with app.app_context():
-            db.session.execute(sa.text("SET SESSION innodb_lock_wait_timeout = 5"))
-            connection_id = db.session.execute(sa.text("SELECT CONNECTION_ID()")).scalar_one()
-            with connection_guard:
-                connection_ids.add(connection_id)
-            # Deliberately create a repeatable-read snapshot and stale ORM row
-            # before either worker locks the session. A locking read must refresh it.
-            cached = StudySessionBatch.query.filter_by(batch_id=job["batch_id"]).one()
-            if cached.status != "enqueued":
-                raise AssertionError("Concurrency fixture was already processed.")
-            ready.wait()
-            result = study_worker_service.process_single_study_batch(dict(job))
-            if db.session().in_transaction():
-                raise AssertionError("Worker leaked its DB transaction.")
-            return result
-
-    transition = study_worker_service.study_service.execute_native_review_transition
-    # Simulate Redis leases not protecting either worker (expiry/outage).
-    with patch.object(study_worker_service, "acquire_batch_lock", return_value="probe"), patch.object(
-        study_worker_service, "acquire_session_lock", return_value="probe"
-    ), patch.object(study_worker_service, "release_batch_lock"), patch.object(
-        study_worker_service, "release_session_lock"
-    ), patch.object(
-        study_worker_service.study_service, "execute_native_review_transition", wraps=transition
-    ) as replay:
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [executor.submit(run_worker) for _ in range(2)]
-            outcomes = [future.result(timeout=30)["status"] for future in futures]
-        if sorted(outcomes) != ["already_processed", "completed"]:
-            raise AssertionError(f"Unexpected competing-worker results: {outcomes}")
-        if replay.call_count != 1 or len(connection_ids) != 2:
-            raise AssertionError("Two-connection duplicate executed the transition twice.")
-    _verify_batch(app, job, attempts=0)
-
-
-def _probe_uncertain_commit(app, job: dict) -> None:
-    with app.app_context():
-        real_commit = db.session.commit
-
-        def committed_but_disconnected():
-            real_commit()
-            raise RuntimeError("probe: DB committed but client lost acknowledgement")
-
-        with patch.object(db.session, "commit", side_effect=committed_but_disconnected) as commit:
-            result = study_worker_service.process_single_study_batch(job, max_retries=1)
-        if result["status"] != "already_processed" or commit.call_count != 1:
-            raise AssertionError("Uncertain COMMIT did not honor the durable receipt.")
-    _verify_batch(app, job, attempts=0)
-
-
-def _probe_process_restart(app, uri: str, job: dict) -> None:
-    with app.app_context():
-        real_commit = db.session.commit
-        commit_calls = 0
-
-        def fail_first_commit():
-            nonlocal commit_calls
-            commit_calls += 1
-            if commit_calls == 1:
-                raise RuntimeError("probe: transient write failure")
-            return real_commit()
-
-        with patch.object(db.session, "commit", side_effect=fail_first_commit):
-            result = study_worker_service.process_single_study_batch(job)
-        if result["status"] != "retrying" or result["attempts"] != 1:
-            raise AssertionError("Failed attempt was not durably scheduled for retry.")
-        clear_study_queue()
-        db.session.remove()
-    env = dict(os.environ)
-    env["P5_BATCH_PROBE_DATABASE_URI"] = uri
-    recovered = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--worker-once"],
-        cwd=ROOT_DIR, env=env, capture_output=True, text=True, timeout=45, check=False,
-    )
-    if recovered.returncode:
-        # Do not print credentials, environment, job contents or driver errors.
-        raise AssertionError(f"Recovery subprocess failed (exit={recovered.returncode}).")
-    output = json.loads(recovered.stdout.strip().splitlines()[-1])
-    if output["processed_count"] != 1 or output["failed_count"]:
-        raise AssertionError(f"Recovery subprocess did not finish one job: {output}")
-    _verify_batch(app, job, attempts=1)
-
-
 def _probe_note_batch_command(app, *, recovery_uri: str | None = None, continuous_probe=None) -> None:
     """Prove HTTP admission with canonical concurrency or fresh-process recovery."""
     suffix = "continuous" if continuous_probe else ("transport" if recovery_uri is not None else "command")
@@ -257,6 +90,7 @@ def _probe_note_batch_command(app, *, recovery_uri: str | None = None, continuou
         user = User(username=f"note-batch-{suffix}", email=f"note-batch-{suffix}@example.test")
         db.session.add(user)
         db.session.flush()
+        enroll_new_learner_note_authority(db.session, user=user)
         note_type = NoteType(name="NOTE batch probe", user_id=user.id)
         deck = Deck(name="NOTE batch probe", owner_user_id=user.id)
         db.session.add_all([note_type, deck])
@@ -267,15 +101,14 @@ def _probe_note_batch_command(app, *, recovery_uri: str | None = None, continuou
         db.session.flush()
         composition_id = None
         for number in range(2):
-            template = Template(
-                name=f"NOTE sibling {number}", note_type_id=note_type.id,
+            template = create_attached_template(db.session, note_type=note_type,
+                name=f"NOTE sibling {number}",
                 front_html="{{Word}}", back_html="{{Word}}", is_default=number == 0,
             )
             db.session.add(template)
             db.session.flush()
             if number == 0:
                 composition_id = make_compatibility_composition_id(note_type.id, template.id)
-            db.session.add(Card(note_id=note.id, template_id=template.id))
         user_id, deck_id = user.id, deck.id
         db.session.commit()
         stage_note_authority_enrollment(db.session, learner_user_id=user_id, now_utc=datetime.utcnow())
@@ -351,8 +184,8 @@ def _probe_note_batch_command(app, *, recovery_uri: str | None = None, continuou
         if len(subjects) != 1 or subjects[0].authority_revision != revision:
             raise AssertionError("NOTE authority row advanced incorrectly.")
         # The Note's one row holds the state; no Card carries progress (ADR P10).
-        if CardProgress.query.filter_by(user_id=user_id).count():
-            raise AssertionError("A consolidated NOTE learner wrote card_progress.")
+        if sa.inspect(db.engine).has_table("card_progress"):
+            raise AssertionError("Retired card_progress was recreated.")
         expected_ease = {1: 2.5, 2: 2.35, 4: 2.05}[revision]
         if decode_float(subjects[0].state_payload["ease"], field_name="ease") != expected_ease:
             raise AssertionError("NOTE mixed-rating numeric state changed on MySQL read.")
@@ -523,10 +356,8 @@ def run_probe(*, continuous_probe=None) -> dict:
         created = True
         uri = _database_uri(settings, database_name)
         app = _probe_app(uri)
-        client, deck_id = _seed_client(app)
-        _probe_competing_workers(app, _admit(client, deck_id))
-        _probe_uncertain_commit(app, _admit(client, deck_id, is_final=True))
-        _probe_process_restart(app, uri, _admit(client, deck_id, is_final=True))
+        with app.app_context():
+            db.create_all()
         _probe_note_batch_command(app)
         _probe_note_batch_command(app, recovery_uri=uri)
         if continuous_probe is not None:
@@ -535,10 +366,6 @@ def run_probe(*, continuous_probe=None) -> dict:
             version = db.session.execute(sa.text("SELECT VERSION()")).scalar_one()
         return {
             "status": "PASS", "mysql_version": version,
-            "competing_workers_without_redis_lease": "PASS",
-            "uncertain_commit_terminal_receipt": "PASS",
-            "separate_process_outbox_recovery": "PASS",
-            "durable_retry_budget_after_restart": "PASS",
             "note_internal_competing_commands": "PASS",
             "note_internal_cross_batch_current_read": "PASS",
             "note_internal_atomic_fault_rollback": "PASS",

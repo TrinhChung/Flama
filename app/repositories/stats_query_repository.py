@@ -75,7 +75,7 @@ def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] 
     scope = learner_presentation_scope(learner_user_id=user_id, scope_deck_ids=scope_deck_ids)
     subject = StudyProgressSubject
     return db.session.execute(select(
-        scope.c.card_id, subject_integrity_violation(subject, note_id=scope.c.note_id),
+        scope.c.card_id, subject_integrity_violation(subject, note_id=scope.c.note_id, learner_user_id=int(user_id)),
         subject.normalized_queue, subject.due_at, subject.due_day, subject.is_suspended,
         subject.state_payload["type"].as_string(), subject.state_payload["interval_days"].as_string(),
     ).select_from(scope).outerjoin(subject, and_(

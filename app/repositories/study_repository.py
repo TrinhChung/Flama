@@ -536,7 +536,8 @@ def _ordered_study_card_queries(
         due_groups.append(tuple(
             queue_query.filter(anchor).order_by(*ordering).with_entities(
                 Card.id, subject.due_day, subject.due_at, Card.created_at, Card.order_key,
-            ).execution_options(note_queue_code=queue_code, note_anchor_index=anchor_index)
+            ).execution_options(note_queue_code=queue_code, note_anchor_index=anchor_index,
+                                note_learner_user_id=int(user_id))
             for anchor_index, anchor in enumerate(anchors)
         ))
     # A never-studied Note has either no subject or an empty envelope.
@@ -564,7 +565,8 @@ def _ordered_study_card_queries(
             subject.due_at <= learn_ahead_cutoff,
         ).order_by(subject.due_at.asc(), Card.created_at.asc(), Card.order_key.asc(), Card.id.asc())
         .with_entities(Card.id, subject.due_day, subject.due_at, Card.created_at, Card.order_key)
-        .execution_options(note_queue_code=queue_code, note_anchor_index=1),
+        .execution_options(note_queue_code=queue_code, note_anchor_index=1,
+                           note_learner_user_id=int(user_id)),
     ) for queue_code in (RELEARNING_QUEUE, LEARNING_QUEUE))
     return tuple(due_groups), ahead_groups
 
@@ -598,14 +600,54 @@ def _first_queue_branch(branch):
     time = branch.column_descriptions[2]['expr']
     candidate = branch
     if queue_code == REVIEW_QUEUE and anchor_index == 0:
-        first_day = candidate.order_by(None).with_entities(day).order_by(day.asc()).first()
+        first_day = _seek_subject_anchor(candidate, day)
         if first_day is None:
             return None
         candidate = candidate.filter(day == first_day[0])
-    first_time = candidate.filter(time.isnot(None)).order_by(None).with_entities(time).order_by(time.asc()).first()
+    first_time = _seek_subject_anchor(candidate.filter(time.isnot(None)), time)
     if first_time is not None:
         return candidate.filter(time == first_time[0]).first()
     return candidate.filter(time.is_(None)).first() if anchor_index == 0 else None
+
+
+def _seek_subject_anchor(branch, anchor):
+    """Read a due-index anchor with a correlated authorized-scope probe.
+
+    A joined LIMIT1 can still filesort every presentation if MySQL starts at
+    NoteType/content. This query has one outer subject table, so the queue,
+    suspension and day/time prefix supplies the order. The correlated EXISTS
+    tests the original scope for each encountered Note. MySQL's NO_SEMIJOIN
+    hint preserves that dependent probe rather than flattening it back into
+    a content-first sort. Small buckets bypass this indexed seek entirely.
+    """
+
+    from sqlalchemy import literal
+    from sqlalchemy.sql import visitors
+
+    subject_table = anchor.table
+    seeker = aliased(StudyProgressSubject, name='note_due_seek')
+    def replace_column(node):
+        if getattr(node, 'table', None) is subject_table:
+            return getattr(seeker, node.key)
+        return None
+    predicates = []
+    for criterion in branch._where_criteria:
+        tables = {node.table for node in visitors.iterate(criterion)
+                  if getattr(node, 'table', None) is not None}
+        if tables == {subject_table}:
+            predicates.append(visitors.replacement_traverse(criterion, {}, replace_column))
+    scoped = (branch.order_by(None).with_entities(literal(1))
+              .filter(Card.note_id == seeker.live_note_id)
+              .prefix_with('/*+ QB_NAME(note_due_scope) */', dialect='mysql')
+              .limit(1).exists())
+    target = getattr(seeker, anchor.key)
+    return (db.session.query(target)
+            .prefix_with('/*+ NO_SEMIJOIN(@note_due_scope) */', dialect='mysql')
+            .with_hint(seeker, 'FORCE INDEX (ix_sp_subject_note_due)', dialect_name='mysql')
+            .filter(seeker.learner_user_id == branch.get_execution_options()['note_learner_user_id'],
+                    *predicates, scoped)
+            .order_by(target.asc())
+            .execution_options(**branch.get_execution_options()).first())
 
 
 def query_next_due_card_id(
@@ -621,13 +663,28 @@ def query_next_due_card_id(
     )
     for stage, groups in enumerate((due_groups, ahead_groups)):
         for queue_index, branches in enumerate(groups):
+            small_bucket = False
             if queue_counts is not None:
                 bucket = 1 if stage == 1 or queue_index in (0, 1) else (2 if queue_index == 2 else 0)
                 if queue_counts[bucket] == 0:
                     continue
+                # The same request already counted these eligible Notes or
+                # presentations. Small buckets sort cheaply in one SELECT;
+                # staged anchor seeks pay off on larger due collections.
+                small_bucket = queue_counts[bucket] <= 256
+            first = (lambda branch: branch.first()) if small_bucket else _first_queue_branch
+            if stage == 0 and queue_index == 2:
+                # REVIEW orders every dated row before every undated row,
+                # then non-null timestamp rows before null timestamps. These
+                # disjoint branches can stop immediately in that exact order.
+                for branch in branches:
+                    row = first(branch)
+                    if row is not None:
+                        return str(row[0])
+                continue
             # At most three LIMIT 1 results are merged in memory. We retain
             # the Query execution options (notably pinned retired applications).
-            candidates = [row for branch in branches if (row := _first_queue_branch(branch)) is not None]
+            candidates = [row for branch in branches if (row := first(branch)) is not None]
             if candidates:
                 return str(min(candidates, key=lambda row: _queue_row_order_key(
                     row, queue_index=queue_index,
@@ -855,7 +912,7 @@ def query_study_queue_counts(
         return db.func.count(db.distinct(db.case((condition, unit), else_=None)))
     row = base.with_entities(
         count(new), count(learn), count(review),
-        db.func.max(subject_integrity_violation(subject, note_id=Card.note_id)),
+        db.func.max(subject_integrity_violation(subject, note_id=Card.note_id, learner_user_id=user_id)),
     ).one()
     violation = violation_error(int(row[3] or 0))
     if violation is not None:

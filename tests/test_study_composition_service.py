@@ -12,7 +12,7 @@ from models.note_type import NoteType
 from models.study_application import StudyApplication
 from models.template import Template
 from models.user import User
-from tests.study_note_fixtures import attach_template
+from tests.study_note_fixtures import attach_template, create_note_user
 from app.services.study_composition_service import (
     AppliedComposition,
     build_compatibility_composition,
@@ -44,7 +44,7 @@ class StudyCompositionServiceTests(unittest.TestCase):
         db.create_all()
 
         uid = uuid4().hex[:8]
-        self.user = User(username=f"user_{uid}", email=f"user_{uid}@example.com")
+        self.user = create_note_user(db.session, username=f"user_{uid}", email=f"user_{uid}@example.com")
         self.user.set_password("pass")
         db.session.add(self.user)
         db.session.commit()

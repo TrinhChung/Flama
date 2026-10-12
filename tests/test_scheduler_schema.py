@@ -2,8 +2,6 @@
 
 import unittest
 from datetime import datetime, timedelta
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import sqlalchemy as sa
@@ -19,10 +17,13 @@ from app.services.anki_scheduler import CardState, FsrsMemoryState
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.stats_overview import record_review_event
 from models import db
-from models.card_progress import CardProgress
+from models.note import Note
+from models.note_type import NoteType
+from models.study_progress_subject import StudyProgressSubject
+from tests.note_progress_fixtures import stage_note_state, decode_note_state
+from tests.study_note_fixtures import enroll_note_user, mapper_state_input, assert_retired_progress_absent
 from models.deck import Deck
 from models.scheduler_preset import SchedulerPreset
-from models.study_authority_enrollment import StudyAuthorityEnrollment
 from models.user import User
 from models.user_scheduler_settings import UserSchedulerSettings
 
@@ -40,8 +41,15 @@ class SchedulerSchemaTests(unittest.TestCase):
             user = User(username="schema-user", email="schema@example.com")
             user.set_password("password")
             db.session.add(user)
+            db.session.flush()
+            enroll_note_user(db.session, user)
+            note_type = NoteType(name="Schema", user_id=user.id)
+            db.session.add(note_type)
+            db.session.flush()
+            note = Note(user_id=user.id, note_type_id=note_type.id, field_values={})
+            db.session.add(note)
             db.session.commit()
-            self.user_id = user.id
+            self.user_id, self.note_id = user.id, note.id
 
     def tearDown(self):
         with self.app.app_context():
@@ -55,22 +63,11 @@ class SchedulerSchemaTests(unittest.TestCase):
             self.assertTrue(inspector.has_table("scheduler_presets"))
             self.assertTrue(inspector.has_table("user_scheduler_settings"))
 
-            card_progress_columns = {column["name"] for column in inspector.get_columns("card_progress")}
-            self.assertTrue(
-                {
-                    "interval_days_raw",
-                    "is_buried",
-                    "buried_until_day",
-                    "review_kind",
-                    "scheduler_mode",
-                    "memory_stability",
-                    "memory_difficulty",
-                    "suspension_reason",
-                    "last_leech_at",
-                    "last_leech_lapses",
-                    "last_review_event_id",
-                }.issubset(card_progress_columns)
-            )
+            assert_retired_progress_absent(self, db.session)
+            columns = {column["name"] for column in inspector.get_columns("study_progress_subjects")}
+            self.assertTrue({"state_payload", "algorithm_state_hash", "semantic_state_hash",
+                "authority_revision", "normalized_queue", "due_day", "due_at",
+                "is_suspended", "is_buried", "buried_until_day"}.issubset(columns))
 
             review_event_columns = {column["name"] for column in inspector.get_columns("review_events")}
             self.assertTrue(
@@ -100,111 +97,50 @@ class SchedulerSchemaTests(unittest.TestCase):
             deck_columns = {column["name"] for column in inspector.get_columns("decks")}
             self.assertIn("scheduler_preset_id", deck_columns)
 
-    def test_card_progress_persists_extended_scheduler_state(self):
+    def test_note_subject_persists_exact_extended_scheduler_state(self):
         with self.app.app_context():
-            progress = CardProgress(user_id=self.user_id, card_id=None, queue="new")
-            db.session.add(progress)
-            db.session.commit()
-
-            now = datetime(2026, 3, 27, 10, 0, 0)
-            updated = CardState(
-                type="review",
-                due=now,
-                dueDay=now.date().toordinal() + 5,
-                intervalDays=5.75,
-                ease=2.65,
-                reps=12,
-                lapses=3,
-                lastReviewAt=now,
-                reviewKind="filtered",
-                schedulerMode="fsrs",
-                suspended=True,
-                suspensionReason="leech",
-                leeched=True,
-                memoryState=FsrsMemoryState(stability=9.5, difficulty=4.25),
-            )
-
+            now = datetime(2026, 3, 27, 10)
+            progress = mapper_state_input(user_id=self.user_id)
+            updated = CardState(type="review", due=now, dueDay=now.date().toordinal() + 6,
+                intervalDays=5.75, ease=2.65, reps=12, lapses=3, lastReviewAt=now,
+                reviewKind="filtered", schedulerMode="fsrs", suspended=True,
+                suspensionReason="leech", leeched=True,
+                memoryState=FsrsMemoryState(stability=9.5, difficulty=4.25))
             apply_card_state_to_progress(progress, updated, now)
+            values = {key: value for key, value in vars(progress).items()
+                      if key not in {"id", "user_id", "card_id", "created_at", "updated_at"}}
+            subject = stage_note_state(db.session, user_id=self.user_id, note_id=self.note_id,
+                                      now=now, **values)
             db.session.commit()
-
-            stored = CardProgress.query.get(progress.id)
-            self.assertAlmostEqual(float(stored.interval_days_raw or 0), 5.75, delta=0.0001)
-            self.assertEqual(stored.review_kind, "filtered")
-            self.assertEqual(stored.scheduler_mode, "fsrs")
-            self.assertTrue(stored.is_suspended)
-            self.assertEqual(stored.suspension_reason, "leech")
-            self.assertAlmostEqual(float(stored.memory_stability or 0), 9.5, delta=0.0001)
-            self.assertAlmostEqual(float(stored.memory_difficulty or 0), 4.25, delta=0.0001)
-            self.assertEqual(int(stored.last_leech_lapses or 0), 3)
-            self.assertIsNotNone(stored.last_leech_at)
-
-    def test_startup_compatibility_does_not_rewrite_existing_progress_raw_value(self):
-        with self.app.app_context():
-            progress = CardProgress(
-                user_id=self.user_id,
-                card_id=None,
-                queue="review",
-                interval_days=7,
-                interval_days_raw=None,
-            )
-            db.session.add(progress)
-            # Deliberately divergent NOTE projection: boot repair must not
-            # mask it before the parity reader can reject the learner.
-            recorded_at = datetime(2026, 9, 24, 0, 0, 0)
-            db.session.add(StudyAuthorityEnrollment(
-                learner_user_id=self.user_id,
-                mode_code="NOTE",
-                epoch=1,
-                created_at=recorded_at,
-                updated_at=recorded_at,
-            ))
-            db.session.commit()
-            progress_id = progress.id
-
-            ensure_backward_compatible_schema()
+            subject_id = subject.id
             db.session.expire_all()
-            stored = db.session.get(CardProgress, progress_id)
-            self.assertIsNone(stored.interval_days_raw)
+            stored = decode_note_state(db.session.get(StudyProgressSubject, subject_id))
+            self.assertEqual(stored.intervalDays, 5.75)
+            self.assertEqual(stored.reviewKind, "filtered")
+            self.assertEqual(stored.schedulerMode, "fsrs")
+            self.assertTrue(stored.suspended)
+            self.assertEqual(stored.suspensionReason, "leech")
+            self.assertEqual(stored.memoryState.stability, 9.5)
+            self.assertEqual(stored.memoryState.difficulty, 4.25)
+            self.assertTrue(stored.leeched)
+            assert_retired_progress_absent(self, db.session)
 
-    def test_startup_compatibility_initializes_raw_value_when_column_is_added(self):
-        # A file-backed database keeps inspector connections separate from the
-        # writer transaction; SQLite :memory: shares one connection and can
-        # roll an in-flight repair UPDATE back during schema inspection.
-        with TemporaryDirectory(prefix="flama-startup-schema-") as temporary_dir:
-            database_path = (Path(temporary_dir) / "startup.sqlite").as_posix()
-            app = create_app({
-                "TESTING": True,
-                "SQLALCHEMY_DATABASE_URI": f"sqlite:///{database_path}",
-                "STARTUP_RUN_MAINTENANCE": False,
-                "STARTUP_CHECK_DB_CONNECTIVITY": False,
-            })
-            with app.app_context():
-                db.create_all()
-                user = User(username="startup-raw-user", email="startup-raw@example.com")
-                user.set_password("password")
-                db.session.add(user)
-                db.session.flush()
-                progress = CardProgress(
-                    user_id=user.id,
-                    card_id=None,
-                    queue="review",
-                    interval_days=7,
-                    interval_days_raw=7.0,
-                )
-                db.session.add(progress)
-                db.session.commit()
-                progress_id = progress.id
-
-                db.session.execute(sa.text(
-                    "ALTER TABLE card_progress DROP COLUMN interval_days_raw"
-                ))
-                db.session.commit()
+    def test_startup_maintenance_preserves_note_state_and_does_not_resurrect_retired_table(self):
+        with self.app.app_context():
+            subject = stage_note_state(db.session, user_id=self.user_id, note_id=self.note_id,
+                queue="review", interval_days=7, interval_days_raw=7.123456789012345,
+                due_day=datetime(2026, 3, 27).date().toordinal(), revision=19)
+            db.session.commit()
+            before = dict(payload=subject.state_payload, algorithm_hash=subject.algorithm_state_hash,
+                          semantic_hash=subject.semantic_state_hash, revision=subject.authority_revision)
+            for _ in range(2):
                 ensure_backward_compatible_schema()
                 db.session.expire_all()
-                stored = db.session.get(CardProgress, progress_id)
-                self.assertEqual(stored.interval_days_raw, 7.0)
-                db.session.remove()
-                db.engine.dispose()
+                stored = db.session.get(StudyProgressSubject, subject.id)
+                self.assertEqual(dict(payload=stored.state_payload, algorithm_hash=stored.algorithm_state_hash,
+                    semantic_hash=stored.semantic_state_hash, revision=stored.authority_revision), before)
+                self.assertEqual(decode_note_state(stored).intervalDays, 7.123456789012345)
+                assert_retired_progress_absent(self, db.session)
 
     def test_review_event_persists_extended_scheduler_metadata(self):
         with self.app.app_context():
@@ -239,7 +175,7 @@ class SchedulerSchemaTests(unittest.TestCase):
             )
             db.session.commit()
 
-            stored = event.__class__.query.get(event.id)
+            stored = db.session.get(event.__class__, event.id)
             self.assertEqual(stored.scheduler_mode, "fsrs")
             self.assertEqual(stored.review_kind, "filtered")
             self.assertEqual(stored.queue_before, "review")
@@ -312,7 +248,7 @@ class SchedulerSchemaTests(unittest.TestCase):
             now = datetime(2026, 3, 27, 10, 0, 0)
             card = SimpleNamespace(id="learn-future", created_at=now)
             progress_map = {
-                "learn-future": CardProgress(
+                "learn-future": mapper_state_input(
                     user_id=self.user_id,
                     card_id="learn-future",
                     queue="learning",

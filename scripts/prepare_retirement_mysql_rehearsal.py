@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -37,7 +38,11 @@ def main():
     parser.add_argument('--env-file', type=Path, default=ROOT / '.env')
     parser.add_argument('--mysql-bin', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--schema-suffix', default='', help='Use fresh isolated schemas for a later rehearsal.')
     args = parser.parse_args()
+    if not re.fullmatch(r'[a-zA-Z0-9_]{0,12}', args.schema_suffix):
+        parser.error('--schema-suffix must contain at most 12 letters, digits or underscores')
+    schemas = tuple(name + args.schema_suffix for name in SCHEMAS)
     args.mysql_socket = None
     args.database = None
     engine = _engine(args)
@@ -51,7 +56,7 @@ def main():
     if backup.exists() or manifest.exists():
         raise RuntimeError('Refusing to overwrite rehearsal backup/evidence')
     with engine.connect() as connection:
-        for name in SCHEMAS:
+        for name in schemas:
             exists = connection.execute(sa.text(
                 'SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name=:name'
             ), {'name': name}).scalar_one()
@@ -90,16 +95,16 @@ def main():
         server = sa.create_engine(uri.set(database=None))
         try:
             with server.connect() as connection:
-                for name in SCHEMAS:
+                for name in schemas:
                     connection.exec_driver_sql(f'CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci')
         finally:
             server.dispose()
         with backup.open('rb') as source:
             subprocess.run([str(args.mysql_bin / 'mysql.exe'), defaults,
-                            '--default-character-set=utf8mb4', SCHEMAS[0]],
+                            '--default-character-set=utf8mb4', schemas[0]],
                            stdin=source, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            check=True, timeout=300)
-        restored = sa.create_engine(uri.set(database=SCHEMAS[0]))
+        restored = sa.create_engine(uri.set(database=schemas[0]))
         try:
             with restored.connect() as connection:
                 actual = {name: int(connection.exec_driver_sql(
@@ -112,7 +117,7 @@ def main():
         digest = hashlib.file_digest(backup.open('rb'), 'sha256').hexdigest()
         report = {'source_database': uri.database, 'mysql_version': version,
                   'backup_file': str(backup), 'backup_bytes': backup.stat().st_size,
-                  'backup_sha256': digest, 'schemas': list(SCHEMAS),
+                  'backup_sha256': digest, 'schemas': list(schemas),
                   'table_counts': source_counts, 'restore_row_counts_match': True}
         manifest.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
         print(f'Full backup restore PASS: {len(names)} tables, SHA256={digest}', flush=True)

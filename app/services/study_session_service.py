@@ -595,7 +595,7 @@ def open_study_session(
             selectinload(Card.template),
             selectinload(Card.application),
         )
-        .order_by(Card.created_at.asc(), Card.id.asc())
+        .order_by(Card.created_at.asc(), Card.order_key.asc())
         .limit(MAX_SESSION_CARDS + 1)
         .all()
     )

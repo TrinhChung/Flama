@@ -10,6 +10,17 @@ def enroll_note_user(session, user):
     return enroll_new_learner_note_authority(session, user=user)
 
 
+def create_note_user(session, **values):
+    """Stage a new NOTE learner before staging any owned content; never commit."""
+    from models.user import User
+
+    user = User(**values)
+    session.add(user)
+    session.flush()
+    enroll_note_user(session, user)
+    return user
+
+
 def mapper_state_input(**changes):
     """Pure scheduler-state input for codec fixtures, never an ORM entity."""
     from datetime import datetime

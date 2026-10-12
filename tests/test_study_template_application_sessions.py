@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from tests import test_study_composition_service as compositions
 from tests import test_study_session_install_usage as installs
-from app.repositories import template_release_repository
+from app.repositories import template_release_repository, template_library_repository
 from app.services import study_session_service
 from app.services.study_composition_service import (
     apply_composition_selection_to_query, count_notes_by_composition,
@@ -40,7 +40,7 @@ class StudyTemplateApplicationTests(unittest.TestCase):
         selection = resolve_composition_selection(query, clone_scope=None,
             requested_composition_id=composition_id, request_source="test")
         return study_session_service.open_study_session(user=self.user, query=query,
-            clone_scope=None, scope_type="deck", scope_id=str(self.deck.id), timezone_name="UTC",
+            clone_scope=None, scope_type="deck", scope_id=str(self.deck.id), timezone_name="UTC", wire_schema_version="study-session.v4",
             composition_selection=selection, input_bindings=bindings)
 
     def test_independent_template_applies_to_two_note_types_with_note_authority(self):
@@ -56,9 +56,8 @@ class StudyTemplateApplicationTests(unittest.TestCase):
                 for index, note_type in enumerate((self.note_type, second_type))]
         db.session.add_all([second_note, *apps])
         db.session.flush()
-        cards = [Card(note_id=note.id, template_id=template.id, application=application)
+        cards = [Card.query.filter_by(note_id=note.id, application_id=application.id).one()
                  for note, application in zip((self.note, second_note), apps)]
-        db.session.add_all(cards)
         db.session.commit()
         query = self._query().filter(Card.template_id == template.id)
         available = list_available_compositions_for_query(query, clone_scope=None)
@@ -81,8 +80,7 @@ class StudyTemplateApplicationTests(unittest.TestCase):
                                  occurrence_key="again", display_name="Again")
         db.session.add(repeat)
         db.session.flush()
-        repeated_card = Card(note_id=self.note.id, template_id=self.template_1.id, application=repeat)
-        db.session.add(repeated_card)
+        repeated_card = Card.query.filter_by(note_id=self.note.id, application_id=repeat.id).one()
         db.session.commit()
         original = resolve_compatibility_composition_for_card(self.card_1)
         repeated = resolve_compatibility_composition_for_card(repeated_card)
@@ -170,7 +168,7 @@ class StudyTemplateReleaseSessionTests(unittest.TestCase):
         self._install_overlay(notes=3)
         with self.app.app_context():
             install = db.session.get(DeckInstall, self.install_id)
-            source = Template.query.filter_by(note_type_id=install.source_note_type_id).one()
+            source = template_library_repository.applications(db.session, install.source_note_type_id)[0].template
             field = FieldDef.query.filter_by(note_type_id=install.source_note_type_id).one()
             application = StudyApplication.query.filter_by(template_id=source.id).one()
             source.front_html = "pinned {{term}}"

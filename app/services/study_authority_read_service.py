@@ -108,7 +108,7 @@ def _availability_from_subject(subject, *, card) -> StudyAuthorityAvailabilityRe
     )
 
 
-def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilityRead:
+def validate_consolidated_subject_state(*, subject, note_id: str) -> None:
     """A locked consolidated row must agree with its own state (ADR P10 §2.7).
 
     In memory only: the row's availability and semantic hash are recomputed
@@ -130,7 +130,7 @@ def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilit
     except StudyProgressCodecError as exc:
         raise StudyAuthorityReadError(
             "AUTHORITY_READ_PARITY_DIVERGED",
-            f"Note {card.note_id} NOTE state cannot be projected: {exc}",
+            f"Note {note_id} NOTE state cannot be projected: {exc}",
         ) from exc
     if (
         projected.semantic_state_hash != bytes(subject.semantic_state_hash)
@@ -142,8 +142,14 @@ def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilit
     ):
         raise StudyAuthorityReadError(
             "AUTHORITY_READ_PARITY_DIVERGED",
-            f"Note {card.note_id} availability differs from its NOTE state.",
+            f"Note {note_id} availability differs from its NOTE state.",
         )
+
+
+
+def validate_consolidated_subject(*, card, subject) -> StudyAuthorityAvailabilityRead:
+    """Validate a locked Note state, then attach presentation ordering metadata."""
+    validate_consolidated_subject_state(subject=subject, note_id=str(card.note_id))
     return _availability_from_subject(subject, card=card)
 
 

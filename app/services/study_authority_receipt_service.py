@@ -364,7 +364,7 @@ def _card_revisions(base, result: ExistingStateNoteReviewResult) -> dict[str, in
     # No Card carries progress: every sibling reports the Note's authority
     # revision (ADR P9-03 §2.9); clients only echo it back.
     revision = int(result.write.authority_revision)
-    return {card_id: revision for card_id in sorted(base.siblings.card_ids)}
+    return {card_id: revision for card_id in sorted(base.siblings.history_card_ids)}
 
 
 def _stage_receipt(

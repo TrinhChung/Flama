@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import sys
 from time import perf_counter
+from statistics import median
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,8 +103,10 @@ def main():
         client = app.test_client()
         with client.session_transaction() as login:
             login['_user_id'], login['_fresh'] = str(args.user_id), True
-        for kind in ('combined-baseline', 'anchor-seeking'):
-            for iteration in range(args.iterations):
+        for iteration in range(args.iterations):
+            kinds = ('combined-baseline', 'anchor-seeking')
+            # Alternate order to reduce cache and concurrent-load bias.
+            for kind in kinds if iteration % 2 == 0 else reversed(kinds):
                 statements.clear()
                 context = patch('app.routes.flashcards.study._query_next_due_card_id', side_effect=combined)
                 if kind == 'anchor-seeking':
@@ -123,13 +126,19 @@ def main():
                     'count_aggregates': sum('count(distinct' in sql.lower() for sql in statements)})
         snapshots = {(row['card_id'], json.dumps(row['counts'], sort_keys=True)) for row in result['runs']}
         result['same_card_and_counts'] = len(snapshots) == 1
+        result['warm_medians_ms'] = {
+            kind: round(median(row['wall_ms'] for row in result['runs']
+                               if row['kind'] == kind and (row['iteration'] > 0 or args.iterations == 1)), 3)
+            for kind in ('combined-baseline', 'anchor-seeking')
+        }
     finally:
         event.remove(engine, 'before_cursor_execute', guard)
         with app.app_context():
             db.session.rollback()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
-    print(json.dumps(result))
+    print(json.dumps({key: result[key] for key in ('database', 'scope', 'scope_id',
+                     'same_card_and_counts', 'warm_medians_ms')}))
     return 0 if result['same_card_and_counts'] and all(row['status'] == 200 for row in result['runs']) else 1
 
 

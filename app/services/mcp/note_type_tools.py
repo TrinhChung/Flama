@@ -380,6 +380,9 @@ def preview_note_type_update(
     renamed_fields: list[dict[str, str]] = []
     removed_fields: list[str] = []
     modified_fields: list[dict[str, Any]] = []
+    added_templates: list[dict[str, Any]] = []
+    updated_templates: list[dict[str, Any]] = []
+    removed_templates: list[str] = []
 
     data_loss_possible = False
     template_regeneration_required = False

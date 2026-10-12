@@ -155,8 +155,7 @@ def _run_probe(app, settings, database_name):
                             deck_id=fixture.deck_id, field_values={"Word": "outside-lease"})
         db.session.add(outside_note)
         db.session.flush()
-        outside_card = Card(note=outside_note, template_id=source.template_id)
-        db.session.add(outside_card)
+        outside_card = Card.query.filter_by(note_id=outside_note.id, application_id=source.application_id).one()
         db.session.commit()
         outside_note_id, outside_card_id = outside_note.id, outside_card.id
         db.session.rollback()

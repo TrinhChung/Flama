@@ -10,7 +10,9 @@ from app.connect import create_connect_app
 from app.services import mcp_access_token_service, mcp_tool_service, user_api_token_service
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from models.deck_install import DeckInstall
@@ -38,7 +40,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
 
         with self.app.app_context():
             db.create_all()
-            user = User(
+            user = create_note_user(db.session,
                 username="test_mcp_user",
                 email="mcp_user@example.com",
                 timezone="UTC",
@@ -47,7 +49,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
             user.set_password("password123")
             db.session.add(user)
 
-            other_user = User(
+            other_user = create_note_user(db.session,
                 username="other_user",
                 email="other@example.com",
                 timezone="UTC",
@@ -67,6 +69,8 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
             nt = NoteType(user_id=user.id, name="Vocabulary Standard")
             db.session.add(nt)
             db.session.flush()
+            db.session.add(nt)
+            db.session.flush()
             self.note_type_id = nt.id
 
             f1 = FieldDef(note_type_id=nt.id, name="Word", field_type="text", position=0, required=True, identity_role="primary")
@@ -75,7 +79,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
             db.session.add_all([f1, f2, f3])
             db.session.flush()
 
-            t1 = Template(
+            t1 = attach_template(db.session, owner_user_id=db.session.get(NoteType, nt.id).user_id,
                 note_type_id=nt.id,
                 name="Recognition",
                 front_html="<div class='word'>{{Word}}</div>",
@@ -131,10 +135,13 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                 field_values={"Word": "test", "Meaning": "test"})
             db.session.add(note)
             db.session.flush()
-            db.session.add(Card(note_id=note.id, template_id=self.template_id))
+
             db.session.commit()
             stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
                 now_utc=datetime.now(timezone.utc).replace(tzinfo=None))
+            db.session.commit()
+            from tests.note_progress_fixtures import stage_note_state
+            stage_note_state(db.session, user_id=self.user_id, note_id=note.id)
             db.session.commit()
             original_hash = bytes(StudyProgressSubject.query.one().semantic_state_hash)
 
@@ -150,8 +157,10 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(Card.query.count(), 2)
             # The Note's one row is untouched by the topology change (ADR P10).
-            self.assertEqual(CardProgress.query.count(), 0)
-            self.assertEqual(Template.query.filter_by(is_default=True).count(), 1)
+            assert_retired_progress_absent(self, db.session)
+            from models.study_application import StudyApplication
+            self.assertEqual(StudyApplication.query.filter_by(note_type_id=self.note_type_id,
+                                                            status_code="ACTIVE", is_default=True).count(), 1)
             subject = StudyProgressSubject.query.one()
             self.assertEqual(bytes(subject.semantic_state_hash), original_hash)
             self.assertEqual(subject.authority_revision, 0)
@@ -591,7 +600,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
                 note_type_id=self.note_type_id,
                 parent_id=source_root.id,
             )
-            learner = User(
+            learner = create_note_user(db.session,
                 username="mcp-shared-learner",
                 email="mcp-shared-learner@example.com",
             )
@@ -708,7 +717,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
 
             note = db.session.get(Note, note_id)
             card = Card.query.filter_by(note_id=note_id).one()
-            progress = CardProgress(
+            progress = stage_note_state(db.session,
                 user_id=learner.id,
                 card_id=card.id,
                 queue="review",
@@ -789,7 +798,7 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
             self.assertEqual(preserved_note.tags, [])
             self.assertEqual(preserved_note.field_values["Word"], "hound")
             self.assertIsNotNone(db.session.get(Card, card_id))
-            self.assertIsNotNone(db.session.get(CardProgress, progress_id))
+            self.assertIsNotNone(db.session.get(StudyProgressSubject, progress_id))
             self.assertIsNotNone(
                 db.session.get(DeckCloneNoteFieldOverride, overlay_id)
             )

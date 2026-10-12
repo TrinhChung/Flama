@@ -1,79 +1,52 @@
-"""Behavior acceptance characterization baseline tests for study architecture decoupling."""
+"""NOTE behavior acceptance across native, session, Connect and overlay boundaries."""
 
-from __future__ import annotations
-
-import gzip
 import hashlib
 import json
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
-from sqlalchemy.exc import IntegrityError
-
 from app import create_app
-from app.services import (
-    anki_import_service,
-    flama_connect_package_service,
-    flashcards_share_service,
-    study_composition_service,
-    study_service,
-    study_session_service,
-)
+from app.connect import connect_bp
+from app.services import flashcards_share_service, study_composition_service, study_service, study_session_service, user_api_token_service
 from app.services.anki_scheduler import _day_index
 from app.services.connect.actions import add_note
 from app.services.mcp import study_tools as mcp_study_tools
 from app.validators.review_event import classify_review_event_payload
-from app.repositories.study_repository import (
-    query_next_due_card_id,
-    query_study_queue_counts,
-)
+from app.repositories.study_repository import query_next_due_card_id, query_study_queue_counts
 from models import db
-from models.audit_log import AuditLog
 from models.card import Card
-from models.card_progress import CardProgress
 from models.deck import Deck
-from models.deck_clone_deck_map import DeckCloneDeckMap
-from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
-from models.flashcard import (
-    DeckCloneAddedNote,
-    FieldDef,
-    Note,
-    NoteType,
-    ReviewEvent,
-    Template,
-)
+from models.deck_clone_added_note import DeckCloneAddedNote
+from models.field_def import FieldDef
+from models.note import Note
+from models.note_type import NoteType
+from models.review_event import ReviewEvent
 from models.connect_note_ref import ConnectNoteRef
+from models.connect_source_card_ref import ConnectSourceCardRef
 from models.connect_review_event_ref import ConnectReviewEventRef
+from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
-from models.study_session_card import StudySessionCard
 from models.study_session_commit import StudySessionCommit
 from models.user import User
-
+from tests.note_progress_fixtures import stage_note_state, decode_note_state, subject_for_card
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent
 
 
 def _review_event_provenance():
-    """Count ReviewEvents by payload disposition and provenance source path."""
-
     counts = {}
-    for row in ReviewEvent.query.order_by(ReviewEvent.id.asc()).all():
-        disposition = classify_review_event_payload(
-            row.payload_json,
-            scheduler_algorithm=row.scheduler_algorithm,
-            algorithm_version=row.algorithm_version,
-            scheduler_config_hash=row.scheduler_config_hash,
-            study_session_id=row.study_session_id,
-            client_event_id=row.client_event_id,
-            sequence_no=row.sequence_no,
-        )
-        try:
-            provenance = (json.loads(row.payload_json or "{}") or {}).get("provenance") or {}
-        except (TypeError, ValueError, AttributeError):
-            provenance = {}
-        key = (disposition.category, provenance.get("source_path"))
+    for row in ReviewEvent.query.all():
+        disposition = classify_review_event_payload(row.payload_json,
+            scheduler_algorithm=row.scheduler_algorithm, algorithm_version=row.algorithm_version,
+            scheduler_config_hash=row.scheduler_config_hash, study_session_id=row.study_session_id,
+            client_event_id=row.client_event_id, sequence_no=row.sequence_no)
+        source = (json.loads(row.payload_json or "{}" ).get("provenance") or {}).get("source_path")
+        key = (disposition.category, source)
         counts[key] = counts.get(key, 0) + 1
     return counts
+
 
 class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
     def setUp(self):
@@ -81,9 +54,13 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-                "WTF_CSRF_ENABLED": False,
+                "WTF_CSRF_ENABLED": False, "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False, "REDIS_URL": "",
+                "STUDY_WIRE_V4_ENABLED": True, "STUDY_ASYNC_BATCH_ENABLED": False,
+                "CONNECT_LEGACY_WEB_ACTIONS_ENABLED": True, "CONNECT_RATE_LIMIT_BACKEND": "local",
             }
         )
+        self.app.register_blueprint(connect_bp)
         self.client = self.app.test_client()
 
         with self.app.app_context():
@@ -110,6 +87,8 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             db.session.add_all([author, learner])
             db.session.flush()
 
+            enroll_note_user(db.session, author)
+            enroll_note_user(db.session, learner)
             self.author_id = author.id
             self.learner_id = learner.id
 
@@ -134,7 +113,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 position=1,
                 required=True,
             )
-            template = Template(
+            template = attach_template(db.session, owner_user_id=author.id,
                 note_type_id=note_type.id,
                 name="Recognition",
                 position=0,
@@ -169,855 +148,229 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             self.note_a_id = note_a.id
             self.note_b_id = note_b.id
 
-            card_a = Card(note_id=note_a.id, template_id=template.id)
-            card_b = Card(note_id=note_b.id, template_id=template.id)
-            db.session.add_all([card_a, card_b])
+            card_a = Card.query.filter_by(note_id=note_a.id, template_id=template.id).one()
+            card_b = Card.query.filter_by(note_id=note_b.id, template_id=template.id).one()
             db.session.commit()
             self.card_a_id = card_a.id
             self.card_b_id = card_b.id
+
+        self._login(self.author_id)
 
     def tearDown(self):
         with self.app.app_context():
             db.session.remove()
             db.drop_all()
 
-    # -------------------------------------------------------------------------
-    # 1. Direct REST vs MCP vs durable session parity
-    # -------------------------------------------------------------------------
-    def test_direct_native_review_and_mcp_parity(self):
-        """REST, MCP and durable sessions share state and event semantics."""
-        from unittest.mock import patch
 
-        fixed_now = datetime(2026, 8, 29, 10, 0, 0)
-        today_day = _day_index(fixed_now, boundary_hour=4, timezone_name="Asia/Ho_Chi_Minh")
-        expected_due_day_after = today_day + 13
+    def _login(self, user_id):
+        with self.client.session_transaction() as login:
+            login["_user_id"], login["_fresh"] = str(user_id), True
 
+    def _open(self):
+        response = self.client.post("/api/study/sessions", json={"scope": "deck", "scope_id": self.deck_id,
+            "accepted_session_schema_versions": ["study-session.v4"]})
+        self.assertEqual(response.status_code, 201, response.get_json())
+        return response.get_json()
+
+    def _event(self, snapshot, card, sequence=1):
+        policy = snapshot["policies"][card["policy_key"]]
+        event_id = str(uuid4())
+        self.assertEqual(len(card["card_id"]), 73)
+        return dict(event_id=event_id, operation_key=event_id, sequence=sequence, card_id=card["card_id"],
+            rating="good", action_key="review.good", action_contract_version="1",
+            trigger_key="scheduler.review.good", trigger_contract_version="1", policy_key=card["policy_key"],
+            scheduler_offset_ms=0, duration_ms=2500, algorithm_key=snapshot["scheduler_algorithm"],
+            algorithm_version=snapshot["algorithm_version"], config_schema_version=policy["config_schema_version"],
+            config_hash=policy["config_hash"], study_session_id=snapshot["session_id"],
+            **{key: value for key, value in card["authority_pin"].items() if key != "schema_version"})
+
+    def _commit_payload(self, snapshot, events):
+        return dict(schema_version="study-commit.v3", commit_id=str(uuid4()),
+            session_token=snapshot["session_token"], snapshot_hash=snapshot["snapshot_hash"],
+            commit_reason="manual_exit", events=events, final_states=[])
+
+    def _commit(self, snapshot, payload, expected=200):
+        response = self.client.post(f"/api/study/sessions/{snapshot['session_id']}/commit", json=payload)
+        self.assertEqual(response.status_code, expected, response.get_json())
+        return response.get_json()
+
+    def test_direct_native_review_mcp_and_session_have_exact_note_state_and_provenance(self):
+        fixed_now = datetime(2026, 8, 29, 10)
+        today = _day_index(fixed_now, 4, timezone_name="Asia/Ho_Chi_Minh")
         with self.app.app_context():
-            note_c = Note(
-                user_id=self.author_id,
-                note_type_id=self.note_type_id,
-                deck_id=self.deck_id,
-                field_values={"Word": "bird", "Meaning": "Bird"},
-            )
-            db.session.add(note_c)
+            note = Note(user_id=self.author_id, note_type_id=self.note_type_id,
+                        deck_id=self.deck_id, field_values={"Word": "bird", "Meaning": "Bird"})
+            db.session.add(note)
             db.session.flush()
-            card_c = Card.query.filter_by(note_id=note_c.id, template_id=self.template_id).one()
-            db.session.flush()
-            card_c_id = card_c.id
-
-            # Initial identical state for all three transports.
-            p_a = CardProgress(
-                user_id=self.author_id,
-                card_id=self.card_a_id,
-                queue="review",
-                interval_days=5,
-                ease_factor=2.5,
-                reps=3,
-                lapses=0,
-                due_day=today_day,
-                step_index=0,
-                revision=0,
-            )
-            p_b = CardProgress(
-                user_id=self.author_id,
-                card_id=self.card_b_id,
-                queue="review",
-                interval_days=5,
-                ease_factor=2.5,
-                reps=3,
-                lapses=0,
-                due_day=today_day,
-                step_index=0,
-                revision=0,
-            )
-            p_c = CardProgress(
-                user_id=self.author_id,
-                card_id=card_c_id,
-                queue="review",
-                interval_days=5,
-                ease_factor=2.5,
-                reps=3,
-                lapses=0,
-                due_day=today_day,
-                step_index=0,
-                revision=0,
-            )
-            db.session.add_all([p_a, p_b, p_c])
+            card_c_id = Card.query.filter_by(note_id=note.id).one().id
+            for card_id in (self.card_a_id, self.card_b_id, card_c_id):
+                self.assertEqual(len(card_id), 73)
+                stage_note_state(db.session, user_id=self.author_id, card_id=card_id, now=fixed_now,
+                    queue="review", interval_days=5, ease_factor=2.5, reps=3, due_day=today)
             db.session.commit()
-
-        # 1. Execute review via direct REST endpoint for Card A with fixed reference time
-        with patch("app.routes.flashcards.study.datetime") as mock_study_dt, \
-             patch("app.services.study_service.datetime") as mock_srv_dt:
-            mock_study_dt.utcnow.return_value = fixed_now
-            mock_study_dt.fromisoformat = datetime.fromisoformat
-            mock_study_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
-            mock_srv_dt.utcnow.return_value = fixed_now
-            mock_srv_dt.fromisoformat = datetime.fromisoformat
-            mock_srv_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
-
-            self.client.post(
-                "/login",
-                data={"email": "author@example.com", "password": "password"},
-                follow_redirects=False,
-            )
-            rest_response = self.client.post(
-                f"/api/study/{self.card_a_id}/answer",
-                json={
-                    "rating": "good",
-                    "duration_ms": 2500,
-                    "timezone": "Asia/Ho_Chi_Minh",
-                },
-            )
-            self.assertEqual(rest_response.status_code, 200, rest_response.get_json())
-            self.assertTrue(rest_response.get_json()["success"])
-
-            # 2. Execute review via MCP tool for Card B with fixed reference time
+        with patch("app.routes.flashcards.study.datetime", wraps=datetime) as route_clock, \
+             patch("app.services.study_service.datetime", wraps=datetime) as review_clock, \
+             patch("app.services.study_session_service.datetime", wraps=datetime) as session_clock:
+            route_clock.utcnow.return_value = fixed_now
+            review_clock.utcnow.return_value = fixed_now
+            session_clock.utcnow.return_value = fixed_now
+            response = self.client.post(f"/api/study/{self.card_a_id}/answer", json={
+                "rating": "good", "operation_key": str(uuid4()), "duration_ms": 2500,
+                "scope": "deck", "scope_id": self.deck_id, "timezone": "Asia/Ho_Chi_Minh"})
+            self.assertEqual(response.status_code, 200, response.get_json())
             with self.app.app_context():
-                mcp_result = mcp_study_tools.submit_review(
-                    user_id=self.author_id,
-                    card_id=self.card_b_id,
-                    rating="good",
-                    duration_ms=2500,
-                )
-                self.assertTrue(mcp_result["success"])
-                self.assertEqual(mcp_result["rating"], "good")
-
-                # 3. Execute the equivalent review through a durable session.
-                author_user = db.session.get(User, self.author_id)
-                snapshot = study_session_service.open_study_session(
-                    user=author_user,
-                    query=Card.query.filter(Card.id == card_c_id),
-                    clone_scope=None,
-                    scope_type="deck",
-                    scope_id=str(self.deck_id),
-                    timezone_name="Asia/Ho_Chi_Minh",
-                    now=fixed_now,
-                )
-                session_card = snapshot["cards"][0]
-                session_event_id = str(uuid4())
-                session_result = study_session_service.commit_study_session(
-                    user=author_user,
-                    session_id=snapshot["session_id"],
-                    payload={
-                        "schema_version": "study-commit.v1",
-                        "commit_id": "commit-transport-parity-01",
-                        "session_token": snapshot["session_token"],
-                        "snapshot_hash": snapshot["snapshot_hash"],
-                        "commit_reason": "manual_exit",
-                        "events": [
-                            {
-                                "event_id": session_event_id,
-                                "sequence": 1,
-                                "card_id": card_c_id,
-                                "rating": "good",
-                                "policy_key": session_card["policy_key"],
-                                "scheduler_offset_ms": 0,
-                                "duration_ms": 2500,
-                            }
-                        ],
-                        "final_states": [],
-                    },
-                    now=fixed_now,
-                )
-                self.assertTrue(session_result["success"])
-
-                # 4. Comprehensive parity across authoritative CardProgress fields.
-                updated_pa = CardProgress.query.filter_by(
-                    user_id=self.author_id, card_id=self.card_a_id
-                ).one()
-                updated_pb = CardProgress.query.filter_by(
-                    user_id=self.author_id, card_id=self.card_b_id
-                ).one()
-                updated_pc = CardProgress.query.filter_by(
-                    user_id=self.author_id, card_id=card_c_id
-                ).one()
-
-                progress_parity_fields = (
-                    "reps",
-                    "interval_days",
-                    "interval_days_raw",
-                    "ease_factor",
-                    "lapses",
-                    "queue",
-                    "step_index",
-                    "due_day",
-                    "due_at",
-                    "revision",
-                    "is_suspended",
-                    "is_buried",
-                    "buried_until_day",
-                    "review_kind",
-                    "scheduler_mode",
-                    "memory_stability",
-                    "memory_difficulty",
-                    "suspension_reason",
-                    "last_leech_at",
-                    "last_leech_lapses",
-                    "last_reviewed_at",
-                )
-                for field_name in progress_parity_fields:
-                    self.assertEqual(
-                        getattr(updated_pa, field_name),
-                        getattr(updated_pc, field_name),
-                        field_name,
-                    )
-
-                self.assertEqual(updated_pa.reps, 4)
-                self.assertEqual(updated_pb.reps, 4)
-                self.assertEqual(updated_pa.interval_days, 13)
-                self.assertEqual(updated_pb.interval_days, 13)
-                self.assertEqual(updated_pa.interval_days_raw, 12.5)
-                self.assertEqual(updated_pb.interval_days_raw, 12.5)
-                self.assertEqual(updated_pa.ease_factor, 2.5)
-                self.assertEqual(updated_pb.ease_factor, 2.5)
-                self.assertEqual(updated_pa.lapses, 0)
-                self.assertEqual(updated_pb.lapses, 0)
-                self.assertEqual(updated_pa.queue, "review")
-                self.assertEqual(updated_pb.queue, "review")
-                self.assertEqual(updated_pa.step_index, 0)
-                self.assertEqual(updated_pb.step_index, 0)
-                self.assertEqual(updated_pa.due_day, expected_due_day_after)
-                self.assertEqual(updated_pb.due_day, expected_due_day_after)
-                self.assertEqual(updated_pa.due_at, updated_pb.due_at)
-                self.assertEqual(updated_pa.revision, 1)
-                self.assertEqual(updated_pb.revision, 1)
-                self.assertEqual(updated_pa.is_suspended, False)
-                self.assertEqual(updated_pb.is_suspended, False)
-                self.assertEqual(updated_pa.is_buried, False)
-                self.assertEqual(updated_pb.is_buried, False)
-                self.assertIsNone(updated_pa.buried_until_day)
-                self.assertIsNone(updated_pb.buried_until_day)
-                self.assertEqual(updated_pa.review_kind, "review")
-                self.assertEqual(updated_pb.review_kind, "review")
-                self.assertEqual(updated_pa.scheduler_mode, "legacy")
-                self.assertEqual(updated_pb.scheduler_mode, "legacy")
-                self.assertIsNone(updated_pa.memory_stability)
-                self.assertIsNone(updated_pb.memory_stability)
-                self.assertIsNone(updated_pa.memory_difficulty)
-                self.assertIsNone(updated_pb.memory_difficulty)
-                self.assertIsNone(updated_pa.suspension_reason)
-                self.assertIsNone(updated_pb.suspension_reason)
-                self.assertIsNone(updated_pa.last_leech_at)
-                self.assertIsNone(updated_pb.last_leech_at)
-                self.assertEqual(updated_pa.last_leech_lapses, 0)
-                self.assertEqual(updated_pb.last_leech_lapses, 0)
-                self.assertEqual(updated_pa.last_reviewed_at, fixed_now)
-                self.assertEqual(updated_pb.last_reviewed_at, fixed_now)
-                self.assertLess(abs((updated_pa.last_reviewed_at - updated_pb.last_reviewed_at).total_seconds()), 1.0)
-
-                # Documented Exclusions / Entity Pointers on CardProgress
-                self.assertEqual(updated_pa.card_id, self.card_a_id)
-                self.assertEqual(updated_pb.card_id, self.card_b_id)
-
-                # 5. Comprehensive parity across authoritative ReviewEvent fields.
-                event_a = ReviewEvent.query.filter_by(
-                    user_id=self.author_id, card_id=self.card_a_id
-                ).order_by(ReviewEvent.id.desc()).first()
-                event_b = ReviewEvent.query.filter_by(
-                    user_id=self.author_id, card_id=self.card_b_id
-                ).order_by(ReviewEvent.id.desc()).first()
-                event_c = ReviewEvent.query.filter_by(
-                    user_id=self.author_id, card_id=card_c_id
-                ).order_by(ReviewEvent.id.desc()).first()
-
-                self.assertIsNotNone(event_a)
-                self.assertIsNotNone(event_b)
-                self.assertIsNotNone(event_c)
-                self.assertEqual(updated_pa.last_review_event_id, event_a.id)
-                self.assertEqual(updated_pb.last_review_event_id, event_b.id)
-                self.assertEqual(updated_pc.last_review_event_id, event_c.id)
-
-                event_parity_fields = (
-                    "user_id",
-                    "deck_id",
-                    "note_type_id",
-                    "scheduler_preset_id",
-                    "scheduler_algorithm",
-                    "algorithm_version",
-                    "scheduler_config_hash",
-                    "reviewed_at",
-                    "duration_ms",
-                    "rating",
-                    "mode",
-                    "scheduler_mode",
-                    "review_kind",
-                    "queue_before",
-                    "queue_after",
-                    "interval_days_before",
-                    "interval_days_after",
-                    "due_day_before",
-                    "due_day_after",
-                    "days_late",
-                    "ease_factor_before",
-                    "ease_factor_after",
-                    "memory_stability_before",
-                    "memory_stability_after",
-                    "memory_difficulty_before",
-                    "memory_difficulty_after",
-                    "leeched_after",
-                    "suspended_after",
-                )
-                for field_name in event_parity_fields:
-                    self.assertEqual(
-                        getattr(event_a, field_name),
-                        getattr(event_c, field_name),
-                        field_name,
-                    )
-
-                self.assertEqual(event_a.user_id, self.author_id)
-                self.assertEqual(event_b.user_id, self.author_id)
-                self.assertIsNone(event_a.scheduler_preset_id)
-                self.assertIsNone(event_b.scheduler_preset_id)
-                self.assertEqual(event_a.scheduler_algorithm, "legacy-anki")
-                self.assertEqual(event_b.scheduler_algorithm, "legacy-anki")
-                self.assertEqual(event_a.algorithm_version, "1.0.0")
-                self.assertEqual(event_b.algorithm_version, "1.0.0")
-                self.assertEqual(event_a.scheduler_config_hash, event_b.scheduler_config_hash)
-                self.assertEqual(event_a.reviewed_at, fixed_now)
-                self.assertEqual(event_b.reviewed_at, fixed_now)
-                self.assertLess(abs((event_a.reviewed_at - event_b.reviewed_at).total_seconds()), 1.0)
-                self.assertEqual(event_a.duration_ms, 2500)
-                self.assertEqual(event_b.duration_ms, 2500)
-                self.assertEqual(event_a.rating, "good")
-                self.assertEqual(event_b.rating, "good")
-                self.assertEqual(event_a.mode, "review")
-                self.assertEqual(event_b.mode, "review")
-                self.assertEqual(event_a.scheduler_mode, "legacy")
-                self.assertEqual(event_b.scheduler_mode, "legacy")
-                self.assertEqual(event_a.review_kind, "review")
-                self.assertEqual(event_b.review_kind, "review")
-                self.assertEqual(event_a.queue_before, "review")
-                self.assertEqual(event_b.queue_before, "review")
-                self.assertEqual(event_a.queue_after, "review")
-                self.assertEqual(event_b.queue_after, "review")
-                self.assertEqual(event_a.interval_days_before, 5.0)
-                self.assertEqual(event_b.interval_days_before, 5.0)
-                self.assertEqual(event_a.interval_days_after, 12.5)
-                self.assertEqual(event_b.interval_days_after, 12.5)
-                self.assertEqual(event_a.due_day_before, today_day)
-                self.assertEqual(event_b.due_day_before, today_day)
-                self.assertEqual(event_a.due_day_after, expected_due_day_after)
-                self.assertEqual(event_b.due_day_after, expected_due_day_after)
-                self.assertEqual(event_a.days_late, 0)
-                self.assertEqual(event_b.days_late, 0)
-                self.assertEqual(event_a.days_late, event_b.days_late)
-                self.assertEqual(event_a.ease_factor_before, 2.5)
-                self.assertEqual(event_b.ease_factor_before, 2.5)
-                self.assertEqual(event_a.ease_factor_after, 2.5)
-                self.assertEqual(event_b.ease_factor_after, 2.5)
-                self.assertIsNone(event_a.memory_stability_before)
-                self.assertIsNone(event_b.memory_stability_before)
-                self.assertIsNone(event_a.memory_stability_after)
-                self.assertIsNone(event_b.memory_stability_after)
-                self.assertIsNone(event_a.memory_difficulty_before)
-                self.assertIsNone(event_b.memory_difficulty_before)
-                self.assertIsNone(event_a.memory_difficulty_after)
-                self.assertIsNone(event_b.memory_difficulty_after)
-                self.assertFalse(event_a.leeched_after)
-                self.assertFalse(event_b.leeched_after)
-                self.assertFalse(event_a.suspended_after)
-                self.assertFalse(event_b.suspended_after)
-
-                # 6. Only session transport carries session/sequence provenance.
-                self.assertEqual(event_a.card_id, str(self.card_a_id))
-                self.assertEqual(event_b.card_id, str(self.card_b_id))
-                self.assertIsNone(event_a.client_event_id)
-                self.assertIsNotNone(event_b.client_event_id)
-                self.assertEqual(len(str(event_b.client_event_id)), 36)
-                self.assertEqual(event_c.study_session_id, snapshot["session_id"])
-                self.assertEqual(event_c.client_event_id, session_event_id)
-                self.assertEqual(event_c.sequence_no, 1)
-                self.assertIsNone(event_a.study_session_id)
-                self.assertIsNone(event_a.sequence_no)
-                self.assertIsNone(event_b.study_session_id)
-                self.assertIsNone(event_b.sequence_no)
-
-                payload_a = json.loads(event_a.payload_json)
-                payload_b = json.loads(event_b.payload_json)
-                payload_c = json.loads(event_c.payload_json)
-                self.assertEqual(payload_a["schema_version"], "review-event-payload.v1")
-                self.assertEqual(payload_b["schema_version"], "review-event-payload.v1")
-                self.assertEqual(payload_c["schema_version"], "review-event-payload.v1")
-                self.assertEqual(payload_a["provenance"]["source_path"], "native.rest")
-                self.assertEqual(payload_b["provenance"]["source_path"], "native.mcp")
-                self.assertEqual(
-                    payload_c["provenance"]["source_path"],
-                    "native.session.commit",
-                )
-                self.assertNotIn("source", payload_a)
-                self.assertEqual(payload_b.get("source"), "mcp")
-                self.assertEqual(payload_b.get("client_event_id"), str(event_b.client_event_id))
-
-                # Shared semantic trigger metadata in runtime payload
-                runtime_a = payload_a["_study_runtime"]
-                runtime_b = payload_b["_study_runtime"]
-                runtime_c = payload_c["_study_runtime"]
-                self.assertEqual(runtime_a["action_key"], "review.good")
-                self.assertEqual(runtime_b["action_key"], "review.good")
-                self.assertEqual(runtime_a["trigger_key"], "scheduler.review.good")
-                self.assertEqual(runtime_b["trigger_key"], "scheduler.review.good")
-                self.assertEqual(runtime_a["trigger_contract_version"], "1")
-                self.assertEqual(runtime_b["trigger_contract_version"], "1")
-                self.assertEqual(runtime_a["action_contract_version"], "1")
-                self.assertEqual(runtime_b["action_contract_version"], "1")
-                self.assertEqual(runtime_a["algorithm_key"], "legacy-anki")
-                self.assertEqual(runtime_b["algorithm_key"], "legacy-anki")
-                self.assertEqual(runtime_a["algorithm_version"], "1.0.0")
-                self.assertEqual(runtime_b["algorithm_version"], "1.0.0")
-                self.assertEqual(runtime_a["state_schema_version"], "anki-card-state.v1")
-                self.assertEqual(runtime_b["state_schema_version"], "anki-card-state.v1")
-                self.assertEqual(runtime_a["scheduler_config_hash"], runtime_b["scheduler_config_hash"])
-                self.assertEqual(runtime_a, runtime_c)
-
-                # 7. Every native transport records complete, distinct provenance.
-                self.assertEqual(_review_event_provenance(), {
-                    ("complete", "native.rest"): 1,
-                    ("complete", "native.mcp"): 1,
-                    ("complete", "native.session.commit"): 1,
-                })
-
-    # -------------------------------------------------------------------------
-    # 2. Batch Commit Idempotency, Atomic Rollback & Stale Revision Conflict
-    # -------------------------------------------------------------------------
-    def test_batch_commit_idempotency_and_atomic_rollback(self):
-        """Batch session commit is idempotent on replay, rolls back atomically on pre-write validation and mid-write ORM failures, and detects stale conflicts."""
-        from unittest.mock import patch
-
+                result = mcp_study_tools.submit_review(user_id=self.author_id, card_id=self.card_b_id,
+                    rating="good", duration_ms=2500, operation_key=str(uuid4()))
+                self.assertTrue(result["success"])
+            snapshot = self._open()
+            card_c = next(card for card in snapshot["cards"] if card["card_id"] == card_c_id)
+            payload = self._commit_payload(snapshot, [self._event(snapshot, card_c)])
+            first = self._commit(snapshot, payload)
+            replay = self._commit(snapshot, payload)
+            self.assertEqual(replay, first)
         with self.app.app_context():
-            now = datetime(2026, 8, 29, 10, 0, 0)
-            author_user = db.session.get(User, self.author_id)
+            subjects = [subject_for_card(db.session, user_id=self.author_id, card_id=card_id)
+                        for card_id in (self.card_a_id, self.card_b_id, card_c_id)]
+            self.assertTrue(all(subject.state_payload == subjects[0].state_payload for subject in subjects))
+            self.assertTrue(all(subject.semantic_state_hash == subjects[0].semantic_state_hash for subject in subjects))
+            state = decode_note_state(subjects[0])
+            self.assertEqual((state.type, state.reps, state.intervalDays, state.dueDay), ("review", 4, 12.5, today+13))
+            self.assertTrue(all(subject.authority_revision == 1 for subject in subjects))
+            events = ReviewEvent.query.all()
+            self.assertEqual(len(events), 3)
+            self.assertTrue(all(len(event.card_id) == 73 for event in events))
+            fields = ("rating", "duration_ms", "reviewed_at", "scheduler_algorithm", "algorithm_version",
+                "queue_before", "queue_after", "interval_days_before", "interval_days_after", "due_day_after")
+            for field in fields:
+                self.assertEqual([getattr(event, field) for event in events], [getattr(events[0], field)]*3, field)
+            self.assertEqual(_review_event_provenance(), {
+                ("complete", "native.rest"): 1, ("complete", "native.mcp"): 1,
+                ("complete", "native.session.commit"): 1})
+            assert_retired_progress_absent(self, db.session)
 
-            # Part A: Idempotency
-            snapshot = study_session_service.open_study_session(
-                user=author_user,
-                query=Card.query.filter(Card.note_id == self.note_a_id),
-                clone_scope=None,
-                scope_type="deck",
-                scope_id=str(self.deck_id),
-                timezone_name="Asia/Ho_Chi_Minh",
-                now=now,
-            )
-            card = snapshot["cards"][0]
-            test_event_id = str(uuid4())
-            commit_payload = {
-                "schema_version": "study-commit.v1",
-                "commit_id": "commit-idempotency-test-01",
-                "session_token": snapshot["session_token"],
-                "snapshot_hash": snapshot["snapshot_hash"],
-                "commit_reason": "manual_exit",
-                "events": [
-                    {
-                        "event_id": test_event_id,
-                        "sequence": 1,
-                        "card_id": card["card_id"],
-                        "rating": "good",
-                        "policy_key": card["policy_key"],
-                        "scheduler_offset_ms": 1000,
-                        "duration_ms": 500,
-                    }
-                ],
-                "final_states": [],
-            }
-
-            # First commit delegates its authoritative mutation to the shared core.
-            real_mutation = study_service.apply_native_review_mutation
-            with patch(
-                "app.services.study_service.apply_native_review_mutation",
-                wraps=real_mutation,
-            ) as mutation_spy:
-                result1 = study_session_service.commit_study_session(
-                    user=author_user,
-                    session_id=snapshot["session_id"],
-                    payload=commit_payload,
-                    now=now,
-                )
-            self.assertEqual(mutation_spy.call_count, 1)
-            delegated_input = mutation_spy.call_args.args[0]
-            self.assertEqual(
-                delegated_input.provenance.study_session_id,
-                snapshot["session_id"],
-            )
-            self.assertTrue(result1.get("success"))
-            self.assertEqual(result1.get("applied_event_count"), 1)
-
-            events_count_first = ReviewEvent.query.filter_by(study_session_id=snapshot["session_id"]).count()
-            self.assertEqual(events_count_first, 1)
-
-            # Second commit replay with identical payload
-            result2 = study_session_service.commit_study_session(
-                user=author_user,
-                session_id=snapshot["session_id"],
-                payload=commit_payload,
-                now=now,
-            )
-            self.assertTrue(result2.get("success"))
-            self.assertEqual(result2.get("commit_id"), "commit-idempotency-test-01")
-
-            events_count_second = ReviewEvent.query.filter_by(study_session_id=snapshot["session_id"]).count()
-            self.assertEqual(events_count_first, events_count_second)
-
-            # Part B1: Pre-Write Validation Rollback (Event 1 valid, Event 2 invalid rating -> ZERO partial writes)
-            snapshot_err = study_session_service.open_study_session(
-                user=author_user,
-                query=Card.query.filter(Card.id.in_([self.card_a_id, self.card_b_id])),
-                clone_scope=None,
-                scope_type="deck",
-                scope_id=str(self.deck_id),
-                timezone_name="Asia/Ho_Chi_Minh",
-                now=now,
-            )
-            cards_by_id = {c["card_id"]: c for c in snapshot_err["cards"]}
-            card_a_info = cards_by_id[self.card_a_id]
-            card_b_info = cards_by_id[self.card_b_id]
-
-            # Record progress state prior to failed batch
-            card_a_prog_before = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_a_id).first()
-            card_a_reps_before = card_a_prog_before.reps if card_a_prog_before else None
-
-            err_commit_payload = {
-                "schema_version": "study-commit.v1",
-                "commit_id": "commit-rollback-test-02",
-                "session_token": snapshot_err["session_token"],
-                "snapshot_hash": snapshot_err["snapshot_hash"],
-                "commit_reason": "manual_exit",
-                "events": [
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 1,
-                        "card_id": self.card_a_id,
-                        "rating": "good",  # Event 1 is completely valid
-                        "policy_key": card_a_info["policy_key"],
-                        "scheduler_offset_ms": 1000,
-                        "duration_ms": 500,
-                    },
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 2,
-                        "card_id": self.card_b_id,
-                        "rating": "invalid_rating_value",  # Event 2 fails validation before write phase
-                        "policy_key": card_b_info["policy_key"],
-                        "scheduler_offset_ms": 2000,
-                        "duration_ms": 500,
-                    },
-                ],
-                "final_states": [],
-            }
-
-            with self.assertRaises(study_session_service.StudySessionError) as cm:
-                study_session_service.commit_study_session(
-                    user=author_user,
-                    session_id=snapshot_err["session_id"],
-                    payload=err_commit_payload,
-                    now=now,
-                )
-            self.assertEqual(cm.exception.status, 422)
-
-            # Assert ZERO partial writes across all entities
-            err_session_events = ReviewEvent.query.filter_by(study_session_id=snapshot_err["session_id"]).count()
-            self.assertEqual(err_session_events, 0, "No partial ReviewEvent should be written for either card")
-
-            progress_a_after = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_a_id).first()
-            card_a_reps_after = progress_a_after.reps if progress_a_after else None
-            self.assertEqual(card_a_reps_before, card_a_reps_after, "Card A progress must not be mutated by rolled back batch")
-
-            progress_b = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_b_id).first()
-            self.assertIsNone(progress_b, "Card B progress must not be created")
-
-            commit_receipt = StudySessionCommit.query.filter_by(session_id=snapshot_err["session_id"]).first()
-            self.assertIsNone(commit_receipt, "No StudySessionCommit receipt should be created")
-
-            session_row = db.session.get(StudySession, snapshot_err["session_id"])
-            self.assertEqual(session_row.status, "open", "Session must remain open after rollback")
-            self.assertIsNone(session_row.committed_at, "Session committed_at must remain None")
-
-            # Part B2: Mid-Write Phase Failure & Transaction Atomicity (Exception raised during write phase after ORM mutation/flush)
-            snapshot_write_err = study_session_service.open_study_session(
-                user=author_user,
-                query=Card.query.filter(Card.id.in_([self.card_a_id, self.card_b_id])),
-                clone_scope=None,
-                scope_type="deck",
-                scope_id=str(self.deck_id),
-                timezone_name="Asia/Ho_Chi_Minh",
-                now=now,
-            )
-            cards_write_map = {c["card_id"]: c for c in snapshot_write_err["cards"]}
-
-            # Card A initial progress before write-failure test
-            prog_a_before_b2 = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_a_id).first()
-            reps_a_before_b2 = prog_a_before_b2.reps if prog_a_before_b2 else None
-
-            # Valid batch payload with 2 events
-            valid_two_event_payload = {
-                "schema_version": "study-commit.v1",
-                "commit_id": "commit-midwrite-rollback-test-03",
-                "session_token": snapshot_write_err["session_token"],
-                "snapshot_hash": snapshot_write_err["snapshot_hash"],
-                "commit_reason": "manual_exit",
-                "events": [
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 1,
-                        "card_id": self.card_a_id,
-                        "rating": "good",
-                        "policy_key": cards_write_map[self.card_a_id]["policy_key"],
-                        "scheduler_offset_ms": 1000,
-                        "duration_ms": 500,
-                    },
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 2,
-                        "card_id": self.card_b_id,
-                        "rating": "good",
-                        "policy_key": cards_write_map[self.card_b_id]["policy_key"],
-                        "scheduler_offset_ms": 2000,
-                        "duration_ms": 500,
-                    },
-                ],
-                "final_states": [],
-            }
-
-            # Inject failure after canonical event/progress/side-effect mutation.
-            real_mutation = study_service.apply_native_review_mutation
-
-            def _failing_mutation(command):
-                result = real_mutation(command)
-                command.card.note.tags = list(command.card.note.tags or []) + [
-                    "rollback-sentinel"
-                ]
-                if command.card.id == self.card_b_id:
-                    raise RuntimeError(
-                        "Simulated mid-write database failure after canonical mutation"
-                    )
-                return result
-
-            audit_count_before = AuditLog.query.count()
-            with patch(
-                "app.services.study_service.apply_native_review_mutation",
-                side_effect=_failing_mutation,
-            ):
-                with self.assertRaises(RuntimeError) as cm_write_err:
-                    study_session_service.commit_study_session(
-                        user=author_user,
-                        session_id=snapshot_write_err["session_id"],
-                        payload=valid_two_event_payload,
-                        now=now,
-                    )
-                self.assertIn("Simulated mid-write database failure", str(cm_write_err.exception))
-
-            # Verify that service atomically rolled back all partial mutations from the write phase
-            write_err_events = ReviewEvent.query.filter_by(study_session_id=snapshot_write_err["session_id"]).count()
-            self.assertEqual(write_err_events, 0, "No partial ReviewEvent must remain after mid-write rollback")
-
-            prog_a_after_b2 = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_a_id).first()
-            reps_a_after_b2 = prog_a_after_b2.reps if prog_a_after_b2 else None
-            self.assertEqual(reps_a_before_b2, reps_a_after_b2, "Card A progress must not be mutated after mid-write rollback")
-
-            prog_b_after_b2 = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_b_id).first()
-            self.assertIsNone(prog_b_after_b2, "Card B progress must not be created after mid-write rollback")
-
-            commit_receipt_b2 = StudySessionCommit.query.filter_by(session_id=snapshot_write_err["session_id"]).first()
-            self.assertIsNone(commit_receipt_b2, "No StudySessionCommit receipt should exist after mid-write rollback")
-
-            session_row_b2 = db.session.get(StudySession, snapshot_write_err["session_id"])
-            self.assertEqual(session_row_b2.status, "open", "Session must remain open after mid-write rollback")
-            self.assertIsNone(session_row_b2.committed_at, "Session committed_at must remain None after mid-write rollback")
-            self.assertEqual(AuditLog.query.count(), audit_count_before)
-            db.session.expire_all()
-            self.assertNotIn(
-                "rollback-sentinel",
-                db.session.get(Note, self.note_a_id).tags or [],
-            )
-            self.assertNotIn(
-                "rollback-sentinel",
-                db.session.get(Note, self.note_b_id).tags or [],
-            )
-
-            # Part C: Stale Revision Conflict
-            # Open Session S1 and Session S2 on Card A
-            s1 = study_session_service.open_study_session(
-                user=author_user,
-                query=Card.query.filter(Card.id == self.card_a_id),
-                clone_scope=None,
-                scope_type="deck",
-                scope_id=str(self.deck_id),
-                timezone_name="Asia/Ho_Chi_Minh",
-                now=now,
-            )
-            s2 = study_session_service.open_study_session(
-                user=author_user,
-                query=Card.query.filter(Card.id == self.card_a_id),
-                clone_scope=None,
-                scope_type="deck",
-                scope_id=str(self.deck_id),
-                timezone_name="Asia/Ho_Chi_Minh",
-                now=now,
-            )
-
-            # S1 commits successfully -> increments CardProgress revision
-            s1_payload = {
-                "schema_version": "study-commit.v1",
-                "commit_id": "commit-s1-ok",
-                "session_token": s1["session_token"],
-                "snapshot_hash": s1["snapshot_hash"],
-                "commit_reason": "manual_exit",
-                "events": [
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 1,
-                        "card_id": self.card_a_id,
-                        "rating": "good",
-                        "policy_key": s1["cards"][0]["policy_key"],
-                        "scheduler_offset_ms": 1000,
-                        "duration_ms": 500,
-                    }
-                ],
-                "final_states": [],
-            }
-            res_s1 = study_session_service.commit_study_session(
-                user=author_user,
-                session_id=s1["session_id"],
-                payload=s1_payload,
-                now=now,
-            )
-            self.assertTrue(res_s1["success"])
-
-            # S2 attempts to commit with stale base revision -> must fail with CARD_PROGRESS_CONFLICT
-            s2_payload = {
-                "schema_version": "study-commit.v1",
-                "commit_id": "commit-s2-conflict",
-                "session_token": s2["session_token"],
-                "snapshot_hash": s2["snapshot_hash"],
-                "commit_reason": "manual_exit",
-                "events": [
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 1,
-                        "card_id": self.card_a_id,
-                        "rating": "easy",
-                        "policy_key": s2["cards"][0]["policy_key"],
-                        "scheduler_offset_ms": 1000,
-                        "duration_ms": 500,
-                    }
-                ],
-                "final_states": [],
-            }
-            with self.assertRaises(study_session_service.StudySessionError) as cm_conflict:
-                study_session_service.commit_study_session(
-                    user=author_user,
-                    session_id=s2["session_id"],
-                    payload=s2_payload,
-                    now=now,
-                )
-            self.assertEqual(cm_conflict.exception.code, "CARD_PROGRESS_CONFLICT")
-            self.assertEqual(cm_conflict.exception.status, 409)
-
-            # Assert zero partial writes from S2
-            s2_events = ReviewEvent.query.filter_by(study_session_id=s2["session_id"]).count()
-            self.assertEqual(s2_events, 0)
-
-    def test_first_progress_insert_races_return_typed_conflicts(self):
-        """Direct and batch first-write races never leak raw IntegrityError."""
-        from unittest.mock import patch
-
+    def test_atomic_commit_rolls_back_every_note_and_retry_is_idempotent(self):
+        snapshot = self._open()
+        events = [self._event(snapshot, card, sequence) for sequence, card in enumerate(snapshot["cards"], 1)]
+        payload = self._commit_payload(snapshot, events)
+        corrupt = {**payload, "events": [events[0], {**events[1], "algorithm_version": "invalid"}]}
+        self._commit(snapshot, corrupt, expected=422)
         with self.app.app_context():
-            now = datetime(2026, 8, 29, 10, 0, 0)
-            author = db.session.get(User, self.author_id)
-            card_a = db.session.get(Card, self.card_a_id)
-            duplicate_error = IntegrityError(
-                "INSERT INTO card_progress",
-                {},
-                RuntimeError("duplicate progress row"),
-            )
+            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.filter(StudyProgressSubject.authority_revision > 0).count(), 0)
+        first = self._commit(snapshot, payload)
+        second = self._commit(snapshot, payload)
+        self.assertEqual({k:v for k,v in first.items() if k != "replayed"}, {k:v for k,v in second.items() if k != "replayed"})
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 2)
+            self.assertEqual(StudySessionCommit.query.count(), 1)
+            self.assertTrue(all(subject.authority_revision == 1 for subject in StudyProgressSubject.query.all()))
+            assert_retired_progress_absent(self, db.session)
 
-            with patch(
-                "app.services.study_service.db.session.flush",
-                side_effect=duplicate_error,
-            ):
-                with self.assertRaises(study_service.StudyReviewError) as direct_cm:
-                    study_service.execute_native_review_command(
-                        user=author,
-                        card=card_a,
-                        action="good",
-                        payload={"duration_ms": 500},
-                        clone_scope=None,
-                        requested_scope_id=self.deck_id,
-                        timezone_name="Asia/Ho_Chi_Minh",
-                        now=now,
-                    )
-            self.assertEqual(direct_cm.exception.code, "CONCURRENT_REVIEW")
-            self.assertEqual(direct_cm.exception.status, 409)
-            self.assertIsNone(
-                CardProgress.query.filter_by(
-                    user_id=self.author_id,
-                    card_id=self.card_a_id,
-                ).first()
-            )
+    def test_second_session_cannot_overwrite_a_changed_note(self):
+        first, stale = self._open(), self._open()
+        self._commit(first, self._commit_payload(first, [self._event(first, first["cards"][0])]))
+        result = self._commit(stale, self._commit_payload(stale, [self._event(stale, stale["cards"][0])]), expected=409)
+        self.assertIn(result["error"], {"AUTHORITY_REVISION_CONFLICT", "AUTHORITY_STATE_CONFLICT", "STALE_AUTHORITY_PIN"})
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 1)
 
-            snapshot = study_session_service.open_study_session(
-                user=author,
-                query=Card.query.filter(Card.id == self.card_b_id),
-                clone_scope=None,
-                scope_type="deck",
-                scope_id=str(self.deck_id),
-                timezone_name="Asia/Ho_Chi_Minh",
-                now=now,
-            )
-            session_card = snapshot["cards"][0]
-            payload = {
-                "schema_version": "study-commit.v1",
-                "commit_id": "commit-first-progress-race-01",
-                "session_token": snapshot["session_token"],
-                "snapshot_hash": snapshot["snapshot_hash"],
-                "commit_reason": "manual_exit",
-                "events": [
-                    {
-                        "event_id": str(uuid4()),
-                        "sequence": 1,
-                        "card_id": self.card_b_id,
-                        "rating": "good",
-                        "policy_key": session_card["policy_key"],
-                        "scheduler_offset_ms": 0,
-                        "duration_ms": 500,
-                    }
-                ],
-                "final_states": [],
-            }
-            batch_duplicate_error = IntegrityError(
-                "INSERT INTO card_progress",
-                {},
-                RuntimeError("duplicate progress row"),
-            )
-            with patch(
-                "app.services.study_session_service.db.session.flush",
-                side_effect=batch_duplicate_error,
-            ):
-                with self.assertRaises(
-                    study_session_service.StudySessionError
-                ) as batch_cm:
-                    study_session_service.commit_study_session(
-                        user=author,
-                        session_id=snapshot["session_id"],
-                        payload=payload,
-                        now=now,
-                    )
-            self.assertEqual(batch_cm.exception.code, "CARD_PROGRESS_CONFLICT")
-            self.assertEqual(batch_cm.exception.status, 409)
-            self.assertIsNone(
-                CardProgress.query.filter_by(
-                    user_id=self.author_id,
-                    card_id=self.card_b_id,
-                ).first()
-            )
-            self.assertEqual(
-                ReviewEvent.query.filter_by(
-                    study_session_id=snapshot["session_id"]
-                ).count(),
-                0,
-            )
+    def test_later_note_command_fault_rolls_back_prior_state_history_and_receipt(self):
+        snapshot = self._open()
+        events = [self._event(snapshot, card, sequence)
+                  for sequence, card in enumerate(snapshot["cards"], 1)]
+        payload = self._commit_payload(snapshot, events)
+        original = study_session_service.apply_idempotent_existing_state_note_review
+        calls = 0
 
-    # -------------------------------------------------------------------------
-    # 3. Due Selection & Multi-Timezone Day Boundary Invariants
-    # -------------------------------------------------------------------------
+        def fault_after_second(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            result = original(*args, **kwargs)
+            if calls == 2:
+                raise RuntimeError("injected fault after the second NOTE command")
+            return result
+
+        with patch.object(study_session_service, "apply_idempotent_existing_state_note_review",
+                          side_effect=fault_after_second):
+            self._commit(snapshot, payload, expected=500)
+        self.assertEqual(calls, 2)
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(StudySessionCommit.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.filter(StudyProgressSubject.authority_revision > 0).count(), 0)
+            self.assertEqual(db.session.get(StudySession, snapshot["session_id"]).status, "open")
+        self._commit(snapshot, payload)
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 2)
+
+    def _connect(self, action, params):
+        response = self.client.post("/v1/flama-connect", json={
+            "action": action, "version": 2, "key": self.connect_token, "params": params})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        value = response.get_json()
+        self.assertFalse(isinstance(value, dict) and value.get("error"), value)
+        return value
+
+    def _sync_package(self, session_id, kind, sequence, records):
+        content = ("\n".join(json.dumps(record) for record in records)+"\n").encode()
+        response = self.client.put(f"/api/flashcards/import/anki/sessions/{session_id}/packages/{kind}/{sequence}",
+            data=content, content_type="application/x-ndjson", headers={"X-Package-SHA256": hashlib.sha256(content).hexdigest()})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        return response.get_json()
+
+    def test_connect_http_import_and_snapshot_persist_complete_73_character_presentation_identity(self):
+        with self.app.app_context():
+            self.connect_token = user_api_token_service.issue_token(user_id=self.author_id, name="qualification").plaintext
+            db.session.commit()
+        imported = self._connect("createImportSession", dict(source="anki", sourceKey="qualification-profile",
+            sourceRootPath="Inbox", targetRootPath="Inbox", selectedDecks=["Inbox"], totalNotes=1,
+            totalMedia=0, mode="strict", planHash="a"*64, noteTypes=[dict(sourceModelId="1001",
+                sourceModelName="Vocabulary", targetNoteTypeId=self.note_type_id,
+                fields=[dict(name="Word",fieldType="text"),dict(name="Meaning",fieldType="text")],
+                fieldMapping={"Word":"Word","Meaning":"Meaning"}, templates=[dict(name="Recognition",
+                    frontHtml="{{Word}}",backHtml="{{Meaning}}",sharedCss="")])]))
+        session_id = imported["importSessionId"]
+        cards = self._connect("importCards", dict(importSessionId=session_id, cards=[dict(ankiNoteId=88001,
+            sourceModelId="1001",sourceDeckId="1",sourceDeckPath="Inbox",contentHash="1"*64,
+            note=dict(deckName="Inbox",modelName=self.note_type_id, fields={"Word":"qualification","Meaning":"complete identity"},tags=[]))]))
+        self.assertTrue(cards["results"][0]["imported"], cards)
+        with self.app.app_context():
+            imported_note = Note.query.filter_by(user_id=self.author_id).filter(
+                Note.field_values["Word"].as_string() == "qualification").one()
+            wire_card_id = Card.query.filter_by(note_id=imported_note.id).one().id
+            self.assertEqual(len(wire_card_id), 73)
+        # Source card identities are text in Connect. Feed the full UUID pair
+        # through snapshot, revlog and status parsing too; no 36/64 truncation.
+        snapshot = dict(externalNoteId=88001,sourceCardId=wire_card_id,ord=0,snapshotHash="2"*64,
+            type=2,queue=2,due=50003,sourceToday=50000,interval=14,factor=2500,reps=2,lapses=1,left=0,mod=1)
+        progress = self._sync_package(session_id, "progress", 0, [snapshot])
+        self.assertEqual(progress["results"][0]["code"], "PROGRESS_APPLIED")
+        replay = self._sync_package(session_id, "progress", 0, [snapshot])
+        self.assertTrue(replay["replayed"])
+        review_id = int(datetime(2026,8,20,12,tzinfo=timezone.utc).timestamp()*1000)
+        reviews = self._sync_package(session_id, "reviews", 1, [dict(sourceReviewId=review_id,
+            sourceCardId=wire_card_id,ease=3,type=1,ivl=10,lastIvl=5,factor=2500,time=2500)])
+        self.assertEqual(reviews["status"], "processed")
+        status = self.client.post(f"/api/flashcards/import/anki/sessions/{session_id}/note-status", json={
+            "notes": [{"ankiNoteId": 88001, "contentHash": "1"*64,
+                       "cards": [{"sourceCardId": wire_card_id, "snapshotHash": "2"*64}]}]})
+        self.assertEqual(status.status_code, 200, status.get_json())
+        self.assertEqual(status.get_json()["notes"][0]["cards"][0]["progressState"], "unchanged")
+        with self.app.app_context():
+            ref = ConnectSourceCardRef.query.filter_by(user_id=self.author_id, external_card_id=wire_card_id).one()
+            self.assertEqual(len(ref.card_id), 73)
+            self.assertEqual(ref.card_id, wire_card_id)
+            note_id, application_id = ref.card_id.split(".")
+            self.assertEqual((len(note_id),len(application_id)), (36,36))
+            subject = subject_for_card(db.session, user_id=self.author_id, card_id=ref.card_id)
+            self.assertEqual(subject.authority_revision, 1)
+            self.assertEqual(decode_note_state(subject).reps, 2)
+            event_ref = ConnectReviewEventRef.query.filter_by(external_review_id=str(review_id)).one()
+            event = db.session.get(ReviewEvent, event_ref.review_event_id)
+            self.assertEqual(event.card_id, ref.card_id)
+            self.assertEqual(_review_event_provenance(), {("complete","external.anki.revlog"):1})
+            assert_retired_progress_absent(self, db.session)
+
     def test_due_selection_queue_ordering_and_timezone_boundary(self):
         """Due selection respects queue ordering (learning -> review -> new), excludes suspended/buried, and enforces 4 AM local boundary."""
         with self.app.app_context():
@@ -1026,7 +379,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
 
             # 1. Queue Ordering Invariant: Learning (priority 0) > Review (priority 1) > New (priority 2)
             # Card A: Due Review Card
-            p_rev = CardProgress(
+            p_rev = stage_note_state(db.session,
                 user_id=self.author_id,
                 card_id=self.card_a_id,
                 queue="review",
@@ -1036,7 +389,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 is_buried=False,
             )
             # Card B: Learning Card due right now
-            p_learn = CardProgress(
+            p_learn = stage_note_state(db.session,
                 user_id=self.author_id,
                 card_id=self.card_b_id,
                 queue="learning",
@@ -1049,8 +402,8 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             note_c = Note(user_id=self.author_id, note_type_id=self.note_type_id, deck_id=self.deck_id, field_values={})
             db.session.add(note_c)
             db.session.flush()
-            card_c = Card(note_id=note_c.id, template_id=self.template_id)
-            db.session.add_all([p_rev, p_learn, card_c])
+            card_c = Card.query.filter_by(note_id=note_c.id, template_id=self.template_id).one()
+            db.session.add_all([p_rev, p_learn])
             db.session.commit()
 
             # Query queue ordering: learning card must be selected first
@@ -1069,7 +422,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             db.session.flush()
             card_d = Card.query.filter_by(note_id=note_d.id, template_id=self.template_id).one()
             db.session.flush()
-            p_susp = CardProgress(
+            p_susp = stage_note_state(db.session,
                 user_id=self.author_id,
                 card_id=card_d.id,
                 queue="review",
@@ -1083,7 +436,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             db.session.flush()
             card_e = Card.query.filter_by(note_id=note_e.id, template_id=self.template_id).one()
             db.session.flush()
-            p_buried = CardProgress(
+            p_buried = stage_note_state(db.session,
                 user_id=self.author_id,
                 card_id=card_e.id,
                 queue="review",
@@ -1152,174 +505,6 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                     f"Timezone {tz_name} at {utc_after} UTC should resolve to today's day index",
                 )
 
-    # -------------------------------------------------------------------------
-    # 4. Import & Connect Provenance via Real Entrypoint
-    # -------------------------------------------------------------------------
-    def test_import_and_connect_provenance_via_real_entrypoint(self):
-        """ReviewEvents generated via Anki/Connect import entrypoints are marked with import provenance and external references."""
-        with self.app.app_context():
-            # 1. Create real import session for author
-            session_info = anki_import_service.create_session(
-                user_id=self.author_id,
-                payload={
-                    "source": "anki",
-                    "sourceKey": f"{self.author_id}:http://127.0.0.1:8765",
-                    "sourceRootPath": "JLPT N5 Vocab",
-                    "targetRootPath": "JLPT N5 Vocab",
-                    "selectedDecks": ["JLPT N5 Vocab"],
-                    "decks": [
-                        {
-                            "sourceDeckId": "anki-vocab",
-                            "sourcePath": "JLPT N5 Vocab",
-                            "targetPath": "JLPT N5 Vocab",
-                        }
-                    ],
-                    "totalNotes": 1,
-                    "totalMedia": 0,
-                    "mode": "strict",
-                    "noteTypes": [
-                        {
-                            "sourceModelId": "anki-model-1",
-                            "sourceModelName": "Vocabulary NoteType",
-                            "targetNoteTypeId": self.note_type_id,
-                            "fields": [
-                                {"name": "Word", "fieldType": "text"},
-                                {"name": "Meaning", "fieldType": "text"},
-                            ],
-                            "templates": [
-                                {
-                                    "name": "Recognition",
-                                    "frontHtml": "{{Word}}",
-                                    "backHtml": "{{Meaning}}",
-                                }
-                            ],
-                        }
-                    ],
-                },
-            )
-            session_id = session_info["importSessionId"]
-
-            # 2. Upload card package via real service entrypoint
-            card_record = {
-                "ankiNoteId": 88001,
-                "sourceModelId": "anki-model-1",
-                "sourceDeckId": "anki-vocab",
-                "sourceDeckPath": "JLPT N5 Vocab",
-                "contentHash": "1" * 64,
-                "note": {
-                    "deckName": "JLPT N5 Vocab",
-                    "modelName": str(self.note_type_id),
-                    "fields": {"Word": "猫", "Meaning": "Cat"},
-                    "tags": ["anki"],
-                },
-            }
-            card_pkg = gzip.compress((json.dumps(card_record) + "\n").encode(), mtime=0)
-            card_res = flama_connect_package_service.receive_card_package(
-                user_id=self.author_id,
-                session_id=session_id,
-                sequence=0,
-                expected_sha256=hashlib.sha256(card_pkg).hexdigest(),
-                content=card_pkg,
-                content_encoding="gzip",
-            )
-            self.assertEqual(card_res["status"], "processed")
-
-            # 3. Upload progress package
-            progress_record = {
-                "externalNoteId": 88001,
-                "sourceCardId": 99001,
-                "ord": 0,
-                "snapshotHash": "2" * 64,
-                "type": 2,
-                "queue": 2,
-                "due": 50003,
-                "sourceToday": 50000,
-                "interval": 14,
-                "factor": 2500,
-                "reps": 2,
-                "lapses": 1,
-                "left": 0,
-                "mod": 1,
-            }
-            prog_pkg = gzip.compress((json.dumps(progress_record) + "\n").encode(), mtime=0)
-            flama_connect_package_service.receive_sync_package(
-                user_id=self.author_id,
-                session_id=session_id,
-                sequence=0,
-                kind="progress",
-                expected_sha256=hashlib.sha256(prog_pkg).hexdigest(),
-                content=prog_pkg,
-                content_encoding="gzip",
-            )
-
-            # 4. Upload review sync package via real service entrypoint
-            rev_time_ms = int(datetime(2026, 8, 20, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
-            review_item = {
-                "sourceReviewId": rev_time_ms,
-                "sourceCardId": 99001,
-                "ease": 3,
-                "type": 1,
-                "ivl": 10,
-                "lastIvl": 5,
-                "factor": 2500,
-                "time": 2500,
-            }
-            review_pkg = gzip.compress((json.dumps(review_item) + "\n").encode(), mtime=0)
-            rev_res = flama_connect_package_service.receive_sync_package(
-                user_id=self.author_id,
-                session_id=session_id,
-                sequence=1,
-                kind="reviews",
-                expected_sha256=hashlib.sha256(review_pkg).hexdigest(),
-                content=review_pkg,
-                content_encoding="gzip",
-            )
-            self.assertEqual(rev_res["status"], "processed")
-
-            # 5. Verify ReviewEvent and ConnectReviewEventRef provenance
-            imported_ref = ConnectReviewEventRef.query.filter_by(
-                user_id=self.author_id,
-                external_review_id=str(rev_time_ms),
-            ).first()
-            self.assertIsNotNone(imported_ref)
-
-            imported_event = db.session.get(ReviewEvent, imported_ref.review_event_id)
-            self.assertIsNotNone(imported_event)
-            self.assertEqual(imported_event.scheduler_mode, "anki")
-            self.assertEqual(imported_event.scheduler_algorithm, "anki")
-
-            # 6. Verify Native Review maintains native legacy-anki metadata
-            now = datetime(2026, 8, 29, 10, 0, 0)
-            author_user = db.session.get(User, self.author_id)
-            card_a_obj = db.session.get(Card, self.card_a_id)
-            study_service.execute_native_review_command(
-                user=author_user,
-                card=card_a_obj,
-                action="good",
-                payload={"duration_ms": 1500},
-                clone_scope=None,
-                requested_scope_id=None,
-                timezone_name="Asia/Ho_Chi_Minh",
-                now=now,
-            )
-            native_event = ReviewEvent.query.filter_by(
-                user_id=self.author_id, card_id=self.card_a_id
-            ).order_by(ReviewEvent.id.desc()).first()
-            self.assertEqual(native_event.scheduler_mode, "legacy")
-            self.assertEqual(native_event.scheduler_algorithm, "legacy-anki")
-            self.assertEqual(native_event.algorithm_version, "1.0.0")
-            runtime_meta = json.loads(native_event.payload_json)["_study_runtime"]
-            self.assertEqual(runtime_meta["trigger_key"], "scheduler.review.good")
-
-            # 7. Imported and native events keep distinct provenance.
-            self.assertEqual(_review_event_provenance(), {
-                ("complete", "external.anki.revlog"): 1,
-                ("complete", "native.rest"): 1,
-            })
-
-    # -------------------------------------------------------------------------
-    # 5. Shared Deck Logical Overlay via Real Service Path
-    # -------------------------------------------------------------------------
     def test_shared_deck_logical_overlay_via_real_service_path(self):
         """Real install/query/review path proves zero source card duplication, zero source note mutation, real local-added content, and isolated learner progress."""
         with self.app.app_context():
@@ -1374,7 +559,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 user=learner_user,
                 card=source_card_a,
                 action="good",
-                payload={"duration_ms": 2000},
+                payload={"operation_key": str(uuid4()), "duration_ms": 2000},
                 clone_scope=scope,
                 requested_scope_id=local_deck_id,
                 timezone_name="Asia/Ho_Chi_Minh",
@@ -1382,9 +567,9 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             )
 
             # Learner progress is created on source card; author has no progress
-            learner_prog = CardProgress.query.filter_by(user_id=self.learner_id, card_id=self.card_a_id).one()
+            learner_prog = decode_note_state(subject_for_card(db.session, user_id=self.learner_id, card_id=self.card_a_id))
             self.assertEqual(learner_prog.reps, 1)
-            author_prog = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_a_id).first()
+            author_prog = StudyProgressSubject.query.filter_by(learner_user_id=self.author_id, live_note_id=self.note_a_id).first()
             self.assertIsNone(author_prog)
 
             # Source Note field values remain completely untouched (Zero Mutation)
@@ -1451,6 +636,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                     scope_id=str(local_deck_id),
                     timezone_name="Asia/Ho_Chi_Minh",
                     composition_selection=selection,
+                    wire_schema_version="study-session.v4",
                     now=now,
                 )
                 self.assertEqual(
@@ -1474,7 +660,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 user=learner_user,
                 card=custom_card,
                 action="good",
-                payload={"duration_ms": 1800},
+                payload={"operation_key": str(uuid4()), "duration_ms": 1800},
                 clone_scope=scope,
                 requested_scope_id=local_deck_id,
                 timezone_name="Asia/Ho_Chi_Minh",
@@ -1482,21 +668,18 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             )
 
             # Progress created for learner on local added card
-            custom_prog = CardProgress.query.filter_by(user_id=self.learner_id, card_id=custom_card.id).one()
+            custom_prog = decode_note_state(subject_for_card(db.session, user_id=self.learner_id, card_id=custom_card.id))
             self.assertEqual(custom_prog.reps, 1)
 
             # Author's notes query still only contains original author notes (2 notes)
             author_notes = Note.query.filter_by(deck_id=self.deck_id, user_id=self.author_id).all()
             self.assertEqual(len(author_notes), 2)
 
-    # -------------------------------------------------------------------------
-    # 6. Study Action Runtime Validation & Unauthorized Action Rejection
-    # -------------------------------------------------------------------------
     def test_study_action_runtime_validates_and_rejects_unauthorized_actions(self):
         """Study action runtime validates semantic review actions and rejects unauthorized/forged actions without progress side effects."""
         with self.app.app_context():
             # Initial progress
-            initial_progress = CardProgress(
+            initial_progress = stage_note_state(db.session,
                 user_id=self.author_id,
                 card_id=self.card_a_id,
                 queue="review",
@@ -1524,9 +707,9 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                     resolve_review_action(invalid_action)  # type: ignore[arg-type]
 
             # 3. Ensure progress was NOT modified
-            p = CardProgress.query.filter_by(user_id=self.author_id, card_id=self.card_a_id).one()
+            p = decode_note_state(subject_for_card(db.session, user_id=self.author_id, card_id=self.card_a_id))
             self.assertEqual(p.reps, 1)
-            self.assertEqual(p.interval_days, 1)
+            self.assertEqual(p.intervalDays, 1)
 
 
 if __name__ == "__main__":

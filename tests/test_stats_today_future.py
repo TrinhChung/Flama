@@ -236,7 +236,7 @@ class StatsTodayFutureTests(unittest.TestCase):
         self.assertIn("future_due", payload)
         self.assertIn("totals", payload)
 
-    def test_non_utc_mysql_falls_back_to_python_future_due(self):
+    def test_python_local_day_future_due(self):
         with self.app.app_context():
             db.session.add(
                 ReviewEvent(
@@ -253,7 +253,8 @@ class StatsTodayFutureTests(unittest.TestCase):
             self._add_progress(due_at=datetime(2026, 2, 23, 15, 30, 0), interval_days=3)
             db.session.commit()
 
-            with patch("app.repositories.stats_query_repository._session_dialect_name", return_value="mysql"):
+            from app.services.stats_today_future import _aggregate_future_due_python
+            with patch("app.services.stats_today_future._aggregate_future_due_python", wraps=_aggregate_future_due_python) as future:
                 payload = build_today_future_stats(
                     user_id=self.user_id,
                     timezone_name="Asia/Tokyo",
@@ -265,6 +266,7 @@ class StatsTodayFutureTests(unittest.TestCase):
                     now_utc=datetime(2026, 2, 22, 16, 0, 0),
                 )
 
+            future.assert_called_once()
             self.assertEqual(payload["today"]["cards"], 1)
             self.assertEqual(payload["totals"]["due_tomorrow"], 1)
 

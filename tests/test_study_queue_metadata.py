@@ -142,8 +142,12 @@ class StudyQueueMetadataTests(unittest.TestCase):
             db.session.flush()
             # SQLite fixture permits an orphaned type; the previous MCP path
             # skipped it before slicing the queue. Keep that contract.
-            db.session.add(Card(note_id=orphan.id, template_id=card.template_id,
-                                created_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=10)))
+            from models.study_application import StudyApplication
+            older = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=10)
+            orphan.created_at = older
+            db.session.add(StudyApplication(note_type_id=orphan.note_type_id,
+                template_id=card.template_id, occurrence_key="orphan-fixture", status_code="ACTIVE",
+                created_at=older, updated_at=older))
             db.session.commit()
         loaded = self._record_loads()
         with self.app.app_context():

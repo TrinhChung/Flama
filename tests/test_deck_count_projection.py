@@ -12,7 +12,8 @@ from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import attach_template, enroll_note_user
+from tests.note_progress_fixtures import stage_note_state
 from models.deck import Deck
 from models.deck_count_snapshot import DeckCountContentRevision, DeckCountLearnerRevision
 from models.note import Note
@@ -41,6 +42,8 @@ class DeckCountProjectionTests(unittest.TestCase):
                  for number in range(2)]
         db.session.add_all(users)
         db.session.flush()
+        for user in users:
+            enroll_note_user(db.session, user)
         self.user_id, self.other_user_id = [user.id for user in users]
         decks = [Deck(name=f"Count Deck {number}", owner_user_id=self.user_id)
                  for number in range(3)]
@@ -49,11 +52,11 @@ class DeckCountProjectionTests(unittest.TestCase):
         db.session.flush()
         self.deck_ids = [deck.id for deck in decks]
         self.note_type_id = note_type.id
-        template = Template(note_type_id=note_type.id, name="Front", front_html="Q", back_html="A")
+        template = attach_template(db.session, owner_user_id=self.user_id, note_type_id=note_type.id, name="Front", front_html="Q", back_html="A")
         db.session.add(template)
         db.session.flush()
         self.template_id = template.id
-        other_template = Template(note_type_id=note_type.id, name="Reverse", position=1,
+        other_template = attach_template(db.session, owner_user_id=self.user_id, note_type_id=note_type.id, name="Reverse", position=1,
                                   front_html="A", back_html="Q")
         db.session.add(other_template)
         db.session.flush()
@@ -146,27 +149,27 @@ class DeckCountProjectionTests(unittest.TestCase):
         self.assertIsNone(db.session.get(Card, self.card_ids[0]))
         self.assertEqual(self._revisions(), ({self.deck_ids[0]: 1}, {}))
 
-    def test_legacy_progress_deduplicates_multiple_flushes_without_global_epoch(self):
-        progress = CardProgress(user_id=self.user_id, card_id=self.card_ids[0], queue="new")
+    def test_note_progress_deduplicates_multiple_flushes_without_global_epoch(self):
+        progress = stage_note_state(db.session, user_id=self.user_id, card_id=self.card_ids[0], queue="new")
         db.session.add(progress)
         db.session.flush()
-        progress.queue = "review"
-        progress.due_day = 1
+        stage_note_state(db.session, user_id=self.user_id, note_id=self.note_ids[0], queue="review", due_day=1)
         db.session.flush()
-        progress.is_suspended = True
+        stage_note_state(db.session, user_id=self.user_id, note_id=self.note_ids[0], queue="review", due_day=1, is_suspended=True)
         db.session.commit()
         self.assertEqual(self._revisions(), ({}, {(self.user_id, self.deck_ids[0]): 1}))
 
-    def test_legacy_progress_move_tracks_old_and_new_learner_and_card_scope(self):
+    def test_note_progress_move_tracks_old_and_new_learner_and_note_scope(self):
         self.app.config["DECK_COUNT_WRITE_ENABLED"] = False
-        progress = CardProgress(user_id=self.user_id, card_id=self.card_ids[0], queue="new")
+        progress = stage_note_state(db.session, user_id=self.user_id, card_id=self.card_ids[0], queue="new")
         db.session.add(progress)
         db.session.commit()
         # Load prior keys explicitly: unloaded replacements may safely use the global epoch.
-        _ = progress.user_id, progress.card_id
+        _ = progress.learner_user_id, progress.logical_note_key, progress.live_note_id
         self.app.config["DECK_COUNT_WRITE_ENABLED"] = True
-        progress.user_id = self.other_user_id
-        progress.card_id = self.card_ids[1]
+        progress.learner_user_id = self.other_user_id
+        progress.logical_note_key = self.note_ids[1].encode()
+        progress.live_note_id = self.note_ids[1]
         db.session.commit()
         self.assertEqual(self._revisions(), ({}, {
             (user_id, deck_id): 1 for user_id in (self.user_id, self.other_user_id)
@@ -235,7 +238,7 @@ class DeckCountProjectionTests(unittest.TestCase):
         self.assertEqual(self._revisions(), ({self.deck_ids[1]: 1}, {}))
 
     def test_structured_and_text_bulk_mutations_bump_global_once(self):
-        db.session.execute(update(CardProgress).where(CardProgress.user_id == self.user_id)
+        db.session.execute(update(StudyProgressSubject).where(StudyProgressSubject.learner_user_id == self.user_id)
                            .values(is_suspended=True))
         db.session.execute(text("UPDATE notes SET tags = :tags WHERE id = :note_id"),
                            {"tags": "[]", "note_id": self.note_ids[0]})
@@ -294,7 +297,7 @@ class DeckCountProjectionTests(unittest.TestCase):
         self.assertTrue(all(row["note_type_id"] == self.note_type_id for row in after["items"]))
         self.assertEqual(mutations, [])
         # A committed availability change must turn only that cache entry into raw fallback.
-        db.session.add(CardProgress(user_id=self.user_id, card_id=self.card_ids[0], queue="learning"))
+        db.session.add(stage_note_state(db.session, user_id=self.user_id, card_id=self.card_ids[0], queue="learning"))
         db.session.commit()
         with patch("app.services.dashboard_service.aggregate_deck_study_counts",
                    wraps=aggregate_deck_study_counts) as aggregate:

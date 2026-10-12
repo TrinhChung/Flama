@@ -336,6 +336,21 @@ class NoteQueryRetirementTests(unittest.TestCase):
             self._browse(status='new')
         self.assertEqual((caught.exception.status, caught.exception.code), (409, 'DETACHED_AUTHORITY_SUBJECT'))
 
+    def test_wrong_logical_key_cannot_hide_live_note_evidence_as_pristine(self):
+        self._add(1)
+        card = self._add(2, 'review', due_day=999999)
+        subject = StudyProgressSubject.query.filter_by(live_note_id=card.note_id).one()
+        subject.logical_note_key = b'noncanonical-key'
+        db.session.commit()
+        with self.assertRaises(browse_card_service.BrowseApiError) as caught:
+            self._browse(status='new')
+        self.assertEqual((caught.exception.status, caught.exception.code), (409, 'DETACHED_AUTHORITY_SUBJECT'))
+        from app.repositories.study_authority_repository import StudyAuthorityFenceError
+        with self.assertRaises(StudyAuthorityFenceError) as caught:
+            study_repository.query_study_queue_counts(self._query(), user_id=self.user.id,
+                                                       now=NOW, timezone_name='UTC')
+        self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
+
     def test_browse_count_rejects_empty_nonpristine_envelope_before_status_filter(self):
         card = self._add(1)
         db.session.add(StudyProgressSubject(learner_user_id=self.user.id,
@@ -366,6 +381,44 @@ class NoteQueryRetirementTests(unittest.TestCase):
         with self.assertRaises(browse_card_service.BrowseApiError) as caught:
             self._browse(status='new')
         self.assertEqual(caught.exception.code, 'INCOMPLETE_AUTHORITY_COVERAGE')
+
+    def test_small_review_bucket_preserves_anchor_priority_without_extra_seeks(self):
+        dated = self._add(1, 'review', due_day=1)
+        timestamp = self._add(2, 'review', due_at=NOW - timedelta(days=100))
+        null = self._add(3, 'review')
+        with patch.object(study_repository, '_first_queue_branch',
+                          side_effect=AssertionError('small bucket does not need staged seeks')):
+            selected = study_repository.query_next_due_card_id(self._query(), user_id=self.user.id,
+                now=NOW, timezone_name='UTC', queue_counts=(0, 0, 3))
+            self.assertEqual(selected, dated.id)
+            selected = study_repository.query_next_due_card_id(self._query().filter(Card.id != dated.id),
+                user_id=self.user.id, now=NOW, timezone_name='UTC', queue_counts=(0, 0, 2))
+            self.assertEqual(selected, timestamp.id)
+            selected = study_repository.query_next_due_card_id(self._query().filter(Card.id == null.id),
+                user_id=self.user.id, now=NOW, timezone_name='UTC', queue_counts=(0, 0, 1))
+            self.assertEqual(selected, null.id)
+
+    def test_subject_anchor_seek_never_uses_an_earlier_note_outside_authorized_scope(self):
+        hidden = self._add(1, 'review', due_day=1)
+        visible = self._add(2, 'review', due_day=2)
+        other_deck = Deck(name='Outside scope', owner_user_id=self.user.id)
+        db.session.add(other_deck)
+        db.session.flush()
+        db.session.get(Note, hidden.note_id).deck_id = other_deck.id
+        db.session.commit()
+        statements = []
+        def capture(_conn, _cursor, statement, *_args):
+            if 'note_due_seek' in statement:
+                statements.append(statement)
+        event.listen(db.engine, 'before_cursor_execute', capture)
+        try:
+            selected = study_repository.query_next_due_card_id(self._query(), user_id=self.user.id,
+                                                               now=NOW, timezone_name='UTC')
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', capture)
+        self.assertEqual(selected, visible.id)
+        self.assertTrue(statements)
+        self.assertTrue(all('EXISTS' in sql and 'LIMIT' in sql for sql in statements))
 
 
 if __name__ == '__main__':

@@ -22,7 +22,7 @@ from app.services.scheduler_config_service import resolve_deck_options
 from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.deck import Deck
-from models.card import card_key_pairs, forget_card_identities
+from models.card import card_key_pairs, forget_card_identities, legacy_card_ids, note_card_ids
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
 from models.study_progress_subject import StudyProgressSubject
 from app.utils.deck_move_token import parse_deck_move_token
@@ -563,12 +563,7 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
         note_ids = {
             note_id for note_id, _application_id in card_key_pairs(db.session, card_id_set).values()
         }
-        card_id_set.update(
-            str(row[0])
-            for row in db.session.query(Card.id)
-            .filter(Card.note_id.in_(sorted(note_ids)))
-            .all()
-        )
+        card_id_set.update(note_card_ids(db.session, note_ids))
         options_by_deck_id: dict[int, float] = {}
         for note_id, local_deck_id in overlay_local_deck_by_note_id.items():
             if local_deck_id not in options_by_deck_id:
@@ -582,9 +577,10 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
         from models.study_session import StudySession
         from models.study_session_card import StudySessionCard
 
+        session_wire_ids = card_id_set | set(legacy_card_ids(db.session, card_id_set))
         affected_session_ids = db.session.query(
             StudySessionCard.session_id
-        ).filter(StudySessionCard.card_id.in_(sorted(card_id_set)))
+        ).filter(StudySessionCard.card_id.in_(sorted(session_wire_ids)))
         open_sessions = (
             StudySession.query.filter(
                 StudySession.user_id == user_id,

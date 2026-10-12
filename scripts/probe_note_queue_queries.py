@@ -26,6 +26,8 @@ def main() -> int:
     parser.add_argument('--user-id', type=int, required=True)
     parser.add_argument('--database', help='Use a migrated disposable clone on the same loopback server')
     parser.add_argument('--deck-id', type=int)
+    parser.add_argument('--queue', choices=('new', 'learning', 'relearning', 'review'),
+                        help='Read-only controlled scope restricted to one current NOTE queue')
     parser.add_argument('--timezone', default='UTC')
     parser.add_argument('--analyze', action='store_true', help='Execute read-only EXPLAIN ANALYZE (MySQL8.0.18+)')
     parser.add_argument('--compare-combined', action='store_true', help='Also explain an equivalent combined OR/CASE picker')
@@ -39,14 +41,14 @@ def main() -> int:
     from app.settings import build_app_config
     from app.repositories.study_repository import (
         _next_day_boundary, _ordered_study_card_queries, _today_day_index,
-        query_next_due_card_id,
+        query_next_due_card_id, query_study_queue_counts,
     )
     from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
     from models import db
     from models.card import Card
     from models.note import Note
     from models.study_progress_subject import StudyProgressSubject
-    from sqlalchemy import and_, case, event, false, or_
+    from sqlalchemy import and_, case, event, false, or_, select
     from sqlalchemy.orm import aliased
     from sqlalchemy.engine import make_url
 
@@ -71,10 +73,15 @@ def main() -> int:
             )
             if args.deck_id is not None:
                 scope = scope.filter(Note.deck_id == args.deck_id)
+            if args.queue is not None:
+                scope = scope.filter(Note.id.in_(select(StudyProgressSubject.live_note_id).where(
+                    StudyProgressSubject.learner_user_id == args.user_id,
+                    StudyProgressSubject.normalized_queue == args.queue,
+                )))
             due, ahead = _ordered_study_card_queries(scope, user_id=args.user_id,
                                                     now=now, timezone_name=args.timezone)
             result = {'scope': 'owned-active', 'user_id': args.user_id,
-                      'deck_id': args.deck_id, 'timezone': args.timezone,
+                      'deck_id': args.deck_id, 'queue_filter': args.queue, 'timezone': args.timezone,
                       'snapshot_utc': now.isoformat(), 'analyze': args.analyze, 'plans': []}
             def explain(branch, *, kind, queue_index=None, anchor_index=None):
                 compiled = branch.limit(1).statement.compile(
@@ -118,7 +125,7 @@ def main() -> int:
                     case((queue == 'relearning', 0), (queue == 'learning', 1),
                          (queue == 'review', 2), else_=3),
                     review_day.is_(None), review_day, due_at.is_(None), due_at,
-                    Card.created_at, Card.id,
+                    Card.created_at, Card.order_key, Card.id,
                 ).with_entities(Card.id)
                 explain(combined, kind='combined-baseline')
             if args.serving:
@@ -128,18 +135,24 @@ def main() -> int:
                         captured.append((statement, parameters, dict(context.execution_options)))
                 event.listen(connection, 'before_cursor_execute', capture)
                 try:
+                    result['queue_counts'] = counts = query_study_queue_counts(
+                        scope, user_id=args.user_id, now=now, timezone_name=args.timezone,
+                    )
                     result['selected_card_id'] = query_next_due_card_id(
                         scope, user_id=args.user_id, now=now, timezone_name=args.timezone,
+                        queue_counts=counts,
                     )
                 finally:
                     event.remove(connection, 'before_cursor_execute', capture)
                 for sql, parameters, options in captured:
                     prefix = 'EXPLAIN ANALYZE ' if args.analyze else 'EXPLAIN FORMAT=JSON '
                     rows = connection.exec_driver_sql(prefix + sql, parameters).all()
+                    warnings = [tuple(row) for row in connection.exec_driver_sql('SHOW WARNINGS').all()]
                     result['plans'].append({
-                        'kind': 'serving', 'queue_index': options.get('note_queue_code'),
+                        'kind': 'count' if 'count(distinct' in sql.lower() else 'serving',
+                        'queue_index': options.get('note_queue_code'),
                         'anchor_index': options.get('note_anchor_index'), 'sql': sql,
-                        'plan': [str(row[0]) for row in rows],
+                        'plan': [str(row[0]) for row in rows], 'warnings': warnings,
                     })
             for kind, groups in (('due', due), ('ahead', ahead)):
                 for queue_index, branches in enumerate(groups):

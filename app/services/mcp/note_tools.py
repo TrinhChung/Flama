@@ -153,15 +153,9 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
             learner_user_id=user_id,
             logical_note_key=str(note.id).encode("utf-8"),
         ).one_or_none()
-        if (
-            subject is None
-            or str(subject.live_note_id or "") != str(note.id)
-            # CONSOLIDATED_V1 (ADR P10): Cards carry no progress, nothing to count.
-            or (
-                not is_consolidated(route)
-                and int(subject.contributor_count) != len(note.cards)
-            )
-        ):
+        # Fresh Notes may have no subject until their first stateful write.
+        # The scoped reader already validates every returned presentation.
+        if subject is not None and str(subject.live_note_id or "") != str(note.id):
             raise StudyAuthorityReadError(
                 "INCOMPLETE_AUTHORITY_COMPATIBILITY",
                 "NOTE detail Card topology differs from its canonical subject.",

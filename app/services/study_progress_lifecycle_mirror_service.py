@@ -403,7 +403,9 @@ def materialize_pristine_notes_bulk(
             statement = dialect_insert(table).values(values).on_conflict_do_nothing(
                 index_elements=[table.c.learner_user_id, table.c.logical_note_key]
             )
-        session.execute(statement)
+        # A missing subject and its pristine NEW envelope have the same
+        # availability. Keep subsequent ORM state changes scoped to the Note.
+        session.execute(statement.execution_options(flama_pristine_subject_envelope=True))
     subject_by_note: dict[str, StudyProgressSubject] = {}
     for chunk in _chunked(ordered):
         for subject in session.execute(

@@ -113,6 +113,12 @@ class StudyAlgorithmSwitchTests(unittest.TestCase):
         self.addCleanup(registry_patch.stop)
         with self.app.app_context():
             self.note_key = str(Card.query.first().note_id)
+            from app.repositories.study_authority_repository import lock_study_authority_route
+            from app.services.study_note_pristine_service import materialize_pristine_notes
+            route = lock_study_authority_route(db.session, learner_user_id=self.user_id)
+            materialize_pristine_notes(db.session, route=route, cards=Card.query.all(),
+                                      starting_ease_by_note_id={self.note_key: 2.5}, now_utc=_now())
+            db.session.commit()
 
     def _switch(self, target=SYNTHETIC, *, operation_key=None, expected=None):
         request = StudyAlgorithmSwitchRequest(learner_user_id=self.user_id, logical_note_key=self.note_key,

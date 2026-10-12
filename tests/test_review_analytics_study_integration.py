@@ -9,7 +9,6 @@ from sqlalchemy import func
 
 from tests import test_study_session_api as session_fixtures
 from tests import test_study_note_batch as note_batch_fixtures
-from tests import test_study_batch_queue as legacy_batch_fixtures
 from tests import test_anki_import_api as anki_fixtures
 from app.services.review_analytics_policy import resolve_review_analytics_policy
 from app.services.study_worker_service import process_single_study_batch
@@ -137,15 +136,16 @@ class ReviewAnalyticsNativeIntegrationTests(ProjectionAssertions, unittest.TestC
 
 
 class ReviewAnalyticsWorkerIntegrationTests(ProjectionAssertions, unittest.TestCase):
-    def test_legacy_async_worker_accepts_once_and_retry_has_no_delta(self):
-        legacy_batch_fixtures.StudyBatchQueueTests.setUpClass()
-        fixture = legacy_batch_fixtures.StudyBatchQueueTests("test_worker_refreshes_cached_batch_after_another_commit")
-        fixture.app.config["REVIEW_ANALYTICS_WRITE_ENABLED"] = False
-        fixture.setUp()
+    def test_note_http_worker_accepts_once_and_retry_has_no_counter_delta(self):
+        from app.services.study_queue_service import pop_study_batch
+        note_batch_fixtures.StudyNoteBatchTests.setUpClass()
+        fixture = note_batch_fixtures.StudyNoteBatchTests("test_two_batches_continue_same_note_and_project_every_sibling")
+        fixture._seed()
         try:
             enable_empty_projection(fixture.app, fixture.user_id)
-            snapshot = fixture._open_session()
-            job = fixture._admit_single_event_job(snapshot, is_final=True)
+            fixture._http_admit(fixture._batch_payload(1, [fixture._event(1)], final=True))
+            job = pop_study_batch(timeout=0)
+            self.assertIsNotNone(job)
             with fixture.app.app_context():
                 accepted = process_single_study_batch(job)
                 self.assertIn(accepted["status"], {"processed", "completed"})
@@ -156,7 +156,7 @@ class ReviewAnalyticsWorkerIntegrationTests(ProjectionAssertions, unittest.TestC
             self.assert_projection(fixture.app, fixture.user_id, 1, 500, 1, 1)
         finally:
             fixture.app.config["REVIEW_ANALYTICS_WRITE_ENABLED"] = False
-            fixture.tearDown()
+            fixture._cleanup()
 
     def test_note_batch_continuation_and_replay_preserve_atomic_counters(self):
         note_batch_fixtures.StudyNoteBatchTests.setUpClass()

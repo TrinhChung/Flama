@@ -1,18 +1,15 @@
 """Phase 6 D6-04: NOTE learners count each Note once (STUDY_NOTE_COUNT_ENABLED)."""
 
-from datetime import datetime
 import unittest
 from unittest.mock import patch
 
 from app import create_app
-from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+from tests.study_note_fixtures import attach_template, enroll_note_user
 from models import db
-from models.card import Card
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
-from models.template import Template
 from models.user import User
 
 
@@ -35,21 +32,19 @@ class StudyNoteLevelCountTests(unittest.TestCase):
             user = User(username="note-counts", email="note-counts@example.test")
             db.session.add(user)
             db.session.flush()
+            enroll_note_user(db.session, user)
             deck = Deck(name="Two templates", owner_user_id=user.id)
             note_type = NoteType(name="Two templates", user_id=user.id)
             db.session.add_all([deck, note_type])
             db.session.flush()
             db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-            templates = [Template(note_type_id=note_type.id, name=f"T{i}", front_html="{{Word}}",
+            templates = [attach_template(db.session, owner_user_id=user.id, note_type_id=note_type.id, name=f"T{i}", front_html="{{Word}}",
                                   back_html="{{Word}}", position=i, is_default=i == 0) for i in range(2)]
             db.session.add_all(templates)
             notes = [Note(user_id=user.id, deck_id=deck.id, note_type_id=note_type.id,
                           field_values={"Word": f"w{i}"}) for i in range(self.NOTES)]
             db.session.add_all(notes)
             db.session.flush()
-            db.session.add_all(Card(note_id=note.id, template_id=t.id) for note in notes for t in templates)
-            db.session.commit()
-            stage_note_authority_enrollment(db.session, learner_user_id=int(user.id), now_utc=datetime.utcnow())
             db.session.commit()
             self.user_id, self.deck_id = int(user.id), int(deck.id)
         self.client = self.app.test_client()

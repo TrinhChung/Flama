@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 import unittest
 
 from flask_migrate import upgrade
@@ -13,6 +14,18 @@ from models import db
 
 
 class RetirementFreshMigrationChainTests(unittest.TestCase):
+    def test_ci_source_name_exception_is_limited_to_explicit_empty_service(self):
+        from scripts.bootstrap_historical_schema import ci_empty_target_allowed
+        settings = {"DB_NAME":"ci", "DB_HOST":"127.0.0.1"}
+        with patch.dict("os.environ", {"CI":"true", "GITHUB_ACTIONS":"true"}):
+            self.assertTrue(ci_empty_target_allowed("ci", settings, requested=True))
+            self.assertFalse(ci_empty_target_allowed("ci", settings, requested=False))
+            self.assertFalse(ci_empty_target_allowed("nihongo", settings, requested=True))
+            self.assertFalse(ci_empty_target_allowed("ci", {**settings,"DB_HOST":"remote.example"}, requested=True))
+            self.assertFalse(ci_empty_target_allowed("ci", {**settings,"DB_NAME":"nihongo"}, requested=True))
+        with patch.dict("os.environ", {"CI":"true", "GITHUB_ACTIONS":"false"}):
+            self.assertFalse(ci_empty_target_allowed("ci", settings, requested=True))
+
     def test_historical_metadata_is_private_and_keeps_original_card_schema(self):
         self.assertIsNot(HISTORICAL_BOOTSTRAP_METADATA, db.metadata)
         cards = HISTORICAL_BOOTSTRAP_METADATA.tables["cards"]
@@ -45,6 +58,9 @@ class RetirementFreshMigrationChainTests(unittest.TestCase):
                     # Same migration entry point as `flask --app wsgi.py db upgrade`.
                     upgrade(directory=str(Path(__file__).resolve().parents[1] / "migrations"))
                     tables = set(sa.inspect(db.engine).get_table_names())
+                    self.assertEqual(db.session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one(), "20261012_000062")
+                    self.assertEqual(set(db.metadata.tables) - tables, set())
+                    self.assertEqual(tables - set(db.metadata.tables), {"alembic_version"})
                     self.assertFalse(tables & {"cards", "card_progress", "vocabulary_column_preferences",
                                               "study_progress_backfill_runs", "study_progress_backfill_checkpoints",
                                               "study_progress_backfill_dispositions"})

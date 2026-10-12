@@ -4,12 +4,31 @@ No legacy persistence model or compatibility Card write is introduced. Each
 learner/Note has one current state; callers choose the exact scheduler values.
 """
 from datetime import datetime
-from types import SimpleNamespace
 
 from app.services.study_progress_shadow_mapper import MappedCardProgress, map_card_progress
-from models.card import Card
+from models.card import Card, get_card
 from models.study_progress_subject import StudyProgressSubject
 from tests.study_note_fixtures import mapper_state_input
+
+
+def decode_note_state(subject):
+    """Read a current NOTE state through the registered, hash-checked codec."""
+    from app.services.study_progress_shadow_codec import STATE_DECODERS
+    return STATE_DECODERS.decode(
+        algorithm_key=subject.algorithm_key, algorithm_version=subject.algorithm_version,
+        state_schema_version=subject.state_schema_version, storage_codec=subject.storage_codec,
+        payload=subject.state_payload, expected_size=subject.state_payload_size,
+        expected_hash=subject.algorithm_state_hash,
+    )
+
+
+def subject_for_card(session, *, user_id, card_id):
+    from models.card import get_card
+    card = get_card(session, card_id)
+    if card is None:
+        raise ValueError('Fixture needs a resolvable presentation.')
+    return session.query(StudyProgressSubject).filter_by(
+        learner_user_id=user_id, logical_note_key=str(card.note_id).encode(), live_note_id=card.note_id).one()
 
 
 def subject_values(*, user_id, note_id, now=None, **state):
@@ -33,7 +52,7 @@ def subject_values(*, user_id, note_id, now=None, **state):
 
 def stage_note_state(session, *, user_id, card_id=None, note_id=None, **state):
     if note_id is None:
-        card = session.get(Card, card_id)
+        card = get_card(session, card_id)
         if card is None:
             raise ValueError('Fixture needs a current derived presentation.')
         note_id = card.note_id

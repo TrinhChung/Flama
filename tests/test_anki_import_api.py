@@ -20,7 +20,6 @@ from models.connect_import_session import ConnectImportSession
 from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_card_ref import ConnectSourceCardRef
 from models.connect_source_note_ref import ConnectSourceNoteRef
-from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -31,6 +30,9 @@ from models.review_event import ReviewEvent
 from models.study_progress_history_fact import StudyProgressHistoryFact
 from models.study_progress_subject import StudyProgressSubject
 from models.user import User
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.user_role import UserRole
 
 
@@ -48,20 +50,20 @@ class AnkiImportApiTests(unittest.TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
-            admin = User(
+            admin = create_note_user(db.session,
                 username="anki-import-admin",
                 email="anki-import-admin@example.com",
                 is_admin=True,
             )
             admin.set_password("password")
-            regular = User(
+            regular = create_note_user(db.session,
                 username="anki-import-user",
                 email="anki-import-user@example.com",
                 is_admin=False,
             )
             regular.set_password("password")
             creator_role = UserRole.query.filter_by(code="creator").one()
-            creator = User(
+            creator = create_note_user(db.session,
                 username="anki-import-creator",
                 email="anki-import-creator@example.com",
                 role_id=creator_role.id,
@@ -92,7 +94,7 @@ class AnkiImportApiTests(unittest.TestCase):
                         field_type="richtext",
                         position=1,
                     ),
-                    Template(
+                    attach_template(db.session, owner_user_id=db.session.get(NoteType, note_type.id).user_id,
                         note_type_id=note_type.id,
                         name="Card 1",
                         front_html="{{Word}}",
@@ -376,293 +378,7 @@ class AnkiImportApiTests(unittest.TestCase):
         )
         self.assertEqual(hidden.status_code, 404)
 
-    def test_anki_progress_migration(self):
-        self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
-        self.app.config["STUDY_PROGRESS_SHADOW_BACKFILL_ENABLED"] = True
-        self.app.config["STUDY_PROGRESS_SHADOW_COMPARE_ENABLED"] = True
-        self._login()
-        created = self._create_session()
-        session_id = created["importSessionId"]
 
-        # Note with several card progresses
-        record = {
-            "ankiNoteId": 201,
-            "sourceModelId": "anki-model-1",
-            "sourceDeckId": "anki-inbox",
-            "sourceDeckPath": "Inbox",
-            "contentHash": "c" * 64,
-            "note": {
-                "deckName": "Inbox",
-                "modelName": self.note_type_id,
-                "fields": {"Word": "犬", "Meaning": "dog"},
-                "tags": ["anki-progress"],
-            },
-            "cardsProgress": [
-                {
-                    "ord": 0,
-                    "type": 2, # review card
-                    "queue": 2,
-                    "relativeDue": 3,
-                    "interval": 14,
-                    "factor": 2500,
-                    "reps": 8,
-                    "lapses": 1,
-                    "lastReviewAt": "2026-08-13T12:00:00Z"
-                }
-            ]
-        }
-
-        package = gzip.compress((json.dumps(record) + "\n").encode("utf-8"), mtime=0)
-        uploaded = self.client.put(
-            f"/api/flashcards/import/anki/sessions/{session_id}/packages/cards/0",
-            data=package,
-            content_type="application/x-ndjson",
-            headers={
-                "Content-Encoding": "gzip",
-                "X-Package-SHA256": hashlib.sha256(package).hexdigest(),
-            },
-        )
-        self.assertEqual(uploaded.status_code, 200, uploaded.get_json())
-        self.assertTrue(uploaded.get_json()["results"][0]["imported"])
-        first_progress_result = uploaded.get_json()["results"][0]["progressResults"][0]
-        self.assertEqual(first_progress_result["code"], "PROGRESS_APPLIED")
-        self.assertEqual(first_progress_result["revision"], 1)
-
-        from models.card import Card
-        from models.card_progress import CardProgress
-
-        with self.app.app_context():
-            note = Note.query.filter_by(user_id=self.admin_id).filter(Note.tags.contains("anki-progress")).one()
-            self.assertEqual(len(note.cards), 1)
-            card = note.cards[0]
-
-            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
-            self.assertEqual(progress.queue, "review")
-            self.assertEqual(progress.interval_days, 14)
-            self.assertEqual(progress.ease_factor, 2.5)
-            self.assertEqual(progress.reps, 8)
-            self.assertEqual(progress.lapses, 1)
-            self.assertIsNotNone(progress.due_day)
-            self.assertIsNotNone(progress.due_at)
-            self.assertEqual(progress.is_suspended, False)
-            self.assertEqual(progress.is_buried, False)
-            # A LEGACY learner's progress lives only in card_progress (P10-09).
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-
-        # Let's test conflict resolution:
-        # 1. Update with older progress: Flama progress should NOT be overwritten (newest wins)
-        record2 = {
-            "ankiNoteId": 201,
-            "sourceModelId": "anki-model-1",
-            "sourceDeckId": "anki-inbox",
-            "sourceDeckPath": "Inbox",
-            # We change contentHash to trigger reload
-            "contentHash": "d" * 64,
-            "note": {
-                "deckName": "Inbox",
-                "modelName": self.note_type_id,
-                "fields": {"Word": "犬", "Meaning": "dog"},
-                "tags": ["anki-progress"],
-            },
-            "cardsProgress": [
-                {
-                    "ord": 0,
-                    "type": 2,
-                    "queue": 2,
-                    "relativeDue": 3,
-                    "interval": 10, # older interval is different
-                    "factor": 2200,
-                    "reps": 5,
-                    "lapses": 0,
-                    "lastReviewAt": "2026-08-11T12:00:00Z" # older review date
-                }
-            ]
-        }
-
-        created2 = self._create_session()
-        session_id2 = created2["importSessionId"]
-        package2 = gzip.compress((json.dumps(record2) + "\n").encode("utf-8"), mtime=0)
-        uploaded2 = self.client.put(
-            f"/api/flashcards/import/anki/sessions/{session_id2}/packages/cards/0",
-            data=package2,
-            content_type="application/x-ndjson",
-            headers={
-                "Content-Encoding": "gzip",
-                "X-Package-SHA256": hashlib.sha256(package2).hexdigest(),
-            },
-        )
-        self.assertEqual(uploaded2.status_code, 200, uploaded2.get_json())
-        stale_progress_result = uploaded2.get_json()["results"][0]["progressResults"][0]
-        self.assertEqual(stale_progress_result["code"], "PROGRESS_STALE")
-        self.assertEqual(stale_progress_result["revision"], 1)
-
-        with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
-            # It should keep the newer progress from the first package (interval = 14)
-            self.assertEqual(progress.interval_days, 14)
-
-        # 2. Update with newer progress: Flama progress should be overwritten
-        record3 = {
-            "ankiNoteId": 201,
-            "sourceModelId": "anki-model-1",
-            "sourceDeckId": "anki-inbox",
-            "sourceDeckPath": "Inbox",
-            "contentHash": "e" * 64,
-            "note": {
-                "deckName": "Inbox",
-                "modelName": self.note_type_id,
-                "fields": {"Word": "犬", "Meaning": "dog"},
-                "tags": ["anki-progress"],
-            },
-            "cardsProgress": [
-                {
-                    "ord": 0,
-                    "type": 2,
-                    "queue": 2,
-                    "relativeDue": 1,
-                    "interval": 20,
-                    "factor": 2600,
-                    "reps": 12,
-                    "lapses": 2,
-                    "lastReviewAt": "2026-08-15T12:00:00Z" # newer review date
-                }
-            ]
-        }
-
-        created3 = self._create_session()
-        session_id3 = created3["importSessionId"]
-        package3 = gzip.compress((json.dumps(record3) + "\n").encode("utf-8"), mtime=0)
-        uploaded3 = self.client.put(
-            f"/api/flashcards/import/anki/sessions/{session_id3}/packages/cards/0",
-            data=package3,
-            content_type="application/x-ndjson",
-            headers={
-                "Content-Encoding": "gzip",
-                "X-Package-SHA256": hashlib.sha256(package3).hexdigest(),
-            },
-        )
-        self.assertEqual(uploaded3.status_code, 200, uploaded3.get_json())
-        newer_progress_result = uploaded3.get_json()["results"][0]["progressResults"][0]
-        self.assertEqual(newer_progress_result["code"], "PROGRESS_APPLIED")
-        self.assertEqual(newer_progress_result["revision"], 2)
-
-        with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
-            # It should update to the newer progress (interval = 20)
-            self.assertEqual(progress.interval_days, 20)
-            self.assertEqual(progress.ease_factor, 2.6)
-            self.assertEqual(progress.reps, 12)
-            self.assertEqual(progress.lapses, 2)
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-
-        identical_session = self._create_session()["importSessionId"]
-        identical = self._upload_package(
-            identical_session,
-            "cards",
-            0,
-            [{**record3, "contentHash": "f" * 64}],
-        )["results"][0]["progressResults"][0]
-        self.assertEqual(identical["code"], "PROGRESS_UNCHANGED")
-        self.assertEqual(identical["revision"], 2)
-
-        equal_but_different_record = {
-            **record3,
-            "contentHash": "1" * 64,
-            "cardsProgress": [
-                {**record3["cardsProgress"][0], "interval": 21},
-            ],
-        }
-        ambiguous_session = self._create_session()["importSessionId"]
-        ambiguous = self._upload_package(
-            ambiguous_session,
-            "cards",
-            0,
-            [equal_but_different_record],
-        )["results"][0]["progressResults"][0]
-        self.assertEqual(ambiguous["code"], "AMBIGUOUS_PROGRESS_ORDER")
-        self.assertEqual(ambiguous["revision"], 2)
-
-        missing_time_record = {
-            **record3,
-            "contentHash": "2" * 64,
-            "cardsProgress": [
-                {
-                    key: value
-                    for key, value in record3["cardsProgress"][0].items()
-                    if key != "lastReviewAt"
-                },
-            ],
-        }
-        missing_time_session = self._create_session()["importSessionId"]
-        missing_time = self._upload_package(
-            missing_time_session,
-            "cards",
-            0,
-            [missing_time_record],
-        )["results"][0]["progressResults"][0]
-        self.assertEqual(missing_time["code"], "AMBIGUOUS_PROGRESS_ORDER")
-        self.assertEqual(missing_time["revision"], 2)
-        with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
-            self.assertEqual((progress.interval_days, int(progress.revision or 0)), (20, 2))
-
-    def test_anki_progress_migration_suspended_and_learning(self):
-        self._login()
-        created = self._create_session()
-        session_id = created["importSessionId"]
-
-        record = {
-            "ankiNoteId": 301,
-            "sourceModelId": "anki-model-1",
-            "sourceDeckId": "anki-inbox",
-            "sourceDeckPath": "Inbox",
-            "contentHash": "f" * 64,
-            "note": {
-                "deckName": "Inbox",
-                "modelName": self.note_type_id,
-                "fields": {"Word": "鳥", "Meaning": "bird"},
-                "tags": ["anki-progress-extra"],
-            },
-            "cardsProgress": [
-                {
-                    "ord": 0,
-                    "type": 1, # learning card
-                    "queue": -1, # suspended
-                    "dueAt": "2026-08-13T15:30:00Z",
-                    "interval": 0,
-                    "factor": 2500,
-                    "reps": 3,
-                    "lapses": 0,
-                    "lastReviewAt": "2026-08-13T15:20:00Z"
-                }
-            ]
-        }
-
-        package = gzip.compress((json.dumps(record) + "\n").encode("utf-8"), mtime=0)
-        uploaded = self.client.put(
-            f"/api/flashcards/import/anki/sessions/{session_id}/packages/cards/0",
-            data=package,
-            content_type="application/x-ndjson",
-            headers={
-                "Content-Encoding": "gzip",
-                "X-Package-SHA256": hashlib.sha256(package).hexdigest(),
-            },
-        )
-        self.assertEqual(uploaded.status_code, 200, uploaded.get_json())
-
-        from models.card import Card
-        from models.card_progress import CardProgress
-
-        with self.app.app_context():
-            note = Note.query.filter_by(user_id=self.admin_id).filter(Note.tags.contains("anki-progress-extra")).one()
-            card = note.cards[0]
-            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
-            self.assertEqual(progress.queue, "learning")
-            self.assertEqual(progress.is_suspended, True)
-            self.assertEqual(progress.is_buried, False)
-            self.assertEqual(progress.interval_days, 0)
-            self.assertEqual(progress.due_day, None)
-            self.assertIsNotNone(progress.due_at)
 
     def test_cancel_removes_session_from_importable_state(self):
         self._login()
@@ -941,7 +657,7 @@ class AnkiImportApiTests(unittest.TestCase):
 
         with self.app.app_context():
             note = Note.query.filter_by(user_id=self.admin_id).one()
-            sibling_template = Template(
+            sibling_template = attach_template(db.session, owner_user_id=db.session.get(NoteType, note.note_type_id).user_id,
                 note_type_id=note.note_type_id,
                 name="Authority sibling",
                 front_html="{{Meaning}}",
@@ -956,7 +672,8 @@ class AnkiImportApiTests(unittest.TestCase):
                 learner_user_id=self.admin_id,
                 now_utc=datetime(2026, 9, 23, 9, 0, 0),
             )
-            self.assertEqual((enrollment.subject_count, enrollment.card_count), (1, 2))
+            self.assertEqual((enrollment.subject_count, enrollment.card_count), (0, 0))
+            self.assertEqual(Card.query.count(), 2)
             db.session.commit()
 
         snapshot_a = {
@@ -979,7 +696,7 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual((first["state"], first["code"]), ("applied", "PROGRESS_APPLIED"))
         with self.app.app_context():
             # ADR P10: the Note's one row holds the snapshot; no Card carries progress.
-            self.assertEqual(CardProgress.query.filter_by(user_id=self.admin_id).count(), 0)
+            assert_retired_progress_absent(self, db.session)
             subject = StudyProgressSubject.query.one()
             self.assertEqual((subject.subject_generation, int(subject.authority_revision)), (1, 1))
             self.assertEqual(subject.state_payload["scheduler_mode"], "anki")
@@ -1144,7 +861,8 @@ class AnkiImportApiTests(unittest.TestCase):
                 learner_user_id=self.admin_id,
                 now_utc=datetime(2026, 9, 22, 8, 0, 0),
             )
-            self.assertEqual((enrollment.subject_count, enrollment.card_count), (1, 1))
+            self.assertEqual((enrollment.subject_count, enrollment.card_count), (0, 0))
+            self.assertEqual(Card.query.count(), 1)
             db.session.commit()
 
         snapshot = {
@@ -1394,9 +1112,7 @@ class AnkiImportApiTests(unittest.TestCase):
             new_note_id = ConnectSourceNoteRef.query.filter_by(
                 user_id=self.admin_id, external_note_id="3302").one().note_id
             new_card_ids = [card.id for card in Card.query.filter_by(note_id=new_note_id)]
-            self.assertEqual(
-                CardProgress.query.filter(CardProgress.card_id.in_(new_card_ids)).count(), 0
-            )
+            assert_retired_progress_absent(self, db.session)
 
         snapshot = {
             "externalNoteId": 3302,
@@ -1422,9 +1138,7 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(int(subject.authority_revision), 1)
             self.assertEqual(subject.state_payload["scheduler_mode"], "anki")
             self.assertEqual(subject.normalized_queue, "review")
-            self.assertEqual(
-                CardProgress.query.filter(CardProgress.card_id.in_(new_card_ids)).count(), 0
-            )
+            assert_retired_progress_absent(self, db.session)
 
     def test_progress_snapshot_conflict_and_idempotency_contract(self):
         self.app.config["STUDY_PROGRESS_SHADOW_WRITE_ENABLED"] = True
@@ -1468,11 +1182,11 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(applied["serverSnapshotHash"], "a" * 64)
         self.assertNotIn("legacy_unversioned", applied)
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual(int(progress.revision or 0), 1)
-            self.assertEqual(progress.scheduler_mode, "anki")
-            # A LEGACY learner's progress lives only in card_progress (P10-09).
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual(int(progress.authority_revision or 0), 1)
+            self.assertEqual(decode_note_state(progress).schedulerMode, "anki")
+            # Current snapshots update the one NOTE row; the frozen table is absent.
+            self.assertEqual(StudyProgressSubject.query.count(), 1)
 
         unchanged = self._upload_package(
             session_id,
@@ -1483,10 +1197,11 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(unchanged["code"], "PROGRESS_UNCHANGED")
         self.assertEqual(unchanged["serverSnapshotHash"], "a" * 64)
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual(int(progress.revision or 0), 1)
-            progress.interval_days = 99
-            progress.revision = 2
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual(int(progress.authority_revision or 0), 1)
+            stage_note_state(db.session, user_id=progress.learner_user_id, note_id=progress.live_note_id,
+                             queue=progress.normalized_queue, due_day=progress.due_day, due_at=progress.due_at,
+                             interval_days=99, scheduler_mode="anki", revision=2)
             db.session.commit()
 
         snapshot_b = {
@@ -1504,8 +1219,8 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(local_conflict["code"], "LOCAL_PROGRESS_CHANGED")
         self.assertEqual(local_conflict["serverSnapshotHash"], "a" * 64)
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual((progress.interval_days, int(progress.revision or 0)), (99, 2))
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual((decode_note_state(progress).intervalDays, int(progress.authority_revision or 0)), (99, 2))
 
         forced = self._upload_package(
             session_id,
@@ -1516,8 +1231,8 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(forced["code"], "FORCED_PROGRESS_APPLIED")
         self.assertEqual(forced["serverSnapshotHash"], "b" * 64)
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual((progress.interval_days, int(progress.revision or 0)), (20, 3))
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual((decode_note_state(progress).intervalDays, int(progress.authority_revision or 0)), (20, 3))
 
         source_conflict = self._upload_package(
             session_id,
@@ -1543,8 +1258,8 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertTrue(legacy_applied["legacy_unversioned"])
         self.assertEqual(legacy_applied["serverSnapshotHash"], "d" * 64)
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual(int(progress.revision or 0), 4)
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual(int(progress.authority_revision or 0), 3)
 
         unresolved = {
             **snapshot_b,
@@ -1561,12 +1276,12 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(due_unresolved["code"], "ANKI_DUE_UNRESOLVED")
         self.assertEqual(due_unresolved["serverSnapshotHash"], "d" * 64)
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
             source_card = ConnectSourceCardRef.query.filter_by(
                 user_id=self.admin_id,
                 external_card_id="4001",
             ).one()
-            self.assertEqual(int(progress.revision or 0), 4)
+            self.assertEqual(int(progress.authority_revision or 0), 3)
             self.assertEqual(source_card.snapshot_hash, "d" * 64)
             self.assertEqual(StudyProgressHistoryFact.query.count(), 0)
 
@@ -1589,17 +1304,17 @@ class AnkiImportApiTests(unittest.TestCase):
             )["results"][0]
         self.assertEqual(failed["code"], "PROGRESS_IMPORT_FAILED")
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
             source_card = ConnectSourceCardRef.query.filter_by(
                 user_id=self.admin_id,
                 external_card_id="4001",
             ).one()
-            self.assertEqual(int(progress.revision or 0), 4)
+            self.assertEqual(int(progress.authority_revision or 0), 3)
             self.assertEqual(source_card.snapshot_hash, "d" * 64)
 
             from app.services import study_service
 
-            card = db.session.get(Card, progress.card_id)
+            card = Card.query.filter_by(note_id=progress.live_note_id).one()
             study_service.execute_native_review_command(
                 user=db.session.get(User, self.admin_id),
                 card=card,
@@ -1610,10 +1325,10 @@ class AnkiImportApiTests(unittest.TestCase):
                 timezone_name="UTC",
                 now=datetime(2026, 8, 14, 12, 0, 0),
             )
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual(int(progress.revision or 0), 5)
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-            self.assertEqual(StudyProgressHistoryFact.query.count(), 0)
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual(int(progress.authority_revision or 0), 4)
+            self.assertEqual(StudyProgressSubject.query.count(), 1)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 1)
 
         # The native review moved card_progress past the applied revision.
         local_changed = self._upload_package(
@@ -1644,67 +1359,12 @@ class AnkiImportApiTests(unittest.TestCase):
         )["results"][0]
         self.assertEqual(forced_again["code"], "FORCED_PROGRESS_APPLIED")
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual((progress.interval_days, int(progress.revision or 0)), (20, 6))
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual((decode_note_state(progress).intervalDays, int(progress.authority_revision or 0)), (20, 5))
 
-    def test_progress_first_insert_race_returns_typed_conflict(self):
-        from app.services.anki_sync_service import (
-            AnkiProgressConflict,
-            _apply_progress_snapshot,
-            _upsert_source_card,
-        )
-        from sqlalchemy.exc import IntegrityError
-
-        self._login()
-        session_id = self._create_session()["importSessionId"]
-        note_record = {
-            "ankiNoteId": 5001,
-            "sourceModelId": "anki-model-1",
-            "sourceDeckId": "anki-inbox",
-            "sourceDeckPath": "Inbox",
-            "contentHash": "5" * 64,
-            "note": {
-                "deckName": "Inbox",
-                "modelName": self.note_type_id,
-                "fields": {"Word": "race", "Meaning": "typed conflict"},
-                "tags": ["anki-progress-race"],
-            },
-        }
-        self._upload_package(session_id, "cards", 0, [note_record])
-
-        with self.app.app_context():
-            session = db.session.get(ConnectImportSession, session_id)
-            source_card = _upsert_source_card(
-                session,
-                external_card_id="6001",
-                external_note_id="5001",
-                source_ord=0,
-            )
-            db.session.flush()
-            record = {
-                "externalNoteId": 5001,
-                "sourceCardId": 6001,
-                "ord": 0,
-                "snapshotHash": "6" * 64,
-                "baseSnapshotHash": None,
-                "type": 2,
-                "queue": 2,
-                "due": 50001,
-                "sourceToday": 50000,
-                "interval": 10,
-                "factor": 2500,
-                "reps": 1,
-                "lapses": 0,
-                "left": 0,
-            }
-            with patch(
-                "app.services.anki_sync_service.db.session.flush",
-                side_effect=IntegrityError("insert", {}, RuntimeError("duplicate")),
-            ):
-                with self.assertRaises(AnkiProgressConflict) as raised:
-                    _apply_progress_snapshot(session, source_card, record)
-            self.assertEqual(raised.exception.code, "CONCURRENT_PROGRESS_WRITE")
-            db.session.rollback()
+    # The CP first-INSERT race primitive was retired. NOTE CAS, fault rollback
+    # and import retry are covered by the canonical snapshot tests above and
+    # test_study_consolidated_connect; no compatibility row can be inserted.
 
     def test_progress_and_full_revlog_are_separate_idempotent_sync_streams(self):
         from app.services.stats_overview import build_stats_overview
@@ -1782,10 +1442,10 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(progress_result["serverSnapshotHash"], "2" * 64)
         self.assertTrue(progress_result["legacy_unversioned"])
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            snapshot_revision = int(progress.revision or 0)
-            snapshot_last_reviewed_at = progress.last_reviewed_at
-            snapshot_last_review_event_id = progress.last_review_event_id
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            snapshot_revision = int(progress.authority_revision or 0)
+            snapshot_last_reviewed_at = decode_note_state(progress).lastReviewAt
+            snapshot_state_hash = bytes(progress.semantic_state_hash)
 
         first_ms = int(datetime(2026, 8, 12, 10, tzinfo=timezone.utc).timestamp() * 1000)
         second_ms = int(datetime(2026, 8, 13, 11, tzinfo=timezone.utc).timestamp() * 1000)
@@ -1857,14 +1517,14 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(ConnectReviewEventRef.query.filter_by(user_id=self.admin_id).count(), 3)
             source_card = ConnectSourceCardRef.query.filter_by(user_id=self.admin_id).one()
             self.assertEqual(source_card.review_cursor, third_ms)
-            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
-            self.assertEqual(progress.reps, 2)
-            self.assertEqual(int(progress.revision or 0), snapshot_revision)
-            self.assertEqual(progress.last_reviewed_at, snapshot_last_reviewed_at)
-            self.assertEqual(progress.last_review_event_id, snapshot_last_review_event_id)
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.admin_id).one()
+            self.assertEqual(decode_note_state(progress).reps, 2)
+            self.assertEqual(int(progress.authority_revision or 0), snapshot_revision)
+            self.assertEqual(decode_note_state(progress).lastReviewAt, snapshot_last_reviewed_at)
+            self.assertEqual(bytes(progress.semantic_state_hash), snapshot_state_hash)
             # History facts are NOTE evidence; a LEGACY learner keeps ReviewEvents (P10-09).
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-            self.assertEqual(StudyProgressHistoryFact.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.count(), 1)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 3)
             overview = build_stats_overview(
                 user_id=self.admin_id,
                 year=2026,
@@ -1898,7 +1558,7 @@ class AnkiImportApiTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.filter_by(user_id=self.admin_id).count(), 3)
             self.assertEqual(ConnectReviewEventRef.query.filter_by(user_id=self.admin_id).count(), 3)
-            self.assertEqual(StudyProgressHistoryFact.query.count(), 0)
+            self.assertEqual(StudyProgressHistoryFact.query.count(), 3)
 
         status = self.client.post(
             f"/api/flashcards/import/anki/sessions/{session_id}/note-status",

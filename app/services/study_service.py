@@ -51,7 +51,7 @@ from app.validators.review_event import (
 from app.services.review_analytics_projection_service import flush_review_analytics_deltas
 from models import db
 from models.audit_log import AuditLog
-from models.card import Card
+from models.card import Card, CardWireIdentity
 from models.deck import Deck
 from models.review_event import ReviewEvent
 
@@ -706,8 +706,10 @@ def _execute_note_authority_review_command(
         siblings=siblings,
     )
     locked_card = next(
-        sibling for sibling in siblings.cards if str(sibling.id) == str(card.id)
+        sibling for sibling in siblings.cards if str(sibling.key) == str(card.key)
     )
+    if str(locked_card.id) != str(card.id):
+        locked_card = CardWireIdentity(locked_card, str(card.id))
     # A first-state review was already checked against its pristine version.
     if require_review_state_version and not pristine:
         requested_version = str(review_state_version or "").strip()

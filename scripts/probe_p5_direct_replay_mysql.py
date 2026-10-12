@@ -111,7 +111,6 @@ def _concurrent_first_state_answers(case):
     from uuid import uuid4
 
     from app.services import study_service
-    from models.card_progress import CardProgress
     from models.review_event import ReviewEvent
     from models.study_progress_subject import StudyProgressSubject
 
@@ -156,8 +155,7 @@ def _concurrent_first_state_answers(case):
         case.assertEqual(
             ReviewEvent.query.filter(ReviewEvent.card_id.in_(case.source_card_ids)).count(), len(succeeded))
         # The Note's one row holds the state; no Card carries progress (ADR P10).
-        case.assertEqual(
-            CardProgress.query.filter(CardProgress.card_id.in_(case.source_card_ids)).count(), 0)
+        case.assertFalse(sa.inspect(db.engine).has_table("card_progress"))
 
 
 def _template_preview_race(case, *, change_count):

@@ -3,19 +3,19 @@
 import json
 import unittest
 from datetime import datetime, timedelta
+from hashlib import sha256
+from contextlib import contextmanager
+from sqlalchemy import event as sql_event
 from unittest.mock import patch
 from uuid import uuid4
 
 from app import create_app
 from app.repositories import template_library_repository
-from tests.study_note_fixtures import attach_template, enroll_note_user, mapper_state_input, assert_retired_progress_absent
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent, archive_wire_alias
+from tests.note_progress_fixtures import stage_note_state
 from app.repositories.study_authority_repository import StudyAuthorityFenceError
 from app.services.anki_scheduler import _day_index, applyAnswer
 from app.services.study_progress_contract import MAPPER_VERSION
-from app.services.study_progress_shadow_mapper import (
-    MappedCardProgress,
-    map_card_progress,
-)
 from app.services.study_algorithm_registry import (
     AlgorithmLifecycleState,
     AlgorithmResolutionPurpose,
@@ -43,7 +43,7 @@ from app.services.study_session_config import (
 )
 from app.validators.flashcard_input import RequestValidationError
 from models import db
-from models.card import Card
+from models.card import Card, CardWireIdentity
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
@@ -57,6 +57,9 @@ from models.study_authority_command_receipt import StudyAuthorityCommandReceipt
 from models.study_progress_lifecycle_event import StudyProgressLifecycleEvent
 from models.study_progress_subject import StudyProgressSubject
 from models.study_session import StudySession
+from models.study_session_card import StudySessionCard
+from models.study_application import StudyApplication
+from models.study_session_commit import StudySessionCommit
 from models.study_session_authority_pin import StudySessionAuthorityPin
 from models.study_session_batch import StudySessionBatch
 from models.template import Template
@@ -144,112 +147,24 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
 
-    def _open_session_v3(self):
-        previous = self.app.config["STUDY_WIRE_V3_ENABLED"]
-        self.app.config["STUDY_WIRE_V3_ENABLED"] = True
-        try:
-            response = self.client.post(
-                "/api/study/sessions",
-                json={
-                    "scope": "deck",
-                    "scope_id": self.deck_id,
-                    "accepted_session_schema_versions": [
-                        "study-session.v3",
-                        "study-session.v2",
-                    ],
-                },
-            )
-        finally:
-            self.app.config["STUDY_WIRE_V3_ENABLED"] = previous
-        self.assertEqual(response.status_code, 201, response.get_json())
-        return response.get_json()
 
     def _enable_existing_state_note_authority(
-        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token: bool | None = None
+        self, *, epoch=1, enroll=True, initial_progress=None, note_id=None, include_token=None
     ):
-        """A NOTE learner whose existing state lives on the Note's one row (ADR P10)."""
-
-        from app.services.study_consolidated_progress_service import (
-            apply_note_availability,
-            note_burial,
-            project_subject_state,
-        )
-
+        """Stage exact canonical NOTE state; enrollment was explicit at signup."""
         with self.app.app_context():
-            note_query = Note.query.filter_by(
-                user_id=self.user_id,
-                deck_id=self.deck_id,
-            )
-            note = note_query.filter_by(id=note_id).one() if note_id else note_query.one()
-            now = datetime(2026, 9, 21, 8, 0, 0)
-            card = Card.query.filter_by(note_id=note.id).one()
-            # A transient card_progress shape is only the source of the state.
-            progress = mapper_state_input(
-                    id=1,
-                    user_id=self.user_id,
-                    card_id=str(card.id),
-                    queue="new",
-                    step_index=0,
-                    interval_days=0,
-                    interval_days_raw=0.0,
-                    is_suspended=False,
-                    is_buried=False,
-                    review_kind="review",
-                    scheduler_mode="legacy",
-                    ease_factor=2.5,
-                    last_leech_lapses=0,
-                    reps=0,
-                    lapses=0,
-                    revision=0,
-                    created_at=now,
-                    updated_at=now,
-                )
-            for field_name, value in (initial_progress or {}).items():
-                setattr(progress, field_name, value)
-            mapped = map_card_progress(progress, card_created_at=card.created_at, card_order_key=str(card.id))
-            self.assertIsInstance(mapped, MappedCardProgress)
-            subject = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id, live_note_id=str(note.id)).one_or_none()
-            subject = subject or StudyProgressSubject(
-                learner_user_id=self.user_id,
-                logical_note_key=str(note.id).encode("utf-8"),
-                live_note_id=str(note.id),
-                subject_generation=1,
-                mirror_revision=1,
-                status_code="MIRRORED_SINGLE",
-                contributor_count=1,
-                mapper_version=MAPPER_VERSION,
-                created_at=now,
-                updated_at=now,
-            )
-            should_include_token = bool(enroll if include_token is None else include_token)
-            expected_hash = mapped.semantic_state_hash.hex()
-            if not should_include_token:
-                db.session.commit()
-                return str(note.id), expected_hash
-            if should_include_token:
-                subject.algorithm_key = mapped.algorithm_key
-                subject.algorithm_version = mapped.algorithm_version
-                subject.state_schema_version = mapped.state_schema_version
-                subject.storage_codec = mapped.storage_codec
-                subject.state_payload = mapped.state.payload
-                subject.state_payload_size = mapped.state.size
-                subject.algorithm_state_hash = mapped.algorithm_state_hash
-                subject.semantic_state_hash = mapped.semantic_state_hash
-                subject.authority_revision = 0
-                subject.history_completeness_code = "HISTORY_NATIVE_COMPLETE"
-                subject.current_provenance_code = "UNKNOWN_LEGACY"
-                apply_note_availability(
-                    subject,
-                    project_subject_state(mapped.state.payload, burial=note_burial(subject)),
-                    now_utc=now,
-                )
-            db.session.add(subject)
+            query = Note.query.filter_by(user_id=self.user_id, deck_id=self.deck_id)
+            note = query.filter_by(id=note_id).one() if note_id else query.one()
+            subject = stage_note_state(db.session, user_id=self.user_id,
+                note_id=str(note.id), now=datetime(2026, 9, 21, 8), **(initial_progress or {}))
+            subject.mapper_version = MAPPER_VERSION
+            subject.mirror_revision = max(1, int(subject.mirror_revision or 0))
+            subject.history_completeness_code = "HISTORY_NATIVE_COMPLETE"
             if enroll:
-                enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
-                enrollment.mode_code = "NOTE"
-                enrollment.epoch = epoch
+                db.session.get(StudyAuthorityEnrollment, self.user_id).epoch = epoch
             db.session.commit()
-            return str(note.id), expected_hash
+            return str(note.id), subject.semantic_state_hash.hex()
+
 
     @staticmethod
     def _live_rows():
@@ -271,6 +186,20 @@ class StudySessionApiTests(unittest.TestCase):
             self.app.config["STUDY_WIRE_V4_ENABLED"] = previous_v4
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
+
+    @contextmanager
+    def _record_study_sql(self):
+        """Observe real queries after retirement, without patching canonical APIs."""
+        with self.app.app_context():
+            statements = []
+            def record(conn, cursor, statement, parameters, context, executemany):
+                statements.append(statement.lower())
+            sql_event.listen(db.engine, "before_cursor_execute", record)
+            try:
+                yield statements
+            finally:
+                sql_event.remove(db.engine, "before_cursor_execute", record)
+        self.assertFalse(any("card_progress" in statement for statement in statements), statements)
 
     def test_note_authority_deck_reset_reinitializes_state_and_invalidates_pin(self):
         self._enable_existing_state_note_authority(epoch=7)
@@ -543,7 +472,7 @@ class StudySessionApiTests(unittest.TestCase):
         )
         self.assertEqual(committed.status_code, 200, committed.get_json())
 
-    def test_note_authority_template_delete_detaches_sibling_and_fences_pin(self):
+    def test_template_attachment_retirement_preserves_state_and_old_lease(self):
         self._enable_existing_state_note_authority(epoch=13)
         created = self.client.post(
             f"/api/note-types/{self.note_type_id}/templates",
@@ -586,9 +515,11 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertTrue(deleted.get_json()["success"])
 
         with self.app.app_context():
-            self.assertIsNone(db.session.get(Template, template_id))
+            self.assertIsNotNone(db.session.get(Template, template_id))
+            retired = StudyApplication.query.filter_by(note_type_id=self.note_type_id, template_id=template_id).one()
+            self.assertEqual(retired.status_code, "RETIRED")
             self.assertIsNone(db.session.get(Card, removed_card_id))
-            self.assertEqual(Template.query.count(), 1)
+            self.assertEqual(Template.query.count(), 2)
             self.assertEqual(Card.query.count(), 1)
             assert_retired_progress_absent(self, db.session)
             subject = StudyProgressSubject.query.one()
@@ -600,9 +531,19 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(int(subject.authority_revision), 0)
             self.assertIsNotNone(subject.semantic_state_hash)
             self.assertEqual(StudyProgressLifecycleEvent.query.count(), 0)
-            self.assertEqual(old_session.status, "cancelled")
+            self.assertEqual(old_session.status, "open")
+            self.assertEqual(StudySessionCard.query.filter_by(session_id=snapshot["session_id"]).one().card_id, removed_card_id)
+            self.assertEqual(StudySessionAuthorityPin.query.filter_by(session_card_id=StudySessionCard.query.filter_by(session_id=snapshot["session_id"]).one().id).count(), 1)
             remaining_card_id = str(Card.query.one().id)
 
+        # The frozen lease still resolves its retired application explicitly.
+        commit = self.client.post(f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=self._commit_payload(snapshot))
+        self.assertEqual(commit.status_code, 200, commit.get_json())
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.one().card_id, removed_card_id)
+            self.assertIsNotNone(db.session.get(Template, template_id))
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, 1)
         reviewed = self.client.post(
             f"/api/study/{remaining_card_id}/answer",
             json={
@@ -613,7 +554,7 @@ class StudySessionApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(reviewed.status_code, 200, reviewed.get_json())
-        self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 1)
+        self.assertEqual(reviewed.get_json()["authority"]["authority_revision"], 2)
 
     def test_note_authority_new_template_expands_every_owned_note(self):
         self._enable_existing_state_note_authority(epoch=15, include_token=True)
@@ -777,9 +718,130 @@ class StudySessionApiTests(unittest.TestCase):
             "final_states": [],
         }
 
+    def test_retiring_last_application_keeps_hidden_state_auditable(self):
+        self._enable_existing_state_note_authority(initial_progress={"queue": "review",
+            "due_day": 739000, "interval_days": 5, "reps": 3})
+        with self.app.app_context():
+            application = StudyApplication.query.filter_by(note_type_id=self.note_type_id).one()
+            application.status_code = "RETIRED"
+            db.session.commit()
+            original = StudyProgressSubject.query.one().semantic_state_hash
+            self.assertEqual(Card.query.count(), 0)
+        runner = self.app.test_cli_runner()
+        audit = runner.invoke(args=["study-authority-read-audit", "--user-id", str(self.user_id)])
+        self.assertEqual(audit.exit_code, 0, audit.output)
+        result = json.loads(audit.output)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["card_count"], 0)
+        self.assertEqual(result["canonical"]["due"], 0)
+        with self.app.app_context():
+            self.assertEqual(StudyProgressSubject.query.one().semantic_state_hash, original)
+            StudyProgressSubject.query.one().normalized_queue = "new"
+            db.session.commit()
+        corrupt = runner.invoke(args=["study-authority-read-audit", "--user-id", str(self.user_id)])
+        self.assertNotEqual(corrupt.exit_code, 0)
+        self.assertIn("AUTHORITY_READ_PARITY_DIVERGED", corrupt.output)
+        with self.app.app_context():
+            subject = StudyProgressSubject.query.one()
+            subject.normalized_queue = "review"
+            # Actual current payload must be audited even if a stale status
+            # label no longer says MIRRORED after presentation retirement.
+            subject.status_code = "NO_CURRENT_PROGRESS"
+            subject.state_payload = {**subject.state_payload, "reps": "99"}
+            db.session.commit()
+        corrupt_hash = runner.invoke(args=["study-authority-read-audit", "--user-id", str(self.user_id)])
+        self.assertNotEqual(corrupt_hash.exit_code, 0)
+        self.assertIn("STATE_HASH_MISMATCH", corrupt_hash.output)
+
+    def test_old_uuid_session_snapshot_pin_commit_and_replay_keep_exact_wire_id(self):
+        old_uuid = str(uuid4())
+        with self.app.app_context():
+            card = Card.query.one()
+            canonical_id = str(card.id)
+            archive_wire_alias(db.session, card, old_uuid)
+            db.session.commit()
+        from app.services.study_composition_service import apply_composition_selection_to_query
+
+        class HistoricalDiscovery:
+            """Emulate the IDs issued pre-P11 while using the real issuer and query."""
+            def __init__(self, query):
+                self.query = query
+            def options(self, *values):
+                self.query = self.query.options(*values)
+                return self
+            def order_by(self, *values):
+                self.query = self.query.order_by(*values)
+                return self
+            def limit(self, value):
+                self.query = self.query.limit(value)
+                return self
+            def all(self):
+                return [CardWireIdentity(card, old_uuid) if str(card.id) == canonical_id else card
+                    for card in self.query.all()]
+
+        def historical_discovery(*args, **kwargs):
+            return HistoricalDiscovery(apply_composition_selection_to_query(*args, **kwargs))
+
+        with patch("app.services.study_session_service.apply_composition_selection_to_query",
+                   side_effect=historical_discovery):
+            snapshot = self._open_session()
+        self.assertEqual(snapshot["cards"][0]["card_id"], old_uuid)
+        url = f"/api/study/sessions/{snapshot['session_id']}"
+        with self.app.app_context():
+            session = db.session.get(StudySession, snapshot["session_id"])
+            membership = StudySessionCard.query.one()
+            pin = StudySessionAuthorityPin.query.one()
+            self.assertEqual(membership.card_id, old_uuid)
+            before = (session.snapshot_hash, session.config_snapshot_json, membership.initial_state_json,
+                tuple(getattr(pin, column.name) for column in pin.__table__.columns))
+        status = self.client.get(url)
+        self.assertEqual(status.status_code, 200, status.get_json())
+        self.assertFalse(status.get_json()["stale"])
+        payload = self._commit_payload(snapshot)
+        changed = json.loads(json.dumps(payload))
+        changed["events"][0]["card_id"] = canonical_id
+        refused = self.client.post(url + "/commit", json=changed)
+        self.assertEqual(refused.status_code, 422, refused.get_json())
+        self.assertEqual(refused.get_json()["error"], "CARD_OUTSIDE_SESSION")
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, 0)
+        committed = self.client.post(url + "/commit", json=payload)
+        self.assertEqual(committed.status_code, 200, committed.get_json())
+        receipt = committed.get_json()
+        with self.app.app_context():
+            event = ReviewEvent.query.one()
+            authority_receipt = StudyAuthorityCommandReceipt.query.one()
+            self.assertEqual(event.card_id, old_uuid)
+            event_before = (event.payload_json, bytes(authority_receipt.request_fingerprint),
+                authority_receipt.response_payload)
+        with patch("app.services.study_session_service.study_service.execute_native_review_transition",
+                   side_effect=AssertionError("old UUID session replay executed twice")):
+            replay = self.client.post(url + "/commit", json=payload)
+        self.assertEqual(replay.status_code, 200, replay.get_json())
+        self.assertEqual(replay.get_json(), receipt)
+        changed_retry = self.client.post(url + "/commit", json=changed)
+        self.assertEqual(changed_retry.status_code, 409, changed_retry.get_json())
+        self.assertEqual(changed_retry.get_json()["details"], receipt)
+        with self.app.app_context():
+            session = db.session.get(StudySession, snapshot["session_id"])
+            membership = StudySessionCard.query.one()
+            pin = StudySessionAuthorityPin.query.one()
+            self.assertEqual(membership.card_id, old_uuid)
+            self.assertEqual((session.snapshot_hash, session.config_snapshot_json, membership.initial_state_json,
+                tuple(getattr(pin, column.name) for column in pin.__table__.columns)), before)
+            self.assertEqual(ReviewEvent.query.count(), 1)
+            self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 1)
+            event = ReviewEvent.query.one()
+            authority_receipt = StudyAuthorityCommandReceipt.query.one()
+            self.assertEqual(event.card_id, old_uuid)
+            self.assertEqual((event.payload_json, bytes(authority_receipt.request_fingerprint),
+                authority_receipt.response_payload), event_before)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, 1)
+
     def test_open_returns_self_contained_snapshot(self):
         snapshot = self._open_session()
-        self.assertEqual(snapshot["schema_version"], "study-session.v2")
+        self.assertEqual(snapshot["schema_version"], "study-session.v4")
         self.assertTrue(snapshot["server_now_utc"].endswith(".000Z"))
         self.assertEqual(snapshot["scope"]["id"], str(self.deck_id))
         self.assertEqual(len(snapshot["cards"]), 1)
@@ -848,61 +910,41 @@ class StudySessionApiTests(unittest.TestCase):
         with self.assertRaises(StudySessionConfigError):
             decode_study_session_config(json.dumps(wrapped))
 
-    def test_wire_v3_is_capability_negotiated_and_flag_gated(self):
-        previous = self.app.config["STUDY_WIRE_V3_ENABLED"]
-        self.app.config["STUDY_WIRE_V3_ENABLED"] = True
+    def test_note_session_requires_v4_capability_and_enabled_flag(self):
+        for versions in ([], ["study-session.v2"], ["study-session.v3", "study-session.v2"]):
+            with self.subTest(versions=versions):
+                response = self.client.post("/api/study/sessions", json={"scope": "deck",
+                    "scope_id": self.deck_id, "accepted_session_schema_versions": versions})
+                expected_status, expected_code = (422, "UNSUPPORTED_SESSION_SCHEMA") if not versions else (409, "WIRE_CONTRACT_MISMATCH")
+                self.assertEqual(response.status_code, expected_status, response.get_json())
+                self.assertEqual(response.get_json()["error"], expected_code)
+        previous = self.app.config["STUDY_WIRE_V4_ENABLED"]
+        self.app.config["STUDY_WIRE_V4_ENABLED"] = False
         try:
-            old_client = self._open_session()
+            response = self.client.post("/api/study/sessions", json={"scope": "deck",
+                "scope_id": self.deck_id, "accepted_session_schema_versions": ["study-session.v4"]})
         finally:
-            self.app.config["STUDY_WIRE_V3_ENABLED"] = previous
-        self.assertEqual(old_client["schema_version"], "study-session.v2")
-
-        flag_off = self.client.post(
-            "/api/study/sessions",
-            json={
-                "scope": "deck",
-                "scope_id": self.deck_id,
-                "accepted_session_schema_versions": [
-                    "study-session.v3",
-                    "study-session.v2",
-                ],
-            },
-        )
-        self.assertEqual(flag_off.status_code, 201, flag_off.get_json())
-        self.assertEqual(flag_off.get_json()["schema_version"], "study-session.v2")
-
-        v3 = self._open_session_v3()
-        self.assertEqual(v3["schema_version"], "study-session.v3")
+            self.app.config["STUDY_WIRE_V4_ENABLED"] = previous
+        self.assertEqual(response.status_code, 422, response.get_json())
+        self.assertEqual(response.get_json()["error"], "UNSUPPORTED_SESSION_SCHEMA")
         with self.app.app_context():
-            row = db.session.get(StudySession, v3["session_id"])
-            self.assertEqual(row.wire_schema_version, "study-session.v3")
+            self.assertEqual(StudySession.query.count(), 0)
+        self.assertEqual(self._open_session()["schema_version"], "study-session.v4")
 
-    def test_wire_v4_flag_keeps_legacy_enrollment_on_v3(self):
-        previous_v3 = self.app.config["STUDY_WIRE_V3_ENABLED"]
-        previous_v4 = self.app.config["STUDY_WIRE_V4_ENABLED"]
-        self.app.config["STUDY_WIRE_V3_ENABLED"] = True
-        self.app.config["STUDY_WIRE_V4_ENABLED"] = True
-        try:
-            response = self.client.post(
-                "/api/study/sessions",
-                json={
-                    "scope": "deck",
-                    "scope_id": self.deck_id,
-                    "accepted_session_schema_versions": [
-                        "study-session.v4",
-                        "study-session.v3",
-                        "study-session.v2",
-                    ],
-                },
-            )
-        finally:
-            self.app.config["STUDY_WIRE_V3_ENABLED"] = previous_v3
-            self.app.config["STUDY_WIRE_V4_ENABLED"] = previous_v4
-        self.assertEqual(response.status_code, 201, response.get_json())
-        self.assertEqual(response.get_json()["schema_version"], "study-session.v3")
+
+    def test_legacy_enrollment_cannot_issue_any_new_session(self):
         with self.app.app_context():
-            self.assertEqual(StudySession.query.count(), 1)
+            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
+            enrollment.mode_code = "LEGACY"
+            db.session.commit()
+        response = self.client.post("/api/study/sessions", json={"scope": "deck",
+            "scope_id": self.deck_id, "accepted_session_schema_versions": ["study-session.v4", "study-session.v3"]})
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "STUDY_AUTHORITY_MIGRATION_REQUIRED")
+        with self.app.app_context():
+            self.assertEqual(StudySession.query.count(), 0)
             self.assertEqual(StudySessionAuthorityPin.query.count(), 0)
+
 
     def test_wire_v4_note_enrollment_issues_frozen_authority_pin(self):
         note_id, expected_hash = self._enable_existing_state_note_authority(epoch=3)
@@ -921,343 +963,128 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(persisted.session_card.session_id, snapshot["session_id"])
             self.assertEqual(bytes(persisted.logical_note_key).decode(), note_id)
 
-    def test_note_enrollment_switch_fences_and_cancels_legacy_lease(self):
-        self._enable_existing_state_note_authority(enroll=False)
-        legacy = self._open_session()
+    def test_note_enrollment_retry_preserves_existing_note_lease(self):
+        self._enable_existing_state_note_authority(epoch=5)
+        snapshot = self._open_session()
         with self.app.app_context():
-            result = stage_note_authority_enrollment(
-                db.session,
-                learner_user_id=self.user_id,
-                now_utc=datetime(2026, 9, 21, 9, 0, 0),
-            )
-            self.assertEqual(result.mode_code, "NOTE")
-            self.assertEqual(result.epoch, 1)
-            self.assertEqual(result.subject_count, 1)
-            self.assertEqual(result.card_count, 1)
-            self.assertEqual(result.cancelled_session_count, 1)
+            before = StudyProgressSubject.query.one().semantic_state_hash
+            result = stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 21, 9))
             db.session.commit()
-            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
-            self.assertEqual(enrollment.mode_code, "NOTE")
-            self.assertEqual(enrollment.epoch, 1)
-            self.assertEqual(
-                db.session.get(StudySession, legacy["session_id"]).status,
-                "cancelled",
-            )
-            self.assertEqual(self._live_rows().count(), 1)
+            self.assertEqual(result.mode_code, "NOTE")
+            self.assertEqual(result.epoch, 5)
+            self.assertEqual(result.cancelled_session_count, 0)
+            self.assertEqual(StudyProgressSubject.query.one().semantic_state_hash, before)
+            self.assertEqual(db.session.get(StudySession, snapshot["session_id"]).status, "open")
 
-    def test_note_enrollment_switch_materializes_pristine_owned_note(self):
+
+    def test_new_note_is_materialized_by_explicit_note_writer(self):
         with self.app.app_context():
-            result = stage_note_authority_enrollment(
-                db.session,
-                learner_user_id=self.user_id,
-                now_utc=datetime(2026, 9, 21, 9, 0, 0),
-            )
-            self.assertEqual(result.mode_code, "NOTE")
-            self.assertEqual(result.epoch, 1)
-            self.assertEqual(result.subject_count, 1)
-            self.assertEqual(result.card_count, 1)
-            db.session.commit()
-
-            enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
             subject = StudyProgressSubject.query.one()
-            self.assertEqual(enrollment.mode_code, "NOTE")
             self.assertEqual(subject.status_code, "MIRRORED_SINGLE")
             self.assertEqual(int(subject.subject_generation), 1)
             self.assertEqual(int(subject.mirror_revision), 1)
             self.assertEqual(int(subject.authority_revision), 0)
             self.assertIsNotNone(subject.semantic_state_hash)
-            self.assertEqual(subject.current_provenance_code, "UNKNOWN_LEGACY")
-            self.assertEqual(
-                subject.history_completeness_code,
-                "HISTORY_NATIVE_COMPLETE",
-            )
+            self.assertEqual(subject.history_completeness_code, "HISTORY_NATIVE_COMPLETE")
             assert_retired_progress_absent(self, db.session)
-
-        snapshot = self._open_session_v4()
-        self.assertEqual(snapshot["authority_mode"], "NOTE")
+        snapshot = self._open_session()
         self.assertEqual(snapshot["cards"][0]["state"]["type"], "new")
-        self.assertEqual(
-            snapshot["cards"][0]["authority_pin"]["base_authority_revision"],
-            "0",
-        )
+        self.assertEqual(snapshot["cards"][0]["authority_pin"]["base_authority_revision"], "0")
 
-    def test_note_enrollment_switch_reuses_pristine_empty_subject(self):
+
+    def test_enrollment_retry_does_not_rematerialize_existing_subject(self):
         with self.app.app_context():
-            note = Note.query.filter_by(user_id=self.user_id).one()
-            now = datetime(2026, 9, 21, 8, 0, 0)
-            subject = StudyProgressSubject(
-                learner_user_id=self.user_id,
-                logical_note_key=str(note.id).encode("utf-8"),
-                live_note_id=str(note.id),
-                subject_generation=1,
-                mirror_revision=0,
-                status_code="NO_CURRENT_PROGRESS",
-                contributor_count=0,
-                mapper_version=MAPPER_VERSION,
-                created_at=now,
-                updated_at=now,
-            )
-            db.session.add(subject)
+            subject = StudyProgressSubject.query.one()
+            subject_id, state_hash = subject.id, subject.semantic_state_hash
+            revision = int(subject.mirror_revision)
+            result = stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 21, 9))
             db.session.commit()
-            subject_id = int(subject.id)
-
-            result = stage_note_authority_enrollment(
-                db.session,
-                learner_user_id=self.user_id,
-                now_utc=datetime(2026, 9, 21, 9, 0, 0),
-            )
-            db.session.commit()
-
-            self.assertEqual(result.subject_count, 1)
+            self.assertEqual(result.subject_count, 0)
             self.assertEqual(StudyProgressSubject.query.count(), 1)
-            materialized = StudyProgressSubject.query.one()
-            self.assertEqual(int(materialized.id), subject_id)
-            self.assertEqual(materialized.status_code, "MIRRORED_SINGLE")
-            assert_retired_progress_absent(self, db.session)
-            self.assertEqual(self._live_rows().count(), 1)
+            current = StudyProgressSubject.query.one()
+            self.assertEqual(current.id, subject_id)
+            self.assertEqual(current.semantic_state_hash, state_hash)
+            self.assertEqual(int(current.mirror_revision), revision)
 
-    def test_note_enrollment_refuses_legacy_progress_it_cannot_migrate(self):
-        with self.app.app_context():
-            card = Card.query.one()
-            db.session.add(CardProgress(user_id=self.user_id, card_id=str(card.id)))
-            db.session.commit()
 
-            with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
-                stage_note_authority_enrollment(
-                    db.session,
-                    learner_user_id=self.user_id,
-                    now_utc=datetime(2026, 9, 21, 9, 0, 0),
-                )
-            self.assertEqual(failure.exception.code, "LEGACY_PROGRESS_NOT_MIGRATABLE")
-            db.session.rollback()
-            self.assertIsNone(
-                db.session.get(StudyAuthorityEnrollment, self.user_id)
-            )
-            self.assertEqual(CardProgress.query.count(), 1)
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-
-    def test_note_enrollment_pristine_materialization_rolls_back_atomically(self):
-        created = self.client.post(
-            "/api/notes",
-            json={
-                "note_type_id": self.note_type_id,
-                "deck_id": self.deck_id,
-                "field_values": {"Word": "çŠ¬"},
-            },
-        )
-        self.assertEqual(created.status_code, 201, created.get_json())
-
-        with self.app.app_context():
-            from app.services import study_progress_lifecycle_mirror_service
-
-            original = (
-                study_progress_lifecycle_mirror_service.materialize_new_note_authority
-            )
-            call_count = 0
-
-            def fail_second_materialization(*args, **kwargs):
-                nonlocal call_count
-                call_count += 1
-                if call_count == 2:
-                    raise StudyAuthorityFenceError(
-                        "INJECTED_ENROLLMENT_FAILURE",
-                        "Injected second pristine Note failure.",
-                    )
-                return original(*args, **kwargs)
-
-            with patch(
-                "app.services.study_authority_enrollment_service."
-                "study_progress_lifecycle_mirror_service."
-                "materialize_new_note_authority",
-                side_effect=fail_second_materialization,
-            ):
-                with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
-                    stage_note_authority_enrollment(
-                        db.session,
-                        learner_user_id=self.user_id,
-                        now_utc=datetime(2026, 9, 21, 9, 0, 0),
-                    )
-            self.assertEqual(
-                failure.exception.code,
-                "INJECTED_ENROLLMENT_FAILURE",
-            )
-            db.session.rollback()
-            self.assertIsNone(
-                db.session.get(StudyAuthorityEnrollment, self.user_id)
-            )
-            self.assertEqual(Note.query.count(), 2)
-            self.assertEqual(Card.query.count(), 2)
-            assert_retired_progress_absent(self, db.session)
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-
-    def test_note_enrollment_switch_rejects_in_flight_async_batch(self):
-        self._enable_existing_state_note_authority(enroll=False)
-        legacy = self._open_session()
-        with self.app.app_context():
-            db.session.add(
-                StudySessionBatch(
-                    session_id=legacy["session_id"],
-                    user_id=self.user_id,
-                    batch_id=str(uuid4()),
-                    batch_sequence=1,
-                    event_count=1,
-                    status="processing",
-                    commit_reason="manual_exit",
-                    is_final=True,
-                    request_hash="sha256-" + "1" * 64,
-                    payload_json="{}",
-                    enqueued_at=datetime(2026, 9, 21, 9, 0, 0),
-                )
-            )
-            db.session.commit()
-
-            with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
-                stage_note_authority_enrollment(
-                    db.session,
-                    learner_user_id=self.user_id,
-                    now_utc=datetime(2026, 9, 21, 9, 30, 0),
-                )
-            self.assertEqual(failure.exception.code, "AUTHORITY_BATCH_IN_FLIGHT")
-            db.session.rollback()
-            self.assertIsNone(
-                db.session.get(StudyAuthorityEnrollment, self.user_id)
-            )
-            self.assertEqual(
-                db.session.get(StudySession, legacy["session_id"]).status,
-                "open",
-            )
-
-    def test_authority_enrollment_cli_is_dry_run_by_default(self):
-        self._enable_existing_state_note_authority(enroll=False)
-        runner = self.app.test_cli_runner()
-
-        dry_run = runner.invoke(
-            args=[
-                "study-authority-enrollment",
-                "--user-id",
-                str(self.user_id),
-                "--mode",
-                "NOTE",
-            ]
-        )
-        self.assertEqual(dry_run.exit_code, 0, dry_run.output)
-        dry_payload = json.loads(
-            next(line for line in dry_run.output.splitlines() if line.startswith("{"))
-        )
-        self.assertFalse(dry_payload["applied"])
-        with self.app.app_context():
-            self.assertIsNone(
-                db.session.get(StudyAuthorityEnrollment, self.user_id)
-            )
-            self.assertEqual(StudyProgressSubject.query.count(), 0)
-
-        skipped_audit = runner.invoke(
-            args=[
-                "study-authority-read-audit",
-                "--user-id", str(self.user_id),
-                "--observed-at-utc", "2026-09-21T18:30:00+09:00",
-                "--timezone-name", "UTC+09:00",
-            ]
-        )
-        self.assertEqual(skipped_audit.exit_code, 0, skipped_audit.output)
-        skipped_payload = json.loads(skipped_audit.output)
-        self.assertEqual(skipped_payload["status"], "SKIP")
-        self.assertEqual(skipped_payload["timezone"], "UTC+09:00")
-        self.assertEqual(skipped_payload["observed_at_utc"], "2026-09-21T09:30:00.000000Z")
-
-        previous_v4 = self.app.config.get("STUDY_WIRE_V4_ENABLED", False)
-        self.app.config["STUDY_WIRE_V4_ENABLED"] = False
-        blocked = runner.invoke(
-            args=[
-                "study-authority-enrollment",
-                "--user-id",
-                str(self.user_id),
-                "--mode",
-                "NOTE",
-                "--apply",
-            ]
-        )
-        self.assertNotEqual(blocked.exit_code, 0, blocked.output)
-        self.assertIn("NOTE_ENROLLMENT_DISABLED", blocked.output)
-
-        self.app.config["STUDY_WIRE_V4_ENABLED"] = True
-        try:
-            applied = runner.invoke(
-                args=[
-                    "study-authority-enrollment",
-                    "--user-id",
-                    str(self.user_id),
-                    "--mode",
-                    "NOTE",
-                    "--apply",
-                ]
-            )
-        finally:
-            self.app.config["STUDY_WIRE_V4_ENABLED"] = previous_v4
-        self.assertEqual(applied.exit_code, 0, applied.output)
-        payload = json.loads(
-            next(line for line in applied.output.splitlines() if line.startswith("{"))
-        )
-        self.assertTrue(payload["applied"])
-        self.assertEqual(payload["mode_code"], "NOTE")
-        self.assertEqual(payload["epoch"], 1)
+    def test_existing_legacy_account_requires_offline_migration_without_state_writes(self):
         with self.app.app_context():
             enrollment = db.session.get(StudyAuthorityEnrollment, self.user_id)
-            self.assertEqual(enrollment.mode_code, "NOTE")
-            self.assertEqual(enrollment.epoch, 1)
+            enrollment.mode_code = "LEGACY"
+            original = StudyProgressSubject.query.one().semantic_state_hash
+            db.session.commit()
+            with self.assertRaises(StudyAuthorityEnrollmentError) as failure:
+                stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
+                    now_utc=datetime(2026, 9, 21, 9))
+            self.assertEqual(failure.exception.code, "STUDY_AUTHORITY_MIGRATION_REQUIRED")
+            db.session.rollback()
+            self.assertEqual(db.session.get(StudyAuthorityEnrollment, self.user_id).mode_code, "LEGACY")
+            self.assertEqual(StudyProgressSubject.query.one().semantic_state_hash, original)
+            assert_retired_progress_absent(self, db.session)
 
-        audit = runner.invoke(
-            args=[
-                "study-authority-read-audit",
-                "--user-id",
-                str(self.user_id),
-            ]
-        )
-        self.assertEqual(audit.exit_code, 0, audit.output)
-        audit_payload = json.loads(
-            next(line for line in audit.output.splitlines() if line.startswith("{"))
-        )
-        self.assertEqual(audit_payload["status"], "PASS")
-        self.assertEqual(audit_payload["authority_mode"], "NOTE")
-        self.assertEqual(audit_payload["mismatches"], [])
 
+    def test_new_note_materialization_failure_rolls_back_note_and_subject(self):
+        with self.app.app_context():
+            before = (Note.query.count(), Card.query.count(), StudyProgressSubject.query.count())
+            state_hash = StudyProgressSubject.query.one().semantic_state_hash
+        with patch("app.services.flashcard_content_service.study_progress_lifecycle_mirror_service.materialize_new_note_authority",
+                   side_effect=StudyAuthorityFenceError("INJECTED_NOTE_FAILURE", "Injected failure.")):
+            created = self.client.post("/api/notes", json={"note_type_id": self.note_type_id,
+                "deck_id": self.deck_id, "field_values": {"Word": "rollback"}})
+        self.assertEqual(created.status_code, 409, created.get_json())
+        self.assertEqual(created.get_json()["error"], "INJECTED_NOTE_FAILURE")
+        with self.app.app_context():
+            self.assertEqual((Note.query.count(), Card.query.count(), StudyProgressSubject.query.count()), before)
+            self.assertEqual(StudyProgressSubject.query.one().semantic_state_hash, state_hash)
+            self.assertEqual(db.session.get(StudyAuthorityEnrollment, self.user_id).mode_code, "NOTE")
+
+
+    def test_enrollment_retry_keeps_an_admitted_note_batch_untouched(self):
+        snapshot = self._open_session()
+        batch_id = str(uuid4())
+        with self.app.app_context():
+            db.session.add(StudySessionBatch(session_id=snapshot["session_id"], user_id=self.user_id,
+                batch_id=batch_id, batch_sequence=1, event_count=1, status="processing",
+                commit_reason="manual_exit", is_final=True, request_hash="sha256-" + "1" * 64,
+                payload_json="{}", enqueued_at=datetime(2026, 9, 21, 9)))
+            db.session.commit()
+            result = stage_note_authority_enrollment(db.session, learner_user_id=self.user_id,
+                now_utc=datetime(2026, 9, 21, 9, 30))
+            db.session.commit()
+            self.assertEqual(result.cancelled_session_count, 0)
+            self.assertEqual(StudySessionBatch.query.one().status, "processing")
+            self.assertEqual(db.session.get(StudySession, snapshot["session_id"]).status, "open")
+
+
+    def test_authority_enrollment_cli_is_dry_run_by_default(self):
+        self._enable_existing_state_note_authority(epoch=4)
+        runner = self.app.test_cli_runner()
+        with self.app.app_context():
+            before = StudyProgressSubject.query.one().semantic_state_hash
+        dry_run = runner.invoke(args=["study-authority-enrollment", "--user-id", str(self.user_id), "--mode", "NOTE"])
+        self.assertEqual(dry_run.exit_code, 0, dry_run.output)
+        payload = json.loads(next(line for line in dry_run.output.splitlines() if line.startswith("{")))
+        self.assertFalse(payload["applied"])
+        self.assertEqual(payload["epoch"], 4)
+        applied = runner.invoke(args=["study-authority-enrollment", "--user-id", str(self.user_id), "--mode", "NOTE", "--apply"])
+        self.assertEqual(applied.exit_code, 0, applied.output)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(StudyAuthorityEnrollment, self.user_id).epoch, 4)
+            self.assertEqual(StudyProgressSubject.query.one().semantic_state_hash, before)
         for timezone_name in ("UTC", "Asia/Tokyo", "UTC+09:00"):
-            fixed_audit = runner.invoke(
-                args=[
-                    "study-authority-read-audit",
-                    "--user-id",
-                    str(self.user_id),
-                    "--observed-at-utc",
-                    "2026-09-21T18:30:00+09:00",
-                    "--timezone-name",
-                    timezone_name,
-                ]
-            )
-            self.assertEqual(fixed_audit.exit_code, 0, fixed_audit.output)
-            fixed_payload = json.loads(
-                next(
-                    line for line in fixed_audit.output.splitlines()
-                    if line.startswith("{")
-                )
-            )
-            self.assertEqual(fixed_payload["status"], "PASS")
-            self.assertEqual(fixed_payload["observed_at_utc"], "2026-09-21T09:30:00.000000Z")
-            self.assertEqual(fixed_payload["timezone"], timezone_name)
-
-        for option, value, error_code in (
-            ("--observed-at-utc", "2026-09-21T09:30:00", "INVALID_AUDIT_TIME"),
+            audit = runner.invoke(args=["study-authority-read-audit", "--user-id", str(self.user_id),
+                "--observed-at-utc", "2026-09-21T18:30:00+09:00", "--timezone-name", timezone_name])
+            self.assertEqual(audit.exit_code, 0, audit.output)
+            result = json.loads(audit.output)
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["observed_at_utc"], "2026-09-21T09:30:00.000000Z")
+            self.assertEqual(result["timezone"], timezone_name)
+        for option, value, error_code in (("--observed-at-utc", "2026-09-21T09:30:00", "INVALID_AUDIT_TIME"),
             ("--observed-at-utc", "not-a-time", "INVALID_AUDIT_TIME"),
-            ("--timezone-name", "Not/A_Timezone", "INVALID_AUDIT_TIMEZONE"),
-        ):
-            invalid = runner.invoke(
-                args=[
-                    "study-authority-read-audit",
-                    "--user-id",
-                    str(self.user_id),
-                    option,
-                    value,
-                ]
-            )
+            ("--timezone-name", "Not/A_Timezone", "INVALID_AUDIT_TIMEZONE")):
+            invalid = runner.invoke(args=["study-authority-read-audit", "--user-id", str(self.user_id), option, value])
             self.assertNotEqual(invalid.exit_code, 0)
             self.assertIn(error_code, invalid.output)
 
@@ -1297,25 +1124,21 @@ class StudySessionApiTests(unittest.TestCase):
                 bool(expected_due),
             )
 
-    def test_note_read_audit_rejects_uncovered_cardless_note(self):
+    def test_note_read_audit_excludes_notes_without_active_presentations(self):
         self._enable_existing_state_note_authority()
         with self.app.app_context():
-            db.session.add(
-                Note(
-                    note_type_id=self.note_type_id,
-                    user_id=self.user_id,
-                    deck_id=self.deck_id,
-                    field_values={"Word": "uncovered"},
-                    tags=[],
-                )
-            )
+            empty_type = NoteType(user_id=self.user_id, name="No active applications")
+            db.session.add(empty_type)
+            db.session.flush()
+            db.session.add(Note(note_type_id=empty_type.id, user_id=self.user_id,
+                deck_id=self.deck_id, field_values={}, tags=[]))
             db.session.commit()
+        audit = self.app.test_cli_runner().invoke(args=["study-authority-read-audit", "--user-id", str(self.user_id)])
+        self.assertEqual(audit.exit_code, 0, audit.output)
+        payload = json.loads(audit.output)
+        self.assertEqual(payload["status"], "PASS")
+        self.assertEqual(payload["canonical"]["new"], 1)
 
-        audit = self.app.test_cli_runner().invoke(
-            args=["study-authority-read-audit", "--user-id", str(self.user_id)]
-        )
-        self.assertNotEqual(audit.exit_code, 0)
-        self.assertIn("INCOMPLETE_AUTHORITY_COVERAGE", audit.output)
 
     def test_note_read_audit_compares_learn_ahead_order(self):
         self._enable_existing_state_note_authority(
@@ -1639,16 +1462,7 @@ class StudySessionApiTests(unittest.TestCase):
 
     def test_direct_note_queue_bypasses_legacy_sql_selection(self):
         self._enable_existing_state_note_authority(epoch=12)
-        with (
-            patch(
-                "app.routes.flashcards.study._query_study_queue_counts",
-                side_effect=AssertionError("legacy counts must not serve NOTE"),
-            ),
-            patch(
-                "app.routes.flashcards.study._query_next_due_card_id",
-                side_effect=AssertionError("legacy order must not serve NOTE"),
-            ),
-        ):
+        with self._record_study_sql():
             response = self.client.get(
                 "/api/study/session/next",
                 query_string={"scope": "deck", "scope_id": self.deck_id},
@@ -1663,11 +1477,7 @@ class StudySessionApiTests(unittest.TestCase):
     def test_dashboard_note_counts_are_rebuilt_from_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=14)
         with self.app.app_context():
-            # A frozen card_progress row (kept from before NOTE) never serves NOTE counts.
-            card = Card.query.one()
-            db.session.add(CardProgress(
-                user_id=self.user_id, card_id=str(card.id), queue="review", due_day=0, revision=3))
-            db.session.commit()
+            assert_retired_progress_absent(self, db.session)
         response = self.client.get("/api/dashboard")
         self.assertEqual(response.status_code, 200, response.get_json())
         payload = response.get_json()
@@ -1678,10 +1488,7 @@ class StudySessionApiTests(unittest.TestCase):
 
     def test_statistics_note_future_due_bypasses_legacy_progress_query(self):
         self._enable_existing_state_note_authority(epoch=15)
-        with patch(
-            "app.services.stats_overview.query_future_due_day_counts",
-            side_effect=AssertionError("legacy future due must not serve NOTE"),
-        ):
+        with self._record_study_sql():
             response = self.client.get(
                 "/api/statistics/overview",
                 query_string={"year": 2026, "timezone": "Asia/Tokyo"},
@@ -1694,16 +1501,7 @@ class StudySessionApiTests(unittest.TestCase):
 
     def test_today_future_note_analytics_bypass_legacy_progress_queries(self):
         self._enable_existing_state_note_authority(epoch=16)
-        with (
-            patch(
-                "app.services.stats_today_future.query_due_progress_rows",
-                side_effect=AssertionError("legacy due rows must not serve NOTE"),
-            ),
-            patch(
-                "app.services.stats_today_future.query_interval_days_rows",
-                side_effect=AssertionError("legacy daily load must not serve NOTE"),
-            ),
-        ):
+        with self._record_study_sql():
             response = self.client.get(
                 "/api/statistics/today-future",
                 query_string={
@@ -1720,18 +1518,9 @@ class StudySessionApiTests(unittest.TestCase):
 
     def test_browse_note_rows_and_detail_bypass_legacy_progress_reads(self):
         self._enable_existing_state_note_authority(epoch=17)
-        with self.app.app_context():
+        with self._record_study_sql():
             card_id = str(Card.query.join(Note, Card.note_id == Note.id).one().id)
-        with (
-            patch(
-                "app.services.browse_card_service.load_card_progress_map",
-                side_effect=AssertionError("legacy Browse rows must not serve NOTE"),
-            ),
-            patch(
-                "app.repositories.browse_card_repository.load_browse_progress",
-                side_effect=AssertionError("legacy Browse detail must not serve NOTE"),
-            ),
-        ):
+        with self._record_study_sql():
             rows_response = self.client.get(
                 "/api/browse/cards",
                 query_string={"deck_id": self.deck_id, "sort_by": "due"},
@@ -1777,8 +1566,7 @@ class StudySessionApiTests(unittest.TestCase):
     def test_study_deck_page_serves_the_spa_without_reading_progress(self):
         self._enable_existing_state_note_authority(epoch=19)
         refuse = AssertionError("the Study page shell must not read progress")
-        with patch("app.services.study_authority_read_service.load_study_authority_card_reads",
-                   side_effect=refuse),                 patch("app.repositories.study_repository.load_card_progress_map", side_effect=refuse):
+        with self._record_study_sql():
             response = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(response.status_code, 200)
         self.assertIn('<div id="root"></div>', response.get_data(as_text=True))
@@ -1788,7 +1576,7 @@ class StudySessionApiTests(unittest.TestCase):
         # resent the same commit id with another reason (auto_finish, then
         # manual_exit). It must get the stored receipt to settle, and nothing
         # may be applied twice.
-        snapshot = self._open_session_v3()
+        snapshot = self._open_session_v4()
         payload = {**self._commit_payload(snapshot), "commit_reason": "page_exit"}
         url = f"/api/study/sessions/{snapshot['session_id']}/commit"
         first = self.client.post(url, json=payload)
@@ -1805,46 +1593,69 @@ class StudySessionApiTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(ReviewEvent.query.count(), events_before)
 
-    def test_pre_cutover_legacy_commit_replays_after_note_enrollment(self):
-        # A browser lost the acknowledgement of a legacy commit, then the
-        # learner moved to NOTE: the retry must get its receipt, not a refusal.
-        # The commit path reads only the learner's route, so the NOTE fence
-        # row is enough here (full enrollment is covered elsewhere).
-        committed = self._open_session_v3()
-        payload = self._commit_payload(committed)
-        first = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=payload)
-        self.assertEqual(first.status_code, 200, first.get_json())
-        receipt = first.get_json()
-        open_lease = self._open_session_v3()
+    def test_historical_legacy_commit_receipt_replays_without_legacy_execution(self):
+        # Seed a pre-cutover artifact directly, including its exact request hash.
+        # Retirement must read this receipt without converting its old wire IDs.
+        now = datetime.utcnow().replace(microsecond=0)
+        raw_card_id, token = str(uuid4()), "historical-session-token"
+        payload = {"schema_version": "study-commit.v2", "commit_id": str(uuid4()),
+            "session_token": token, "snapshot_hash": "sha256-" + "7" * 64,
+            "events": [{"card_id": raw_card_id, "event_id": str(uuid4()), "rating": "good", "sequence": 1}],
+            "final_states": []}
+        receipt = {"schema_version": "study-commit-receipt.v1", "applied_event_count": 1,
+            "historical_card_id": raw_card_id}
+        from app.services.study_session_service import _request_hash
         with self.app.app_context():
-            now = datetime.utcnow()
-            db.session.add(StudyAuthorityEnrollment(
-                learner_user_id=self.user_id, mode_code="NOTE", epoch=1, created_at=now, updated_at=now,
-            ))
+            row = StudySession(user_id=self.user_id, scope_id=str(self.deck_id), local_deck_id=self.deck_id,
+                wire_schema_version="study-session.v3", status="committed", snapshot_hash=payload["snapshot_hash"],
+                token_hash=sha256(token.encode()).hexdigest(), opened_at=now, expires_at=now + timedelta(hours=1),
+                committed_at=now, config_snapshot_json="{}")
+            db.session.add(row)
+            db.session.flush()
+            session_id = row.id
+            card = Card.query.one()
+            archive_wire_alias(db.session, card, raw_card_id)
+            db.session.add(StudySessionCard(session_id=session_id, card_id=raw_card_id,
+                base_state_hash="sha256-" + "8" * 64, scheduler_config_hash="sha256-" + "9" * 64,
+                initial_state_json='{"type":"new","historical":"unchanged"}', ordinal=0))
+            event = ReviewEvent(user_id=self.user_id, card_id=raw_card_id, note_id=card.note_id,
+                deck_id=self.deck_id, study_session_id=session_id, reviewed_at=now,
+                rating="good", mode="flashcard", sequence_no=1,
+                payload_json='{"old_wire_id":"' + raw_card_id + '"}')
+            db.session.add(event)
+            db.session.add(StudySessionCommit(session_id=session_id, user_id=self.user_id,
+                idempotency_key=payload["commit_id"], request_hash=_request_hash(payload),
+                response_json=json.dumps(receipt)))
+            open_lease = StudySession(user_id=self.user_id, scope_id=str(self.deck_id), local_deck_id=self.deck_id,
+                wire_schema_version="study-session.v3", status="open", snapshot_hash=payload["snapshot_hash"],
+                token_hash=sha256(token.encode()).hexdigest(), opened_at=now, expires_at=now + timedelta(hours=1),
+                config_snapshot_json="{}")
+            db.session.add(open_lease)
             db.session.commit()
-            events_before = ReviewEvent.query.count()
-
-        replay = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=payload)
+            open_id = open_lease.id
+            before = (_request_hash(payload), StudyProgressSubject.query.one().semantic_state_hash,
+                StudySessionCard.query.one().initial_state_json, event.payload_json)
+        url = f"/api/study/sessions/{session_id}/commit"
+        replay = self.client.post(url, json=payload)
         self.assertEqual(replay.status_code, 200, replay.get_json())
         self.assertEqual(replay.get_json(), receipt)
-
-        other = self._commit_payload(committed)
-        again = self.client.post(f"/api/study/sessions/{committed['session_id']}/commit", json=other)
-        self.assertEqual(again.status_code, 409, again.get_json())
-        self.assertEqual(again.get_json()["error"], "SESSION_ALREADY_COMMITTED")
-        self.assertEqual(again.get_json()["details"], receipt)
-
-        # A legacy lease that would still write stays refused under NOTE.
-        with self.app.app_context():
-            db.session.get(StudySession, open_lease["session_id"]).status = "open"
-            db.session.commit()
-        refused = self.client.post(
-            f"/api/study/sessions/{open_lease['session_id']}/commit", json=self._commit_payload(open_lease)
-        )
+        conflict = self.client.post(url, json={**payload, "commit_id": str(uuid4())})
+        self.assertEqual(conflict.status_code, 409, conflict.get_json())
+        self.assertEqual(conflict.get_json()["details"], receipt)
+        refused = self.client.post(f"/api/study/sessions/{open_id}/commit", json=payload)
         self.assertEqual(refused.status_code, 409, refused.get_json())
         self.assertEqual(refused.get_json()["error"], "WIRE_CONTRACT_MISMATCH")
         with self.app.app_context():
-            self.assertEqual(ReviewEvent.query.count(), events_before)
+            stored = StudySessionCommit.query.one()
+            self.assertEqual(stored.request_hash, before[0])
+            self.assertEqual(json.loads(stored.response_json), receipt)
+            self.assertEqual(StudyProgressSubject.query.one().semantic_state_hash, before[1])
+            self.assertEqual(ReviewEvent.query.count(), 1)
+            self.assertEqual(ReviewEvent.query.one().card_id, raw_card_id)
+            self.assertEqual(ReviewEvent.query.one().payload_json, before[3])
+            self.assertEqual(StudySessionCard.query.one().card_id, raw_card_id)
+            self.assertEqual(StudySessionCard.query.one().initial_state_json, before[2])
+
 
     def test_direct_note_read_fails_closed_on_stale_canonical_availability(self):
         self._enable_existing_state_note_authority(epoch=13)
@@ -1864,12 +1675,10 @@ class StudySessionApiTests(unittest.TestCase):
             "AUTHORITY_READ_PARITY_DIVERGED",
         )
 
-    def test_direct_note_read_ignores_frozen_card_progress_and_fails_closed_on_a_corrupt_row(self):
+    def test_direct_note_read_uses_retired_schema_and_fails_closed_on_a_corrupt_row(self):
         self._enable_existing_state_note_authority(epoch=11)
         with self.app.app_context():
-            card = Card.query.one()
-            db.session.add(CardProgress(user_id=self.user_id, card_id=str(card.id), reps=99, revision=9))
-            db.session.commit()
+            assert_retired_progress_absent(self, db.session)
 
         response = self.client.get(
             "/api/study/session/next",
@@ -1949,8 +1758,8 @@ class StudySessionApiTests(unittest.TestCase):
                 "open",
             )
 
-    def test_v3_commit_requires_exact_identity_and_paired_envelope(self):
-        wrong_envelope_snapshot = self._open_session_v3()
+    def test_v4_commit_requires_exact_identity_and_paired_envelope(self):
+        wrong_envelope_snapshot = self._open_session_v4()
         wrong_envelope = self._commit_payload(wrong_envelope_snapshot)
         wrong_envelope["schema_version"] = "study-commit.v1"
         response = self.client.post(
@@ -1960,7 +1769,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422, response.get_json())
         self.assertEqual(response.get_json()["error"], "UNSUPPORTED_COMMIT_SCHEMA")
 
-        missing_snapshot = self._open_session_v3()
+        missing_snapshot = self._open_session_v4()
         missing = self._commit_payload(missing_snapshot)
         del missing["events"][0]["action_contract_version"]
         response = self.client.post(
@@ -1970,7 +1779,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422, response.get_json())
         self.assertEqual(response.get_json()["error"], "WIRE_CONTRACT_MISMATCH")
 
-        mismatch_snapshot = self._open_session_v3()
+        mismatch_snapshot = self._open_session_v4()
         mismatch = self._commit_payload(mismatch_snapshot)
         mismatch["events"][0]["algorithm_version"] = "latest"
         response = self.client.post(
@@ -1980,7 +1789,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422, response.get_json())
         self.assertEqual(response.get_json()["error"], "WIRE_CONTRACT_MISMATCH")
 
-        valid_snapshot = self._open_session_v3()
+        valid_snapshot = self._open_session_v4()
         response = self.client.post(
             f"/api/study/sessions/{valid_snapshot['session_id']}/commit",
             json=self._commit_payload(valid_snapshot),
@@ -1993,7 +1802,7 @@ class StudySessionApiTests(unittest.TestCase):
             payload = json.loads(event.payload_json)
             self.assertEqual(
                 payload["provenance"]["wire_schema_version"],
-                "study-session.v3",
+                "study-session.v4",
             )
             self.assertEqual(
                 payload["_study_runtime"]["action_contract_version"],
@@ -2158,22 +1967,22 @@ class StudySessionApiTests(unittest.TestCase):
             "REVIEW_EVENT_PAYLOAD_STRING_TOO_LONG",
         )
 
-        legacy_operation = self.client.post(
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 0)
+            assert_retired_progress_absent(self, db.session)
+        native_operation = self.client.post(
             f"/api/study/{card_id}/answer",
             json={**base_payload, "operation_key": str(uuid4())},
         )
         self.assertEqual(
-            legacy_operation.status_code,
-            422,
-            legacy_operation.get_json(),
+            native_operation.status_code,
+            200,
+            native_operation.get_json(),
         )
-        self.assertEqual(
-            legacy_operation.get_json()["error"],
-            "AUTHORITY_OPERATION_KEY_UNAVAILABLE",
-        )
+        self.assertEqual(native_operation.get_json()["authority"]["mode"], "NOTE")
 
         with self.app.app_context():
-            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(ReviewEvent.query.count(), 1)
             assert_retired_progress_absent(self, db.session)
 
     def test_session_event_allowlist_failure_has_no_partial_write(self):
@@ -2299,6 +2108,7 @@ class StudySessionApiTests(unittest.TestCase):
                 "scheduler_offset_ms": 2000,
             }
         )
+        second_event["operation_key"] = second_event["event_id"]
         payload["events"].append(second_event)
 
         response = self.client.post(
@@ -2322,7 +2132,7 @@ class StudySessionApiTests(unittest.TestCase):
             empty_deck_id = empty_deck.id
         response = self.client.post(
             "/api/study/sessions",
-            json={"scope": "deck", "scope_id": empty_deck_id},
+            json={"scope": "deck", "scope_id": empty_deck_id, "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 404, response.get_json())
         self.assertEqual(response.get_json()["error"], "NO_STUDY_CARDS")
@@ -2365,12 +2175,9 @@ class StudySessionApiTests(unittest.TestCase):
 
         card_id = snapshot["cards"][0]["card_id"]
         with self.app.app_context():
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=card_id,
-            ).one()
-            self.assertEqual(progress.reps, 1)
-            self.assertEqual(progress.revision, 1)
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one()
+            self.assertEqual(int(progress.state_payload["reps"]), 1)
+            self.assertEqual(progress.authority_revision, 1)
             events = ReviewEvent.query.filter_by(
                 user_id=self.user_id,
                 card_id=card_id,
@@ -2400,7 +2207,7 @@ class StudySessionApiTests(unittest.TestCase):
 
         self.assertNotEqual(second["session_id"], first["session_id"])
         card = second["cards"][0]
-        self.assertEqual(card["base_revision"], 1)
+        self.assertEqual(card["authority_pin"]["base_authority_revision"], "1")
         self.assertEqual(card["state"]["reps"], 1)
 
     def test_commit_preserves_repeated_answers_for_one_card(self):
@@ -2415,6 +2222,7 @@ class StudySessionApiTests(unittest.TestCase):
                 "scheduler_offset_ms": 2000,
             }
         )
+        second_event["operation_key"] = second_event["event_id"]
         payload["events"].append(second_event)
         response = self.client.post(
             f"/api/study/sessions/{snapshot['session_id']}/commit",
@@ -2434,11 +2242,8 @@ class StudySessionApiTests(unittest.TestCase):
                 .all()
             )
             self.assertEqual([row.sequence_no for row in events], [1, 2])
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=card_id,
-            ).one()
-            self.assertEqual(progress.reps, 2)
+            progress = StudyProgressSubject.query.filter_by(learner_user_id=self.user_id).one()
+            self.assertEqual(int(progress.state_payload["reps"]), 2)
 
     def test_second_session_detects_progress_conflict(self):
         first = self._open_session()
@@ -2456,7 +2261,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(second_commit.status_code, 409)
         self.assertEqual(
             second_commit.get_json()["error"],
-            "CARD_PROGRESS_CONFLICT",
+            "AUTHORITY_STATE_CONFLICT",
         )
 
     def test_legacy_answer_invalidates_open_batch_session(self):
@@ -2485,7 +2290,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(batch.status_code, 409)
         self.assertEqual(
             batch.get_json()["error"],
-            "CARD_PROGRESS_CONFLICT",
+            "AUTHORITY_STATE_CONFLICT",
         )
 
     def test_commit_rejects_unavailable_pinned_algorithm_version(self):
@@ -2503,7 +2308,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409, response.get_json())
         self.assertEqual(response.get_json()["error"], "ALGORITHM_UNAVAILABLE")
 
-    def test_commit_rejects_tampered_final_state(self):
+    def test_v4_commit_rejects_client_supplied_final_state(self):
         snapshot = self._open_session()
         payload = self._commit_payload(snapshot)
         card = snapshot["cards"][0]
@@ -2519,42 +2324,33 @@ class StudySessionApiTests(unittest.TestCase):
             json=payload,
         )
         self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.get_json()["error"], "FINAL_STATE_MISMATCH")
+        self.assertEqual(response.get_json()["error"], "INVALID_FINAL_STATES")
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.count(), 0)
+            self.assertEqual(StudyAuthorityCommandReceipt.query.count(), 0)
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, 0)
 
-    def test_commit_tolerates_mysql_datetime_precision_in_final_state(self):
+    def test_note_commit_normalizes_event_clock_to_mysql_datetime_seconds(self):
         snapshot = self._open_session()
         payload = self._commit_payload(snapshot)
         card = snapshot["cards"][0]
         policy = snapshot["policies"][card["policy_key"]]
-        opened_at = datetime.fromisoformat(
-            snapshot["server_now_utc"].replace("Z", "+00:00")
-        ).replace(tzinfo=None)
-        # Reproduce a session opened before the precision fix: the browser
-        # retained milliseconds while MySQL DATETIME replayed from .000.
-        browser_answer_at = opened_at + timedelta(milliseconds=1289)
-        browser_state = applyAnswer(
-            deserialize_card_state(card["state"]),
-            deserialize_deck_options(policy["config"]),
-            browser_answer_at,
-            "good",
-            timezone_name=snapshot["timezone"],
-        )
-        payload["events"][0]["scheduler_offset_ms"] = 500
-        payload["final_states"] = [
-            {
-                "card_id": card["card_id"],
-                "base_revision": card["base_revision"],
-                "state": serialize_card_state(browser_state),
-            }
-        ]
-
-        response = self.client.post(
-            f"/api/study/sessions/{snapshot['session_id']}/commit",
-            json=payload,
-        )
-
+        opened_at = datetime.fromisoformat(snapshot["server_now_utc"].replace("Z", "+00:00")).replace(tzinfo=None)
+        # The wire offset retains milliseconds, but replay uses the same
+        # second precision as historical MySQL DATETIME review-event clocks.
+        answer_at = (opened_at + timedelta(milliseconds=1289)).replace(microsecond=0)
+        expected = applyAnswer(deserialize_card_state(card["state"]),
+            deserialize_deck_options(policy["config"]), answer_at, "good", timezone_name=snapshot["timezone"])
+        payload["events"][0]["scheduler_offset_ms"] = 1289
+        self.assertEqual(payload["final_states"], [])
+        response = self.client.post(f"/api/study/sessions/{snapshot['session_id']}/commit", json=payload)
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["applied_event_count"], 1)
+        fresh = self._open_session()
+        self.assertEqual(fresh["cards"][0]["state"], serialize_card_state(expected))
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.one().reviewed_at, answer_at.replace(microsecond=0))
+            self.assertEqual(StudyProgressSubject.query.one().authority_revision, 1)
 
     def test_clone_session_uses_local_scope_without_mutating_source_note(self):
         with self.app.app_context():
@@ -2628,18 +2424,9 @@ class StudySessionApiTests(unittest.TestCase):
                     source_deck_id=source_deck.id,
                 )
             )
-            db.session.add(
-                CardProgress(
-                    user_id=self.user_id,
-                    card_id=card.id,
-                    queue="review",
-                    due_day=_day_index(datetime.utcnow(), 4),
-                    interval_days=5,
-                    ease_factor=2.5,
-                    lapses=7,
-                    revision=0,
-                )
-            )
+            stage_note_state(db.session, user_id=self.user_id, card_id=card.id,
+                queue="review", due_day=_day_index(datetime.utcnow(), 4), interval_days=5,
+                ease_factor=2.5, lapses=7, revision=0)
             db.session.commit()
             local_deck_id = local_deck.id
             source_card_id = card.id
@@ -2647,7 +2434,7 @@ class StudySessionApiTests(unittest.TestCase):
 
         response = self.client.post(
             "/api/study/sessions",
-            json={"scope": "deck", "scope_id": local_deck_id},
+            json={"scope": "deck", "scope_id": local_deck_id, "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 201, response.get_json())
         snapshot = response.get_json()
@@ -2657,7 +2444,7 @@ class StudySessionApiTests(unittest.TestCase):
             local_deck_id,
         )
         payload = self._commit_payload(snapshot)
-        payload["events"][0]["rating"] = "again"
+        payload["events"][0].update(rating="again", action_key="review.again", trigger_key="scheduler.review.again")
         commit = self.client.post(
             f"/api/study/sessions/{snapshot['session_id']}/commit",
             json=payload,
@@ -2671,10 +2458,8 @@ class StudySessionApiTests(unittest.TestCase):
                 study_session_id=snapshot["session_id"]
             ).one()
             self.assertEqual(event.deck_id, local_deck_id)
-            progress = CardProgress.query.filter_by(
-                user_id=self.user_id,
-                card_id=source_card_id,
-            ).one()
+            progress = StudyProgressSubject.query.filter_by(
+                learner_user_id=self.user_id, live_note_id=source_note_id).one()
             self.assertTrue(progress.is_suspended)
 
     def test_scope_compositions_endpoint(self):
@@ -2750,7 +2535,7 @@ class StudySessionApiTests(unittest.TestCase):
         self._add_second_composition()
         response = self.client.post(
             "/api/study/sessions",
-            json={"scope": "deck", "scope_id": self.deck_id},
+            json={"scope": "deck", "scope_id": self.deck_id, "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 409, response.get_json())
         self.assertEqual(
@@ -2774,8 +2559,7 @@ class StudySessionApiTests(unittest.TestCase):
             json={
                 "scope": "deck",
                 "scope_id": self.deck_id,
-                "composition_id": composition_id,
-            },
+                "composition_id": composition_id, "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 201, response.get_json())
         snapshot = response.get_json()
@@ -2795,8 +2579,7 @@ class StudySessionApiTests(unittest.TestCase):
                 "composition_ids": [
                     "comp:notetype:unused:template:unused",
                     f"comp:notetype:{self.note_type_id}:template:{template_id}",
-                ],
-            },
+                ], "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 400, response.get_json())
         self.assertEqual(
@@ -2830,8 +2613,7 @@ class StudySessionApiTests(unittest.TestCase):
             json={
                 "scope": "deck",
                 "scope_id": self.deck_id,
-                "composition_id": composition_id,
-            },
+                "composition_id": composition_id, "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 403, response.get_json())
         self.assertEqual(response.get_json()["error"], "COMPOSITION_OUT_OF_SCOPE")
@@ -2847,8 +2629,7 @@ class StudySessionApiTests(unittest.TestCase):
                 json={
                     "scope": "deck",
                     "scope_id": self.deck_id,
-                    "composition_id": composition_id,
-                },
+                    "composition_id": composition_id, "accepted_session_schema_versions": ["study-session.v4"]},
             )
         self.assertEqual(response.status_code, 201, response.get_json())
         self.assertEqual(response.get_json()["cards"][0]["card_id"], card_id)
@@ -2870,7 +2651,7 @@ class StudySessionApiTests(unittest.TestCase):
     def test_open_session_non_existent_deck_returns_404_deck_not_found(self):
         response = self.client.post(
             "/api/study/sessions",
-            json={"scope": "deck", "scope_id": 999999},
+            json={"scope": "deck", "scope_id": 999999, "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 404)
         payload = response.get_json()
@@ -2902,7 +2683,7 @@ class StudySessionApiTests(unittest.TestCase):
 
         response = self.client.post(
             "/api/study/sessions",
-            json={"scope": "deck", "scope_id": other_deck_id},
+            json={"scope": "deck", "scope_id": other_deck_id, "accepted_session_schema_versions": ["study-session.v4"]},
         )
         self.assertEqual(response.status_code, 403)
         payload = response.get_json()

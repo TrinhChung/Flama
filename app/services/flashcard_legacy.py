@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.repositories import template_library_repository
 from models.flashcard import FieldDef, NoteType, Template
+from models.study_application import StudyApplication
 
 LEGACY_NOTE_TYPE_NAME = "Flama Standard Vocabulary"
 

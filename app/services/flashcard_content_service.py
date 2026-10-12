@@ -856,7 +856,7 @@ def create_template(
             error or "Unable to create template.",
         )
     db.session.commit()
-    return marketplace_query_service.serialize_template(template, note_type_id=note_type.id)
+    return _serialize_attached_template(template, note_type_id=note_type.id)
 
 
 def update_template(
@@ -911,7 +911,7 @@ def update_template(
         {"note_type_id": note_type.id, "template_id": template.id},
     )
     db.session.commit()
-    return marketplace_query_service.serialize_template(template, note_type_id=note_type.id)
+    return _serialize_attached_template(template, note_type_id=note_type.id)
 
 
 def reset_template(
@@ -932,7 +932,7 @@ def reset_template(
     template.back_html = LEGACY_BACK_TEMPLATE.strip()
     template.shared_css = LEGACY_SHARED_CSS.strip()
     db.session.commit()
-    return marketplace_query_service.serialize_template(template, note_type_id=note_type.id)
+    return _serialize_attached_template(template, note_type_id=note_type.id)
 
 
 def delete_template(
@@ -1567,6 +1567,14 @@ def _field(*, note_type_id: str, field_id: str) -> FieldDef:
             status=404,
         )
     return row
+
+
+def _serialize_attached_template(template: Template, *, note_type_id: str):
+    application = StudyApplication.query.filter_by(
+        note_type_id=note_type_id, template_id=template.id, status_code="ACTIVE",
+    ).order_by(StudyApplication.position, StudyApplication.id).first()
+    return marketplace_query_service.serialize_template(template, application=application,
+                                                        note_type_id=note_type_id)
 
 
 def _template(*, note_type_id: str, template_id: str) -> Template:

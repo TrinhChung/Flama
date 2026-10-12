@@ -40,7 +40,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from sqlalchemy import func, select
 
-from app.services.study_authority_enrollment_service import stage_note_authority_enrollment
+from app.services.study_authority_enrollment_service import enroll_new_learner_note_authority
+from app.repositories.template_library_repository import create_attached_template
 from app.services.study_composition_service import make_compatibility_composition_id
 from app.services.user_roles import ensure_default_user_roles
 from models import db
@@ -94,12 +95,13 @@ def _seed(app, *, learners: int, notes: int) -> list[dict]:
             user.set_password(PROBE_PASSWORD)
             db.session.add(user)
             db.session.flush()
+            enroll_new_learner_note_authority(db.session, user=user)
             deck = Deck(name=f"Probe deck {index}", owner_user_id=user.id)
             note_type = NoteType(name=f"Probe type {index}", user_id=user.id)
             db.session.add_all([deck, note_type])
             db.session.flush()
             db.session.add(FieldDef(note_type_id=note_type.id, name="Word", field_type="text", position=0))
-            template = Template(note_type_id=note_type.id, name="Card 1",
+            template = create_attached_template(db.session, note_type=note_type, name="Card 1",
                                 front_html="{{Word}}", back_html="{{Word}}", is_default=True)
             db.session.add(template)
             db.session.flush()
@@ -107,9 +109,6 @@ def _seed(app, *, learners: int, notes: int) -> list[dict]:
                          field_values={"Word": f"w-{index}-{number}"}) for number in range(notes)]
             db.session.add_all(rows)
             db.session.flush()
-            db.session.add_all(Card(note_id=note.id, template_id=template.id) for note in rows)
-            db.session.commit()
-            stage_note_authority_enrollment(db.session, learner_user_id=int(user.id), now_utc=datetime.utcnow())
             db.session.commit()
             seeded.append({
                 "user_id": int(user.id), "deck_id": deck.id,

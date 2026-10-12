@@ -86,8 +86,6 @@ class StatsOverviewTests(unittest.TestCase):
         suspended=False, buried=False, learner_id=None, owner_id=None,
         detached=False, logical_key=None,
     ):
-        from app.services.study_consolidated_progress_service import materialize_consolidated_pristine
-
         now = datetime(2026, 1, 1)
         self._card_seq += 1
         note_type = NoteType(name=f"Canonical Stats {self._card_seq}", user_id=owner_id or self.user_id)
@@ -101,22 +99,12 @@ class StatsOverviewTests(unittest.TestCase):
         db.session.flush()
         cards = Card.query.filter_by(note_id=note.id).all()
         db.session.flush()
-        subject = StudyProgressSubject(
-            learner_user_id=learner_id or self.user_id,
-            logical_note_key=logical_key or note.id.encode(),
-            live_note_id=note.id, created_at=now, updated_at=now,
-        )
-        db.session.add(subject)
-        materialize_consolidated_pristine(
-            items=[(note.id, subject, tuple(cards), 2.5)],
-            provenance_code="NATIVE_DIRECT", now_utc=now,
-        )
-        subject.normalized_queue = queue
-        subject.due_at = due_at
-        subject.due_day = due_day
-        subject.is_suspended = suspended
-        subject.is_buried = buried
-        subject.buried_until_day = date(2026, 1, 20).toordinal() if buried else None
+        subject = stage_note_state(db.session, user_id=learner_id or self.user_id,
+            note_id=note.id, now=now, queue=queue, due_at=due_at, due_day=due_day,
+            is_suspended=suspended, is_buried=buried,
+            buried_until_day=date(2026, 1, 20).toordinal() if buried else None)
+        if logical_key is not None:
+            subject.logical_note_key = logical_key  # Deliberate identity drift fixture.
         if detached:
             subject.live_note_id = None
         db.session.flush()
@@ -293,12 +281,12 @@ class StatsOverviewTests(unittest.TestCase):
             self.assertEqual(jan_12["source"], "due")
             self.assertTrue(jan_12["is_future"])
 
-    def test_non_utc_mysql_falls_back_to_python_aggregation(self):
+    def test_python_local_day_aggregation(self):
         with self.app.app_context():
             self._add_event(when_utc=datetime(2026, 1, 10, 15, 30, 0), duration_ms=2000)
             db.session.commit()
 
-            with patch("app.repositories.stats_query_repository._session_dialect_name", return_value="mysql"):
+            with patch("app.services.stats_overview.can_use_mysql_local_day_sql", return_value=False):
                 payload = build_stats_overview(
                     user_id=self.user_id,
                     year=2026,
@@ -378,8 +366,8 @@ class StatsOverviewTests(unittest.TestCase):
             self.assertEqual(today_point["source"], "reviewed")
             self.assertFalse(today_point["is_future"])
 
-    def test_note_authority_mode_never_falls_back_to_projection_rows(self):
-        """R9: NOTE future due comes only from canonical availability, never card_progress."""
+    def test_suspended_note_state_is_excluded_and_old_storage_is_absent(self):
+        """Forecast reads valid canonical state and never recreates old progress storage."""
         with self.app.app_context():
             now_utc = datetime(2026, 1, 10, 12, 0, 0)
             for hour in range(5):
@@ -502,7 +490,9 @@ class StatsOverviewTests(unittest.TestCase):
             # The scope's live association does not substitute for logical-key availability.
             self._add_canonical_due(due_day=due, logical_key=b"mismatched-logical-key")
             db.session.commit()
-            self.assertEqual(self._canonical_day_counts(), {})
+            from app.services.study_authority_read_service import StudyAuthorityReadError
+            with self.assertRaises(StudyAuthorityReadError):
+                self._canonical_day_counts()
 
     def test_canonical_due_dst_timezone_uses_python_business_day_mapping(self):
         with self.app.app_context():

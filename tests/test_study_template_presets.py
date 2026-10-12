@@ -5,6 +5,7 @@ from unittest.mock import patch
 from tests import test_study_composition_service as compositions
 from tests import test_study_session_install_usage as installs
 from app.services import study_session_service, study_template_preset_service
+from app.repositories import template_library_repository
 from app.services.study_composition_service import resolve_compatibility_composition_for_card
 from app.validators.template_library import TemplateLibraryError
 from models import db
@@ -37,7 +38,7 @@ class StudyTemplatePresetTests(unittest.TestCase):
         self.assertEqual(saved["stale_compositions"], [])
         snapshot = study_session_service.open_study_session(user=self.user,
             query=Card.query.join(Note, Card.note_id == Note.id).filter(Note.deck_id == self.deck.id),
-            clone_scope=None, scope_type="deck", scope_id=str(self.deck.id), timezone_name="UTC")
+            clone_scope=None, scope_type="deck", scope_id=str(self.deck.id), timezone_name="UTC", wire_schema_version="study-session.v4")
         self.assertEqual(snapshot["selected_composition_id"], composition_id)
         self.assertEqual(next(iter(snapshot["contents"].values()))["render_context"]["term"], "test front")
         self.assertIsNone(study_template_preset_service.session_input_bindings(self.user.id + 1, "deck", self.deck.id, composition_id))
@@ -98,7 +99,7 @@ class StudyInstalledTemplatePresetTests(unittest.TestCase):
         self._install_overlay(notes=1)
         with self.app.app_context():
             install = db.session.get(DeckInstall, self.install_id)
-            template = Template.query.filter_by(note_type_id=install.source_note_type_id).one()
+            template = template_library_repository.applications(db.session, install.source_note_type_id)[0].template
             field = FieldDef.query.filter_by(note_type_id=install.source_note_type_id).one()
             template.input_schema = [{"key": "term", "type": "text"}]
             added = DeckCloneAddedFieldDef(deck_install_id=install.id, name="Personal", field_type="text")
@@ -139,7 +140,7 @@ class StudyInstalledTemplatePresetTests(unittest.TestCase):
         self._install_overlay(notes=1)
         with self.app.app_context():
             install = db.session.get(DeckInstall, self.install_id)
-            template = Template.query.filter_by(note_type_id=install.source_note_type_id).one()
+            template = template_library_repository.applications(db.session, install.source_note_type_id)[0].template
             field = FieldDef.query.filter_by(note_type_id=install.source_note_type_id).one()
             template.input_schema = [{"key": "term", "type": "text"}]
             db.session.add(DeckCloneFieldDefOverride(deck_install_id=install.id,

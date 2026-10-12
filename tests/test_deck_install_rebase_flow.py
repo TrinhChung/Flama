@@ -9,7 +9,9 @@ from app import create_app
 from app.services import deck_install_rebase_service, deck_release_service
 from models import db
 from models.card import Card
-from models.card_progress import CardProgress
+from tests.study_note_fixtures import create_note_user, attach_template, assert_retired_progress_absent
+from tests.note_progress_fixtures import stage_note_state, subject_for_card, decode_note_state
+from models.study_progress_subject import StudyProgressSubject
 from models.deck import Deck
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from models.deck_install import DeckInstall
@@ -48,14 +50,16 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
         self.context.pop()
 
     def _seed_release_context(self):
-        owner = User(username="release-owner", email="release-owner@example.com")
+        owner = create_note_user(db.session, username="release-owner", email="release-owner@example.com")
         owner.set_password("password")
-        learner = User(username="release-learner", email="release-learner@example.com")
+        learner = create_note_user(db.session, username="release-learner", email="release-learner@example.com")
         learner.set_password("password")
         db.session.add_all([owner, learner])
         db.session.flush()
 
         note_type = NoteType(user_id=owner.id, name="Release note type")
+        db.session.add(note_type)
+        db.session.flush()
         db.session.add(note_type)
         db.session.flush()
         word_field = FieldDef(
@@ -72,7 +76,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
             position=1,
             required=False,
         )
-        template = Template(
+        template = attach_template(db.session, owner_user_id=db.session.get(NoteType, note_type.id).user_id,
             note_type_id=note_type.id,
             name="Card",
             front_html="{{Word}}",
@@ -102,7 +106,7 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
         db.session.flush()
         card = Card.query.filter_by(note_id=note.id, template_id=template.id).one()
         db.session.flush()
-        progress = CardProgress(
+        progress = stage_note_state(db.session,
             user_id=learner.id,
             card_id=card.id,
             queue="review",
@@ -275,19 +279,10 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
             value="いぬ",
         )
         install = db.session.get(DeckInstall, self.ids["install_id"])
-        before_progress = db.session.get(
-            CardProgress,
-            CardProgress.query.filter_by(
-                user_id=self.ids["learner_id"],
-                card_id=self.ids["card_id"],
-            ).first().id,
-        )
-        progress_snapshot = (
-            before_progress.card_id,
-            before_progress.interval_days,
-            before_progress.reps,
-            before_progress.revision,
-        )
+        before_subject = subject_for_card(db.session, user_id=self.ids['learner_id'], card_id=self.ids['card_id'])
+        before_progress = decode_note_state(before_subject)
+        progress_snapshot = (before_subject.authority_revision, bytes(before_subject.semantic_state_hash),
+                             dict(before_subject.state_payload), before_subject.live_note_id)
 
         rebase = deck_install_rebase_service.prepare_and_apply_update(
             install_id=install.id,
@@ -308,19 +303,9 @@ class DeckInstallRebaseFlowTests(unittest.TestCase):
             DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=install.id).count(),
             1,
         )
-        after_progress = CardProgress.query.filter_by(
-            user_id=self.ids["learner_id"],
-            card_id=self.ids["card_id"],
-        ).one()
-        self.assertEqual(
-            (
-                after_progress.card_id,
-                after_progress.interval_days,
-                after_progress.reps,
-                after_progress.revision,
-            ),
-            progress_snapshot,
-        )
+        after_subject = subject_for_card(db.session, user_id=self.ids['learner_id'], card_id=self.ids['card_id'])
+        self.assertEqual((after_subject.authority_revision, bytes(after_subject.semantic_state_hash),
+                          dict(after_subject.state_payload), after_subject.live_note_id), progress_snapshot)
         replay = deck_install_rebase_service.prepare_and_apply_update(
             install_id=install.id,
             release_id=self.ids["second_release_id"],

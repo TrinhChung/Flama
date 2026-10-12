@@ -29,6 +29,8 @@ from models.scheduler_preset import SchedulerPreset
 from models.study_session import StudySession
 from models.study_session_card import StudySessionCard
 from models.template import Template
+from models.study_application import StudyApplication
+from app.repositories import template_library_repository
 from models.user import User
 
 
@@ -105,8 +107,8 @@ class StudySessionScalingTests(unittest.TestCase):
         response, statements = self._capture_sql(lambda: self.client.get(f"/api/study/sessions/{self.snapshot['session_id']}"))
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertFalse(response.get_json()["stale"])
-        sibling_reads = [s for s in statements if "FROM cards" in s and "cards.note_id IN" in s]
-        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id" and "notes.id IN" in s]
+        sibling_reads = [s for s in statements if s.lstrip().startswith("SELECT card_presentations.id, ") and "card_presentations.note_id IN" in s]
+        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id, notes.note_type_id" and "notes.id IN" in s]
         self.assertEqual((len(sibling_reads), len(note_locks)), (1, 1))
         self.assertFalse(any(s.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) for s in statements))
 
@@ -117,8 +119,8 @@ class StudySessionScalingTests(unittest.TestCase):
         response, statements = self._capture_sql(lambda: self.client.get(f"/api/study/sessions/{self.snapshot['session_id']}"))
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertFalse(response.get_json()["stale"])
-        sibling_reads = [s for s in statements if "FROM cards" in s and "cards.note_id IN" in s]
-        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id" and "notes.id IN" in s]
+        sibling_reads = [s for s in statements if s.lstrip().startswith("SELECT card_presentations.id, ") and "card_presentations.note_id IN" in s]
+        note_locks = [s for s in statements if "FROM notes" in s and s.split("FROM notes")[0].strip() == "SELECT notes.id, notes.note_type_id" and "notes.id IN" in s]
         self.assertEqual((len(sibling_reads), len(note_locks)), (2, 2))
         self.assertFalse(any(s.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) for s in statements))
 
@@ -133,7 +135,7 @@ class StudySessionScalingTests(unittest.TestCase):
                 db.session, actor_user_ids=[self.user_id], card_ids=card_ids, deleted_note_ids=[],
             )
             repeated_application = stage_repeated_application(
-                db.session, routes=routes, template=template, occurrence_key="scaling-repeat",
+                db.session, routes=routes, template=template, note_type=db.session.get(Card, card_ids[0]).note.note_type, occurrence_key="scaling-repeat",
             )
             repeated_application_id = repeated_application.id
             db.session.commit()
@@ -215,7 +217,7 @@ class StudySessionOverlayScalingTests(unittest.TestCase):
         self._install_overlay(notes=3)
         with self.app.app_context():
             install = db.session.get(DeckInstall, self.install_id)
-            template = Template.query.filter_by(note_type_id=install.source_note_type_id).one()
+            template = template_library_repository.applications(db.session, install.source_note_type_id)[0].template
             notes = [Note(
                 user_id=self.user_id, note_type_id=install.source_note_type_id,
                 deck_id=self.local_deck_id, field_values={"Word": f"local-{number}"},
@@ -223,7 +225,6 @@ class StudySessionOverlayScalingTests(unittest.TestCase):
             db.session.add_all(notes)
             db.session.flush()
             db.session.add_all(DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id) for note in notes)
-            db.session.add_all(Card(note_id=note.id, template_id=template.id) for note in notes)
             db.session.commit()
             local_note_ids = {note.id for note in notes}
         snapshot, statements = self._capture_sql(self._open)
@@ -281,7 +282,7 @@ class StudySessionSiblingLockTests(unittest.TestCase):
         with self.assertRaises(StudyAuthorityFenceError) as wrong:
             lock_study_authority_siblings_many(db.session, route=replace(self._route(), learner_user_id=self.user_id+1), locked_by_logical_note_key={self.note_id: locked})
         self.assertEqual(wrong.exception.code, "WRONG_LEARNER")
-        db.session.execute(delete(Card).where(Card.note_id == self.note_id))
+        db.session.execute(delete(StudyApplication).where(StudyApplication.note_type_id == db.session.get(Note, self.note_id).note_type_id))
         with self.assertRaises(StudyAuthorityFenceError) as missing:
             lock_study_authority_siblings_many(db.session, route=self._route(), locked_by_logical_note_key={self.note_id: locked})
         self.assertEqual(missing.exception.code, "AUTHORITY_SIBLINGS_EMPTY")

@@ -364,7 +364,7 @@ def _join_note_availability(query, *, learner_user_id: int):
         is_buried=subject.is_buried,
         buried_until_day=subject.buried_until_day,
         integrity_violation=note_analytics_read_repository.subject_integrity_violation(
-            subject, note_id=Card.note_id,
+            subject, note_id=Card.note_id, learner_user_id=learner_user_id,
         ),
     )
 
