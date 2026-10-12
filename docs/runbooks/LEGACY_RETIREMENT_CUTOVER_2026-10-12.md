@@ -36,7 +36,7 @@ marker from MySQL, using an isolated empty schema on the same dialect.
    Record its SHA-256 and compare table counts. Do not reuse a stale backup or
    overwrite an existing rehearsal schema. Check views, routines, triggers and
    events for source-schema references before restoring.
-3. Rehearse the six-table archive restore and actual `wsgi.py` migration entry
+3. Rehearse the external archive restore and actual `wsgi.py` migration entry
    point on that copy. Verify NOTE audit and protected-state conservation.
 4. Inspect open sessions and unfinished batch inventory. Preserve sessions;
    drain admitted batches before stopping the worker. Expired/open sessions
@@ -70,7 +70,7 @@ python scripts/audit_legacy_progress_retirement.py [connection options] \
   --output <private-dir>/progress-before.json
 python scripts/archive_retired_tables.py [connection options] archive \
   --output <private-dir>/retirement-archive.json --tables \
-  cards card_progress vocabulary_column_preferences \
+  cards card_progress templates vocabulary_column_preferences \
   study_progress_backfill_runs study_progress_backfill_checkpoints \
   study_progress_backfill_dispositions
 python scripts/archive_retired_tables.py [connection options] verify-restore \
