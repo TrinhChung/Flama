@@ -9,7 +9,7 @@
 - **Phiên bản báo cáo**: 1.0.0 (Master Release)
 - **Ngày hoàn tất kiểm toán**: 2026-10-11
 - **Phạm vi khảo sát**: 100% CSDL Production MySQL `nihongo` đã dump (41.533 notes, 36 Note Types, 35 templates) và toàn bộ 14 họ script template
-- **Cam kết an toàn & Phân định Biên độ**: 
+- **Cam kết an toàn & Phân định Biên độ**:
   - CSDL MySQL Local `nihongo`: STRICT READ-ONLY GUARANTEE — 100% không thực hiện lệnh ghi (INSERT, UPDATE, DELETE, ALTER), đã được thẩm định độc lập qua Binary Log (0 mutations).
   - Sản phẩm Kiểm toán: Tệp tài liệu `docs/reports/ARRAY_MIGRATION_AUDIT_REPORT.md` là artifact khảo sát thuần túy độc lập (`??` untracked).
   - Biên độ Mã nguồn: Ghi nhận 42 tệp mã nguồn trong working tree thuộc luồng phát triển song song Native JSON Array của Claude Code và User (Session ID `9b353ba2-3abb-4fc3-8472-7649b0e70a0e`); toàn bộ các sửa đổi này được cô lập nghiêm ngặt khỏi phạm vi bàn giao của báo cáo khảo sát này (xem chi tiết Mục 1.4 và Mục 5.4).
@@ -666,7 +666,7 @@ Khảo sát phát hiện **168 trường hợp** chứa các phần tử trùng 
 
 > **CẢNH BÁO KIẾN TRÚC TỐI KHẨN CẤP**:
 > Nếu bật deduplicate (`preserveDuplicates: false`), hệ thống sẽ gọt bỏ các phần tử trùng lặp, gây ra hiện tượng **Trượt chỉ số mảng (Index Shift Catastrophe)**:
-> 
+>
 > *Minh chứng cụ thể trên Note ID `0aa68bfd-dc87-4c6e-8deb-baec31511a77` (Antonym)*:
 > - Cột EN gốc (3 phần tử): `['allow', 'permit', 'authorize']`
 > - Cột VI gốc (3 phần tử): `['cho phép', 'cho phép', 'ủy quyền']`
@@ -829,7 +829,7 @@ Hội đồng kiểm toán, QA và kỹ sư triển khai có thể sử dụng t
 
 #### Query 1: Thẩm định tổng số lượng Notes và Note Types
 ```sql
-SELECT 
+SELECT
     nt.id AS note_type_id,
     nt.name AS note_type_name,
     COUNT(n.id) AS total_notes
@@ -843,13 +843,13 @@ ORDER BY total_notes DESC;
 
 #### Query 2: Kiểm tra tỷ lệ Native JSON Array vs Chuỗi Phẳng
 ```sql
-SELECT 
+SELECT
     fd.name AS field_name,
     nt.name AS note_type_name,
     COUNT(n.id) AS total_notes,
     SUM(CASE WHEN JSON_TYPE(JSON_EXTRACT(n.field_values, CONCAT('$."', fd.name, '"'))) = 'ARRAY' THEN 1 ELSE 0 END) AS json_array_count,
     SUM(CASE WHEN JSON_TYPE(JSON_EXTRACT(n.field_values, CONCAT('$."', fd.name, '"'))) = 'STRING' THEN 1 ELSE 0 END) AS raw_string_count,
-    SUM(CASE WHEN JSON_EXTRACT(n.field_values, CONCAT('$."', fd.name, '"')) IS NULL 
+    SUM(CASE WHEN JSON_EXTRACT(n.field_values, CONCAT('$."', fd.name, '"')) IS NULL
               OR JSON_LENGTH(JSON_EXTRACT(n.field_values, CONCAT('$."', fd.name, '"'))) = 0 THEN 1 ELSE 0 END) AS empty_count
 FROM field_defs fd
 JOIN note_types nt ON fd.note_type_id = nt.id
@@ -862,7 +862,7 @@ ORDER BY total_notes DESC, fd.name;
 
 #### Query 3: Kiểm tra cờ rủi ro HTML và Sound tags trong các trường Array
 ```sql
-SELECT 
+SELECT
     fd.name AS field_name,
     nt.name AS note_type_name,
     SUM(CASE WHEN JSON_EXTRACT(n.field_values, CONCAT('$."', fd.name, '"')) LIKE '%<%' THEN 1 ELSE 0 END) AS html_flag_count,
@@ -878,35 +878,35 @@ HAVING html_flag_count > 0 OR sound_flag_count > 0;
 
 #### Query 4: Kiểm tra độ lệch kích thước các cặp trường song song trong En4Everyone
 ```sql
-SELECT 
+SELECT
     'Collocation vs Coollocation_VI' AS pair_name,
     COUNT(*) AS mismatched_notes
 FROM notes n
 JOIN note_types nt ON n.note_type_id = nt.id
 WHERE nt.name LIKE '%En4Everyone%'
-  AND JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Collocation"')) != 
+  AND JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Collocation"')) !=
       JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Coollocation_VI"'))
 
 UNION ALL
 
-SELECT 
+SELECT
     'Synonym vs Synonym_VI' AS pair_name,
     COUNT(*) AS mismatched_notes
 FROM notes n
 JOIN note_types nt ON n.note_type_id = nt.id
 WHERE nt.name LIKE '%En4Everyone%'
-  AND JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Synonym"')) != 
+  AND JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Synonym"')) !=
       JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Synonym_VI"'))
 
 UNION ALL
 
-SELECT 
+SELECT
     'Antonym vs Antonym_VI' AS pair_name,
     COUNT(*) AS mismatched_notes
 FROM notes n
 JOIN note_types nt ON n.note_type_id = nt.id
 WHERE nt.name LIKE '%En4Everyone%'
-  AND JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Antonym"')) != 
+  AND JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Antonym"')) !=
       JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."Antonym_VI"'));
 ```
 *Kỳ vọng*:
@@ -916,21 +916,21 @@ WHERE nt.name LIKE '%En4Everyone%'
 
 #### Query 5: Truy vấn danh sách 8 thẻ rỗng phiên âm trong Flama Standard Vocabulary
 ```sql
-SELECT 
+SELECT
     n.id AS note_id,
     JSON_UNQUOTE(JSON_EXTRACT(n.field_values, '$."word"')) AS word,
     JSON_EXTRACT(n.field_values, '$."reading"') AS reading
 FROM notes n
 JOIN note_types nt ON n.note_type_id = nt.id
 WHERE nt.name LIKE '%Flama Standard Vocabulary%'
-  AND (JSON_EXTRACT(n.field_values, '$."reading"') IS NULL 
+  AND (JSON_EXTRACT(n.field_values, '$."reading"') IS NULL
        OR JSON_LENGTH(JSON_EXTRACT(n.field_values, '$."reading"')) = 0);
 ```
 *Kỳ vọng*: Trả về chính xác 8 bản ghi của các voice model TTS (`Yunyang`, `Junjian`, `XiaoYi Female`...).
 
 #### Query 6: Thẩm định các mẫu Template có chứa khối `<script>`
 ```sql
-SELECT 
+SELECT
     t.id AS template_id,
     t.name AS template_name,
     nt.name AS note_type_name,
