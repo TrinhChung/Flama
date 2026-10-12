@@ -70,33 +70,15 @@ class StudyTemplateApplicationTests(unittest.TestCase):
         for card in cards:
             composition = resolve_compatibility_composition_for_card(card)
             self.assertEqual(composition.note_type_id, card.note.note_type_id)
-            self.assertTrue(composition.composition_id.endswith(f":application:{card.application_id}"))
+            self.assertEqual(
+                composition.composition_id,
+                f"comp:notetype:{card.note.note_type_id}:template:{template.id}",
+            )
+            self.assertEqual(composition.study_application_id, card.application_id)
             selection = resolve_composition_selection(query, clone_scope=None,
                 requested_composition_id=composition.composition_id, request_source="test")
             selected = apply_composition_selection_to_query(query, clone_scope=None, selection=selection).all()
             self.assertEqual([row.id for row in selected], [card.id])
-
-    def test_repeated_occurrences_have_separate_selection_and_counts(self):
-        repeat = StudyApplication(template_id=self.template_1.id, note_type_id=self.note_type.id,
-                                 occurrence_key="again", display_name="Again")
-        db.session.add(repeat)
-        db.session.flush()
-        repeated_card = Card(note_id=self.note.id, template_id=self.template_1.id, application=repeat)
-        db.session.add(repeated_card)
-        db.session.commit()
-        original = resolve_compatibility_composition_for_card(self.card_1)
-        repeated = resolve_compatibility_composition_for_card(repeated_card)
-        self.assertNotEqual(original.composition_id, repeated.composition_id)
-        self.assertEqual(repeated.application_id, repeat.id)
-        available = list_available_compositions_for_query(self._query(), clone_scope=None)
-        self.assertEqual(count_notes_by_composition(self._query(), clone_scope=None, compositions=available),
-                         {original.composition_id: 1, repeated.composition_id: 1})
-        self.assertEqual([row["card_id"] for row in self._open(original.composition_id)["cards"]], [self.card_1.id])
-        self.assertEqual([row["card_id"] for row in self._open(repeated.composition_id)["cards"]], [repeated_card.id])
-        repeat.status_code = "RETIRED"
-        db.session.commit()
-        self.assertEqual([item.composition_id for item in list_available_compositions_for_query(self._query(), clone_scope=None)],
-                         [original.composition_id])
 
     def test_session_binding_override_is_frozen_and_does_not_change_application(self):
         fields = [FieldDef(note_type_id=self.note_type.id, name=name, field_type="text", position=index)
