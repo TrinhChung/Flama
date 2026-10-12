@@ -1100,7 +1100,12 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
     rebase.applied_at = now
     db.session.flush()
     from app.services.template_release_service import stage_install_template_subscriptions
-    stage_install_template_subscriptions(db.session, install_id=install.id, user_id=user_id)
+    stage_install_template_subscriptions(
+        db.session,
+        install_id=install.id,
+        user_id=user_id,
+        from_release_id=rebase.from_release_id,
+    )
     return rebase
 
 

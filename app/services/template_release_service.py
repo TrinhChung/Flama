@@ -588,20 +588,101 @@ def stage_note_type_template_subscriptions(session, *, note_type_install_id, use
     return received
 
 
-def _attach_received_template(session, subscription, source_app, *, user_id):
+def _ensure_local_field_map(session, *, source_nt, local_nt):
+    source_fields = session.execute(
+        select(FieldDef.__table__)
+        .where(FieldDef.note_type_id == source_nt)
+        .order_by(FieldDef.position.asc(), FieldDef.id.asc())
+    ).mappings().all()
+    local_fields = session.execute(
+        select(FieldDef.__table__).where(FieldDef.note_type_id == local_nt)
+    ).mappings().all()
+    local_by_name = {row["name"]: row["id"] for row in local_fields}
+    for row in source_fields:
+        if row["name"] not in local_by_name:
+            new_field_id = uuid_str()
+            session.execute(insert(FieldDef.__table__).values(
+                id=new_field_id,
+                note_type_id=local_nt,
+                name=row["name"],
+                field_type=row["field_type"],
+                position=row["position"],
+                required=bool(row["required"]),
+                identity_role=row.get("identity_role"),
+            ))
+            local_by_name[row["name"]] = new_field_id
+    return {row["id"]: local_by_name.get(row["name"]) for row in source_fields}
+
+
+def _mapped_bindings(source_app, field_map):
+    if not source_app:
+        return {}
+    return {
+        key: field_map.get(value)
+        for key, value in (source_app.get("input_bindings") or {}).items()
+    }
+
+
+def _sync_subscription_to_pinned_release(session, subscription, *, target_release_id):
+    if not target_release_id or subscription["applied_release_id"] == target_release_id:
+        return subscription
+    source_id = subscription["source_template_id"]
+    target = repository.release(session, target_release_id, source_id)
+    applied = repository.release(session, subscription["applied_release_id"], source_id)
+    if target is None or applied is None or int(target["sequence_no"]) <= int(applied["sequence_no"]):
+        return subscription
+    local = repository.template(session, subscription["local_template_id"], lock=True)
+    pending = _prepare(session, subscription, local, {"release_id": target["id"]}, automatic=True)
+    if pending["status"] == "ready":
+        subscription = dict(subscription, pending_update_json=pending)
+        _apply(session, subscription, local, {"preparation_id": pending["id"]})
+    return repository.subscription(session, user_id=subscription["user_id"], source_template_id=source_id)
+
+
+def _attach_received_template(session, subscription, source_app, *, user_id, base_app=None, reactivate=False):
     source_nt = source_app["note_type_id"]
     nt_install = repository.one(session, NoteTypeInstall, NoteTypeInstall.user_id == user_id, NoteTypeInstall.source_note_type_id == source_nt)
     if not nt_install or not nt_install["installed_note_type_id"]:
         return
     local_nt = nt_install["installed_note_type_id"]
+    field_map = _ensure_local_field_map(session, source_nt=source_nt, local_nt=local_nt)
+    bindings = _mapped_bindings(source_app, field_map)
     existing = repository.one(session, StudyApplication, StudyApplication.note_type_id == local_nt, StudyApplication.template_id == subscription["local_template_id"])
     if existing:
+        updates = {}
+        if base_app is not None:
+            base_bindings = _mapped_bindings(base_app, field_map)
+            local_bindings = dict(existing.get("input_bindings") or {})
+            merged_bindings = {}
+            for key in set(base_bindings) | set(bindings) | set(local_bindings):
+                b_val = base_bindings.get(key)
+                u_val = bindings.get(key)
+                l_val = local_bindings.get(key)
+                if key in bindings:
+                    merged_bindings[key] = u_val if l_val == b_val else l_val
+                elif l_val != b_val and l_val is not None:
+                    merged_bindings[key] = l_val
+            if merged_bindings != local_bindings:
+                updates["input_bindings"] = merged_bindings
+            for prop, default in (("display_name", None), ("is_default", False), ("position", 0)):
+                b_val = bool(base_app.get(prop)) if prop == "is_default" else base_app.get(prop, default)
+                u_val = bool(source_app.get(prop)) if prop == "is_default" else source_app.get(prop, default)
+                l_val = bool(existing.get(prop)) if prop == "is_default" else existing.get(prop, default)
+                if l_val == b_val and u_val != l_val:
+                    updates[prop] = u_val
+        elif reactivate and existing.get("status_code") != "ACTIVE":
+            updates.update(
+                input_bindings=bindings,
+                display_name=source_app.get("display_name"),
+                is_default=bool(source_app.get("is_default")),
+                position=source_app.get("position", 0),
+            )
+        if reactivate and existing.get("status_code") != "ACTIVE":
+            updates["status_code"] = "ACTIVE"
+        if updates:
+            updates["updated_at"] = _now()
+            repository.update_row(session, StudyApplication, [StudyApplication.id == existing["id"]], updates)
         return  # reinstall never overwrites a user's customized binding
-    source_fields = session.execute(select(FieldDef.__table__).where(FieldDef.note_type_id == source_nt)).mappings().all()
-    local_fields = session.execute(select(FieldDef.__table__).where(FieldDef.note_type_id == local_nt)).mappings().all()
-    local_by_name = {row["name"]: row["id"] for row in local_fields}
-    field_map = {row["id"]: local_by_name.get(row["name"]) for row in source_fields}
-    bindings = {key: field_map.get(value) for key, value in (source_app.get("input_bindings") or {}).items()}
     session.execute(insert(StudyApplication.__table__).values(
         id=uuid_str(), note_type_id=local_nt, template_id=subscription["local_template_id"],
         occurrence_key="compat", input_bindings=bindings, status_code="ACTIVE",
@@ -617,6 +698,42 @@ def _attach_received_template(session, subscription, source_app, *, user_id):
             StudyApplication.occurrence_key == "compat",
         ).values(status_code="RETIRED"))
         session.execute(update(Template.__table__).where(Template.id.in_(raw_ids)).values(archived_at=_now()))
+
+
+def _retire_unpinned_received_applications(session, *, install, user_id, active_source_ids, base_source_ids):
+    source_nt = install.get("source_note_type_id")
+    if not source_nt:
+        return
+    nt_install = repository.one(session, NoteTypeInstall, NoteTypeInstall.user_id == user_id, NoteTypeInstall.source_note_type_id == source_nt)
+    if not nt_install or not nt_install.get("installed_note_type_id"):
+        return
+    local_nt = nt_install["installed_note_type_id"]
+    prior_source_ids = set(base_source_ids)
+    if install.get("deck_item_id"):
+        prior_source_ids.update(
+            session.execute(
+                select(DeckReleaseTemplatePin.source_template_id)
+                .join(DeckRelease.__table__, DeckRelease.id == DeckReleaseTemplatePin.deck_release_id)
+                .where(DeckRelease.deck_item_id == install["deck_item_id"])
+            ).scalars().all()
+        )
+    for retired_source_id in sorted(prior_source_ids - set(active_source_ids)):
+        sub = repository.subscription(session, user_id=user_id, source_template_id=retired_source_id)
+        if not sub:
+            continue
+        existing = repository.one(
+            session,
+            StudyApplication,
+            StudyApplication.note_type_id == local_nt,
+            StudyApplication.template_id == sub["local_template_id"],
+        )
+        if existing and existing.get("status_code") == "ACTIVE":
+            repository.update_row(
+                session,
+                StudyApplication,
+                [StudyApplication.id == existing["id"]],
+                {"status_code": "RETIRED", "updated_at": _now()},
+            )
 
 
 def list_install_templates(*, user_id, install_id):
@@ -635,7 +752,7 @@ def list_install_templates(*, user_id, install_id):
     return {"install_id": install_id, "items": items, "legacy_template_fallback": not bool(release and release.get("template_pins_initialized"))}
 
 
-def stage_install_template_subscriptions(session, *, install_id, user_id):
+def stage_install_template_subscriptions(session, *, install_id, user_id, from_release_id=None):
     """Receive canonical user copies and attach them to the installed NoteType.
 
     Historical releases without a pin manifest retain explicit legacy behavior;
@@ -648,10 +765,30 @@ def stage_install_template_subscriptions(session, *, install_id, user_id):
     if not release or not release.get("template_pins_initialized"):
         return []
     pins = repository.deck_pins(session, release["id"])
+    base_release_id = from_release_id or release.get("parent_release_id")
+    base_pins = repository.deck_pins(session, base_release_id) if base_release_id else {}
     received = []
     for source_id, pin in sorted(pins.items()):
         subscription = ensure_subscription(session, user_id=user_id, source_template_id=source_id, release_id=pin["template_release_id"])
+        subscription = _sync_subscription_to_pinned_release(session, subscription, target_release_id=pin["template_release_id"])
         received.append(subscription)
+        base_pin = base_pins.get(source_id)
+        base_apps = list((base_pin.get("applications_json") or {}).values()) if base_pin else []
+        base_app = base_apps[0] if base_apps else None
         for source_app in (pin["applications_json"] or {}).values():
-            _attach_received_template(session, subscription, source_app, user_id=user_id)
+            _attach_received_template(
+                session,
+                subscription,
+                source_app,
+                user_id=user_id,
+                base_app=base_app,
+                reactivate=bool(base_release_id is not None or source_id not in base_pins),
+            )
+    _retire_unpinned_received_applications(
+        session,
+        install=install,
+        user_id=user_id,
+        active_source_ids=set(pins),
+        base_source_ids=set(base_pins),
+    )
     return received
