@@ -1,8 +1,11 @@
 # P11 and Template origin retirement qualification
 
-Date: 2026-10-12. Mode: DESIGN/implementation. Workspace: isolated
-`D:/Project/nihongo-legacy-retirement`. This report records focused SQLite
-qualification; it does not certify MySQL deployment or the whole application.
+Date: 2026-10-12. Implementation and deployment complete. Workspace:
+`D:/Project/nihongo-legacy-retirement`. The focused evidence below is supplemented
+by 2,320 passing backend tests, frontend/build qualification, and actual local
+and VPS MySQL cutovers to revision 62 with 20 protected checksums unchanged.
+See [the deployment report](../plans/completed/LEGACY_RETIREMENT_CUTOVER_REPORT_2026-10-12.md)
+for target-specific counts, backups and service health.
 
 ## Invariants and resulting architecture
 
@@ -66,15 +69,14 @@ Factory, mapper configuration and SQLite `db.create_all()` passed. Runtime
 metadata contains no physical `cards` or retired CardProgress table. `git diff
 --check` passed for these changes.
 
-## Remaining release gates
+## Completed release gates
 
-The root task must verify complete consumer cutover, old session/receipt replay
+Root verification covered complete consumer cutover, old session/receipt replay
 suites, historical migration chain, MySQL DDL and backup/restore rehearsal,
-then local-first deployment before VPS. The real REST/Connect suites above
-passed after origin readers/writers and obsolete fixtures were migrated;
-earlier transient failures are not used as release evidence. No real local or
-VPS data was changed by this subtask. Root MySQL/deployment evidence belongs
-in its deployment report, independently of these SQLite proofs.
+then actual local deployment followed by VPS. The focused REST/Connect suites
+above passed after origin readers/writers and obsolete fixtures were migrated;
+earlier transient failures are not used as release evidence. Target-specific
+deployment evidence is recorded independently of these focused SQLite proofs.
 
 ## Root qualification added after the focused review
 
@@ -82,4 +84,10 @@ The populated MySQL rehearsal upgraded the latest deployed revision 57 to 62. It
 
 The baseline-to-head chain also passed on fresh MySQL. Actual MySQL batch admission/recovery and 19 direct/overlay replay cases passed, followed by the concurrent NOTE review/signup/create probe. SQL tracing over 192 tests recorded no runtime CardProgress or physical Card queries. Real old UUID sessions preserve membership, snapshot, authority pins, events and exact stored replay receipts; reset also cancels old UUID leases.
 
-Production gates are still pending: integrate the newer template attachment commits, complete backend release verification, then apply to actual local and only afterward VPS. This report does not label isolated rehearsal as production deployment.
+The newer template attachment commits are integrated. Full backend qualification
+passed 2,320 tests (seven skipped); focused frontend, typecheck and production
+build passed. Actual local and VPS migrations reached revision 62 after
+independent full-backup and seven-table archive restores. All 20 protected
+checksums stayed identical on each target. The selected VPS release is
+`fb685882099d20d90479d234402ae3b098076f89`; web, Connect and worker are active,
+and web/API/Connect health returned 200.
