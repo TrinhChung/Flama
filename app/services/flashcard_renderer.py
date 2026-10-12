@@ -1025,10 +1025,6 @@ def build_render_context(
         if key not in context:
             context[key] = _plain_context_value(value)
 
-    # Common alias for compatibility with older templates.
-    if "hanviet" in context and "han_viet" not in context:
-        context["han_viet"] = context["hanviet"]
-
     # Anki allows dots in field names (literal strings), but Mustache
     # treats dots as nested property access.  Mirror flat dotted keys
     # into nested dicts so both semantics work.
