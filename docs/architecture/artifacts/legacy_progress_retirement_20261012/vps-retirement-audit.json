@@ -1,0 +1,62 @@
+{
+  "archive_candidate_rows": {
+    "study_progress_backfill_checkpoints": 1,
+    "study_progress_backfill_dispositions": 16986,
+    "study_progress_backfill_runs": 1,
+    "vocabulary_column_preferences": 0
+  },
+  "authority_modes": {
+    "NOTE": 32
+  },
+  "blockers": [],
+  "current_state_problems": {},
+  "current_subject_statuses": {
+    "MIRRORED_EQUIVALENT_FANIN": 60,
+    "MIRRORED_SINGLE": 42779
+  },
+  "current_subjects": 42839,
+  "database": {
+    "dialect": "mysql",
+    "host": null,
+    "name": "flama",
+    "port": null,
+    "version": "8.0.46-0ubuntu0.22.04.4"
+  },
+  "fanin_groups": 0,
+  "frozen_mapping_failure_codes": {},
+  "frozen_state_comparison": {
+    "different_current_state_preserved": 483,
+    "same_semantic_state": 40310
+  },
+  "meaning": "DATA_READY verifies coverage/current state; it does not authorize dropping runtime consumers.",
+  "mode": "read-only consistent snapshot; no app startup",
+  "observed_at_utc": "2026-10-11T15:58:36.086641+00:00",
+  "problem_samples": [],
+  "progress_coverage": {
+    "covered_rows": 40793,
+    "missing_current_state_rows": 0,
+    "missing_subject_rows": 0,
+    "old_rows": 40793,
+    "old_rows_written_since_cutover": 0,
+    "rows_on_legacy_or_unenrolled_learner": 0,
+    "target_note_identity_mismatch_rows": 0,
+    "tombstoned_rows": 0,
+    "unresolved_rows": 0
+  },
+  "schema_version": "legacy-progress-retirement.v1",
+  "snapshot_sha256": {
+    "card_progress": "f4af3cb924bbb099b1c6f565a0906af91f416ca5f506f65153d621d8af993b04",
+    "study_progress_subjects": "21db3a698708c570f59485eb09d3d08064672ea1866027b1a10541b1601fe486"
+  },
+  "status": "DATA_READY",
+  "storage_profiles": [
+    {
+      "created_at": "2026-09-30T23:30:35.624779",
+      "epoch": 3,
+      "id": 1,
+      "profile_code": "CONSOLIDATED_V1",
+      "switched_at": "2026-10-03T06:38:52.000000",
+      "updated_at": "2026-10-03T06:38:52.000000"
+    }
+  ]
+}
