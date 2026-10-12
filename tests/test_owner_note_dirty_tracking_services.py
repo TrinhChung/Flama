@@ -62,6 +62,7 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
                 "WTF_CSRF_ENABLED": False,
                 "FLASHCARD_MEDIA_UPLOAD_ROOT": self.upload_tmp.name,
                 "FLASHCARD_MEDIA_MAX_BYTES": 1024 * 1024,
+                "STUDY_WIRE_V4_ENABLED": True,
             }
         )
 
@@ -746,6 +747,7 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
         )
         self.assertEqual(opened.status_code, 201, opened.get_json())
         snapshot = opened.get_json()
+        self.assertEqual(snapshot["schema_version"], "study-session.v4")
         card_payload = next(
             card
             for card in snapshot["cards"]
