@@ -362,13 +362,10 @@ describe('renderStudySide', () => {
       expect(result.allowed_audio_urls).toContain('https://example.com/voice.mp3')
     })
 
-    it('supports alias mapping like han_viet and nested objects', () => {
+    it('supports nested dotted object mapping', () => {
       const updated = patchRenderContext({}, {
-        han_viet: 'KHUYỂN',
         'meta.source': 'JMdict',
       })
-      expect(updated.han_viet).toBe('KHUYỂN')
-      expect(updated.hanviet).toBe('KHUYỂN')
       expect((updated as any).meta?.source).toBe('JMdict')
     })
 

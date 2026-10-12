@@ -205,11 +205,6 @@ export function patchRenderContext(
         .replace(/\\n/g, LINEBREAK_TOKEN)
         .replace(/\n/g, LINEBREAK_TOKEN)
       next[key] = normalized
-      if (key === 'hanviet') {
-        next['han_viet'] = normalized
-      } else if (key === 'han_viet') {
-        next['hanviet'] = normalized
-      }
     }
 
     if (key.includes('.')) {

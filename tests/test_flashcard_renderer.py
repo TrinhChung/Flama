@@ -209,7 +209,7 @@ class FlashcardRendererTests(unittest.TestCase):
     def test_inline_script_is_preserved_for_sandbox_renderer_output(self):
         template = self._template(
             """{{#word_audio}}<audio id="custom-audio" src="{{word_audio}}"></audio>{{/word_audio}}
-            {{#hanviet}}<div>{{han_viet}}</div>{{/hanviet}}
+            {{#hanviet}}<div>{{hanviet}}</div>{{/hanviet}}
             {{image}}{{diagram}}
             <script>window.__fc_test = true;</script>"""
         )
@@ -527,6 +527,36 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertEqual(context["Word"], "犬")
         self.assertIn("<i>dog</i>", context["Meaning"])
         self.assertEqual(context["LegacyX"], "value")
+
+    def test_template_alias_mapping_via_input_bindings(self):
+        template = SimpleNamespace(
+            id="tpl-alias",
+            front_html="<div>{{Term}}</div>",
+            back_html="<div>{{han_viet}}</div>",
+            shared_css="",
+            updated_at=datetime(2026, 2, 23, 12, 0, 0),
+            input_schema=[
+                {"key": "Term", "type": "text", "required": True},
+                {"key": "han_viet", "type": "text", "required": False},
+            ],
+            input_bindings={
+                "Term": "f-1",
+                "han_viet": "f-2",
+            },
+        )
+        fields = [
+            SimpleNamespace(id="f-1", name="word", field_type="text", required=True),
+            SimpleNamespace(id="f-2", name="hanviet", field_type="text", required=False),
+        ]
+        values = {"word": "犬", "hanviet": "KHUYỂN"}
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values=values,
+            media_assets=[],
+        )
+        self.assertIn("犬", rendered["front_html"])
+        self.assertIn("KHUYỂN", rendered["back_html"])
 
 
 class FlashcardSecurityTests(unittest.TestCase):
