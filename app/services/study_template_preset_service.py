@@ -136,7 +136,7 @@ def save_preset(*, user_id, deck_id, payload):
         raise TemplateLibraryError("VALIDATION_ERROR", "selected_compositions must be a unique string array.", field="selected_compositions")
     if any(item not in by_id for item in selected):
         raise TemplateLibraryError("COMPOSITION_OUT_OF_SCOPE", "Selected composition is outside this deck.", status=403)
-    if not isinstance(bindings, dict) or any(key not in selected for key in bindings) or not isinstance(ask, bool):
+    if not isinstance(bindings, dict) or any(key not in by_id for key in bindings) or not isinstance(ask, bool):
         raise TemplateLibraryError("VALIDATION_ERROR", "Invalid preset bindings or prompt preference.")
     validated = {}
     clone_scope = flashcards_share_service.resolve_clone_scope_for_local_deck(user_id=user_id, local_deck_id=deck_id)
@@ -162,11 +162,12 @@ def resolve_session_preset(user_id, scope_type, scope_id, requested_composition_
     if requested_composition_id is not None or scope_type != "deck":
         return requested_composition_id
     row = _row(user_id, int(scope_id))
-    if row is None or row.ask_before_study or len(row.selected_compositions or []) != 1:
+    if row is None or row.ask_before_study or not (row.selected_compositions or []):
         return None
     available = _scope(user_id, int(scope_id))
-    saved = row.selected_compositions[0]
-    if saved not in {item.composition_id for item in available}:
+    valid = {item.composition_id for item in available}
+    saved = next((item for item in (row.selected_compositions or []) if item in valid), None)
+    if saved is None:
         raise TemplateLibraryError("COMPOSITION_STALE", "Saved study composition is no longer available.", status=409)
     return saved
 

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   ExternalLink,
   ListFilter,
   Settings2,
@@ -89,17 +90,17 @@ function SelectInputsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] max-w-lg sm:max-w-xl max-h-[85dvh] flex flex-col gap-0 p-0 overflow-hidden rounded-2xl border-border/40 shadow-2xl">
-        <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/25">
-          <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-            <SlidersHorizontal className="size-4.5 sm:size-5 text-primary shrink-0" />
+        <DialogHeader className="p-3.5 sm:p-5 pb-2.5 sm:pb-3 border-b border-border/25">
+          <DialogTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
+            <SlidersHorizontal className="size-4 sm:size-4.5 text-primary shrink-0" />
             <span>Chọn các trường truyền vào template</span>
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground mt-1">
+          <DialogDescription className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">
             Chọn những trường sẽ truyền dữ liệu vào template cho phiên học này. Nếu bỏ chọn, template sẽ nhận giá trị null.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-5 sm:py-2.5 bg-muted/20 border-b border-border/25 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 px-3.5 py-1.5 sm:px-5 sm:py-2 bg-muted/20 border-b border-border/25 text-[11px] sm:text-xs">
           <span className="text-muted-foreground font-medium">
             Tổng cộng: {inputSchema.length} trường
           </span>
@@ -146,7 +147,7 @@ function SelectInputsDialog({
               return (
                 <div
                   key={input.key}
-                  className={`rounded-xl border p-3 sm:p-3.5 transition-all ${
+                  className={`rounded-xl border p-2.5 sm:p-3.5 transition-all ${
                     isTransmitted
                       ? 'border-border/40 bg-card shadow-xs'
                       : 'border-border/20 bg-muted/20 opacity-75'
@@ -230,8 +231,8 @@ function SelectInputsDialog({
           )}
         </div>
 
-        <DialogFooter className="p-3.5 sm:p-4 border-t border-border/25 bg-muted/15 sm:justify-end">
-          <Button onClick={() => onOpenChange(false)} className="w-full sm:w-auto rounded-xl">
+        <DialogFooter className="p-3 sm:p-4 border-t border-border/25 bg-muted/15 sm:justify-end">
+          <Button onClick={() => onOpenChange(false)} className="w-full sm:w-auto h-9 sm:h-10 text-xs sm:text-sm rounded-xl">
             <Check className="mr-1.5 size-4" />
             Xác nhận
           </Button>
@@ -280,29 +281,29 @@ export function StudyTemplatePreparation({
   }).length
 
   return (
-    <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-y-auto p-3.5 sm:p-6 text-foreground">
+    <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-y-auto p-3 sm:p-6 text-foreground">
       <AmbientBackground />
-      <main className="relative z-10 w-full max-w-2xl rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-5 sm:p-8 shadow-2xl shadow-primary/5 dark:shadow-none">
+      <main className="relative z-10 w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-4 sm:p-8 shadow-2xl shadow-primary/5 dark:shadow-none">
         {/* Nút quay về Dashboard ở đầu màn hình */}
-        <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-border/25">
+        <div className="flex items-center justify-between pb-3 mb-4 sm:pb-3.5 sm:mb-5 border-b border-border/25">
           <Button
             asChild
             variant="ghost"
             size="sm"
-            className="-ml-2 rounded-full text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            className="-ml-1.5 sm:-ml-2 rounded-full text-xs sm:text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
           >
             <Link to="/dashboard">
               <ArrowLeft className="mr-1.5 size-4 shrink-0" /> Quay về Dashboard
             </Link>
           </Button>
-          <span className="text-[11px] sm:text-xs text-muted-foreground/80 font-medium px-2.5 py-1 rounded-full bg-muted/40">
+          <span className="text-[10px] sm:text-xs text-muted-foreground/80 font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-muted/40">
             Phiên học Flashcard
           </span>
         </div>
 
         <div className="space-y-1">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Chuẩn bị phiên học</h1>
-          {deckName ? <p className="text-xs sm:text-sm text-muted-foreground">{deckName}</p> : null}
+          <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">Chuẩn bị phiên học</h1>
+          {deckName ? <p className="text-xs sm:text-sm text-muted-foreground truncate">{deckName}</p> : null}
         </div>
 
         {preparation.error || error ? (
@@ -311,36 +312,46 @@ export function StudyTemplatePreparation({
           </div>
         ) : null}
 
-        <div className="mt-5 sm:mt-6 space-y-4 sm:space-y-5">
+        <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-5">
           {/* Chọn Template cho phiên học */}
           <div className="space-y-1.5">
-            <label htmlFor="study-template-choice" className="block text-xs sm:text-sm font-medium text-foreground">
-              Template cho phiên này
-            </label>
-            <select
-              id="study-template-choice"
-              value={preparation.compositionId ?? ''}
-              disabled={pending}
-              className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 cursor-pointer"
-              onChange={(event) => preparation.selectComposition(event.target.value)}
-            >
-              <option value="" disabled>
-                Chọn template
-              </option>
-              {choices.map((choice: StudyTemplateComposition) => (
-                <option key={choice.composition_id} value={choice.composition_id}>
-                  {choice.note_type_name ? `${choice.note_type_name} · ` : ''}
-                  {choice.template_name}
+            <div className="flex items-center justify-between">
+              <label htmlFor="study-template-choice" className="block text-xs sm:text-sm font-semibold text-foreground">
+                Template cho phiên này
+              </label>
+              {selectedChoice?.note_type_name && (
+                <span className="text-[11px] font-normal text-muted-foreground hidden sm:inline">
+                  {selectedChoice.note_type_name}
+                </span>
+              )}
+            </div>
+            <div className="relative w-full">
+              <select
+                id="study-template-choice"
+                value={preparation.compositionId ?? ''}
+                disabled={pending}
+                className="h-9.5 sm:h-10 w-full appearance-none rounded-xl border border-input/80 bg-background px-3 pr-9 text-xs sm:text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 cursor-pointer"
+                onChange={(event) => preparation.selectComposition(event.target.value)}
+              >
+                <option value="" disabled className="text-xs sm:text-sm">
+                  Chọn template
                 </option>
-              ))}
-            </select>
+                {choices.map((choice: StudyTemplateComposition) => (
+                  <option key={choice.composition_id} value={choice.composition_id} className="text-xs sm:text-sm">
+                    {choice.note_type_name ? `${choice.note_type_name} · ` : ''}
+                    {choice.template_name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground select-none" aria-hidden="true" />
+            </div>
           </div>
 
           {/* Phần tùy chọn truyền trường và mapping */}
           {preparation.entry && (
-            <div className="space-y-3.5 rounded-2xl border border-border/30 bg-muted/30 dark:bg-muted/15 p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
+            <div className="space-y-3 sm:space-y-3.5 rounded-2xl border border-border/30 bg-muted/30 dark:bg-muted/15 p-3.5 sm:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+                <div className="min-w-0">
                   <h2 className="text-xs sm:text-sm font-semibold text-foreground">
                     Dữ liệu truyền vào template
                   </h2>
@@ -351,7 +362,7 @@ export function StudyTemplatePreparation({
                 {totalInputs > 0 && (
                   <Badge
                     variant={transmittedCount > 0 ? 'secondary' : 'outline'}
-                    className="text-[11px] sm:text-xs shrink-0 rounded-full font-medium"
+                    className="text-[10px] sm:text-xs shrink-0 self-start sm:self-auto rounded-full font-medium"
                   >
                     {transmittedCount}/{totalInputs} trường được truyền
                   </Badge>
@@ -365,16 +376,16 @@ export function StudyTemplatePreparation({
               )}
 
               {/* 2 nút thao tác chính theo yêu cầu */}
-              <div className="grid gap-2.5 sm:grid-cols-2 pt-1">
+              <div className="grid gap-2 sm:gap-2.5 sm:grid-cols-2 pt-1">
                 {/* Nút 1: Chọn các trường sẽ truyền vào */}
                 <Button
                   type="button"
                   variant="outline"
                   disabled={pending}
-                  className="w-full justify-start h-auto py-2.5 px-3.5 rounded-xl border-border/40 bg-card hover:bg-card hover:border-primary/40 hover:shadow-xs transition-all cursor-pointer"
+                  className="w-full justify-start h-auto py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl border-border/40 bg-card hover:bg-card hover:border-primary/40 hover:shadow-xs transition-all cursor-pointer"
                   onClick={() => setFieldSelectionOpen(true)}
                 >
-                  <ListFilter className="mr-2.5 size-4 text-primary shrink-0" />
+                  <ListFilter className="mr-2 sm:mr-2.5 size-3.5 sm:size-4 text-primary shrink-0" />
                   <div className="text-left flex-1 min-w-0">
                     <div className="text-xs font-semibold">Chọn các trường truyền vào</div>
                     <div className="text-[11px] text-muted-foreground font-normal truncate">
@@ -392,10 +403,10 @@ export function StudyTemplatePreparation({
                   <Button
                     asChild
                     variant="outline"
-                    className="w-full justify-start h-auto py-2.5 px-3.5 rounded-xl border-border/40 bg-card hover:bg-card hover:border-primary/40 hover:shadow-xs transition-all cursor-pointer"
+                    className="w-full justify-start h-auto py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl border-border/40 bg-card hover:bg-card hover:border-primary/40 hover:shadow-xs transition-all cursor-pointer"
                   >
                     <Link to={mappingUrl} target="_blank" rel="noopener noreferrer">
-                      <Settings2 className="mr-2.5 size-4 text-primary shrink-0" />
+                      <Settings2 className="mr-2 sm:mr-2.5 size-3.5 sm:size-4 text-primary shrink-0" />
                       <div className="text-left flex-1 min-w-0">
                         <div className="text-xs font-semibold flex items-center justify-between">
                           <span>Thiết lập mapping Note Type</span>
@@ -412,9 +423,9 @@ export function StudyTemplatePreparation({
                     type="button"
                     variant="outline"
                     disabled
-                    className="w-full justify-start h-auto py-2.5 px-3.5 rounded-xl border-border/40 opacity-60"
+                    className="w-full justify-start h-auto py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl border-border/40 opacity-60"
                   >
-                    <Settings2 className="mr-2.5 size-4 text-muted-foreground shrink-0" />
+                    <Settings2 className="mr-2 sm:mr-2.5 size-3.5 sm:size-4 text-muted-foreground shrink-0" />
                     <div className="text-left">
                       <div className="text-xs font-semibold">Thiết lập mapping Note Type</div>
                       <div className="text-[11px] text-muted-foreground font-normal">
@@ -428,7 +439,7 @@ export function StudyTemplatePreparation({
           )}
 
           {/* Tùy chọn ghi nhớ */}
-          <div className="space-y-3 border-t border-border/25 pt-4 sm:pt-5">
+          <div className="space-y-2.5 sm:space-y-3 border-t border-border/25 pt-3.5 sm:pt-5">
             <label className="flex items-center gap-2.5 text-xs sm:text-sm cursor-pointer select-none group">
               <input
                 type="checkbox"
@@ -456,12 +467,12 @@ export function StudyTemplatePreparation({
           </div>
 
           {/* Nút hành động ở cuối */}
-          <div className="flex items-center justify-end pt-5 sm:pt-6 border-t border-border/25">
+          <div className="flex items-center justify-end pt-4 sm:pt-6 border-t border-border/25">
             <Button
               size="lg"
               disabled={pending || !preparation.compositionId}
               onClick={onStart}
-              className="w-full sm:w-auto min-w-36 h-11 px-6 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md shadow-primary/15 transition-all cursor-pointer"
+              className="w-full sm:w-auto min-w-36 h-10 sm:h-11 px-6 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs sm:text-sm font-semibold shadow-md shadow-primary/15 transition-all cursor-pointer"
             >
               {preparation.error || error ? 'Thử lại' : 'Bắt đầu học'}
             </Button>

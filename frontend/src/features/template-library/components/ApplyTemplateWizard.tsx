@@ -53,7 +53,7 @@ function useApplyTemplate({ template, initialNoteTypeId, initialOccurrenceKey, o
   const [error, setError] = useState<Error | null>(null)
   const noteTypes = useQuery({
     queryKey: ['note-types', 'template-attachment'],
-    queryFn: ({ signal }) => apiRequest<{ items: AttachableNoteType[] }>('/api/note-types', { signal }),
+    queryFn: ({ signal }) => apiRequest<{ items: AttachableNoteType[] }>('/api/note-types?compact=true', { signal }),
   })
   useEffect(() => {
     mounted.current = true

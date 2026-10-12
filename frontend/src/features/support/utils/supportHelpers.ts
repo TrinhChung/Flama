@@ -24,6 +24,7 @@ export const ROUTE_KEY_MAP: Record<string, string> = {
   '/marketplace/note-types': 'screens.marketplace_note_types',
   '/orders': 'screens.orders',
   '/settings/yomitan': 'screens.settings_yomitan',
+  '/settings/asbplayer': 'screens.settings_asbplayer',
   '/settings/mcp-tokens': 'screens.settings_mcp_tokens',
   '/feedback': 'screens.feedback',
   '/tickets': 'screens.tickets',
@@ -34,6 +35,8 @@ export const ROUTE_KEY_MAP: Record<string, string> = {
   '/admin/image-library': 'screens.admin_image_library',
   '/admin/support': 'screens.admin_support',
 }
+
+export const SCREEN_MAP = ROUTE_KEY_MAP
 
 export const ROUTE_NAME_MAP: Record<string, string> = {
   '/dashboard': 'Trang chủ / Tổng quan',
@@ -49,6 +52,7 @@ export const ROUTE_NAME_MAP: Record<string, string> = {
   '/marketplace/note-types': 'Kho loại thẻ',
   '/orders': 'Danh sách đơn hàng',
   '/settings/yomitan': 'Cài đặt Kết nối Yomitan',
+  '/settings/asbplayer': 'Cài đặt Kết nối asbplayer',
   '/settings/mcp-tokens': 'MCP Access Tokens',
   '/feedback': 'Góp ý & Báo lỗi',
   '/tickets': 'Danh sách Ticket hỗ trợ',

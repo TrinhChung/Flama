@@ -7,6 +7,8 @@ export { CardSideToggle } from './ui/CardSideToggle'
 export type { CardSide, CardSideToggleProps } from './ui/CardSideToggle'
 export { MediaFieldPreview, resolveDisplayUrl } from './ui/MediaFieldPreview'
 export type { MediaFieldPreviewProps } from './ui/MediaFieldPreview'
+export { ArrayFieldInput } from './ui/ArrayFieldInput'
+export type { ArrayFieldInputProps, ArrayViewMode } from './ui/ArrayFieldInput'
 export type {
   CardRendererFrameProps,
   CardDisplayProps,

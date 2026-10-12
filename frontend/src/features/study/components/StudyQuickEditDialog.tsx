@@ -11,11 +11,12 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { LoaderCircle, Pencil, PenTool, RotateCcw, Save } from 'lucide-react'
+import { AlignLeft, Code, LoaderCircle, Pencil, PenTool, RotateCcw, Save } from 'lucide-react'
 import { BrowseStrokeModal } from '@/features/browse/components/BrowseStrokeModal'
 import { StudyQuickEditFields } from './StudyQuickEditFields'
 import { StudyQuickEditTags } from './StudyQuickEditTags'
 import { useStudyQuickEditForm } from '../hooks/useStudyQuickEditForm'
+import type { ArrayViewMode } from '@/entities/flashcard'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 
 export type StudyQuickEditDialogProps = {
@@ -44,6 +45,7 @@ export function StudyQuickEditDialog({
 }: StudyQuickEditDialogProps) {
   const { t } = useTranslation('study')
   const [isStrokeModalOpen, setIsStrokeModalOpen] = useState(false)
+  const [arrayViewMode, setArrayViewMode] = useState<ArrayViewMode>('normal')
 
   const {
     fieldValues,
@@ -115,17 +117,49 @@ export function StudyQuickEditDialog({
                 </div>
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 sm:px-2.5 text-xs font-semibold gap-1.5 rounded-lg bg-background/80 hover:bg-muted shrink-0 border-border/80 shadow-2xs"
-                title={t('quick_edit.generate_stroke_tooltip')}
-                onClick={() => setIsStrokeModalOpen(true)}
-              >
-                <PenTool className="size-3.5 text-primary" />
-                <span className="hidden sm:inline">{t('quick_edit.generate_stroke')}</span>
-              </Button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* View Mode Toggle: Normal lines vs Code (Array) */}
+                <div className="flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setArrayViewMode('normal')}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      arrayViewMode === 'normal'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    title={t('quick_edit.view_mode_normal_tooltip', 'Chế độ xem thường')}
+                  >
+                    <AlignLeft className="size-3" />
+                    <span className="hidden sm:inline">{t('quick_edit.view_mode_normal', 'Thường')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setArrayViewMode('code')}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      arrayViewMode === 'code'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    title={t('quick_edit.view_mode_code_tooltip', 'Chế độ xem code mảng JSON')}
+                  >
+                    <Code className="size-3" />
+                    <span className="hidden sm:inline">{t('quick_edit.view_mode_code', 'Code')}</span>
+                  </button>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 sm:px-2.5 text-xs font-semibold gap-1.5 rounded-lg bg-background/80 hover:bg-muted shrink-0 border-border/80 shadow-2xs"
+                  title={t('quick_edit.generate_stroke_tooltip')}
+                  onClick={() => setIsStrokeModalOpen(true)}
+                >
+                  <PenTool className="size-3.5 text-primary" />
+                  <span className="hidden sm:inline">{t('quick_edit.generate_stroke')}</span>
+                </Button>
+              </div>
             </div>
           </DialogHeader>
 
@@ -139,6 +173,7 @@ export function StudyQuickEditDialog({
               fieldValues={fieldValues}
               onFieldValueChange={handleFieldValueChange}
               resolveMediaUrl={mediaResolver}
+              mode={arrayViewMode}
             />
 
             <StudyQuickEditTags

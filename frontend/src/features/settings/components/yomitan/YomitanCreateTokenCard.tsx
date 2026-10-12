@@ -7,21 +7,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Check, Copy, ExternalLink, KeyRound, ShieldAlert } from 'lucide-react'
-import type { TokenPreset } from '../../hooks/useYomitanTokenCRUD'
 
 interface YomitanCreateTokenCardProps {
   name: string
   setName: (name: string) => void
   expiry: string
   setExpiry: (expiry: string) => void
-  preset: TokenPreset
-  setPreset: (preset: TokenPreset) => void
   isPending: boolean
   onCreate: () => void
   issuedConnectUrl: string | null
-  issuedMiningKey: string | null
-  onSetupMining: () => void
-  isPreparingMining: boolean
   copied: string | null
   onCopy: (label: string, value: string) => void
 }
@@ -31,14 +25,9 @@ export function YomitanCreateTokenCard({
   setName,
   expiry,
   setExpiry,
-  preset,
-  setPreset,
   isPending,
   onCreate,
   issuedConnectUrl,
-  issuedMiningKey,
-  onSetupMining,
-  isPreparingMining,
   copied,
   onCopy,
 }: YomitanCreateTokenCardProps) {
@@ -67,17 +56,6 @@ export function YomitanCreateTokenCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 sm:p-6 pt-0 space-y-5 sm:space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="connect-token-preset" className="text-xs font-semibold">
-            {t('connect.preset.label', 'Ứng dụng và quyền truy cập')}
-          </Label>
-          <NativeSelect id="connect-token-preset" className="w-full h-10 text-sm" value={preset}
-            onChange={(event) => setPreset(event.target.value as TokenPreset)}>
-            <NativeSelectOption value="legacy">Yomitan / Flama Connect</NativeSelectOption>
-            <NativeSelectOption value="mining-text">asbplayer — {t('connect.preset.text', 'chỉ văn bản')}</NativeSelectOption>
-            <NativeSelectOption value="mining-media">asbplayer — {t('connect.preset.media', 'văn bản, ảnh và MP3')}</NativeSelectOption>
-          </NativeSelect>
-        </div>
         <div className="grid gap-4 md:grid-cols-[1fr_240px_auto] md:items-end">
           <div className="space-y-2">
             <Label htmlFor="connect-token-name" className="text-xs font-semibold">
@@ -119,20 +97,7 @@ export function YomitanCreateTokenCard({
           </Button>
         </div>
 
-        {preset !== 'legacy' ? (
-          <Alert className="border-sky-500/30 bg-sky-50/50 dark:bg-sky-950/20 p-3.5 sm:p-4">
-            <AlertTitle>{t('connect.mining.title', 'Cấu hình asbplayer')}</AlertTitle>
-            <AlertDescription className="space-y-2 text-xs">
-              <p>{t('connect.mining.mapping', 'Chọn Add, deck Sentences và model Sentence Card. Map sentence → Sentence, definition → Definition, word → Word, source → Source, URL → URL.')}</p>
-              <p>{preset === 'mining-media'
-                ? t('connect.mining.media', 'Map image → Image, audio → Audio và chọn audio MP3.')
-                : t('connect.mining.text', 'Để trống mapping image và audio khi chỉ gửi văn bản.')}</p>
-              <Button variant="outline" size="sm" disabled={isPreparingMining} onClick={onSetupMining}>
-                {t('connect.mining.prepare', 'Chuẩn bị deck và model')}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : <Alert className="border-sky-500/30 bg-sky-50/50 dark:bg-sky-950/20 p-3.5 sm:p-4">
+        <Alert className="border-sky-500/30 bg-sky-50/50 dark:bg-sky-950/20 p-3.5 sm:p-4">
           <ShieldAlert className="size-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
           <div>
             <AlertTitle className="text-sky-900 dark:text-sky-200 text-xs sm:text-sm font-semibold">
@@ -170,16 +135,14 @@ export function YomitanCreateTokenCard({
               </p>
             </AlertDescription>
           </div>
-        </Alert>}
+        </Alert>
 
         {issuedConnectUrl ? (
           <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 p-3.5 sm:p-4">
             <ShieldAlert className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="space-y-2.5 w-full min-w-0">
               <AlertTitle className="text-amber-900 dark:text-amber-200 font-bold text-xs sm:text-sm">
-                {issuedMiningKey
-                  ? t('connect.mining.save_key_warning', 'Sao chép API key ngay — Flama chỉ hiển thị key này một lần.')
-                  : t('yomitan.form.issued_warning_title')}
+                {t('yomitan.form.issued_warning_title')}
               </AlertTitle>
               <AlertDescription className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                 <code className="min-w-0 flex-1 break-all rounded-lg border bg-background p-3 text-xs font-mono select-all overflow-x-auto max-h-32">
@@ -198,16 +161,6 @@ export function YomitanCreateTokenCard({
                   {copied === 'connect-url' ? t('yomitan.form.copied_btn') : t('yomitan.form.copy_btn')}
                 </Button>
               </AlertDescription>
-              {issuedMiningKey ? (
-                <div className="space-y-2">
-                  <p className="text-xs">{t('connect.mining.key_label', 'Dán token này vào API key của asbplayer:')}</p>
-                  <code className="block break-all rounded-lg border bg-background p-3 text-xs font-mono select-all">{issuedMiningKey}</code>
-                  <Button variant="outline" size="sm" onClick={() => onCopy('connect-key', issuedMiningKey)}>
-                    {copied === 'connect-key' ? <Check className="mr-2 size-4" /> : <Copy className="mr-2 size-4" />}
-                    {copied === 'connect-key' ? t('yomitan.form.copied_btn') : t('connect.mining.copy_key', 'Sao chép API key')}
-                  </Button>
-                </div>
-              ) : null}
             </div>
           </Alert>
         ) : null}

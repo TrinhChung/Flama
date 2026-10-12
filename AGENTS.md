@@ -61,6 +61,11 @@
 - Flashcard HTML rendering and media safety flow through `app/services/flashcard_renderer.py` plus CSP and `/media/proxy/<asset_id>` constraints. Preserve sanitization and proxy-based media access.
 - For UI work, target the React frontend (`frontend/src/`). Jinja templates have been completely deleted; all user-facing UI is in React.
 - Mặc định khi người dùng yêu cầu sửa/nâng cấp giao diện (UI/UX), làm việc và điều chỉnh trên React frontend (`frontend/src/`).
+- **Native Array & No Anki Export (Không xuất sang Anki)**:
+  - Trường `array` lưu **JSON list** các item text thuần (cho phép list lồng) trong `notes.field_values`. Giá trị ghi trước 2026-10-11 có thể vẫn là chuỗi mỗi dòng 1 item cho tới khi migrate, nên code đọc phải nhận cả hai.
+  - Không `str()` giá trị field (list sẽ thành repr Python): dùng `field_value_text()` khi cần text (hiển thị, tìm kiếm, TTS, worksheet), `stored_field_value()` khi chuẩn hoá mà phải giữ list (cả hai trong `models/field_types.py`; frontend: `fieldValueEditorText()` trong `frontend/src/lib/arrayField.ts`).
+  - Flama chỉ import một chiều từ Anki/text, **không** có và không làm chức năng xuất sang Anki; ràng buộc chuỗi phẳng của Anki không áp dụng cho `array`.
+  - Renderer (backend lẫn frontend) **không** tự định dạng hay chuyển đổi mảng: list được đưa nguyên vào Mustache, chỉ riêng `{{field}}` trên cả list in ra giống `String(array)` của mustache.js. Template tự xử lý bằng `{{#field}}{{.}}{{/field}}` hoặc `<script>`.
 - **Zero Visual Regression**: Khi refactor kiến trúc frontend (tách hook, bẻ nhỏ component, thay thẻ HTML thô bằng UI Primitives), BẮT BUỘC bảo toàn 100% màu sắc, dải gradient thương hiệu, padding, font size, icon, đổ bóng và layout vị trí gốc trừ khi người dùng yêu cầu redesign.
 - **Chrome DevTools & Browser Profiling**: Mỗi khi khởi chạy hoặc kết nối Chrome để debug, test, profiling hiệu năng, hoặc dùng `chrome-devtools` MCP, **BẮT BUỘC phải dùng 1 profile riêng biệt** (isolated `--user-data-dir`, ví dụ: `C:\Users\chung\.gemini\chrome-profiles\flama-devtools`). **Tuyệt đối KHÔNG** can thiệp, mở remote debugging hay can thiệp vào profile cá nhân mặc định của người dùng nhằm tránh xung đột cookies/sessions và bảo vệ dữ liệu cá nhân.
 

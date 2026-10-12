@@ -58,7 +58,11 @@
     "template_badge": "Template: {{name}}",
     "selected_cards_count": "Selected: {{count}} cards",
     "delete_selected": "Delete {{count}} cards",
-    "confirm_bulk_delete": "Are you sure you want to permanently delete {{count}} selected cards?"
+    "confirm_bulk_delete": "Are you sure you want to permanently delete {{count}} selected cards?",
+    "view_mode_normal": "Normal",
+    "view_mode_code": "Code",
+    "view_mode_normal_tooltip": "Normal text view",
+    "view_mode_code_tooltip": "Array code view (JSON Array)"
   },
   "card_table": {
     "searching": "Finding cards...",
@@ -120,7 +124,14 @@
     "cancel": "Cancel",
     "save_card": "Save Card",
     "delete_card": "Permanently Delete Card",
-    "confirm_delete": "Are you sure you want to permanently delete this card? This action cannot be undone."
+    "confirm_delete": "Are you sure you want to permanently delete this card? This action cannot be undone.",
+    "view_mode_normal": "Normal",
+    "view_mode_code": "Code",
+    "view_mode_normal_tooltip": "Normal view (one item per line)",
+    "view_mode_code_tooltip": "JSON array code view",
+    "switch_to_code": "Switch to code view",
+    "switch_to_normal": "Switch to normal view",
+    "invalid_array_json": "Invalid JSON array syntax (e.g. [\"item 1\", \"item 2\"])"
   },
   "stroke_modal": {
     "title": "Generate Kanji & Hanzi Stroke Order Diagrams",

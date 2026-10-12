@@ -20,6 +20,7 @@ import {
   Shapes,
   ShieldUser,
   Store,
+  Subtitles,
   Ticket,
   TrendingUp,
   Upload,
@@ -75,6 +76,7 @@ export function AppSidebar({
     { title: t('sidebar.item.deck_audio'), url: '/audio/generate', icon: AudioLines },
     { title: t('sidebar.item.flama_audio'), url: '/guide/flama-audio', icon: Download },
     { title: t('sidebar.item.yomitan'), url: '/settings/yomitan', icon: Key },
+    { title: t('sidebar.item.asbplayer'), url: '/settings/asbplayer', icon: Subtitles },
     { title: t('sidebar.item.mcp_ai'), url: '/settings/mcp-tokens', icon: Plug },
   ]
 

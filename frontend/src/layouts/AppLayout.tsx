@@ -64,6 +64,7 @@ const pageTitleKeyMap: Record<string, string> = {
   '/settings/goals': 'page_titles.settings_goals',
   '/settings/mcp-tokens': 'page_titles.settings_mcp',
   '/settings/yomitan': 'page_titles.settings_yomitan',
+  '/settings/asbplayer': 'page_titles.settings_asbplayer',
   '/guide': 'page_titles.guide',
   '/guide/flama-audio': 'page_titles.guide_flama_audio',
   '/feedback': 'page_titles.feedback',
@@ -537,10 +538,12 @@ export function AppLayout() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-4 bg-border/60" />
+            <div className="hidden sm:flex sm:items-center sm:gap-2.5">
+              <Separator orientation="vertical" className="h-4 bg-border/60" />
 
-            {/* Corner Utility: Language Switcher at the far right corner */}
-            <LanguageSwitcher />
+              {/* Corner Utility: Language Switcher at the far right corner */}
+              <LanguageSwitcher />
+            </div>
           </div>
         </header>
         <main className="min-h-[calc(100svh-3.5rem)] flex-1">

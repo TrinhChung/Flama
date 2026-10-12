@@ -88,19 +88,16 @@ export function useTemplateMappingDraft(noteTypeId: string, applicationId: strin
     mutationFn: async () => {
       if (!current || invalid) throw new Error(t('needs_repair'))
       const captured = { name: current.name.trim(), input_bindings: { ...current.bindings } }
-      const [fresh, freshDetail] = await Promise.all([
-        client.fetchQuery({ queryKey: cardTemplateQueryKeys.applications(noteTypeId, true), queryFn: ({ signal }) => fetchTemplateApplications(noteTypeId, true, signal), staleTime: 0 }),
-        client.fetchQuery({ queryKey: ['note-type-detail', noteTypeId], queryFn: ({ signal }) => apiRequest<MappingNoteType>(`/api/note-types/${encodeURIComponent(noteTypeId)}`, { signal }), staleTime: 0 }),
-      ])
-      const latest = fresh.items.find((item) => item.id === effectiveApplicationId)
-      if (!latest || latest.status_code !== 'ACTIVE') throw new Error(t('retired_notice'))
-      if (validateBindings(latest.input_schema, freshDetail.field_defs, captured.input_bindings).some((issue) => issue.blocking)) throw new Error(t('source_changed'))
       const result = await updateTemplateApplication(noteTypeId, effectiveApplicationId, { input_bindings: captured.input_bindings, display_name: captured.name })
-      if (result.id !== effectiveApplicationId || result.note_type_id !== noteTypeId || result.template_id !== latest.template_id) throw new Error(t('not_found'))
-      return { result, fields: freshDetail.field_defs }
+      if (result.id !== effectiveApplicationId || result.note_type_id !== noteTypeId) throw new Error(t('not_found'))
+      return { result, fields }
     },
     onSuccess: async ({ result, fields: latestFields }) => {
       if (active.current) { setDraft(fromApplication(result, latestFields)); toast.success(t('saved')) }
+      client.setQueryData(cardTemplateQueryKeys.applications(noteTypeId, true), (old: { schema_version: string; items: TemplateApplication[] } | undefined) => {
+        if (!old) return old
+        return { ...old, items: old.items.map((item) => (item.id === result.id ? result : item)) }
+      })
       await Promise.all([
         client.invalidateQueries({ queryKey: ['card-template'] }),
         client.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] }),

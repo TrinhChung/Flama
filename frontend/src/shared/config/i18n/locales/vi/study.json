@@ -87,7 +87,11 @@
     "save_changes": "Lưu thay đổi",
     "save_tooltip": "Lưu thay đổi (Ctrl+Enter)",
     "saved_success": "Đã lưu thay đổi thẻ.",
-    "save_error": "Không thể lưu thẻ"
+    "save_error": "Không thể lưu thẻ",
+    "view_mode_normal": "Thường",
+    "view_mode_code": "Code",
+    "view_mode_normal_tooltip": "Chế độ xem thường (mỗi dòng một phần tử)",
+    "view_mode_code_tooltip": "Chế độ xem code mảng JSON"
   },
   "edit_modal": {
     "title": "Chỉnh sửa thẻ",

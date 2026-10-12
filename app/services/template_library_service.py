@@ -2,13 +2,14 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from app.repositories import template_library_repository as repository
 from app.repositories import template_version_repository
 from app.validators.template_library import (TemplateLibraryError, body, text, validate_input_schema, infer_input_schema, validate_bindings, binding_warnings)
 from app.services import template_version_service
 from models import db
 from models.card import Card
+from models.model_uuid import uuid_str
 from models.note import Note
 from models.note_type import NoteType
 from models.study_application import StudyApplication
@@ -348,10 +349,23 @@ def attach_template(*, user_id, note_type_id, payload):
         _application_payload(application, payload, note_type)
         db.session.flush()
         existing = set(db.session.execute(select(Card.note_id).where(Card.application_id == application.id)).scalars())
-        cards = [Card(note_id=note_id, template_id=template.id, application_id=application.id) for note_id in note_ids if note_id not in existing]
-        db.session.add_all(cards)
-        db.session.flush()
-        topology.finalize_content_expansion(plan, new_cards=cards)
+        missing_note_ids = [note_id for note_id in note_ids if note_id not in existing]
+        if missing_note_ids:
+            now = datetime.utcnow()
+            card_rows = [
+                {
+                    "id": uuid_str(),
+                    "note_id": note_id,
+                    "template_id": template.id,
+                    "application_id": application.id,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+                for note_id in missing_note_ids
+            ]
+            db.session.execute(insert(Card), card_rows)
+            db.session.flush()
+        topology.finalize_content_expansion(plan, new_cards=())
         return lambda: serialize_application(application)
     return _commit(operation)
 

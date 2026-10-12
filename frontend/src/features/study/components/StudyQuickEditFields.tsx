@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/native-select'
-import { MediaFieldPreview } from '@/features/browse/components/MediaFieldPreview'
+import { MediaFieldPreview, ArrayFieldInput, type ArrayViewMode } from '@/entities/flashcard'
 import { fieldValueEditorText } from '@/lib/arrayField'
 
 export type StudyQuickEditFieldDef = {
@@ -22,6 +22,7 @@ export type StudyQuickEditFieldsProps = {
   fieldValues: Record<string, string>
   onFieldValueChange: (fieldName: string, value: string) => void
   resolveMediaUrl: (rawRef: string) => string | undefined
+  mode?: ArrayViewMode
 }
 
 export function StudyQuickEditFields({
@@ -32,6 +33,7 @@ export function StudyQuickEditFields({
   fieldValues,
   onFieldValueChange,
   resolveMediaUrl,
+  mode,
 }: StudyQuickEditFieldsProps) {
   const { t } = useTranslation('study')
 
@@ -76,9 +78,21 @@ export function StudyQuickEditFields({
           )
         }
 
-        const isArray = ft === 'array'
+        if (ft === 'array') {
+          return (
+            <ArrayFieldInput
+              key={field.name}
+              fieldName={field.name}
+              value={fieldValues[field.name]}
+              onChange={(v) => onFieldValueChange(field.name, v)}
+              required={field.required}
+              mode={mode}
+              placeholderNormal={t('quick_edit.array_placeholder')}
+            />
+          )
+        }
+
         const isMultiline =
-          isArray ||
           val.length > 60 ||
           val.includes('\n') ||
           field.name.toLowerCase().includes('meaning') ||
@@ -102,7 +116,7 @@ export function StudyQuickEditFields({
               <Textarea
                 value={val}
                 onChange={(e) => onFieldValueChange(field.name, e.target.value)}
-                placeholder={isArray ? t('quick_edit.array_placeholder') : t('quick_edit.enter_field', { fieldName: field.name })}
+                placeholder={t('quick_edit.enter_field', { fieldName: field.name })}
                 className="min-h-20 text-base sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50 focus:bg-background transition-colors"
               />
             ) : (
