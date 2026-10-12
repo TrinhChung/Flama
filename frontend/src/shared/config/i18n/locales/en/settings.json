@@ -145,9 +145,9 @@
   "asbplayer": {
     "loading": "Loading asbplayer tokens…",
     "header": {
-      "title": "asbplayer Token & AnkiConnect Management",
-      "description": "Integrate asbplayer extension to mine sentences, images, and audio from video and anime directly into Flama.",
-      "guide_title": "asbplayer Connection Guide",
+      "title": "asbplayer & Flama Connect Token Management",
+      "description": "Integrate asbplayer extension with Flama Connect to mine sentences, images, and audio from video and anime directly into Flama.",
+      "guide_title": "asbplayer & Flama Connect Connection Guide",
       "troubleshoot_title": "Troubleshoot asbplayer",
       "guide_btn": "Connection Guide"
     },
@@ -164,12 +164,12 @@
       "media_sub": "Accurate Auto Cut",
       "sentences_title": "Sentence Mining",
       "sentences_sub": "Context-based Learning",
-      "protocol_title": "AnkiConnect Protocol",
+      "protocol_title": "Flama Connect Platform",
       "protocol_sub": "Anki-compatible Standard"
     },
     "form": {
-      "title": "Create asbplayer API Token",
-      "description": "Issue an AnkiConnect API token for the asbplayer extension. See <link>Detailed Connection Guide</link> for configuration steps.",
+      "title": "Create asbplayer API Token (Flama Connect)",
+      "description": "Issue an API token for the asbplayer extension to connect with Flama Connect. See <link>Detailed Connection Guide</link> for configuration steps.",
       "guide_link_text": "Detailed Connection Guide",
       "preset_label": "Mining Mode (Preset)",
       "preset_text": "Text only (Sentence & Word)",
@@ -187,12 +187,12 @@
       "expiry_365": "365 days",
       "expiry_none": "Never expires",
       "submit_btn": "Generate New Token",
-      "issued_title": "asbplayer Connection Details",
+      "issued_title": "asbplayer & Flama Connect Connection Details",
       "issued_warning": "Copy the API Key now — Flama displays this key only once!",
-      "url_label": "AnkiConnect Server URL",
+      "url_label": "Flama Connect Server URL (Compatible Endpoint)",
       "copy_url_btn": "Copy URL",
       "copied_url_btn": "URL Copied",
-      "key_label": "API Key (AnkiConnect Secret)",
+      "key_label": "API Key (Flama Connect Token)",
       "copy_key_btn": "Copy API Key",
       "copied_key_btn": "API Key Copied"
     },
@@ -216,7 +216,7 @@
       "th_actions": "Actions",
       "never_expires": "Never expires",
       "never_used": "Never used",
-      "action_copy_url": "Copy AnkiConnect URL",
+      "action_copy_url": "Copy Flama Connect Server URL",
       "action_rotate": "Regenerate",
       "action_revoke": "Revoke",
       "confirm_rotate": "Revoke the old token and create a new token with this name?",
@@ -225,8 +225,8 @@
     "docs": {
       "title": "Documentation & Reference Guides",
       "view_all": "View all",
-      "card1_title": "Install & Configure asbplayer",
-      "card1_desc": "Step-by-step extension installation on Chrome and AnkiConnect setup.",
+      "card1_title": "Install & Connect Flama Connect",
+      "card1_desc": "Step-by-step extension installation on your browser and connection to Flama Connect.",
       "card2_title": "7 Sentence Card Fields Mapping",
       "card2_desc": "Configure mapping for Sentence, Word, Definition, Image, Audio, Source, URL.",
       "card3_title": "Shortcuts & Video Mining",
@@ -238,7 +238,7 @@
       "rotate_success": "Old token revoked and new token created successfully.",
       "setup_success": "Deck Sentences and model Sentence Card are ready.",
       "copied": "Copied to clipboard.",
-      "copied_url": "AnkiConnect Server URL copied.",
+      "copied_url": "Flama Connect Server URL copied.",
       "copy_failed": "Failed to copy to clipboard."
     }
   }

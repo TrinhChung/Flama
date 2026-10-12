@@ -145,9 +145,9 @@
   "asbplayer": {
     "loading": "Đang tải token asbplayer…",
     "header": {
-      "title": "Quản lý Token asbplayer & AnkiConnect",
-      "description": "Tích hợp tiện ích asbplayer để khai thác câu, ảnh và audio từ video/anime trực tiếp vào Flama.",
-      "guide_title": "Hướng dẫn kết nối asbplayer",
+      "title": "Quản lý Token asbplayer & Flama Connect",
+      "description": "Tích hợp tiện ích asbplayer với Flama Connect để khai thác câu, ảnh và audio từ video/anime trực tiếp vào Flama.",
+      "guide_title": "Hướng dẫn kết nối asbplayer & Flama Connect",
       "troubleshoot_title": "Khắc phục lỗi asbplayer",
       "guide_btn": "Hướng dẫn kết nối"
     },
@@ -164,12 +164,12 @@
       "media_sub": "Cắt tự động chuẩn xác",
       "sentences_title": "Sentence Mining",
       "sentences_sub": "Học từ qua ngữ cảnh",
-      "protocol_title": "Giao thức AnkiConnect",
+      "protocol_title": "Nền tảng Flama Connect",
       "protocol_sub": "Tương thích chuẩn Anki"
     },
     "form": {
-      "title": "Tạo API Token asbplayer",
-      "description": "Cấp token truy cập giao thức AnkiConnect cho tiện ích asbplayer. Xem <link>Hướng dẫn kết nối chi tiết</link> để xem các bước cấu hình.",
+      "title": "Tạo API Token asbplayer (Flama Connect)",
+      "description": "Cấp token truy cập nền tảng Flama Connect (tương thích giao thức asbplayer). Xem <link>Hướng dẫn kết nối chi tiết</link> để xem các bước cấu hình.",
       "guide_link_text": "Hướng dẫn kết nối chi tiết",
       "preset_label": "Chế độ khai thác (Preset)",
       "preset_text": "Chỉ văn bản (Câu & Từ vựng)",
@@ -187,12 +187,12 @@
       "expiry_365": "365 ngày",
       "expiry_none": "Không hết hạn",
       "submit_btn": "Tạo token mới",
-      "issued_title": "Thông tin kết nối asbplayer",
+      "issued_title": "Thông tin kết nối asbplayer & Flama Connect",
       "issued_warning": "Sao chép API Key ngay bây giờ — Flama chỉ hiển thị khóa này một lần duy nhất!",
-      "url_label": "AnkiConnect Server URL",
+      "url_label": "Server URL Flama Connect (Endpoint tương thích)",
       "copy_url_btn": "Sao chép URL",
       "copied_url_btn": "Đã sao chép URL",
-      "key_label": "API Key (AnkiConnect Secret)",
+      "key_label": "API Key (Flama Connect Token)",
       "copy_key_btn": "Sao chép API Key",
       "copied_key_btn": "Đã sao chép API Key"
     },
@@ -216,7 +216,7 @@
       "th_actions": "Thao tác",
       "never_expires": "Không hết hạn",
       "never_used": "Chưa từng sử dụng",
-      "action_copy_url": "Sao chép URL AnkiConnect",
+      "action_copy_url": "Sao chép Server URL Flama Connect",
       "action_rotate": "Tạo lại",
       "action_revoke": "Thu hồi",
       "confirm_rotate": "Thu hồi token cũ và tạo token mới với tên này?",
@@ -225,8 +225,8 @@
     "docs": {
       "title": "Tài liệu & Hướng dẫn tham chiếu",
       "view_all": "Xem tất cả",
-      "card1_title": "Cài đặt & Cấu hình asbplayer",
-      "card1_desc": "Hướng dẫn cài đặt extension trên Chrome và cấu hình kết nối AnkiConnect.",
+      "card1_title": "Cài đặt & Kết nối Flama Connect",
+      "card1_desc": "Hướng dẫn cài đặt extension trên trình duyệt và kết nối asbplayer với Flama Connect.",
       "card2_title": "Ánh xạ 7 trường Sentence Card",
       "card2_desc": "Cấu hình mapping Sentence, Word, Definition, Image, Audio, Source, URL.",
       "card3_title": "Phím tắt & Khai thác Video",
@@ -238,7 +238,7 @@
       "rotate_success": "Đã thu hồi token cũ và tạo token mới thành công.",
       "setup_success": "Đã chuẩn bị deck Sentences và model Sentence Card thành công.",
       "copied": "Đã sao chép vào bộ nhớ tạm.",
-      "copied_url": "Đã sao chép AnkiConnect Server URL.",
+      "copied_url": "Đã sao chép Server URL Flama Connect.",
       "copy_failed": "Không thể sao chép vào bộ nhớ tạm."
     }
   }
