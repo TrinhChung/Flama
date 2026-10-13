@@ -4,7 +4,7 @@ Order is the display order. The column stays a non-native Enum (VARCHAR sized to
 the longest value, no CHECK constraint), so adding a value of at most eight
 characters needs no migration.
 
-``array`` stores a JSON list of plain-text items (nested lists allowed) in
+``array`` stores a JSON list of text/safe-richtext items (nested lists allowed) in
 ``notes.field_values``; values written before 2026-10-11 may still be one item
 per line until they are migrated. Renderers hand a list to Mustache unchanged:
 the template iterates it with ``{{#field}}...{{/field}}`` or its own

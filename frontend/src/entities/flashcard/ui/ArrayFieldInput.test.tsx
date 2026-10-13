@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 
 import { act } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ArrayFieldInput } from './ArrayFieldInput'
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 describe('ArrayFieldInput', () => {
   let container: HTMLDivElement | null = null
+  let root: Root | null = null
 
   afterEach(() => {
+    act(() => root?.unmount())
+    root = null
     container?.remove()
     container = null
     document.body.replaceChildren()
@@ -17,10 +22,10 @@ describe('ArrayFieldInput', () => {
   async function renderComponent(props: Partial<React.ComponentProps<typeof ArrayFieldInput>> = {}) {
     container = document.createElement('div')
     document.body.appendChild(container)
-    const root = createRoot(container)
+    root = createRoot(container)
     const onChange = vi.fn()
     await act(async () => {
-      root.render(
+      root!.render(
         <ArrayFieldInput
           fieldName="Collocation"
           value={props.value ?? 'item 1\nitem 2'}
@@ -30,7 +35,7 @@ describe('ArrayFieldInput', () => {
         />,
       )
     })
-    return { container, onChange }
+    return { container, onChange, root: root! }
   }
 
   it('renders normal view with lines by default', async () => {
@@ -65,7 +70,7 @@ describe('ArrayFieldInput', () => {
 
     const textarea = view.querySelector('textarea')
     expect(textarea?.value).toBe('[\n  "item 1",\n  "item 2"\n]')
-    expect(onChange).toHaveBeenCalledWith('[\n  "item 1",\n  "item 2"\n]')
+    expect(onChange).not.toHaveBeenCalled()
     expect(view.textContent).not.toContain('Cú pháp JSON Array không hợp lệ')
 
     // Switch to preview mode
@@ -82,7 +87,7 @@ describe('ArrayFieldInput', () => {
 
     const textareaBack = view.querySelector('textarea')
     expect(textareaBack?.value).toBe('item 1\nitem 2')
-    expect(onChange).toHaveBeenCalledWith('item 1\nitem 2')
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('handles bracket-prefixed values like [n] noun without syntax error when switching to code', async () => {
@@ -120,6 +125,59 @@ describe('ArrayFieldInput', () => {
 
     // Should show error message
     const error = view.textContent
-    expect(error).toContain('JSON Array')
+    expect(error).toContain('Cú pháp JSON Array không hợp lệ')
+    expect(textarea?.getAttribute('aria-invalid')).toBe('true')
+  })
+
+  it('keeps nested arrays intact through preview and code without reporting an edit', async () => {
+    const value = [['a', 'b'], ['c'], '', 'a']
+    const { container: view, onChange } = await renderComponent({ value })
+    expect(JSON.parse(view.querySelector('textarea')!.value)).toEqual(value)
+    expect(view.querySelector<HTMLButtonElement>('[aria-label="Nhập thường Collocation"]')!.disabled).toBe(true)
+    await act(async () => view.querySelector<HTMLButtonElement>('[aria-label="Xem trước Collocation"]')!.click())
+    await act(async () => view.querySelector<HTMLButtonElement>('[aria-label="Xem code Collocation"]')!.click())
+    expect(JSON.parse(view.querySelector('textarea')!.value)).toEqual(value)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('reports invalid JSON content and prevents switching away from the broken draft', async () => {
+    const onValidityChange = vi.fn()
+    const { container: view } = await renderComponent({ mode: 'code', onValidityChange })
+    const textarea = view.querySelector('textarea')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '[1, null]')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(onValidityChange).toHaveBeenLastCalledWith(false)
+    expect(view.querySelector<HTMLButtonElement>('[aria-label="Nhập thường Collocation"]')!.disabled).toBe(true)
+    expect(view.querySelector<HTMLButtonElement>('[aria-label="Xem trước Collocation"]')!.disabled).toBe(true)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '[["a"], "b"]')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(onValidityChange).toHaveBeenLastCalledWith(true)
+  })
+
+  it('updates presentation when a controlled mode changes and when values are reverted', async () => {
+    const value = ['a', 'b']
+    const { container: view, root: renderedRoot, onChange } = await renderComponent({ value })
+    await act(async () => renderedRoot.render(<ArrayFieldInput fieldName="Collocation" value={value} mode="code" onChange={onChange} />))
+    expect(JSON.parse(view.querySelector('textarea')!.value)).toEqual(value)
+    await act(async () => renderedRoot.render(<ArrayFieldInput fieldName="Collocation" value={['original']} mode="code" onChange={onChange} />))
+    expect(JSON.parse(view.querySelector('textarea')!.value)).toEqual(['original'])
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('keeps an invalid nested-array draft in Code even when the controlled mode requests Normal', async () => {
+    const onValidityChange = vi.fn()
+    const { container: view } = await renderComponent({ value: [['nested']], mode: 'normal', onValidityChange })
+    const input = view.querySelector('textarea')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(input, '["broken"')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(input.value).toBe('["broken"')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(onValidityChange).toHaveBeenLastCalledWith(false)
   })
 })

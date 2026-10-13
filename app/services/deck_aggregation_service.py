@@ -11,7 +11,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Dict, Tuple
 
-from sqlalchemy import and_, case, func, literal, not_, or_, select, union_all
+from sqlalchemy import and_, case, func, not_, or_, select
 from sqlalchemy.orm import Session
 
 from app.repositories import note_analytics_read_repository as note_reads
@@ -164,18 +164,6 @@ def aggregate_deck_study_counts(
     if not visible_deck_ids:
         return {}, {}
 
-    owned = (
-        select(
-            Note.deck_id.label("deck_id"),
-            Card.id.label("card_id"),
-            Card.note_id.label("note_id"),
-        )
-        .select_from(Card)
-        .join(Note, Card.note_id == Note.id)
-        .where(Note.deck_id.in_(visible_deck_ids), Card.application_status == "ACTIVE")
-    )
-    if not owned_by_any_user:
-        owned = owned.where(Note.user_id == learner_user_id)
     # Admins see every deck but, as before, never count logical-overlay sources.
     overlay, overlay_types = (
         (None, [])
@@ -186,17 +174,15 @@ def aggregate_deck_study_counts(
             visible_deck_ids=visible_deck_ids,
         )
     )
-    scope = (union_all(owned, overlay) if overlay is not None else owned).subquery("counted_cards")
-
-    storage_profile = None
+    from app.repositories.note_analytics_scope_repository import deck_note_scope
     from app.repositories.study_authority_repository import read_study_storage_profile
 
     storage_profile = read_study_storage_profile(session)
-    rows = note_reads.note_card_rows(
-        scope,
-        learner_user_id=learner_user_id,
-        storage_profile=storage_profile,
-    ).subquery("rows")
+    scope = deck_note_scope(
+        learner_user_id=learner_user_id, deck_ids=visible_deck_ids,
+        overlay=overlay, owned_by_any_user=owned_by_any_user,
+    )
+    rows = note_reads.note_rows(scope, learner_user_id=learner_user_id).subquery("rows")
 
     # A Card without progress/state has NULL columns and reads as active NEW.
     is_active = and_(
@@ -222,14 +208,14 @@ def aggregate_deck_study_counts(
             ),
         ),
     )
-    unit = rows.c.note_id if count_by_note else rows.c.card_id
+    weight = 1 if count_by_note else rows.c.card_count
     aggregated = session.execute(
         select(
             rows.c.deck_id,
-            func.count(func.distinct(unit)),
-            func.count(func.distinct(case((is_new, unit), else_=None))),
-            func.count(func.distinct(case((is_learn, unit), else_=None))),
-            func.count(func.distinct(case((is_due, unit), else_=None))),
+            func.sum(weight),
+            func.sum(case((is_new, weight), else_=0)),
+            func.sum(case((is_learn, weight), else_=0)),
+            func.sum(case((is_due, weight), else_=0)),
             func.max(rows.c.violation),
         ).group_by(rows.c.deck_id).execution_options(include_retired_cards=True)
     ).all()

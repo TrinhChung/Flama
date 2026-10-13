@@ -31,20 +31,15 @@
 
 ## 3. Các Điểm Chưa Ổn (Unresolved Issues) Cần Xử Lý Tiếp
 
-### Điểm 1: Khi người học bấm Update Deck (Rebase sang `DeckRelease` mới), các Template đã cài từ phiên bản trước không tự cập nhật và `StudyApplication` bị gỡ/sửa không được đồng bộ sang `installed_note_type_id`
+### Điểm 1: [ĐÃ XỬ LÝ] Khi người học bấm Update Deck (Rebase sang `DeckRelease` mới), tự động 3-way merge các Template đã cài và đồng bộ `StudyApplication` trên `installed_note_type_id`
 
 - **Vị trí code**:
-  - [`app/services/deck_install_rebase_service.py`](file:///d:/Project/nihongo/app/services/deck_install_rebase_service.py#L1102-L1103) (`apply_prepared_update`)
-  - [`app/services/template_release_service.py`](file:///d:/Project/nihongo/app/services/template_release_service.py#L283-L306) (`ensure_subscription`)
-  - [`app/services/template_release_service.py`](file:///d:/Project/nihongo/app/services/template_release_service.py#L591-L621) (`_attach_received_template`)
-  - [`app/services/template_release_service.py`](file:///d:/Project/nihongo/app/services/template_release_service.py#L639-L658) (`stage_install_template_subscriptions`)
-- **Hiện trạng & Nguyên nhân**:
-  1. Khi tác giả sửa HTML/CSS/`input_schema` của một Template rồi publish lại Deck sang bản release mới, `DeckReleaseTemplatePin` đã trỏ sang `template_release_id` mới. Tuy nhiên, khi người học bấm cập nhật Deck, `stage_install_template_subscriptions` gọi `ensure_subscription(...)`, mà hàm này lại `return existing` ngay nếu người học đã có `TemplateSubscription` từ bản cài v1 — dẫn tới `applied_release_id` và bản copy local (`local_template_id`) của người học vẫn giữ nguyên code HTML/CSS cũ (trừ khi người học tự vào cập nhật từng template riêng lẻ).
-  2. Tương tự, trong `_attach_received_template`, câu lệnh `if existing: return` bỏ qua việc cập nhật `input_bindings`, `display_name`, `is_default`, `position` trên `installed_note_type_id` khi tác giả thay đổi cấu hình gắn kết ở bản release mới.
-  3. Nếu tác giả gỡ (`RETIRED`) một Template khỏi `NoteType` rồi publish bản `DeckRelease` mới, thẻ nguồn trong clone deck được ẩn đúng nhờ `DeckReleaseTemplatePin`, nhưng bản ghi `StudyApplication` tương ứng trên `installed_note_type_id` của người học chưa được chuyển sang `RETIRED` (hoặc kích hoạt lại về `ACTIVE` nếu tác giả gắn lại).
-- **Hướng xử lý đề xuất**:
-  - Trong `stage_install_template_subscriptions`: Nếu `subscription["applied_release_id"] != pin["template_release_id"]`, tự động chuẩn bị và áp dụng bản cập nhật (`_prepare` + `_apply`) cho `local_template_id` nếu bản copy local chưa bị người học chỉnh sửa riêng (`status == "ready"`).
-  - Trong `_attach_received_template` và `stage_install_template_subscriptions`: Đồng bộ lại `status_code` (`ACTIVE` / `RETIRED`), `position`, `is_default`, và `input_bindings` (nếu người học chưa tùy biến riêng) trên `installed_note_type_id` theo đúng manifest của `DeckReleaseTemplatePin`.
+  - [`app/services/deck_install_rebase_service.py`](file:///d:/Project/nihongo/app/services/deck_install_rebase_service.py#L1102-L1108) (`apply_prepared_update`)
+  - [`app/services/template_release_service.py`](file:///d:/Project/nihongo/app/services/template_release_service.py#L591-L725) (`_sync_subscription_to_pinned_release`, `_attach_received_template`, `_retire_unpinned_received_applications`, `stage_install_template_subscriptions`)
+- **Giải pháp đã triển khai**:
+  1. Trong `stage_install_template_subscriptions`: Khi `subscription["applied_release_id"] != pin["template_release_id"]` và bản pin mới có `sequence_no` cao hơn, gọi `_sync_subscription_to_pinned_release` để tự động chạy 3-way merge (`_prepare` + `_apply` nếu `status == "ready"`) cho `local_template_id`, bảo toàn chỉnh sửa không xung đột của người học.
+  2. Trong `_attach_received_template`: Tự động bổ sung `FieldDef` còn thiếu từ `source_note_type` sang `installed_note_type_id`, đồng thời thực hiện 3-way merge `input_bindings`, `display_name`, `is_default`, `position` so với `base_app` của bản release trước (chỉ cập nhật các thuộc tính người học chưa tự tùy biến riêng) và kích hoạt lại `status_code = "ACTIVE"` nếu Template được gắn lại.
+  3. Trong `_retire_unpinned_received_applications`: Tự động chuyển `status_code = "RETIRED"` cho các `StudyApplication` trên `installed_note_type_id` của những Template từng có trong các bản release trước của Deck nhưng đã bị gỡ khỏi `DeckReleaseTemplatePin` hiện tại.
 
 ---
 

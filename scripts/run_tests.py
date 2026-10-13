@@ -699,6 +699,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/dashboard_service.py",
             "app/repositories/stats_query_repository.py",
             "app/repositories/note_analytics_read_repository.py",
+            "app/repositories/note_analytics_scope_repository.py",
             "app/services/review_analytics_*.py",
             "app/repositories/review_analytics_*.py",
             "app/services/deck_count_*.py",
@@ -712,10 +713,12 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/probe_deck_counts_mysql.py",
             "scripts/probe_p5_analytics_mysql.py",
             "scripts/probe_dashboard_due_counts_mysql.py",
+            "scripts/probe_note_analytics_mysql.py",
         ],
         "backend_tests": [
             "tests/test_deck_aggregation_service.py",
             "tests/test_note_analytics_read.py",
+            "tests/test_note_stats_retirement.py",
             "tests/test_stats_overview.py",
             "tests/test_stats_study_time.py",
             "tests/test_stats_today_future.py",
@@ -805,6 +808,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "migrations/**",
             "scripts/audit_legacy_schema.py",
+            "scripts/audit_legacy_progress_retirement.py",
             "scripts/probe_p1_02_mysql_concurrency.py",
             "scripts/run_phase4_preflight_bundle.py",
             "scripts/probe_p5_study_batch_mysql.py",
@@ -867,6 +871,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "frontend/src/shared/config/i18n/**",
             "frontend/src/shared/ui/LanguageSwitcher*",
             "scripts/verify_m1_challenger.py",
+            "scripts/test_adversarial_i18n_parity.py",
         ],
         "backend_tests": [],
         "frontend_tests": [

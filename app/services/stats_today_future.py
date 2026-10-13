@@ -180,7 +180,7 @@ def _future_window_end_offset(future_range: str) -> int | None:
 
 def _aggregate_future_due_python(
     *,
-    rows: list[tuple[Any, Any, Any]],
+    rows: list[tuple[Any, Any, Any] | tuple[Any, Any, Any, int]],
     timezone_name: str,
     today_local: date,
     backlog: bool,
@@ -189,7 +189,9 @@ def _aggregate_future_due_python(
 ) -> tuple[dict[int, dict[str, int]], int]:
     by_offset: dict[int, dict[str, int]] = {}
 
-    for due_at, due_day, queue_value in rows:
+    for row in rows:
+        due_at, due_day, queue_value = row[:3]
+        weight = int(row[3]) if len(row) == 4 else 1
         queue_norm = normalize_progress_queue(queue_value)
         if queue_norm == REVIEW_QUEUE and due_day is not None:
             try:
@@ -226,9 +228,9 @@ def _aggregate_future_due_python(
                 "relearning": 0,
             },
         )
-        bucket["due_count"] += 1
+        bucket["due_count"] += weight
         if queue_norm in {"new", "learning", "review", "relearning"}:
-            bucket[queue_norm] += 1
+            bucket[queue_norm] += weight
 
     min_offset = min((offset for offset in by_offset if offset < 0), default=0)
     return by_offset, min_offset
@@ -294,12 +296,13 @@ def _consolidated_due_rows_and_load(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
-) -> tuple[list[tuple[Any, Any, Any]], float]:
-    """CONSOLIDATED_V1: due rows and daily load from one non-locking SELECT.
+) -> tuple[list[tuple[Any, Any, Any, int]], float]:
+    """CONSOLIDATED_V1: weighted due rows and daily load at Note grain.
 
     Preserve per-presentation arithmetic while resolving installed sources
     onto their local decks and retaining release-pinned applications. Read
-    current Note subjects without entity hydration or subject locks.
+    current Note subjects without entity hydration or subject locks. Scope
+    resolution may first check whether the learner has an installation.
     """
 
     from app.repositories.note_analytics_read_repository import state_interval_days, violation_error
@@ -307,19 +310,19 @@ def _consolidated_due_rows_and_load(
 
     if scope_deck_ids is not None and not scope_deck_ids:
         return [], 0.0
-    rows: list[tuple[Any, Any, Any]] = []
+    rows: list[tuple[Any, Any, Any, int]] = []
     total = 0.0
     fetched = query_consolidated_forecast_rows(user_id=user_id, scope_deck_ids=scope_deck_ids)
     error = violation_error(max((int(row[1] or 0) for row in fetched), default=0))
     if error is not None:
         raise StudyAuthorityReadError(*error)
-    for _card_id, _violation, queue, due_at, due_day, suspended, state_type, interval in fetched:
+    for _note_id, _violation, queue, due_at, due_day, suspended, state_type, interval, card_count in fetched:
         if suspended:
             continue
         if due_at is not None or due_day is not None:
-            rows.append((due_at, due_day, queue))
+            rows.append((due_at, due_day, queue, int(card_count)))
         if normalize_progress_queue(state_type) == REVIEW_QUEUE:
-            total += 1.0 / max(1.0, state_interval_days(interval))
+            total += int(card_count) / max(1.0, state_interval_days(interval))
     return rows, total
 
 

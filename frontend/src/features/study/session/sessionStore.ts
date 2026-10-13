@@ -587,7 +587,7 @@ export async function removeStudySessionIfMatches(
 
 export async function updateCardFieldValuesInSessions(
   cardId: string,
-  newFieldValues: Record<string, string>,
+  newFieldValues: Record<string, unknown>,
   options?: { noteId?: string | null; media?: StudyMediaArtifact[] },
 ) {
   try {

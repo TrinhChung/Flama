@@ -343,20 +343,59 @@ def load_card_for_browse_update(*, card_id: str) -> Card | None:
     ))
 
 
-def page_total_and_integrity(query, *, eligible, violation) -> tuple[int, int]:
-    """One aggregate for exact filtered total and envelope integrity.
+def page_total_and_integrity(query, *, eligible=None, violation=None) -> tuple[int, int]:
+    """Return exact filtered total for pagination without full-collection preflight scan."""
 
-    COUNT already visits the content candidates. Checking cheap identity and
-    all-or-none presence here avoids a second full-candidate preflight query.
-    Invalid envelopes outside the requested status are still rejected.
-    Payload/hash decoding stays bounded to the page's locking authority read.
-    """
-
-    row = query.order_by(None).with_entities(
-        func.count(func.distinct(case((eligible, Card.id), else_=None))),
-        func.max(violation),
+    count_query = query.order_by(None)
+    if eligible is not None:
+        count_query = count_query.filter(eligible)
+    row = count_query.with_entities(
+        func.count(func.distinct(Card.id)),
     ).one()
-    return int(row[0] or 0), int(row[1] or 0)
+    return int(row[0] or 0), 0
+
+
+def page_window_integrity(
+    session,
+    *,
+    learner_user_id: int,
+    card_ids: list[int | str] | None = None,
+    note_ids: list[str] | set[str] | None = None,
+) -> int:
+    """Boundary integrity check applied only to records returned in the current page window."""
+    if note_ids is None:
+        if not card_ids:
+            return 0
+        from models.card import card_key_pairs
+        pairs = card_key_pairs(session, card_ids)
+        resolved_note_ids = sorted({pair[0] for pair in pairs.values() if pair[0]})
+    else:
+        resolved_note_ids = sorted({str(nid) for nid in note_ids if nid})
+
+    if not resolved_note_ids:
+        return 0
+
+    from models.flashcard import Note
+    from models.study_progress_subject import StudyProgressSubject
+    from app.repositories import note_analytics_read_repository
+    from sqlalchemy import LargeBinary, cast
+
+    subject = aliased(StudyProgressSubject)
+    violation_expr = note_analytics_read_repository.subject_integrity_violation(
+        subject,
+        note_id=Note.id,
+        learner_user_id=learner_user_id,
+    )
+    row = session.execute(
+        select(func.max(violation_expr))
+        .select_from(Note)
+        .outerjoin(subject, and_(
+            subject.learner_user_id == int(learner_user_id),
+            subject.logical_note_key == cast(Note.id, LargeBinary),
+        ))
+        .where(Note.id.in_(resolved_note_ids))
+    ).one()
+    return int(row[0] or 0)
 
 
 def load_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:

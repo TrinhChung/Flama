@@ -1,0 +1,135 @@
+{
+  "schema_version": "analytics-counts-production-enable-investigation.v1",
+  "observed_at_utc": "2026-10-13T11:21:09.036502+00:00",
+  "report_timezone": "Asia/Tokyo",
+  "release": "fb685882099d20d90479d234402ae3b098076f89",
+  "environment_files": {
+    "/etc/flama/flama.env": {
+      "exists": true,
+      "values": {
+        "STUDY_NOTE_COUNT_ENABLED": "1",
+        "STARTUP_RUN_MAINTENANCE": "0"
+      }
+    },
+    "/opt/flama/releases/fb685882099d20d90479d234402ae3b098076f89/.env": {
+      "exists": true,
+      "values": {
+        "STUDY_NOTE_COUNT_ENABLED": "1",
+        "STARTUP_RUN_MAINTENANCE": "0"
+      }
+    }
+  },
+  "services": {
+    "flama.service": {
+      "MainPID": "628348",
+      "EnvironmentFiles": "/etc/flama/flama.env (ignore_errors=no)",
+      "LoadState": "loaded",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "initial_environment_whitelist": {
+        "STUDY_NOTE_COUNT_ENABLED": "1",
+        "STARTUP_RUN_MAINTENANCE": "0"
+      }
+    },
+    "flama-connect.service": {
+      "MainPID": "628349",
+      "EnvironmentFiles": "/etc/flama/flama.env (ignore_errors=no)",
+      "LoadState": "loaded",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "initial_environment_whitelist": {
+        "STUDY_NOTE_COUNT_ENABLED": "1",
+        "STARTUP_RUN_MAINTENANCE": "0"
+      }
+    },
+    "flama-study-worker.service": {
+      "MainPID": "628350",
+      "EnvironmentFiles": "/etc/flama/flama.env (ignore_errors=no)",
+      "LoadState": "loaded",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "initial_environment_whitelist": {
+        "STUDY_NOTE_COUNT_ENABLED": "1",
+        "STARTUP_RUN_MAINTENANCE": "0"
+      }
+    },
+    "flama-analytics-counts.service": {
+      "MainPID": "0",
+      "LoadState": "not-found",
+      "ActiveState": "inactive",
+      "UnitFileState": ""
+    },
+    "flama-analytics-counts.timer": {
+      "LoadState": "not-found",
+      "ActiveState": "inactive",
+      "UnitFileState": ""
+    }
+  },
+  "database": {
+    "migration": "20261012_000062",
+    "storage_profile": "CONSOLIDATED_V1",
+    "learner_authority_modes": {
+      "NOTE": 32
+    },
+    "derived_table_rows": {
+      "review_analytics_heads": 0,
+      "review_analytics_generations": 0,
+      "daily_review_counts": 0,
+      "deck_count_content_revisions": 0,
+      "deck_count_learner_revisions": 0,
+      "deck_study_count_snapshots": 0
+    },
+    "transaction_read_only": true
+  },
+  "deployed_count_config_source": [
+    {
+      "line": 151,
+      "text": "\"REVIEW_ANALYTICS_WRITE_ENABLED\": coerce_bool_env(\"REVIEW_ANALYTICS_WRITE_ENABLED\", default=False),"
+    },
+    {
+      "line": 152,
+      "text": "\"REVIEW_ANALYTICS_READ_MODE\": os.getenv(\"REVIEW_ANALYTICS_READ_MODE\", \"raw\").strip().lower(),"
+    },
+    {
+      "line": 153,
+      "text": "\"REVIEW_ANALYTICS_READ_USER_IDS\": comma_separated_env(\"REVIEW_ANALYTICS_READ_USER_IDS\"),"
+    },
+    {
+      "line": 154,
+      "text": "\"REVIEW_ANALYTICS_SHADOW_SAMPLE_RATE\": os.getenv(\"REVIEW_ANALYTICS_SHADOW_SAMPLE_RATE\", \"0.01\"),"
+    },
+    {
+      "line": 156,
+      "text": "\"DECK_COUNT_WRITE_ENABLED\": coerce_bool_env(\"DECK_COUNT_WRITE_ENABLED\", default=False),"
+    },
+    {
+      "line": 157,
+      "text": "\"DECK_COUNT_READ_MODE\": os.getenv(\"DECK_COUNT_READ_MODE\", \"raw\").strip().lower(),"
+    },
+    {
+      "line": 158,
+      "text": "\"DECK_COUNT_PREWARM_USER_IDS\": comma_separated_env(\"DECK_COUNT_PREWARM_USER_IDS\"),"
+    }
+  ],
+  "deployed_managed_env_count_keys": [],
+  "deployed_workflow_count_references_present": false,
+  "release_has_count_files": {
+    "app/services/deck_count_snapshot_service.py": true,
+    "app/services/review_analytics_projection_service.py": true,
+    "deploy/flama-analytics-counts.service": true,
+    "deploy/flama-analytics-counts.timer": true
+  },
+  "operations": {
+    "production_writes": false,
+    "service_restart": false,
+    "application_factory_invoked": false,
+    "credential_output": false,
+    "reads": [
+      "release symlink and selected source lines",
+      "allowlisted environment keys",
+      "systemd properties",
+      "/proc initial environment allowlist",
+      "MySQL read-only SELECT counts and profile"
+    ]
+  }
+}

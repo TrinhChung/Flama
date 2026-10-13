@@ -10,7 +10,51 @@
     "connect_guide_title": "Hướng dẫn kết nối trợ lý AI qua MCP",
     "troubleshoot_title": "Khắc phục sự cố MCP",
     "loading": "Đang tải MCP tokens…",
+    "value_intro": {
+      "badge": "Gia sư AI riêng cho Flama",
+      "title": "Tại sao nên kết nối Trợ lý AI cùng Flama?",
+      "subtitle": "Biến ChatGPT & Claude thành gia sư cá nhân hóa am hiểu tường tận kho Flashcard và tiến độ học tập thực tế của bạn.",
+      "toggle_hide": "Thu gọn giới thiệu",
+      "toggle_show": "Tìm hiểu cách hoạt động",
+      "before_title": "Chat AI thông thường",
+      "before_badge": "Rời rạc",
+      "before_p1": "AI giải thích ngữ pháp và ví dụ rất hay nhưng kiến thức nằm kẹt lại trong tab chat.",
+      "before_p2": "Phải tự copy-paste thủ công từng câu từng chữ vào Flama để làm thẻ ôn tập.",
+      "before_p3": "AI không biết bạn đang học bài nào hay yếu từ nào, nên đưa bài tập chung chung.",
+      "after_title": "Khi kết nối cùng Flama (MCP)",
+      "after_badge": "Cá nhân hóa 100%",
+      "after_p1": "Tạo hàng chục thẻ chỉ bằng 1 câu lệnh tự nhiên (ví dụ: 'Tạo 10 thẻ từ vựng đặt vé máy bay').",
+      "after_p2": "AI truy cập trực tiếp kho thẻ Flama để biên soạn đoạn hội thoại bám sát trình độ của bạn.",
+      "after_p3": "Tự động phân tích điểm yếu, tra cứu chéo và đề xuất ôn tập từ vựng đúng ngữ cảnh.",
+      "steps_label": "Quy trình kết nối và sử dụng 3 bước:",
+      "step_1": "1. Kết nối 1 chạm qua đăng nhập ChatGPT OAuth",
+      "step_2": "2. Ra lệnh tự nhiên bằng tiếng Việt trong khung chat",
+      "step_3": "3. Thẻ và bài tập tự động đồng bộ vào tài khoản Flama"
+    },
     "tabs": {
+      "overview": {
+        "title": "1. Khám phá & Công dụng",
+        "badge": "Khuyên xem",
+        "desc": "Tìm hiểu lợi ích kết nối AI và tự động đồng bộ kho Flashcard Flama",
+        "cta_btn": "Bắt đầu kết nối tiện ích ➔",
+        "cta_question": "Sẵn sàng kết nối Trợ lý AI với Flama?"
+      },
+      "setup": {
+        "title": "2. Cài đặt & Kết nối",
+        "badge": "Kết nối",
+        "desc": "Quản lý OAuth ChatGPT, Personal Access Token và thông số máy chủ MCP",
+        "cta_btn": "Xem tài liệu hướng dẫn ➔",
+        "cta_question": "Cần tra cứu cấu hình chi tiết hoặc khắc phục sự cố?",
+        "mode_title": "Phương Thức Kết Nối AI",
+        "mode_desc": "Chọn kết nối 1 chạm qua ChatGPT OAuth hoặc cấp Personal Access Token cho IDE lập trình."
+      },
+      "docs": {
+        "title": "3. Hướng dẫn & Tra cứu",
+        "badge": "Tra cứu",
+        "desc": "Cấu hình Claude Desktop, Cursor, catalog 19 công cụ MCP và giải đáp sự cố",
+        "cta_btn": "Quay lại Cài đặt & Kết nối ➔",
+        "cta_question": "Đã nắm rõ cấu hình và sẵn sàng kết nối?"
+      },
       "chatgpt": {
         "title": "1. Kết nối ChatGPT",
         "badge": "Khuyên dùng",
@@ -20,6 +64,20 @@
         "title": "2. Quản lý Quyền & Token API",
         "badge": "Lập trình viên",
         "desc": "Personal Access Token cho Cursor, Cline • Claude (Đang thử nghiệm)"
+      }
+    },
+    "pillars": {
+      "marketplace": {
+        "title": "Tra cứu Marketplace an toàn",
+        "desc": "AI chỉ khám phá metadata và mẫu xem thử (3–5 thẻ) của các bộ thẻ đã chia sẻ công khai. Tuyệt đối chống cào dữ liệu."
+      },
+      "one_click": {
+        "title": "Tích hợp trợ lý AI 1 chạm",
+        "desc": "Ra lệnh tự nhiên bằng tiếng Việt: AI tự động phân tích ngữ pháp, giải thích từ vựng và tạo Flashcard chuẩn vào Flama."
+      },
+      "privacy": {
+        "title": "Không sợ rò rỉ dữ liệu cá nhân",
+        "desc": "Bảo vệ tuyệt đối kho thẻ cá nhân chưa xuất bản. Phân quyền chuẩn OAuth 2.1 và Token có thời hạn, thu hồi bất cứ lúc nào."
       }
     },
     "docs_strip": {
@@ -37,6 +95,62 @@
         "title": "Tiện ích Yomitan 1-Click",
         "desc": "Tự động khai thác từ vựng khi đọc báo, manga trực tiếp trên trình duyệt."
       }
+    }
+  },
+  "docs_tab": {
+    "title": "Tài liệu & Hướng dẫn tham chiếu MCP",
+    "description": "Hướng dẫn cấu hình kết nối trực tiếp Claude Desktop, Cursor IDE và tra cứu danh mục công cụ Flashcard AI.",
+    "copy_success": "Đã sao chép cấu hình vào bộ nhớ tạm",
+    "copy_error": "Không thể sao chép cấu hình",
+    "clients": {
+      "title": "Cấu hình Ứng dụng & IDE",
+      "subtitle": "Chọn ứng dụng AI bạn sử dụng để lấy cấu hình kết nối chuẩn",
+      "tabs": {
+        "curl": "cURL Kiểm tra"
+      },
+      "copy_json": "Sao chép JSON",
+      "copied": "Đã sao chép",
+      "copy_curl": "Sao chép cURL",
+      "claude_desktop": {
+        "title": "Claude Desktop",
+        "desc": "Thêm máy chủ Flama MCP vào tệp cấu hình claude_desktop_config.json.",
+        "config_label": "Cấu hình claude_desktop_config.json:"
+      },
+      "cursor": {
+        "title": "Cursor IDE",
+        "desc": "Cấu hình MCP Server qua Settings > Features > MCP trong Cursor.",
+        "config_label": "Cấu hình Cursor mcpServers:",
+        "guide_title": "Hướng dẫn cấu hình nhanh trong Cursor IDE:",
+        "step1": "1. Mở Cursor Settings (Ctrl+, / Cmd+,) ➔ Chọn tab Features ➔ mục MCP.",
+        "step2": "2. Bấm + Add New MCP Server ➔ Đặt tên là flama, Type là http hoặc sse, URL: http://localhost:4790/v1/mcp kèm Header Authorization: Bearer <TOKEN>."
+      },
+      "windsurf": {
+        "title": "Windsurf / Cline",
+        "desc": "Kết nối trợ lý lập trình Windsurf Cascade hoặc extension Cline qua Remote MCP.",
+        "config_label": "Cấu hình mcp_config.json:"
+      },
+      "curl": {
+        "command_label": "Lệnh cURL kiểm tra kết nối JSON-RPC 2.0:"
+      }
+    },
+    "tools": {
+      "title": "Danh mục Công cụ & Prompts",
+      "desc": "Tra cứu danh mục công cụ Flashcard và các mẫu câu lệnh ra lệnh cho AI.",
+      "view_catalog": "Xem danh mục công cụ →",
+      "sample_prompts_title": "Mẫu câu lệnh thông dụng:"
+    },
+    "troubleshooting": {
+      "title": "Khắc phục Sự cố MCP",
+      "desc": "Xử lý các lỗi kết nối thường gặp, chứng chỉ SSL và kiểm tra kết nối.",
+      "guide_link": "Xem hướng dẫn sửa lỗi →"
+    },
+    "guardrails": {
+      "process_title": "Tiến Trình Flama Connect",
+      "process_desc": "Đảm bảo dịch vụ Flama Connect đang chạy trên cổng 4790 (qua lệnh connect_wsgi.py) để lắng nghe các yêu cầu từ AI Agent.",
+      "anti_scraping_title": "Chống Cào Dữ Liệu An Toàn",
+      "anti_scraping_desc": "Hệ thống áp dụng cơ chế Anti-scraping: AI chỉ được xem trước tối đa 3–5 thẻ mẫu của các bộ thẻ đã chia sẻ công khai.",
+      "privacy_title": "Bảo Vệ Kho Thẻ Cá Nhân",
+      "privacy_desc": "AI không bao giờ có quyền đọc các bộ thẻ nội bộ chưa chia sẻ của bạn nếu chưa được cấp quyền Scopes tường minh."
     }
   },
   "tokens_tab": {

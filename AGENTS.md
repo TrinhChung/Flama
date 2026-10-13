@@ -62,7 +62,7 @@
 - For UI work, target the React frontend (`frontend/src/`). Jinja templates have been completely deleted; all user-facing UI is in React.
 - Mặc định khi người dùng yêu cầu sửa/nâng cấp giao diện (UI/UX), làm việc và điều chỉnh trên React frontend (`frontend/src/`).
 - **Native Array & No Anki Export (Không xuất sang Anki)**:
-  - Trường `array` lưu **JSON list** các item text thuần (cho phép list lồng) trong `notes.field_values`. Giá trị ghi trước 2026-10-11 có thể vẫn là chuỗi mỗi dòng 1 item cho tới khi migrate, nên code đọc phải nhận cả hai.
+  - Trường `array` lưu **JSON list** các item text hoặc safe rich-text (cho phép list lồng) trong `notes.field_values`. Giá trị ghi trước 2026-10-11 có thể vẫn là chuỗi mỗi dòng 1 item cho tới khi migrate, nên code đọc phải nhận cả hai.
   - Không `str()` giá trị field (list sẽ thành repr Python): dùng `field_value_text()` khi cần text (hiển thị, tìm kiếm, TTS, worksheet), `stored_field_value()` khi chuẩn hoá mà phải giữ list (cả hai trong `models/field_types.py`; frontend: `fieldValueEditorText()` trong `frontend/src/lib/arrayField.ts`).
   - Flama chỉ import một chiều từ Anki/text, **không** có và không làm chức năng xuất sang Anki; ràng buộc chuỗi phẳng của Anki không áp dụng cho `array`.
   - Renderer (backend lẫn frontend) **không** tự định dạng hay chuyển đổi mảng: list được đưa nguyên vào Mustache, chỉ riêng `{{field}}` trên cả list in ra giống `String(array)` của mustache.js. Template tự xử lý bằng `{{#field}}{{.}}{{/field}}` hoặc `<script>`.

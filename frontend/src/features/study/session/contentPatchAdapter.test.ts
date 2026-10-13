@@ -204,6 +204,16 @@ function createSampleSession(): PersistedStudySession {
 }
 
 describe('applyCardContentPatch', () => {
+  it('preserves native nested arrays in stored content and the render context', () => {
+    const session = createSampleSession()
+    const answers = [['a', 'b'], [], '', 'a']
+    const result = applyCardContentPatch(session, 'card-1', { Answer: answers })
+    const card = result.nextSession.snapshot.cards.find((item) => item.card_id === 'card-1')!
+    const content = result.nextSession.snapshot.contents[card.content_key]
+    expect(content.field_values.Answer).toEqual(answers)
+    expect(content.render_context.Answer).toEqual(answers)
+    expect(session.snapshot.contents[session.snapshot.cards[0].content_key].field_values).not.toHaveProperty('Answer')
+  })
   it('returns updated: false when cardId does not match any card', () => {
     const session = createSampleSession()
     const result = applyCardContentPatch(session, 'non-existent-card', { Word: 'lion' })

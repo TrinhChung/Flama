@@ -193,12 +193,10 @@ def _canonical_future_due_day_counts(
     scope = note_reads.learner_note_scope(
         learner_user_id=user_id, storage_profile=storage_profile
     )
-    rows = note_reads.note_card_rows(
-        scope, learner_user_id=user_id, storage_profile=storage_profile
-    ).subquery("rows")
+    rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("rows")
     # One pass: every violating Card plus every due, unsuspended Card.
     fetched = db.session.execute(
-        select(rows.c.violation, rows.c.due_at, rows.c.due_day, rows.c.queue).where(
+        select(rows.c.violation, rows.c.due_at, rows.c.due_day, rows.c.queue, rows.c.card_count).where(
             or_(
                 rows.c.violation > 0,
                 and_(
@@ -217,10 +215,8 @@ def _canonical_future_due_day_counts(
     if error is not None:
         raise StudyAuthorityReadError(*error)
 
-    avail_rows = [(due_at, due_day, queue) for _violation, due_at, due_day, queue in fetched]
-
     by_day: dict[date, int] = {}
-    for due_at, due_day, queue_value in avail_rows:
+    for _violation, due_at, due_day, queue_value, card_count in fetched:
         local_day = _progress_due_local_day(
             due_at=due_at,
             due_day=due_day,
@@ -231,9 +227,9 @@ def _canonical_future_due_day_counts(
         if local_day is None:
             continue
         if local_day < start_local_day:
-            by_day[start_local_day] = _safe_int(by_day.get(start_local_day)) + 1
+            by_day[start_local_day] = _safe_int(by_day.get(start_local_day)) + int(card_count)
         elif local_day < end_local_day:
-            by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+            by_day[local_day] = _safe_int(by_day.get(local_day)) + int(card_count)
     return by_day
 
 

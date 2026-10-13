@@ -766,6 +766,56 @@ describe('StudyPage exit confirmation and completion card gating', () => {
     expect(shortcut.defaultPrevented).toBe(false)
     expect(mocks.requestFullscreen).not.toHaveBeenCalled()
   })
+
+  it('renders completion screen without error boundary when session completes on a card with array fields', async () => {
+    mocks.sessionHookData = {
+      session: {
+        status: 'active',
+        snapshot: {
+          session_id: 'session-array-complete',
+          scope: { name: 'Array Deck' },
+        },
+        events: [],
+      } as any,
+      view: {
+        card: null,
+        template: null,
+        content: {
+          schema_version: 'study-content.v1',
+          renderer_abi: 'client_v1',
+          id: 'cnt-array',
+          note_id: 'note-array',
+          version: '1',
+          field_values: {
+            Front: 'Kanji',
+            Readings: ['かんじ', 'カンジ'],
+            Tags: ['n5', 'array-test'],
+          },
+          render_context: {},
+          media: [],
+        },
+        counts: { new: 0, learning: 0, due: 0 },
+        session_state: 'complete_today',
+      } as any,
+      receipt: null,
+      error: null,
+      leaseConflict: false,
+      takeoverState: 'idle',
+      isLoading: false,
+      isBusy: false,
+      canUndo: false,
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    expect(container?.textContent).toContain('Hoàn thành lượt học hôm nay')
+    expect(container?.textContent).not.toContain('trim is not a function')
+  })
 })
 
 

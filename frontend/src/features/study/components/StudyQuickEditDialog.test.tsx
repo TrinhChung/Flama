@@ -24,6 +24,7 @@ vi.mock('@/app/api', () => ({
 }))
 
 import { StudyQuickEditDialog } from './StudyQuickEditDialog'
+import { inferFieldType } from '../hooks/useStudyQuickEditForm'
 import type { StudyContentArtifact, StudyTemplateArtifact } from '../types'
 import { canonicalDigest } from '../session/canonicalDigest'
 
@@ -120,6 +121,36 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 }
 
 describe('StudyQuickEditDialog', () => {
+  it('blocks invalid array code and saves nested arrays as native lists', async () => {
+    mocks.get.mockImplementation(() => new Promise(() => {}))
+    const template = { ...mockTemplate, field_defs: [
+      { name: 'Word', field_type: 'text', position: 0 },
+      { name: 'Answer', field_type: 'array', position: 1 },
+    ] }
+    const content = { ...mockContent, field_values: { Word: '勉強', Answer: [['old'], 'answer'] } }
+    const onCardUpdated = vi.fn()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root?.render(renderWithClient(
+      <StudyQuickEditDialog open={true} onOpenChange={vi.fn()} cardId="card-123"
+        template={template} content={content} onCardUpdated={onCardUpdated} />,
+    )))
+    const input = document.querySelector<HTMLTextAreaElement>('[aria-label="Answer"]')!
+    const save = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('Lưu thay đổi'))!
+    await act(async () => setNativeValue(input, '[1]'))
+    expect(save.disabled).toBe(true)
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true })))
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    const values = { Word: '勉強', Answer: [['new'], 'item'] }
+    mocks.mutate.mockResolvedValueOnce({ success: true, detail: { note: { id: '101', field_values: values } } })
+    await act(async () => setNativeValue(input, JSON.stringify(values.Answer)))
+    expect(save.disabled).toBe(false)
+    await act(async () => save.click())
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', expect.objectContaining({ field_values: values }))
+    expect(onCardUpdated).toHaveBeenCalledWith('card-123', values, { noteId: '101', media: undefined })
+  })
+
   it('uses frozen note fields and excludes aliases while authoritative detail is loading', async () => {
     mocks.get.mockImplementation(() => new Promise(() => {}))
     const projection = {
@@ -691,5 +722,109 @@ describe('StudyQuickEditDialog', () => {
         }),
       }),
     )
+  })
+
+  it('does not crash when closed even if content contains native arrays or unexpected fields', async () => {
+    const template = {
+      ...mockTemplate,
+      field_defs: [
+        { name: 'Word', field_type: 'text', position: 0 },
+        { name: 'Synonyms', field_type: 'text', position: 1 },
+      ],
+    }
+    const content = {
+      ...mockContent,
+      field_values: {
+        Word: '本',
+        Synonyms: ['ほん', '書籍', ['sub-item']],
+        ExtraObj: { custom: true },
+        ExtraNum: 42,
+      },
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    // Should mount and unmount cleanly with open={false} without throwing TypeError
+    await act(async () => {
+      root?.render(
+        renderWithClient(
+          <StudyQuickEditDialog
+            open={false}
+            onOpenChange={vi.fn()}
+            cardId="card-123"
+            template={template}
+            content={content}
+            onCardUpdated={vi.fn()}
+          />,
+        ),
+      )
+    })
+
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('does not crash when transitioning to session completion with card and template null', async () => {
+    const content = {
+      ...mockContent,
+      field_values: {
+        Word: '車',
+        Tags: ['n5', 'transport'],
+      },
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    // Replicates completion state where cardId and template become null/undefined
+    await act(async () => {
+      root?.render(
+        renderWithClient(
+          <StudyQuickEditDialog
+            open={false}
+            onOpenChange={vi.fn()}
+            cardId={undefined}
+            template={null}
+            content={content}
+            onCardUpdated={vi.fn()}
+          />,
+        ),
+      )
+    })
+
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+  })
+})
+
+describe('inferFieldType', () => {
+  it('does not throw for string, string[], nested arrays, null, undefined, numbers, and objects', () => {
+    expect(() => inferFieldType(undefined, undefined, undefined)).not.toThrow()
+    expect(() => inferFieldType(null, null, null)).not.toThrow()
+    expect(() => inferFieldType('text', 'notes', ['item1', 'item2'])).not.toThrow()
+    expect(() => inferFieldType('text', 'nested', [['a', 'b'], ['c']])).not.toThrow()
+    expect(() => inferFieldType('text', 'count', 123)).not.toThrow()
+    expect(() => inferFieldType('text', 'meta', { key: 'value' })).not.toThrow()
+    expect(() => inferFieldType({ invalid: true } as any, 123 as any, ['a'])).not.toThrow()
+  })
+
+  it('correctly returns array for native lists and nested lists', () => {
+    expect(inferFieldType('array', 'any_name', 'any_val')).toBe('array')
+    expect(inferFieldType('text', 'custom_name', ['item 1', 'item 2'])).toBe('array')
+    expect(inferFieldType(undefined, 'custom_name', [['nested']])).toBe('array')
+  })
+
+  it('correctly infers audio and image fields', () => {
+    expect(inferFieldType('text', 'audio_file', 'test.mp3')).toBe('audio')
+    expect(inferFieldType('text', 'custom', '[sound:word.mp3]')).toBe('audio')
+    expect(inferFieldType('text', 'my_picture', 'image.png')).toBe('image')
+    expect(inferFieldType('text', 'custom', 'photo.webp')).toBe('image')
+  })
+
+  it('defaults to text for other types without throwing', () => {
+    expect(inferFieldType('text', 'Meaning', 'Học tập')).toBe('text')
+    expect(inferFieldType(undefined, undefined, 42)).toBe('text')
+    expect(inferFieldType(null, null, null)).toBe('text')
   })
 })

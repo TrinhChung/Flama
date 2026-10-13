@@ -433,6 +433,206 @@ class TemplateReleaseServiceTests(unittest.TestCase):
                 marketplace.preview_shared_note_type_template(user_id=self.stranger_id, note_type_id=nt.id, template_id=independent["id"])
             self.assertEqual(caught.exception.status, 404)
 
+    def test_deck_rebase_syncs_template_releases_bindings_and_retirements(self):
+        from app.services import deck_install_rebase_service, deck_release_service, template_library_service as library
+        from app.services.flashcards_share_service import install_shared_deck_item_for_user
+
+        word_field = FieldDef(note_type_id=self.nt_id, name="Word", field_type="text", position=0)
+        meaning_field = FieldDef(note_type_id=self.nt_id, name="Meaning", field_type="text", position=1)
+        db.session.add_all([word_field, meaning_field])
+        db.session.flush()
+
+        source_app = StudyApplication.query.filter_by(note_type_id=self.nt_id, template_id=self.source_id).first()
+        source_app.input_bindings = {"Prompt": word_field.id}
+        source_app.display_name = "Main v1"
+        source_app.position = 0
+        source_app.is_default = True
+
+        extra = library.create_template(user_id=self.owner_id, payload={
+            "name": "Extra v1",
+            "front_html": "<div>EXTRA V1</div>",
+            "back_html": "<div>BACK</div>",
+            "shared_css": ".extra{}",
+            "input_schema": [{"key": "Prompt", "type": "text"}],
+        })
+        extra_app = library.attach_template(user_id=self.owner_id, note_type_id=self.nt_id, payload={
+            "template_id": extra["id"],
+            "input_bindings": {"Prompt": meaning_field.id},
+            "display_name": "Extra Card",
+            "position": 1,
+            "is_default": False,
+        })
+
+        deck = Deck(owner_user_id=self.owner_id, note_type_id=self.nt_id, name="Rebase source")
+        db.session.add(deck)
+        db.session.flush()
+        item = DeckMarketplaceItem(
+            owner_user_id=self.owner_id,
+            source_deck_id=deck.id,
+            source_note_type_id=self.nt_id,
+            title="Rebase Deck",
+            publish_status="published",
+        )
+        db.session.add(item)
+        db.session.flush()
+
+        release_v1 = deck_release_service.publish_release(
+            deck_item_id=item.id,
+            user_id=self.owner_id,
+            version_label="1.0.0",
+            changelog="Initial",
+            expected_current_release_id=None,
+            expected_working_revision=int(item.working_revision or 0),
+            idempotency_key="rebase-deck-v1",
+        ).release
+        db.session.commit()
+
+        # Learner installs v1 and customizes local CSS on the main template (non-conflicting edit).
+        NoteTypeInstall.query.filter_by(user_id=self.learner_id, source_note_type_id=self.nt_id).delete()
+        db.session.commit()
+        install_shared_deck_item_for_user(item, user_id=self.learner_id)
+        db.session.commit()
+
+        install = DeckInstall.query.filter_by(user_id=self.learner_id, deck_item_id=item.id).one()
+        nt_install = NoteTypeInstall.query.filter_by(user_id=self.learner_id, source_note_type_id=self.nt_id).one()
+        sub_main = repository.subscription(db.session, user_id=self.learner_id, source_template_id=self.source_id)
+        sub_extra = repository.subscription(db.session, user_id=self.learner_id, source_template_id=extra["id"])
+        self.edit(sub_main["local_template_id"], shared_css=".learner-custom{}")
+
+        # Author edits main template front_html, adds a new field Reading, updates bindings/metadata,
+        # retires extra template, attaches a third template, and publishes Deck v2.
+        reading_field = FieldDef(note_type_id=self.nt_id, name="Reading", field_type="text", position=2)
+        db.session.add(reading_field)
+        db.session.flush()
+        self.edit(self.source_id, front_html="FRONT V2")
+        source_app = StudyApplication.query.filter_by(note_type_id=self.nt_id, template_id=self.source_id).first()
+        source_app.input_bindings = {"Prompt": reading_field.id}
+        source_app.display_name = "Main v2"
+        source_app.position = 2
+        db.session.commit()
+
+        library.retire_application(user_id=self.owner_id, note_type_id=self.nt_id, application_id=extra_app["id"])
+        third = library.create_template(user_id=self.owner_id, payload={
+            "name": "Third v2",
+            "front_html": "<div>THIRD V2</div>",
+            "back_html": "<div>BACK</div>",
+            "shared_css": ".third{}",
+            "input_schema": [{"key": "Hint", "type": "text"}],
+        })
+        library.attach_template(user_id=self.owner_id, note_type_id=self.nt_id, payload={
+            "template_id": third["id"],
+            "input_bindings": {"Hint": reading_field.id},
+            "display_name": "Third Card",
+            "position": 0,
+            "is_default": False,
+        })
+
+        item = db.session.get(DeckMarketplaceItem, item.id)
+        release_v2 = deck_release_service.publish_release(
+            deck_item_id=item.id,
+            user_id=self.owner_id,
+            version_label="2.0.0",
+            changelog="v2",
+            expected_current_release_id=release_v1.id,
+            expected_working_revision=int(item.working_revision or 0),
+            idempotency_key="rebase-deck-v2",
+        ).release
+        db.session.commit()
+
+        # Learner updates deck to v2.
+        deck_install_rebase_service.prepare_and_apply_update(
+            install_id=install.id,
+            release_id=release_v2.id,
+            user_id=self.learner_id,
+        )
+
+        # 1. Main template 3-way merged: got FRONT V2 while preserving learner's shared_css.
+        local_main = repository.template(db.session, sub_main["local_template_id"])
+        self.assertEqual(local_main["front_html"], "FRONT V2")
+        self.assertEqual(local_main["shared_css"], ".learner-custom{}")
+        sub_main_after = repository.subscription(db.session, user_id=self.learner_id, source_template_id=self.source_id)
+        v2_pins = repository.deck_pins(db.session, release_v2.id)
+        self.assertEqual(sub_main_after["applied_release_id"], v2_pins[self.source_id]["template_release_id"])
+
+        # 2. Main StudyApplication updated bindings (including newly added Reading field), display_name, and position.
+        local_reading_field = FieldDef.query.filter_by(note_type_id=nt_install.installed_note_type_id, name="Reading").one()
+        local_main_app = StudyApplication.query.filter_by(
+            note_type_id=nt_install.installed_note_type_id,
+            template_id=sub_main["local_template_id"],
+        ).one()
+        self.assertEqual(local_main_app.status_code, "ACTIVE")
+        self.assertEqual(local_main_app.input_bindings, {"Prompt": local_reading_field.id})
+        self.assertEqual(local_main_app.display_name, "Main v2")
+        self.assertEqual(local_main_app.position, 2)
+
+        # 3. Retired template's StudyApplication on installed_note_type_id is now RETIRED.
+        local_extra_app = StudyApplication.query.filter_by(
+            note_type_id=nt_install.installed_note_type_id,
+            template_id=sub_extra["local_template_id"],
+        ).one()
+        self.assertEqual(local_extra_app.status_code, "RETIRED")
+
+        # 4. Newly attached third template is received and ACTIVE on installed_note_type_id.
+        sub_third = repository.subscription(db.session, user_id=self.learner_id, source_template_id=third["id"])
+        self.assertIsNotNone(sub_third)
+        local_third_app = StudyApplication.query.filter_by(
+            note_type_id=nt_install.installed_note_type_id,
+            template_id=sub_third["local_template_id"],
+        ).one()
+        self.assertEqual(local_third_app.status_code, "ACTIVE")
+        self.assertEqual(local_third_app.input_bindings, {"Hint": local_reading_field.id})
+
+        # 5. Learner customizes local_third_app binding; author re-attaches extra template and changes third's binding in v3.
+        local_word_field = FieldDef.query.filter_by(note_type_id=nt_install.installed_note_type_id, name="Word").one()
+        local_third_app.input_bindings = {"Hint": local_word_field.id}
+        db.session.commit()
+
+        library.attach_template(user_id=self.owner_id, note_type_id=self.nt_id, payload={
+            "template_id": extra["id"],
+            "input_bindings": {"Prompt": word_field.id},
+            "display_name": "Extra Reactivated",
+            "position": 3,
+            "is_default": False,
+        })
+        third_source_app = StudyApplication.query.filter_by(note_type_id=self.nt_id, template_id=third["id"]).one()
+        third_source_app.input_bindings = {"Hint": meaning_field.id}
+        db.session.commit()
+
+        item = db.session.get(DeckMarketplaceItem, item.id)
+        release_v3 = deck_release_service.publish_release(
+            deck_item_id=item.id,
+            user_id=self.owner_id,
+            version_label="3.0.0",
+            changelog="v3",
+            expected_current_release_id=release_v2.id,
+            expected_working_revision=int(item.working_revision or 0),
+            idempotency_key="rebase-deck-v3",
+        ).release
+        db.session.commit()
+
+        deck_install_rebase_service.prepare_and_apply_update(
+            install_id=install.id,
+            release_id=release_v3.id,
+            user_id=self.learner_id,
+        )
+
+        # Extra template is reactivated, while learner's customized binding on third template is preserved.
+        db.session.expire_all()
+        self.assertEqual(
+            StudyApplication.query.filter_by(
+                note_type_id=nt_install.installed_note_type_id,
+                template_id=sub_extra["local_template_id"],
+            ).one().status_code,
+            "ACTIVE",
+        )
+        self.assertEqual(
+            StudyApplication.query.filter_by(
+                note_type_id=nt_install.installed_note_type_id,
+                template_id=sub_third["local_template_id"],
+            ).one().input_bindings,
+            {"Hint": local_word_field.id},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,17 +1,16 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
 import {
-  ArrowRight,
   BookOpen,
+  Bot,
   KeyRound,
-  LifeBuoy,
   MessagesSquare,
-  MousePointerClick,
-  Wrench,
+  Search,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { ContextHelpButton } from '@/features/guide'
@@ -19,89 +18,75 @@ import { ContextHelpButton } from '@/features/guide'
 import { useMcpTokenCRUD } from '../hooks/useMcpTokenCRUD'
 import { McpTokensTab } from '../components/McpTokensTab'
 import { McpOAuthTab } from '../components/McpOAuthTab'
+import { McpValueIntro } from '../components/mcp/McpValueIntro'
+import { McpGuideTab } from '../components/mcp/McpGuideTab'
 
 export function McpTokensPage() {
   const { t } = useTranslation('mcp')
-  const [activeTab, setActiveTab] = useState('chatgpt')
+  const [activeTab, setActiveTabState] = useState<'overview' | 'tokens' | 'guide'>('overview')
+  const [setupMode, setSetupMode] = useState<'chatgpt' | 'tokens'>('chatgpt')
   const hookResult = useMcpTokenCRUD()
   const { query } = hookResult
+
+  const setActiveTab = (tab: string) => {
+    if (tab === 'tokens' || tab === 'setup') {
+      setActiveTabState('tokens')
+    } else if (tab === 'guide' || tab === 'docs') {
+      setActiveTabState('guide')
+    } else {
+      setActiveTabState('overview')
+    }
+  }
 
   if (query.isPending) return <PageLoading label={t('page.loading')} />
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
   return (
     <Page className="max-w-7xl mx-auto space-y-6 sm:space-y-8 pb-12 px-3 sm:px-6">
-      {/* Header & Feature Navigation */}
-      <div className="space-y-4">
-        <PageHeader
-          title={t('page.title')}
-          description={t('page.description')}
-          actions={
-            <ContextHelpButton
-              guidePath="/guide/integrations/mcp-ai"
-              guideTitle={t('page.connect_guide_title')}
-              troubleshootPath="/guide/troubleshooting/mcp"
-              troubleshootTitle={t('page.troubleshoot_title')}
-              label={t('page.connect_guide_btn')}
-            />
-          }
-        />
+      {/* Header & Feature Help Action */}
+      <PageHeader
+        title={t('page.title')}
+        description={t('page.description')}
+        actions={
+          <ContextHelpButton
+            guidePath="/guide/integrations/mcp-ai"
+            guideTitle={t('page.connect_guide_title')}
+            troubleshootPath="/guide/troubleshooting/mcp"
+            troubleshootTitle={t('page.troubleshoot_title')}
+            label={t('page.connect_guide_btn')}
+          />
+        }
+      />
 
-        {/* Top Quick Explanatory Links - Swipeable on mobile */}
-        <div className="flex items-center gap-2 pt-0.5 text-xs overflow-x-auto no-scrollbar pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 sm:flex-wrap">
-          <span className="text-muted-foreground font-medium text-[11px] shrink-0">{t('page.quick_links_label')}</span>
-          <Link
-            to="/guide/integrations/mcp-ai"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors font-medium text-[11px] shrink-0 whitespace-nowrap"
-          >
-            <BookOpen className="size-3" />
-            <span>{t('page.quick_guide_ai')}</span>
-          </Link>
-          <Link
-            to="/guide/integrations/mcp-tools"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors font-medium text-[11px] shrink-0 whitespace-nowrap"
-          >
-            <Wrench className="size-3" />
-            <span>{t('page.quick_tools_prompts')}</span>
-          </Link>
-          <Link
-            to="/guide/troubleshooting/mcp"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors font-medium text-[11px] shrink-0 whitespace-nowrap"
-          >
-            <LifeBuoy className="size-3" />
-            <span>{t('page.quick_troubleshooting')}</span>
-          </Link>
-        </div>
-      </div>
-
+      {/* 3-Tab Segmented Card System */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
         <TabsList
           style={{ height: 'auto' }}
-          className="grid w-full grid-cols-1 lg:grid-cols-2 p-1 bg-muted/60 rounded-xl border gap-1"
+          className="grid w-full grid-cols-1 md:grid-cols-3 p-1 bg-muted/60 rounded-xl border gap-1"
         >
-          {/* Tab 1: ChatGPT (Primary) */}
+          {/* Tab 1: Khám phá & Công dụng (Primary / Default) */}
           <TabsTrigger
-            value="chatgpt"
+            value="overview"
             style={{ height: 'auto' }}
             className="group flex items-start sm:items-center justify-between gap-3 p-3 sm:p-4 text-left rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-xs data-[state=active]:border-primary/40 border border-transparent transition-colors whitespace-normal after:hidden"
           >
             <div className="flex items-center gap-3 min-w-0 w-full">
-              <MessagesSquare className="size-5 text-muted-foreground group-data-[state=active]:text-primary shrink-0" />
+              <Bot className="size-5 text-muted-foreground group-data-[state=active]:text-primary shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-foreground truncate">{t('page.tabs.chatgpt.title')}</span>
+                  <span className="text-sm font-bold text-foreground truncate">{t('page.tabs.overview.title')}</span>
                   <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-primary/10 text-primary shrink-0">
-                    {t('page.tabs.chatgpt.badge')}
+                    {t('page.tabs.overview.badge')}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
-                  {t('page.tabs.chatgpt.desc')}
+                  {t('page.tabs.overview.desc')}
                 </p>
               </div>
             </div>
           </TabsTrigger>
 
-          {/* Tab 2: Tokens & Permissions (Developer / IDE) */}
+          {/* Tab 2: Cài đặt & Kết nối */}
           <TabsTrigger
             value="tokens"
             style={{ height: 'auto' }}
@@ -111,88 +96,129 @@ export function McpTokensPage() {
               <KeyRound className="size-5 text-muted-foreground group-data-[state=active]:text-primary shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-foreground truncate">{t('page.tabs.tokens.title')}</span>
+                  <span className="text-sm font-bold text-foreground truncate">{t('page.tabs.setup.title')}</span>
                   <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted text-muted-foreground shrink-0">
-                    {t('page.tabs.tokens.badge')}
+                    {t('page.tabs.setup.badge')}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
-                  {t('page.tabs.tokens.desc')}
+                  {t('page.tabs.setup.desc')}
+                </p>
+              </div>
+            </div>
+          </TabsTrigger>
+
+          {/* Tab 3: Hướng dẫn & Tra cứu */}
+          <TabsTrigger
+            value="guide"
+            style={{ height: 'auto' }}
+            className="group flex items-start sm:items-center justify-between gap-3 p-3 sm:p-4 text-left rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-xs data-[state=active]:border-primary/40 border border-transparent transition-colors whitespace-normal after:hidden"
+          >
+            <div className="flex items-center gap-3 min-w-0 w-full">
+              <BookOpen className="size-5 text-muted-foreground group-data-[state=active]:text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground truncate">{t('page.tabs.docs.title')}</span>
+                  <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted text-muted-foreground shrink-0">
+                    {t('page.tabs.docs.badge')}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
+                  {t('page.tabs.docs.desc')}
                 </p>
               </div>
             </div>
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: ChatGPT Onboarding & OAuth 2.1 */}
-        <McpOAuthTab tabValue="chatgpt" />
+        {/* Tab 1: Khám phá & Công dụng (Overview + 3 Pillars + CTA) */}
+        <TabsContent value="overview" className="space-y-6">
+          <McpValueIntro onStartSetup={() => setActiveTab('tokens')} showToggle={false} />
 
-        {/* Tab 2: Token Management & Permissions */}
-        <McpTokensTab hookResult={hookResult} onSwitchToChatGPT={() => setActiveTab('chatgpt')} />
+          {/* 3 Core Value Pillar Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+            <div className="flex items-start gap-3 p-3.5 sm:p-4 rounded-xl border border-border/60 bg-card shadow-2xs">
+              <div className="p-2 sm:p-2.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+                <Search className="size-4.5 sm:size-5" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <div className="text-xs sm:text-sm font-semibold text-foreground">
+                  {t('page.pillars.marketplace.title')}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {t('page.pillars.marketplace.desc')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 p-3.5 sm:p-4 rounded-xl border border-border/60 bg-card shadow-2xs">
+              <div className="p-2 sm:p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                <Zap className="size-4.5 sm:size-5" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <div className="text-xs sm:text-sm font-semibold text-foreground">
+                  {t('page.pillars.one_click.title')}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {t('page.pillars.one_click.desc')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 p-3.5 sm:p-4 rounded-xl border border-border/60 bg-card shadow-2xs">
+              <div className="p-2 sm:p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <ShieldCheck className="size-4.5 sm:size-5" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <div className="text-xs sm:text-sm font-semibold text-foreground">
+                  {t('page.pillars.privacy.title')}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {t('page.pillars.privacy.desc')}
+                </p>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Tab 2: Cài đặt & Kết nối (Consolidating Personal Tokens & ChatGPT OAuth) */}
+        <TabsContent value="tokens" className="space-y-6">
+          <Tabs value={setupMode} onValueChange={(val) => setSetupMode(val as any)} className="w-full space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
+              <div className="space-y-0.5">
+                <h3 className="text-sm sm:text-base font-bold text-foreground">
+                  {t('page.tabs.setup.mode_title')}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {t('page.tabs.setup.mode_desc')}
+                </p>
+              </div>
+
+              <TabsList className="grid grid-cols-2 max-w-xs p-1 bg-muted/60 rounded-xl border shrink-0">
+                <TabsTrigger value="chatgpt" className="text-xs font-semibold py-1.5 gap-1.5">
+                  <MessagesSquare className="size-3.5" />
+                  <span>{t('page.tabs.chatgpt.title')}</span>
+                </TabsTrigger>
+                <TabsTrigger value="tokens" className="text-xs font-semibold py-1.5 gap-1.5">
+                  <KeyRound className="size-3.5" />
+                  <span>{t('page.tabs.tokens.title')}</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {/* Sub-tab 1: ChatGPT Onboarding & OAuth 2.1 */}
+            <McpOAuthTab tabValue="chatgpt" />
+
+            {/* Sub-tab 2: Token Management & Permissions */}
+            <McpTokensTab hookResult={hookResult} onSwitchToChatGPT={() => setSetupMode('chatgpt')} />
+          </Tabs>
+        </TabsContent>
+
+        {/* Tab 3: Hướng dẫn & Tra cứu (Config JSON, Tools Explorer, Troubleshooting) */}
+        <TabsContent value="guide" className="space-y-6">
+          <McpGuideTab />
+        </TabsContent>
       </Tabs>
-
-      {/* Contextual Reference / Documentation Strip */}
-      <div className="rounded-xl border bg-card p-4 sm:p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            {t('page.docs_strip.title')}
-          </span>
-          <Link
-            to="/guide/integrations/mcp-ai"
-            className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
-          >
-            <span>{t('page.docs_strip.view_all')}</span>
-            <ArrowRight className="size-3" />
-          </Link>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-3 pt-1">
-          <Link
-            to="/guide/integrations/mcp-ai"
-            className="group flex items-start gap-3 p-3 rounded-lg hover:bg-muted/60 transition-colors"
-          >
-            <BookOpen className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="min-w-0 space-y-0.5">
-              <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                {t('page.docs_strip.card_ai.title')}
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {t('page.docs_strip.card_ai.desc')}
-              </p>
-            </div>
-          </Link>
-
-          <Link
-            to="/guide/integrations/mcp-tools"
-            className="group flex items-start gap-3 p-3 rounded-lg hover:bg-muted/60 transition-colors"
-          >
-            <Wrench className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="min-w-0 space-y-0.5">
-              <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                {t('page.docs_strip.card_tools.title')}
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {t('page.docs_strip.card_tools.desc')}
-              </p>
-            </div>
-          </Link>
-
-          <Link
-            to="/guide/integrations/yomitan"
-            className="group flex items-start gap-3 p-3 rounded-lg hover:bg-muted/60 transition-colors"
-          >
-            <MousePointerClick className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="min-w-0 space-y-0.5">
-              <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                {t('page.docs_strip.card_yomitan.title')}
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {t('page.docs_strip.card_yomitan.desc')}
-              </p>
-            </div>
-          </Link>
-        </div>
-      </div>
     </Page>
   )
 }

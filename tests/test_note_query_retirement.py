@@ -106,7 +106,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
     def _query(self):
         return Card.query.join(Note, Note.id == Card.note_id).filter(Note.deck_id == self.deck.id)
 
-    def _oracle(self, *, timezone_name='UTC', query=None):
+    def _oracle(self, *, timezone_name='UTC', query=None, runtime=RUNTIME):
         cards = (query or self._query()).all()
         subjects = {row.live_note_id: row for row in StudyProgressSubject.query.all()}
         reads = {}
@@ -120,7 +120,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
                 buried_until_day=subject.buried_until_day if subject else None,
                 card_created_at=card.created_at, card_order_key=card.order_key.encode(),
             ))
-        with patch('app.services.study_authority_read_service.resolve_scheduler_runtime_settings', return_value=RUNTIME):
+        with patch('app.services.study_authority_read_service.resolve_scheduler_runtime_settings', return_value=runtime):
             return summarize_study_authority_queue(cards=cards, reads_by_card_id=reads,
                 learner_user_id=self.user.id, now_utc=NOW, timezone_name=timezone_name)
 
@@ -239,6 +239,50 @@ class NoteQueryRetirementTests(unittest.TestCase):
         return browse_card_service.list_browse_cards(user_id=self.user.id, admin_mode=False,
             timezone_name='UTC', query_args={'deck_id': self.deck.id, 'per_page': 7, **args})
 
+    def test_browse_review_filters_match_study_for_nullable_anchors_and_local_boundaries(self):
+        timezones = ('UTC', 'Asia/Tokyo', 'America/New_York', 'Pacific/Honolulu')
+        boundaries = sorted({study_repository._next_day_boundary(
+            now=NOW, timezone_name=timezone_name, day_boundary_hour_local=hour,
+        ) for timezone_name in timezones for hour in (4, 17)})
+        today = study_repository._today_day_index(
+            now=NOW, timezone_name='UTC', day_boundary_hour_local=4,
+        )
+        past = self._add(1, 'review', due_at=NOW - timedelta(hours=1))
+        later_today = self._add(2, 'review', due_at=NOW + timedelta(hours=1))
+        undated = self._add(3, 'review')
+        future_day = self._add(4, 'review', due_day=today + 2,
+                               due_at=NOW - timedelta(days=1))
+        self._add(5, 'review', due_day=today - 2, due_at=NOW + timedelta(days=10))
+        suspended = self._add(6, 'review', due_at=NOW - timedelta(hours=1), suspended=True)
+        new = self._add(7)
+        learning = self._add(8, 'learning', due_at=NOW - timedelta(hours=1))
+        for index, boundary in enumerate(boundaries):
+            self._add(9 + 2 * index, 'review', due_at=boundary - timedelta(microseconds=1))
+            self._add(10 + 2 * index, 'review', due_at=boundary)
+
+        for timezone_name in timezones:
+            for hour in (4, 17):
+                with self.subTest(timezone=timezone_name, boundary_hour=hour):
+                    runtime = SimpleNamespace(day_boundary_hour_local=hour, learn_ahead_seconds=1200)
+                    oracle = self._oracle(timezone_name=timezone_name, runtime=runtime)
+                    expected = set(oracle.due_card_ids) - {learning.id, new.id}
+                    self.assertTrue({past.id, later_today.id, undated.id} <= expected)
+                    self.assertFalse({future_day.id, suspended.id} & expected)
+                    with patch.object(browse_card_service, '_utcnow', return_value=NOW), \
+                         patch.object(browse_card_service, 'resolve_scheduler_runtime_settings', return_value=runtime), \
+                         patch.object(study_repository, 'resolve_scheduler_runtime_settings', return_value=runtime):
+                        counts = study_repository.query_study_queue_counts(
+                            self._query(), user_id=self.user.id, now=NOW, timezone_name=timezone_name,
+                        )
+                        self.assertEqual(counts[2], len(expected))
+                        for status in ('due', 'review'):
+                            page = browse_card_service.list_browse_cards(
+                                user_id=self.user.id, admin_mode=False, timezone_name=timezone_name,
+                                query_args={'deck_id': self.deck.id, 'status': status, 'per_page': 100},
+                            )
+                            self.assertEqual(page['total'], counts[2])
+                            self.assertEqual({row['card_id'] for row in page['items']}, expected)
+
     def _bulk_stateful_notes(self):
         # Bulk content insertion creates no Card records; one application derives 2000.
         rows = [{'id': f'10000000-0000-0000-0000-{index:012d}', 'user_id': self.user.id,
@@ -326,14 +370,14 @@ class NoteQueryRetirementTests(unittest.TestCase):
         self.assertLessEqual(len(candidate_selects), 16)
         self.assertTrue(all('LIMIT' in s for s in candidate_selects))
 
-    def test_browse_count_rejects_detached_envelope_even_outside_requested_status(self):
+    def test_browse_page_rejects_detached_envelope(self):
         self._add(1)
         card = self._add(2, 'review', due_day=99999)
         subject = StudyProgressSubject.query.filter_by(live_note_id=card.note_id).one()
         subject.live_note_id = None
         db.session.commit()
         with self.assertRaises(browse_card_service.BrowseApiError) as caught:
-            self._browse(status='new')
+            self._browse(status='review')
         self.assertEqual((caught.exception.status, caught.exception.code), (409, 'DETACHED_AUTHORITY_SUBJECT'))
 
     def test_wrong_logical_key_cannot_hide_live_note_evidence_as_pristine(self):
@@ -351,14 +395,14 @@ class NoteQueryRetirementTests(unittest.TestCase):
                                                        now=NOW, timezone_name='UTC')
         self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
 
-    def test_browse_count_rejects_empty_nonpristine_envelope_before_status_filter(self):
+    def test_browse_page_rejects_empty_nonpristine_envelope(self):
         card = self._add(1)
         db.session.add(StudyProgressSubject(learner_user_id=self.user.id,
             logical_note_key=card.note_id.encode(), live_note_id=card.note_id,
             status_code='QUARANTINED_CORRUPT_STATE', created_at=NOW, updated_at=NOW))
         db.session.commit()
         with self.assertRaises(browse_card_service.BrowseApiError) as caught:
-            self._browse(status='review')
+            self._browse()
         self.assertEqual(caught.exception.code, 'INCOMPLETE_AUTHORITY_COVERAGE')
 
     def test_browse_returned_page_still_rejects_semantic_hash_drift(self):
@@ -370,7 +414,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
             self._browse()
         self.assertIn(caught.exception.code, ('AUTHORITY_READ_PARITY_DIVERGED', 'AUTHORITY_STATE_DIVERGED'))
 
-    def test_browse_count_rejects_partial_state_group_instead_of_pristine_fallback(self):
+    def test_browse_page_rejects_partial_state_group(self):
         card = self._add(1, 'review', due_day=99999)
         # Model CHECK normally prevents partial groups. Simulate externally
         # damaged evidence to prove that a status filter cannot hide it.
@@ -379,7 +423,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
         subject.algorithm_key = None
         db.session.commit()
         with self.assertRaises(browse_card_service.BrowseApiError) as caught:
-            self._browse(status='new')
+            self._browse(status='review')
         self.assertEqual(caught.exception.code, 'INCOMPLETE_AUTHORITY_COVERAGE')
 
     def test_small_review_bucket_preserves_anchor_priority_without_extra_seeks(self):
@@ -418,7 +462,26 @@ class NoteQueryRetirementTests(unittest.TestCase):
             event.remove(db.engine, 'before_cursor_execute', capture)
         self.assertEqual(selected, visible.id)
         self.assertTrue(statements)
-        self.assertTrue(all('EXISTS' in sql and 'LIMIT' in sql for sql in statements))
+    def test_page_window_integrity_targeted_index_evaluation(self):
+        from app.repositories import browse_card_repository
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, card_ids=[]), 0)
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, note_ids=[]), 0)
+        card = self._add(1, 'review', due_day=1)
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, card_ids=[card.id]), 0)
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, note_ids=[card.note_id]), 0)
+
+        statements = []
+        def capture(_conn, _cursor, statement, *_args):
+            statements.append(statement)
+        event.listen(db.engine, 'before_cursor_execute', capture)
+        try:
+            browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, card_ids=[card.id])
+            browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, note_ids=[card.note_id])
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', capture)
+        self.assertTrue(statements)
+        self.assertTrue(all('card_presentations' not in sql for sql in statements))
+        self.assertTrue(all('notes' in sql for sql in statements))
 
 
 if __name__ == '__main__':

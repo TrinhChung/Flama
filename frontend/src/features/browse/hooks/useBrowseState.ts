@@ -85,7 +85,7 @@ export type CardDetailResponse = {
     note_type_name?: string | null
     deck_id: number
     deck_name: string
-    field_values: Record<string, string>
+    field_values: Record<string, unknown>
     tags: string[]
   }
   fields: CardDetailField[]
@@ -324,16 +324,25 @@ export function useBrowseState() {
     }
   }, [urlDeckId, urlCardId])
 
-  const [editFieldValues, setEditFieldValues] = useState<Record<string, string>>({})
+  const [editFieldValues, setEditFieldValues] = useState<Record<string, unknown>>({})
   const [editDeckId, setEditDeckId] = useState<number | null>(null)
   const [editTags, setEditTags] = useState<string[]>([])
   const [newTagInput, setNewTagInput] = useState('')
   const [arrayViewMode, setArrayViewMode] = useState<'normal' | 'code'>('normal')
 
   // Initial Snapshot for Dirty Tracking
-  const [initialFieldValues, setInitialFieldValues] = useState<Record<string, string>>({})
+  const [initialFieldValues, setInitialFieldValues] = useState<Record<string, unknown>>({})
   const [initialDeckId, setInitialDeckId] = useState<number | null>(null)
   const [initialTags, setInitialTags] = useState<string[]>([])
+  const hydratedCardIdRef = useRef<string | null>(null)
+  const editorStateRef = useRef({
+    cardId: activeCardId, fields: editFieldValues, deckId: editDeckId, tags: editTags,
+    initialFields: initialFieldValues, initialDeckId, initialTags,
+  })
+  editorStateRef.current = {
+    cardId: activeCardId, fields: editFieldValues, deckId: editDeckId, tags: editTags,
+    initialFields: initialFieldValues, initialDeckId, initialTags,
+  }
 
   // Debounce main search query
   useEffect(() => {
@@ -445,7 +454,17 @@ export function useBrowseState() {
   ttsDestinationFieldRef.current = ttsDestinationField
 
   useEffect(() => {
-    if (cardDetailQuery.data) {
+    if (!activeCardId || isCreatingCard) {
+      hydratedCardIdRef.current = null
+      return
+    }
+    if (cardDetailQuery.data && String(cardDetailQuery.data.card.card_id) === activeCardId) {
+      const editor = editorStateRef.current
+      const isPristine = JSON.stringify(editor.fields) === JSON.stringify(editor.initialFields)
+        && editor.deckId === editor.initialDeckId
+        && JSON.stringify(editor.tags) === JSON.stringify(editor.initialTags)
+      if (hydratedCardIdRef.current === activeCardId && !isPristine) return
+      hydratedCardIdRef.current = activeCardId
       const fieldValues = cardDetailQuery.data.note.field_values || {}
       const deckId = cardDetailQuery.data.note.deck_id || null
       const tags = cardDetailQuery.data.note.tags || []
@@ -458,7 +477,7 @@ export function useBrowseState() {
       setInitialDeckId(deckId)
       setInitialTags(tags)
     }
-  }, [cardDetailQuery.data])
+  }, [cardDetailQuery.data, activeCardId, isCreatingCard])
 
   useEffect(() => {
     effectiveNoteTypeNameRef.current = effectiveCardDetail?.note?.note_type_name || undefined
@@ -545,7 +564,7 @@ export function useBrowseState() {
     const initialKeys = Object.keys(initialFieldValues)
     if (currentKeys.length !== initialKeys.length) return true
     for (const key of currentKeys) {
-      if ((editFieldValues[key] || '') !== (initialFieldValues[key] || '')) return true
+      if (JSON.stringify(editFieldValues[key] ?? '') !== JSON.stringify(initialFieldValues[key] ?? '')) return true
     }
     return false
   })()
@@ -595,7 +614,7 @@ export function useBrowseState() {
     mutationFn: (payload: {
       note_type_id: string
       deck_id: number
-      field_values: Record<string, string>
+      field_values: Record<string, unknown>
       tags?: string[]
     }) =>
       appApi.mutate<{ id: string; card_ids?: Array<string | number>; first_card_id?: string | number }>(
@@ -640,9 +659,14 @@ export function useBrowseState() {
 
   // Update Mutation
   const updateMutation = useMutation({
-    mutationFn: (payload: { field_values: Record<string, string>; deck_id?: number; tags?: string[] }) =>
-      appApi.mutate(`/browse/cards/${activeCardId}`, 'PATCH', payload),
-    onSuccess: async () => {
+    mutationFn: async (payload: { field_values: Record<string, unknown>; deck_id?: number; tags?: string[] }) => {
+      const cardId = activeCardId
+      const noteId = cardDetailQuery.data?.note.id
+      const draft = { fields: editFieldValues, deckId: editDeckId, tags: editTags }
+      const data = await appApi.mutate<{ detail: CardDetailResponse }>(`/browse/cards/${cardId}`, 'PATCH', payload)
+      return { data, cardId, noteId, draft }
+    },
+    onSuccess: async ({ data, cardId, noteId, draft }) => {
       if (urlDeckId) {
         toast.success(t('toasts.save_success'), {
           duration: 2000,
@@ -654,15 +678,26 @@ export function useBrowseState() {
       } else {
         toast.success(t('toasts.save_success'), { duration: 1200 })
       }
-      setInitialFieldValues(editFieldValues)
-      setInitialDeckId(editDeckId)
-      setInitialTags(editTags)
-      if (activeCardId) {
-        const noteId = cardDetailQuery.data?.note?.id ? String(cardDetailQuery.data.note.id) : null
-        await updateCardFieldValues({ cardId: activeCardId, fieldValues: editFieldValues, noteId })
+      const committed = data.detail.note
+      if (cardId === editorStateRef.current.cardId) {
+        setInitialFieldValues(committed.field_values)
+        setInitialDeckId(committed.deck_id ?? null)
+        setInitialTags(committed.tags)
+        setEditDeckId((current) => current === draft.deckId ? committed.deck_id ?? null : current)
+        setEditTags((current) => JSON.stringify(current) === JSON.stringify(draft.tags) ? committed.tags : current)
+        setEditFieldValues((current) => {
+          const next = { ...committed.field_values }
+          for (const [name, value] of Object.entries(current)) {
+            if (JSON.stringify(value) !== JSON.stringify(draft.fields[name])) next[name] = value
+          }
+          return next
+        })
+      }
+      if (cardId) {
+        await updateCardFieldValues({ cardId, fieldValues: committed.field_values, noteId: committed.id || noteId })
       }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
-      void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })
+      void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', cardId] })
     },
     onError: (error: Error) => {
       toast.error(t('toasts.save_error'), { description: error.message })

@@ -99,7 +99,7 @@ describe('McpTokensPage Component', () => {
     }
   }
 
-  it('renders prominent segmented tabs with ChatGPT as the default active tab', async () => {
+  it('renders prominent segmented tabs with Overview as the default active tab and navigates to Setup via CTA', async () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -110,14 +110,30 @@ describe('McpTokensPage Component', () => {
       )
     })
 
-    await waitForContent('1. Kết nối ChatGPT')
+    await waitForContent('1. Khám phá & Công dụng')
 
     // Tabs should be clearly present and prominent
-    expect(container.textContent).toContain('1. Kết nối ChatGPT')
-    expect(container.textContent).toContain('Khuyên dùng')
-    expect(container.textContent).toContain('2. Quản lý Quyền & Token API')
+    expect(container.textContent).toContain('1. Khám phá & Công dụng')
+    expect(container.textContent).toContain('Khuyên xem')
+    expect(container.textContent).toContain('2. Cài đặt & Kết nối')
+    expect(container.textContent).toContain('3. Hướng dẫn & Tra cứu')
 
-    // ChatGPT 5-step guide should be rendered by default
+    // Tab 1 (Overview) value intro and CTA should be rendered by default
+    expect(container.textContent).toContain('Tại sao nên kết nối Trợ lý AI cùng Flama?')
+    expect(container.textContent).toContain('Bắt đầu kết nối tiện ích ➔')
+
+    // Click CTA button to navigate to Tab 2 (Setup & Connection)
+    const ctaButton = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bắt đầu kết nối tiện ích'),
+    )
+    expect(ctaButton).toBeTruthy()
+    await act(async () => {
+      ctaButton?.click()
+    })
+
+    await waitForContent('1. Kết nối ChatGPT')
+
+    // ChatGPT 5-step guide should be rendered inside Tab 2
     expect(container.textContent).toContain('Hướng Dẫn 5 Bước Kết Nối ChatGPT')
     expect(container.textContent).toContain('Bật Chế độ Nhà phát triển (Developer Mode) trên ChatGPT')
     expect(container.textContent).toContain('Mở kho Plugin và chọn "Tự tạo plugin của bạn"')
@@ -126,7 +142,7 @@ describe('McpTokensPage Component', () => {
     expect(container.textContent).toContain('Bấm Lưu & Đồng ý Điều Khoản Cấp Quyền')
   })
 
-  it('contains Developer Mode warning for ChatGPT and quick copy parameters', async () => {
+  it('contains Developer Mode warning for ChatGPT and quick copy parameters in setup tab', async () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -135,6 +151,17 @@ describe('McpTokensPage Component', () => {
           </MemoryRouter>
         </QueryClientProvider>,
       )
+    })
+
+    await waitForContent('Bắt đầu kết nối tiện ích')
+
+    // Navigate to setup tab via CTA
+    const ctaButton = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bắt đầu kết nối tiện ích'),
+    )
+    expect(ctaButton).toBeTruthy()
+    await act(async () => {
+      ctaButton?.click()
     })
 
     await waitForContent('Flama Plugin đang trong giai đoạn thử nghiệm')

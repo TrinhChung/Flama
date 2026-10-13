@@ -20,9 +20,9 @@ export interface ContentPatchResult {
 }
 
 function projectedFieldUpdates(
-  values: Record<string, string>,
+  values: Record<string, unknown>,
   template: StudyTemplateArtifact | undefined,
-): Record<string, string> {
+): Record<string, unknown> {
   const projection = template?.binding_projection
   if (!projection) return values
   const updates = { ...values }
@@ -47,7 +47,7 @@ function projectedFieldUpdates(
 export function applyCardContentPatch(
   current: PersistedStudySession,
   cardId: string,
-  newFieldValues: Record<string, string>,
+  newFieldValues: Record<string, unknown>,
   options?: ContentPatchOptions,
 ): ContentPatchResult {
   const targetCards = current.snapshot.cards.filter(

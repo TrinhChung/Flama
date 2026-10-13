@@ -96,7 +96,7 @@ export type StudyContentArtifact = {
   id: string
   note_id: string
   version: string
-  field_values: Record<string, string>
+  field_values: Record<string, unknown>
   render_context: Record<string, unknown>
   media: StudyMediaArtifact[]
 }
@@ -413,7 +413,7 @@ export type StudyCardEditResponse = {
   note_id: string
   deck_id?: number | null
   tags?: string[]
-  field_values: Record<string, string>
+  field_values: Record<string, unknown>
   content_ref?: StudyArtifactRef
 }
 

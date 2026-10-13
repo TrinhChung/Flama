@@ -461,26 +461,24 @@ def review_due_expr(
     timezone_name: str = "UTC",
     day_boundary_hour_local: int | None = None,
 ):
+    """Review anchors are due throughout their local study day."""
+
     today_day_index = _today_day_index(
         now=now,
         timezone_name=timezone_name,
         day_boundary_hour_local=day_boundary_hour_local,
     )
-    # A review timestamp without due_day still belongs to a local study day.
-    # It is due anywhere before the next boundary, matching the NOTE reader.
     next_boundary = _next_day_boundary(
-        now=now, timezone_name=timezone_name,
+        now=now,
+        timezone_name=timezone_name,
         day_boundary_hour_local=day_boundary_hour_local,
     )
+    # A timestamp-only or undated review is valid NOTE state. Keep due_day
+    # authoritative when present, matching the picker's disjoint anchors.
     return db.or_(
         progress_alias.due_day <= today_day_index,
-        db.and_(
-            progress_alias.due_day.is_(None),
-            db.or_(
-                progress_alias.due_at.is_(None),
-                progress_alias.due_at < next_boundary,
-            ),
-        ),
+        db.and_(progress_alias.due_day.is_(None), progress_alias.due_at < next_boundary),
+        db.and_(progress_alias.due_day.is_(None), progress_alias.due_at.is_(None)),
     )
 
 

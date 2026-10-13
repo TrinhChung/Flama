@@ -20,6 +20,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi, type GenerateStrokesResponse } from '@/app/api'
+import { fieldValueEditorText } from '@/lib/arrayField'
 import { loadStoredStrokeSettings } from '../services/strokeStorage'
 import type { useBrowseState, CardDetailResponse } from '../hooks/useBrowseState'
 import { BrowseStrokeSinglePreview } from './BrowseStrokeSinglePreview'
@@ -32,7 +33,7 @@ export interface BrowseStrokeModalProps {
   mode?: 'single' | 'batch'
   cardId?: string | null
   fields?: Array<{ name: string; field_type?: string }>
-  fieldValues?: Record<string, string>
+  fieldValues?: Record<string, unknown>
   deckName?: string | null
   onApply?: (targetField: string, value: string) => void
 }
@@ -177,27 +178,27 @@ export function BrowseStrokeModal({
     if (
       editFieldValues[sourceField] !== undefined &&
       editFieldValues[sourceField] !== null &&
-      String(editFieldValues[sourceField]).trim()
+      fieldValueEditorText(editFieldValues[sourceField]).trim()
     ) {
-      return String(editFieldValues[sourceField]).trim()
+      return fieldValueEditorText(editFieldValues[sourceField]).trim()
     }
     // 2. From active card note field_values
     const cardNoteFieldVal = cardDetailQuery?.data?.note?.field_values?.[sourceField]
     if (
       cardNoteFieldVal !== undefined &&
       cardNoteFieldVal !== null &&
-      String(cardNoteFieldVal).trim()
+      fieldValueEditorText(cardNoteFieldVal).trim()
     ) {
-      return String(cardNoteFieldVal).trim()
+      return fieldValueEditorText(cardNoteFieldVal).trim()
     }
     // 3. From target card query note field_values
     const targetNoteFieldVal = targetCardQuery?.data?.note?.field_values?.[sourceField]
     if (
       targetNoteFieldVal !== undefined &&
       targetNoteFieldVal !== null &&
-      String(targetNoteFieldVal).trim()
+      fieldValueEditorText(targetNoteFieldVal).trim()
     ) {
-      return String(targetNoteFieldVal).trim()
+      return fieldValueEditorText(targetNoteFieldVal).trim()
     }
     // 4. Fallback from card row
     const matchingCard =

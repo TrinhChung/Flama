@@ -1,7 +1,8 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
-import { BookOpen, Code, HelpCircle } from 'lucide-react'
+import { BookOpen, BookOpenCheck, KeyRound } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { ContextHelpButton } from '@/features/guide'
@@ -9,10 +10,12 @@ import { ContextHelpButton } from '@/features/guide'
 import { useYomitanTokenCRUD } from '../hooks/useYomitanTokenCRUD'
 import { YomitanTokensTab } from '../components/YomitanTokensTab'
 import { YomitanFeatureHighlights } from '../components/yomitan/YomitanFeatureHighlights'
-import { YomitanDocumentationSection } from '../components/yomitan/YomitanDocumentationSection'
+import { YomitanValueIntro } from '../components/yomitan/YomitanValueIntro'
+import { YomitanGuideTab } from '../components/yomitan/YomitanGuideTab'
 
 export function YomitanTokensPage() {
   const { t } = useTranslation('settings')
+  const [activeTab, setActiveTab] = useState('overview')
   const hookResult = useYomitanTokenCRUD()
   const { query } = hookResult
 
@@ -21,57 +24,110 @@ export function YomitanTokensPage() {
 
   return (
     <Page className="max-w-7xl mx-auto space-y-6 sm:space-y-8 pb-12 px-3 sm:px-6">
-      {/* Header & Feature Highlights Bar */}
-      <div className="space-y-4 sm:space-y-6">
-        <PageHeader
-          title={t('yomitan.header.title')}
-          description={t('yomitan.header.description')}
-          actions={
-            <ContextHelpButton
-              guidePath="/guide/integrations/yomitan"
-              guideTitle={t('yomitan.header.guide_title')}
-              troubleshootPath="/guide/troubleshooting/yomitan"
-              troubleshootTitle={t('yomitan.header.troubleshoot_title')}
-              label={t('yomitan.header.guide_btn')}
-            />
-          }
-        />
+      {/* Header & Help Action */}
+      <PageHeader
+        title={t('yomitan.header.title')}
+        description={t('yomitan.header.description')}
+        actions={
+          <ContextHelpButton
+            guidePath="/guide/integrations/yomitan"
+            guideTitle={t('yomitan.header.guide_title')}
+            troubleshootPath="/guide/troubleshooting/yomitan"
+            troubleshootTitle={t('yomitan.header.troubleshoot_title')}
+            label={t('yomitan.header.guide_btn')}
+          />
+        }
+      />
 
-        {/* Top Quick Explanatory Links */}
-        <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs">
-          <span className="text-muted-foreground font-medium text-[11px]">{t('yomitan.quick_links.label')}</span>
-          <Link
-            to="/guide/integrations/yomitan"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-sky-500/10 hover:border-sky-500/40 hover:text-sky-600 dark:hover:text-sky-400 transition-all font-medium text-[11px]"
+      {/* Segmented Card Tabs: Khám phá vs Cài đặt vs Hướng dẫn */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
+        <TabsList
+          style={{ height: 'auto' }}
+          className="grid w-full grid-cols-1 md:grid-cols-3 p-1 bg-muted/60 rounded-xl border gap-1"
+        >
+          {/* Tab 1: Công dụng & Khám phá (Primary / Default) */}
+          <TabsTrigger
+            value="overview"
+            style={{ height: 'auto' }}
+            className="group flex items-start sm:items-center justify-between gap-3 p-3 sm:p-4 text-left rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-xs data-[state=active]:border-primary/40 border border-transparent transition-colors whitespace-normal after:hidden"
           >
-            <BookOpen className="size-3 text-sky-500" />
-            <span>{t('yomitan.quick_links.install')}</span>
-          </Link>
-          <Link
-            to="/guide/integrations/yomitan-markers"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-purple-500/10 hover:border-purple-500/40 hover:text-purple-600 dark:hover:text-purple-400 transition-all font-medium text-[11px]"
+            <div className="flex items-center gap-3 min-w-0 w-full">
+              <BookOpenCheck className="size-5 text-muted-foreground group-data-[state=active]:text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground truncate">{t('yomitan.tabs.overview.title')}</span>
+                  <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-primary/10 text-primary shrink-0">
+                    {t('yomitan.tabs.overview.badge')}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
+                  {t('yomitan.tabs.overview.desc')}
+                </p>
+              </div>
+            </div>
+          </TabsTrigger>
+
+          {/* Tab 2: Cài đặt & Quản lý Token */}
+          <TabsTrigger
+            value="tokens"
+            style={{ height: 'auto' }}
+            className="group flex items-start sm:items-center justify-between gap-3 p-3 sm:p-4 text-left rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-xs data-[state=active]:border-primary/40 border border-transparent transition-colors whitespace-normal after:hidden"
           >
-            <Code className="size-3 text-purple-500" />
-            <span>{t('yomitan.quick_links.markers')}</span>
-          </Link>
-          <Link
-            to="/guide/troubleshooting/yomitan"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400 transition-all font-medium text-[11px]"
+            <div className="flex items-center gap-3 min-w-0 w-full">
+              <KeyRound className="size-5 text-muted-foreground group-data-[state=active]:text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground truncate">{t('yomitan.tabs.tokens.title')}</span>
+                  <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted text-muted-foreground shrink-0">
+                    {t('yomitan.tabs.tokens.badge')}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
+                  {t('yomitan.tabs.tokens.desc')}
+                </p>
+              </div>
+            </div>
+          </TabsTrigger>
+
+          {/* Tab 3: Hướng dẫn & Tra cứu */}
+          <TabsTrigger
+            value="guide"
+            style={{ height: 'auto' }}
+            className="group flex items-start sm:items-center justify-between gap-3 p-3 sm:p-4 text-left rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-xs data-[state=active]:border-primary/40 border border-transparent transition-colors whitespace-normal after:hidden"
           >
-            <HelpCircle className="size-3 text-amber-500" />
-            <span>{t('yomitan.quick_links.mobile')}</span>
-          </Link>
-        </div>
+            <div className="flex items-center gap-3 min-w-0 w-full">
+              <BookOpen className="size-5 text-muted-foreground group-data-[state=active]:text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground truncate">{t('yomitan.tabs.docs.title')}</span>
+                  <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted text-muted-foreground shrink-0">
+                    {t('yomitan.tabs.docs.badge')}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1">
+                  {t('yomitan.tabs.docs.desc')}
+                </p>
+              </div>
+            </div>
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Quick Highlights Bar */}
-        <YomitanFeatureHighlights />
-      </div>
+        {/* Tab 1 Content: Công dụng & Cách hoạt động */}
+        <TabsContent value="overview" className="space-y-6">
+          <YomitanValueIntro onStartSetup={() => setActiveTab('tokens')} showToggle={false} />
+          <YomitanFeatureHighlights />
+        </TabsContent>
 
-      {/* Main Token Management Component */}
-      <YomitanTokensTab hookResult={hookResult} />
+        {/* Tab 2 Content: Cài đặt & Quản lý Token */}
+        <TabsContent value="tokens" className="space-y-6">
+          <YomitanTokensTab hookResult={hookResult} />
+        </TabsContent>
 
-      {/* Contextual Reference / Documentation Strip */}
-      <YomitanDocumentationSection />
+        {/* Tab 3 Content: Hướng dẫn & Tra cứu */}
+        <TabsContent value="guide" className="space-y-6">
+          <YomitanGuideTab />
+        </TabsContent>
+      </Tabs>
     </Page>
   )
 }

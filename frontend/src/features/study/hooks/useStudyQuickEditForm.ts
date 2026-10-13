@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { appApi } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
-import { normalizeArrayFieldValues } from '@/lib/arrayField'
+import { fieldValueEditorText, serializeArrayFieldValues } from '@/lib/arrayField'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
 
@@ -16,16 +16,16 @@ export type UpdateCardResponse = {
 }
 
 export function inferFieldType(
-  rawFieldType?: string | null,
-  fieldName?: string,
-  fieldValue?: string,
+  rawFieldType?: unknown,
+  fieldName?: unknown,
+  fieldValue?: unknown,
 ): 'image' | 'audio' | 'diagram' | 'text' | 'array' {
-  const ft = (rawFieldType || '').trim().toLowerCase()
+  const ft = typeof rawFieldType === 'string' ? rawFieldType.trim().toLowerCase() : ''
   if (ft === 'image' || ft === 'audio' || ft === 'diagram' || ft === 'array') {
     return ft
   }
 
-  const name = (fieldName || '').trim().toLowerCase()
+  const name = typeof fieldName === 'string' ? fieldName.trim().toLowerCase() : ''
   if (
     name === 'audio' ||
     name === 'sound' ||
@@ -54,7 +54,17 @@ export function inferFieldType(
     return 'image'
   }
 
-  const val = (fieldValue || '').trim()
+  if (Array.isArray(fieldValue)) {
+    return 'array'
+  }
+
+  const val =
+    typeof fieldValue === 'string'
+      ? fieldValue.trim()
+      : fieldValue == null
+      ? ''
+      : fieldValueEditorText(fieldValue).trim()
+
   if (val.startsWith('[sound:') || /\.(mp3|wav|ogg|opus|m4a|aac|flac)(\?.*)?$/i.test(val)) {
     return 'audio'
   }
@@ -72,7 +82,7 @@ export type UseStudyQuickEditFormOptions = {
   content?: StudyContentArtifact | null
   onCardUpdated: (
     cardId: string,
-    newFieldValues: Record<string, string>,
+    newFieldValues: Record<string, unknown>,
     options?: { media?: StudyMediaArtifact[]; noteId?: string | null },
   ) => void | Promise<void>
   onClose: () => void
@@ -89,8 +99,12 @@ export function useStudyQuickEditForm({
   const { t } = useTranslation('study')
   const queryClient = useQueryClient()
 
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
-  const [initialFieldValues, setInitialFieldValues] = useState<Record<string, string>>({})
+  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
+  const [initialFieldValues, setInitialFieldValues] = useState<Record<string, unknown>>({})
+  const [invalidArrayFields, setInvalidArrayFields] = useState<Record<string, boolean>>({})
+  const handleFieldValidityChange = useCallback((name: string, valid: boolean) => {
+    setInvalidArrayFields((previous) => previous[name] === !valid ? previous : { ...previous, [name]: !valid })
+  }, [])
   const [tags, setTags] = useState<string[]>([])
   const [initialTags, setInitialTags] = useState<string[]>([])
   const [newTagInput, setNewTagInput] = useState('')
@@ -122,7 +136,10 @@ export function useStudyQuickEditForm({
       isFormInitializedRef.current = true
     } else if (!open) {
       isFormInitializedRef.current = false
+      setFieldValues({})
+      setInitialFieldValues({})
       setNewTagInput('')
+      setInvalidArrayFields({})
     }
   }, [open, content, template?.binding_projection])
 
@@ -144,7 +161,7 @@ export function useStudyQuickEditForm({
       setFieldValues((current) => {
         // If form has not been modified by user yet, adopt authoritative detailValues directly
         const isPristine = Object.keys(current).every(
-          (k) => (current[k] || '') === (initialFieldValues[k] || '')
+          (k) => JSON.stringify(current[k] ?? '') === JSON.stringify(initialFieldValues[k] ?? '')
         )
         if (isPristine) {
           return { ...detailValues }
@@ -188,7 +205,7 @@ export function useStudyQuickEditForm({
     const initialKeys = Object.keys(initialFieldValues)
     if (currentKeys.length !== initialKeys.length) return true
     for (const key of currentKeys) {
-      if ((fieldValues[key] || '') !== (initialFieldValues[key] || '')) return true
+      if (JSON.stringify(fieldValues[key] ?? '') !== JSON.stringify(initialFieldValues[key] ?? '')) return true
     }
     return false
   }, [cardId, deckId, fieldValues, initialDeckId, initialFieldValues, initialTags, open, tags])
@@ -223,7 +240,7 @@ export function useStudyQuickEditForm({
   // Save Mutation
   const updateMutation = useMutation({
     mutationFn: (payload: {
-      field_values: Record<string, string>
+      field_values: Record<string, unknown>
       deck_id?: number
       tags?: string[]
     }) => appApi.mutate<UpdateCardResponse>(`/browse/cards/${cardId}`, 'PATCH', payload),
@@ -267,6 +284,8 @@ export function useStudyQuickEditForm({
 
   // Resolve fields definition
   const fieldDefs = useMemo(() => {
+    if (!open) return []
+
     const rawDefs =
       cardDetailQuery.data?.fields && cardDetailQuery.data.fields.length > 0
         ? cardDetailQuery.data.fields
@@ -282,7 +301,7 @@ export function useStudyQuickEditForm({
           }))
 
     return rawDefs.map((f, index) => {
-      const val = initialFieldValues[f.name] || fieldValues[f.name] || ''
+      const val = fieldValues[f.name] ?? initialFieldValues[f.name] ?? ''
       const detectedType = inferFieldType(f.field_type, f.name, val)
       return {
         name: f.name,
@@ -291,18 +310,17 @@ export function useStudyQuickEditForm({
         field_type: detectedType,
       }
     })
-  }, [cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
+  }, [open, cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
 
   const handleSubmit = useCallback(() => {
-    if (!isDirty || updateMutation.isPending || !cardId) return
-    const values = normalizeArrayFieldValues(fieldValues, fieldDefs)
-    if (values !== fieldValues) setFieldValues(values)
+    if (!isDirty || updateMutation.isPending || !cardId || fieldDefs.some((field) => invalidArrayFields[field.name])) return
+    const values = serializeArrayFieldValues(fieldValues, fieldDefs)
     updateMutation.mutate({
       field_values: values,
       deck_id: deckId || undefined,
       tags,
     })
-  }, [isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags])
+  }, [isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags, invalidArrayFields])
 
   const deckList = cardDetailQuery.data?.decks || []
 
@@ -319,6 +337,8 @@ export function useStudyQuickEditForm({
     handleRevert,
     handleApplyStrokes,
     isDirty,
+    hasInvalidFields: fieldDefs.some((field) => invalidArrayFields[field.name]),
+    handleFieldValidityChange,
     mediaResolver,
     handleSubmit,
     isSubmitting: updateMutation.isPending,

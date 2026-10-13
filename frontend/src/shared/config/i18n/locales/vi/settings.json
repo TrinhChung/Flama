@@ -57,6 +57,26 @@
   },
   "yomitan": {
     "loading": "Đang tải token Yomitan…",
+    "cta_question": "Sẵn sàng kết nối tiện ích Yomitan với Flama?",
+    "tabs": {
+      "overview": {
+        "title": "1. Công dụng & Cách hoạt động",
+        "badge": "Khuyên xem",
+        "desc": "Tìm hiểu lợi ích tra từ 0.1s và tự động tạo thẻ Flama",
+        "cta_btn": "Đi đến Cài đặt & Tạo Token kết nối",
+        "cta_question": "Sẵn sàng kết nối tiện ích Yomitan với Flama?"
+      },
+      "tokens": {
+        "title": "2. Cài đặt & Quản lý Token",
+        "badge": "Kết nối",
+        "desc": "Cấp mã Server URL Flama Connect và quản lý các thiết bị"
+      },
+      "docs": {
+        "title": "3. Hướng dẫn & Tra cứu",
+        "badge": "Tra cứu",
+        "desc": "Cài đặt extension, bảng 55 markers và hướng dẫn mobile"
+      }
+    },
     "header": {
       "title": "Quản lý Token Yomitan & Flama Connect",
       "description": "Tích hợp tiện ích tra từ Yomitan trên trình duyệt với Flama để tự động tạo Flashcard chỉ với 1 cú nhấp chuột.",
@@ -79,6 +99,28 @@
       "immersion_sub": "Web PC & Mobile",
       "connect_title": "Flama Connect",
       "connect_sub": "Kết nối đám mây"
+    },
+    "value_intro": {
+      "badge": "Bậc thầy đọc hiểu",
+      "title": "Tại sao bạn nên kết hợp Yomitan cùng Flama?",
+      "subtitle": "Biến mọi trang web, báo chí và tài liệu bạn đọc thành mỏ khai thác từ vựng tự động mà không cần gõ thẻ thủ công.",
+      "toggle_hide": "Thu gọn giới thiệu",
+      "toggle_show": "Tìm hiểu cách hoạt động",
+      "before_title": "Cách học truyền thống",
+      "before_badge": "Tốn thời gian",
+      "before_p1": "Bôi đen từ, mở tab khác tra từ điển ➔ Đứt mạch đọc và mất tập trung.",
+      "before_p2": "Gõ tay từng từ, tra Kanji, chép nghĩa và ví dụ ➔ Mất 3–5 phút cho 1 thẻ.",
+      "before_p3": "Lười làm thẻ nên đọc xong là quên sạch, không thể duy trì ôn tập.",
+      "after_title": "Khi kết hợp cùng Flama",
+      "after_badge": "Siêu tốc 0.1s",
+      "after_p1": "Rê chuột là thấy ngay Hiragana, Hán Việt và nghĩa tức thì trên mặt chữ.",
+      "after_p2": "Bấm icon (+) 1-click: Từ vựng, giải nghĩa và audio bay thẳng vào Flama.",
+      "after_p3": "Thuật toán lặp lại ngắt quãng (SRS) tự động lên lịch nhắc ôn đúng lúc sắp quên.",
+      "steps_label": "Quy trình học đắm mình 3 bước:",
+      "step_1": "1. Đọc bài viết, web hoặc manga yêu thích",
+      "step_2": "2. Rê chuột tra từ tức thì trong 0.1s",
+      "step_3": "3. Nhấp (+) lưu thẻ vào Flama để ôn tập",
+      "cta_label": "Sẵn sàng kết nối tiện ích Yomitan với Flama?"
     },
     "form": {
       "title": "Tạo API Token Flama Connect",
@@ -133,6 +175,29 @@
       "card3_title": "Di động & Xử lý sự cố",
       "card3_desc": "Hướng dẫn dùng trên Kiwi Browser, Firefox Android và sửa lỗi kết nối."
     },
+    "guide_tab": {
+      "download_title": "Tải Tiện Ích Yomitan Chính Thức",
+      "download_desc": "Cài đặt Yomitan trên trình duyệt máy tính hoặc điện thoại Android để bắt đầu tra từ và khai thác Flashcard.",
+      "chrome_desc": "Cài đặt trực tiếp từ Chrome Web Store chính thức (hỗ trợ cả Kiwi Browser trên Android).",
+      "firefox_desc": "Cài đặt từ kho tiện ích Firefox Add-ons chính thức cho máy tính và điện thoại.",
+      "github_title": "Mã Nguồn GitHub",
+      "github_desc": "Xem mã nguồn mở, hướng dẫn đóng góp và các bản phát hành độc lập mới nhất.",
+      "markers_title": "Bảng Tra Cứu 55 Field Markers Tích Hợp",
+      "markers_desc": "Tra cứu nhanh cú pháp các trường dữ liệu để gán vào mẫu thẻ Flashcard trong Yomitan.",
+      "markers_link": "Toàn văn hướng dẫn",
+      "mobile_title": "Hướng Dẫn Sử Dụng Trên Di Động (Kiwi Browser / Firefox Android)",
+      "mobile_desc": "Đọc báo tiếng Nhật, manga và khai thác từ vựng 1 chạm trực tiếp trên điện thoại.",
+      "step1_title": "Cài Trình Duyệt",
+      "step1_desc": "Tải Kiwi Browser hoặc Firefox Android từ Google Play Store.",
+      "step2_title": "Thêm Tiện Ích",
+      "step2_desc": "Mở link Chrome Web Store trong Kiwi Browser và bấm Thêm vào Chrome.",
+      "step3_title": "Dán Server URL",
+      "step3_desc": "Vào Cài đặt Yomitan ➔ Anki / Connect, dán Server URL được cấp ở Tab 2: Cài đặt & Kết nối.",
+      "step4_title": "Đọc & Khai Thác",
+      "step4_desc": "Chạm giữ từ vựng trên trang web để hiện popup nghĩa và bấm (+) để lưu vào Flama.",
+      "troubleshoot_title": "Khắc Phục Sự Cố & Tài Liệu Chuyên Sâu",
+      "troubleshoot_desc": "Giải đáp các vướng mắc phổ biến trong quá trình kết nối và sử dụng tiện ích."
+    },
     "messages": {
       "create_success": "Đã tạo token Flama Connect thành công.",
       "revoke_success": "Token đã được thu hồi ngay lập tức.",
@@ -144,6 +209,26 @@
   },
   "asbplayer": {
     "loading": "Đang tải token asbplayer…",
+    "cta_question": "Sẵn sàng kết nối tiện ích asbplayer để khai thác phim & anime?",
+    "tabs": {
+      "overview": {
+        "title": "1. Công dụng & Cách hoạt động",
+        "badge": "Khuyên xem",
+        "desc": "Khai thác câu thoại, cắt MP3 và chụp ảnh trực tiếp từ video/anime",
+        "cta_btn": "Đi đến Cài đặt & Tạo Token kết nối",
+        "cta_question": "Sẵn sàng kết nối tiện ích asbplayer để khai thác phim & anime?"
+      },
+      "tokens": {
+        "title": "2. Cài đặt & Quản lý Token",
+        "badge": "Kết nối",
+        "desc": "Cấp mã API Key AnkiConnect và quản lý các thiết bị"
+      },
+      "docs": {
+        "title": "3. Hướng dẫn & Tra cứu",
+        "badge": "Tra cứu",
+        "desc": "Cài đặt extension, bảng ánh xạ 7 trường và phím tắt khai thác"
+      }
+    },
     "header": {
       "title": "Quản lý Token asbplayer & Flama Connect",
       "description": "Tích hợp tiện ích asbplayer với Flama Connect để khai thác câu, ảnh và audio từ video/anime trực tiếp vào Flama.",
@@ -166,6 +251,28 @@
       "sentences_sub": "Học từ qua ngữ cảnh",
       "protocol_title": "Nền tảng Flama Connect",
       "protocol_sub": "Tương thích chuẩn Anki"
+    },
+    "value_intro": {
+      "badge": "Cao thủ luyện nghe",
+      "title": "Tại sao nên kết hợp asbplayer cùng Flama?",
+      "subtitle": "Khai thác câu thoại, bắt trọn âm thanh MP3 và biểu cảm nhân vật trực tiếp từ Phim ảnh & Anime có phụ đề.",
+      "toggle_hide": "Thu gọn giới thiệu",
+      "toggle_show": "Tìm hiểu cách hoạt động",
+      "before_title": "Xem phim truyền thống",
+      "before_badge": "Dễ quên",
+      "before_p1": "Bật Vietsub thì mắt chỉ lo đọc chữ; tắt phụ đề thì diễn viên nói quá nhanh, nuốt âm.",
+      "before_p2": "Gặp câu hay muốn tua lại thì chỉnh thanh trượt video giật cục, lệch nhịp thoại.",
+      "before_p3": "Tắt video là âm thanh và cảm xúc bay sạch, không có cách nào ôn tập lại ngữ điệu.",
+      "after_title": "Khi kết hợp cùng Flama",
+      "after_badge": "Bắt trọn ngữ cảnh",
+      "after_p1": "Phụ đề tiếng Nhật đồng bộ từng mili-giây, tua lặp từng câu thoại chuẩn xác.",
+      "after_p2": "Bấm phím tắt: Tự động cắt đúng file MP3 câu thoại + chụp ảnh biểu cảm nhân vật.",
+      "after_p3": "Ôn tập Flashcard với chính giọng lồng tiếng chân thật của người bản xứ trong phim.",
+      "steps_label": "Quy trình luyện nghe đắm mình 3 bước:",
+      "step_1": "1. Mở video/anime có phụ đề tiếng Nhật",
+      "step_2": "2. Bấm phím tắt bắt câu thoại và cắt MP3",
+      "step_3": "3. Thẻ sinh ra tức thì trên Flama để ôn luyện",
+      "cta_label": "Sẵn sàng kết nối tiện ích asbplayer để khai thác phim & anime?"
     },
     "form": {
       "title": "Tạo API Token asbplayer (Flama Connect)",
@@ -231,6 +338,57 @@
       "card2_desc": "Cấu hình mapping Sentence, Word, Definition, Image, Audio, Source, URL.",
       "card3_title": "Phím tắt & Khai thác Video",
       "card3_desc": "Sử dụng phím tắt Ctrl+Shift+X để tạo thẻ ngay khi xem anime và phim."
+    },
+    "guide_tab": {
+      "download_title": "Tải Tiện Ích & Trình Phát asbplayer",
+      "download_desc": "Cài đặt tiện ích mở rộng trên trình duyệt hoặc sử dụng trình phát web độc lập để khai thác phim và video.",
+      "chrome_desc": "Tiện ích cho Chrome, Brave, Edge & Kiwi Browser.",
+      "firefox_desc": "Tiện ích mở rộng cho Mozilla Firefox trên máy tính.",
+      "web_player_desc": "Trình phát video phụ đề trên web không cần cài đặt.",
+      "github_title": "Mã Nguồn GitHub",
+      "github_desc": "Tải bản desktop app và xem tài liệu kỹ thuật nguồn mở.",
+      "mapping_title": "Bảng Quy Chuẩn Ánh Xạ 7 Trường Dữ Liệu",
+      "mapping_desc": "Cấu hình ánh xạ các trường từ asbplayer sang Note Type Sentence Card trên Flama.",
+      "btn_copy_scheme": "Sao chép JSON mẫu",
+      "btn_copied": "Đã sao chép",
+      "copy_scheme_success": "Đã sao chép cấu hình JSON mẫu vào bộ nhớ tạm",
+      "copy_scheme_error": "Không thể sao chép cấu hình",
+      "th_asb_field": "Trường asbplayer",
+      "th_flama_field": "Trường Flama",
+      "th_data_type": "Kiểu Dữ Liệu",
+      "th_role": "Vai Trò & Chức Năng",
+      "th_desc": "Mô Tả Chi Tiết",
+      "role_primary": "Chính (Bắt buộc)",
+      "role_word": "Từ vựng mục tiêu",
+      "role_definition": "Giải nghĩa / Định nghĩa",
+      "role_image": "Ảnh chụp video",
+      "role_audio": "Đoạn âm thanh thoại",
+      "role_source": "Bối cảnh / Tiêu đề",
+      "role_url": "Liên kết nguồn",
+      "field_sentence_desc": "Câu thoại tiếng Nhật trong phụ đề video (Dùng để định danh chống trùng lặp)",
+      "field_word_desc": "Từ vựng trọng tâm cần học (tự động điền khi rê chuột tra từ bằng Yomitan trên phụ đề)",
+      "field_definition_desc": "Nghĩa tiếng Việt hoặc tiếng Anh của từ vựng trích xuất từ popup Yomitan",
+      "field_image_desc": "Ảnh chụp màn hình video đúng thời điểm phát câu thoại (tự động nén tối ưu)",
+      "field_audio_desc": "Đoạn audio âm thanh giọng nhân vật nói câu thoại được cắt tự động chuẩn xác",
+      "field_source_desc": "Tiêu đề video, tên anime hoặc tên tệp media đang phát",
+      "field_url_desc": "Đường dẫn liên kết trực tiếp đến video (YouTube, Netflix...) kèm mốc thời gian",
+      "quick_tip": "Mẹo thiết lập nhanh: Bạn chỉ cần bấm nút \"Chuẩn bị deck và model\" ở Tab 2: Cài đặt & Kết nối, hệ thống Flama sẽ tự động tạo sẵn Deck Sentences và cấu hình chuẩn 7 trường trên cho bạn.",
+      "shortcuts_title": "Phím Tắt Khai Thác & Điều Hướng Video",
+      "shortcuts_desc": "Các thao tác bàn phím giúp bạn bắt trọn ngữ cảnh phụ đề khi xem phim anime.",
+      "shortcut_mine_title": "Khai Thác Thẻ Tức Thì",
+      "shortcut_mine_desc": "Trên Mac dùng Cmd + Shift + X: Tự động bắt câu thoại, cắt file MP3 thoại gốc và chụp ảnh màn hình nhân vật đưa vào Flama.",
+      "shortcut_nav_title": "Điều Hướng Phụ Đề",
+      "shortcut_nav_desc": "A: Tua lùi về câu thoại trước • S: Nghe lặp lại câu hiện tại • D: Tua tới câu thoại tiếp theo.",
+      "shortcut_yomitan_title": "Kết Hợp Yomitan",
+      "shortcut_yomitan_badge": "Khuyên dùng",
+      "shortcut_yomitan_desc": "Rê chuột tra từ trên phụ đề bằng Yomitan trước khi bấm Ctrl+Shift+X để tự động điền cả từ vựng và định nghĩa vào thẻ!",
+      "docs_title": "Tài Liệu Hướng Dẫn & Khắc Phục Sự Cố",
+      "docs_desc": "Tham khảo cẩm nang chi tiết và các bước khắc phục sự cố kết nối asbplayer.",
+      "doc_install_desc": "Hướng dẫn cài đặt extension và thiết lập AnkiConnect.",
+      "doc_mapping_desc": "Ánh xạ Sentence, Word, Audio, Image đúng chuẩn.",
+      "doc_shortcuts_desc": "Sử dụng phím tắt Ctrl+Shift+X khai thác siêu tốc.",
+      "doc_troubleshoot_title": "Sửa Lỗi Kết Nối",
+      "doc_troubleshoot_desc": "Xử lý lỗi cổng 4790 và sự cố không nhận MP3."
     },
     "messages": {
       "create_success": "Đã tạo token asbplayer thành công.",

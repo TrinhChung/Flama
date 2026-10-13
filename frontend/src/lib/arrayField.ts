@@ -5,6 +5,27 @@
  */
 export const ARRAY_FIELD_TYPE = 'array'
 
+export type ArrayFieldItem = string | ArrayFieldItem[]
+export type ArrayFieldValue = ArrayFieldItem[]
+
+function isArrayValue(value: unknown): value is ArrayFieldValue {
+  return Array.isArray(value) && value.every((item) =>
+    typeof item === 'string' || isArrayValue(item))
+}
+
+/** Parse for storage/code editing without flattening nested arrays or removing items. */
+export function parseArrayValue(value: unknown): ArrayFieldValue {
+  if (isArrayValue(value)) return value
+  if (typeof value !== 'string' || !value) return []
+  if (isValidArrayJson(value)) return JSON.parse(value) as ArrayFieldValue
+  return normalizeArrayValue(value).split('\n').filter(Boolean)
+}
+
+/** Nested lists and multiline items cannot be represented by one item per line. */
+export function arrayNeedsCodeEditor(value: unknown): boolean {
+  return parseArrayValue(value).some((item) => Array.isArray(item) || /[\r\n]/.test(item))
+}
+
 const NAMED_ENTITIES: Record<string, string> = {
   amp: '&',
   lt: '<',
@@ -87,7 +108,7 @@ export function isValidArrayJson(text: string): boolean {
   if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return false
   try {
     const parsed = JSON.parse(trimmed)
-    return Array.isArray(parsed)
+    return isArrayValue(parsed)
   } catch {
     return false
   }
@@ -121,7 +142,7 @@ export function parseArrayItems(input: unknown): string[] {
 
 /** Convert array field value (lines or list) into formatted JSON array code string */
 export function arrayLinesToCode(value: unknown, multiline = true): string {
-  const items = parseArrayItems(value)
+  const items = parseArrayValue(value)
   if (items.length === 0) return '[]'
   return multiline && items.length > 1
     ? JSON.stringify(items, null, 2)
@@ -135,16 +156,32 @@ export function arrayCodeToLines(codeText: string): string {
 }
 
 /** Normalize only the values of `array` fields; other fields pass through untouched. */
-export function normalizeArrayFieldValues<T extends Record<string, string>>(
+export function normalizeArrayFieldValues<T extends Record<string, unknown>>(
   values: T,
   fields: ReadonlyArray<{ name: string; field_type?: string | null }>,
 ): T {
   const arrayFields = fields.filter((field) => isArrayField(field.field_type))
   if (!arrayFields.length) return values
-  const next: Record<string, string> = { ...values }
+  const next: Record<string, unknown> = { ...values }
   for (const field of arrayFields) {
-    if (typeof next[field.name] === 'string') next[field.name] = normalizeArrayValue(next[field.name])
+    const value = next[field.name]
+    // JSON code is an explicit list. Keep its structure instead of turning it into lines.
+    if (typeof value === 'string') next[field.name] = isValidArrayJson(value) ? value : normalizeArrayValue(value)
   }
   return next as T
+}
+
+/** API payload for array fields; all other values pass through unchanged. */
+export function serializeArrayFieldValues(
+  values: Record<string, unknown>,
+  fields: ReadonlyArray<{ name: string; field_type?: string | null }>,
+): Record<string, unknown> {
+  const next = { ...values }
+  for (const field of fields) {
+    if (isArrayField(field.field_type) && Object.hasOwn(next, field.name)) {
+      next[field.name] = parseArrayValue(next[field.name])
+    }
+  }
+  return next
 }
 

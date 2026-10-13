@@ -757,14 +757,8 @@ def list_browse_cards(
                             ).day_boundary_hour_local)),
         )
 
-    total, worst = browse_card_repository.page_total_and_integrity(
-        query, eligible=eligible, violation=progress_alias.integrity_violation,
-    )
-    violation = note_analytics_read_repository.violation_error(worst)
-    if violation is not None:
-        db.session.rollback()
-        raise BrowseApiError(violation[1], status=409, code=violation[0])
     query = query.filter(eligible)
+    total, _ = browse_card_repository.page_total_and_integrity(query)
 
     if sort_by == "deck":
         query = query.outerjoin(Deck, Note.deck_id == Deck.id)
@@ -825,6 +819,18 @@ def list_browse_cards(
     query = query.order_by(Card.id.asc())
     pagination = query.paginate(page=page, per_page=per_page, error_out=False, count=False)
     pagination.total = total
+    if pagination.items:
+        page_card_ids = [card_obj.id for card_obj in pagination.items]
+        worst = browse_card_repository.page_window_integrity(
+            db.session,
+            learner_user_id=user_id,
+            card_ids=page_card_ids,
+            note_ids=[card_obj.note_id for card_obj in pagination.items],
+        )
+        violation = note_analytics_read_repository.violation_error(worst)
+        if violation is not None:
+            db.session.rollback()
+            raise BrowseApiError(violation[1], status=409, code=violation[0])
     options_by_deck_id: dict[int | None, Any] = {}
     deck_options_by_card_id: dict[str, Any] = {}
     for card_obj in pagination.items:

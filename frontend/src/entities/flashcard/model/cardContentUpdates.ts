@@ -3,7 +3,7 @@ import type { CardMediaArtifact } from './types'
 export interface CardContentUpdate {
   cardId: string
   noteId?: string | null
-  fieldValues: Record<string, string>
+  fieldValues: Record<string, unknown>
   media?: CardMediaArtifact[]
 }
 

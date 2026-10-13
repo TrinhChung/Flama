@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Flame, Layers, Sparkles, Video } from 'lucide-react'
+import { Film, Flame, Layers, Video } from 'lucide-react'
 
 export function AsbplayerFeatureHighlights() {
   const { t } = useTranslation('settings')
@@ -22,7 +22,7 @@ export function AsbplayerFeatureHighlights() {
 
       <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border bg-card/60 backdrop-blur-sm shadow-2xs">
         <div className="p-2 sm:p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-          <Sparkles className="size-4.5 sm:size-5" />
+          <Film className="size-4.5 sm:size-5" />
         </div>
         <div className="min-w-0">
           <div className="text-[11px] sm:text-xs font-semibold truncate">

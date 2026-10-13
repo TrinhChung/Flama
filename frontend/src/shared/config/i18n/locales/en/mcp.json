@@ -10,7 +10,51 @@
     "connect_guide_title": "Guide: Connecting AI Assistants via MCP",
     "troubleshoot_title": "MCP Troubleshooting",
     "loading": "Loading MCP tokens…",
+    "value_intro": {
+      "badge": "Personal AI Tutor for Flama",
+      "title": "Why connect AI Assistants with Flama?",
+      "subtitle": "Turn ChatGPT & Claude into a personalized tutor that deeply understands your flashcards and learning progress.",
+      "toggle_hide": "Collapse intro",
+      "toggle_show": "How it works",
+      "before_title": "Regular AI Chat",
+      "before_badge": "Isolated",
+      "before_p1": "Great grammatical insights and example sentences stay locked inside your chat history.",
+      "before_p2": "Tedious manual copying and pasting each field into Flama to create review cards.",
+      "before_p3": "AI has zero visibility into your deck progress, resulting in generic exercises.",
+      "after_title": "With Flama MCP Connection",
+      "after_badge": "100% Tailored",
+      "after_p1": "Generate dozens of flashcards with a simple prompt (e.g. 'Create 10 travel cards').",
+      "after_p2": "AI inspects your Flama cards to write dialogues matching your actual vocabulary level.",
+      "after_p3": "Instant cross-referencing and contextual practice tailored to your weak points.",
+      "steps_label": "3-Step Setup & Usage Flow:",
+      "step_1": "1. 1-Click link via ChatGPT OAuth sign-in",
+      "step_2": "2. Give natural commands directly in chat",
+      "step_3": "3. Cards & exercises sync into your Flama account"
+    },
     "tabs": {
+      "overview": {
+        "title": "1. Overview & Capabilities",
+        "badge": "Recommended",
+        "desc": "Discover AI integration benefits and automated Flama Flashcard synchronization",
+        "cta_btn": "Start Connecting Extension ➔",
+        "cta_question": "Ready to connect AI Assistants to Flama?"
+      },
+      "setup": {
+        "title": "2. Setup & Connection",
+        "badge": "Connect",
+        "desc": "Manage ChatGPT OAuth, Personal Access Tokens, and MCP server endpoints",
+        "cta_btn": "View Documentation & Guides ➔",
+        "cta_question": "Need detailed configuration reference or troubleshooting?",
+        "mode_title": "AI Connection Method",
+        "mode_desc": "Choose 1-click connection via ChatGPT OAuth or issue a Personal Access Token for coding IDEs."
+      },
+      "docs": {
+        "title": "3. Guides & Reference",
+        "badge": "Reference",
+        "desc": "Claude Desktop, Cursor configuration, 19 MCP tools catalog, and troubleshooting",
+        "cta_btn": "Back to Setup & Connection ➔",
+        "cta_question": "Understood the setup and ready to connect?"
+      },
       "chatgpt": {
         "title": "1. Connect ChatGPT",
         "badge": "Recommended",
@@ -20,6 +64,20 @@
         "title": "2. API Access Tokens & Permissions",
         "badge": "Developers",
         "desc": "Personal Access Tokens for Cursor, Cline, and Claude Desktop (Experimental)"
+      }
+    },
+    "pillars": {
+      "marketplace": {
+        "title": "Safe Marketplace Discovery",
+        "desc": "AI only inspects metadata and 3–5 sample cards from publicly shared decks. Scrape-proof by design."
+      },
+      "one_click": {
+        "title": "1-Click AI Integration",
+        "desc": "Prompt naturally in your language: AI analyzes grammar, explains vocabulary, and creates verified cards directly in Flama."
+      },
+      "privacy": {
+        "title": "Zero Personal Data Leakage",
+        "desc": "Complete protection for unpublished personal decks. Secured by OAuth 2.1 and expiring, revokable tokens."
       }
     },
     "docs_strip": {
@@ -37,6 +95,62 @@
         "title": "Yomitan 1-Click Mining",
         "desc": "Automatically mine vocabulary while reading news and manga in your browser."
       }
+    }
+  },
+  "docs_tab": {
+    "title": "MCP Documentation & Reference",
+    "description": "Configuration guides for Claude Desktop, Cursor IDE, and catalog of Flama Flashcard AI tools.",
+    "copy_success": "Configuration copied to clipboard",
+    "copy_error": "Failed to copy configuration",
+    "clients": {
+      "title": "Application & IDE Configuration",
+      "subtitle": "Select your AI application to get the standard connection configuration",
+      "tabs": {
+        "curl": "cURL Test"
+      },
+      "copy_json": "Copy JSON",
+      "copied": "Copied",
+      "copy_curl": "Copy cURL",
+      "claude_desktop": {
+        "title": "Claude Desktop",
+        "desc": "Add Flama MCP server to claude_desktop_config.json configuration file.",
+        "config_label": "claude_desktop_config.json configuration:"
+      },
+      "cursor": {
+        "title": "Cursor IDE",
+        "desc": "Configure MCP Server via Settings > Features > MCP in Cursor.",
+        "config_label": "Cursor mcpServers configuration:",
+        "guide_title": "Quick configuration guide in Cursor IDE:",
+        "step1": "1. Open Cursor Settings (Ctrl+, / Cmd+,) ➔ Choose Features tab ➔ MCP section.",
+        "step2": "2. Click + Add New MCP Server ➔ Name it flama, Type: http or sse, URL: http://localhost:4790/v1/mcp with Header Authorization: Bearer <TOKEN>."
+      },
+      "windsurf": {
+        "title": "Windsurf / Cline",
+        "desc": "Connect Windsurf Cascade or Cline extension via Remote MCP.",
+        "config_label": "mcp_config.json configuration:"
+      },
+      "curl": {
+        "command_label": "cURL JSON-RPC 2.0 verification command:"
+      }
+    },
+    "tools": {
+      "title": "Tools & Prompts Catalog",
+      "desc": "Reference Flashcard tools and sample prompt templates for AI agents.",
+      "view_catalog": "View tools catalog →",
+      "sample_prompts_title": "Popular prompt templates:"
+    },
+    "troubleshooting": {
+      "title": "MCP Troubleshooting",
+      "desc": "Resolve common connection errors, SSL certificates, and verify connectivity.",
+      "guide_link": "View troubleshooting guide →"
+    },
+    "guardrails": {
+      "process_title": "Flama Connect Process",
+      "process_desc": "Ensure Flama Connect service is running on port 4790 (via connect_wsgi.py) to listen for AI Agent requests.",
+      "anti_scraping_title": "Safe Anti-Scraping",
+      "anti_scraping_desc": "Anti-scraping protection: AI agents are only allowed to preview 3–5 sample cards from publicly shared decks.",
+      "privacy_title": "Personal Deck Protection",
+      "privacy_desc": "AI never reads your unshared personal decks unless explicit permission scopes are granted."
     }
   },
   "tokens_tab": {

@@ -160,9 +160,10 @@ describe('MCP Localization Suite (Vietnamese & Technical English)', () => {
     // Verify English titles & descriptions
     expect(container.textContent).toContain('AI Integration via Model Context Protocol (MCP)')
     expect(container.textContent).toContain('Connect ChatGPT, Cursor, and AI assistants')
-    expect(container.textContent).toContain('Connect ChatGPT')
+    expect(container.textContent).toContain('1. Overview & Capabilities')
     expect(container.textContent).toContain('Recommended')
-    expect(container.textContent).toContain('API Access Tokens & Permissions')
+    expect(container.textContent).toContain('2. Setup & Connection')
+    expect(container.textContent).toContain('3. Guides & Reference')
     expect(container.textContent).toContain('Setup Guide')
   })
 
@@ -207,7 +208,7 @@ describe('MCP Localization Suite (Vietnamese & Technical English)', () => {
 
     await waitForContent('Kết nối AI qua Model Context Protocol (MCP)')
     expect(container.textContent).toContain('Kết nối AI qua Model Context Protocol (MCP)')
-    expect(container.textContent).toContain('1. Kết nối ChatGPT')
+    expect(container.textContent).toContain('1. Khám phá & Công dụng')
 
     // Switch to English
     await act(async () => {
@@ -216,7 +217,7 @@ describe('MCP Localization Suite (Vietnamese & Technical English)', () => {
 
     await waitForContent('AI Integration via Model Context Protocol (MCP)')
     expect(container.textContent).toContain('AI Integration via Model Context Protocol (MCP)')
-    expect(container.textContent).toContain('1. Connect ChatGPT')
+    expect(container.textContent).toContain('1. Overview & Capabilities')
 
     // Switch back to Vietnamese
     await act(async () => {
@@ -225,5 +226,6 @@ describe('MCP Localization Suite (Vietnamese & Technical English)', () => {
 
     await waitForContent('Kết nối AI qua Model Context Protocol (MCP)')
     expect(container.textContent).toContain('Kết nối AI qua Model Context Protocol (MCP)')
+    expect(container.textContent).toContain('1. Khám phá & Công dụng')
   })
 })

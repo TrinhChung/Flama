@@ -117,6 +117,31 @@ def note_card_rows(scope, *, learner_user_id: int, storage_profile: str | None =
     )
 
 
+def note_rows(scope, *, learner_user_id: int, include_state: bool = False):
+    """Availability once per scoped Note; Card metrics carry a multiplicity.
+
+    Both identity probes are retained. A live-key match alone is not equivalent
+    to the canonical logical-key join when historical evidence is damaged.
+    """
+    subject = aliased(StudyProgressSubject)
+    columns = [
+        scope.c.deck_id, scope.c.note_id, scope.c.card_count,
+        subject.normalized_queue.label("queue"), subject.due_day, subject.due_at,
+        subject.is_suspended, subject.is_buried, subject.buried_until_day,
+        subject_integrity_violation(subject, note_id=scope.c.note_id,
+                                    learner_user_id=learner_user_id).label("violation"),
+    ]
+    if include_state:
+        columns.extend([
+            subject.state_payload["type"].as_string().label("state_type"),
+            subject.state_payload["interval_days"].as_string().label("interval_token"),
+        ])
+    return select(*columns).select_from(scope).outerjoin(subject, and_(
+        subject.learner_user_id == int(learner_user_id),
+        subject.logical_note_key == cast(scope.c.note_id, LargeBinary),
+    ))
+
+
 def subject_vector_violation(session: Session, *, scope, learner_user_id: int, storage_profile: str | None = None) -> int:
     """Former I5 (contributor coverage): Cards carry no progress any more."""
 
@@ -124,7 +149,7 @@ def subject_vector_violation(session: Session, *, scope, learner_user_id: int, s
 
 
 def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = None):
-    """Visible owned/install presentations whose Note holds current state.
+    """Visible owned/install Notes whose live Note holds current state.
 
     The shared scope preserves release-pinned retired applications and local
     added Notes. An outer ORM statement embedding this scope must retain
@@ -132,24 +157,19 @@ def learner_note_scope(*, learner_user_id: int, storage_profile: str | None = No
     applications, while the overlay branch enforces its release pin.
     """
 
-    from app.repositories.stats_query_repository import learner_presentation_scope
+    from models import db
+    from app.repositories.note_analytics_scope_repository import collection_note_scope
 
-    visible = learner_presentation_scope(learner_user_id=learner_user_id)
-    cards = (
-        select(visible.c.card_id, visible.c.note_id)
-        .select_from(visible)
-        .join(StudyProgressSubject, and_(
-            StudyProgressSubject.learner_user_id == int(learner_user_id),
-            StudyProgressSubject.live_note_id == visible.c.note_id,
-        ))
-        .where(StudyProgressSubject.semantic_state_hash.isnot(None))
-        .distinct()
-    ).subquery("learner_cards")
-    return select(
-        null().label("deck_id"),
-        cards.c.card_id,
-        cards.c.note_id,
-    ).subquery("learner_note_scope")
+    scope = collection_note_scope(db.session, learner_user_id=learner_user_id)
+    # A bounded scalar presence probe has the same semantics as EXISTS. It
+    # prevents MySQL's semijoin rewrite from placing application counts before
+    # the Note join (measured 31 x 39k intermediate rows on the production set).
+    state = select(literal(1)).where(
+        StudyProgressSubject.learner_user_id == int(learner_user_id),
+        StudyProgressSubject.live_note_id == scope.c.note_id,
+        StudyProgressSubject.semantic_state_hash.isnot(None),
+    ).correlate(scope).limit(1).scalar_subquery().isnot(None)
+    return select(scope.c.deck_id, scope.c.note_id, scope.c.card_count).where(state).subquery("learner_note_scope")
 
 
 def consolidated_card_rows(card_query, *, learner_user_id: int):

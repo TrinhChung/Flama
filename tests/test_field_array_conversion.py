@@ -138,12 +138,17 @@ class FieldArrayConversionTests(unittest.TestCase):
 
     def test_array_values_must_be_clean_lines(self):
         source = self.client.get(self._url()).get_json()
-        for bad in ("ăn\n\ndùng bữa", " ăn", "<b>ăn</b>", "ăn\r\nuống"):
+        for bad in ("ăn\n\ndùng bữa", " ăn", "<script>alert(1)</script>", "ăn\r\nuống"):
             payload = self._payload(source, transform=lambda value, bad=bad: bad if value.startswith("ăn") else value)
             response = self.client.post(self._url(), json=payload)
             self.assertEqual(response.status_code, 400, (bad, response.get_json()))
             self.assertEqual(response.get_json()["error"], "INVALID_ARRAY_VALUE")
-        self.assertEqual(self._field_type(), "text")
+        # Safe rich-text HTML lines like <b> are allowed
+        safe_payload = self._payload(source, transform=lambda value: "<b>ăn</b>" if value.startswith("ăn") else value)
+        safe_response = self.client.post(self._url(), json=safe_payload)
+        self.assertEqual(safe_response.status_code, 200, safe_response.get_json())
+        self.assertEqual(self._meaning(self.note_ids[0]), ["<b>ăn</b>"])
+        self.assertEqual(self._field_type(), "array")
 
     def test_array_note_edit_takes_lines_or_a_list_as_sent(self):
         source = self.client.get(self._url()).get_json()
