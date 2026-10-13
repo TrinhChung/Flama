@@ -17,7 +17,8 @@ from models.field_types import ARRAY_FIELD_TYPE
 RESTORABLE_FIELD_TYPES = ("text", "richtext", "markdown")
 MAX_CONVERSION_NOTES = 20_000
 MAX_ARRAY_VALUE_LENGTH = 5_000
-_HTML_TAG_RE = re.compile(r"<\s*/?\s*[a-zA-Z!][^>]*>")
+_SCRIPT_TAG_RE = re.compile(r"(?is)<\s*script\b")
+_DANGEROUS_ELEMENT_RE = re.compile(r"(?is)<\s*(?:iframe|object|embed|foreignobject|script)\b")
 
 
 class ArrayConversionError(ValueError):
@@ -87,8 +88,10 @@ def array_value_problem(value: str) -> str | None:
         return None
     if len(value) > MAX_ARRAY_VALUE_LENGTH:
         return "too_long"
-    if "\r" in value or _HTML_TAG_RE.search(value):
+    if "\r" in value:
         return "not_plain_lines"
+    if _SCRIPT_TAG_RE.search(value) or _DANGEROUS_ELEMENT_RE.search(value):
+        return "unsafe_html"
     for line in value.split("\n"):
         if not line or line != line.strip():
             return "not_plain_lines"

@@ -427,7 +427,22 @@ def _clean_array_items(items: list[Any], *, field_name: str, depth: int, budget:
         if isinstance(item, list):
             value, budget = _clean_array_items(item, field_name=field_name, depth=depth + 1, budget=budget - 1)
         elif isinstance(item, str):
-            value = sanitize_plain_text(item, field_name=field_name)
+            if _SCRIPT_TAG_RE.search(item) or _DANGEROUS_ELEMENT_RE.search(item):
+                raise RequestValidationError(
+                    f"Field '{field_name}' contains unsafe HTML content.",
+                    field=field_name,
+                )
+            if _EVENT_HANDLER_RE.search(item):
+                raise RequestValidationError(
+                    f"Field '{field_name}' contains disallowed event handler content.",
+                    field=field_name,
+                )
+            if _JS_URL_RE.search(item):
+                raise RequestValidationError(
+                    f"Field '{field_name}' contains disallowed javascript URL content.",
+                    field=field_name,
+                )
+            value = sanitize_rich_text(item, field_name=field_name)
             budget -= max(len(value), 1)
         else:
             raise RequestValidationError(
@@ -444,7 +459,7 @@ def _clean_array_items(items: list[Any], *, field_name: str, depth: int, budget:
 
 
 def _clean_array_field_value(raw_value: Any, *, field_name: str) -> list[Any]:
-    """Store an ``array`` field as a JSON list of plain-text items.
+    """Store an ``array`` field as a JSON list of items (safe rich-text allowed).
 
     Editors send one item per line; API clients may send a list nested at most
     ``MAX_ARRAY_DEPTH`` deep, kept as sent apart from sanitizing each item. The
@@ -453,8 +468,11 @@ def _clean_array_field_value(raw_value: Any, *, field_name: str) -> list[Any]:
     if raw_value is None:
         return []
     if not isinstance(raw_value, list):
-        text = sanitize_plain_text(raw_value, field_name=field_name)
-        return [line.strip() for line in text.split("\n") if line.strip()]
+        text = str(raw_value).replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        cleaned, _ = _clean_array_items(lines, field_name=field_name, depth=1, budget=MAX_TEXT_FIELD_LENGTH)
+        return cleaned
     cleaned, _ = _clean_array_items(raw_value, field_name=field_name, depth=1, budget=MAX_TEXT_FIELD_LENGTH)
     return cleaned
 

@@ -16,16 +16,16 @@ export type UpdateCardResponse = {
 }
 
 export function inferFieldType(
-  rawFieldType?: string | null,
-  fieldName?: string,
-  fieldValue?: string,
+  rawFieldType?: unknown,
+  fieldName?: unknown,
+  fieldValue?: unknown,
 ): 'image' | 'audio' | 'diagram' | 'text' | 'array' {
-  const ft = (rawFieldType || '').trim().toLowerCase()
+  const ft = typeof rawFieldType === 'string' ? rawFieldType.trim().toLowerCase() : ''
   if (ft === 'image' || ft === 'audio' || ft === 'diagram' || ft === 'array') {
     return ft
   }
 
-  const name = (fieldName || '').trim().toLowerCase()
+  const name = typeof fieldName === 'string' ? fieldName.trim().toLowerCase() : ''
   if (
     name === 'audio' ||
     name === 'sound' ||
@@ -54,7 +54,17 @@ export function inferFieldType(
     return 'image'
   }
 
-  const val = (fieldValue || '').trim()
+  if (Array.isArray(fieldValue)) {
+    return 'array'
+  }
+
+  const val =
+    typeof fieldValue === 'string'
+      ? fieldValue.trim()
+      : fieldValue == null
+      ? ''
+      : fieldValueEditorText(fieldValue).trim()
+
   if (val.startsWith('[sound:') || /\.(mp3|wav|ogg|opus|m4a|aac|flac)(\?.*)?$/i.test(val)) {
     return 'audio'
   }
@@ -126,6 +136,8 @@ export function useStudyQuickEditForm({
       isFormInitializedRef.current = true
     } else if (!open) {
       isFormInitializedRef.current = false
+      setFieldValues({})
+      setInitialFieldValues({})
       setNewTagInput('')
       setInvalidArrayFields({})
     }
@@ -272,6 +284,8 @@ export function useStudyQuickEditForm({
 
   // Resolve fields definition
   const fieldDefs = useMemo(() => {
+    if (!open) return []
+
     const rawDefs =
       cardDetailQuery.data?.fields && cardDetailQuery.data.fields.length > 0
         ? cardDetailQuery.data.fields
@@ -287,8 +301,8 @@ export function useStudyQuickEditForm({
           }))
 
     return rawDefs.map((f, index) => {
-      const val = initialFieldValues[f.name] || fieldValues[f.name] || ''
-      const detectedType = inferFieldType(f.field_type, f.name, fieldValueEditorText(val))
+      const val = fieldValues[f.name] ?? initialFieldValues[f.name] ?? ''
+      const detectedType = inferFieldType(f.field_type, f.name, val)
       return {
         name: f.name,
         position: f.position ?? index,
@@ -296,7 +310,7 @@ export function useStudyQuickEditForm({
         field_type: detectedType,
       }
     })
-  }, [cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
+  }, [open, cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
 
   const handleSubmit = useCallback(() => {
     if (!isDirty || updateMutation.isPending || !cardId || fieldDefs.some((field) => invalidArrayFields[field.name])) return

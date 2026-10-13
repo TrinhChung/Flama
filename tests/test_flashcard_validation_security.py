@@ -726,6 +726,82 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
             )
             self.assertNotIn("Cookie", resp.headers.get("Vary", ""))
 
+    def test_array_field_accepts_safe_html_and_rejects_malicious_script(self):
+        resp = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Array Safe HTML Note Type",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                    {"name": "Collocations", "field_type": "array", "position": 1, "required": False},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>",
+                    "back_html": "<div>{{Word}}</div>{{#Collocations}}<div>{{{.}}}</div>{{/Collocations}}",
+                    "shared_css": "",
+                },
+            },
+        )
+        self.assertEqual(resp.status_code, 201, resp.get_json())
+        nt_id = resp.get_json()["id"]
+
+        # Safe rich-text HTML items are accepted
+        valid_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": nt_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "Tokyo",
+                    "Collocations": ["<b>Tokyo tower</b>", "<i>central Tokyo</i>", "<span style='color:red;'>metropolis</span>"],
+                },
+            },
+        )
+        self.assertEqual(valid_resp.status_code, 201, valid_resp.get_json())
+        valid_id = valid_resp.get_json()["id"]
+        detail = self.client.get(f"/api/notes/{valid_id}").get_json()
+        colls = (detail.get("field_values") or {}).get("Collocations")
+        self.assertEqual(colls, ["<b>Tokyo tower</b>", "<i>central Tokyo</i>", '<span style="color:red;">metropolis</span>'])
+
+        # String input with <br> splits into array items preserving safe HTML
+        str_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": nt_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "Osaka",
+                    "Collocations": "<b>Osaka castle</b><br>great food<br><i>Kansai</i>",
+                },
+            },
+        )
+        self.assertEqual(str_resp.status_code, 201, str_resp.get_json())
+        str_id = str_resp.get_json()["id"]
+        str_detail = self.client.get(f"/api/notes/{str_id}").get_json()
+        str_colls = (str_detail.get("field_values") or {}).get("Collocations")
+        self.assertEqual(str_colls, ["<b>Osaka castle</b>", "great food", "<i>Kansai</i>"])
+
+        # Malicious payloads are rejected
+        for malicious in (
+            ["<script>alert(1)</script>"],
+            ["<iframe src='//evil.com'></iframe>"],
+            ["<img src=x onerror=alert(1)>"],
+            ["<a href='javascript:alert(1)'>click</a>"],
+        ):
+            bad_resp = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": nt_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": "Bad",
+                        "Collocations": malicious,
+                    },
+                },
+            )
+            self.assertEqual(bad_resp.status_code, 400, (malicious, bad_resp.get_json()))
+
 
 if __name__ == "__main__":
     unittest.main()
