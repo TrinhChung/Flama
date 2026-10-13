@@ -8,6 +8,8 @@ import {
   normalizeArrayFieldValues,
   normalizeArrayValue,
   parseArrayItems,
+  parseArrayValue,
+  serializeArrayFieldValues,
 } from './arrayField'
 
 describe('array field values', () => {
@@ -19,6 +21,34 @@ describe('array field values', () => {
   it('normalizes json array strings back into lines', () => {
     expect(normalizeArrayValue('["ăn", "dùng bữa"]')).toBe('ăn\ndùng bữa')
     expect(normalizeArrayValue('[\n  "mục 1",\n  "mục 2"\n]')).toBe('mục 1\nmục 2')
+  })
+
+  it('preserves nested lists, empty items, duplicates and multiline items in code and API payloads', () => {
+    const value = [['a', 'b'], [], '', 'a', 'line 1\nline 2']
+    expect(JSON.parse(arrayLinesToCode(value))).toEqual(value)
+    expect(parseArrayValue(JSON.stringify(value))).toEqual(value)
+    expect(serializeArrayFieldValues(
+      { Answer: JSON.stringify(value), Word: '猫' },
+      [{ name: 'Answer', field_type: 'array' }, { name: 'Word', field_type: 'text' }],
+    )).toEqual({ Answer: value, Word: '猫' })
+    expect(serializeArrayFieldValues({ Answer: value }, [{ name: 'Answer', field_type: 'array' }]).Answer).toBe(value)
+  })
+
+  it('accepts text and nested lists in JSON code, rejecting objects, numbers and null', () => {
+    expect(isValidArrayJson('[["a"], "b"]')).toBe(true)
+    for (const invalid of ['[1]', '[null]', '[true]', '[{}]', '[["a", 1]]']) {
+      expect(isValidArrayJson(invalid)).toBe(false)
+    }
+  })
+
+  it('converts legacy lines to native arrays while keeping repeated items', () => {
+    expect(serializeArrayFieldValues(
+      { Answer: ' a \n\na', Other: ' unchanged ' },
+      [{ name: 'Answer', field_type: 'array' }],
+    )).toEqual({ Answer: ['a', 'a'], Other: ' unchanged ' })
+    expect(normalizeArrayFieldValues(
+      { Answer: '[["a", "b"], "c"]' }, [{ name: 'Answer', field_type: 'array' }],
+    )).toEqual({ Answer: '[["a", "b"], "c"]' })
   })
 
   it('shows a stored list one item per line in editors', () => {

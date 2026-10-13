@@ -466,22 +466,7 @@ def review_due_expr(
         timezone_name=timezone_name,
         day_boundary_hour_local=day_boundary_hour_local,
     )
-    # A review timestamp without due_day still belongs to a local study day.
-    # It is due anywhere before the next boundary, matching the NOTE reader.
-    next_boundary = _next_day_boundary(
-        now=now, timezone_name=timezone_name,
-        day_boundary_hour_local=day_boundary_hour_local,
-    )
-    return db.or_(
-        progress_alias.due_day <= today_day_index,
-        db.and_(
-            progress_alias.due_day.is_(None),
-            db.or_(
-                progress_alias.due_at.is_(None),
-                progress_alias.due_at < next_boundary,
-            ),
-        ),
-    )
+    return progress_alias.due_day <= today_day_index
 
 
 def _ordered_study_card_queries(

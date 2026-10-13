@@ -1,4 +1,4 @@
-import type React from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { LoaderCircle, Plus, RotateCcw, Tag, X } from 'lucide-react'
-import { fieldValueEditorText, isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
+import { fieldValueEditorText, isArrayField, serializeArrayFieldValues } from '@/lib/arrayField'
 import { MediaFieldPreview, ArrayFieldInput } from '@/entities/flashcard'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
@@ -57,12 +57,15 @@ export function BrowseCardCreateForm({
     noteTypes.find((nt) => !nt.field_defs?.some((f) => f.name.toLowerCase() === 'stt'))?.id ||
     noteTypes[0]?.id
   const selectedNoteType =
-    noteTypes.find((nt) => nt.id === effectiveNoteTypeId) || noteTypes[0]
+    noteTypes.find((nt) => nt.id === effectiveNoteTypeId)
   const fields = (selectedNoteType?.field_defs || []).filter(
     (f) => f.name.trim().toLowerCase() !== 'stt',
   )
+  const [invalidArrayFields, setInvalidArrayFields] = useState<Record<string, boolean>>({})
+  const hasInvalidFields = fields.some((field) => invalidArrayFields[`${effectiveNoteTypeId}:${field.name}`])
 
   const submitCreateCard = () => {
+    if (createMutation.isPending || hasInvalidFields || fields.length === 0) return
     if (!editDeckId) {
       toast.error(t('editor.select_deck_error'))
       return
@@ -74,17 +77,17 @@ export function BrowseCardCreateForm({
     }
     // Only send fields defined in the selected Note Type
     const allowedNames = new Set(fields.map((f) => f.name))
-    const payloadFields: Record<string, string> = {}
+    const payloadFields: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(editFieldValues)) {
-      if (allowedNames.has(k) && v !== undefined && v !== null && String(v).trim() !== '') {
-        payloadFields[k] = String(v)
+      if (allowedNames.has(k) && v !== undefined && v !== null && fieldValueEditorText(v).trim() !== '') {
+        payloadFields[k] = v
       }
     }
 
     void createMutation.mutate({
       deck_id: editDeckId,
       note_type_id: noteTypeId,
-      field_values: normalizeArrayFieldValues(payloadFields, fields),
+      field_values: serializeArrayFieldValues(payloadFields, fields),
       tags: editTags,
     })
   }
@@ -186,18 +189,23 @@ export function BrowseCardCreateForm({
             if (isArrayField(ft)) {
               return (
                 <ArrayFieldInput
-                  key={field.name}
+                  key={`${effectiveNoteTypeId}:${field.name}`}
                   fieldName={field.name}
                   value={editFieldValues[field.name]}
                   onChange={(v) =>
                     setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
                   }
                   required={field.required}
+                  onValidityChange={(valid) => setInvalidArrayFields((previous) => {
+                    const key = `${effectiveNoteTypeId}:${field.name}`
+                    return previous[key] === !valid ? previous : { ...previous, [key]: !valid }
+                  })}
                 />
               )
             }
 
             const isMultiline =
+              ft === 'richtext' || ft === 'markdown' ||
               val.length > 50 ||
               val.includes('\n') ||
               field.name.toLowerCase().includes('meaning') ||
@@ -304,7 +312,7 @@ export function BrowseCardCreateForm({
             size="sm"
             className="flex-1 h-9 text-xs font-bold rounded-lg shadow-sm bg-primary text-primary-foreground hover:opacity-95 disabled:opacity-50"
             onClick={submitCreateCard}
-            disabled={createMutation.isPending || !editDeckId}
+            disabled={createMutation.isPending || !editDeckId || fields.length === 0 || hasInvalidFields}
           >
             {createMutation.isPending ? (
               <LoaderCircle className="size-3.5 mr-1 animate-spin" />

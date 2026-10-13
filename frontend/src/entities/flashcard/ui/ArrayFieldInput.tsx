@@ -15,8 +15,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  arrayNeedsCodeEditor,
   fieldValueEditorText,
   isValidArrayJson,
+  parseArrayValue,
   parseArrayItems,
 } from '@/lib/arrayField'
 
@@ -26,6 +28,7 @@ export interface ArrayFieldInputProps {
   fieldName: string
   value: unknown
   onChange: (value: string) => void
+  onValidityChange?: (valid: boolean) => void
   required?: boolean
   /** View mode: 'preview' (items badges) | 'normal' (lines) | 'code' (JSON array) */
   mode?: ArrayViewMode
@@ -38,21 +41,11 @@ export interface ArrayFieldInputProps {
   disabled?: boolean
 }
 
-/** Format items cleanly into a JSON array string with 2-space indentation */
-function formatItemsToJson(items: string[]): string {
-  if (items.length === 0) return '[]'
-  return JSON.stringify(items, null, 2)
-}
-
-/** Format items into newline-separated text */
-function formatItemsToLines(items: string[]): string {
-  return items.join('\n')
-}
-
 export function ArrayFieldInput({
   fieldName,
   value,
   onChange,
+  onValidityChange,
   required = false,
   mode: externalMode,
   onModeChange,
@@ -66,102 +59,75 @@ export function ArrayFieldInput({
   const [internalMode, setInternalMode] = useState<ArrayViewMode>('normal')
   const [copied, setCopied] = useState(false)
 
-  const effectiveMode = externalMode ?? internalMode
-
-  useEffect(() => {
-    if (externalMode !== undefined) {
-      setInternalMode(externalMode)
-    }
-  }, [externalMode])
-
-  // Initial text computed from value based on current mode
-  const computeInitialText = useCallback(
-    (val: unknown, currentMode: ArrayViewMode): string => {
-      const items = parseArrayItems(val)
-      if (currentMode === 'code') {
-        return formatItemsToJson(items)
-      }
-      if (typeof val === 'string' && !isValidArrayJson(val)) {
-        return val
-      }
-      return formatItemsToLines(items)
-    },
-    [],
-  )
-
-  const [currentText, setCurrentText] = useState<string>(() =>
-    computeInitialText(value, effectiveMode),
-  )
-
+  const [draftValue, setDraftValue] = useState<unknown>(value)
+  const [editedMode, setEditedMode] = useState<ArrayViewMode | null>(null)
   const lastValuePropRef = useRef<unknown>(value)
-  const lastReportedValueRef = useRef<string>(currentText)
+  const lastReportedValueRef = useRef<unknown>(value)
 
   // Sync external value changes when parent changes value
   useEffect(() => {
     if (value !== lastValuePropRef.current) {
       lastValuePropRef.current = value
-      const incomingText = typeof value === 'string' ? value : fieldValueEditorText(value)
-      if (incomingText !== lastReportedValueRef.current) {
-        const next = computeInitialText(value, effectiveMode)
-        setCurrentText(next)
-        lastReportedValueRef.current = next
+      if (value !== lastReportedValueRef.current) {
+        setDraftValue(value)
+        setEditedMode(null)
+        lastReportedValueRef.current = value
       }
     }
-  }, [value, effectiveMode, computeInitialText])
+  }, [value])
+
+  const needsCode = arrayNeedsCodeEditor(draftValue)
+  const requestedMode = externalMode ?? internalMode
+  const hasInvalidCodeDraft = editedMode === 'code' && typeof draftValue === 'string' && !isValidArrayJson(draftValue)
+  const effectiveMode = hasInvalidCodeDraft || (requestedMode === 'normal' && needsCode) ? 'code' : requestedMode
+  const currentText = effectiveMode === 'code'
+    ? editedMode === 'code' && typeof draftValue === 'string'
+      ? draftValue
+      : JSON.stringify(parseArrayValue(draftValue), null, 2)
+    : typeof draftValue === 'string' && !isValidArrayJson(draftValue)
+      ? draftValue
+      : fieldValueEditorText(parseArrayValue(draftValue))
 
   // Items parsed from currentText for Preview and count indicators
-  const items = useMemo(() => parseArrayItems(currentText), [currentText])
+  const items = useMemo(() => parseArrayItems(draftValue), [draftValue])
 
   // Validation: only checked in code mode
   const isInvalidJson = useMemo(() => {
     if (effectiveMode !== 'code') return false
     const trimmed = currentText.trim()
-    if (!trimmed) return false
     return !isValidArrayJson(trimmed)
   }, [effectiveMode, currentText])
+
+  useEffect(() => {
+    onValidityChange?.(!isInvalidJson)
+  }, [isInvalidJson, onValidityChange])
 
   // Mode switching
   const handleSetMode = useCallback(
     (targetMode: ArrayViewMode) => {
-      if (targetMode === effectiveMode) return
-
-      if (targetMode === 'code') {
-        // Switching to code mode: ALWAYS format into valid JSON array
-        const extracted = parseArrayItems(currentText)
-        const code = formatItemsToJson(extracted)
-        setCurrentText(code)
-        lastReportedValueRef.current = code
-        lastValuePropRef.current = code
-        onChange(code)
-      } else if (targetMode === 'normal') {
-        // Switching to normal lines mode
-        const extracted = parseArrayItems(currentText)
-        const lines = formatItemsToLines(extracted)
-        setCurrentText(lines)
-        lastReportedValueRef.current = lines
-        lastValuePropRef.current = lines
-        onChange(lines)
-      }
+      if (disabled || isInvalidJson || targetMode === effectiveMode || (targetMode === 'normal' && needsCode)) return
 
       setInternalMode(targetMode)
       onModeChange?.(targetMode)
     },
-    [effectiveMode, currentText, onChange, onModeChange],
+    [disabled, isInvalidJson, effectiveMode, needsCode, onModeChange],
   )
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const next = e.target.value
-      setCurrentText(next)
+      setDraftValue(next)
+      setEditedMode(effectiveMode)
+      if (externalMode === undefined) setInternalMode(effectiveMode)
       lastReportedValueRef.current = next
       onChange(next)
     },
-    [onChange],
+    [onChange, effectiveMode, externalMode],
   )
 
   const handleCopyJson = useCallback(() => {
     const textToCopy =
-      effectiveMode === 'code' ? currentText : formatItemsToJson(items)
+      effectiveMode === 'code' ? currentText : JSON.stringify(parseArrayValue(draftValue), null, 2)
     if (!textToCopy) return
     navigator.clipboard
       .writeText(textToCopy)
@@ -173,13 +139,13 @@ export function ArrayFieldInput({
       .catch(() => {
         toast.error(t('editor.copy_failed', 'Không thể sao chép.'))
       })
-  }, [effectiveMode, currentText, items, t])
+  }, [effectiveMode, currentText, draftValue, t])
 
   return (
     <div className={`space-y-1.5 ${className}`}>
       {/* Header toolbar with 3 view modes matching MediaFieldPreview */}
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+        <label htmlFor={`array-field-${fieldName}`} className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
           <List className="size-3 opacity-60" />
           <span>{label || fieldName}</span>
           {required && <span className="text-destructive">*</span>}
@@ -197,7 +163,7 @@ export function ArrayFieldInput({
             size="icon"
             className="h-6 w-6 rounded"
             onClick={() => handleSetMode('preview')}
-            disabled={disabled}
+            disabled={disabled || isInvalidJson}
             title={t('editor.view_mode_preview_tooltip', 'Xem trước danh sách (preview)')}
             aria-label={`Xem trước ${fieldName}`}
           >
@@ -209,7 +175,7 @@ export function ArrayFieldInput({
             size="icon"
             className="h-6 w-6 rounded"
             onClick={() => handleSetMode('normal')}
-            disabled={disabled}
+            disabled={disabled || isInvalidJson || needsCode}
             title={t('editor.view_mode_normal_tooltip', 'Chế độ xem thường (mỗi dòng một phần tử)')}
             aria-label={`Nhập thường ${fieldName}`}
           >
@@ -266,6 +232,7 @@ export function ArrayFieldInput({
                 <span>{t('editor.items_count', '{{count}} phần tử', { count: items.length })}</span>
                 <button
                   type="button"
+                  disabled={disabled || needsCode}
                   onClick={() => handleSetMode('normal')}
                   className="text-primary hover:underline font-medium"
                 >
@@ -281,6 +248,8 @@ export function ArrayFieldInput({
       {effectiveMode === 'normal' && (
         <div className="space-y-1.5">
           <Textarea
+            id={`array-field-${fieldName}`}
+            aria-label={fieldName}
             value={currentText}
             onChange={handleChange}
             disabled={disabled}
@@ -318,6 +287,10 @@ export function ArrayFieldInput({
               </Button>
             </div>
             <Textarea
+              id={`array-field-${fieldName}`}
+              aria-label={fieldName}
+              aria-invalid={isInvalidJson || undefined}
+              aria-describedby={isInvalidJson ? `array-field-${fieldName}-error` : undefined}
               value={currentText}
               onChange={handleChange}
               disabled={disabled}
@@ -328,7 +301,7 @@ export function ArrayFieldInput({
             />
           </div>
           {isInvalidJson && (
-            <div className="flex items-center gap-1 text-[11px] text-destructive font-medium animate-in fade-in slide-in-from-top-1 px-1">
+            <div id={`array-field-${fieldName}-error`} role="alert" className="flex items-center gap-1 text-[11px] text-destructive font-medium animate-in fade-in slide-in-from-top-1 px-1">
               <AlertCircle className="size-3 shrink-0" />
               <span>
                 {t(

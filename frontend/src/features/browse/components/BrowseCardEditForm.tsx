@@ -1,5 +1,5 @@
 import '@/shared/config/i18n'
-import type React from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { fieldValueEditorText, isArrayField, normalizeArrayFieldValues } from '@/lib/arrayField'
+import { fieldValueEditorText, isArrayField, serializeArrayFieldValues } from '@/lib/arrayField'
 import { MediaFieldPreview, ArrayFieldInput } from '@/entities/flashcard'
 import { statusLabel, statusVariant } from '../utils/formatter'
 import type { useBrowseState } from '../hooks/useBrowseState'
@@ -62,15 +62,18 @@ export function BrowseCardEditForm({
   } = browse
 
   const detail = cardDetailQuery.data
+  const [invalidArrayFields, setInvalidArrayFields] = useState<Record<string, boolean>>({})
+  const hasInvalidFields = detail?.fields.some((field) => invalidArrayFields[field.name]) ?? false
 
   if (!detail) return null
 
   const deckList = detail.decks || decksQuery.data?.decks || []
 
   const submitUpdateCard = () => {
-    if (!isDirty || updateMutation.isPending) return
-    const fieldValues = normalizeArrayFieldValues(editFieldValues, detail.fields)
-    if (fieldValues !== editFieldValues) setEditFieldValues(fieldValues)
+    if (!isDirty || updateMutation.isPending || hasInvalidFields) return
+    const changedFields = Object.fromEntries(Object.entries(editFieldValues).filter(([name, value]) =>
+      JSON.stringify(value) !== JSON.stringify(browse.initialFieldValues[name])))
+    const fieldValues = serializeArrayFieldValues(changedFields, detail.fields)
     void updateMutation.mutate({
       field_values: fieldValues,
       deck_id: editDeckId || undefined,
@@ -184,11 +187,13 @@ export function BrowseCardEditForm({
                   setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
                 }
                 required={field.required}
+                onValidityChange={(valid) => setInvalidArrayFields((previous) =>
+                  previous[field.name] === !valid ? previous : { ...previous, [field.name]: !valid })}
               />
             )
           }
 
-          const isMultiline = val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
+          const isMultiline = ft === 'richtext' || ft === 'markdown' || val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
 
           return (
             <div key={field.name} className="space-y-1.5">
@@ -286,7 +291,7 @@ export function BrowseCardEditForm({
             size="sm"
             className="flex-1 h-9 text-xs font-bold rounded-lg shadow-sm disabled:bg-muted disabled:text-muted-foreground disabled:border disabled:border-border/50 disabled:shadow-none disabled:opacity-100"
             onClick={submitUpdateCard}
-            disabled={!isDirty || updateMutation.isPending}
+            disabled={!isDirty || updateMutation.isPending || hasInvalidFields}
           >
             {updateMutation.isPending ? (
               <LoaderCircle className="size-3.5 mr-1 animate-spin" />

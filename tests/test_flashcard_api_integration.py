@@ -4391,6 +4391,62 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(values.get("Reading"), "\u3044\u306c")
             self.assertEqual(values.get("Meaning"), "dog")
 
+    def test_browse_native_arrays_preserve_owned_values_and_clone_delta_only(self):
+        note_type = self._create_note_type()
+        meaning_field_id = next(field["id"] for field in note_type["field_defs"] if field["name"] == "Meaning")
+        source_value = [["a", "b"], "repeat", "repeat"]
+        with self.app.app_context():
+            db.session.get(FieldDef, meaning_field_id).field_type = "array"
+            db.session.commit()
+
+        created = self.client.post("/api/notes", json={
+            "note_type_id": note_type["id"], "deck_id": self.deck_id,
+            "field_values": {"Word": "猫", "Meaning": source_value},
+        })
+        self.assertEqual(created.status_code, 201, created.get_json())
+        note_id = created.get_json()["id"]
+        with self.app.app_context():
+            card_id = Card.query.filter_by(note_id=note_id).first().id
+
+        updated = self.client.patch(f"/api/browse/cards/{card_id}", json={"field_values": {"Word": "犬"}})
+        self.assertEqual(updated.status_code, 200, updated.get_json())
+        self.assertEqual(updated.get_json()["detail"]["note"]["field_values"]["Meaning"], source_value)
+
+        with self.app.app_context():
+            learner = create_note_user(db.session, username="array-learner", email="array-learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+            learner_id = learner.id
+            listing = DeckMarketplaceItem(
+                owner_user_id=self.user_id, source_deck_id=self.deck_id,
+                source_note_type_id=note_type["id"], title="Native Array Browse",
+                publish_status="published", pricing_mode="free",
+            )
+            db.session.add(listing)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(listing)
+            db.session.commit()
+            listing_id = listing.id
+
+        learner_client = self.app.test_client()
+        learner_client.post("/login", data={"email": "array-learner@example.com", "password": "password"})
+        installed = learner_client.post(f"/api/shared/decks/{listing_id}/install")
+        self.assertEqual(installed.status_code, 201, installed.get_json())
+        clone_value = [["learner", "local"], "repeat", "repeat"]
+        cloned = learner_client.patch(f"/api/browse/cards/{card_id}", json={"field_values": {"Meaning": clone_value}})
+        self.assertEqual(cloned.status_code, 200, cloned.get_json())
+        self.assertEqual(cloned.get_json()["detail"]["note"]["field_values"]["Meaning"], clone_value)
+        reread = learner_client.get(f"/api/browse/cards/{card_id}")
+        self.assertEqual(reread.status_code, 200, reread.get_json())
+        self.assertEqual(reread.get_json()["note"]["field_values"]["Meaning"], clone_value)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Note, note_id).field_values["Meaning"], source_value)
+            self.assertEqual(Note.query.filter_by(user_id=learner_id).count(), 0)
+            install = DeckInstall.query.filter_by(deck_item_id=listing_id, user_id=learner_id).first()
+            overrides = DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=install.id).all()
+            self.assertEqual([override.field_name for override in overrides], ["Meaning"])
+
     def test_browse_batch_delete_removes_owned_cards_and_orphaned_notes(self):
         note_type_id = self._create_note_type()["id"]
         note_ids = []

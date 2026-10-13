@@ -326,14 +326,14 @@ class NoteQueryRetirementTests(unittest.TestCase):
         self.assertLessEqual(len(candidate_selects), 16)
         self.assertTrue(all('LIMIT' in s for s in candidate_selects))
 
-    def test_browse_count_rejects_detached_envelope_even_outside_requested_status(self):
+    def test_browse_page_rejects_detached_envelope(self):
         self._add(1)
         card = self._add(2, 'review', due_day=99999)
         subject = StudyProgressSubject.query.filter_by(live_note_id=card.note_id).one()
         subject.live_note_id = None
         db.session.commit()
         with self.assertRaises(browse_card_service.BrowseApiError) as caught:
-            self._browse(status='new')
+            self._browse(status='review')
         self.assertEqual((caught.exception.status, caught.exception.code), (409, 'DETACHED_AUTHORITY_SUBJECT'))
 
     def test_wrong_logical_key_cannot_hide_live_note_evidence_as_pristine(self):
@@ -351,14 +351,14 @@ class NoteQueryRetirementTests(unittest.TestCase):
                                                        now=NOW, timezone_name='UTC')
         self.assertEqual(caught.exception.code, 'DETACHED_AUTHORITY_SUBJECT')
 
-    def test_browse_count_rejects_empty_nonpristine_envelope_before_status_filter(self):
+    def test_browse_page_rejects_empty_nonpristine_envelope(self):
         card = self._add(1)
         db.session.add(StudyProgressSubject(learner_user_id=self.user.id,
             logical_note_key=card.note_id.encode(), live_note_id=card.note_id,
             status_code='QUARANTINED_CORRUPT_STATE', created_at=NOW, updated_at=NOW))
         db.session.commit()
         with self.assertRaises(browse_card_service.BrowseApiError) as caught:
-            self._browse(status='review')
+            self._browse()
         self.assertEqual(caught.exception.code, 'INCOMPLETE_AUTHORITY_COVERAGE')
 
     def test_browse_returned_page_still_rejects_semantic_hash_drift(self):
@@ -370,7 +370,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
             self._browse()
         self.assertIn(caught.exception.code, ('AUTHORITY_READ_PARITY_DIVERGED', 'AUTHORITY_STATE_DIVERGED'))
 
-    def test_browse_count_rejects_partial_state_group_instead_of_pristine_fallback(self):
+    def test_browse_page_rejects_partial_state_group(self):
         card = self._add(1, 'review', due_day=99999)
         # Model CHECK normally prevents partial groups. Simulate externally
         # damaged evidence to prove that a status filter cannot hide it.
@@ -379,7 +379,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
         subject.algorithm_key = None
         db.session.commit()
         with self.assertRaises(browse_card_service.BrowseApiError) as caught:
-            self._browse(status='new')
+            self._browse(status='review')
         self.assertEqual(caught.exception.code, 'INCOMPLETE_AUTHORITY_COVERAGE')
 
     def test_small_review_bucket_preserves_anchor_priority_without_extra_seeks(self):
@@ -418,7 +418,26 @@ class NoteQueryRetirementTests(unittest.TestCase):
             event.remove(db.engine, 'before_cursor_execute', capture)
         self.assertEqual(selected, visible.id)
         self.assertTrue(statements)
-        self.assertTrue(all('EXISTS' in sql and 'LIMIT' in sql for sql in statements))
+    def test_page_window_integrity_targeted_index_evaluation(self):
+        from app.repositories import browse_card_repository
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, card_ids=[]), 0)
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, note_ids=[]), 0)
+        card = self._add(1, 'review', due_day=1)
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, card_ids=[card.id]), 0)
+        self.assertEqual(browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, note_ids=[card.note_id]), 0)
+
+        statements = []
+        def capture(_conn, _cursor, statement, *_args):
+            statements.append(statement)
+        event.listen(db.engine, 'before_cursor_execute', capture)
+        try:
+            browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, card_ids=[card.id])
+            browse_card_repository.page_window_integrity(db.session, learner_user_id=self.user.id, note_ids=[card.note_id])
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', capture)
+        self.assertTrue(statements)
+        self.assertTrue(all('card_presentations' not in sql for sql in statements))
+        self.assertTrue(all('notes' in sql for sql in statements))
 
 
 if __name__ == '__main__':

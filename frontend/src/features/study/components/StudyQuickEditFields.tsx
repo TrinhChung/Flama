@@ -19,8 +19,9 @@ export type StudyQuickEditFieldsProps = {
   deckId: number | null
   onDeckChange: (deckId: number) => void
   fieldDefs: StudyQuickEditFieldDef[]
-  fieldValues: Record<string, string>
+  fieldValues: Record<string, unknown>
   onFieldValueChange: (fieldName: string, value: string) => void
+  onFieldValidityChange?: (fieldName: string, valid: boolean) => void
   resolveMediaUrl: (rawRef: string) => string | undefined
 }
 
@@ -31,6 +32,7 @@ export function StudyQuickEditFields({
   fieldDefs,
   fieldValues,
   onFieldValueChange,
+  onFieldValidityChange,
   resolveMediaUrl,
 }: StudyQuickEditFieldsProps) {
   const { t } = useTranslation('study')
@@ -84,6 +86,7 @@ export function StudyQuickEditFields({
               value={fieldValues[field.name]}
               onChange={(v) => onFieldValueChange(field.name, v)}
               required={field.required}
+              onValidityChange={(valid) => onFieldValidityChange?.(field.name, valid)}
               placeholderNormal={t('quick_edit.array_placeholder')}
             />
           )

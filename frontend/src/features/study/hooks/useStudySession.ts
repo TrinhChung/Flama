@@ -1175,7 +1175,7 @@ export function useStudySession(deckId: string | null) {
 
   const updateCardContent = useCallback(async (
     cardId: string,
-    updatedFieldValues: Record<string, string>,
+    updatedFieldValues: Record<string, unknown>,
     options?: { noteId?: string | null; skipBroadcast?: boolean; media?: StudyMediaArtifact[] },
   ) => {
     const controller = leaseControllerRef.current
@@ -1352,7 +1352,7 @@ export function useStudySession(deckId: string | null) {
     const handleCardSync = (detail: {
       cardId?: string
       noteId?: string | null
-      fieldValues?: Record<string, string>
+      fieldValues?: Record<string, unknown>
       media?: StudyMediaArtifact[]
     }) => {
       if (!detail?.cardId || !detail?.fieldValues) return

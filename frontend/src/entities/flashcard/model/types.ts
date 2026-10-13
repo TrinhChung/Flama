@@ -88,7 +88,7 @@ export interface CardRendererSlotContext {
   /** Scope identifier (e.g., deckId, noteTypeId) */
   scopeId?: string | null
   /** Field values of the card */
-  fieldValues?: Record<string, string>
+  fieldValues?: Record<string, unknown>
   /** Active payload object sent to the renderer */
   activeFacePayload?: unknown
   /** Helper action to toggle between front and back */
@@ -133,7 +133,7 @@ export interface CardRendererFrameProps {
   scope?: string
   scopeId?: string | null
   fieldDefs?: unknown[]
-  fieldValues?: Record<string, string>
+  fieldValues?: Record<string, unknown>
   active?: boolean
   enableLivePatch?: boolean
   fillHeight?: boolean
@@ -156,7 +156,7 @@ export interface CardDisplayProps {
   scope?: string
   scopeId?: string | null
   fieldDefs?: unknown[]
-  fieldValues?: Record<string, string>
+  fieldValues?: Record<string, unknown>
   enableLivePatch?: boolean
   className?: string
   slots?: CardRendererSlots

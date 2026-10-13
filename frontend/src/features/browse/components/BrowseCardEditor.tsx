@@ -93,6 +93,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
 
   return (
     <BrowseCardEditForm
+      key={activeCardId}
       browse={browse}
       isMobile={isMobile}
       editorWidth={editorWidth}

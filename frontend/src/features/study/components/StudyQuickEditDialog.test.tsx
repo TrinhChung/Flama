@@ -120,6 +120,36 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 }
 
 describe('StudyQuickEditDialog', () => {
+  it('blocks invalid array code and saves nested arrays as native lists', async () => {
+    mocks.get.mockImplementation(() => new Promise(() => {}))
+    const template = { ...mockTemplate, field_defs: [
+      { name: 'Word', field_type: 'text', position: 0 },
+      { name: 'Answer', field_type: 'array', position: 1 },
+    ] }
+    const content = { ...mockContent, field_values: { Word: '勉強', Answer: [['old'], 'answer'] } }
+    const onCardUpdated = vi.fn()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root?.render(renderWithClient(
+      <StudyQuickEditDialog open={true} onOpenChange={vi.fn()} cardId="card-123"
+        template={template} content={content} onCardUpdated={onCardUpdated} />,
+    )))
+    const input = document.querySelector<HTMLTextAreaElement>('[aria-label="Answer"]')!
+    const save = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('Lưu thay đổi'))!
+    await act(async () => setNativeValue(input, '[1]'))
+    expect(save.disabled).toBe(true)
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true })))
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    const values = { Word: '勉強', Answer: [['new'], 'item'] }
+    mocks.mutate.mockResolvedValueOnce({ success: true, detail: { note: { id: '101', field_values: values } } })
+    await act(async () => setNativeValue(input, JSON.stringify(values.Answer)))
+    expect(save.disabled).toBe(false)
+    await act(async () => save.click())
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', expect.objectContaining({ field_values: values }))
+    expect(onCardUpdated).toHaveBeenCalledWith('card-123', values, { noteId: '101', media: undefined })
+  })
+
   it('uses frozen note fields and excludes aliases while authoritative detail is loading', async () => {
     mocks.get.mockImplementation(() => new Promise(() => {}))
     const projection = {
