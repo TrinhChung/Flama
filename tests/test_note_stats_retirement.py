@@ -16,7 +16,7 @@ from app.services.stats_today_future import _aggregate_future_due_python, _conso
 from app.services.study_progress_shadow_mapper import MappedCardProgress, map_card_progress
 from migrations.retired_card_tables import CardProgress as FrozenProgress
 from models import db
-from models.card import Card
+from models.card import Card, PresentationAlias, cutover_applications, cutover_notes
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
@@ -229,6 +229,122 @@ class NoteStatsRetirementTests(unittest.TestCase):
             _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
         self.assertFalse(any("card_progress" in sql.lower() for sql in self.trace))
         self.assertNotIn("cards", set(sa.inspect(db.engine).get_table_names()))
+
+    def _assert_collection_scope_parity(self, deck_ids=None):
+        """Reference actual Card membership, independently of Note-weight algebra."""
+        from app.repositories.note_analytics_scope_repository import collection_note_scope
+
+        old = learner_presentation_scope(learner_user_id=1, scope_deck_ids=deck_ids)
+        presentations = sa.select(old.c.note_id, old.c.card_id).distinct().subquery()
+        expected = dict(db.session.execute(sa.select(
+            presentations.c.note_id, sa.func.count(),
+        ).group_by(presentations.c.note_id).execution_options(include_retired_cards=True)).all())
+        scope = collection_note_scope(db.session, learner_user_id=1, deck_ids=deck_ids)
+        actual = dict(db.session.execute(sa.select(
+            scope.c.note_id, scope.c.card_count,
+        ).execution_options(include_retired_cards=True)).all())
+        self.assertEqual(actual, expected)
+        return actual
+
+    def test_note_scope_preserves_original_absent_pairs_and_new_applications(self):
+        db.session.execute(sa.insert(cutover_notes).values(note_id=self.own_note))
+        db.session.execute(sa.insert(cutover_applications).values(application_id=self.own_app))
+        db.session.commit()
+        self.assertEqual(self._assert_collection_scope_parity(), {})
+
+        self._insert(PresentationAlias.__table__, id=str(uuid4()), note_id=self.own_note,
+                     application_id=self.own_app, template_id=self.own_template,
+                     created_at=NOW, updated_at=NOW)
+        self._application(1, self.own_type)
+        missing_app, _ = self._application(1, self.own_type)
+        db.session.execute(sa.insert(cutover_applications).values(application_id=missing_app))
+        new_note = self._note(1, self.own_type, 1)
+        retired, template = self._application(1, self.own_type, status="RETIRED")
+        self._insert(PresentationAlias.__table__, id=str(uuid4()), note_id=self.own_note,
+                     application_id=retired, template_id=template, created_at=NOW, updated_at=NOW)
+        db.session.commit()
+
+        self.assertEqual(self._assert_collection_scope_parity([1]), {self.own_note: 2, new_note: 3})
+        self.assertEqual(self._aggregate([1])[1], {"total": 2, "new": 1, "learn": 0, "due": 1})
+        self.assertEqual(self._aggregate([1], by_note=False)[1], {"total": 5, "new": 3, "learn": 0, "due": 2})
+
+    def test_note_scope_ignores_aliases_for_a_different_application_note_type(self):
+        other_type = str(uuid4())
+        self._insert(NoteType, id=other_type, user_id=1, name="Other")
+        application, template = self._application(1, other_type)
+        db.session.execute(sa.insert(cutover_notes).values(note_id=self.own_note))
+        db.session.execute(sa.insert(cutover_applications), [
+            {"application_id": self.own_app}, {"application_id": application},
+        ])
+        self._insert(PresentationAlias.__table__, id=str(uuid4()), note_id=self.own_note,
+                     application_id=application, template_id=template, created_at=NOW, updated_at=NOW)
+        db.session.commit()
+        self.assertEqual(self._assert_collection_scope_parity(), {})
+
+    def test_forecast_reads_one_row_for_many_occurrences_and_preserves_card_units(self):
+        from app.repositories.stats_query_repository import query_consolidated_forecast_rows
+        for _ in range(20):
+            self._insert(StudyApplication, id=str(uuid4()), note_type_id=self.own_type,
+                         template_id=self.own_template, occurrence_key=str(uuid4()),
+                         status_code="ACTIVE", created_at=NOW, updated_at=NOW)
+        db.session.commit()
+        self.assertEqual(self._assert_collection_scope_parity()[self.own_note], 21)
+        fetched = query_consolidated_forecast_rows(user_id=1, scope_deck_ids=[1])
+        self.assertEqual(len(fetched), 1)
+        self.assertEqual(fetched[0][-1], 21)
+        rows, load = _consolidated_due_rows_and_load(user_id=1, scope_deck_ids=[1])
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(load, 2.1)
+        by_day, _ = _aggregate_future_due_python(rows=rows, timezone_name="UTC",
+            today_local=date.fromordinal(DAY), backlog=False, end_offset=29, day_boundary_hour_local=0)
+        self.assertEqual(by_day[0]["due_count"], 21)
+        due = _canonical_future_due_day_counts(user_id=1, timezone_name="UTC", timezone_obj=None,
+            start_utc=NOW.replace(hour=0), end_utc=NOW + timedelta(days=30),
+            day_boundary_hour_local=0, storage_profile="CONSOLIDATED_V1")
+        self.assertEqual(due, {date.fromordinal(DAY): 21})
+
+    def test_collection_unions_disjoint_release_pins_instead_of_max_or_sum(self):
+        self._clone()
+        self._clone(local_deck=4, duplicate=True)
+        other = str(uuid4())
+        self._insert(StudyApplication, id=other, note_type_id=self.source_type,
+                     template_id=self.source_template, occurrence_key=other, status_code="RETIRED",
+                     created_at=NOW - timedelta(days=30), updated_at=NOW)
+        install = db.session.execute(sa.select(DeckInstall).where(DeckInstall.local_deck_id == 4)).scalar_one()
+        db.session.execute(sa.update(DeckReleaseTemplatePin).where(
+            DeckReleaseTemplatePin.deck_release_id == install.applied_release_id,
+        ).values(applications_json={other: {"id": other}}))
+        db.session.commit()
+        self.assertEqual(self._assert_collection_scope_parity()[self.source_note], 2)
+        self.assertEqual(self._assert_collection_scope_parity([3])[self.source_note], 1)
+        self.assertEqual(self._assert_collection_scope_parity([4])[self.source_note], 1)
+        self.assertEqual(self._aggregate([3, 4], by_note=False)[3]["total"], 1)
+
+    def test_collection_deduplicates_owned_and_installed_active_presentations(self):
+        self._clone()
+        db.session.execute(sa.update(Note).where(Note.id == self.source_note).values(user_id=1))
+        db.session.execute(sa.update(StudyApplication).where(StudyApplication.id == self.source_app).values(status_code="ACTIVE"))
+        db.session.execute(sa.update(DeckInstall).values(source_owner_user_id=1))
+        db.session.commit()
+        self.assertEqual(self._assert_collection_scope_parity()[self.source_note], 1)
+        self.assertEqual(self._assert_collection_scope_parity([3])[self.source_note], 1)
+        self.assertEqual(self._assert_collection_scope_parity([2])[self.source_note], 1)
+
+        # A malformed/self install mapping back to its physical deck still
+        # shares the old COUNT(DISTINCT Card) semantics in both badge units.
+        db.session.execute(sa.update(DeckCloneDeckMap).values(local_deck_id=2))
+        db.session.execute(sa.update(DeckInstall).values(local_deck_id=2))
+        db.session.commit()
+        self.assertEqual(self._aggregate([2], by_note=False)[2]["total"], 1)
+        self.assertEqual(self._aggregate([2], by_note=True)[2]["total"], 1)
+
+    def test_empty_deck_scope_and_notes_without_applications_have_no_weight(self):
+        other_type = str(uuid4())
+        self._insert(NoteType, id=other_type, user_id=1, name="Unattached")
+        self._note(1, other_type, 1)
+        db.session.commit()
+        self.assertEqual(self._assert_collection_scope_parity([]), {})
+        self.assertEqual(self._assert_collection_scope_parity([1]), {self.own_note: 1})
 
 
 if __name__ == "__main__":

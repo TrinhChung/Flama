@@ -1,0 +1,1192 @@
+{
+  "schema_version": "dashboard-production-investigation.v1",
+  "observed_date": "2026-10-13",
+  "timezone": "Asia/Tokyo",
+  "environment": {
+    "production_release": "fb685882099d20d90479d234402ae3b098076f89",
+    "local_head_at_start": "886ad3bf9491dcce6fcea59889a7ab1a040e2762",
+    "mysql": "8.0.46-0ubuntu0.22.04.4",
+    "migration": "20261012_000062",
+    "buffer_pool_bytes": 134217728,
+    "gunicorn": {
+      "workers": 2,
+      "threads_per_worker": 4,
+      "worker_class": "gthread",
+      "timeout_s": 120
+    },
+    "load_average_at_start": [
+      0.39,
+      0.15,
+      0.05
+    ],
+    "memory_available_mb_at_start": 5362,
+    "study_note_count_enabled": true,
+    "deck_count_write_enabled": false,
+    "deck_count_read_mode": "raw",
+    "review_analytics_write_enabled": false,
+    "review_analytics_read_mode": "raw",
+    "startup_maintenance": false,
+    "count_prewarm_timer": "inactive",
+    "count_snapshot_rows": 0
+  },
+  "inventory": {
+    "learner_user_id": 1,
+    "owned_notes": 39336,
+    "owned_active_presentations": 113680,
+    "active_applications_all_users": 34,
+    "visible_dashboard_decks": 1533,
+    "count_result_decks": 1468,
+    "learner_progress_subjects": 39336,
+    "learner_review_events": 119341,
+    "historical_aliases_for_owned_notes": 109560
+  },
+  "latest_observed_completion_chain": {
+    "session": "2026-10-13T19:58:20.004+09:00",
+    "dashboard": "2026-10-13T19:58:34.477+09:00",
+    "overview": "2026-10-13T19:58:42.075+09:00",
+    "session_to_dashboard_completion_gap_s": 14.473,
+    "dashboard_to_overview_completion_gap_s": 7.598,
+    "measurement_type": "completion gaps, not request durations"
+  },
+  "journal_last_24h": {
+    "rows": 947,
+    "dashboard_200": 34,
+    "overview_200": 33,
+    "session_200": 32,
+    "matching_performance_or_error_messages": 0,
+    "duration_logging_available": false
+  },
+  "audit_endpoint_summary": {
+    "/api/dashboard?compact=1": {
+      "samples": 3,
+      "endpoint_median_ms": 4791.855,
+      "endpoint_range_ms": [
+        3743.171,
+        5264.242
+      ],
+      "sql_median_ms": 4589.007,
+      "sql_fraction_range": [
+        0.9548364227936329,
+        0.975454768163143
+      ]
+    },
+    "/api/statistics/overview?year=2026": {
+      "samples": 3,
+      "endpoint_median_ms": 4074.12,
+      "endpoint_range_ms": [
+        4072.843,
+        4486.377
+      ],
+      "sql_median_ms": 4034.367,
+      "sql_fraction_range": [
+        0.9877123567635978,
+        0.9902425554475568
+      ]
+    }
+  },
+  "audit_endpoint_samples": [
+    {
+      "path": "/api/session",
+      "status": 200,
+      "elapsed_ms": 513.434,
+      "sql_ms": 6.636,
+      "sql_count": 2,
+      "bytes": 605,
+      "stages_ms": {},
+      "top_sql": [
+        {
+          "ms": 3.615,
+          "rows": 1,
+          "shape": "SELECT users.id AS users_id, users.email AS users_email, users.username AS users_username, users.display_name AS users_display_name, users.avatar_url "
+        },
+        {
+          "ms": 3.021,
+          "rows": 1,
+          "shape": "SELECT user_roles.id AS user_roles_id, user_roles.code AS user_roles_code, user_roles.name AS user_roles_name, user_roles.description AS user_roles_de"
+        }
+      ]
+    },
+    {
+      "path": "/api/dashboard?compact=1",
+      "status": 200,
+      "elapsed_ms": 4791.855,
+      "sql_ms": 4589.007,
+      "sql_count": 10,
+      "bytes": 335015,
+      "stages_ms": {
+        "collect_accessible_decks": 121.376,
+        "resolve_cached_owned_deck_counts": 0.151,
+        "aggregate_deck_study_counts": 4594.055,
+        "build_dashboard_data": 4770.729
+      },
+      "top_sql": [
+        {
+          "ms": 4348.475,
+          "rows": 1468,
+          "shape": "SELECT `rows`.deck_id, count(distinct(`rows`.note_id)) AS count_1, count(distinct(CASE WHEN ((`rows`.is_suspended IS NULL OR `rows`.is_suspended IS fa"
+        },
+        {
+          "ms": 181.757,
+          "rows": 1163,
+          "shape": "SELECT notes.deck_id, notes.note_type_id, min(notes.created_at) AS min_1 FROM notes WHERE notes.user_id = %(user_id_1)s AND notes.deck_id IN (%(deck_i"
+        },
+        {
+          "ms": 46.88,
+          "rows": 1533,
+          "shape": "SELECT decks.id AS decks_id, decks.parent_id AS decks_parent_id, decks.owner_user_id AS decks_owner_user_id, decks.note_type_id AS decks_note_type_id,"
+        },
+        {
+          "ms": 3.267,
+          "rows": 1,
+          "shape": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+        }
+      ]
+    },
+    {
+      "path": "/api/statistics/overview?year=2026",
+      "status": 200,
+      "elapsed_ms": 4486.377,
+      "sql_ms": 4431.25,
+      "sql_count": 9,
+      "bytes": 53023,
+      "stages_ms": {
+        "query_daily_review_aggregates": 271.433,
+        "_canonical_future_due_day_counts": 4087.1,
+        "query_active_review_days": 100.17
+      },
+      "top_sql": [
+        {
+          "ms": 4067.72,
+          "rows": 34,
+          "shape": "SELECT greatest(CASE WHEN (lower(trim(availability.queue)) = %(lower_1)s AND availability.due_day IS NOT NULL) THEN availability.due_day ELSE to_days("
+        },
+        {
+          "ms": 262.702,
+          "rows": 267,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day, count(review_events.id) AS cards, coale"
+        },
+        {
+          "ms": 97.306,
+          "rows": 420,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day FROM review_events WHERE review_events.u"
+        },
+        {
+          "ms": 0.907,
+          "rows": 1,
+          "shape": "SELECT users.id AS users_id, users.email AS users_email, users.username AS users_username, users.display_name AS users_display_name, users.avatar_url "
+        }
+      ]
+    },
+    {
+      "path": "/api/dashboard?compact=1",
+      "status": 200,
+      "elapsed_ms": 5264.242,
+      "sql_ms": 5026.49,
+      "sql_count": 11,
+      "bytes": 335015,
+      "stages_ms": {
+        "collect_accessible_decks": 45.937,
+        "resolve_cached_owned_deck_counts": 0.153,
+        "aggregate_deck_study_counts": 5158.905,
+        "build_dashboard_data": 5238.508
+      },
+      "top_sql": [
+        {
+          "ms": 4804.622,
+          "rows": 1468,
+          "shape": "SELECT `rows`.deck_id, count(distinct(`rows`.note_id)) AS count_1, count(distinct(CASE WHEN ((`rows`.is_suspended IS NULL OR `rows`.is_suspended IS fa"
+        },
+        {
+          "ms": 190.502,
+          "rows": 1163,
+          "shape": "SELECT notes.deck_id, notes.note_type_id, min(notes.created_at) AS min_1 FROM notes WHERE notes.user_id = %(user_id_1)s AND notes.deck_id IN (%(deck_i"
+        },
+        {
+          "ms": 26.685,
+          "rows": 1533,
+          "shape": "SELECT decks.id AS decks_id, decks.parent_id AS decks_parent_id, decks.owner_user_id AS decks_owner_user_id, decks.note_type_id AS decks_note_type_id,"
+        },
+        {
+          "ms": 0.987,
+          "rows": 1,
+          "shape": "SELECT users.id AS users_id, users.email AS users_email, users.username AS users_username, users.display_name AS users_display_name, users.avatar_url "
+        }
+      ]
+    },
+    {
+      "path": "/api/statistics/overview?year=2026",
+      "status": 200,
+      "elapsed_ms": 4074.12,
+      "sql_ms": 4034.367,
+      "sql_count": 9,
+      "bytes": 53023,
+      "stages_ms": {
+        "query_daily_review_aggregates": 247.253,
+        "_canonical_future_due_day_counts": 3740.231,
+        "query_active_review_days": 60.21
+      },
+      "top_sql": [
+        {
+          "ms": 3727.557,
+          "rows": 34,
+          "shape": "SELECT greatest(CASE WHEN (lower(trim(availability.queue)) = %(lower_1)s AND availability.due_day IS NOT NULL) THEN availability.due_day ELSE to_days("
+        },
+        {
+          "ms": 244.802,
+          "rows": 267,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day, count(review_events.id) AS cards, coale"
+        },
+        {
+          "ms": 58.105,
+          "rows": 420,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day FROM review_events WHERE review_events.u"
+        },
+        {
+          "ms": 1.124,
+          "rows": 1,
+          "shape": "SELECT users.id AS users_id, users.email AS users_email, users.username AS users_username, users.display_name AS users_display_name, users.avatar_url "
+        }
+      ]
+    },
+    {
+      "path": "/api/dashboard?compact=1",
+      "status": 200,
+      "elapsed_ms": 3743.171,
+      "sql_ms": 3651.294,
+      "sql_count": 11,
+      "bytes": 335015,
+      "stages_ms": {
+        "collect_accessible_decks": 40.388,
+        "resolve_cached_owned_deck_counts": 0.148,
+        "aggregate_deck_study_counts": 3647.687,
+        "build_dashboard_data": 3720.581
+      },
+      "top_sql": [
+        {
+          "ms": 3432.911,
+          "rows": 1468,
+          "shape": "SELECT `rows`.deck_id, count(distinct(`rows`.note_id)) AS count_1, count(distinct(CASE WHEN ((`rows`.is_suspended IS NULL OR `rows`.is_suspended IS fa"
+        },
+        {
+          "ms": 190.325,
+          "rows": 1163,
+          "shape": "SELECT notes.deck_id, notes.note_type_id, min(notes.created_at) AS min_1 FROM notes WHERE notes.user_id = %(user_id_1)s AND notes.deck_id IN (%(deck_i"
+        },
+        {
+          "ms": 23.431,
+          "rows": 1533,
+          "shape": "SELECT decks.id AS decks_id, decks.parent_id AS decks_parent_id, decks.owner_user_id AS decks_owner_user_id, decks.note_type_id AS decks_note_type_id,"
+        },
+        {
+          "ms": 1.659,
+          "rows": 1,
+          "shape": "SELECT study_authority_storage_profile.profile_code FROM study_authority_storage_profile WHERE study_authority_storage_profile.id = %(id_1)s"
+        }
+      ]
+    },
+    {
+      "path": "/api/statistics/overview?year=2026",
+      "status": 200,
+      "elapsed_ms": 4072.843,
+      "sql_ms": 4032.69,
+      "sql_count": 9,
+      "bytes": 53023,
+      "stages_ms": {
+        "query_daily_review_aggregates": 283.62,
+        "_canonical_future_due_day_counts": 3704.812,
+        "query_active_review_days": 56.633
+      },
+      "top_sql": [
+        {
+          "ms": 3693.034,
+          "rows": 34,
+          "shape": "SELECT greatest(CASE WHEN (lower(trim(availability.queue)) = %(lower_1)s AND availability.due_day IS NOT NULL) THEN availability.due_day ELSE to_days("
+        },
+        {
+          "ms": 281.048,
+          "rows": 267,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day, count(review_events.id) AS cards, coale"
+        },
+        {
+          "ms": 55.132,
+          "rows": 420,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day FROM review_events WHERE review_events.u"
+        },
+        {
+          "ms": 1.112,
+          "rows": 1,
+          "shape": "SELECT users.id AS users_id, users.email AS users_email, users.username AS users_username, users.display_name AS users_display_name, users.avatar_url "
+        }
+      ]
+    }
+  ],
+  "io_endpoint_samples": [
+    {
+      "path": "/api/dashboard?compact=1",
+      "status": 200,
+      "elapsed_ms": 4200.232,
+      "sql_ms": 3678.092,
+      "sql_count": 11,
+      "bytes": 335015,
+      "global_io_delta": {
+        "Innodb_buffer_pool_read_requests": 1970871,
+        "Innodb_buffer_pool_reads": 33558,
+        "Innodb_data_read": 555270144,
+        "Innodb_data_reads": 33891,
+        "Innodb_row_lock_current_waits": 0
+      },
+      "stages_ms": {
+        "collect_accessible_decks": 51.544,
+        "resolve_cached_owned_deck_counts": 0.163,
+        "aggregate_deck_study_counts": 3662.061,
+        "build_dashboard_data": 3770.327
+      },
+      "top_sql": [
+        {
+          "ms": 3432.357,
+          "rows": 1468,
+          "shape": "SELECT `rows`.deck_id, count(distinct(`rows`.note_id)) AS count_1, count(distinct(CASE WHEN ((`rows`.is_suspended IS NULL OR `rows`.is_suspended IS fa"
+        },
+        {
+          "ms": 195.646,
+          "rows": 1163,
+          "shape": "SELECT notes.deck_id, notes.note_type_id, min(notes.created_at) AS min_1 FROM notes WHERE notes.user_id = %(user_id_1)s AND notes.deck_id IN (%(deck_i"
+        },
+        {
+          "ms": 33.543,
+          "rows": 1533,
+          "shape": "SELECT decks.id AS decks_id, decks.parent_id AS decks_parent_id, decks.owner_user_id AS decks_owner_user_id, decks.note_type_id AS decks_note_type_id,"
+        },
+        {
+          "ms": 4.455,
+          "rows": 1,
+          "shape": "SELECT user_roles.id AS user_roles_id, user_roles.code AS user_roles_code, user_roles.name AS user_roles_name, user_roles.description AS user_roles_de"
+        }
+      ]
+    },
+    {
+      "path": "/api/statistics/overview?year=2026",
+      "status": 200,
+      "elapsed_ms": 3961.209,
+      "sql_ms": 3918.07,
+      "sql_count": 9,
+      "bytes": 53023,
+      "global_io_delta": {
+        "Innodb_buffer_pool_read_requests": 3068126,
+        "Innodb_buffer_pool_reads": 30848,
+        "Innodb_data_read": 507510784,
+        "Innodb_data_reads": 30976,
+        "Innodb_row_lock_current_waits": 0
+      },
+      "stages_ms": {
+        "query_daily_review_aggregates": 247.305,
+        "_canonical_future_due_day_counts": 3634.836,
+        "query_active_review_days": 58.866
+      },
+      "top_sql": [
+        {
+          "ms": 3615.675,
+          "rows": 34,
+          "shape": "SELECT greatest(CASE WHEN (lower(trim(availability.queue)) = %(lower_1)s AND availability.due_day IS NOT NULL) THEN availability.due_day ELSE to_days("
+        },
+        {
+          "ms": 243.847,
+          "rows": 267,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day, count(review_events.id) AS cards, coale"
+        },
+        {
+          "ms": 56.269,
+          "rows": 420,
+          "shape": "SELECT date(date_sub(date_add(review_events.reviewed_at, INTERVAL 540 MINUTE), INTERVAL 4 HOUR)) AS local_day FROM review_events WHERE review_events.u"
+        },
+        {
+          "ms": 0.709,
+          "rows": 1,
+          "shape": "SELECT users.id AS users_id, users.email AS users_email, users.username AS users_username, users.display_name AS users_display_name, users.avatar_url "
+        }
+      ]
+    }
+  ],
+  "explain_plans": [
+    {
+      "endpoint": "dashboard",
+      "rows": [
+        {
+          "id": 1,
+          "select_type": "PRIMARY",
+          "table": "<derived2>",
+          "partitions": null,
+          "type": "ALL",
+          "possible_keys": null,
+          "key": null,
+          "key_len": null,
+          "ref": null,
+          "rows": 9565,
+          "filtered": 100.0,
+          "Extra": "Using filesort"
+        },
+        {
+          "id": 2,
+          "select_type": "DERIVED",
+          "table": "study_applications",
+          "partitions": null,
+          "type": "ALL",
+          "possible_keys": "uq_study_applications_note_type_template_occurrence,ix_study_applications_note_type_ord",
+          "key": null,
+          "key_len": null,
+          "ref": null,
+          "rows": 32,
+          "filtered": 10.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 2,
+          "select_type": "DERIVED",
+          "table": "notes",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "PRIMARY,ix_notes_note_type_id",
+          "key": "ix_notes_note_type_id",
+          "key_len": "146",
+          "ref": "flama.study_applications.note_type_id",
+          "rows": 5978,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 2,
+          "select_type": "DERIVED",
+          "table": "notes",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY,ix_notes_user_id,ix_notes_deck_id",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.notes.id",
+          "rows": 1,
+          "filtered": 50.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 2,
+          "select_type": "DERIVED",
+          "table": "card_presentation_aliases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "uq_presentation_alias_note_application,ix_card_presentation_aliases_application_id,ix_card_presentation_aliases_note_id",
+          "key": "uq_presentation_alias_note_application",
+          "key_len": "292",
+          "ref": "flama.notes.id,flama.study_applications.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where; Using index"
+        },
+        {
+          "id": 2,
+          "select_type": "DERIVED",
+          "table": "study_progress_subjects_1",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "uq_sp_subject_user_note,ix_sp_subject_note_due",
+          "key": "uq_sp_subject_user_note",
+          "key_len": "150",
+          "ref": "const,func",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index condition"
+        },
+        {
+          "id": 7,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "card_presentation_cutover_applications",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.study_applications.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 6,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "card_presentation_cutover_notes",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.notes.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 3,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "study_progress_subjects_2",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "uq_sp_subject_user_note,ix_sp_subject_live_note,ix_sp_subject_note_due",
+          "key": "ix_sp_subject_live_note",
+          "key_len": "147",
+          "ref": "func",
+          "rows": 1,
+          "filtered": 45.0,
+          "Extra": "Using index condition; Using where"
+        }
+      ]
+    },
+    {
+      "endpoint": "overview",
+      "rows": [
+        {
+          "id": 1,
+          "select_type": "PRIMARY",
+          "table": "<derived2>",
+          "partitions": null,
+          "type": "ALL",
+          "possible_keys": null,
+          "key": null,
+          "key_len": null,
+          "ref": null,
+          "rows": 5701,
+          "filtered": 100.0,
+          "Extra": "Using temporary"
+        },
+        {
+          "id": 2,
+          "select_type": "DERIVED",
+          "table": "<derived5>",
+          "partitions": null,
+          "type": "ALL",
+          "possible_keys": null,
+          "key": null,
+          "key_len": null,
+          "ref": null,
+          "rows": 5759,
+          "filtered": 100.0,
+          "Extra": null
+        },
+        {
+          "id": 2,
+          "select_type": "DERIVED",
+          "table": "study_progress_subjects_1",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "uq_sp_subject_user_note,ix_sp_subject_note_due",
+          "key": "uq_sp_subject_user_note",
+          "key_len": "150",
+          "ref": "const,func",
+          "rows": 1,
+          "filtered": 99.0,
+          "Extra": "Using index condition; Using where"
+        },
+        {
+          "id": 5,
+          "select_type": "DERIVED",
+          "table": "<derived6>",
+          "partitions": null,
+          "type": "ALL",
+          "possible_keys": null,
+          "key": null,
+          "key_len": null,
+          "ref": null,
+          "rows": 12800,
+          "filtered": 100.0,
+          "Extra": "Using temporary"
+        },
+        {
+          "id": 5,
+          "select_type": "DERIVED",
+          "table": "study_progress_subjects",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "uq_sp_subject_user_note,ix_sp_subject_live_note,ix_sp_subject_note_due",
+          "key": "ix_sp_subject_live_note",
+          "key_len": "147",
+          "ref": "learner_presentations.note_id",
+          "rows": 1,
+          "filtered": 45.0,
+          "Extra": "Using where; Distinct"
+        },
+        {
+          "id": 6,
+          "select_type": "DERIVED",
+          "table": "<derived7>",
+          "partitions": null,
+          "type": "ALL",
+          "possible_keys": null,
+          "key": null,
+          "key_len": null,
+          "ref": null,
+          "rows": 12800,
+          "filtered": 100.0,
+          "Extra": "Using temporary"
+        },
+        {
+          "id": 7,
+          "select_type": "DERIVED",
+          "table": "study_applications",
+          "partitions": null,
+          "type": "ALL",
+          "possible_keys": "uq_study_applications_note_type_template_occurrence,ix_study_applications_note_type_ord",
+          "key": null,
+          "key_len": null,
+          "ref": null,
+          "rows": 32,
+          "filtered": 10.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 7,
+          "select_type": "DERIVED",
+          "table": "notes",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "PRIMARY,ix_notes_note_type_id",
+          "key": "ix_notes_note_type_id",
+          "key_len": "146",
+          "ref": "flama.study_applications.note_type_id",
+          "rows": 5978,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 7,
+          "select_type": "DERIVED",
+          "table": "notes",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY,ix_notes_user_id",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.notes.id",
+          "rows": 1,
+          "filtered": 50.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 7,
+          "select_type": "DERIVED",
+          "table": "card_presentation_aliases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "uq_presentation_alias_note_application,ix_card_presentation_aliases_application_id,ix_card_presentation_aliases_note_id",
+          "key": "uq_presentation_alias_note_application",
+          "key_len": "292",
+          "ref": "flama.notes.id,flama.study_applications.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where; Using index"
+        },
+        {
+          "id": 10,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "card_presentation_cutover_applications",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.study_applications.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 9,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "card_presentation_cutover_notes",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.notes.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 11,
+          "select_type": "UNION",
+          "table": "deck_installs",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "PRIMARY,ix_deck_installs_local_deck_id,ix_deck_installs_source_owner_user_id,ix_deck_installs_user_id,ix_deck_installs_clone_mode,ix_deck_installs_version_mode",
+          "key": "ix_deck_installs_user_id",
+          "key_len": "4",
+          "ref": "const",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 11,
+          "select_type": "UNION",
+          "table": "deck_clone_deck_maps",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "uq_clone_map_install_source,ix_deck_clone_deck_maps_deck_install_id,ix_deck_clone_deck_maps_source_deck_id",
+          "key": "uq_clone_map_install_source",
+          "key_len": "146",
+          "ref": "flama.deck_installs.id",
+          "rows": 106,
+          "filtered": 100.0,
+          "Extra": null
+        },
+        {
+          "id": 11,
+          "select_type": "UNION",
+          "table": "notes",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "PRIMARY,ix_notes_user_id,ix_notes_deck_id",
+          "key": "ix_notes_deck_id",
+          "key_len": "5",
+          "ref": "flama.deck_clone_deck_maps.source_deck_id",
+          "rows": 29,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 11,
+          "select_type": "UNION",
+          "table": "notes",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY,ix_notes_note_type_id",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.notes.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 11,
+          "select_type": "UNION",
+          "table": "study_applications",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "uq_study_applications_note_type_template_occurrence,ix_study_applications_note_type_ord",
+          "key": "uq_study_applications_note_type_template_occurrence",
+          "key_len": "146",
+          "ref": "flama.notes.note_type_id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 11,
+          "select_type": "UNION",
+          "table": "card_presentation_aliases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "uq_presentation_alias_note_application,ix_card_presentation_aliases_application_id,ix_card_presentation_aliases_note_id",
+          "key": "uq_presentation_alias_note_application",
+          "key_len": "292",
+          "ref": "flama.notes.id,flama.study_applications.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 20,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "deck_releases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.deck_installs.applied_release_id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 19,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "deck_releases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.deck_installs.applied_release_id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": null
+        },
+        {
+          "id": 19,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "deck_release_entity_memberships",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "uq_deck_release_memberships_item_entity_start,ix_deck_release_entity_memberships_deck_item_id,ix_deck_release_memberships_visibility,ix_deck_release_memberships_deck_visibility",
+          "key": "uq_deck_release_memberships_item_entity_start",
+          "key_len": "534",
+          "ref": "flama.deck_installs.deck_item_id,const,flama.notes.id",
+          "rows": 1,
+          "filtered": 13.33,
+          "Extra": "Using index condition; Using where"
+        },
+        {
+          "id": 18,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "deck_releases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.deck_installs.applied_release_id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 17,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "deck_releases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.deck_installs.applied_release_id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 16,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "deck_release_template_pins",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY,ix_deck_release_template_pins_source_template_id",
+          "key": "PRIMARY",
+          "key_len": "292",
+          "ref": "flama.deck_installs.applied_release_id,func",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 15,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "deck_releases",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.deck_installs.applied_release_id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using where"
+        },
+        {
+          "id": 14,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "card_presentation_cutover_applications",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.study_applications.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 13,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "card_presentation_cutover_notes",
+          "partitions": null,
+          "type": "eq_ref",
+          "possible_keys": "PRIMARY",
+          "key": "PRIMARY",
+          "key_len": "146",
+          "ref": "flama.notes.id",
+          "rows": 1,
+          "filtered": 100.0,
+          "Extra": "Using index"
+        },
+        {
+          "id": 3,
+          "select_type": "DEPENDENT SUBQUERY",
+          "table": "study_progress_subjects_2",
+          "partitions": null,
+          "type": "ref",
+          "possible_keys": "uq_sp_subject_user_note,ix_sp_subject_live_note,ix_sp_subject_note_due",
+          "key": "ix_sp_subject_live_note",
+          "key_len": "147",
+          "ref": "func",
+          "rows": 1,
+          "filtered": 45.0,
+          "Extra": "Using index condition; Using where"
+        }
+      ]
+    }
+  ],
+  "explain_analyze": [
+    {
+      "endpoint": "dashboard",
+      "lines": [
+        "-> Group aggregate: count(predicate), count(predicate) or (predicate) is false)) and (predicate) is not true) or (predicate) and (predicate))) and (predicate))) not in (p (actual time=3078..3249 rows=1468 loops=1)",
+        "    -> Sort: `rows`.deck_id   (actual time=3078..3092 rows=113680 loops=1)",
+        "        -> Table scan on rows   (actual time=2842..2894 rows=113680 loops=1)",
+        "            -> Materialize   (actual time=2842..2842 rows=113680 loops=1)",
+        "                -> Nested loop left join   (actual time=0.786..1922 rows=113680 loops=1)",
+        "                    -> Filter: (predicate) or exists(predicate) is false or exists(predicate) is false)   (actual time=0.653..1345 rows=113680 loops=1)",
+        "                        -> Nested loop left join   (actual time=0.652..1303 rows=113680 loops=1)",
+        "                            -> Nested loop inner join   (actual time=0.611..795 rows=113680 loops=1)",
+        "                                -> Nested loop inner join   (actual time=0.372..81.1 rows=115863 loops=1)",
+        "                                    -> Filter: (predicate)   (actual time=0.328..0.575 rows=34 loops=1)",
+        "                                        -> Table scan on study_applications   (actual time=0.211..0.426 rows=34 loops=1)",
+        "                                    -> Covering index lookup on notes using ix_notes_note_type_id (predicate)   (actual time=0.0458..2.18 rows=3408 loops=34)",
+        "                                -> Filter: (predicate) and (predicate)))   (actual time=0.00592..0.00601 rows=0.981 loops=115863)",
+        "                                    -> Single-row index lookup on notes using PRIMARY (predicate)   (actual time=0.00564..0.00567 rows=1 loops=115863)",
+        "                            -> Single-row covering index lookup on card_presentation_aliases using uq_presentation_alias_note_application (predicate)   (actual time=0.00429..0.00432 rows=0.964 loops=113680)",
+        "                            -> Limit: 1 row(predicate)   (actual time=0.00548..0.00551 rows=1 loops=4120)",
+        "                                -> Single-row covering index lookup on card_presentation_cutover_notes using PRIMARY (predicate)   (actual time=0.00535..0.00535 rows=1 loops=4120)",
+        "                            -> Limit: 1 row(predicate)   (actual time=0.00121..0.00121 rows=0 loops=4120)",
+        "                                -> Single-row covering index lookup on card_presentation_cutover_applications using PRIMARY (predicate)   (actual time=0.00109..0.00109 rows=0 loops=4120)",
+        "                    -> Single-row index lookup on study_progress_subjects_1 using uq_sp_subject_user_note (predicate)), with index condition: <if>(predicate), (predicate) (actual time=0.00488..0.00491 rows=1 loops=113680)",
+        "                    -> Limit: 1 row(predicate)   (actual time=0.00507..0.00507 rows=0 loops=113680)",
+        "                        -> Filter: (predicate) and (predicate)))   (actual time=0.00495..0.00495 rows=0 loops=113680)",
+        "                            -> Index lookup on study_progress_subjects_2 using ix_sp_subject_live_note (predicate), with index condition: (predicate)   (actual time=0.00423..0.00458 rows=1.03 loops=113680)"
+      ]
+    },
+    {
+      "endpoint": "overview",
+      "lines": [
+        "-> Table scan on <temporary>   (actual time=3716..3716 rows=34 loops=1)",
+        "    -> Aggregate using temporary table   (actual time=3716..3716 rows=34 loops=1)",
+        "        -> Table scan on availability   (actual time=3690..3705 rows=42968 loops=1)",
+        "            -> Materialize   (actual time=3690..3690 rows=42968 loops=1)",
+        "                -> Filter: (predicate) is false) or (predicate)) and (predicate) or (predicate)) and (predicate)) = 'review') and (predicate)) then study_progress_subject (actual time=2919..3366 rows=42968 loops=1)",
+        "                    -> Nested loop left join   (actual time=2919..3333 rows=113680 loops=1)",
+        "                        -> Table scan on learner_cards   (actual time=2919..2953 rows=113680 loops=1)",
+        "                            -> Materialize   (actual time=2919..2919 rows=113680 loops=1)",
+        "                                -> Table scan on <temporary>   (actual time=2812..2837 rows=113680 loops=1)",
+        "                                    -> Temporary table with deduplication   (actual time=2812..2812 rows=113680 loops=1)",
+        "                                        -> Nested loop inner join   (actual time=1775..2342 rows=113680 loops=1)",
+        "                                            -> Table scan on learner_presentations   (actual time=1775..1815 rows=113680 loops=1)",
+        "                                                -> Materialize   (actual time=1775..1775 rows=113680 loops=1)",
+        "                                                    -> Table scan on <temporary>   (actual time=1657..1685 rows=113680 loops=1)",
+        "                                                        -> Temporary table with deduplication   (actual time=1657..1657 rows=113680 loops=1)",
+        "                                                            -> Table scan on learner_presentations_all   (actual time=1199..1232 rows=113680 loops=1)",
+        "                                                                -> Union all materialize   (actual time=1199..1199 rows=113680 loops=1)",
+        "                                                                    -> Filter: (predicate) or exists(predicate) is false or exists(predicate) is false)   (actual time=0.18..1077 rows=113680 loops=1)",
+        "                                                                        -> Nested loop left join   (actual time=0.179..1038 rows=113680 loops=1)",
+        "                                                                            -> Nested loop inner join   (actual time=0.151..606 rows=113680 loops=1)",
+        "                                                                                -> Nested loop inner join   (actual time=0.0641..69.6 rows=115863 loops=1)",
+        "                                                                                    -> Filter: (predicate)   (actual time=0.0468..0.369 rows=34 loops=1)",
+        "                                                                                        -> Table scan on study_applications   (actual time=0.045..0.343 rows=34 loops=1)",
+        "                                                                                    -> Covering index lookup on notes using ix_notes_note_type_id (predicate)   (actual time=0.0501..1.84 rows=3408 loops=34)",
+        "                                                                                -> Filter: (predicate)   (actual time=0.00439..0.00447 rows=0.981 loops=115863)",
+        "                                                                                    -> Single-row index lookup on notes using PRIMARY (predicate)   (actual time=0.00424..0.00426 rows=1 loops=115863)",
+        "                                                                            -> Single-row covering index lookup on card_presentation_aliases using uq_presentation_alias_n (actual time=0.00362..0.00365 rows=0.964 loops=113680)",
+        "                                                                            -> Limit: 1 row(predicate)   (actual time=0.00489..0.00492 rows=1 loops=4120)",
+        "                                                                                -> Single-row covering index lookup on card_presentation_cutover_notes using PRIMARY (pred (actual time=0.00478..0.00478 rows=1 loops=4120)",
+        "                                                                            -> Limit: 1 row(predicate)   (actual time=0.00126..0.00126 rows=0 loops=4120)",
+        "                                                                                -> Single-row covering index lookup on card_presentation_cutover_applications using PRIMAR (actual time=0.00114..0.00114 rows=0 loops=4120)",
+        "                                                                    -> Filter: (predicate) and exists(predicate) and exists(predicate)) or (predicate) or exists(predicate (actual time=0.0478..0.0478 rows=0 loops=1)",
+        "                                                                        -> Nested loop left join   (actual time=0.0476..0.0476 rows=0 loops=1)",
+        "                                                                            -> Nested loop inner join   (actual time=0.0471..0.0471 rows=0 loops=1)",
+        "                                                                                -> Nested loop inner join   (actual time=0.0469..0.0469 rows=0 loops=1)",
+        "                                                                                    -> Nested loop inner join   (actual time=0.0468..0.0468 rows=0 loops=1)",
+        "                                                                                        -> Nested loop inner join   (actual time=0.0467..0.0467 rows=0 loops=1)",
+        "                                                                                            -> Filter: (predicate) and (predicate) and (predicate) or exists(predicate) is (actual time=0.0464..0.0464 rows=0 loops=1)",
+        "                                                                                                -> Index lookup on deck_installs using ix_deck_installs_user_id (predicate (actual time=0.0462..0.0462 rows=0 loops=1)",
+        "                                                                                                    -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                        -> Filter: (predicate) is true)   (never executed)",
+        "                                                                                                            -> Single-row index lookup on deck_releases using PRIMARY (pre (never executed)",
+        "                                                                                                    -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                        -> Filter: (predicate) is true)   (never executed)",
+        "                                                                                                            -> Single-row index lookup on deck_releases using PRIMARY (pre (never executed)",
+        "                                                                                                    -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                        -> Single-row covering index lookup on deck_releases using PRIMARY (never executed)",
+        "                                                                                                    -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                        -> Single-row covering index lookup on deck_releases using PRIMARY (never executed)",
+        "                                                                                            -> Index lookup on deck_clone_deck_maps using uq_clone_map_install_source (pre (never executed)",
+        "                                                                                        -> Filter: (predicate) or (predicate)) and (predicate) and exists(predicate) and e (never executed)",
+        "                                                                                            -> Index lookup on notes using ix_notes_deck_id (predicate)   (never executed)",
+        "                                                                                                -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                    -> Single-row covering index lookup on deck_releases using PRIMARY (pr (never executed)",
+        "                                                                                                -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                    -> Nested loop inner join   (never executed)",
+        "                                                                                                        -> Single-row index lookup on deck_releases using PRIMARY (predica (never executed)",
+        "                                                                                                        -> Filter: (predicate) or (predicate))   (never executed)",
+        "                                                                                                            -> Index lookup on deck_release_entity_memberships using uq_de (never executed)",
+        "                                                                                                -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                    -> Single-row covering index lookup on deck_releases using PRIMARY (pr (never executed)",
+        "                                                                                    -> Filter: (predicate) and exists(predicate) and exists(predicate)) or (predicate) or  (never executed)",
+        "                                                                                        -> Single-row index lookup on notes using PRIMARY (predicate)   (never executed)",
+        "                                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                -> Single-row covering index lookup on deck_releases using PRIMARY (predic (never executed)",
+        "                                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                -> Nested loop inner join   (never executed)",
+        "                                                                                                    -> Single-row index lookup on deck_releases using PRIMARY (predicate)  (never executed)",
+        "                                                                                                    -> Filter: (predicate) or (predicate))   (never executed)",
+        "                                                                                                        -> Index lookup on deck_release_entity_memberships using uq_deck_r (never executed)",
+        "                                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                                -> Single-row covering index lookup on deck_releases using PRIMARY (predic (never executed)",
+        "                                                                                -> Filter: (predicate) and exists(predicate)) or (predicate) is false and (predicate))) an (never executed)",
+        "                                                                                    -> Index lookup on study_applications using uq_study_applications_note_type_template_o (never executed)",
+        "                                                                                        -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                            -> Filter: (predicate) is true)   (never executed)",
+        "                                                                                                -> Single-row index lookup on deck_releases using PRIMARY (predicate)   (never executed)",
+        "                                                                                        -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                            -> Filter: (predicate) and (predicate)) = 1))   (never executed)",
+        "                                                                                                -> Single-row index lookup on deck_release_template_pins using PRIMARY (pr (never executed)",
+        "                                                                                        -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                            -> Filter: (predicate) is true)   (never executed)",
+        "                                                                                                -> Single-row index lookup on deck_releases using PRIMARY (predicate)   (never executed)",
+        "                                                                                        -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                            -> Single-row covering index lookup on deck_releases using PRIMARY (predicate) (never executed)",
+        "                                                                                        -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                            -> Nested loop inner join   (never executed)",
+        "                                                                                                -> Single-row index lookup on deck_releases using PRIMARY (predicate)   (never executed)",
+        "                                                                                                -> Filter: (predicate) or (predicate))   (never executed)",
+        "                                                                                                    -> Index lookup on deck_release_entity_memberships using uq_deck_relea (never executed)",
+        "                                                                                        -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                            -> Single-row covering index lookup on deck_releases using PRIMARY (predicate) (never executed)",
+        "                                                                            -> Single-row index lookup on card_presentation_aliases using uq_presentation_alias_note_appli (never executed)",
+        "                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                -> Single-row covering index lookup on deck_releases using PRIMARY (predicate)   (never executed)",
+        "                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                -> Nested loop inner join   (never executed)",
+        "                                                                                    -> Single-row index lookup on deck_releases using PRIMARY (predicate)   (never executed)",
+        "                                                                                    -> Filter: (predicate) or (predicate))   (never executed)",
+        "                                                                                        -> Index lookup on deck_release_entity_memberships using uq_deck_release_membershi (never executed)",
+        "                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                -> Single-row covering index lookup on deck_releases using PRIMARY (predicate)   (never executed)",
+        "                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                -> Single-row covering index lookup on card_presentation_cutover_notes using PRIMARY (pred (never executed)",
+        "                                                                            -> Limit: 1 row(predicate)   (never executed)",
+        "                                                                                -> Single-row covering index lookup on card_presentation_cutover_applications using PRIMAR (never executed)",
+        "                                            -> Limit: 1 row(predicate)   (actual time=0.00443..0.00445 rows=1 loops=113680)",
+        "                                                -> Filter: (predicate) and (predicate))   (actual time=0.00431..0.00431 rows=1 loops=113680)",
+        "                                                    -> Index lookup on study_progress_subjects using ix_sp_subject_live_note (predicate)   (actual time=0.00414..0.00414 rows=1 loops=113680)",
+        "                        -> Single-row index lookup on study_progress_subjects_1 using uq_sp_subject_user_note (predicate)), with index condition: <if>(predicate), (predic (actual time=0.00317..0.0032 rows=1 loops=113680)",
+        "                    -> Limit: 1 row(predicate)   (actual time=0.00453..0.00453 rows=0 loops=42968)",
+        "                        -> Filter: (predicate) and (predicate)))   (actual time=0.00441..0.00441 rows=0 loops=42968)",
+        "                            -> Index lookup on study_progress_subjects_2 using ix_sp_subject_live_note (predicate), with index condition: (predicate)   (actual time=0.00373..0.00407 rows=1.08 loops=42968)"
+      ]
+    }
+  ],
+  "live_nginx_gunicorn_loopback_samples": [
+    {
+      "iteration": 1,
+      "path": "/api/session",
+      "status": 200,
+      "ttfb_ms": 14.499,
+      "total_ms": 14.542,
+      "wire_bytes": 648,
+      "encoding": null,
+      "type": "application/json"
+    },
+    {
+      "iteration": 1,
+      "path": "/api/dashboard?compact=1",
+      "status": 200,
+      "ttfb_ms": 3280.348,
+      "total_ms": 3287.997,
+      "wire_bytes": 335015,
+      "encoding": null,
+      "type": "application/json"
+    },
+    {
+      "iteration": 1,
+      "path": "/api/statistics/overview?year=2026",
+      "status": 200,
+      "ttfb_ms": 3881.711,
+      "total_ms": 3881.832,
+      "wire_bytes": 53023,
+      "encoding": null,
+      "type": "application/json"
+    },
+    {
+      "iteration": 2,
+      "path": "/api/session",
+      "status": 200,
+      "ttfb_ms": 8.324,
+      "total_ms": 8.348,
+      "wire_bytes": 648,
+      "encoding": null,
+      "type": "application/json"
+    },
+    {
+      "iteration": 2,
+      "path": "/api/dashboard?compact=1",
+      "status": 200,
+      "ttfb_ms": 4284.298,
+      "total_ms": 4292.661,
+      "wire_bytes": 335015,
+      "encoding": null,
+      "type": "application/json"
+    },
+    {
+      "iteration": 2,
+      "path": "/api/statistics/overview?year=2026",
+      "status": 200,
+      "ttfb_ms": 4179.995,
+      "total_ms": 4180.312,
+      "wire_bytes": 53023,
+      "encoding": null,
+      "type": "application/json"
+    }
+  ],
+  "public_asset_observations": {
+    "entry": {
+      "file": "index-DZJSx_E-.js",
+      "wire_bytes": 99148,
+      "decoded_bytes": 356105,
+      "ms": 107.9,
+      "cf_cache": "HIT",
+      "encoding": "gzip"
+    },
+    "dashboard": {
+      "file": "DashboardPage-qvSNLytu.js",
+      "wire_bytes": 10418,
+      "decoded_bytes": 38071,
+      "ms": 96.6,
+      "cf_cache": "HIT",
+      "encoding": "gzip"
+    },
+    "public_source_map_confirms_overview_waits_for_dashboard": true,
+    "old_backend_bundle_dashboard_url_returned_html_and_was_excluded": true
+  },
+  "limits": [
+    "Three sequential audit samples and two live origin samples are not p95 or a load test.",
+    "An in-process audit uses the deployed code but a separate Flask process and root socket DB connection with transaction_read_only=1; no account passwords or response bodies are retained.",
+    "First audit session includes process-lazy initialization; live serving session was 8-15 ms.",
+    "EXPLAIN ANALYZE executes SELECT and adds instrumentation overhead; its nested times must not be added together.",
+    "I/O deltas are global and can include other MySQL traffic; no controlled empty or cold buffer pool was created.",
+    "Journal records completion timestamps, without request start/duration, so 14.473 seconds is not an exact API duration.",
+    "No authenticated cold browser navigation, DOM/paint profile, client network trace, or controlled before/after deployment comparison was captured.",
+    "Origin JSON had no gzip; public Cloudflare responses can gzip, so origin body size is not assumed to equal browser wire bytes.",
+    "The October 4 baseline used different code and a smaller presentation population; it is historical context, not proof of a like-for-like regression."
+  ],
+  "safety": {
+    "application_code_modified": false,
+    "production_configuration_modified": false,
+    "services_restarted": false,
+    "database_rows_modified": false,
+    "audit_sql_mutation_guard": true,
+    "audit_transaction_read_only": 1,
+    "contains_credentials_or_auth_cookies": false,
+    "contains_response_bodies_or_note_content": false,
+    "contains_sql_parameter_values": false
+  }
+}

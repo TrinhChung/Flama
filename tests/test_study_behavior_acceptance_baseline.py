@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from app import create_app
 from app.connect import connect_bp
-from app.services import flashcards_share_service, study_composition_service, study_service, study_session_service, user_api_token_service
+from app.services import browse_card_service, flashcards_share_service, study_composition_service, study_service, study_session_service, user_api_token_service
 from app.services.anki_scheduler import _day_index
 from app.services.connect.actions import add_note
 from app.services.mcp import study_tools as mcp_study_tools
@@ -504,6 +504,56 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                     expected_after_ordinal,
                     f"Timezone {tz_name} at {utc_after} UTC should resolve to today's day index",
                 )
+
+    def test_installed_browse_due_filters_use_learner_nullable_review_state(self):
+        now = datetime(2026, 8, 29, 10)
+        with self.app.app_context():
+            initial_notes, initial_cards = Note.query.count(), Card.query.count()
+            source_fields = {note.id: dict(note.field_values) for note in Note.query.all()}
+            item = DeckMarketplaceItem(
+                source_deck_id=self.deck_id, source_note_type_id=self.note_type_id,
+                owner_user_id=self.author_id, title='Nullable review anchors',
+                publish_status='published', pricing_mode='free', price_amount_minor=0,
+            )
+            db.session.add(item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(item)
+            db.session.commit()
+            installed, error, _field, status = flashcards_share_service.install_shared_deck_item(
+                deck_item_id=item.id, user_id=self.learner_id, publish_statuses_visible={'published'},
+            )
+            self.assertEqual(status, 201, error)
+            local_deck_id = installed['installed_deck_id']
+            scope = flashcards_share_service.resolve_clone_scope_for_local_deck(
+                user_id=self.learner_id, local_deck_id=local_deck_id,
+            )
+            learner_subject = stage_note_state(db.session, user_id=self.learner_id,
+                card_id=self.card_a_id, now=now, queue='review', due_day=None,
+                due_at=now + timedelta(hours=1), interval_days=1)
+            stage_note_state(db.session, user_id=self.author_id,
+                card_id=self.card_b_id, now=now, queue='review', due_day=None,
+                due_at=now - timedelta(days=1), interval_days=1)
+            db.session.commit()
+            self.assertIsNone(learner_subject.due_day)
+            counts = query_study_queue_counts(flashcards_share_service.query_clone_scope_cards(scope),
+                user_id=self.learner_id, now=now, timezone_name='Asia/Ho_Chi_Minh')
+            self.assertEqual(counts, (1, 0, 1))
+
+        self._login(self.learner_id)
+        with patch.object(browse_card_service, '_utcnow', return_value=now):
+            for status in ('due', 'review'):
+                response = self.client.get('/api/browse/cards', query_string={
+                    'deck_id': local_deck_id, 'status': status,
+                })
+                self.assertEqual(response.status_code, 200, response.get_json())
+                page = response.get_json()
+                self.assertEqual(page['total'], counts[2])
+                self.assertEqual([row['card_id'] for row in page['items']], [self.card_a_id])
+        with self.app.app_context():
+            self.assertEqual((Note.query.count(), Card.query.count()), (initial_notes, initial_cards))
+            self.assertEqual({note.id: dict(note.field_values) for note in Note.query.all()}, source_fields)
+            self.assertIsNone(StudyProgressSubject.query.filter_by(
+                learner_user_id=self.author_id, live_note_id=self.note_a_id).first())
 
     def test_shared_deck_logical_overlay_via_real_service_path(self):
         """Real install/query/review path proves zero source card duplication, zero source note mutation, real local-added content, and isolated learner progress."""

@@ -5,12 +5,11 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import LargeBinary, and_, case, cast, func, or_, select, text, union_all
+from sqlalchemy import and_, case, func, or_, select, text, union_all
 
 from models import db
 from models.card import Card
 from models.flashcard import DeckCloneDeckMap, DeckInstall, Note
-from models.study_progress_subject import StudyProgressSubject
 from models.flashcard import ReviewEvent
 from app.services.anki_scheduler import _day_index
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
@@ -64,23 +63,22 @@ def learner_presentation_scope(*, learner_user_id: int, scope_deck_ids: list[int
 
 
 def query_consolidated_forecast_rows(*, user_id: int, scope_deck_ids: list[int] | None):
-    """Current subject availability and interval for each scoped presentation.
+    """Current availability/interval once per scoped Note, with Card weight.
 
     Multiple installs of the same source presentation contribute once to a
     collection forecast; a scoped local deck still resolves its own install.
     Subject identity/presence guards share the canonical aggregate contract.
     """
-    from app.repositories.note_analytics_read_repository import subject_integrity_violation
+    from app.repositories.note_analytics_read_repository import note_rows
+    from app.repositories.note_analytics_scope_repository import collection_note_scope
 
-    scope = learner_presentation_scope(learner_user_id=user_id, scope_deck_ids=scope_deck_ids)
-    subject = StudyProgressSubject
+    scope = collection_note_scope(db.session, learner_user_id=user_id, deck_ids=scope_deck_ids)
+    rows = note_rows(scope, learner_user_id=user_id, include_state=True).subquery("forecast_notes")
     return db.session.execute(select(
-        scope.c.card_id, subject_integrity_violation(subject, note_id=scope.c.note_id, learner_user_id=int(user_id)),
-        subject.normalized_queue, subject.due_at, subject.due_day, subject.is_suspended,
-        subject.state_payload["type"].as_string(), subject.state_payload["interval_days"].as_string(),
-    ).select_from(scope).outerjoin(subject, and_(
-        subject.learner_user_id == int(user_id), subject.logical_note_key == cast(scope.c.note_id, LargeBinary),
-    )).distinct().execution_options(include_retired_cards=True)).all()
+        rows.c.note_id, rows.c.violation, rows.c.queue, rows.c.due_at,
+        rows.c.due_day, rows.c.is_suspended, rows.c.state_type,
+        rows.c.interval_token, rows.c.card_count,
+    ).execution_options(include_retired_cards=True)).all()
 
 
 def can_use_mysql_local_day_sql(*, timezone_name: str) -> bool:
@@ -190,9 +188,7 @@ def query_canonical_future_due_day_counts_mysql(
     scope = note_reads.learner_note_scope(
         learner_user_id=user_id, storage_profile=storage_profile
     )
-    rows = note_reads.note_card_rows(
-        scope, learner_user_id=user_id, storage_profile=storage_profile
-    ).subquery("availability")
+    rows = note_reads.note_rows(scope, learner_user_id=user_id).subquery("availability")
     # TO_DAYS has a year-zero origin; Python date ordinals start at 0001-01-01.
     # Review due_day overrides due_at; every other queue uses its UTC timestamp.
     day = case(
@@ -209,7 +205,7 @@ def query_canonical_future_due_day_counts_mysql(
     )
     folded = func.greatest(day, start_local_day.toordinal())
     statement = (
-        select(folded.label("day_index"), func.count().label("cards"))
+        select(folded.label("day_index"), func.sum(rows.c.card_count).label("cards"))
         .select_from(rows)
         .where(
             or_(rows.c.is_suspended.is_(False), rows.c.is_suspended.is_(None)),

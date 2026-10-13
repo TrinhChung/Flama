@@ -1,0 +1,454 @@
+{
+  "schema_version": "note-centric-analytics.v1",
+  "observed_date": "2026-10-13",
+  "timezone": "Asia/Tokyo",
+  "measurement_environment": {
+    "release": "fb685882099d20d90479d234402ae3b098076f89",
+    "mysql_read_only": 1,
+    "frozen_now_utc": "2026-10-13T11:30:58.712028",
+    "timezone": "Asia/Tokyo",
+    "note_count_enabled": true,
+    "deck_count_mode": "raw",
+    "candidate_source_sha256": {
+      "app.repositories.note_analytics_scope_repository": "7ce76b885a1fa470c557a369c36cf3b3a122fbce5bb4c828cf8c5ebc4971fa63",
+      "app.repositories.note_analytics_read_repository": "47c565f02c7fbfb03246e797f4d6cac2250093507cfc5139efb91eb1f2a4a573",
+      "app.repositories.stats_query_repository": "aa6e325ce0cc8f5976e3ced64fee30920d1ec35d088c8fedcb8c15183d80c387",
+      "app.services.deck_aggregation_service": "26a757300d1b2cdee16a54e69f0dd24c869cc527f3dac7d6b17d2d659f7556fb",
+      "app.services.stats_overview": "e554d5efb7130183335feafebd500aaa7e093c972656fb96b672f60feeaa72ca",
+      "app.services.stats_today_future": "d34402dd0fdc6643f7ff336a41894d6629b0cb9fab06398682bc7ece11a7b422"
+    }
+  },
+  "final_module_source_sha256": {
+    "app.repositories.note_analytics_scope_repository": "7ce76b885a1fa470c557a369c36cf3b3a122fbce5bb4c828cf8c5ebc4971fa63",
+    "app.repositories.note_analytics_read_repository": "47c565f02c7fbfb03246e797f4d6cac2250093507cfc5139efb91eb1f2a4a573",
+    "app.repositories.stats_query_repository": "aa6e325ce0cc8f5976e3ced64fee30920d1ec35d088c8fedcb8c15183d80c387",
+    "app.services.deck_aggregation_service": "26a757300d1b2cdee16a54e69f0dd24c869cc527f3dac7d6b17d2d659f7556fb",
+    "app.services.stats_overview": "e554d5efb7130183335feafebd500aaa7e093c972656fb96b672f60feeaa72ca",
+    "app.services.stats_today_future": "b157217119fe16f20a772e6037765959af55e06077b3c63184221f7e0eeb8ea4"
+  },
+  "source_change_since_measurement": "stats_today_future docstring only; scope/install-check description clarified",
+  "production_implementation_status": "working tree candidate; production release unchanged",
+  "samples": [
+    {
+      "variant": "baseline",
+      "round": 1,
+      "metric": "dashboard",
+      "elapsed_ms": 3760.632,
+      "sql_ms": 3668.759,
+      "sql_count": 8,
+      "decoded_bytes": 365623,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 3427.222,
+      "top_sql_rows": 1468
+    },
+    {
+      "variant": "baseline",
+      "round": 1,
+      "metric": "overview",
+      "elapsed_ms": 4199.843,
+      "sql_ms": 4168.277,
+      "sql_count": 6,
+      "decoded_bytes": 58902,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 3731.042,
+      "top_sql_rows": 34
+    },
+    {
+      "variant": "baseline",
+      "round": 1,
+      "metric": "today_future",
+      "elapsed_ms": 5758.486,
+      "sql_ms": 4952.787,
+      "sql_count": 5,
+      "decoded_bytes": 4684,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 4949.687,
+      "top_sql_rows": 113680
+    },
+    {
+      "variant": "candidate",
+      "round": 1,
+      "metric": "dashboard",
+      "elapsed_ms": 2253.905,
+      "sql_ms": 2045.398,
+      "sql_count": 7,
+      "decoded_bytes": 365623,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 1780.537,
+      "top_sql_rows": 1468
+    },
+    {
+      "variant": "candidate",
+      "round": 1,
+      "metric": "overview",
+      "elapsed_ms": 2090.556,
+      "sql_ms": 2057.998,
+      "sql_count": 7,
+      "decoded_bytes": 58902,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 1700.121,
+      "top_sql_rows": 34
+    },
+    {
+      "variant": "candidate",
+      "round": 1,
+      "metric": "today_future",
+      "elapsed_ms": 2538.184,
+      "sql_ms": 2234.035,
+      "sql_count": 6,
+      "decoded_bytes": 4685,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 2229.596,
+      "top_sql_rows": 39336
+    },
+    {
+      "variant": "candidate",
+      "round": 2,
+      "metric": "dashboard",
+      "elapsed_ms": 1968.39,
+      "sql_ms": 1900.212,
+      "sql_count": 7,
+      "decoded_bytes": 365623,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 1687.544,
+      "top_sql_rows": 1468
+    },
+    {
+      "variant": "candidate",
+      "round": 2,
+      "metric": "overview",
+      "elapsed_ms": 2078.191,
+      "sql_ms": 2057.705,
+      "sql_count": 7,
+      "decoded_bytes": 58902,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 1713.897,
+      "top_sql_rows": 34
+    },
+    {
+      "variant": "candidate",
+      "round": 2,
+      "metric": "today_future",
+      "elapsed_ms": 2450.232,
+      "sql_ms": 2141.313,
+      "sql_count": 6,
+      "decoded_bytes": 4685,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 2136.942,
+      "top_sql_rows": 39336
+    },
+    {
+      "variant": "baseline",
+      "round": 2,
+      "metric": "dashboard",
+      "elapsed_ms": 3314.585,
+      "sql_ms": 3250.518,
+      "sql_count": 7,
+      "decoded_bytes": 365623,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 3041.3,
+      "top_sql_rows": 1468
+    },
+    {
+      "variant": "baseline",
+      "round": 2,
+      "metric": "overview",
+      "elapsed_ms": 4113.639,
+      "sql_ms": 4091.753,
+      "sql_count": 6,
+      "decoded_bytes": 58902,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 3748.787,
+      "top_sql_rows": 34
+    },
+    {
+      "variant": "baseline",
+      "round": 2,
+      "metric": "today_future",
+      "elapsed_ms": 5909.978,
+      "sql_ms": 5046.348,
+      "sql_count": 5,
+      "decoded_bytes": 4684,
+      "same_snapshot_parity": true,
+      "top_sql_ms": 5042.54,
+      "top_sql_rows": 113680
+    }
+  ],
+  "summary": {
+    "dashboard": {
+      "variants": {
+        "baseline": {
+          "samples": 2,
+          "median_ms": 3537.6085000000003,
+          "min_ms": 3314.585,
+          "max_ms": 3760.632
+        },
+        "candidate": {
+          "samples": 2,
+          "median_ms": 2111.1475,
+          "min_ms": 1968.39,
+          "max_ms": 2253.905
+        }
+      },
+      "same_snapshot_parity": true,
+      "speedup": 1.6756804060351067
+    },
+    "overview": {
+      "variants": {
+        "baseline": {
+          "samples": 2,
+          "median_ms": 4156.741,
+          "min_ms": 4113.639,
+          "max_ms": 4199.843
+        },
+        "candidate": {
+          "samples": 2,
+          "median_ms": 2084.3734999999997,
+          "min_ms": 2078.191,
+          "max_ms": 2090.556
+        }
+      },
+      "same_snapshot_parity": true,
+      "speedup": 1.9942399958548698
+    },
+    "today_future": {
+      "variants": {
+        "baseline": {
+          "samples": 2,
+          "median_ms": 5834.232,
+          "min_ms": 5758.486,
+          "max_ms": 5909.978
+        },
+        "candidate": {
+          "samples": 2,
+          "median_ms": 2494.208,
+          "min_ms": 2450.232,
+          "max_ms": 2538.184
+        }
+      },
+      "same_snapshot_parity": true,
+      "speedup": 2.3391120548085804
+    }
+  },
+  "candidate_actual_plans": [
+    {
+      "metric": "dashboard",
+      "lines": [
+        "-> Table scan on <temporary>   (actual time=1858..1858 rows=1468 loops=1)",
+        "    -> Aggregate using temporary table   (actual time=1858..1858 rows=1468 loops=1)",
+        "        -> Table scan on rows   (actual time=1794..1801 rows=39336 loops=1)",
+        "            -> Materialize   (actual time=1794..1794 rows=39336 loops=1)",
+        "                -> Nested loop left join   (actual time=903..1500 rows=39336 loops=1)",
+        "                    -> Filter: (predicate) then analytics_application_counts.active_count else (predicate)) end) > 0)   (actual time=903..1309 rows=39336 loops=1)",
+        "                        -> Nested loop left join   (actual time=903..1299 rows=39336 loops=1)",
+        "                            -> Nested loop left join   (actual time=0.422..332 rows=39336 loops=1)",
+        "                                -> Nested loop inner join   (actual time=0.394..250 rows=39336 loops=1)",
+        "                                    -> Table scan on analytics_application_counts   (actual time=0.233..0.255 rows=31 loops=1)",
+        "                                        -> Materialize   (actual time=0.233..0.233 rows=31 loops=1)",
+        "                                            -> Table scan on <temporary>   (actual time=0.22..0.223 rows=31 loops=1)",
+        "                                                -> Aggregate using temporary table   (actual time=0.22..0.22 rows=31 loops=1)",
+        "                                                    -> Nested loop left join   (actual time=0.0976..0.174 rows=34 loops=1)",
+        "                                                        -> Filter: (predicate)   (actual time=0.0648..0.095 rows=34 loops=1)",
+        "                                                            -> Table scan on study_applications   (actual time=0.0608..0.0871 rows=34 loops=1)",
+        "                                                        -> Single-row covering index lookup on card_presentation_cutover_applications using PRIMARY (predicate)   (actual time=0.00211..0.00213 rows=0.971 loops=34)",
+        "                                    -> Filter: (predicate) and (predicate)))   (actual time=0.948..7.97 rows=1269 loops=31)",
+        "                                        -> Index lookup on notes using ix_notes_note_type_id (predicate)   (actual time=0.61..7.69 rows=1339 loops=31)",
+        "                                -> Single-row covering index lookup on card_presentation_cutover_notes using PRIMARY (predicate)   (actual time=0.00192..0.00195 rows=1 loops=39336)",
+        "                            -> Index lookup on analytics_original_alias_counts using <auto_key0> (predicate)   (actual time=0.0242..0.0244 rows=1 loops=39336)",
+        "                                -> Materialize   (actual time=903..903 rows=39336 loops=1)",
+        "                                    -> Table scan on <temporary>   (actual time=840..845 rows=39336 loops=1)",
+        "                                        -> Aggregate using temporary table   (actual time=840..840 rows=39336 loops=1)",
+        "                                            -> Nested loop inner join   (actual time=541..717 rows=109560 loops=1)",
+        "                                                -> Filter: (predicate) and (predicate))   (actual time=541..678 rows=109560 loops=1)",
+        "                                                    -> Inner hash join (predicate)=<hash>(predicate)), (predicate)=<hash>(predicate))   (actual time=541..623 rows=109560 loops=1)",
+        "                                                        -> Filter: (predicate)   (actual time=0.103..0.183 rows=34 loops=1)",
+        "                                                            -> Table scan on study_applications   (actual time=0.0943..0.168 rows=34 loops=1)",
+        "                                                            -> Nested loop inner join   (actual time=1.39..442 rows=109560 loops=1)",
+        "                                                                -> Nested loop inner join   (actual time=1.34..236 rows=39336 loops=1)",
+        "                                                                    -> Filter: (predicate))   (actual time=1.28..158 rows=39336 loops=1)",
+        "                                                                        -> Index lookup on notes using ix_notes_user_id (predicate)   (actual time=1.28..152 rows=39336 loops=1)",
+        "                                                                    -> Single-row covering index lookup on card_presentation_cutover_notes using PRIMARY (predicate)   (actual time=0.0018..0.00183 rows=1 loops=39336)",
+        "                                                                -> Covering index lookup on card_presentation_aliases using uq_presentation_alias_note_application (predic (actual time=0.00419..0.00491 rows=2.79 loops=39336)",
+        "                                                -> Single-row covering index lookup on card_presentation_cutover_applications using PRIMARY (predicate)   (actual time=183e-6..211e-6 rows=1 loops=109560)",
+        "                    -> Single-row index lookup on study_progress_subjects_1 using uq_sp_subject_user_note (predicate)), with index condition: <if>(predicate), (predicate) (actual time=0.00467..0.0047 rows=1 loops=39336)",
+        "                    -> Limit: 1 row(predicate)   (actual time=0.00498..0.00498 rows=0 loops=39336)",
+        "                        -> Filter: (predicate) and (predicate)))   (actual time=0.00486..0.00486 rows=0 loops=39336)",
+        "                            -> Index lookup on study_progress_subjects_2 using ix_sp_subject_live_note (predicate), with index condition: (predicate)   (actual time=0.00412..0.00448 rows=1.03 loops=39336)"
+      ]
+    },
+    {
+      "metric": "overview",
+      "lines": [
+        "-> Table scan on <temporary>   (actual time=1742..1742 rows=34 loops=1)",
+        "    -> Aggregate using temporary table   (actual time=1742..1742 rows=34 loops=1)",
+        "        -> Table scan on availability   (actual time=1735..1737 rows=15095 loops=1)",
+        "            -> Materialize   (actual time=1735..1735 rows=15095 loops=1)",
+        "                -> Filter: (predicate) is false) or (predicate)) and (predicate) or (predicate)) and (predicate)) = 'review') and (predicate)) then study_progress_subject (actual time=844..1621 rows=15095 loops=1)",
+        "                    -> Nested loop left join   (actual time=841..1606 rows=39336 loops=1)",
+        "                        -> Filter: (predicate) then analytics_application_counts.active_count else (predicate)) end) > 0)   (actual time=841..1475 rows=39336 loops=1)",
+        "                            -> Nested loop left join   (actual time=841..1465 rows=39336 loops=1)",
+        "                                -> Nested loop left join   (actual time=0.427..559 rows=39336 loops=1)",
+        "                                    -> Nested loop inner join   (actual time=0.335..476 rows=39336 loops=1)",
+        "                                        -> Table scan on analytics_application_counts   (actual time=0.232..0.256 rows=31 loops=1)",
+        "                                            -> Materialize   (actual time=0.232..0.232 rows=31 loops=1)",
+        "                                                -> Table scan on <temporary>   (actual time=0.219..0.222 rows=31 loops=1)",
+        "                                                    -> Aggregate using temporary table   (actual time=0.218..0.218 rows=31 loops=1)",
+        "                                                        -> Nested loop left join   (actual time=0.06..0.166 rows=34 loops=1)",
+        "                                                            -> Filter: (predicate)   (actual time=0.0476..0.0976 rows=34 loops=1)",
+        "                                                                -> Table scan on study_applications   (actual time=0.0434..0.0887 rows=34 loops=1)",
+        "                                                            -> Single-row covering index lookup on card_presentation_cutover_applications using PRIMARY (predicate)   (actual time=0.00179..0.00181 rows=0.971 loops=34)",
+        "                                        -> Filter: (predicate) and (predicate) is not null))   (actual time=0.921..15.2 rows=1269 loops=31)",
+        "                                            -> Index lookup on notes using ix_notes_note_type_id (predicate)   (actual time=0.637..7.02 rows=1339 loops=31)",
+        "                                                -> Limit: 1 row(predicate)   (actual time=0.00586..0.00589 rows=1 loops=39336)",
+        "                                                    -> Filter: (predicate) and (predicate))   (actual time=0.00573..0.00573 rows=1 loops=39336)",
+        "                                                        -> Index lookup on study_progress_subjects using ix_sp_subject_live_note (predicate), with index condition: (predi (actual time=0.00556..0.00556 rows=1 loops=39336)",
+        "                                    -> Single-row covering index lookup on card_presentation_cutover_notes using PRIMARY (predicate)   (actual time=0.00192..0.00194 rows=1 loops=39336)",
+        "                                -> Index lookup on analytics_original_alias_counts using <auto_key0> (predicate)   (actual time=0.0226..0.0228 rows=1 loops=39336)",
+        "                                    -> Materialize   (actual time=841..841 rows=39336 loops=1)",
+        "                                        -> Table scan on <temporary>   (actual time=791..796 rows=39336 loops=1)",
+        "                                            -> Aggregate using temporary table   (actual time=791..791 rows=39336 loops=1)",
+        "                                                -> Nested loop inner join   (actual time=501..675 rows=109560 loops=1)",
+        "                                                    -> Filter: (predicate) and (predicate))   (actual time=501..636 rows=109560 loops=1)",
+        "                                                        -> Inner hash join (predicate)=<hash>(predicate)), (predicate)=<hash>(predicate))   (actual time=501..579 rows=109560 loops=1)",
+        "                                                            -> Filter: (predicate)   (actual time=0.0591..0.107 rows=34 loops=1)",
+        "                                                                -> Table scan on study_applications   (actual time=0.0537..0.0968 rows=34 loops=1)",
+        "                                                                -> Nested loop inner join   (actual time=2.03..415 rows=109560 loops=1)",
+        "                                                                    -> Nested loop inner join   (actual time=2..219 rows=39336 loops=1)",
+        "                                                                        -> Index lookup on notes using ix_notes_user_id (predicate)   (actual time=1.98..148 rows=39336 loops=1)",
+        "                                                                        -> Single-row covering index lookup on card_presentation_cutover_notes using PRIMARY (predicate)   (actual time=0.00161..0.00164 rows=1 loops=39336)",
+        "                                                                    -> Covering index lookup on card_presentation_aliases using uq_presentation_alias_note_application (pr (actual time=0.00404..0.0047 rows=2.79 loops=39336)",
+        "                                                    -> Single-row covering index lookup on card_presentation_cutover_applications using PRIMARY (predicate)   (actual time=183e-6..209e-6 rows=1 loops=109560)",
+        "                        -> Single-row index lookup on study_progress_subjects_1 using uq_sp_subject_user_note (predicate)), with index condition: <if>(predicate), (predic (actual time=0.00315..0.00317 rows=1 loops=39336)",
+        "                    -> Limit: 1 row(predicate)   (actual time=0.00472..0.00472 rows=0 loops=15095)",
+        "                        -> Filter: (predicate) and (predicate)))   (actual time=0.00458..0.00458 rows=0 loops=15095)",
+        "                            -> Index lookup on study_progress_subjects_2 using ix_sp_subject_live_note (predicate), with index condition: (predicate)   (actual time=0.00381..0.00419 rows=1.08 loops=15095)"
+      ]
+    }
+  ],
+  "initial_candidate_summary": {
+    "dashboard": {
+      "variants": {
+        "baseline": {
+          "samples": 2,
+          "median_ms": 3623.555,
+          "min_ms": 3223.711,
+          "max_ms": 4023.399
+        },
+        "candidate": {
+          "samples": 2,
+          "median_ms": 2734.016,
+          "min_ms": 2588.233,
+          "max_ms": 2879.799
+        }
+      },
+      "same_snapshot_parity": true,
+      "speedup": 1.325359836957794
+    },
+    "overview": {
+      "variants": {
+        "baseline": {
+          "samples": 2,
+          "median_ms": 4111.9349999999995,
+          "min_ms": 4032.201,
+          "max_ms": 4191.669
+        },
+        "candidate": {
+          "samples": 2,
+          "median_ms": 4407.822,
+          "min_ms": 3901.021,
+          "max_ms": 4914.623
+        }
+      },
+      "same_snapshot_parity": true,
+      "speedup": 0.9328722893075082
+    },
+    "today_future": {
+      "variants": {
+        "baseline": {
+          "samples": 2,
+          "median_ms": 6280.5335,
+          "min_ms": 5792.809,
+          "max_ms": 6768.258
+        },
+        "candidate": {
+          "samples": 2,
+          "median_ms": 2883.8455000000004,
+          "min_ms": 2806.465,
+          "max_ms": 2961.226
+        }
+      },
+      "same_snapshot_parity": true,
+      "speedup": 2.177832862405423
+    }
+  },
+  "initial_candidate_not_accepted_for_heatmap": true,
+  "initial_candidate_issue": "MySQL semijoin expanded application-count/live-state intermediate to 31 x 39336 rows",
+  "query_invariants": [
+    "one canonical availability read per scoped Note",
+    "exact Card multiplicity; Note badges retain one Note per effective deck",
+    "P11 cutover absent-pair and immutable alias membership",
+    "ACTIVE owned applications; retired application pins allowed for installed releases",
+    "installed Note/application visibility and timestamp fallback retained",
+    "per-deck counts versus collection union/deduplication across installations",
+    "canonical logical-key join and separate live-identity probe retained",
+    "timezone, nullable due anchors, suspension/burial contracts retained"
+  ],
+  "validation": {
+    "focused_backend": {
+      "status": "PASS",
+      "tests": 105,
+      "files": [
+        "tests/test_deck_aggregation_service.py",
+        "tests/test_deck_count_projection.py",
+        "tests/test_deck_count_snapshots.py",
+        "tests/test_note_analytics_read.py",
+        "tests/test_note_stats_retirement.py",
+        "tests/test_stats_overview.py",
+        "tests/test_stats_today_future.py",
+        "tests/test_study_note_level_counts.py"
+      ]
+    },
+    "modular_runner": {
+      "status": "PASS",
+      "tests": 25
+    },
+    "disposable_local_mysql": {
+      "configured_database_modified": false,
+      "errors": 0,
+      "failures": 0,
+      "generated_schema": "flama_note_analytics_probe_5496_79577c82",
+      "mysql_version": "8.0.40",
+      "probe_database_dropped": true,
+      "status": "PASS",
+      "tests_run": 10
+    },
+    "same_snapshot_api_payload_parity": true,
+    "integer_and_nonfloat_parity": "exact",
+    "float_parity": {
+      "relative_tolerance": 1e-12,
+      "absolute_tolerance": 1e-09
+    }
+  },
+  "limits": [
+    "Two samples per variant/metric are not p95 or a concurrency/cold-browser benchmark.",
+    "Both variants read one read-only RR snapshot with one frozen clock.",
+    "Candidate modules executed in memory in an audit process, not in serving Gunicorn workers.",
+    "The sampled learner had no installations; installed-heavy performance is not claimed.",
+    "Database and OS caches and competing traffic were not controlled.",
+    "STRAIGHT_JOIN is restricted to MySQL alias aggregation; different workload distributions still require monitoring.",
+    "Canonical lookup counts shrink, but original alias membership still reads multiple aliases per Note.",
+    "Forecast daily_load weighted multiplication can change the final floating-point bit; counts remain exact.",
+    "No production schema, cache flags, buffer-pool size, release, or services were changed."
+  ],
+  "safety": {
+    "production_sql_writes": false,
+    "production_source_files_written": false,
+    "production_configuration_modified": false,
+    "services_restarted": false,
+    "audit_transaction_read_only": 1,
+    "statement_allowlist_enforced": true,
+    "contains_credentials": false,
+    "contains_response_bodies": false,
+    "contains_sql_parameter_values": false
+  }
+}

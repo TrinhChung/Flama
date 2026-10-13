@@ -106,7 +106,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
     def _query(self):
         return Card.query.join(Note, Note.id == Card.note_id).filter(Note.deck_id == self.deck.id)
 
-    def _oracle(self, *, timezone_name='UTC', query=None):
+    def _oracle(self, *, timezone_name='UTC', query=None, runtime=RUNTIME):
         cards = (query or self._query()).all()
         subjects = {row.live_note_id: row for row in StudyProgressSubject.query.all()}
         reads = {}
@@ -120,7 +120,7 @@ class NoteQueryRetirementTests(unittest.TestCase):
                 buried_until_day=subject.buried_until_day if subject else None,
                 card_created_at=card.created_at, card_order_key=card.order_key.encode(),
             ))
-        with patch('app.services.study_authority_read_service.resolve_scheduler_runtime_settings', return_value=RUNTIME):
+        with patch('app.services.study_authority_read_service.resolve_scheduler_runtime_settings', return_value=runtime):
             return summarize_study_authority_queue(cards=cards, reads_by_card_id=reads,
                 learner_user_id=self.user.id, now_utc=NOW, timezone_name=timezone_name)
 
@@ -238,6 +238,50 @@ class NoteQueryRetirementTests(unittest.TestCase):
     def _browse(self, **args):
         return browse_card_service.list_browse_cards(user_id=self.user.id, admin_mode=False,
             timezone_name='UTC', query_args={'deck_id': self.deck.id, 'per_page': 7, **args})
+
+    def test_browse_review_filters_match_study_for_nullable_anchors_and_local_boundaries(self):
+        timezones = ('UTC', 'Asia/Tokyo', 'America/New_York', 'Pacific/Honolulu')
+        boundaries = sorted({study_repository._next_day_boundary(
+            now=NOW, timezone_name=timezone_name, day_boundary_hour_local=hour,
+        ) for timezone_name in timezones for hour in (4, 17)})
+        today = study_repository._today_day_index(
+            now=NOW, timezone_name='UTC', day_boundary_hour_local=4,
+        )
+        past = self._add(1, 'review', due_at=NOW - timedelta(hours=1))
+        later_today = self._add(2, 'review', due_at=NOW + timedelta(hours=1))
+        undated = self._add(3, 'review')
+        future_day = self._add(4, 'review', due_day=today + 2,
+                               due_at=NOW - timedelta(days=1))
+        self._add(5, 'review', due_day=today - 2, due_at=NOW + timedelta(days=10))
+        suspended = self._add(6, 'review', due_at=NOW - timedelta(hours=1), suspended=True)
+        new = self._add(7)
+        learning = self._add(8, 'learning', due_at=NOW - timedelta(hours=1))
+        for index, boundary in enumerate(boundaries):
+            self._add(9 + 2 * index, 'review', due_at=boundary - timedelta(microseconds=1))
+            self._add(10 + 2 * index, 'review', due_at=boundary)
+
+        for timezone_name in timezones:
+            for hour in (4, 17):
+                with self.subTest(timezone=timezone_name, boundary_hour=hour):
+                    runtime = SimpleNamespace(day_boundary_hour_local=hour, learn_ahead_seconds=1200)
+                    oracle = self._oracle(timezone_name=timezone_name, runtime=runtime)
+                    expected = set(oracle.due_card_ids) - {learning.id, new.id}
+                    self.assertTrue({past.id, later_today.id, undated.id} <= expected)
+                    self.assertFalse({future_day.id, suspended.id} & expected)
+                    with patch.object(browse_card_service, '_utcnow', return_value=NOW), \
+                         patch.object(browse_card_service, 'resolve_scheduler_runtime_settings', return_value=runtime), \
+                         patch.object(study_repository, 'resolve_scheduler_runtime_settings', return_value=runtime):
+                        counts = study_repository.query_study_queue_counts(
+                            self._query(), user_id=self.user.id, now=NOW, timezone_name=timezone_name,
+                        )
+                        self.assertEqual(counts[2], len(expected))
+                        for status in ('due', 'review'):
+                            page = browse_card_service.list_browse_cards(
+                                user_id=self.user.id, admin_mode=False, timezone_name=timezone_name,
+                                query_args={'deck_id': self.deck.id, 'status': status, 'per_page': 100},
+                            )
+                            self.assertEqual(page['total'], counts[2])
+                            self.assertEqual({row['card_id'] for row in page['items']}, expected)
 
     def _bulk_stateful_notes(self):
         # Bulk content insertion creates no Card records; one application derives 2000.
