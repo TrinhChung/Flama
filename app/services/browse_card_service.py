@@ -14,6 +14,7 @@ from sqlalchemy.orm import aliased, selectinload
 UTC = timezone.utc
 
 from app.repositories import browse_card_repository, note_analytics_read_repository
+from app.repositories.field_value_query_repository import note_values_search_condition
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.study_authority_repository import (
     StudyAuthorityFenceError,
@@ -129,6 +130,13 @@ def update_browse_card(
             raise BrowseCardUpdateError("Card not found", status=404)
 
     try:
+        if clone_scope is None:
+            from app.services.note_value_precondition_service import check_note_write_preconditions
+            check_note_write_preconditions(note_obj, payload)
+        else:
+            from app.services.clone_field_identity_service import lock_clone_overlay_write
+            clone_scope.install = lock_clone_overlay_write(clone_scope.install,
+                expected_revision=payload.get("expected_overlay_revision") if isinstance(payload, dict) else None)
         validated = validate_browse_card_update_request(
             note_type=note_type_obj,
             payload=payload,
@@ -369,6 +377,35 @@ def _join_note_availability(query, *, learner_user_id: int):
     )
 
 
+def _resolve_canonical_application_ids() -> list[str]:
+    """Return the list of canonical StudyApplication IDs (one per NoteType).
+
+    For each NoteType with active applications, the canonical application is
+    the active application with highest priority:
+    (is_default DESC, position ASC, id ASC).
+    """
+    from models.study_application import StudyApplication
+
+    apps = (
+        StudyApplication.query
+        .filter(StudyApplication.status_code == "ACTIVE")
+        .order_by(
+            StudyApplication.note_type_id.asc(),
+            StudyApplication.is_default.desc(),
+            StudyApplication.position.asc(),
+            StudyApplication.id.asc(),
+        )
+        .all()
+    )
+    seen_note_type_ids: set[str] = set()
+    canonical_ids: list[str] = []
+    for app in apps:
+        if app.note_type_id not in seen_note_type_ids:
+            seen_note_type_ids.add(app.note_type_id)
+            canonical_ids.append(app.id)
+    return canonical_ids
+
+
 def list_browse_cards(
     *,
     user_id: int,
@@ -382,6 +419,12 @@ def list_browse_cards(
     deck_id_raw = str(query_args.get("deck_id") or "").strip()
     include_subdecks_raw = str(query_args.get("include_subdecks") or "1").strip().lower()
     include_subdecks = include_subdecks_raw not in {"0", "false", "no"}
+    include_all_templates_raw = str(
+        query_args.get("all_templates")
+        or query_args.get("include_all_templates")
+        or ""
+    ).strip().lower()
+    include_all_templates = include_all_templates_raw in {"1", "true", "yes"}
     try:
         keyword = sanitize_query_text(query_args.get("q"), field_name="q", max_length=120)
         tag = sanitize_query_text(query_args.get("tag"), field_name="tag", max_length=80)
@@ -455,6 +498,12 @@ def list_browse_cards(
             selected_ids = {selected_deck_id}
 
     query = Card.query.join(Note, Card.note_id == Note.id)
+    if not include_all_templates:
+        canonical_app_ids = _resolve_canonical_application_ids()
+        if canonical_app_ids:
+            query = query.filter(Card.application_id.in_(canonical_app_ids))
+        else:
+            query = query.filter(false())
     # Status and due order come from the learner's Note row (verified
     # on the returned page), NULL for pristine Notes.
     query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
@@ -660,11 +709,8 @@ def list_browse_cards(
                     # Compatibility for early release rows that predate stable
                     # field-name events. Current releases always have the map.
                     checkpoint_field_name = field_name
-                override_names = [field_name]
-                if checkpoint_field_name:
-                    override_names.append(checkpoint_field_name)
-                if is_added_field:
-                    override_names.append(added_field_names[field_id])
+                from app.services.field_value_runtime_service import added_field_identity_key
+                field_identity_key = added_field_identity_key(install.id, field_id) if is_added_field else field_id
                 field_expression = (
                     browse_card_repository.clone_effective_field_text_expression(
                         deck_install_id=str(install.id),
@@ -672,7 +718,7 @@ def list_browse_cards(
                         target_release_sequence=target_sequence,
                         source_field_def_id=source_field_id,
                         checkpoint_field_name=checkpoint_field_name,
-                        override_field_names=override_names,
+                        field_identity_key=field_identity_key,
                     )
                 )
                 all_field_expressions.append(field_expression)
@@ -695,10 +741,7 @@ def list_browse_cards(
         keyword_like = f"%{escape_like_pattern(keyword.lower())}%"
         if admin_mode:
             query = query.filter(
-                func.lower(db.cast(Note.field_values, db.Text)).like(
-                    keyword_like,
-                    escape="\\",
-                )
+                note_values_search_condition(keyword_like=keyword_like)
             )
         else:
             effective_search_conditions = []
@@ -706,10 +749,7 @@ def list_browse_cards(
                 effective_search_conditions.append(
                     db.and_(
                         owned_visibility_condition,
-                        func.lower(db.cast(Note.field_values, db.Text)).like(
-                            keyword_like,
-                            escape="\\",
-                        ),
+                        note_values_search_condition(keyword_like=keyword_like),
                     )
                 )
             for projection in clone_projections:
@@ -1275,6 +1315,8 @@ def update_legacy_browse_note(
         raise BrowseApiError("Note type not found", status=404)
 
     try:
+        from app.services.note_value_precondition_service import check_note_write_preconditions
+        check_note_write_preconditions(note_obj, payload)
         merged_values = validate_legacy_browse_note_update_request(
             note_type=note_type_obj,
             payload=payload,
@@ -1630,9 +1672,20 @@ def _apply_clone_overlay_to_browse_payload(
     note_payload = payload.get("note")
     if isinstance(note_payload, dict):
         note_payload["field_values"] = normalized_values
+        note_payload.pop("content_revision", None)
+        note_payload.pop("field_schema_revision", None)
+        note_payload["deck_install_id"] = clone_scope.install.id
+        note_payload["overlay_revision"] = int(clone_scope.install.overlay_revision or 0)
         if local_deck_id is not None:
             note_payload["deck_id"] = int(local_deck_id)
         note_payload["deck_name"] = local_deck_name
+
+    from app.services.media_field_codec import media_field_label_for_schema
+    assets_by_id = {str(asset.id): asset for asset in note_obj.media_assets or []}
+    for asset_payload in payload.get("media_assets") or []:
+        asset = assets_by_id.get(str(asset_payload.get("id")))
+        if asset is not None:
+            asset_payload["field_name"] = media_field_label_for_schema(asset, overlay_field_defs)
 
     note_type_fields_payload = []
     for field_def in ordered_defs:
@@ -1645,6 +1698,7 @@ def _apply_clone_overlay_to_browse_payload(
             field_position = 0
         note_type_fields_payload.append(
             {
+                "id": str(getattr(field_def, "id", "") or ""),
                 "name": field_name,
                 "field_type": str(getattr(field_def, "field_type", "text") or "text"),
                 "required": bool(getattr(field_def, "required", False)),

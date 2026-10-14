@@ -118,14 +118,18 @@ class StudyNoteOverlayTests(unittest.TestCase):
 
     def _assert_readers_share_the_note_row(self, queue):
         view = self._reader_view()
-        self.assertEqual(view["list_total"], 2)
-        # Both source Cards read their Note's one state.
+        self.assertEqual(view["list_total"], 1)
+        # Canonical source Card reads its Note's one state.
         self.assertEqual({row[1] for row in view["list"]}, {queue})
         dashboard = {deck_id: counts for deck_id, *counts in view["dashboard"]}
         tree = {deck_id: json.loads(counts) for deck_id, counts in view["tree"]}
         new, learn, due = dashboard[self.local_deck_id]
         self.assertEqual((tree[self.local_deck_id]["new"], tree[self.local_deck_id]["learn"],
                           tree[self.local_deck_id]["due"]), (new, learn, due))
+        all_listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
+            timezone_name="UTC", query_args={"deck_id": str(self.local_deck_id), "all_templates": "1"})
+        self.assertEqual(all_listing["total"], 2)
+        self.assertEqual({row["queue"] for row in all_listing["items"]}, {queue})
         return view
 
     def test_pristine_overlay_card_reads_new_without_writing(self):
@@ -288,6 +292,32 @@ class StudyNoteOverlayTests(unittest.TestCase):
                 stage_note_authority_enrollment(db.session, learner_user_id=copy_id, now_utc=_now())
             self.assertEqual(failure.exception.code, "CLONE_CUTOVER_PENDING")
             db.session.rollback()
+
+    def test_browse_deduplicates_multi_template_notes_to_canonical_card(self):
+        self._install_overlay()
+        with self.app.app_context():
+            # The source deck has 1 Note with 2 Templates.
+            # Default browse returns exactly 1 canonical Card row.
+            listing = browse_card_service.list_browse_cards(
+                user_id=self.user_id,
+                admin_mode=False,
+                timezone_name="UTC",
+                query_args={"deck_id": str(self.local_deck_id)},
+            )
+            self.assertEqual(listing["total"], 1)
+            self.assertEqual(len(listing["items"]), 1)
+            row = listing["items"][0]
+            self.assertEqual(row["word"], "共有")
+
+            # Passing all_templates=1 exposes all derived card occurrences.
+            all_listing = browse_card_service.list_browse_cards(
+                user_id=self.user_id,
+                admin_mode=False,
+                timezone_name="UTC",
+                query_args={"deck_id": str(self.local_deck_id), "all_templates": "1"},
+            )
+            self.assertEqual(all_listing["total"], 2)
+            self.assertEqual(len(all_listing["items"]), 2)
 
 
 if __name__ == "__main__":
