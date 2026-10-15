@@ -246,11 +246,11 @@ export function StudyPage() {
 
   if (!deckIdRaw) {
     return (
-      <div className="relative min-h-[100dvh] w-full flex flex-col items-center justify-center p-6 text-center">
+      <div className="relative flex flex-col items-center justify-start h-full h-[100dvh] max-h-[100dvh] w-full overflow-y-auto p-4 sm:p-6 text-center text-foreground">
         <AmbientBackground />
-        <div className="relative z-10 w-full max-w-md rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-6 sm:p-8 shadow-2xl shadow-primary/5 dark:shadow-none space-y-4">
-          <h2 className="text-2xl font-bold text-foreground">{t('page.session_title')}</h2>
-          <p className="text-muted-foreground text-sm">
+        <div className="relative z-10 my-auto w-full max-w-md rounded-2xl sm:rounded-3xl border border-border/40 bg-card/90 backdrop-blur-md p-6 sm:p-8 shadow-2xl shadow-primary/5 dark:shadow-none space-y-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">{t('page.session_title')}</h2>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             {t('page.deck_required')}
           </p>
           <Button asChild className="rounded-xl">
@@ -263,7 +263,7 @@ export function StudyPage() {
 
   if (study.isLoading) {
     return (
-      <div className="relative min-h-[100dvh] w-full flex items-center justify-center">
+      <div className="relative flex items-center justify-center h-full h-[100dvh] max-h-[100dvh] w-full">
         <AmbientBackground />
         <PageLoading label={t('page.creating_session')} />
       </div>
@@ -272,15 +272,17 @@ export function StudyPage() {
 
   if (study.leaseConflict) {
     return (
-      <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-y-auto p-4 text-foreground sm:p-6">
+      <div className="relative flex flex-col items-center justify-start h-full h-[100dvh] max-h-[100dvh] w-full overflow-y-auto p-3 sm:p-6 text-foreground">
         <AmbientBackground />
-        <StudySessionConflict
-          deckName={deckName}
-          takeoverState={study.takeoverState}
-          onTakeover={study.requestTakeover}
-          onForceTakeover={study.forceTakeover}
-          onLeave={() => navigate('/dashboard', { replace: true })}
-        />
+        <div className="my-auto w-full flex justify-center">
+          <StudySessionConflict
+            deckName={deckName}
+            takeoverState={study.takeoverState}
+            onTakeover={study.requestTakeover}
+            onForceTakeover={study.forceTakeover}
+            onLeave={() => navigate('/dashboard', { replace: true })}
+          />
+        </div>
       </div>
     )
   }
@@ -311,14 +313,16 @@ export function StudyPage() {
 
   if (study.error && !study.session) {
     return (
-      <div className="relative min-h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 overflow-y-auto text-foreground">
+      <div className="relative flex flex-col items-center justify-start h-full h-[100dvh] max-h-[100dvh] w-full overflow-y-auto p-3 sm:p-6 text-foreground">
         <AmbientBackground />
-        <StudyScopeErrorCard
-          error={study.error}
-          deckName={deckName}
-          deckId={deckIdRaw}
-          onRetry={() => { void study.reloadSession(true) }}
-        />
+        <div className="my-auto w-full flex justify-center">
+          <StudyScopeErrorCard
+            error={study.error}
+            deckName={deckName}
+            deckId={deckIdRaw}
+            onRetry={() => { void study.reloadSession(true) }}
+          />
+        </div>
       </div>
     )
   }
@@ -337,18 +341,20 @@ export function StudyPage() {
   // exhaustion is not a prerequisite for acknowledging a completed session.
   if (study.receipt && !isLeaving) {
     return (
-      <div className="relative min-h-[100dvh] w-full flex flex-col items-center justify-start sm:justify-center p-3 sm:p-6 text-foreground overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+      <div className="relative flex flex-col items-center justify-start h-full h-[100dvh] max-h-[100dvh] w-full p-3 sm:p-6 text-foreground overflow-y-auto pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
         <AmbientBackground />
-        <StudyCompletionCard
-          deckName={deckName}
-          deckId={deckIdRaw}
-          session={study.session}
-          receipt={study.receipt}
-          totalSessionStats={study.totalSessionStats}
-          counts={counts}
-          isBusy={study.isBusy}
-          onCommit={handleCommit}
-        />
+        <div className="my-auto w-full flex justify-center">
+          <StudyCompletionCard
+            deckName={deckName}
+            deckId={deckIdRaw}
+            session={study.session}
+            receipt={study.receipt}
+            totalSessionStats={study.totalSessionStats}
+            counts={counts}
+            isBusy={study.isBusy}
+            onCommit={handleCommit}
+          />
+        </div>
       </div>
     )
   }

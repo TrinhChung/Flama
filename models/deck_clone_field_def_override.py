@@ -18,7 +18,6 @@ class DeckCloneFieldDefOverride(db.Model):
     )
     source_field_def_id = db.Column(
         db.String(36),
-        db.ForeignKey("field_defs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -28,7 +27,7 @@ class DeckCloneFieldDefOverride(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     deck_install = db.relationship("DeckInstall", back_populates="clone_field_overrides")
-    source_field_def = db.relationship("FieldDef", foreign_keys=[source_field_def_id])
+    source_field_def = db.relationship("FieldDef", primaryjoin="foreign(DeckCloneFieldDefOverride.source_field_def_id) == FieldDef.id")
 
     __table_args__ = (
         UniqueConstraint(

@@ -1,0 +1,23 @@
+[Unit]
+Description=Apply committed Flama review-history projection revisions
+After=network-online.target mysql.service
+
+[Service]
+Type=oneshot
+User=flama
+Group=flama
+WorkingDirectory=/opt/flama/current
+EnvironmentFile=/etc/flama/flama.env
+Environment=STARTUP_RUN_MAINTENANCE=0
+Environment=STARTUP_CHECK_DB_CONNECTIVITY=0
+Environment=PYTHONDONTWRITEBYTECODE=1
+RuntimeDirectory=flama-review-analytics
+ExecCondition=/opt/flama/venv/bin/python -c "import os; raise SystemExit(0 if os.getenv('REVIEW_ANALYTICS_WRITE_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'} else 1)"
+ExecStart=/usr/bin/flock --nonblock /run/flama-review-analytics/runner.lock /opt/flama/venv/bin/flask --app wsgi.py review-analytics-drain --pending --apply --max-users 20 --max-revisions 100
+TimeoutStartSec=60
+Nice=10
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/flama /run/flama-review-analytics

@@ -516,6 +516,9 @@ def clean_note_field_values(
     if not isinstance(raw_field_values, dict):
         raise RequestValidationError("field_values must be an object.", field="field_values")
 
+    from app.validators.field_value_identity import validate_incoming_field_labels
+    validate_incoming_field_labels(raw_field_values, note_type.field_defs)
+
     field_map = {field_def.name: field_def for field_def in note_type.field_defs}
     unknown = sorted(str(key) for key in raw_field_values.keys() if key not in field_map)
     if unknown:
@@ -609,7 +612,7 @@ def validate_note_patch_request(
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
     _reject_forbidden_keys(body, {"id", "user_id", "created_at", "updated_at", "note_type_id"})
-    _validate_allowed_keys(body, {"field_values", "deck_id", "tags"})
+    _validate_allowed_keys(body, {"field_values", "deck_id", "tags", "expected_content_revision", "expected_field_schema_revision"})
 
     if "field_values" in body:
         merged_values, field_updates = clean_note_field_values(
@@ -650,7 +653,7 @@ def validate_study_card_edit_request(
     note_media_ids: Any,
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
-    _validate_allowed_keys(body, {"field_values", "deck_id", "tags", "render_contract"})
+    _validate_allowed_keys(body, {"field_values", "deck_id", "tags", "render_contract", "expected_content_revision", "expected_field_schema_revision"})
 
     if "field_values" in body:
         merged_values, field_updates = clean_note_field_values(
@@ -691,7 +694,7 @@ def validate_browse_card_update_request(
     note_media_ids: Any,
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
-    _validate_allowed_keys(body, {"field_values", "fields", "deck_id", "tags"})
+    _validate_allowed_keys(body, {"field_values", "fields", "deck_id", "tags", "expected_content_revision", "expected_field_schema_revision", "expected_overlay_revision"})
 
     raw_updates = body.get("field_values")
     if raw_updates is None and "fields" in body:
@@ -736,7 +739,7 @@ def validate_legacy_browse_note_update_request(
     note_media_ids: Any,
 ) -> dict[str, str]:
     body = _payload_dict(payload)
-    _validate_allowed_keys(body, {"fields"})
+    _validate_allowed_keys(body, {"fields", "expected_content_revision", "expected_field_schema_revision"})
     if "fields" not in body:
         raise RequestValidationError("Missing fields payload.", field="fields")
 

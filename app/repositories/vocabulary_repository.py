@@ -511,6 +511,7 @@ def build_browse_card_detail(
 
     note_type_fields = [
         {
+            "id": field_def.id,
             "name": field_def.name,
             "field_type": field_def.field_type,
             "required": bool(field_def.required),
@@ -562,6 +563,8 @@ def build_browse_card_detail(
             "deck_id": note_obj.deck_id if note_obj else None,
             "deck_name": deck_name_lookup.get((note_obj.deck_id or 0) if note_obj else 0, ""),
             "field_values": field_values,
+            "content_revision": int(note_obj.content_revision or 0) if note_obj else 0,
+            "field_schema_revision": int(note_type_obj.field_schema_revision or 0) if note_type_obj else 0,
             "tags": (note_obj.tags or []) if note_obj else [],
             "updated_at": note_obj.updated_at.isoformat() if note_obj and note_obj.updated_at else None,
         },

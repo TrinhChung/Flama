@@ -24,8 +24,11 @@ class StudyTemplatePresetTests(unittest.TestCase):
     tearDown = compositions.StudyCompositionServiceTests.tearDown
 
     def _binding(self):
+        values = self.note.field_values
         field = FieldDef(note_type_id=self.note_type.id, name="Front", field_type="text")
         db.session.add(field)
+        db.session.flush()
+        self.note.field_values = values
         self.template_1.front_html, self.template_1.back_html = "{{term}}", ""
         self.template_1.input_schema = [{"key": "term", "type": "text"}]
         db.session.commit()

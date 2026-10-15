@@ -21,6 +21,39 @@ def _same_key(left, right):
     return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
 
 
+def is_origin_allowed(origin: str | None, *, standard: bool) -> bool:
+    """Validate whether an incoming Origin is authorized to access Flama Connect."""
+    if not standard:
+        return True
+    if origin is None or origin == "null":
+        return True
+    if origin.startswith(("chrome-extension://", "moz-extension://")):
+        return True
+    configured = current_app.config.get("CONNECT_ANKI_ALLOWED_ORIGINS")
+    allowed = (set(configured) if configured else {"https://killergerbah.github.io"}) - {"*", "null"}
+    return origin in allowed
+
+
+def get_cors_allow_origin(origin: str | None, *, standard: bool) -> str | None:
+    """Determine the Access-Control-Allow-Origin header value for Flama Connect."""
+    if not origin or origin == "null":
+        return None
+    if standard:
+        if origin.startswith(("chrome-extension://", "moz-extension://")):
+            return origin
+        configured = current_app.config.get("CONNECT_ANKI_ALLOWED_ORIGINS")
+        allowed = (set(configured) if configured else {"https://killergerbah.github.io"}) - {"*", "null"}
+        if origin in allowed:
+            return origin
+        return None
+    allowed = set(current_app.config.get("CONNECT_CORS_ALLOWED_ORIGINS", ()))
+    if "*" in allowed:
+        return "*"
+    if origin in allowed:
+        return origin
+    return None
+
+
 def protocol_response(*, result=None, error=None, status=200, version=4, standard=False):
     versioned = standard or bool(current_app.config.get("CONNECT_VERSIONED_PROTOCOL_ENABLED", False))
     response = make_response(jsonify(encode_result(result, error, version=version, versioned=versioned)), status)
@@ -67,11 +100,9 @@ def handle_request(*, standard=False, url_token=None):
         return protocol_response(version=version, standard=standard, **kwargs)
     if standard and not current_app.config.get("CONNECT_ANKI_ADAPTER_ENABLED", False):
         return respond(error="AnkiConnect adapter is disabled", status=404)
-    if standard:
-        origin = request.headers.get("Origin")
-        allowed = set(current_app.config.get("CONNECT_ANKI_ALLOWED_ORIGINS", ())) - {"*", "null"}
-        if origin is not None and origin not in allowed:
-            return respond(error="origin is not allowed", status=403)
+    origin = request.headers.get("Origin")
+    if not is_origin_allowed(origin, standard=standard):
+        return respond(error="origin is not allowed", status=403)
     if request.method == "OPTIONS":
         return "", 204
     ip = str(request.remote_addr or "unknown")

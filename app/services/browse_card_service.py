@@ -377,35 +377,6 @@ def _join_note_availability(query, *, learner_user_id: int):
     )
 
 
-def _resolve_canonical_application_ids() -> list[str]:
-    """Return the list of canonical StudyApplication IDs (one per NoteType).
-
-    For each NoteType with active applications, the canonical application is
-    the active application with highest priority:
-    (is_default DESC, position ASC, id ASC).
-    """
-    from models.study_application import StudyApplication
-
-    apps = (
-        StudyApplication.query
-        .filter(StudyApplication.status_code == "ACTIVE")
-        .order_by(
-            StudyApplication.note_type_id.asc(),
-            StudyApplication.is_default.desc(),
-            StudyApplication.position.asc(),
-            StudyApplication.id.asc(),
-        )
-        .all()
-    )
-    seen_note_type_ids: set[str] = set()
-    canonical_ids: list[str] = []
-    for app in apps:
-        if app.note_type_id not in seen_note_type_ids:
-            seen_note_type_ids.add(app.note_type_id)
-            canonical_ids.append(app.id)
-    return canonical_ids
-
-
 def list_browse_cards(
     *,
     user_id: int,
@@ -413,7 +384,7 @@ def list_browse_cards(
     timezone_name: str,
     query_args: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Return the Browse card page while preserving logical-clone visibility."""
+    """Return one preview per visible Note; diagnostic mode exposes occurrences."""
     from app.services import flashcards_share as share_ctrl
 
     deck_id_raw = str(query_args.get("deck_id") or "").strip()
@@ -498,12 +469,6 @@ def list_browse_cards(
             selected_ids = {selected_deck_id}
 
     query = Card.query.join(Note, Card.note_id == Note.id)
-    if not include_all_templates:
-        canonical_app_ids = _resolve_canonical_application_ids()
-        if canonical_app_ids:
-            query = query.filter(Card.application_id.in_(canonical_app_ids))
-        else:
-            query = query.filter(false())
     # Status and due order come from the learner's Note row (verified
     # on the returned page), NULL for pristine Notes.
     query, progress_alias = _join_note_availability(query, learner_user_id=user_id)
@@ -798,6 +763,8 @@ def list_browse_cards(
         )
 
     query = query.filter(eligible)
+    if not include_all_templates:
+        query = browse_card_repository.one_visible_card_per_note(query)
     total, _ = browse_card_repository.page_total_and_integrity(query)
 
     if sort_by == "deck":
@@ -1214,6 +1181,47 @@ def _delete_browse_notes(note_ids) -> None:
         )
         forget_card_identities(db.session, (note_id,))
         db.session.delete(note_obj)
+
+
+def delete_browse_notes_batch(
+    *, user_id: int, admin_mode: bool, note_ids: list[str],
+) -> dict[str, Any]:
+    """Delete selected Notes and all their presentations, preserving Templates.
+
+    The card-delete compatibility APIs retain their explicit partial-selection
+    guard. Note deletion is a separate intent and uses the same learner fences,
+    lifecycle events and session cancellation as other content deletion paths.
+    """
+    from app.services import deck_working_tree_service
+
+    ids = sorted(set(note_ids))
+    if not ids:
+        return {"success": True, "deleted_count": 0}
+    notes = Note.query.filter(Note.id.in_(ids)).order_by(Note.id).all()
+    if len(notes) != len(ids):
+        raise BrowseApiError("Note not found", status=404)
+    if not admin_mode and any(note.user_id != user_id for note in notes):
+        raise BrowseApiError(
+            "Không thể xóa note thuộc bộ bài gốc được chia sẻ/clone.",
+            status=403, code="SHARED_SOURCE_NOTE_PROTECTED",
+        )
+    if any(deck_working_tree_service.note_has_shared_release_dependents(note) for note in notes):
+        raise BrowseApiError(
+            "Published shared notes cannot be hard-deleted because learner history must be preserved.",
+            status=409, code="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
+    _stage_browse_card_removal(
+        user_id=user_id,
+        owner_user_ids={note.user_id for note in notes},
+        card_ids=(),
+        deleted_note_ids=ids,
+        source_path="browse.note_delete",
+        operation_key="browse-note-delete:"
+        + hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest(),
+    )
+    _delete_browse_notes(ids)
+    db.session.commit()
+    return {"success": True, "deleted_count": len(ids)}
 
 
 def delete_browse_cards_batch(

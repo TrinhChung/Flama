@@ -1,0 +1,68 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 434.39,
+  "errors": 0,
+  "failures": 0,
+  "fairness_index_evidence": {
+    "explain": [
+      {
+        "Extra": "Using where; Using index; Using temporary; Using filesort",
+        "filtered": 100.0,
+        "id": 1,
+        "key": "ix_review_analytics_outbox_pending_age",
+        "key_len": "9",
+        "partitions": null,
+        "possible_keys": "PRIMARY,ix_review_analytics_outbox_pending_age,ix_review_analytics_outbox_pending",
+        "ref": "const",
+        "rows": 1,
+        "select_type": "SIMPLE",
+        "table": "review_analytics_outbox",
+        "type": "ref"
+      }
+    ],
+    "limitation": "Pending age aggregation/sort can scan pending feed rows and sort eligible learners; fixture proves covering access, not production latency or a constant-cost discovery bound.",
+    "query": "SELECT review_analytics_outbox.user_id \nFROM review_analytics_outbox \nWHERE review_analytics_outbox.applied_at IS NULL GROUP BY review_analytics_outbox.user_id ORDER BY min(review_analytics_outbox.created_at), review_analytics_outbox.user_id \n LIMIT 10"
+  },
+  "fixture_cases": [
+    "test_async_source_commit_has_durable_feed_without_bucket_or_generation_locks",
+    "test_bounded_worker_user_discovery_and_invalid_arguments",
+    "test_bulk_mutation_requires_fence_and_queues_dirty_marker",
+    "test_canonical_insert_uses_frozen_values_without_reloading_raw_event",
+    "test_commit_revision_applies_low_event_id_after_larger_baseline_id",
+    "test_correction_and_delete_enqueue_dirty_markers",
+    "test_correction_of_just_inserted_event_queues_dirty_without_stale_snapshot",
+    "test_dirty_bulk_marker_after_finalizer_is_refused",
+    "test_dirty_marker_tamper_is_covered_by_envelope_hash",
+    "test_duplicate_raw_uniqueness_does_not_enqueue_another_revision",
+    "test_every_source_commit_defers_projection_until_worker",
+    "test_exotic_rating_reloads_exact_sql_passed_semantics",
+    "test_fairness_migration_accepts_metadata_and_can_restore_index",
+    "test_feed_insert_failure_rolls_back_advanced_head_and_source_fact",
+    "test_fractional_timestamp_reloads_before_business_day_grouping",
+    "test_inserted_facts_outbox_and_source_revision_rollback_together",
+    "test_lost_worker_commit_ack_retry_does_not_double_apply",
+    "test_migration_shape_and_populated_downgrade_guard",
+    "test_missing_final_pending_row_does_not_leave_ready_generation",
+    "test_missing_revision_fails_closed_dirty",
+    "test_new_backfill_covers_pending_baseline_without_double_apply",
+    "test_new_history_write_after_finalizer_is_refused_and_rolls_back_atomically",
+    "test_payload_hash_corruption_fails_closed_dirty",
+    "test_pending_discovery_serves_oldest_age_before_user_id",
+    "test_released_savepoint_descendant_rollback_discards_feed_events",
+    "test_savepoint_rollback_after_finalizer_does_not_reopen_source_writes",
+    "test_worker_applies_all_scopes_and_idempotent_retry_once",
+    "test_worker_failure_rolls_back_delta_checkpoint_and_applied_marker"
+  ],
+  "generated_schema": "flama_history_outbox_probe_28364_5cc130e29f95",
+  "mysql_specific_cases": [
+    "test_oldest_pending_selection_uses_covering_index",
+    "test_atomic_head_statement_returns_revision_for_new_existing_and_rolled_back_head",
+    "test_mysql_binary_unsigned_precision_and_payload_round_trip",
+    "test_concurrent_same_learner_writers_allocate_commit_revisions_without_loss",
+    "test_concurrent_workers_serialize_head_and_do_not_double_apply"
+  ],
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "PASS",
+  "tests_run": 33
+}

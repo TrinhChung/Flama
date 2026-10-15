@@ -335,8 +335,9 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             note=dict(deckName="Inbox",modelName=self.note_type_id, fields={"Word":"qualification","Meaning":"complete identity"},tags=[]))]))
         self.assertTrue(cards["results"][0]["imported"], cards)
         with self.app.app_context():
+            from app.repositories.field_value_query_repository import note_values_search_condition
             imported_note = Note.query.filter_by(user_id=self.author_id).filter(
-                Note.field_values["Word"].as_string() == "qualification").one()
+                note_values_search_condition(keyword_like="qualification")).one()
             wire_card_id = Card.query.filter_by(note_id=imported_note.id).one().id
             self.assertEqual(len(wire_card_id), 73)
         # Source card identities are text in Connect. Feed the full UUID pair

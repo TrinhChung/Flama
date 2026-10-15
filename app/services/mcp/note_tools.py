@@ -30,6 +30,7 @@ from app.services.mcp.base import (
     _resolve_note_type_for_user,
 )
 from app.validators.flashcard_input import RequestValidationError, clean_array_fields
+from app.services.note_value_precondition_service import check_note_write_preconditions, note_revision_payload
 from models import db
 from models.card import Card
 from models.deck import Deck
@@ -199,6 +200,7 @@ def get_note(*, user_id: int, note_id: str) -> dict[str, Any]:
         "note_type_id": str(note.note_type_id),
         "note_type_name": note_type.name if note_type else None,
         "fields": dict(note.field_values or {}),
+        **note_revision_payload(note),
         "tags": list(note.tags or []),
         "cards": cards_data,
         "created_at": note.created_at.isoformat() if note.created_at else None,
@@ -515,6 +517,8 @@ def update_note(
     fields: dict[str, Any] | None = None,
     tags: list[str] | None = None,
     deck_id: int | None = None,
+    expected_content_revision: int | None = None,
+    expected_field_schema_revision: int | None = None,
 ) -> dict[str, Any]:
     """Update an existing note's fields (partial), tags, or deck."""
     note = Note.query.filter_by(id=note_id, user_id=user_id).first()
@@ -526,6 +530,10 @@ def update_note(
             code="NOTE_NOT_FOUND",
         )
 
+    check_note_write_preconditions(note, {
+        **({"expected_content_revision": expected_content_revision} if expected_content_revision is not None else {}),
+        **({"expected_field_schema_revision": expected_field_schema_revision} if expected_field_schema_revision is not None else {}),
+    })
     original_deck_id = note.deck_id
     original_fields = dict(note.field_values or {})
 
@@ -601,6 +609,7 @@ def update_note(
     return {
         "success": True,
         "note_id": str(note.id),
+        **note_revision_payload(note),
         "deck_id": int(note.deck_id) if note.deck_id else None,
         "fields": dict(note.field_values or {}),
         "tags": list(note.tags or []),

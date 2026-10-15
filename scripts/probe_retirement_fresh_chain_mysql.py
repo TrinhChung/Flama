@@ -29,7 +29,7 @@ from scripts.mysql_probe_db import _connection_settings, _database_uri, _source_
 
 PROBE_NAME = re.compile(r'^flama_retirement_fresh_probe_[0-9]+_[a-f0-9]{12}$')
 RETIRED = {'cards','card_progress','vocabulary_column_preferences','study_progress_backfill_runs',
-           'study_progress_backfill_checkpoints','study_progress_backfill_dispositions'}
+           'study_progress_backfill_checkpoints','study_progress_backfill_dispositions','field_rename_jobs'}
 
 
 def main():
@@ -67,10 +67,18 @@ def main():
                 upgrade(directory=str(ROOT/'migrations'))
                 tables = set(sa.inspect(db.engine).get_table_names())
                 head = db.session.execute(sa.text('SELECT version_num FROM alembic_version')).scalar_one()
-                if head != '20261012_000062' or tables & RETIRED:
+                if head != '20261014_000068' or tables & RETIRED:
                     raise RuntimeError('Retirement head/table contract failed.')
                 if tables != set(db.metadata.tables) | {'alembic_version'}:
                     raise RuntimeError('Fresh migration schema differs from current runtime metadata.')
+                columns = {column['name']:column for column in sa.inspect(db.engine).get_columns('notes')}
+                if 'field_values' in columns or any(columns[name]['nullable'] for name in
+                        ('field_values_by_id','field_values_codec','field_values_extras')):
+                    raise RuntimeError('Fresh head retained live named Note storage or nullable canonical codec.')
+                for table in ('deck_clone_note_field_overrides','deck_clone_field_def_overrides'):
+                    if any(key['constrained_columns']==['source_field_def_id'] and key['referred_table']=='field_defs'
+                           for key in sa.inspect(db.engine).get_foreign_keys(table)):
+                        raise RuntimeError('Fresh head can erase pinned clone Field identity through an upstream FK.')
                 users = db.session.execute(sa.text('SELECT COUNT(*) FROM users')).scalar_one()
                 subjects = db.session.execute(sa.text('SELECT COUNT(*) FROM study_progress_subjects')).scalar_one()
                 if users or subjects:
@@ -78,6 +86,7 @@ def main():
                 report = {'database':target, 'head':head, 'mysql_version':db.session.execute(sa.text('SELECT VERSION()')).scalar_one(),
                     'runtime_tables':len(db.metadata.tables), 'physical_tables':len(tables), 'users':users, 'subjects':subjects,
                     'retired_tables_present':sorted(tables & RETIRED), 'source_database_writes':0,
+                    'canonical_field_id_only':True,'pinned_overlay_identity_detached':True,
                     'elapsed_seconds':round(time.monotonic()-started,3), 'result':'PASS'}
                 if args.output:
                     args.output.parent.mkdir(parents=True,exist_ok=True)

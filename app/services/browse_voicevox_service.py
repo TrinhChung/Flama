@@ -395,11 +395,13 @@ def generate_voicevox(
         warning_items.extend(cached_warnings)
 
         sha256 = hashlib.sha256(synth_result.content).hexdigest()
-        existing_asset = MediaAsset.query.filter_by(
+        from app.repositories.media_field_identity_repository import find_note_field_media
+        existing_asset = find_note_field_media(
             note_id=note_obj.id,
             field_name=destination_field,
             sha256=sha256,
-        ).first()
+            note=note_obj,
+        )
         if existing_asset is None:
             filename = _render_voicevox_filename(
                 template=filename_template,

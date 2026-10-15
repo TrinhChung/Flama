@@ -44,8 +44,6 @@ from app.services.change_request import (
     _build_conflict_for_item,
     _item_has_conflict,
     _request_has_effective_changes,
-    _rename_note_type_field_values,
-    _remove_note_type_field_values,
     _normalize_field_positions,
     _cleanup_install_overlay_rows,
     _build_merged_working_tree_changes,

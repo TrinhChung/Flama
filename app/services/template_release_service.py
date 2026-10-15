@@ -601,7 +601,8 @@ def _ensure_local_field_map(session, *, source_nt, local_nt):
     for row in source_fields:
         if row["name"] not in local_by_name:
             new_field_id = uuid_str()
-            session.execute(insert(FieldDef.__table__).values(
+            from app.repositories.field_value_identity_repository import insert_field_definition
+            insert_field_definition(session,
                 id=new_field_id,
                 note_type_id=local_nt,
                 name=row["name"],
@@ -609,7 +610,7 @@ def _ensure_local_field_map(session, *, source_nt, local_nt):
                 position=row["position"],
                 required=bool(row["required"]),
                 identity_role=row.get("identity_role"),
-            ))
+            )
             local_by_name[row["name"]] = new_field_id
     return {row["id"]: local_by_name.get(row["name"]) for row in source_fields}
 

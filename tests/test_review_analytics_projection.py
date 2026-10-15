@@ -1,4 +1,4 @@
-"""Atomic daily projection and SAVEPOINT ancestry contracts."""
+"""Atomic history capture, explicit worker projection and SAVEPOINT contracts."""
 
 from datetime import datetime
 import unittest
@@ -74,6 +74,11 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         values.update(kwargs)
         return create_review_event_record(**values)
 
+    def _drain(self):
+        from app.services.review_analytics_outbox_service import process_review_analytics_outbox
+        db.session.remove()
+        return process_review_analytics_outbox(user_id=self.user_id)
+
     def _counts(self):
         rows = db.session.execute(select(DailyReviewCount).where(
             DailyReviewCount.user_id == self.user_id, DailyReviewCount.scope_kind == 0,
@@ -126,6 +131,7 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         flush_review_analytics_deltas(db.session)
         flush_review_analytics_deltas(db.session)
         db.session.commit()
+        self._drain()
         self.assertEqual(self._counts(), (3, 6000, 2))
         self.assertEqual(self._raw_count(), 3)
 
@@ -144,6 +150,7 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         self._event(duration_ms=4000)
         flush_review_analytics_deltas(db.session)
         db.session.commit()
+        self._drain()
         self.assertEqual(self._raw_count(), 2)
         self.assertEqual(self._counts(), (2, 5000, 2))
 
@@ -161,12 +168,13 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         self._event(duration_ms=2000)
         flush_review_analytics_deltas(db.session)
         db.session.commit()
+        self._drain()
         self.assertEqual(self._counts(), (2, 3000, 2))
 
-    def test_counter_failure_rolls_back_raw_and_generation_revision(self):
+    def test_feed_failure_rolls_back_raw_and_head_revision(self):
         self._fence()
         self._event()
-        with patch("app.services.review_analytics_projection_service.add_grouped_deltas",
+        with patch("app.repositories.review_analytics_outbox_repository.insert_outbox_revision",
                    side_effect=RuntimeError("counter failed")):
             with self.assertRaisesRegex(RuntimeError, "counter failed"):
                 flush_review_analytics_deltas(db.session)
@@ -187,6 +195,7 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             flush_review_analytics_deltas(db.session)
         db.session.rollback()
+        self._drain()
         self.assertEqual(self._counts(), (1, 1000, 1))
 
     def test_raw_insert_requires_fence_before_flush(self):
@@ -216,6 +225,7 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
             db.session.commit()
         flush_review_analytics_deltas(db.session)
         db.session.commit()
+        self._drain()
         generation = db.session.get(ReviewAnalyticsGeneration, (self.user_id, 1))
         self.assertEqual(generation.status, 2)
         self.assertIsNone(generation.verified_at)
@@ -233,6 +243,7 @@ class ReviewAnalyticsProjectionTests(unittest.TestCase):
         db.session.execute(statement)
         flush_review_analytics_deltas(db.session)
         db.session.commit()
+        self._drain()
         self.assertEqual(db.session.get(ReviewAnalyticsGeneration, (self.user_id, 1)).status, 2)
 
     def test_finalizer_inside_savepoint_is_rejected(self):

@@ -81,8 +81,6 @@ from app.services.change_request.lifecycle import (
     has_pending_review_request_for_install,
 )
 from app.services.change_request.merge import (
-    _rename_note_type_field_values,
-    _remove_note_type_field_values,
     _normalize_field_positions,
     _cleanup_install_overlay_rows,
     _build_merged_working_tree_changes,

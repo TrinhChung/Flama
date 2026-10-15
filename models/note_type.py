@@ -28,6 +28,7 @@ class NoteType(db.Model):
     price_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     price_cents = synonym("price_amount_minor")
     version = db.Column(db.String(50), nullable=False, default="1.0.0")
+    field_schema_revision = db.Column(db.BigInteger, nullable=False, default=0, server_default="0")
     changelog = db.Column(db.Text, nullable=True)
     publish_status = db.Column(
         db.Enum("private", "published", "unlisted", "archived", name="note_type_publish_status_enum", native_enum=False),

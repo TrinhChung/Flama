@@ -136,15 +136,20 @@ class StudyQueueMetadataTests(unittest.TestCase):
     def test_mcp_queue_skips_missing_note_type_before_limiting(self):
         with self.app.app_context():
             card = db.session.get(Card, self.card_ids[0])
-            orphan = Note(user_id=self.user_id, deck_id=self.deck_id,
-                          note_type_id="missing-note-type", field_values={"Word": "orphan"})
-            db.session.add(orphan)
-            db.session.flush()
             # SQLite fixture permits an orphaned type; the previous MCP path
             # skipped it before slicing the queue. Keep that contract.
-            from models.study_application import StudyApplication
+            # Write this deliberately invalid historical row outside ORM
+            # writers, which correctly require a resolvable current schema.
+            from uuid import uuid4
+            orphan_id = str(uuid4())
             older = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=10)
-            orphan.created_at = older
+            db.session.connection().execute(Note.__table__.insert().values(
+                id=orphan_id, user_id=self.user_id, deck_id=self.deck_id,
+                note_type_id="missing-note-type", field_values_by_id={},
+                field_values_extras={"Word": "orphan"}, field_values_codec="field-id.v1",
+                created_at=older))
+            orphan = db.session.get(Note, orphan_id)
+            from models.study_application import StudyApplication
             db.session.add(StudyApplication(note_type_id=orphan.note_type_id,
                 template_id=card.template_id, occurrence_key="orphan-fixture", status_code="ACTIVE",
                 created_at=older, updated_at=older))

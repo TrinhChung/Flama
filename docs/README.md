@@ -12,6 +12,8 @@ Tài liệu mô tả kiến trúc hiện hành và các tiêu chuẩn kỹ thu�
 |---|---|
 | [`SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) | **Tổng quan kiến trúc toàn hệ thống** (React SPA, Flask REST API, Flama Connect, Flama Audio). |
 | [`DATABASE_PROGRESS_SCALABILITY_REPORT_2026-10-13.md`](architecture/DATABASE_PROGRESS_SCALABILITY_REPORT_2026-10-13.md) | Hạn chế DB khi progress/lịch sử học tăng; mô hình Field ID, analytics projection và lộ trình cải thiện install/template/dashboard. |
+| [`DATABASE_PROGRESS_SCALABILITY_IMPLEMENTATION_2026-10-14.md`](architecture/DATABASE_PROGRESS_SCALABILITY_IMPLEMENTATION_2026-10-14.md) | Các đợt implementation, MySQL parity/performance evidence và gate còn mở; [rollout/rollback runbook](runbooks/DATABASE_PROGRESS_SCALABILITY_ROLLOUT.md). |
+| [`CACHE_STORAGE_GROWTH_REVIEW_2026-10-15.md`](architecture/CACHE_STORAGE_GROWTH_REVIEW_2026-10-15.md) | Số đo MySQL local và vòng đời cache/snapshot/outbox/archive; các phần chưa có retention khi số user tăng. |
 | [`FLAMA_PAYMENT_ARCHITECTURE.md`](architecture/FLAMA_PAYMENT_ARCHITECTURE.md) | **Kiến trúc thanh toán payOS** (Orders, PaymentAttempts, Webhook, Entitlements). |
 | [`CARD_TEMPLATE_SANDBOX_RENDERER.md`](architecture/CARD_TEMPLATE_SANDBOX_RENDERER.md) | **Cơ chế render iframe sandbox an toàn** cho custom card templates. |
 | [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–4 và INT-01/INT-02 hoàn tất cho pre-release development; production enablement còn gate riêng. |

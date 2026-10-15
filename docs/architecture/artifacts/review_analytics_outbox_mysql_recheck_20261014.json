@@ -1,0 +1,18 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 57.813,
+  "errors": 0,
+  "failures": 0,
+  "fixture_cases": [
+    "test_dirty_bulk_marker_after_finalizer_is_refused",
+    "test_duplicate_raw_uniqueness_does_not_enqueue_another_revision",
+    "test_new_history_write_after_finalizer_is_refused_and_rolls_back_atomically",
+    "test_worker_applies_all_scopes_and_idempotent_retry_once"
+  ],
+  "generated_schema": "flama_history_outbox_probe_420_3b7bd8ff19f1",
+  "mysql_specific_cases": [],
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "PASS",
+  "tests_run": 4
+}

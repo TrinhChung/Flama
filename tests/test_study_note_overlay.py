@@ -7,7 +7,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from tests import test_study_direct_note_replay as fixtures
-from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent
+from tests.study_note_fixtures import attach_template, enroll_note_user, assert_retired_progress_absent, archive_wire_alias
 from app.services import browse_card_service, deck_management_service
 from app.services.study_authority_enrollment_service import (
     StudyAuthorityEnrollmentError,
@@ -18,7 +18,8 @@ from app.services.study_artifact_service import pristine_note_review_state_versi
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_progress_shadow_codec import decode_float
 from models import db
-from models.card import Card
+from models.card import Card, cutover_notes, cutover_applications
+from models.study_application import StudyApplication
 from models.deck import Deck
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
@@ -318,6 +319,96 @@ class StudyNoteOverlayTests(unittest.TestCase):
             )
             self.assertEqual(all_listing["total"], 2)
             self.assertEqual(len(all_listing["items"]), 2)
+
+    def test_browse_keeps_note_when_default_presentation_was_absent_at_cutover(self):
+        self._install_overlay()
+        with self.app.app_context():
+            cards = Card.query.filter_by(note_id=self.source_note_id).all()
+            survivor = next(card for card in cards
+                if not db.session.get(StudyApplication, card.application_id).is_default)
+            archive_wire_alias(db.session, survivor, str(uuid4()))
+            db.session.execute(cutover_notes.insert().values(note_id=self.source_note_id))
+            db.session.execute(cutover_applications.insert(), [
+                {"application_id": card.application_id} for card in cards])
+            db.session.commit()
+            listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
+                timezone_name="UTC", query_args={"deck_id": str(self.local_deck_id)})
+            self.assertEqual(listing["total"], 1)
+            self.assertEqual(listing["items"][0]["card_id"], survivor.id)
+            self.assertEqual(listing["items"][0]["word"], "共有")
+
+    def test_browse_chooses_preview_inside_legacy_clone_snapshot(self):
+        self._install_overlay()
+        with self.app.app_context():
+            note = db.session.get(Note, self.source_note_id)
+            for app in StudyApplication.query.filter_by(note_type_id=note.note_type_id):
+                app.is_default = False
+            template = attach_template(db.session, note_type_id=note.note_type_id,
+                owner_user_id=note.user_id, name="New default", front_html="{{Word}}", back_html="{{Word}}",
+                is_default=True)
+            app = StudyApplication.query.filter_by(template_id=template.id).one()
+            app.created_at = db.session.get(DeckInstall, self.install_id).base_snapshot_at + timedelta(days=1)
+            db.session.commit()
+            listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
+                timezone_name="UTC", query_args={"deck_id": str(self.local_deck_id)})
+            self.assertEqual(listing["total"], 1)
+            self.assertIn(listing["items"][0]["card_id"], self.source_card_ids)
+
+    def test_browse_paginates_notes_before_returning_a_preview_per_note(self):
+        self._install_overlay()
+        with self.app.app_context():
+            source = db.session.get(Note, self.source_note_id)
+            for index in range(4):
+                db.session.add(Note(user_id=source.user_id, deck_id=source.deck_id,
+                    note_type_id=source.note_type_id, field_values={"Word": f"word-{index}"},
+                    created_at=source.created_at))
+            # Both presentations are inside the legacy snapshot.
+            db.session.get(DeckInstall, self.install_id).base_snapshot_at = _now() + timedelta(days=1)
+            db.session.commit()
+            seen = []
+            for page in range(1, 4):
+                listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
+                    timezone_name="UTC", query_args={"deck_id": str(self.local_deck_id),
+                        "page": str(page), "per_page": "2", "sort_by": "word"})
+                self.assertEqual(listing["total"], 5)
+                self.assertEqual(listing["pages"], 3)
+                seen.extend(row["note_id"] for row in listing["items"])
+            self.assertEqual(len(seen), 5)
+            self.assertEqual(len(set(seen)), 5)
+
+    def test_browse_preview_uses_active_position_fallback_when_no_default(self):
+        self._install_overlay()
+        with self.app.app_context():
+            cards = Card.query.filter_by(note_id=self.source_note_id).all()
+            first, second = sorted((db.session.get(StudyApplication, card.application_id) for card in cards),
+                key=lambda app: app.id)
+            first.is_default, first.position = False, 10
+            second.is_default, second.position = False, 1
+            db.session.commit()
+            listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
+                timezone_name="UTC", query_args={"deck_id": str(self.local_deck_id)})
+            self.assertEqual(listing["total"], 1)
+            self.assertEqual(listing["items"][0]["card_id"], f"{self.source_note_id}.{second.id}")
+
+    def test_browse_keeps_an_active_preview_when_default_is_retired(self):
+        self._install_overlay()
+        with self.app.app_context():
+            note = db.session.get(Note, self.source_note_id)
+            default = StudyApplication.query.filter_by(note_type_id=note.note_type_id, is_default=True).one()
+            default.status_code = "RETIRED"
+            db.session.commit()
+            listing = browse_card_service.list_browse_cards(user_id=self.user_id, admin_mode=False,
+                timezone_name="UTC", query_args={"deck_id": str(self.local_deck_id)})
+            self.assertEqual(listing["total"], 1)
+            self.assertNotEqual(listing["items"][0]["card_id"], f"{self.source_note_id}.{default.id}")
+
+    def test_browse_note_delete_cannot_delete_an_installed_source_note(self):
+        self._install_overlay()
+        response = self.client.delete(f"/api/browse/notes/{self.source_note_id}")
+        self.assertEqual(response.status_code, 403)
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Note, self.source_note_id))
+            self.assertEqual(Card.query.filter_by(note_id=self.source_note_id).count(), 2)
 
 
 if __name__ == "__main__":

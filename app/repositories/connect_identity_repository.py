@@ -2,6 +2,7 @@
 
 from sqlalchemy import literal
 from sqlalchemy.orm import selectinload
+from app.repositories.field_value_query_repository import named_field_json_expression
 
 from models import db
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
@@ -17,7 +18,7 @@ def local_identity_rows(*, user_id: int, deck_id: int, field_name: str):
     return db.session.query(
         Note.id,
         Note.note_type_id,
-        Note.field_values[field_name].label("identity_value"),
+        named_field_json_expression(field_name).label("identity_value"),
     ).filter(Note.user_id == user_id, Note.deck_id == deck_id).all()
 
 
@@ -54,10 +55,14 @@ def _source_conditions(install, source_deck_id: int, *, uses_release: bool):
 def clone_source_rows(*, install, source_deck_id: int, uses_release: bool):
     # A versioned install must not hydrate source-live field values. Its
     # values come from the immutable release reader in the service instead.
-    values = literal(None) if uses_release else Note.field_values
-    return db.session.query(
-        Note.id, Note.note_type_id, values.label("field_values"),
-    ).filter(*_source_conditions(install, source_deck_id, uses_release=uses_release)).all()
+    conditions = _source_conditions(install, source_deck_id, uses_release=uses_release)
+    if uses_release:
+        return db.session.query(Note.id, Note.note_type_id, literal(None).label("field_values"))\
+            .filter(*conditions).all()
+    # The unversioned compatibility reader still consumes boundary labels;
+    # hydrate only its scoped Notes so the canonical model adapter projects them.
+    return Note.query.options(selectinload(Note.note_type).selectinload(NoteType.field_defs))\
+        .filter(*conditions).all()
 
 
 def clone_note_overrides(*, install, source_deck_id: int, uses_release: bool):

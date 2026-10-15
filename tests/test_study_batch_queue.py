@@ -105,7 +105,8 @@ class StudyBatchQueueTests(unittest.TestCase):
         _payload, job = self._admitted_job()
         with self.app.app_context():
             note_id = self.snapshot["cards"][0]["card_id"].split(".")[0]
-            Note.query.filter_by(id=note_id).delete(synchronize_session=False)
+            db.session.delete(db.session.get(Note, note_id))
+            db.session.flush()
             db.session.commit()
             result = process_single_study_batch(job)
             self.assertNotEqual(result["status"], "completed")

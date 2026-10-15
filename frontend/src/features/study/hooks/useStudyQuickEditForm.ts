@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { appApi } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
 import { fieldValueEditorText, serializeArrayFieldValues } from '@/lib/arrayField'
+import { noteWritePreconditions } from '@/lib/noteWritePreconditions'
 import type { StudyContentArtifact, StudyMediaArtifact, StudyTemplateArtifact } from '../types'
 import type { CardDetailResponse } from '@/features/browse/hooks/useBrowseState'
 
@@ -112,6 +113,9 @@ export function useStudyQuickEditForm({
   const [initialDeckId, setInitialDeckId] = useState<number | null>(null)
 
   const isFormInitializedRef = useRef(false)
+  const initialWritePreconditionsRef = useRef<ReturnType<typeof noteWritePreconditions>>({})
+  const hydratedDetailRef = useRef<CardDetailResponse | null>(null)
+  const initialDetailConflictRef = useRef(false)
 
   // Query background card detail for full deck tree options and tags
   const cardDetailQuery = useQuery({
@@ -140,6 +144,9 @@ export function useStudyQuickEditForm({
       setInitialFieldValues({})
       setNewTagInput('')
       setInvalidArrayFields({})
+      initialWritePreconditionsRef.current = {}
+      hydratedDetailRef.current = null
+      initialDetailConflictRef.current = false
     }
   }, [open, content, template?.binding_projection])
 
@@ -154,9 +161,22 @@ export function useStudyQuickEditForm({
   useEffect(() => {
     if (cardDetailQuery.data && open) {
       const detail = cardDetailQuery.data
+      if (hydratedDetailRef.current === detail) return
+      const hasDraft = JSON.stringify(fieldValues) !== JSON.stringify(initialFieldValues)
+        || JSON.stringify(tags) !== JSON.stringify(initialTags) || deckId !== initialDeckId
+      if (hydratedDetailRef.current && hasDraft) return
+      hydratedDetailRef.current = detail
+      initialWritePreconditionsRef.current = noteWritePreconditions(detail.note)
       const detailValues = detail.note.field_values || {}
       const detailTags = detail.note.tags || []
       const detailDeckId = detail.note.deck_id || null
+      const pendingFields = Object.fromEntries(Object.entries(fieldValues).filter(([name, value]) =>
+        JSON.stringify(value) !== JSON.stringify(initialFieldValues[name])))
+      if (Object.entries(pendingFields).some(([name, value]) =>
+        JSON.stringify(detailValues[name]) !== JSON.stringify(initialFieldValues[name])
+        && JSON.stringify(detailValues[name]) !== JSON.stringify(value))) {
+        initialDetailConflictRef.current = true
+      }
 
       setFieldValues((current) => {
         // If form has not been modified by user yet, adopt authoritative detailValues directly
@@ -168,7 +188,7 @@ export function useStudyQuickEditForm({
         }
         return {
           ...detailValues,
-          ...current,
+          ...pendingFields,
         }
       })
       setInitialFieldValues(detailValues)
@@ -177,7 +197,7 @@ export function useStudyQuickEditForm({
       setDeckId(detailDeckId)
       setInitialDeckId(detailDeckId)
     }
-  }, [cardDetailQuery.data, open, initialFieldValues])
+  }, [cardDetailQuery.data, open, initialFieldValues, fieldValues, tags, initialTags, deckId, initialDeckId])
 
   const handleAddTag = useCallback(() => {
     const trimmed = newTagInput.trim()
@@ -191,6 +211,7 @@ export function useStudyQuickEditForm({
   }, [])
 
   const handleRevert = useCallback(() => {
+    initialDetailConflictRef.current = false
     setFieldValues(initialFieldValues)
     setTags(initialTags)
     setDeckId(initialDeckId)
@@ -243,10 +264,18 @@ export function useStudyQuickEditForm({
       field_values: Record<string, unknown>
       deck_id?: number
       tags?: string[]
-    }) => appApi.mutate<UpdateCardResponse>(`/browse/cards/${cardId}`, 'PATCH', payload),
+    }) => {
+      if (initialDetailConflictRef.current) {
+        return Promise.reject(new Error('Nội dung đã thay đổi. Hoàn tác và tải lại trước khi lưu.'))
+      }
+      return appApi.mutate<UpdateCardResponse>(`/browse/cards/${cardId}`, 'PATCH', {
+        ...payload, ...initialWritePreconditionsRef.current,
+      })
+    },
     onSuccess: async (data) => {
       toast.success(t('quick_edit.saved_success'))
       const committedFieldValues = data?.detail?.note?.field_values || fieldValues
+      if (data?.detail?.note) initialWritePreconditionsRef.current = noteWritePreconditions(data.detail.note)
       setInitialFieldValues(committedFieldValues)
       setFieldValues(committedFieldValues)
       setInitialTags(tags)

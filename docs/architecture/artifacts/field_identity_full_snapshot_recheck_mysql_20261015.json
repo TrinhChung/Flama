@@ -1,0 +1,52 @@
+{
+  "status": "PASS",
+  "checked_at_utc": "2026-10-15T09:28:10.117906+00:00",
+  "previous_attempt": "field_identity_full_snapshot_mysql_20261015.json",
+  "previous_failure_reason": "Pre-DDL equality gate incorrectly rejected legitimate post-cutover edits in an already canonical source snapshot. Corrected read-only snapshot gate verifies current codec and historical archive independently.",
+  "retry_scope": "Same nonce-owned complete snapshot, idempotent head migration and read-only canonical/archive verification. Earlier failure evidence is retained.",
+  "snapshot_source_head": [
+    "20261014_000068"
+  ],
+  "migration": {
+    "before": [
+      "20261014_000068"
+    ],
+    "after": [
+      "20261014_000068"
+    ],
+    "field_cutover": null
+  },
+  "field_contract": {
+    "counts": {
+      "note": 41534,
+      "media": 33936,
+      "override": 0
+    },
+    "archived_counts": {
+      "note": 41533,
+      "media": 33934,
+      "rename_job": 1,
+      "override": 0
+    },
+    "archive_root_sha256": "75483c4d398c1063af2aa2c9bd2578a87d45b7d425ea2011aff48bee82bc67fd",
+    "single_live_authority": true,
+    "immutable_archive_verified": true,
+    "post_cutover_edits_allowed": true
+  },
+  "scoped_definition_counts": [
+    {
+      "identity_kind": "owned",
+      "definitions": 159
+    }
+  ],
+  "configured_source_preserved_during_snapshot_run": true,
+  "source_writes": 0,
+  "historical_override_rows": 0,
+  "production_qualified": false,
+  "fixture_schema": "flama_scalability_probe_21148_fbece91b65e1fa9a",
+  "fixture_cleanup": "removed and verified exact nonce-owned schemas after successful recheck",
+  "removed_fixture_schemas": [
+    "flama_scalability_probe_19912_66994a6532ab0951",
+    "flama_scalability_probe_21148_fbece91b65e1fa9a"
+  ]
+}

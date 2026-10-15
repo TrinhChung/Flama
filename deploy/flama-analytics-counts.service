@@ -1,5 +1,5 @@
 [Unit]
-Description=Refresh Flama configured learner deck count snapshots
+Description=Refresh Flama configured learner deck counts and due buckets
 After=network-online.target mysql.service
 
 [Service]
@@ -12,7 +12,8 @@ Environment=STARTUP_RUN_MAINTENANCE=0
 Environment=STARTUP_CHECK_DB_CONNECTIVITY=0
 Environment=PYTHONDONTWRITEBYTECODE=1
 RuntimeDirectory=flama-analytics-counts
-ExecStart=/usr/bin/flock --nonblock /run/flama-analytics-counts/runner.lock /opt/flama/venv/bin/flask --app wsgi.py deck-counts-prewarm --configured --apply
+ExecCondition=/opt/flama/venv/bin/python -c "import os; raise SystemExit(0 if os.getenv('DECK_COUNT_WRITE_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'} and os.getenv('DECK_COUNT_PREWARM_USER_IDS', '').strip() else 1)"
+ExecStart=/usr/bin/flock --nonblock /run/flama-analytics-counts/runner.lock /opt/flama/venv/bin/flask --app wsgi.py analytics-counts-prewarm --configured --apply --max-decks 100 --max-buckets 4096
 TimeoutStartSec=120
 Nice=10
 IOSchedulingClass=idle

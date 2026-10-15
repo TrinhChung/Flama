@@ -57,7 +57,7 @@ class DeployWorkflowTests(unittest.TestCase):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         migration_position = workflow.index(
-            '"$PROJECT_DIR/venv/bin/flask" --app wsgi.py db upgrade'
+            '"$PROJECT_DIR/venv/bin/python" "$release_dir/deploy/migrate_database.py" --writers-quiesced'
         )
         admin_bootstrap_position = workflow.index(
             '"$PROJECT_DIR/venv/bin/flask" --app wsgi.py bootstrap-admin-sync'
@@ -76,7 +76,7 @@ class DeployWorkflowTests(unittest.TestCase):
             '--unit="flama-db-migrate-$RELEASE_ID"'
         )
         migration_command_end = workflow.index(
-            '"$PROJECT_DIR/venv/bin/flask" --app wsgi.py db upgrade'
+            '"$PROJECT_DIR/venv/bin/python" "$release_dir/deploy/migrate_database.py" --writers-quiesced'
         )
         migration_block = workflow[migration_unit_start:migration_command_end]
 
@@ -92,7 +92,7 @@ class DeployWorkflowTests(unittest.TestCase):
     def test_consumer_is_installed_after_migrations_and_part_of_release_health(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
         activate = workflow[workflow.index('test -f "$environment_file"'):]
-        self.assertLess(activate.index("db upgrade"), activate.index('install -m 0644 "$release_dir/deploy/flama-study-worker.service"'))
+        self.assertLess(activate.index("deploy/migrate_database.py"), activate.index('install -m 0644 "$release_dir/deploy/flama-study-worker.service"'))
         self.assertLess(activate.index("systemctl stop flama-study-worker.service"), activate.index('mv -f "$desired_environment_file" "$environment_file"'))
         self.assertLess(activate.index("systemctl restart flama-study-worker.service"), activate.index("study_worker.py --check-ready"))
         self.assertLess(activate.index("study_worker.py --check-ready"), activate.index('touch "$release_dir/.deployment_succeeded"'))
@@ -134,13 +134,18 @@ class DeployRollbackShellTests(unittest.TestCase):
         if not cls.bash:
             raise unittest.SkipTest("Bash is required for the stubbed deploy-shell rehearsal.")
 
-    def _rollback(self, *, check_exit=0, quiesce_exit=0, consumer_stop_exit=0, previous_worker=True):
+    def _rollback(self, *, check_exit=0, quiesce_exit=0, consumer_stop_exit=0,
+                  history_exit=0, field_exit=0, previous_worker=True):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
         function = workflow[workflow.index("          rollback_activation() {"):workflow.index("          cleanup() {")]
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory)
             previous = fixture / "previous"
             (previous / "deploy").mkdir(parents=True)
+            current = fixture / "current"
+            (current / "deploy").mkdir(parents=True)
+            (current / "deploy" / "flama-review-analytics-worker.service").write_text("test fixture only", encoding="utf-8")
+            (current / "deploy" / "check_field_code_rollback.py").write_text("test fixture only", encoding="utf-8")
             units = ["flama.service", "flama-connect.service"]
             if previous_worker:
                 units.append("flama-study-worker.service")
@@ -154,18 +159,25 @@ class DeployRollbackShellTests(unittest.TestCase):
             script = "\n".join((
                 "set -Eeuo pipefail",
                 "activation_started=1", "deployment_succeeded=0", "RELEASE_ID=test",
-                "PROJECT_DIR=/test-project", "release_dir=/test-new-release",
+                "PROJECT_DIR=/test-project", "release_dir=" + shlex.quote(current.as_posix()),
                 "environment_file=/test-environment",
                 "environment_backup_file=" + shlex.quote(backup.as_posix()),
                 "previous_release=" + shlex.quote(previous.as_posix()),
                 f"CHECK_EXIT={check_exit}", f"QUIESCE_EXIT={quiesce_exit}", f"CONSUMER_STOP_EXIT={consumer_stop_exit}",
+                f"HISTORY_EXIT={history_exit}",
+                f"FIELD_EXIT={field_exit}",
                 '''systemctl() {
                   printf '%s\\n' "systemctl $*"
                   if [ "$*" = 'stop flama.service flama-connect.service' ]; then return "$QUIESCE_EXIT"; fi
                   if [ "$*" = 'stop flama-study-worker.service' ]; then return "$CONSUMER_STOP_EXIT"; fi
                   return 0
                 }
-                systemd-run() { printf '%s\\n' "systemd-run $*"; return "$CHECK_EXIT"; }
+                systemd-run() {
+                  printf '%s\\n' "systemd-run $*"
+                  case "$*" in *review-analytics-rollback-check*) return "$HISTORY_EXIT" ;; esac
+                  case "$*" in *check_field_code_rollback.py*) return "$FIELD_EXIT" ;; esac
+                  return "$CHECK_EXIT"
+                }
                 cp() { printf '%s\\n' "cp $*"; }
                 install() { printf '%s\\n' "install $*"; }
                 ln() { printf '%s\\n' "ln $*"; }
@@ -207,6 +219,21 @@ class DeployRollbackShellTests(unittest.TestCase):
         self.assertLess(output.index("stop flama-study-worker.service"), output.index("cp "))
         self.assertLess(output.index("ln "), output.index("restart flama-study-worker.service"))
         self.assertIn("Previous release restored", errors)
+
+    def test_pending_history_gate_preserves_environment_and_selected_release(self):
+        output, errors = self._rollback(history_exit=1)
+        self.assertIn("stop flama-study-worker.service", output)
+        self.assertIn("review-analytics-rollback-check --writers-quiesced", output)
+        self.assertNotIn("cp ", output)
+        self.assertNotIn("ln ", output)
+        self.assertIn("drain committed history revisions", errors)
+
+    def test_field_contraction_blocks_restoring_an_incompatible_binary(self):
+        output, errors = self._rollback(field_exit=1)
+        self.assertIn("check_field_code_rollback.py", output)
+        self.assertNotIn("cp ", output)
+        self.assertNotIn("ln ", output)
+        self.assertIn("contracted Field ID storage", errors)
 
     def test_pre_consumer_release_disables_obsolete_unit_after_safe_gate(self):
         output, errors = self._rollback(previous_worker=False)

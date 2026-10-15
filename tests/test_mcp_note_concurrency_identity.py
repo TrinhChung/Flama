@@ -230,6 +230,26 @@ class McpNoteConcurrencyIdentityTests(unittest.TestCase):
             self.assertEqual(note.field_values.get("Meaning"), "new updated meaning")
             self.assertEqual(note.field_values.get("Vocabulary"), "shred")
 
+    def test_mcp_note_revision_preconditions_reject_stale_updates(self):
+        from app.validators.mcp import validate_update_note_arguments
+        with self.app.app_context():
+            created = mcp_tool_service.create_note(user_id=self.user_id, note_data={
+                "deck_id": self.deck_id, "note_type_id": self.note_type_id,
+                "fields": {"STT": "99", "Vocabulary": "identity", "Meaning": "original"},
+            })
+            snapshot = mcp_tool_service.get_note(user_id=self.user_id, note_id=created["note_id"])
+            arguments = validate_update_note_arguments({"note_id": created["note_id"],
+                "fields": {"Meaning": "current"},
+                "expected_content_revision": snapshot["content_revision"],
+                "expected_field_schema_revision": snapshot["field_schema_revision"]})
+            updated = mcp_tool_service.update_note(user_id=self.user_id, **arguments)
+            self.assertGreater(updated["content_revision"], snapshot["content_revision"])
+            with self.assertRaises(RequestValidationError) as conflict:
+                mcp_tool_service.update_note(user_id=self.user_id, **arguments)
+            self.assertEqual(conflict.exception.status, 409)
+            db.session.rollback()
+            self.assertEqual(db.session.get(Note, created["note_id"]).field_values["Meaning"], "current")
+
     def test_auto_assign_stt_when_omitted(self):
         """Server automatically allocates incremental STT (1, 2, 3...) when not provided by client."""
         with self.app.app_context():

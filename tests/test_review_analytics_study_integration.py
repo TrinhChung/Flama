@@ -40,6 +40,8 @@ def enable_empty_projection(app, user_id):
 class ProjectionAssertions:
     def assert_projection(self, app, user_id, count, duration, passed, revision):
         with app.app_context():
+            from app.services.review_analytics_outbox_service import process_review_analytics_outbox
+            self.assertTrue(process_review_analytics_outbox(user_id=int(user_id))["ok"])
             self.assertEqual(ReviewEvent.query.filter_by(user_id=user_id).count(), count)
             totals = db.session.query(
                 func.coalesce(func.sum(DailyReviewCount.review_event_count), 0),

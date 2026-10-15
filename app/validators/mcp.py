@@ -581,6 +581,14 @@ def validate_update_note_arguments(arguments: Any) -> dict[str, Any]:
     fields = arguments.get("fields")
     tags = arguments.get("tags")
     deck_id = arguments.get("deck_id")
+    revisions = {}
+    for key in ("expected_content_revision", "expected_field_schema_revision"):
+        if key not in arguments:
+            continue
+        value = arguments[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise RequestValidationError("Revision must be a non-negative integer.", field=key, status=400, code="INVALID_PARAMS")
+        revisions[key] = value
 
     if fields is None and tags is None and deck_id is None:
         raise RequestValidationError("Cần cung cấp ít nhất một trường để cập nhật (fields, tags, hoặc deck_id).", field="fields", status=400, code="INVALID_PARAMS")
@@ -600,6 +608,7 @@ def validate_update_note_arguments(arguments: Any) -> dict[str, Any]:
         "fields": {str(k).strip(): stored_field_value(v) for k, v in fields.items()} if fields is not None else None,
         "tags": [str(t).strip() for t in tags if str(t).strip()] if tags is not None else None,
         "deck_id": deck_id,
+        **revisions,
     }
 
 

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import and_, case, false, func, literal, or_, select
+from sqlalchemy import and_, case, false, func, literal, or_, select, tuple_
 from sqlalchemy.orm import aliased, selectinload
 
 from app.repositories import vocabulary_repository as vocabulary_ctrl
+from app.repositories.field_value_query_repository import note_field_text_expression
 from models import db
 from models.deck import Deck
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
@@ -18,6 +19,7 @@ from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
 from models.card import get_card
 from models.flashcard import Card, Note, NoteType
 from models.field_def import FieldDef
+from models.study_application import StudyApplication
 
 
 TEXT_FIELD_TYPES = {"text", "richtext", "markdown", "array"}
@@ -51,13 +53,7 @@ def owned_note_word_expression():
     """Return the first non-empty live text field without loading Note rows."""
 
     field_def = aliased(FieldDef)
-    escaped_name = func.replace(
-        func.replace(field_def.name, "\\", "\\\\"),
-        '"',
-        '\\"',
-    )
-    dynamic_path = literal('$."').concat(escaped_name).concat(literal('"'))
-    value_expr = _json_extract_text(Note.field_values, dynamic_path)
+    value_expr = note_field_text_expression(field_def.id)
     return (
         select(value_expr)
         .where(
@@ -130,7 +126,7 @@ def clone_effective_field_text_expression(
     target_release_sequence: int | None,
     source_field_def_id: str | None,
     checkpoint_field_name: str | None,
-    override_field_names: list[str] | tuple[str, ...],
+    field_identity_key: str,
 ):
     """Resolve one clone field at its pinned release plus current overlay.
 
@@ -141,13 +137,6 @@ def clone_effective_field_text_expression(
     """
 
     normalized_field_id = str(source_field_def_id or "").strip() or None
-    normalized_names = sorted(
-        {
-            str(field_name).strip()
-            for field_name in override_field_names
-            if str(field_name).strip()
-        }
-    )
     base_text = literal("")
 
     if (
@@ -250,32 +239,14 @@ def clone_effective_field_text_expression(
             (latest_operation == "remove", literal("")),
             else_=checkpoint_value,
         )
-    elif checkpoint_field_name:
-        base_text = _json_extract_text(
-            Note.field_values,
-            literal(_json_path(checkpoint_field_name)),
-        )
+    elif normalized_field_id:
+        base_text = note_field_text_expression(normalized_field_id)
 
     note_override = aliased(DeckCloneNoteFieldOverride)
-    identity_filters = []
-    if normalized_field_id:
-        identity_filters.append(
-            note_override.source_field_def_id == normalized_field_id
-        )
-    if normalized_names:
-        identity_filters.append(
-            and_(
-                note_override.source_field_def_id.is_(None),
-                note_override.field_name.in_(normalized_names),
-            )
-        )
-    if not identity_filters:
-        return func.coalesce(base_text, "")
-
     override_filters = (
         note_override.deck_install_id == str(deck_install_id),
         note_override.source_note_id == Note.id,
-        or_(*identity_filters),
+        note_override.field_identity_key == field_identity_key,
     )
     override_operation = (
         select(note_override.operation)
@@ -340,6 +311,32 @@ def load_card_for_browse_update(*, card_id: str) -> Card | None:
             selectinload(Card.note).selectinload(Note.media_assets),
             selectinload(Card.template),
         )
+    ))
+
+
+def one_visible_card_per_note(query):
+    """Choose a preview only from the caller's already-visible presentations.
+
+    Historical cutover pairs and clone timestamp bounds differ per Note. A
+    NoteType-wide default must never remove a Note that has another visible
+    presentation. This is a SQL subquery, not a persisted cache or table.
+    """
+    ranked = (
+        query.order_by(None)
+        .join(StudyApplication, StudyApplication.id == Card.application_id)
+        .with_entities(
+            Card.note_id.label("note_id"),
+            Card.application_id.label("application_id"),
+            func.row_number().over(
+                partition_by=Card.note_id,
+                order_by=(StudyApplication.is_default.desc(),
+                          StudyApplication.position.asc(), StudyApplication.id.asc()),
+            ).label("preview_rank"),
+        )
+        .subquery("browse_note_previews")
+    )
+    return query.filter(tuple_(Card.note_id, Card.application_id).in_(
+        select(ranked.c.note_id, ranked.c.application_id).where(ranked.c.preview_rank == 1)
     ))
 
 

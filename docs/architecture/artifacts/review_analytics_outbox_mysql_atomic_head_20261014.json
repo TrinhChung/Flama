@@ -1,0 +1,19 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 56.016,
+  "errors": 0,
+  "failures": 0,
+  "fixture_cases": [
+    "test_inserted_facts_outbox_and_source_revision_rollback_together"
+  ],
+  "generated_schema": "flama_history_outbox_probe_13180_b434b185a441",
+  "mysql_specific_cases": [
+    "test_atomic_head_statement_returns_revision_for_new_existing_and_rolled_back_head",
+    "test_mysql_binary_unsigned_precision_and_payload_round_trip",
+    "test_concurrent_same_learner_writers_allocate_commit_revisions_without_loss"
+  ],
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "PASS",
+  "tests_run": 4
+}

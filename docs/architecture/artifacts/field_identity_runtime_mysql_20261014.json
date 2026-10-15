@@ -1,0 +1,37 @@
+{
+  "application_factory_invoked": false,
+  "clone_added_note_cas_rejected": true,
+  "configured_database_modified": false,
+  "elapsed_seconds": 2.437,
+  "generated_schema": "flama_field_identity_probe_12672_3e9932763a78",
+  "legacy_note_media_rows_preserved": true,
+  "media_case_rename_cas_rejected": true,
+  "media_fk_uniqueness_preserved": true,
+  "media_stable_id_after_schema_rename_retained": true,
+  "metadata_lock_timeout_restored": true,
+  "migration": "20261013_000063",
+  "mysql_version": "8.0.40",
+  "nested_arrays_and_null_preserved": true,
+  "populated_downgrade_refused": true,
+  "probe_database_dropped": true,
+  "raw_named_json_preserved": true,
+  "runtime_case_accent_cas": [
+    {
+      "captured": "Alpha",
+      "cas_rejected": true,
+      "old_writer_change": "alpha"
+    },
+    {
+      "captured": "Cafe",
+      "cas_rejected": true,
+      "old_writer_change": "Caf\u00e9"
+    }
+  ],
+  "schema_epoch_cas_rejected": true,
+  "status": "PASS",
+  "typed_runtime_shadow_and_raw_named_parity": true,
+  "typed_scalar_and_missing_presence_preserved": true,
+  "unchanged_owned_note_cas": true,
+  "unused_expand_downgrade_and_reupgrade": true,
+  "upgrade_repeatable": true
+}

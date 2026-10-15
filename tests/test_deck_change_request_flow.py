@@ -180,6 +180,99 @@ class DeckChangeRequestFlowTests(unittest.TestCase):
             f"/api/shared/decks/{deck_item_id}/change-requests/{request_id}/sync"
         )
 
+    def test_added_clone_field_rename_and_reuse_keep_override_identity_and_native_values(self):
+        ctx = self._create_shared_clone_context()
+        with self.app.app_context():
+            source = db.session.get(Note, ctx["source_note_id"])
+            original_source = dict(source.field_values_by_id)
+            added = DeckCloneAddedFieldDef(deck_install_id=ctx["install_id"],
+                name="Local nested", field_type="array", position=10, properties={})
+            db.session.add(added)
+            db.session.commit()
+            added_id = added.id
+        self._apply_overlay(ctx["learner_client"], ctx["deck_item_id"], {
+            "note_field_overrides": [{"source_note_id": ctx["source_note_id"],
+                "field_name": "Local nested", "value": ["LocalNestedNeedle", ["猫", "猫"]]}],
+        })
+        with self.app.app_context():
+            from app.services.field_value_runtime_service import added_field_identity_key
+            install = db.session.get(DeckInstall, ctx["install_id"])
+            source = db.session.get(Note, ctx["source_note_id"])
+            row = DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=install.id).one()
+            identity = added_field_identity_key(install.id, added_id)
+            self.assertEqual(row.field_identity_key, identity)
+            original_delta = (row.id, row.field_name, row.value)
+            db.session.get(DeckCloneAddedFieldDef, added_id).name = "Renamed local"
+            install.overlay_revision += 1
+            db.session.commit()
+            schema = flashcards_share_service.build_clone_schema_view(install=install,
+                source_note_type_id=ctx["note_type_id"])
+            values = flashcards_share_service.apply_clone_note_field_overrides(install=install,
+                source_note=source, schema_view=schema)
+            self.assertEqual(values["Renamed local"], ["LocalNestedNeedle", ["猫", "猫"]])
+            self.assertNotIn("Local nested", values)
+            self.assertEqual(original_delta, (row.id, row.field_name, row.value))
+            self.assertEqual(original_source, source.field_values_by_id)
+            db.session.delete(db.session.get(DeckCloneAddedFieldDef, added_id))
+            replacement = DeckCloneAddedFieldDef(deck_install_id=install.id,
+                name="Renamed local", field_type="array", position=10, properties={})
+            db.session.add(replacement)
+            install.overlay_revision += 1
+            db.session.commit()
+            schema = flashcards_share_service.build_clone_schema_view(install=install,
+                source_note_type_id=ctx["note_type_id"])
+            values = flashcards_share_service.apply_clone_note_field_overrides(install=install,
+                source_note=source, schema_view=schema)
+            self.assertNotIn("Renamed local", values)
+            replacement_key = added_field_identity_key(install.id, replacement.id)
+        self._apply_overlay(ctx["learner_client"], ctx["deck_item_id"], {
+            "note_field_overrides": [{"source_note_id": ctx["source_note_id"],
+                "field_identity_key": replacement_key, "value": ["Replacement"]}],
+        })
+        with self.app.app_context():
+            rows = DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=ctx["install_id"]).all()
+            self.assertEqual({row.field_identity_key for row in rows}, {identity, replacement_key})
+
+    def test_clone_delta_rejects_foreign_field_scope_foreign_namespace_and_identity_retarget(self):
+        ctx = self._create_shared_clone_context()
+        with self.app.app_context():
+            from app.services.field_value_identity_service import FieldIdentityError
+            from app.services.field_value_runtime_service import added_field_identity_key
+            from models.note_type import NoteType
+            foreign_type = NoteType(user_id=self.owner_user_id, name="Foreign scope")
+            db.session.add(foreign_type)
+            db.session.flush()
+            foreign_field = FieldDef(note_type_id=foreign_type.id, name="Foreign field", field_type="text")
+            foreign_install = DeckInstall(user_id=self.owner_user_id, deck_item_id=ctx["deck_item_id"],
+                source_note_type_id=ctx["note_type_id"], source_owner_user_id=self.owner_user_id,
+                clone_mode="logical_overlay")
+            db.session.add_all([foreign_field, foreign_install])
+            db.session.flush()
+            foreign_added = DeckCloneAddedFieldDef(deck_install_id=foreign_install.id,
+                name="Foreign added", field_type="text", properties={})
+            db.session.add(foreign_added)
+            db.session.commit()
+            foreign_keys = [foreign_field.id, added_field_identity_key(foreign_install.id, foreign_added.id)]
+            for key in foreign_keys:
+                db.session.add(DeckCloneNoteFieldOverride(deck_install_id=ctx["install_id"],
+                    source_note_id=ctx["source_note_id"], field_name="Meaning", field_identity_key=key,
+                    operation="set", value="wrong scope"))
+                with self.assertRaises(FieldIdentityError):
+                    db.session.flush()
+                db.session.rollback()
+        self._apply_overlay(ctx["learner_client"], ctx["deck_item_id"], {
+            "note_field_overrides": [{"source_note_id": ctx["source_note_id"],
+                "field_identity_key": ctx["field_ids"]["Meaning"], "value": "valid"}],
+        })
+        with self.app.app_context():
+            from app.services.field_value_identity_service import FieldIdentityError
+            row = DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=ctx["install_id"]).one()
+            row.field_identity_key = ctx["field_ids"]["Word"]
+            with self.assertRaises(FieldIdentityError):
+                db.session.flush()
+            db.session.rollback()
+            self.assertEqual(row.field_identity_key, ctx["field_ids"]["Meaning"])
+
     def _submit_request(self, learner_client, deck_item_id, request_id):
         return learner_client.post(
             f"/api/shared/decks/{deck_item_id}/change-requests/{request_id}/submit"

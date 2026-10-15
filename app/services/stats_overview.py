@@ -155,6 +155,7 @@ def _canonical_future_due_day_counts(
     end_utc: datetime,
     day_boundary_hour_local: int,
     storage_profile: str,
+    now_utc: datetime | None = None,
 ) -> dict[date, int]:
     """Future due days from the learner's current Note availability.
 
@@ -176,6 +177,15 @@ def _canonical_future_due_day_counts(
         timezone_name=timezone_name,
         day_boundary_hour_local=day_boundary_hour_local,
     )
+
+    from app.services.forecast_snapshot_service import resolve_overview_due_counts
+    summary = resolve_overview_due_counts(
+        db.session, user_id=user_id, timezone_name=timezone_name,
+        day_boundary_hour=day_boundary_hour_local, start_local_day=start_local_day,
+        end_local_day=end_local_day, now_utc=now_utc or datetime.utcnow(),
+    )
+    if summary is not None:
+        return summary
 
     if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return query_canonical_future_due_day_counts_mysql(
@@ -420,6 +430,7 @@ def build_stats_overview(
                 end_utc=year_end_utc,
                 day_boundary_hour_local=day_boundary_hour,
                 storage_profile=authority_route.storage_profile,
+                now_utc=now_utc_naive,
             )
 
     tomorrow_start_utc = _day_index_to_datetime(

@@ -23,9 +23,17 @@ from app.services.stats_today_future import (
 )
 from app.services.study_authority_read_service import StudyAuthorityReadError
 from app.services.study_analytics_read_service import analytics_read_transaction
+from app.services.analytics_summary_readiness import AnalyticsSummaryNotReady
 
 
 analytics_bp = Blueprint("api_v1_analytics", __name__)
+
+
+def _summary_pending_response(exc):
+    response, status = error_response(exc.code, str(exc), status=409,
+        details=[{"metric": exc.metric, "retry_after_seconds": exc.retry_after_seconds}])
+    response.headers["Retry-After"] = str(exc.retry_after_seconds)
+    return response, status
 
 
 def _resolve_request_timezone() -> str:
@@ -51,6 +59,9 @@ def dashboard():
         with analytics_read_transaction():
             payload = build_dashboard_payload(current_user, compact=compact in {"1", "true"})
         return jsonify(payload)
+    except AnalyticsSummaryNotReady as exc:
+        db.session.rollback()
+        return _summary_pending_response(exc)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         return error_response(
@@ -96,6 +107,9 @@ def statistics_overview():
                 year=year,
                 timezone_name=resolved_tz,
             )
+    except AnalyticsSummaryNotReady as exc:
+        db.session.rollback()
+        return _summary_pending_response(exc)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         return error_response(
@@ -154,6 +168,9 @@ def statistics_today_future():
                 future_range=future_range,
                 backlog=backlog,
             )
+    except AnalyticsSummaryNotReady as exc:
+        db.session.rollback()
+        return _summary_pending_response(exc)
     except (StudyAuthorityFenceError, StudyAuthorityReadError) as exc:
         db.session.rollback()
         return error_response(
@@ -184,14 +201,14 @@ def statistics_study_time():
         )
 
     resolved_tz = _resolve_request_timezone()
-    with analytics_read_transaction():
-        payload = build_user_study_time_stats(
-            user_id=current_user.id,
-            timezone_name=resolved_tz,
-            scope=scope,
-            deck_id=deck_id,
-            range_preset=range_preset,
-            start_date_str=start_date,
-            end_date_str=end_date,
-        )
+    try:
+        with analytics_read_transaction():
+            payload = build_user_study_time_stats(
+                user_id=current_user.id, timezone_name=resolved_tz, scope=scope,
+                deck_id=deck_id, range_preset=range_preset,
+                start_date_str=start_date, end_date_str=end_date,
+            )
+    except AnalyticsSummaryNotReady as exc:
+        db.session.rollback()
+        return _summary_pending_response(exc)
     return jsonify(payload)

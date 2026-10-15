@@ -15,7 +15,7 @@ from sqlalchemy.orm.util import identity_key
 from app.repositories.deck_count_snapshot_repository import (
     bump_content_revisions, bump_learner_revisions,
 )
-from models.card import card_key_pairs
+from models.card import PresentationAlias
 from models.note import Note
 from models.study_application import StudyApplication
 from models.study_progress_subject import StudyProgressSubject
@@ -24,11 +24,14 @@ _KEY = "flama.deck_counts.transaction"
 _BULK_TABLES = {
     "notes", "cards", "study_progress_subjects",
     "templates", "note_types", "study_applications", "users", "decks",
+    "card_presentation_aliases", "card_presentation_cutover_notes",
+    "card_presentation_cutover_applications", "deck_release_entity_memberships",
+    "deck_release_template_pins", "deck_releases", "deck_installs", "deck_clone_deck_maps",
 }
-_SUBJECT_COLUMNS = (
-    "learner_user_id", "logical_note_key", "live_note_id", "normalized_queue",
-    "due_day", "due_at", "is_suspended", "is_buried", "buried_until_day",
-)
+# Availability, interval-derived forecasts and fail-closed integrity all depend
+# on the canonical envelope. An updated_at-only touch does not change counts.
+_SUBJECT_COLUMNS = tuple(column.name for column in StudyProgressSubject.__table__.c
+                         if column.name not in {"id", "created_at", "updated_at"})
 _PROGRESS_COLUMNS = (
     "user_id", "card_id", "queue", "due_day", "due_at", "is_suspended",
     "is_buried", "buried_until_day",
@@ -123,18 +126,19 @@ def _capture_changes(session, flush_context, instances):
         obj in session.new or _changed(obj, ("status_code", "note_type_id")))]
     cascade = [obj for obj in session.deleted
                if obj.__table__.name in {"templates", "note_types", "study_applications", "users"}]
-    if not affected and not cascade and not occurrences:
+    membership = [obj for obj in lifecycle | session.dirty if (
+        isinstance(obj, PresentationAlias)
+        or obj.__table__.name in {"deck_release_entity_memberships", "deck_release_template_pins", "deck_releases"}
+    )]
+    if not affected and not cascade and not occurrences and not membership:
         return
     frame = _frame(session)
-    if cascade:
+    if cascade or membership or occurrences:
         frame.content.add(0)
-    note_type_ids = set().union(*(_values(obj, "note_type_id") for obj in occurrences))
-    if any(obj.note_type_id is None for obj in occurrences):
-        frame.content.add(0)  # A NoteType added in this flush has no ID yet.
-    if note_type_ids:
-        frame.content.update(int(value) for value in session.execute(
-            select(Note.deck_id).where(Note.note_type_id.in_(sorted(note_type_ids)), Note.deck_id.is_not(None)).distinct()
-        ).scalars())
+    # Attaching/retiring an application is metadata work. The global schema
+    # epoch deliberately trades cache precision for constant writer work; do
+    # not enumerate every Note's deck at flush time. A future NoteType-scoped
+    # revision may reduce this conservative invalidation after qualification.
     # Attribute replacement can hide an unloaded old foreign key. Do not
     # guess its prior scope; a single epoch safely covers that uncommon path.
     for obj in affected:
@@ -169,6 +173,12 @@ def _capture_changes(session, flush_context, instances):
 
     for obj in affected:
         if isinstance(obj, Note):
+            if obj.deck_id is None or (inspect(obj).persistent and notes.get(obj.id) is None
+                    and inspect(obj).attrs.deck_id.history.has_changes()
+                    and not inspect(obj).attrs.deck_id.history.deleted):
+                frame.content.add(0)  # Includes collection Notes with no deck.
+            if None in inspect(obj).attrs.deck_id.history.deleted:
+                frame.content.add(0)
             frame.content.update(decks_for({obj.id}))
             frame.content.update(int(value) for value in _values(obj, "deck_id"))
         else:

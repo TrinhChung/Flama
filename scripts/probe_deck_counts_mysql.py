@@ -185,11 +185,14 @@ def run(url, output):
             from app.services.deck_count_projection_service import invalidate_all_deck_counts
             set_fixture_suspension(False)
             write_metrics = {}
-            for enabled in (False, True):
-                app.config["REVIEW_ANALYTICS_WRITE_ENABLED"] = enabled
-                app.config["DECK_COUNT_WRITE_ENABLED"] = enabled
-                if enabled:
+            for mode, history_enabled, deck_enabled in (
+                    ("disabled", False, False), ("history_only", True, False),
+                    ("deck_only", False, True), ("both", True, True)):
+                app.config["REVIEW_ANALYTICS_WRITE_ENABLED"] = history_enabled
+                app.config["DECK_COUNT_WRITE_ENABLED"] = deck_enabled
+                if history_enabled:
                     run_review_analytics_backfill(user_id=user_id, writer_coverage_enabled=True)
+                if deck_enabled:
                     invalidate_all_deck_counts(db.session)
                     db.session.commit()
                 durations = []
@@ -203,14 +206,28 @@ def run(url, output):
                         timezone_name="UTC", now=NOW, client_event_id=str(uuid4()))
                     if iteration >= 2:
                         durations.append((time.perf_counter() - started) * 1000)
-                write_metrics["counts_enabled" if enabled else "counts_disabled"] = {
+                ordered = sorted(durations)
+                def percentile(value):
+                    position = (len(ordered) - 1) * value / 100
+                    lower = int(position)
+                    upper = min(lower + 1, len(ordered) - 1)
+                    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
+                write_metrics[mode] = {
+                    "history_write_enabled": history_enabled, "deck_write_enabled": deck_enabled,
                     "median_ms": round(statistics.median(durations), 2),
+                    "p95_ms": round(percentile(95), 2), "p99_ms": round(percentile(99), 2),
                     "samples_ms": [round(value, 2) for value in durations],
                 }
             result["native_review_write_metrics"] = write_metrics
+            baseline_p95 = write_metrics["disabled"]["p95_ms"]
+            for mode, metrics in write_metrics.items():
+                metrics["p95_added_ms"] = round(metrics["p95_ms"] - baseline_p95, 2)
+                metrics["p95_added_percent"] = round((metrics["p95_ms"] / baseline_p95 - 1) * 100, 2)
+                metrics["proposed_write_budget_met"] = metrics["p95_added_ms"] <= 5 and metrics["p95_added_percent"] <= 10
+            result["write_qualification_scope"] = "Sequential NOTE fixture samples; concurrency/cold-cache qualification still required"
             state = probe.state(user_id)
-            probe.check("native_write_benchmark_counters_match_accepted_facts", state["raw"] == 24
-                        and state["measures"] == (24, 2400, 24) and state["revision"] == 12)
+            probe.check("native_write_benchmark_counters_match_accepted_facts", state["raw"] == 48
+                        and state["measures"] == (48, 4800, 48) and state["revision"] == 24)
         except Exception as exc:
             result["error"] = {"type": type(exc).__name__, "message": str(exc)}
         finally:

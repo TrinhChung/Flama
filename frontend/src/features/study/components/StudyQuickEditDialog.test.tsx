@@ -121,6 +121,34 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
 }
 
 describe('StudyQuickEditDialog', () => {
+  it('sends the revision captured before the user draft when detail refreshes in the background', async () => {
+    const detail = {
+      card: { card_id: 'card-123', status: 'learning' },
+      note: { id: '101', deck_id: 5, deck_name: 'N5 Deck', tags: ['jlpt-n5'],
+        field_values: mockContent.field_values, content_revision: 3, field_schema_revision: 4 },
+      fields: mockTemplate.field_defs,
+      decks: [{ id: 5, name: 'N5 Deck' }],
+    }
+    mocks.get.mockResolvedValue(detail)
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => root?.render(renderWithClient(
+      <StudyQuickEditDialog open={true} onOpenChange={vi.fn()} cardId="card-123"
+        template={mockTemplate} content={mockContent} onCardUpdated={vi.fn()} />,
+    )))
+    const word = document.querySelector('input[placeholder*="Word"]') as HTMLInputElement
+    await act(async () => setNativeValue(word, 'draft'))
+    await act(async () => queryClient.setQueryData(['browse', 'card-detail', 'card-123'], {
+      ...detail, note: { ...detail.note, content_revision: 9, field_schema_revision: 10 },
+    }))
+    const save = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes('Lưu thay đổi'))!
+    await act(async () => save.click())
+    expect(mocks.mutate).toHaveBeenCalledWith('/browse/cards/card-123', 'PATCH', expect.objectContaining({
+      expected_content_revision: 3, expected_field_schema_revision: 4,
+    }))
+  })
+
   it('blocks invalid array code and saves nested arrays as native lists', async () => {
     mocks.get.mockImplementation(() => new Promise(() => {}))
     const template = { ...mockTemplate, field_defs: [

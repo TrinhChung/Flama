@@ -32,6 +32,7 @@ from app.services.flashcard_renderer import (
     TemplateCompileError,
     render_template_pair,
 )
+from app.services.note_value_precondition_service import check_note_write_preconditions, note_revision_payload
 from app.validators import (
     RequestValidationError,
     validate_note_create_request,
@@ -42,7 +43,6 @@ from models.audit_log import AuditLog
 from models.card import Card
 from models.field_def import FieldDef
 from models.field_types import ARRAY_FIELD_TYPE, FIELD_TYPES
-from models.field_rename_job import FieldRenameJob
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
@@ -635,25 +635,12 @@ def update_field(
     field.required = new_required
     field.identity_role = new_identity_role
 
-    job_payload = None
     if old_name != new_name:
         # Freeze the legacy name->ID map before changing field names. Reusable
         # bindings survive rename; stored Mustache sources stay byte-identical.
         from app.services.template_library_service import initialize_legacy_bindings
         initialize_legacy_bindings(note_type)
-        job = _rename_field_values(
-            user_id=user_id,
-            note_type=note_type,
-            field=field,
-            old_name=old_name,
-            new_name=new_name,
-        )
         field.name = new_name
-        job_payload = {
-            "job_id": job.id,
-            "status": job.status,
-            "processed_notes": job.processed_notes,
-        }
     current_properties = {
         "name": field.name,
         "field_type": field.field_type,
@@ -685,8 +672,6 @@ def update_field(
     result: dict[str, Any] = {
         "field": marketplace_query_service.serialize_field(field)
     }
-    if job_payload:
-        result["rename_job"] = job_payload
     return result
 
 
@@ -713,13 +698,6 @@ def delete_field(
             "Published shared fields must be retired through a release-safe operation.",
             status=409,
         )
-    for note in Note.query.filter_by(
-        note_type_id=note_type.id,
-        user_id=user_id,
-    ).all():
-        values = dict(note.field_values or {})
-        values.pop(field.name, None)
-        note.field_values = values
     db.session.delete(field)
     _audit(
         user_id,
@@ -1326,6 +1304,7 @@ def update_note(
         note_type_id=note.note_type_id,
     )
     try:
+        check_note_write_preconditions(note, payload)
         validated = validate_note_patch_request(
             note_type=note_type,
             payload=payload,
@@ -1410,6 +1389,7 @@ def update_note(
         "id": note.id,
         "field_values": note.field_values,
         "tags": note.tags,
+        **note_revision_payload(note),
     }
 
 
@@ -1604,49 +1584,6 @@ def _audit(user_id: int | None, action: str, payload: dict[str, Any]) -> None:
     db.session.add(AuditLog(user_id=user_id, action=action, payload=payload))
 
 
-def _rename_field_values(
-    *,
-    user_id: int,
-    note_type: NoteType,
-    field: FieldDef,
-    old_name: str,
-    new_name: str,
-) -> FieldRenameJob:
-    job = FieldRenameJob(
-        note_type_id=note_type.id,
-        user_id=user_id,
-        field_def_id=field.id,
-        old_name=old_name,
-        new_name=new_name,
-        status="running",
-        total_notes=Note.query.filter_by(
-            note_type_id=note_type.id,
-            user_id=user_id,
-        ).count(),
-        processed_notes=0,
-    )
-    db.session.add(job)
-    db.session.flush()
-    try:
-        for note in Note.query.filter_by(
-            note_type_id=note_type.id,
-            user_id=user_id,
-        ).all():
-            values = dict(note.field_values or {})
-            if old_name in values and new_name not in values:
-                values[new_name] = values.pop(old_name)
-            elif old_name in values:
-                values.pop(old_name)
-            note.field_values = values
-            job.processed_notes += 1
-        job.status = "completed"
-    except Exception as exc:  # pragma: no cover
-        job.status = "failed"
-        job.error_message = str(exc)
-        logger.exception("Field rename job failed: %s", job.id)
-    return job
-
-
 def _preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for field_def in field_defs:
@@ -1667,6 +1604,7 @@ def _serialize_note(note: Note) -> dict[str, Any]:
         "note_type_id": note.note_type_id,
         "deck_id": note.deck_id,
         "field_values": note.field_values or {},
+        **note_revision_payload(note),
         "tags": note.tags or [],
         "created_at": note.created_at.isoformat() if note.created_at else None,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,

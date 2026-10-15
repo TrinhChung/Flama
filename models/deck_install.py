@@ -111,6 +111,7 @@ class DeckInstall(db.Model):
     market_active_policy_version = db.Column(db.SmallInteger, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    __mapper_args__ = {"version_id_col": overlay_revision, "version_id_generator": False}
 
     deck_item = db.relationship("DeckMarketplaceItem", back_populates="installs")
     user = db.relationship("User", foreign_keys=[user_id])

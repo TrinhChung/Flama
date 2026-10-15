@@ -367,5 +367,33 @@ describe('StudyTemplatePreparation', () => {
     })
     expect(prep.setRemember).toHaveBeenCalledWith(false)
   })
-})
 
+  it('renders responsive bounded viewport container with scrollable body and pinned footer action', async () => {
+    const prep = createMockPreparation()
+
+    await act(async () => {
+      root?.render(
+        <BrowserRouter>
+          <StudyTemplatePreparation preparation={prep} deckName="JLPT N5" onStart={vi.fn()} />
+        </BrowserRouter>,
+      )
+    })
+
+    const outerContainer = container?.firstElementChild as HTMLElement
+    expect(outerContainer.className).toContain('overflow-y-auto')
+    expect(outerContainer.className).toContain('h-[100dvh]')
+
+    const mainCard = container?.querySelector('main') as HTMLElement
+    expect(mainCard).not.toBeNull()
+    expect(mainCard.className).toContain('flex-col')
+    expect(mainCard.className).toContain('overflow-hidden')
+
+    const startButton = Array.from(container?.querySelectorAll('button') ?? []).find((b) =>
+      b.textContent?.includes('Bắt đầu học'),
+    ) as HTMLButtonElement | undefined
+    expect(startButton).toBeDefined()
+    const footer = startButton?.parentElement
+    expect(footer?.className).toContain('shrink-0')
+    expect(footer?.className).toContain('border-t')
+  })
+})

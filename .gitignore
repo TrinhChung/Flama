@@ -39,6 +39,7 @@ engines/
 !/migrations/alembic.ini
 !/migrations/script.py.mako
 !/migrations/retired_note_progress_tables.py
+!/migrations/field_identity_contract.py
 !/migrations/versions/
 !/migrations/versions/*.py
 
@@ -52,6 +53,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+run_*_log.txt
+*_log.txt
 .npm/
 
 # Agent, Tooling & Plugin metadata

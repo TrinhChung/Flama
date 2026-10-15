@@ -1,0 +1,28 @@
+{
+  "configured_database_modified": false,
+  "elapsed_seconds": 162.109,
+  "errors": 0,
+  "failures": 0,
+  "fixture_cases": [
+    "test_additive_migration_preserves_populated_projection_on_rollback",
+    "test_clock_policy_and_canary_changes_reject",
+    "test_identity_drift_fails_closed_without_publishing",
+    "test_nullable_deck_content_lifecycle_invalidates_collection",
+    "test_overlap_installs_and_pinned_retirement_are_collection_union",
+    "test_progress_interval_only_change_rejects_and_rebuilds",
+    "test_publication_race_retains_raw_recovery",
+    "test_ready_payload_parity_and_no_note_progress_history_forecast_scan",
+    "test_window_backlog_overdue_and_overview_fold_parity",
+    "test_worker_retry_empty_projection_and_bucket_budget"
+  ],
+  "generated_schema": "flama_forecast_snapshot_probe_21180_0ff983185c50",
+  "mysql_specific_cases": [
+    "test_mysql_types_double_load_binary_hash_and_datetime_round_trip",
+    "test_due_at_timezone_boundary_and_suspended_pristine_card_buckets",
+    "test_capture_uses_readonly_repeatable_snapshot_before_publication"
+  ],
+  "mysql_version": "8.0.40",
+  "probe_database_dropped": true,
+  "status": "PASS",
+  "tests_run": 13
+}

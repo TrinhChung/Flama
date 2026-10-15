@@ -285,11 +285,15 @@ class NoteQueryRetirementTests(unittest.TestCase):
 
     def _bulk_stateful_notes(self):
         # Bulk content insertion creates no Card records; one application derives 2000.
+        word_id = FieldDef.query.filter_by(note_type_id=self.note_type.id, name='Word').one().id
         rows = [{'id': f'10000000-0000-0000-0000-{index:012d}', 'user_id': self.user.id,
                  'note_type_id': self.note_type.id, 'deck_id': self.deck.id,
-                 'field_values': {'Word': f'{index:08d}'}, 'created_at': NOW, 'updated_at': NOW}
+                 'field_values_by_id': {word_id: f'{index:08d}'}, 'field_values_codec': 'field-id.v1',
+                 'field_values_extras': {}, 'content_revision': 0, 'tags': [], 'created_at': NOW, 'updated_at': NOW}
                 for index in range(1, 2001)]
-        db.session.execute(insert(Note), rows)
+        # Explicit raw fixture writes use the complete canonical codec and
+        # declared scoped ID; production unadapted Session bulk remains blocked.
+        db.session.connection().execute(Note.__table__.insert(), rows)
         document = serialize_card_state(CardState(type='review', stepIndex=0, due=NOW, dueDay=1,
             intervalDays=1, ease=2.5, reps=1, lapses=0, lastReviewAt=None))
         projection = project_note_state(document.payload, burial=NoteCardBurial())

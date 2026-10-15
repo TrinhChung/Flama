@@ -80,10 +80,14 @@ class StudyTemplateApplicationTests(unittest.TestCase):
             self.assertEqual([row.id for row in selected], [card.id])
 
     def test_session_binding_override_is_frozen_and_does_not_change_application(self):
+        values = self.note.field_values
         fields = [FieldDef(note_type_id=self.note_type.id, name=name, field_type="text", position=index)
                   for index, name in enumerate(("Front", "Back"))]
         db.session.add_all(fields)
         db.session.flush()
+        # Explicit fixture disposition: bind the previously undeclared values
+        # to the newly declared definitions, instead of relying on name reuse.
+        self.note.field_values = values
         template = self.template_1
         template.front_html, template.back_html = "{{term}}", ""
         template.input_schema = [{"key": "term", "type": "text"}]
@@ -130,8 +134,11 @@ class StudyTemplateApplicationTests(unittest.TestCase):
             self.assertEqual(StudySession.query.count(), 0)
 
     def test_empty_override_shadows_legacy_inputs_without_saving(self):
+        values = self.note.field_values
         field = FieldDef(note_type_id=self.note_type.id, name="Front", field_type="text")
         db.session.add(field)
+        db.session.flush()
+        self.note.field_values = values
         db.session.commit()
         composition_id = resolve_compatibility_composition_for_card(self.card_1).composition_id
         snapshot = self._open(composition_id, {})

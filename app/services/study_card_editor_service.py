@@ -53,6 +53,8 @@ def update_study_card_note(
 
     note_media_ids = build_media_reference_lookup(note.media_assets or [])
     try:
+        from app.services.note_value_precondition_service import check_note_write_preconditions
+        check_note_write_preconditions(note, payload)
         validated = validate_study_card_edit_request(
             note_type=note_type,
             payload=payload,
@@ -167,6 +169,7 @@ def update_study_card_note(
             rendered_back_html = f"<div class='text-danger'>Error rendering back: {exc}</div>"
 
     display_triplet = note_display_triplet(note)
+    from app.services.note_value_precondition_service import note_revision_payload
     result = {
         "success": True,
         "card_id": card.id,
@@ -174,6 +177,7 @@ def update_study_card_note(
         "deck_id": note.deck_id,
         "tags": note.tags or [],
         "field_values": note_field_values_as_strings(note),
+        **note_revision_payload(note),
         "word": display_triplet.get("word", ""),
         "reading": display_triplet.get("reading", ""),
         "meaning": display_triplet.get("meaning", ""),

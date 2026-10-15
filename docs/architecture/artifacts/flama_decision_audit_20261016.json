@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-16",
+  "scope": "isolated SQLite in-memory; existing test fixture; synthetic data; no production access",
+  "base_commit": "033dd94af05e597e8de3a59bafe1355ae7e8d739",
+  "checks": {
+    "refund": {
+      "http_status": 200,
+      "order_status": "refunded",
+      "grant_status": "completed",
+      "entitlement_statuses": [
+        "active"
+      ],
+      "audit_rows_added": 0
+    },
+    "failed_status_update": {
+      "http_status": 200,
+      "requested_status": "failed",
+      "persisted_status": "paid"
+    },
+    "core_api_quota": {
+      "configured_daily_requests": 2,
+      "paths": [
+        "GET /api/note-types",
+        "GET /api/note-types",
+        "POST /api/note-types"
+      ],
+      "responses": [
+        {
+          "http_status": 200,
+          "error": null
+        },
+        {
+          "http_status": 200,
+          "error": null
+        },
+        {
+          "http_status": 429,
+          "error": "RATE_LIMIT_EXCEEDED"
+        }
+      ]
+    },
+    "scheduler_default": {
+      "scheduler_mode": "legacy",
+      "fsrs_next_states_present": false,
+      "algorithms": [
+        {
+          "key": "legacy-anki",
+          "version": "1.0.0",
+          "state_schema_version": "anki-card-state.v1",
+          "lifecycle_state": "active",
+          "server_executable": true,
+          "new_session_allowed": true,
+          "existing_lease_allowed": true,
+          "accepted_job_allowed": true,
+          "history_read_allowed": true,
+          "switch_initializer_registered": false,
+          "switch_target_allowed": false,
+          "artifacts": {
+            "state_decoder": true,
+            "config_decoder": true,
+            "event_history_decoder": true,
+            "interaction_contract_decoder": true
+          }
+        }
+      ]
+    },
+    "initial_core_api_quota_invalid_route": {
+      "configured_daily_requests": 2,
+      "responses": [
+        {
+          "http_status": 200,
+          "error": null
+        },
+        {
+          "http_status": 405,
+          "error": "METHOD_NOT_ALLOWED"
+        },
+        {
+          "http_status": 201,
+          "error": null
+        }
+      ]
+    },
+    "fsrs_runtime_resolver": {
+      "configured_mode": "fsrs",
+      "fsrs_next_states_present": false,
+      "uses_fsrs_branch": false
+    }
+  }
+}

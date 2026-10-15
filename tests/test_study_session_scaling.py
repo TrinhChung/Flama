@@ -303,7 +303,8 @@ class StudySessionSiblingLockTests(unittest.TestCase):
 
     def test_missing_note_fails_closed(self):
         _lease, _members, locked = self._session_context()
-        db.session.execute(delete(Note).where(Note.id == self.note_id))
+        db.session.delete(db.session.get(Note, self.note_id))
+        db.session.flush()
         with self.assertRaises(StudyAuthorityFenceError) as missing:
             lock_study_authority_siblings_many(db.session, route=self._route(), locked_by_logical_note_key={self.note_id: locked})
         self.assertEqual(missing.exception.code, "AUTHORITY_NOTE_NOT_FOUND")

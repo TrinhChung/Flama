@@ -200,7 +200,6 @@ def apply_plan(session, plan, *, restore=False, fail_after=None):
     from app.services import deck_working_tree_service, template_version_service
     from models.audit_log import AuditLog
     from models.deck_marketplace_item import DeckMarketplaceItem
-    from models.field_rename_job import FieldRenameJob
     from models.note import Note
     from models.template import Template
     validate_plan(plan)
@@ -208,10 +207,6 @@ def apply_plan(session, plan, *, restore=False, fail_after=None):
         raise ValueError('Database identity differs from the plan')
     scoped = fields_for_manifest(session, plan['manifest'], lock=True)
     field_map = {field.id: field for entry, field in scoped}
-    if session.execute(sa.select(FieldRenameJob.id).where(
-        FieldRenameJob.note_type_id.in_({field.note_type_id for field in field_map.values()}),
-        FieldRenameJob.status.notin_(['completed', 'failed']))).first():
-        raise ValueError('Field rename in progress')
     source_key, target_key = ('after', 'before') if restore else ('before', 'after')
     for type_id, expected_count in plan['summary']['notes_by_type'].items():
         count = session.execute(sa.select(sa.func.count()).select_from(Note).where(Note.note_type_id == type_id)).scalar_one()

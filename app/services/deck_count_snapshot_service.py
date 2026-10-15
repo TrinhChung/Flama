@@ -1,4 +1,4 @@
-"""Owned direct-deck cache reads and optimistic, separately transacted prewarm.
+"""Exact direct-deck cache reads and optimistic, separately transacted prewarm.
 
 Readers never write or repair a cache. A publisher always stamps the vector
 that produced the raw counts, even if domain changes race its final commit.
@@ -19,10 +19,12 @@ from app.repositories.study_authority_repository import read_study_authority_rou
 from app.services.anki_scheduler import _day_index_to_datetime
 from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from app.services.review_analytics_policy import ReviewAnalyticsPolicy, resolve_review_analytics_policy
+from app.services.analytics_summary_readiness import require_ready_summary
 from models.deck_count_snapshot import CARD_UNIT, DASHBOARD_CONTRACT, NOTE_UNIT
 
 
-COUNT_IMPLEMENTATION_VERSION = "dashboard-direct-counts.v1"
+COUNT_IMPLEMENTATION_VERSION = "dashboard-direct-counts.v2"
+DEFAULT_PREWARM_MAX_DECKS = 100
 
 
 def _utcnow():
@@ -90,13 +92,70 @@ def _owned_eligible_scope(session, user_id, deck_ids):
     return tuple(sorted(int(row.id) for row in rows if resolved[int(row.id)]))
 
 
+def _installed_eligible_scope(session, user_id, deck_ids):
+    """Only well-formed initialized release scopes can acquire cache stamps.
+
+    Legacy timestamp scopes, unmapped descendants, foreign installs, cycles
+    and incomplete release metadata keep the exact raw fallback. This reads
+    deck/map/release metadata only; source Note membership remains shared.
+    """
+    rows = repository.owned_scope_rows(session, user_id=user_id, deck_ids=deck_ids)
+    by_id = {int(row.id): row for row in rows}
+    dependencies = repository.read_installed_scope_dependencies(session, deck_ids=by_id)
+    if not dependencies:
+        return {}
+    ancestors = {int(row.parent_id) for row in rows if row.parent_id is not None} - set(by_id)
+    while ancestors:
+        parents = repository.owned_scope_rows(session, user_id=user_id, deck_ids=ancestors)
+        if not parents:
+            break
+        by_id.update({int(row.id): row for row in parents})
+        ancestors = {int(row.parent_id) for row in parents if row.parent_id is not None} - set(by_id)
+    ancestor_dependencies = repository.read_installed_scope_dependencies(session, deck_ids=by_id)
+    allowed = {}
+    for deck_id, vector in dependencies.items():
+        if (vector["install_user_id"] != int(user_id)
+                or vector["clone_mode"] != "logical_overlay"
+                or vector["version_mode"] != "release"
+                or not vector["source_owner_user_id"]
+                or not vector["install_source_deck_id"]
+                or not vector["install_local_deck_id"]
+                or vector["release_id"] != vector["applied_release_id"]
+                or vector["release_deck_item_id"] != vector["deck_item_id"]
+                or vector["release_status"] != "published"
+                or not vector["template_pins_initialized"]):
+            continue
+        root_id = int(vector["install_local_deck_id"])
+        root = ancestor_dependencies.get(root_id)
+        if (root is None or root["install_id"] != vector["install_id"]
+                or root["map_source_deck_id"] != vector["install_source_deck_id"]):
+            continue
+        current, seen = deck_id, set()
+        while current not in seen:
+            seen.add(current)
+            metadata = by_id.get(current)
+            mapping = ancestor_dependencies.get(current)
+            if metadata is None or (mapping and mapping["install_id"] != vector["install_id"]):
+                break
+            if current == root_id:
+                allowed[deck_id] = vector
+                break
+            if metadata.parent_id is None:
+                break
+            current = int(metadata.parent_id)
+    return allowed
+
+
 def _context(session, *, user_id, deck_ids, policy, day_index, cutoff,
              is_note_mode, admin_mode, count_by_note, authority_route=None):
     route = authority_route or read_study_authority_route(session, learner_user_id=int(user_id))
     if bool(is_note_mode) != (route.mode_code == "NOTE"):
         return None
-    eligible = _owned_eligible_scope(session, int(user_id), deck_ids)
-    vectors = repository.read_revision_vectors(session, user_id=user_id, deck_ids=eligible)
+    owned = _owned_eligible_scope(session, int(user_id), deck_ids)
+    installed = {} if admin_mode else _installed_eligible_scope(session, int(user_id), deck_ids)
+    eligible = tuple(sorted({*owned, *installed}))
+    revision_ids = {*eligible, *(int(vector["map_source_deck_id"]) for vector in installed.values())}
+    vectors = repository.read_revision_vectors(session, user_id=user_id, deck_ids=revision_ids)
     unit_code = NOTE_UNIT if is_note_mode and count_by_note else CARD_UNIT
     hashes = {}
     for deck_id in eligible:
@@ -106,13 +165,20 @@ def _context(session, *, user_id, deck_ids, policy, day_index, cutoff,
             "mode": route.mode_code, "epoch": route.epoch,
             "persisted_authority": route.persisted, "storage_profile": route.storage_profile,
             "contract": DASHBOARD_CONTRACT, "unit": unit_code,
-            "admin_mode": bool(admin_mode), "owned_notes_only": True,
+            "admin_mode": bool(admin_mode), "owned_notes_only": deck_id not in installed,
             "implementation": COUNT_IMPLEMENTATION_VERSION,
             "policy_hash": policy.policy_hash.hex(), "study_day": int(day_index),
             "cutoff": _utc_naive(cutoff).isoformat(),
         }
+        if deck_id in installed:
+            dependency = installed[deck_id]
+            vector["installed_scope"] = dependency
+            # A learner's source-Note progress is invalidated at the physical
+            # source deck, while local-added Notes use the local deck token.
+            vector["mapped_source_revisions"] = vectors[int(dependency["map_source_deck_id"])]
         hashes[deck_id] = hashlib.sha256(json.dumps(
             vector, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+            default=lambda value: value.isoformat(),
         ).encode("utf-8")).digest()
     return _Context(
         int(user_id), eligible, policy, int(day_index), _utc_naive(cutoff),
@@ -128,12 +194,14 @@ def resolve_cached_owned_deck_counts(
     """Return valid cached counts and all remaining raw IDs, with no DML.
 
     The caller owns its coherent snapshot (Dashboard uses fresh read-only RR).
-    Non-owned decks and every install/mapped scope remain on the raw aggregator.
+    Non-owned and unqualified installed scopes remain on the raw aggregator.
     """
     session = session if isinstance(session, Session) else session()
     requested = sorted({int(value) for value in visible_deck_ids})
     if (not requested or not current_app.config.get("DECK_COUNT_WRITE_ENABLED", False)
             or current_app.config.get("DECK_COUNT_READ_MODE", "raw") != "summary"):
+        if requested and current_app.config.get("DECK_COUNT_READ_MODE", "raw") == "summary":
+            require_ready_summary(user_id=learner_user_id, metric="dashboard")
         return {}, requested
     now = _utc_naive(now_utc or _utcnow())
     policy = ReviewAnalyticsPolicy(timezone_name, int(day_boundary_hour_local))
@@ -141,6 +209,7 @@ def resolve_cached_owned_deck_counts(
     expected_cutoff = _day_index_to_datetime(expected_day + 1, policy.day_boundary_hour,
                                            timezone_name=policy.timezone_name)
     if today_day_index != expected_day or _utc_naive(day_cutoff_utc) != expected_cutoff:
+        require_ready_summary(user_id=learner_user_id, metric="dashboard")
         return {}, requested
     with session.no_autoflush:
         context = _context(
@@ -149,13 +218,17 @@ def resolve_cached_owned_deck_counts(
             admin_mode=admin_mode, count_by_note=count_by_note,
         )
         if context is None:
+            require_ready_summary(user_id=learner_user_id, metric="dashboard")
             return {}, requested
         snapshots = repository.read_snapshots(
             session, user_id=learner_user_id, deck_ids=context.deck_ids,
             contract_code=DASHBOARD_CONTRACT, unit_code=context.unit_code,
         )
     cached = _valid_counts(context, snapshots, now)
-    return cached, [deck_id for deck_id in requested if deck_id not in cached]
+    missing = [deck_id for deck_id in requested if deck_id not in cached]
+    if missing:
+        require_ready_summary(user_id=learner_user_id, metric="dashboard")
+    return cached, missing
 
 
 def _valid_counts(context, snapshots, now):
@@ -263,7 +336,8 @@ class _ComputedCounts(dict):
     computed_at: datetime
 
 
-def prewarm_owned_deck_counts(*, user_id, deck_ids=None, now_utc=None, session_factory=None, force=False):
+def prewarm_owned_deck_counts(*, user_id, deck_ids=None, now_utc=None, session_factory=None,
+                             force=False, max_decks=DEFAULT_PREWARM_MAX_DECKS, after_deck_id=0):
     """Compute raw counts in RR, then publish matching captured stamps in RC.
 
     A race may publish an already stale vector. Readers still reject it; cache
@@ -272,20 +346,30 @@ def prewarm_owned_deck_counts(*, user_id, deck_ids=None, now_utc=None, session_f
     if not current_app.config.get("DECK_COUNT_WRITE_ENABLED", False):
         return {"ok": False, "error": "WRITER_COVERAGE_DISABLED", "computed": 0, "published": 0}
     user_id = int(user_id)
+    max_decks, after_deck_id = int(max_decks), int(after_deck_id)
+    if not 1 <= max_decks <= 1000 or after_deck_id < 0:
+        raise ValueError("Prewarm requires 1..1000 max_decks and a nonnegative deck cursor")
     with _fresh_session(session_factory) as session, _snapshot(session):
         now = _utc_naive(now_utc or _utcnow())
         captured = _worker_context(session, user_id, deck_ids, now)
+        if captured is None:
+            return {"ok": False, "error": "AUTHORITY_SCOPE_UNQUALIFIED", "computed": 0, "published": 0,
+                    "has_more": False, "next_after_deck_id": after_deck_id}
         eligible = len(captured.deck_ids)
         snapshots = repository.read_snapshots(
             session, user_id=user_id, deck_ids=captured.deck_ids,
             contract_code=DASHBOARD_CONTRACT, unit_code=captured.unit_code,
         ) if not force else {}
         cached = _valid_counts(captured, snapshots, now)
-        dirty = tuple(deck_id for deck_id in captured.deck_ids if deck_id not in cached)
+        dirty = tuple(deck_id for deck_id in captured.deck_ids
+                      if deck_id > after_deck_id and deck_id not in cached)
+        has_more = len(dirty) > max_decks
+        dirty = dirty[:max_decks]
         captured = replace(captured, deck_ids=dirty, hashes={key: captured.hashes[key] for key in dirty})
         if not dirty:
             return {"ok": True, "user_id": user_id, "eligible": eligible, "cached": len(cached),
                     "computed": 0, "published": 0, "discarded": 0,
+                    "has_more": False, "next_after_deck_id": after_deck_id,
                     "study_day": date.fromordinal(captured.day_index).isoformat(), "unit_code": captured.unit_code}
         raw, _metadata = aggregate_deck_study_counts(
             session, learner_user_id=user_id, visible_deck_ids=list(captured.deck_ids),
@@ -299,5 +383,6 @@ def prewarm_owned_deck_counts(*, user_id, deck_ids=None, now_utc=None, session_f
     return {"ok": True, "user_id": user_id, "computed": len(captured.deck_ids),
             "eligible": eligible, "cached": len(cached),
             "published": published, "discarded": len(captured.deck_ids) - published,
+            "has_more": has_more, "next_after_deck_id": captured.deck_ids[-1],
             "study_day": date.fromordinal(captured.day_index).isoformat(),
             "unit_code": captured.unit_code}

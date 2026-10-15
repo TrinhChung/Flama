@@ -249,7 +249,6 @@ def apply_plan(session, plan, *, restore=False, fail_after=None):
     from app.services import deck_working_tree_service, template_version_service
     from models.audit_log import AuditLog
     from models.field_def import FieldDef
-    from models.field_rename_job import FieldRenameJob
     from models.note import Note
     from models.note_type import NoteType
     from models.template import Template
@@ -266,10 +265,6 @@ def apply_plan(session, plan, *, restore=False, fail_after=None):
                 or field.field_type != 'array'
                 or session.get(NoteType, field.note_type_id).user_id != entry['owner_user_id']):
             raise ValueError('Field changed after preflight')
-    if session.execute(sa.select(FieldRenameJob.id).where(
-        FieldRenameJob.note_type_id.in_(plan['note_counts']),
-        FieldRenameJob.status.notin_(['completed', 'failed']))).first():
-        raise ValueError('Field rename in progress')
     for type_id, count in plan['note_counts'].items():
         if session.execute(sa.select(sa.func.count()).select_from(Note).where(Note.note_type_id == type_id)).scalar_one() != count:
             raise ValueError('Note membership changed after preflight')

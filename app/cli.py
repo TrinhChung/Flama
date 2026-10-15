@@ -250,7 +250,9 @@ def register_deck_count_commands(app: Flask, *, allow_writes: bool = False) -> N
     @click.option("--configured", is_flag=True, help="Use DECK_COUNT_PREWARM_USER_IDS (bounded canary scope).")
     @click.option("--apply", is_flag=True, help="Publish derived rows; default only reports requested scope.")
     @click.option("--force", is_flag=True, help="Recompute valid rows too for a complete refresh.")
-    def deck_counts_prewarm(user_id, configured, apply, force):
+    @click.option("--max-decks", type=click.IntRange(1, 1000), default=100, show_default=True)
+    @click.option("--after-deck-id", type=click.IntRange(0), default=0, show_default=True)
+    def deck_counts_prewarm(user_id, configured, apply, force, max_decks, after_deck_id):
         """Refresh missing/dirty direct decks outside request transactions."""
         from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
 
@@ -269,7 +271,8 @@ def register_deck_count_commands(app: Flask, *, allow_writes: bool = False) -> N
             return
         for learner_id in sorted(ids):
             try:
-                report = prewarm_owned_deck_counts(user_id=learner_id, force=force)
+                report = prewarm_owned_deck_counts(user_id=learner_id, force=force,
+                    max_decks=max_decks, after_deck_id=after_deck_id)
             except (ValueError, RuntimeError) as exc:
                 raise click.ClickException(str(exc)) from exc
             click.echo(json.dumps(report, sort_keys=True))
@@ -289,11 +292,153 @@ def register_deck_count_commands(app: Flask, *, allow_writes: bool = False) -> N
         click.echo(json.dumps({"ok": True, "dry_run": not apply, "scope": "global"}))
 
 
+def register_scalability_commands(app: Flask, *, allow_writes: bool = False) -> None:
+    @app.cli.command("forecast-summary-status")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    def forecast_summary_status(user_id):
+        """Inspect projection headers; a row count is not a freshness certificate."""
+        from sqlalchemy import select
+        from models.forecast_snapshot import StudyForecastSnapshot
+        from app.services.study_analytics_read_service import analytics_read_transaction
+
+        with analytics_read_transaction():
+            rows = db.session.execute(select(
+                StudyForecastSnapshot.study_day, StudyForecastSnapshot.bucket_count,
+                StudyForecastSnapshot.computed_at, StudyForecastSnapshot.valid_until_utc,
+            ).where(StudyForecastSnapshot.user_id == user_id)).all()
+        click.echo(json.dumps({"ok": True, "user_id": user_id,
+            "read_mode": app.config.get("FORECAST_SUMMARY_READ_MODE", "raw"),
+            "snapshots": [dict(row._mapping) for row in rows]}, default=str))
+
+    if not allow_writes:
+        return
+
+    @app.cli.command("analytics-counts-prewarm")
+    @click.option("--user-id", type=click.IntRange(1), multiple=True)
+    @click.option("--configured", is_flag=True, help="Use DECK_COUNT_PREWARM_USER_IDS.")
+    @click.option("--apply", is_flag=True, help="Publish count and due projections after source validation.")
+    @click.option("--force", is_flag=True)
+    @click.option("--max-decks", type=click.IntRange(1, 1000), default=100, show_default=True)
+    @click.option("--max-buckets", type=click.IntRange(1, 65536), default=4096, show_default=True)
+    def analytics_counts_prewarm(user_id, configured, apply, force, max_decks, max_buckets):
+        """Bounded learner canary job; no source mutation or request transaction."""
+        from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
+        from app.services.forecast_snapshot_service import prewarm_forecast_summary
+
+        ids = set(user_id)
+        if configured:
+            try:
+                ids.update(int(value) for value in app.config.get("DECK_COUNT_PREWARM_USER_IDS", ()))
+            except (ValueError, TypeError) as exc:
+                raise click.ClickException("Invalid DECK_COUNT_PREWARM_USER_IDS") from exc
+        if not ids or len(ids) > 100 or any(value <= 0 for value in ids):
+            raise click.ClickException("Choose 1 to 100 explicit/configured learner IDs")
+        if not apply:
+            click.echo(json.dumps({"ok": True, "dry_run": True, "user_ids": sorted(ids),
+                "max_decks": max_decks, "max_buckets": max_buckets}))
+            return
+        if not app.config.get("DECK_COUNT_WRITE_ENABLED", False):
+            raise click.ClickException("Enable covered DECK_COUNT_WRITE_ENABLED writers before --apply")
+        for learner_id in sorted(ids):
+            try:
+                counts = prewarm_owned_deck_counts(user_id=learner_id, force=force, max_decks=max_decks)
+                forecast = prewarm_forecast_summary(user_id=learner_id, force=force, max_buckets=max_buckets)
+            except (ValueError, RuntimeError) as exc:
+                raise click.ClickException(str(exc)) from exc
+            click.echo(json.dumps({"user_id": learner_id, "deck_counts": counts, "forecast": forecast}))
+            if not counts["ok"] or not forecast["ok"]:
+                raise click.exceptions.Exit(1)
+
+    @app.cli.command("forecast-summary-prewarm")
+    @click.option("--user-id", type=click.IntRange(1), required=True)
+    @click.option("--deck-id", type=click.IntRange(1), multiple=True,
+                  help="Explicit deck union; omit for the complete collection.")
+    @click.option("--apply", is_flag=True)
+    @click.option("--force", is_flag=True)
+    @click.option("--max-buckets", type=click.IntRange(1, 65536), default=4096, show_default=True)
+    def forecast_summary_prewarm(user_id, deck_id, apply, force, max_buckets):
+        from app.services.forecast_snapshot_service import prewarm_forecast_summary
+
+        if not apply:
+            click.echo(json.dumps({"ok": True, "dry_run": True, "user_id": user_id,
+                                  "deck_ids": list(deck_id) or None}))
+            return
+        if not app.config.get("DECK_COUNT_WRITE_ENABLED", False):
+            raise click.ClickException("Enable covered DECK_COUNT_WRITE_ENABLED writers before --apply")
+        try:
+            report = prewarm_forecast_summary(user_id=user_id, deck_ids=list(deck_id) or None,
+                                              max_buckets=max_buckets, force=force)
+        except (ValueError, RuntimeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(json.dumps(report))
+        if not report["ok"]:
+            raise click.exceptions.Exit(1)
+
+
+def register_review_outbox_commands(app: Flask, *, allow_writes: bool = False) -> None:
+    @app.cli.command("review-analytics-rollback-check")
+    @click.option("--writers-quiesced", is_flag=True, required=True,
+                  help="The operator has stopped HTTP, Connect, Study and projection workers.")
+    def review_analytics_rollback_check(writers_quiesced):
+        """Refuse old synchronous code while committed async work remains."""
+        from app.services.review_analytics_outbox_service import pending_review_analytics_outbox_users
+        ids = pending_review_analytics_outbox_users(limit=1)
+        click.echo(json.dumps({"ok": not ids, "pending": bool(ids),
+            "writers_quiesced": writers_quiesced, "error": "ASYNC_HISTORY_PENDING" if ids else None}))
+        if ids:
+            raise click.exceptions.Exit(1)
+
+    @app.cli.command("review-analytics-outbox-status")
+    @click.option("--max-users", type=click.IntRange(1, 100), default=20, show_default=True)
+    def review_analytics_outbox_status(max_users):
+        """List bounded pending learners without processing the durable feed."""
+        from app.services.review_analytics_outbox_service import pending_review_analytics_outbox_users
+        ids = pending_review_analytics_outbox_users(limit=max_users)
+        click.echo(json.dumps({"ok": True, "pending_user_ids": ids, "max_users": max_users,
+            "writer": "durable_outbox"}))
+
+    if not allow_writes:
+        return
+
+    @app.cli.command("review-analytics-drain")
+    @click.option("--user-id", type=click.IntRange(1), multiple=True)
+    @click.option("--pending", is_flag=True, help="Discover a bounded batch of learners with pending revisions.")
+    @click.option("--max-users", type=click.IntRange(1, 100), default=20, show_default=True)
+    @click.option("--max-revisions", type=click.IntRange(1, 100), default=100, show_default=True)
+    @click.option("--apply", is_flag=True, help="Apply deltas/checkpoints; default only reports selected users.")
+    def review_analytics_drain(user_id, pending, max_users, max_revisions, apply):
+        from app.services.review_analytics_outbox_service import (
+            pending_review_analytics_outbox_users, process_review_analytics_outbox,
+        )
+        ids = sorted(set(user_id))
+        if pending:
+            ids = list(dict.fromkeys([*ids, *pending_review_analytics_outbox_users(limit=max_users)]))
+        if len(ids) > max_users or (not ids and not pending):
+            raise click.ClickException("Choose a bounded learner batch or --pending")
+        if not apply:
+            click.echo(json.dumps({"ok": True, "dry_run": True, "user_ids": ids}))
+            return
+        if not app.config.get("REVIEW_ANALYTICS_WRITE_ENABLED", False):
+            raise click.ClickException("Enable covered REVIEW_ANALYTICS_WRITE_ENABLED writers before --apply")
+        failed = False
+        for learner_id in ids:
+            try:
+                report = process_review_analytics_outbox(user_id=learner_id, limit=max_revisions)
+            except (ValueError, RuntimeError) as exc:
+                raise click.ClickException(str(exc)) from exc
+            click.echo(json.dumps(report, sort_keys=True))
+            failed = failed or not report["ok"]
+        if failed:
+            raise click.exceptions.Exit(1)
+
+
 def register_audit_cli_commands(app: Flask) -> None:
     """Register ONLY read-only audit commands on audit Flask app instances."""
     register_phase9_audit_commands(app)
     register_review_analytics_commands(app)
     register_deck_count_commands(app)
+    register_scalability_commands(app)
+    register_review_outbox_commands(app)
 
 
 def register_cli_commands(app: Flask) -> None:
@@ -301,6 +446,8 @@ def register_cli_commands(app: Flask) -> None:
     register_phase9_audit_commands(app)
     register_review_analytics_commands(app, allow_writes=True)
     register_deck_count_commands(app, allow_writes=True)
+    register_scalability_commands(app, allow_writes=True)
+    register_review_outbox_commands(app, allow_writes=True)
 
     @app.cli.command("study-authority-enrollment")
     @click.option(
