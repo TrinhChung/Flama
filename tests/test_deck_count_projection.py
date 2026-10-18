@@ -10,6 +10,7 @@ from app import create_app
 from app.repositories.study_progress_subject_repository import ensure_and_lock_subject
 from app.services.deck_aggregation_service import aggregate_deck_study_counts
 from app.services.deck_count_snapshot_service import prewarm_owned_deck_counts
+from app.services.field_value_identity_service import FieldIdentityError
 from models import db
 from models.card import Card, PresentationAlias, cutover_notes
 from tests.study_note_fixtures import attach_template, enroll_note_user
@@ -292,10 +293,22 @@ class DeckCountProjectionTests(unittest.TestCase):
     def test_structured_and_text_bulk_mutations_bump_global_once(self):
         db.session.execute(update(StudyProgressSubject).where(StudyProgressSubject.learner_user_id == self.user_id)
                            .values(is_suspended=True))
-        db.session.execute(text("UPDATE notes SET tags = :tags WHERE id = :note_id"),
-                           {"tags": "[]", "note_id": self.note_ids[0]})
+        db.session.execute(text("UPDATE study_progress_subjects SET is_suspended = :suspended "
+                                "WHERE learner_user_id = :user_id"),
+                           {"suspended": False, "user_id": self.user_id})
         db.session.commit()
         self.assertEqual(self._revisions(), ({0: 1}, {}))
+
+    def test_rejected_raw_note_write_rolls_back_pending_count_invalidation(self):
+        db.session.execute(update(StudyProgressSubject).where(StudyProgressSubject.learner_user_id == self.user_id)
+                           .values(is_suspended=True))
+        with self.assertRaisesRegex(FieldIdentityError, "Raw field-identity writes"):
+            db.session.execute(text("UPDATE notes SET tags = :tags WHERE id = :note_id"),
+                               {"tags": '["bypass"]', "note_id": self.note_ids[0]})
+        db.session.rollback()
+        self.assertEqual(db.session.get(Note, self.note_ids[0]).tags, [])
+        db.session.commit()
+        self.assertEqual(self._revisions(), ({}, {}))
 
     def test_revision_failure_rolls_back_domain_write_and_captured_scope(self):
         self._add_note(self.deck_ids[0])

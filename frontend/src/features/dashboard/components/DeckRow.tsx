@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import '@/shared/config/i18n'
@@ -71,6 +71,7 @@ export function DeckRow({
   const navigate = useNavigate()
   const numberLocale = i18n.language === 'en' ? 'en-US' : 'vi-VN'
   const [localExpanded, setLocalExpanded] = useState(false)
+  const lastPointerTypeRef = useRef<string>('mouse')
   const hasChildren = node.children.length > 0
   const expanded = isExpanded ? isExpanded(node.id) : localExpanded
   const isSelected = selectedDeckId === node.id
@@ -82,10 +83,22 @@ export function DeckRow({
     void navigator.clipboard.writeText(node.move.alias)
   }
 
+  const handleRowPointerDown = (e: React.PointerEvent) => {
+    lastPointerTypeRef.current = e.pointerType || 'mouse'
+    onPointerDownRow(e, node)
+  }
+
   const handleRowClick = (e: React.MouseEvent) => {
     if (isDragJustEnded() || draggedDeck !== null) {
       e.preventDefault()
       e.stopPropagation()
+      return
+    }
+    const isTouchOrPen =
+      lastPointerTypeRef.current === 'touch' || lastPointerTypeRef.current === 'pen'
+    if (isTouchOrPen && isSelected) {
+      onSelect?.(node)
+      onActivate?.(node)
       return
     }
     onSelect?.(node)
@@ -97,8 +110,21 @@ export function DeckRow({
       e.stopPropagation()
       return
     }
+    if (lastPointerTypeRef.current === 'touch' || lastPointerTypeRef.current === 'pen') {
+      return
+    }
     onSelect?.(node)
     onActivate?.(node)
+  }
+
+  const handleRowContextMenu = (e: React.MouseEvent) => {
+    if (
+      lastPointerTypeRef.current === 'touch' ||
+      lastPointerTypeRef.current === 'pen' ||
+      draggedDeck !== null
+    ) {
+      e.preventDefault()
+    }
   }
 
   const handleRowKeyDown = (e: React.KeyboardEvent) => {
@@ -121,7 +147,8 @@ export function DeckRow({
         role="button"
         tabIndex={0}
         aria-selected={isSelected}
-        onPointerDown={(e) => onPointerDownRow(e, node)}
+        onPointerDown={handleRowPointerDown}
+        onContextMenu={handleRowContextMenu}
         className={cn(
           'deck-row group relative flex items-center justify-between py-1.5 sm:py-2 px-1 rounded-md border border-transparent cursor-grab active:cursor-grabbing select-none touch-manipulation transition-all duration-150',
           'hover:bg-[#fff8f5]',

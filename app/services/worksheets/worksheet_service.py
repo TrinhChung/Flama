@@ -193,7 +193,7 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
         for note in samples:
             for key, value in (note.field_values or {}).items():
                 if key not in sample_values or not sample_values[key]:
-                    sample_values[key] = value
+                    sample_values[key] = field_value_text(value)
 
         note_types_list.append({
             "id": note_type.id,
@@ -246,7 +246,7 @@ def get_deck_worksheet_meta(user_id: int, deck_id: int, admin_mode: bool = False
             for idx, f in enumerate(primary_fields):
                 if not _is_blacklisted(f):
                     raw_name = raw_fields[idx]
-                    sample_text = str(sample_vals.get(raw_name) or "")
+                    sample_text = field_value_text(sample_vals.get(raw_name))
                     if any('\u4e00' <= ch <= '\u9fff' or '\u3040' <= ch <= '\u30ff' for ch in sample_text):
                         return raw_name
             # 2. First non-blacklisted field
@@ -1157,7 +1157,7 @@ def generate_worksheet_preview(
     if template.id in ("kanji_compact", "kanji_stroke", "kanji_step_by_step") or (template.category == "kanji" and options.get("show_stroke_diagram", True) is not False):
         all_chars_to_prefetch: list[str] = []
         for n in notes:
-            raw_text = str((n.field_values or {}).get(kanji_field_name) or "").strip()
+            raw_text = field_value_text((n.field_values or {}).get(kanji_field_name)).strip()
             if raw_text:
                 extracted = CjkExtractor.extract_characters(raw_text, deduplicate=True, max_limit=10)
                 all_chars_to_prefetch.extend(extracted)

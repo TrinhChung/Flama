@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { fieldValueEditorText } from "@/lib/arrayField"
 
 export const cardFieldLabelVariants = cva(
   "text-xs font-semibold uppercase tracking-wide flex items-center justify-between select-none",
@@ -83,11 +84,12 @@ export interface CardFieldsFormProps {
   className?: string
 }
 
-function isMultilineField(field: CardFieldDef, value: string): boolean {
+function isMultilineField(field: CardFieldDef, value: unknown): boolean {
   if (field.field_type === "textarea") return true
   if (field.field_type === "audio" || field.field_type === "image") return false
-  if (value.length > 50 || value.includes("\n")) return true
-  const lowerName = field.name.toLowerCase()
+  const strVal = typeof value === "string" ? value : (value == null ? "" : String(value))
+  if (strVal.length > 50 || strVal.includes("\n")) return true
+  const lowerName = String(field.name || "").toLowerCase()
   return (
     lowerName.includes("meaning") ||
     lowerName.includes("note") ||
@@ -100,15 +102,15 @@ function isMultilineField(field: CardFieldDef, value: string): boolean {
 
 function isAudioField(field: CardFieldDef): boolean {
   if (field.field_type === "audio") return true
-  const lowerName = field.name.toLowerCase()
+  const lowerName = String(field.name || "").toLowerCase()
   return lowerName.includes("audio") || lowerName.includes("sound")
 }
 
 function parseAudioUrl(
-  rawVal: string,
+  rawVal: unknown,
   resolveMediaUrl?: (path: string) => string | undefined
 ): string | null {
-  if (!rawVal || !rawVal.trim()) return null
+  if (typeof rawVal !== "string" || !rawVal.trim()) return null
   let path = rawVal.trim()
   if (path.startsWith("[sound:") && path.endsWith("]")) {
     path = path.slice(7, -1).trim()
@@ -215,7 +217,8 @@ export function CardFieldsForm({
       className={cn("flex flex-col gap-4", className)}
     >
       {fieldDefs.map((field) => {
-        const value = values[field.name] ?? ""
+        const rawValue = values[field.name] ?? ""
+        const value = typeof rawValue === "string" ? rawValue : fieldValueEditorText(rawValue)
         const error = errors[field.name]
         const hasError = Boolean(error)
         const isMultiline = isMultilineField(field, value)

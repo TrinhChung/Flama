@@ -12,7 +12,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { DeckWorksheetModal } from '../components/DeckWorksheetModal'
+import { LazyDeckWorksheetModal } from '../components/LazyDeckWorksheetModal'
 
 export function WorksheetsPage() {
   const { t } = useTranslation('worksheets')
@@ -176,7 +176,7 @@ export function WorksheetsPage() {
       </div>
 
       {/* Standalone Live Studio Modal */}
-      <DeckWorksheetModal
+      <LazyDeckWorksheetModal
         open={isStudioOpen}
         onOpenChange={setIsStudioOpen}
         deckId={initialDeckId}

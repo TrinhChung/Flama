@@ -22,6 +22,7 @@ Năm quyết định nên giải quyết trước:
 | 1 | Quota API có thể chặn CRUD; phạm vi áp dụng giữa các blueprint chưa đồng nhất | Chốt fair-use phù hợp với sử dụng miễn phí; ưu tiên bảo vệ thao tác lõi | Miễn phí không tự đồng nghĩa vô hạn tài nguyên; không suy ra mọi lượt học đều bị đếm quota |
 | 2 | Auto-publish có thể kéo theo cập nhật mọi subscriber trong luồng ghi | Ưu tiên phát hành/cập nhật thủ công nếu cần giảm tải | Không xóa release/pin/overlay đang phục vụ bộ thẻ đã cài |
 | 3 | Chưa có ngân sách dung lượng xuyên suốt các đường upload và dữ liệu lịch sử | Đo tăng trưởng, chốt chính sách; chưa xóa dữ liệu để giải phóng disk | Giới hạn 10 MiB/file hoặc 512 MiB ở Connect không phải quota tổng toàn hệ thống |
+-> hiện khi dùng connect đang để 512 do chức năng này có thể upload cả video nhưng nên điều tra sau cũng được hiện tại cứ tạm thời để như vậy. 
 | 4 | Phạm vi thuật toán và tiến độ giữa các chế độ dễ bị hiểu quá mức | Công bố chính xác thuật toán đang chạy và việc dùng chung tiến độ Note | Có trường FSRS hoặc test adapter không chứng minh FSRS hoàn chỉnh |
 | 5 | Luồng admin thanh toán có sai lệch đã tái hiện | Trong chiến lược miễn phí, cân nhắc đóng nhận giao dịch mới; vẫn xử lý nghĩa vụ cũ nếu có | Tắt nút mua không giải quyết đơn đã trả tiền, entitlement và số dư tác giả |
 
@@ -79,6 +80,7 @@ Nguồn: [Note](../../models/note.py), [Field ledger](../../models/field_value_i
 - **Tác động:** Có thể kéo dài transaction, giữ connection/lock và tăng độ trễ CRUD khi bộ thẻ phổ biến. Chưa chứng minh đây đang là request chậm trên production.
 - **Chưa biết:** Số cờ đang bật, subscriber/deck, độ trễ prepare/apply, lock waits và lỗi thực tế.
 - **Ưu tiên:** P1 có điều kiện. Đây là ứng viên cắt tự động hóa trước khi cắt chế độ học: giữ phát hành cơ bản và cài miễn phí, cân nhắc cập nhật thủ công.
+được nếu vậy có thể tạm thời ẩn đi để tối ưu sau hiện tại chỉ có dugnf thủ công. 
 
 ### F03 — Thống kê đã được tối ưu nhưng đường chậm vẫn tồn tại
 

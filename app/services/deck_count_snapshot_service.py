@@ -189,7 +189,7 @@ def _context(session, *, user_id, deck_ids, policy, day_index, cutoff,
 def resolve_cached_owned_deck_counts(
     session, *, learner_user_id, visible_deck_ids, today_day_index,
     day_cutoff_utc, timezone_name, day_boundary_hour_local, is_note_mode,
-    admin_mode=False, count_by_note=False, now_utc=None,
+    admin_mode=False, count_by_note=False, now_utc=None, authority_route=None,
 ):
     """Return valid cached counts and all remaining raw IDs, with no DML.
 
@@ -216,6 +216,7 @@ def resolve_cached_owned_deck_counts(
             session, user_id=learner_user_id, deck_ids=requested, policy=policy,
             day_index=today_day_index, cutoff=day_cutoff_utc, is_note_mode=is_note_mode,
             admin_mode=admin_mode, count_by_note=count_by_note,
+            authority_route=authority_route,
         )
         if context is None:
             require_ready_summary(user_id=learner_user_id, metric="dashboard")

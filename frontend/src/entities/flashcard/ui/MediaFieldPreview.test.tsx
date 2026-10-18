@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MediaFieldPreview } from './MediaFieldPreview'
+import { MediaFieldPreview, resolveDisplayUrl } from './MediaFieldPreview'
 
 describe('MediaFieldPreview', () => {
   let container: HTMLDivElement | null = null
@@ -187,5 +187,15 @@ describe('MediaFieldPreview', () => {
 
     expect(toastErrorSpy).toHaveBeenCalledWith('Dung lượng ảnh vượt quá 2MB. Vui lòng chọn ảnh nhỏ hơn.')
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('safely handles non-string or array values without throwing TypeError', async () => {
+    expect(resolveDisplayUrl(null)).toBe('')
+    expect(resolveDisplayUrl(undefined)).toBe('')
+    expect(resolveDisplayUrl(['custom.mp3'] as any)).toBe('')
+    expect(resolveDisplayUrl(123 as any)).toBe('')
+
+    const { container: view } = await render(['https://example.com/sound.mp3'] as any, 'audio')
+    expect(view).not.toBeNull()
   })
 })

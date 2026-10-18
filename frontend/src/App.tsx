@@ -8,6 +8,7 @@ import { RequireCreator } from './features/auth/components/RequireCreator'
 import { LandingPage } from './pages/LandingPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { RouteErrorBoundary } from './shared/ui/RouteErrorBoundary'
 import i18n from './shared/config/i18n'
 import { loadRequiredNamespaces } from './shared/config/i18n/loadGuard'
 import { TranslationLoadBoundary } from './shared/config/i18n/TranslationLoadBoundary'
@@ -368,13 +369,16 @@ const router = createBrowserRouter([
   {
     path: MAINTENANCE_PATH,
     element: deferred(<MaintenancePage />),
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: 'oauth/consent',
     element: deferred(<OAuthConsentPage />),
+    errorElement: <RouteErrorBoundary />,
   },
   {
     element: <AppLayout />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: deferred(<LandingPage />) },
       { path: 'login', element: deferred(<LoginPage />) },

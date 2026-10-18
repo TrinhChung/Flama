@@ -218,4 +218,28 @@ describe("CardFieldsForm Primitive", () => {
     const textarea = container?.querySelector('textarea[name="Meaning"]')
     expect(textarea).not.toBeNull()
   })
+
+  it("handles array and non-string values safely without crashing", async () => {
+    await act(async () => {
+      root?.render(
+        <CardFieldsForm
+          fieldDefs={MOCK_FIELDS}
+          values={{
+            Expression: 123 as any,
+            Meaning: ["Nghĩa 1", "Nghĩa 2"] as any,
+            Audio: ["sound.mp3"] as any,
+          }}
+          onChange={vi.fn()}
+        />
+      )
+    })
+
+    const expressionInput = container?.querySelector('input[name="Expression"]') as HTMLInputElement
+    expect(expressionInput).not.toBeNull()
+    expect(expressionInput.value).toBe("123")
+
+    const meaningTextarea = container?.querySelector('textarea[name="Meaning"]') as HTMLTextAreaElement
+    expect(meaningTextarea).not.toBeNull()
+    expect(meaningTextarea.value).toBe("Nghĩa 1\nNghĩa 2")
+  })
 })

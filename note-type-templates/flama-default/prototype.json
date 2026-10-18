@@ -1,7 +1,8 @@
 {
   "slug": "flama-default",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "saved_at": "2026-10-11T09:57:33+09:00",
+  "updated_at": "2026-10-19T00:06:00+09:00",
   "source": {
     "kind": "database",
     "database_name": "nihongo",
@@ -351,7 +352,7 @@
   },
   "files_sha256": {
     "front.html": "9317ed9de21583df07ddb3fb86c62bafe4b2506ffaecd77393ea038f681423bb",
-    "back.html": "ac5bf0d45ee568bf80794d7b3229745601b273d873289eca48060b24f8f91a7b",
+    "back.html": "19d2e25a7065792ad96610cb38d6eb4a827c494dda5c06a8068c2f52d705bfb2",
     "style.css": "f5c42590f778727c8a6bc15364fb17b79fd1f51735cef61bc65bd5437e99bd70"
   }
 }
