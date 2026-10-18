@@ -58,6 +58,7 @@ export function StudyQuickEditDialog({
     handleRevert,
     handleApplyStrokes,
     isDirty,
+    isDetailReady,
     hasInvalidFields,
     handleFieldValidityChange,
     mediaResolver,
@@ -190,7 +191,7 @@ export function StudyQuickEditDialog({
                 size="sm"
                 className="h-10 sm:h-9 px-4 text-xs font-bold rounded-lg shadow-sm bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600 flex-1 sm:flex-initial justify-center"
                 onClick={handleSubmit}
-                disabled={!isDirty || isSubmitting || hasInvalidFields}
+                disabled={!isDetailReady || !isDirty || isSubmitting || hasInvalidFields}
                 title={t('quick_edit.save_tooltip')}
               >
                 {isSubmitting ? (

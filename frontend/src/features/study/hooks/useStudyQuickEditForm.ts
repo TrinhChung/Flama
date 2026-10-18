@@ -142,6 +142,10 @@ export function useStudyQuickEditForm({
       isFormInitializedRef.current = false
       setFieldValues({})
       setInitialFieldValues({})
+      setTags([])
+      setInitialTags([])
+      setDeckId(null)
+      setInitialDeckId(null)
       setNewTagInput('')
       setInvalidArrayFields({})
       initialWritePreconditionsRef.current = {}
@@ -192,9 +196,12 @@ export function useStudyQuickEditForm({
         }
       })
       setInitialFieldValues(detailValues)
-      setTags(detailTags)
+      setTags((current) => [...new Set([
+        ...detailTags.filter((tag) => !initialTags.includes(tag) || current.includes(tag)),
+        ...current.filter((tag) => !initialTags.includes(tag)),
+      ])])
       setInitialTags(detailTags)
-      setDeckId(detailDeckId)
+      setDeckId((current) => current !== initialDeckId ? current : detailDeckId)
       setInitialDeckId(detailDeckId)
     }
   }, [cardDetailQuery.data, open, initialFieldValues, fieldValues, tags, initialTags, deckId, initialDeckId])
@@ -341,15 +348,18 @@ export function useStudyQuickEditForm({
     })
   }, [open, cardDetailQuery.data?.fields, template?.binding_projection, template?.field_defs, fieldValues, initialFieldValues])
 
+  const isDetailReady = Boolean(cardId && cardDetailQuery.data?.card.card_id === cardId)
+
   const handleSubmit = useCallback(() => {
-    if (!isDirty || updateMutation.isPending || !cardId || fieldDefs.some((field) => invalidArrayFields[field.name])) return
+    if (!isDetailReady || hydratedDetailRef.current?.card.card_id !== cardId
+      || !isDirty || updateMutation.isPending || !cardId || fieldDefs.some((field) => invalidArrayFields[field.name])) return
     const values = serializeArrayFieldValues(fieldValues, fieldDefs)
     updateMutation.mutate({
       field_values: values,
       deck_id: deckId || undefined,
       tags,
     })
-  }, [isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags, invalidArrayFields])
+  }, [isDetailReady, isDirty, updateMutation, cardId, fieldValues, fieldDefs, deckId, tags, invalidArrayFields])
 
   const deckList = cardDetailQuery.data?.decks || []
 
@@ -366,6 +376,7 @@ export function useStudyQuickEditForm({
     handleRevert,
     handleApplyStrokes,
     isDirty,
+    isDetailReady,
     hasInvalidFields: fieldDefs.some((field) => invalidArrayFields[field.name]),
     handleFieldValidityChange,
     mediaResolver,
