@@ -217,6 +217,27 @@ class NativeArrayCleanupTests(TestCase):
         with self.assertRaisesRegex(ValueError, 'Protected data changed'):
             audit.compare(before, audit.snapshot(db.session), plan)
 
+    def test_audit_preserves_retired_field_values_outside_the_named_adapter(self):
+        retired = FieldDef(note_type_id=self.note.note_type_id, name='Retired', field_type='text')
+        db.session.add(retired)
+        db.session.flush()
+        self.note.field_values = {**self.note.field_values, 'Retired': 'keep tombstone'}
+        db.session.commit()
+        retired_id = retired.id
+        db.session.delete(retired)
+        db.session.commit()
+        self.assertNotIn('Retired', self.note.field_values)
+        before = audit.snapshot(db.session)
+        plan = self.plan()
+        cleanup.apply_plan(db.session, plan)
+        db.session.commit()
+        audit.compare(before, audit.snapshot(db.session), plan)
+        self.assertEqual(self.note.field_values_by_id[retired_id], 'keep tombstone')
+        self.note.field_values_by_id = {**self.note.field_values_by_id, retired_id: 'unexpected'}
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, 'Protected data changed: note_metadata'):
+            audit.compare(before, audit.snapshot(db.session), plan)
+
     def test_legacy_backfill_keeps_empty_pair_positions_and_rejects_lossy_cleanup(self):
         self.assertEqual(cleanup.array_value('a; literal\r\n\r\na; literal'), ['a; literal', '', 'a; literal'])
         self.assertEqual(cleanup.array_value(''), [])

@@ -37,9 +37,11 @@ from app.services.review_analytics_policy import policy_from_generation
 from app.services.review_analytics_projection_service import (
     ReviewAnalyticsFenceError, flush_review_analytics_deltas, invalidate_review_analytics,
 )
+from app.services.review_analytics_outbox_service import process_review_analytics_outbox
 from app.services.study_analytics_read_service import analytics_read_transaction
 from models import db
 from models.review_analytics import DailyReviewCount, ReviewAnalyticsGeneration, ReviewAnalyticsHead
+from models.review_analytics_outbox import ReviewAnalyticsOutbox
 from models.review_event import ReviewEvent
 from models.user import User
 
@@ -145,13 +147,21 @@ class Probe:
             client_event_id=client_id or str(uuid4()),
         )
 
-    def write(self, user_id, facts):
+    def write(self, user_id, facts, *, drain=True):
         with self.session() as session:
             self.fence(session, user_id)
             rows = [self.fact(session, user_id, **values) for values in facts]
             flush_review_analytics_deltas(session)
             session.commit()
-            return [int(row.id) for row in rows]
+            ids = [int(row.id) for row in rows]
+        if drain:
+            self.drain(user_id)
+        return ids
+
+    def drain(self, user_id):
+        report = process_review_analytics_outbox(user_id=user_id, session_factory=self.session)
+        if not report['ok'] or report['pending']:
+            raise AssertionError(f"outbox_drain_failed: {report}")
 
     def state(self, user_id):
         with self.session() as session:
@@ -162,6 +172,8 @@ class Probe:
                 if generation_id is not None:
                     generation = session.get(ReviewAnalyticsGeneration, (user_id, generation_id))
             raw = int(session.execute(select(func.count()).select_from(ReviewEvent).where(ReviewEvent.user_id == user_id)).scalar_one())
+            pending = int(session.execute(select(func.count()).select_from(ReviewAnalyticsOutbox).where(
+                ReviewAnalyticsOutbox.user_id == user_id, ReviewAnalyticsOutbox.applied_at.is_(None))).scalar_one())
             totals = session.execute(select(
                 func.coalesce(func.sum(DailyReviewCount.review_event_count), 0),
                 func.coalesce(func.sum(DailyReviewCount.positive_duration_ms), 0),
@@ -169,7 +181,7 @@ class Probe:
             ).where(DailyReviewCount.user_id == user_id, DailyReviewCount.scope_kind == 0,
                     DailyReviewCount.generation == (generation.generation if generation else 0))).one()
             return {
-                "raw": raw, "measures": tuple(int(value) for value in totals),
+                "raw": raw, "pending": pending, "measures": tuple(int(value) for value in totals),
                 "revision": int(head.source_revision) if head is not None else None,
                 "status": int(generation.status) if generation is not None else None,
                 "cursor": int(generation.backfill_cursor_id) if generation is not None else None,
@@ -187,9 +199,14 @@ class Probe:
         user_id = self.users["basic"]
         self.ready(user_id)
         client_id = str(uuid4())
-        self.write(user_id, [{"client_id": client_id}])
+        self.write(user_id, [{"client_id": client_id}], drain=False)
+        staged = self.state(user_id)
+        self.check("source_outbox_atomic_commit", staged["raw"] == 1 and staged["pending"] == 1
+                   and staged["revision"] == 1 and staged["measures"] == (0, 0, 0))
+        self.drain(user_id)
         baseline = self.state(user_id)
-        self.check("source_counter_atomic_commit", baseline["raw"] == 1 and baseline["measures"] == (1, 100, 1))
+        self.check("worker_applies_committed_revision", baseline["raw"] == 1 and baseline["pending"] == 0
+                   and baseline["measures"] == (1, 100, 1))
         with self.session() as session:
             self.fence(session, user_id)
             self.fact(session, user_id, duration=9999)
@@ -225,6 +242,7 @@ class Probe:
                 session.flush()
             flush_review_analytics_deltas(session)
             session.commit()
+        self.drain(user_id)
         state = self.state(user_id)
         self.check("savepoint_rollback_and_released_descendant_discard", state["raw"] == 3 and state["measures"] == (3, 1100, 3))
         with self.session() as session:
@@ -276,6 +294,7 @@ class Probe:
             futures = [pool.submit(writer, 1000, "good"), pool.submit(writer, 2000, "again")]
             for future in futures:
                 future.result(timeout=10)
+        self.drain(user_id)
         state = self.state(user_id)
         self.check("concurrent_same_day_no_lost_updates", state["raw"] == 2 and state["measures"] == (2, 3000, 1) and state["revision"] == 2)
 
@@ -364,6 +383,7 @@ class Probe:
             session.execute(delete(ReviewEvent).where(ReviewEvent.user_id == user_id))
             flush_review_analytics_deltas(session)
             session.commit()
+        self.drain(user_id)
         state = self.state(user_id)
         self.check("projected_purge_marks_dirty_and_clears_proof", state["raw"] == 0 and state["status"] == 2 and not state["verified"] and state["measures"][0] == 3)
 
@@ -417,7 +437,8 @@ class Probe:
                 connection.execute(User.__table__.delete().where(User.id.in_(ids)))
             with self.engine.connect() as connection:
                 remaining = sum(int(connection.execute(select(func.count()).select_from(model).where(model.user_id.in_(ids))).scalar_one())
-                                for model in (ReviewEvent, ReviewAnalyticsHead, ReviewAnalyticsGeneration, DailyReviewCount))
+                                for model in (ReviewEvent, ReviewAnalyticsHead, ReviewAnalyticsGeneration,
+                                              DailyReviewCount, ReviewAnalyticsOutbox))
                 self.check("fixture_user_cascade_cleanup", remaining == 0)
 
 

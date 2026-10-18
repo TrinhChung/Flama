@@ -23,6 +23,8 @@ def row_hash(row):
 
 
 def snapshot(session):
+    from models.note import Note
+
     inspector = sa.inspect(session.get_bind())
     state = {'schema_version': SCHEMA, 'identity': identity(session), 'tables': {},
              'notes': {}, 'note_metadata': {}, 'old_versions': {}, 'template_settings': {}}
@@ -36,9 +38,21 @@ def snapshot(session):
         for row in session.execute(query).mappings():
             count += 1
             if table == 'notes':
-                values = row['field_values']
+                note = None if 'field_values' in row else session.get(Note, row['id'])
+                values = row['field_values'] if note is None else note.field_values
                 state['notes'][row['id']] = digest(json.loads(values) if isinstance(values, str) else values)
-                state['note_metadata'][row['id']] = row_hash({k:v for k,v in row.items() if k not in ('field_values','updated_at')})
+                excluded = {'field_values', 'updated_at'}
+                if note is not None:
+                    excluded.update(('field_values_by_id', 'field_values_extras', 'content_revision'))
+                metadata = {k:v for k,v in row.items() if k not in excluded}
+                if note is not None:
+                    # Removed definitions retain tombstones outside the named
+                    # adapter; cleanup must preserve those values too.
+                    from app.services.field_value_runtime_service import canonical_field_schema_for_note
+                    schema = canonical_field_schema_for_note(note)
+                    metadata['retired_values'] = {key:value for key,value in (note.field_values_by_id or {}).items()
+                                                  if key not in schema.ids}
+                state['note_metadata'][row['id']] = row_hash(metadata)
             elif table == 'template_versions':
                 state['old_versions'][row['id']] = row_hash(row)
             elif table == 'templates':

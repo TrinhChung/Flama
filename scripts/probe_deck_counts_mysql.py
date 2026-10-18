@@ -218,6 +218,10 @@ def run(url, output):
                     "p95_ms": round(percentile(95), 2), "p99_ms": round(percentile(99), 2),
                     "samples_ms": [round(value, 2) for value in durations],
                 }
+                if history_enabled:
+                    # Projection runs outside the native write timing. Drain
+                    # before changing coverage or admitting another backfill.
+                    probe.drain(user_id)
             result["native_review_write_metrics"] = write_metrics
             baseline_p95 = write_metrics["disabled"]["p95_ms"]
             for mode, metrics in write_metrics.items():
