@@ -941,6 +941,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "scripts/setup_new_device.sh",
             "scripts/setup_venv.sh",
             "scripts/update_route_snapshot.py",
+            "scripts/verify_m4_link_integrity.py",
             "scripts/deploy_cloudflare_cache_rule.py",
             "fix_deck_imports.py",
             "update_imports.py",
