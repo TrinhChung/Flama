@@ -57,19 +57,26 @@ The application avoids global app state by utilizing the Application Factory pat
 - **Media Cache Hardening**:
   ```python
   # app/__init__.py:17-30
-  class MediaHardenedSessionInterface(SecureCookieSessionInterface):
-      """Strips Set-Cookie and Cookie Vary headers on /media/proxy endpoints."""
-      def save_session(self, app, session, response):
-          if request.path.startswith('/media/proxy'):
-              return
-          return super().save_session(app, session, response)
+  class MediaHardenedSessionInterface(PublicMediaSessionInterface):
+      """Ensure media responses never leak Vary: Cookie or Set-Cookie."""
+
+      def save_session(self, app, session, response) -> None:
+          super().save_session(app, session, response)
+          if has_request_context() and (
+              request.path == "/media/proxy" or request.path.startswith("/media/proxy/")
+          ):
+              response.vary.discard("Cookie")
+              if not response.vary:
+                  response.headers.pop("Vary", None)
+              while "Set-Cookie" in response.headers:
+                  response.headers.remove("Set-Cookie")
   ```
   Prevents session tokens and private cookies from contaminating public reverse-proxy media caches.
 - **Proxy Configuration**: When `TRUST_PROXY=True`, wraps the WSGI pipeline in `werkzeug.middleware.proxy_fix.ProxyFix(x_for=1, x_proto=1, x_host=1)`.
 - **Extension Initialization**:
-  - `db.init_app(app)` (SQLAlchemy 2.0 mapping)
-  - `migrate.init_app(app, db)` (Alembic schema migrations)
-  - `login_manager.init_app(app)` (Flask-Login session manager)
+  - `db.init_app(app)` (SQLAlchemy 2.0 mapping; `db` is instantiated in `models/__init__.py`)
+  - `migrate.init_app(app, db)` (Alembic schema migrations; initialized from `app/extensions.py`)
+  - `login_manager.init_app(app)` (Flask-Login session manager; initialized from `app/extensions.py`)
 - **Model Registration**: Explicitly imports over 45 SQLAlchemy models during initialization to guarantee complete metadata binding before migrations or queries execute.
 - **Error Handlers**:
   - `FieldIdentityConflict` -> HTTP 409
@@ -130,7 +137,8 @@ All modern endpoints are consolidated under the `/api` prefix via `api_v1_bp` (`
 | `billing_bp` | `app/api/v1/billing/` | `/billing` | payOS payments, checkout creation, webhook ingestion |
 | `learning_bp` | `app/api/v1/learning/` | `/browse` | Vocabulary search, virtualized card table, batch edits |
 | `marketplace_*` | `app/api/v1/marketplace/`| `/marketplace` | Shared deck marketplace, reviews, taxonomy, deck installs |
-| `creator_*` | `app/api/v1/creator/` | `/creator` | Creator deck licensing and policy management |
+| `creator_*` | `app/api/v1/creator/` | `/creator` | Creator deck licensing keys (`creator_deck_keys_bp`) |
+| `download_bp` | `app/api/v1/download.py` | `/download` | Authenticated file and media asset downloads |
 | `profile_bp` | `app/api/v1/profile/` | `/profile` | User profile, avatar management, biography |
 | `wallet_bp` | `app/api/v1/wallet/` | `/wallet` | Creator revenue balances, payout requests |
 | `settings_bp` | `app/api/v1/settings/` | `/settings` | Scheduler configuration, integration tokens |
@@ -192,7 +200,7 @@ Study progress is decoupled from card presentation records:
 - **`StudyAuthorityEnrollment` (`models/study_authority_enrollment.py`)**: Controls whether a learner routes to `NOTE` authority (consolidated modern progress) or `LEGACY` authority.
 - **`StudyAuthorityCommandReceipt`**: Idempotency token preventing duplicate review execution during network retries.
 - **`ReviewEvent` (`models/review_event.py`)**: Append-only immutable historical audit log of every answer rating.
-- **`ReviewAnalytics` (`models/review_analytics.py`)**: Pre-aggregated daily review statistics table.
+- **Review Analytics (`models/review_analytics.py`)**: Pre-aggregated daily review statistics tables (`DailyReviewCount`, `ReviewAnalyticsHead`, `ReviewAnalyticsGeneration`), supported by outbox event logging (`ReviewAnalyticsOutbox`).
 
 ### 4.3 Logical Overlay Clone Model (Marketplace)
 To prevent database bloat when users install community decks, Flama implements a **Logical Overlay** model:
@@ -208,8 +216,8 @@ To prevent database bloat when users install community decks, Flama implements a
 - `UserRole` (`models/user_role.py`): RBAC role mappings (`admin`, `creator`, `user`).
 - `Deck` (`models/deck.py`): Hierarchical tree via `parent_id` (self-referential foreign key), `owner_user_id`, `position`.
 - `NoteType` (`models/note_type.py`): Note schema owning field definitions and template applications.
-- `FieldDef` (`models/field_def.py`): Field definition (`name`, `field_type`, `position`, `is_primary`). Native JSON array support.
-- `Note` (`models/note.py`): Content container holding `field_values` (JSON dict), `tags` (JSON array), and `content_hash`.
+- `FieldDef` (`models/field_def.py`): Field definition (`name`, `field_type`, `position`, `identity_role`). Native JSON array support.
+- `Note` (`models/note.py`): Content container holding `field_values` (JSON dict), `tags` (JSON array), and `content_revision`.
 - `StudyApplication` (`models/study_application.py`): Binds `NoteType` to `Template` versions (`ACTIVE` / `RETIRED`) with `input_bindings` JSON.
 - `Template` (`models/template.py`): HTML / Mustache markup (`front_html`, `back_html`, `shared_css`).
 
@@ -224,7 +232,7 @@ Services own business logic orchestration and transaction boundaries:
 - **`deck_management_service.py`**: Deck lifecycle, cycle-resistant tree moves, and progress resetting.
 - **`deck_release_service.py`**: Snapshotting and publishing immutable releases of shared decks.
 - **`flashcard_renderer.py`**: Mustache compilation, field replacement, furigana rendering, and CSP sandbox generation.
-- **`flashcards_share_service.py`**: Share operations, installations, clone overlays, and marketplace ratings.
+- **`flashcards_share_service.py`**: Monolithic share orchestrator (alongside modular `app/services/share/` package comprising `install.py`, `publish.py`, `overlay.py`, `cutover.py`, `helpers.py`, `constants.py`, `note_types.py`).
 - **`study_session_service.py`**: Study session lifecycle, queue building, and answer rating validation.
 - **`payment_service.py`**: payOS order creation, checkout links, and webhook processing.
 
@@ -264,7 +272,7 @@ Study intervals are computed based on day ordinals rather than timestamps to pre
 - **Decoupling**: Runs in process isolation. Does not load Flask-Login, session cookies, or CSRF filters.
 - **Smart Scheme CORS Policy (`app/connect/request_pipeline.py`)**:
   - Automatically approves extension origins: `chrome-extension://*` and `moz-extension://*` (supporting Firefox's per-profile dynamic UUIDs).
-  - Web origins (`http://`, `https://`) strictly validated against `CONNECT_ANKI_ALLOWED_ORIGINS` (defaults: `https://killergerbah.github.io`, `https://asbplayer.dev`). Non-whitelisted web origins receive 403 Forbidden without CORS headers.
+  - Web origins (`http://`, `https://`) strictly validated against `CONNECT_ANKI_ALLOWED_ORIGINS` (default fallback is `("https://killergerbah.github.io",)`; web clients like `https://asbplayer.dev` are configurable via environment). Non-whitelisted web origins receive 403 Forbidden without CORS headers.
   - Non-browser/desktop clients (cURL, Python, WPF) with no `Origin` header are allowed when accompanied by a valid API token.
 - **Brand Protection Mandate**: The service is branded as **Flama Connect**, never "Anki".
 

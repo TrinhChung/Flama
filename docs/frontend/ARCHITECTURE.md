@@ -3,7 +3,7 @@
 - **Domain**: Frontend Single Page Application (SPA)
 - **Root Path**: `frontend/src/`
 - **Specification Status**: Active / Production Ground Truth
-- **Framework Stack**: React 19.2.7, Vite 8.1.1, TypeScript ~6.0.2, TailwindCSS v4.3.3, React Router 7.14.0, TanStack Query v5.101.4
+- **Framework Stack**: React 19.2.7, Vite 8.1.1, TypeScript ~6.0.2, TailwindCSS v4.3.3, React Router DOM ^7.18.3, TanStack Query v5.101.4
 
 ---
 
@@ -46,14 +46,14 @@ Server-rendered HTML templates (Jinja2) have been eliminated; Flask serves only 
 |---|---|---|---|
 | **Runtime / UI** | React | `19.2.7` | `frontend/package.json:44` |
 | **Bundler & Dev Server**| Vite | `8.1.1` | `frontend/vite.config.ts` |
-| **Type System** | TypeScript | `~6.0.2` | `frontend/tsconfig.json` |
+| **Type System** | TypeScript | `~6.0.2` | `frontend/package.json:67` |
 | **Styling Engine** | TailwindCSS | `v4.3.3` | `frontend/src/index.css` via `@tailwindcss/vite` |
-| **Client Routing** | React Router | `7.14.0` | `frontend/src/App.tsx:367` (`createBrowserRouter`) |
-| **Server State** | TanStack Query | `v5.101.4` | `frontend/src/main.tsx:69` (`QueryClient`) |
+| **Client Routing** | React Router DOM | `^7.18.3` | `frontend/src/App.tsx:367` (`createBrowserRouter`) |
+| **Server State** | TanStack Query | `v5.101.4` | `frontend/src/main.tsx:11` (`QueryClient`) |
 | **Client Database** | IndexedDB | Database `flama-study` (v2/v3) | `frontend/src/features/study/session/sessionStore.ts` |
 | **Internationalization**| i18next & react-i18next | `v26.4.2` / `v17.0.16` | `frontend/src/shared/config/i18n/` (26 namespaces) |
-| **Icons & Primitives** | Lucide React & Radix UI | `v1.16.0` / Radix Primitives | `frontend/src/components/ui/` (30 primitives) |
-| **Sanitization & AST** | DOMPurify & Mustache | `v3.3.1` / `v4.2.0` | `frontend/src/entities/flashcard/lib/clientRenderer.ts` |
+| **Icons & Primitives** | Lucide React & Radix UI | `^1.27.0` / Radix Primitives | `frontend/src/components/ui/` (30 primitives) |
+| **Sanitization & AST** | DOMPurify & Mustache | `^3.4.15` / `v4.2.0` | `frontend/src/entities/flashcard/lib/clientRenderer.ts` |
 
 ### 2.1 Vite Proxy Configuration (`frontend/vite.config.ts`)
 The development server binds to `127.0.0.1:5173`. Proxies route backend requests directly to the Flask server at `http://127.0.0.1:4789`:
@@ -183,8 +183,8 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 | Feature Slice | Directory | Primary Responsibilities & Components |
 |---|---|---|
 | **`admin`** | `features/admin/` | 11 administrative pages: `AdminUsersPage`, `AdminPaymentsPage`, `AdminFeesPage`, `AdminTtsPage`, `AdminPermissionsPage`, `AdminTaxonomyPage`, `AdminMcpTokensPage`. |
-| **`audio`** | `features/audio/` | Flama Audio desktop companion integration, pairing challenge dialog (`FlamaAudioPairingDialog.tsx`), deck scan, batch audio queue monitor (`DeckAudioQueueMonitor.tsx`). |
-| **`auth`** | `features/auth/` | Authentication forms (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`), session guard hooks (`useLoginForm.ts`, `useAuth.ts`). |
+| **`audio`** | `features/audio/` | Flama Audio desktop companion integration, local audio dialog (`LocalAudioDialog.tsx`), connection gate (`FlamaAudioConnectionGate.tsx`), deck scan, batch audio queue monitor (`DeckAudioQueueMonitor.tsx`). |
+| **`auth`** | `features/auth/` | Authentication forms (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`), form hooks (`useLoginForm.ts`, `useRegisterForm.ts`), session auth gating via `useBootstrap()` in `RequireAuth.tsx`. |
 | **`browse`** | `features/browse/` | Vocabulary browse table (`BrowsePage`), virtualized card list, multi-deck tree filter, tag search, bulk edit dialogs. |
 | **`dashboard`** | `features/dashboard/` | Learner home (`DashboardPage`), deck tree hierarchy, daily review forecast heatmap, due counts rollup, speculative page preload. |
 | **`deck-collaboration`** | `features/deck-collaboration/` | Community deck contribution: `ChangeRequestInboxPage`, `ChangeRequestDetailPage`, `ReleaseBuilderPage`, `InstalledDeckUpdatePage`. |
@@ -200,7 +200,7 @@ Entities encapsulate domain schemas, persistent data types, and isolated API que
 | **`profile`** | `features/profile/` | User profile management (`ProfilePage`), avatar upload, biography, account preferences. |
 | **`settings`** | `features/settings/` | Study goals (`StudyGoalsPage`), Yomitan API tokens (`YomitanTokensPage`), asbplayer settings, scheduler parameters. |
 | **`statistics`** | `features/statistics/` | Study analytics (`StatisticsPage`), retention rate charts, memory stability distribution, calendar heatmaps. |
-| **`study`** | `features/study/` | Flashcard study engine (`StudyPage`, `StudySessionManager`), SRS rating buttons, answer reveal, quick card edit dialog. |
+| **`study`** | `features/study/` | Flashcard study engine (`StudyPage.tsx`, `useStudySession.ts` hook, `StudyCardRendererFrame.tsx`, `StudyHeaderToolbar.tsx`, `StudyBottomBar.tsx`), SRS rating buttons, answer reveal, quick card edit dialog. |
 | **`support`** | `features/support/` | Support portal (`SupportPage`), feedback submission (`FeedbackPage`), user ticket status (`TicketDetailPage`). |
 | **`template-distribution`**| `features/template-distribution/` | Card template publishing to marketplace, licensing options, pricing setup. |
 | **`template-library`** | `features/template-library/` | Template exploration catalog (`TemplateLibraryPage`), preview host, template detail view. |
@@ -319,7 +319,7 @@ Flama's visual identity uses a warm fire palette ("Tone màu Hỏa ấm") expres
   - Dark Mode: `oklch(0.70 0.21 40)` (illuminated ember)
   - Foreground: `oklch(0.985 0 0)` / `oklch(0.145 0 0)`
 - **Typography**: `@fontsource-variable/geist` (`Geist Variable`, sans-serif).
-- **Ambient Depth (`AmbientBackground.tsx`)**: Dynamic radial background gradients using OKLAB `color-mix` positioned at 20% and 80% bottom bounds, overlaid with a subtle repeating 36px grid pattern (`[size:36px_36px]`).
+- **Ambient Depth (`frontend/src/components/ambient-background.tsx`)**: Dynamic radial background gradients using OKLAB `color-mix` positioned at 20% and 80% bottom bounds, overlaid with a subtle repeating 36px grid pattern (`[size:36px_36px]`).
 - **Cards & Toolbars**: Glassmorphic panels styled with `border-border/60`, `bg-background/80`, and `backdrop-blur-md`.
 
 ### 8.2 Anti-AI-Slop Visual Constraints
@@ -335,7 +335,7 @@ The repository enforces strict UI guardrails:
 ### 9.1 Native Array Data Format
 - In Flama, field values of type `array` are stored as **JSON lists** of text or rich-text items in `notes.field_values`.
 - Flama **does not export to Anki**; flat string constraints of Anki do not apply.
-- Values are read via `fieldValueEditorText()` (`frontend/src/lib/arrayField.ts`) for editor representations and `stored_field_value()` for serialization.
+- Values are read via `fieldValueEditorText()` and parsed via `parseArrayValue()` (`frontend/src/lib/arrayField.ts`) for editor representations, while backend normalization uses `stored_field_value()` (`models/field_types.py`).
 
 ### 9.2 Client Flashcard Renderer (`entities/flashcard/lib/clientRenderer.ts`)
 - In-memory Mustache compiler processes card templates on the client.

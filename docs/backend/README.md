@@ -60,7 +60,7 @@ nihongo/
 │   ├── __init__.py           # Flask application factory (create_app, create_audit_app)
 │   ├── api/v1/               # Canonical REST API blueprints (/api/...)
 │   ├── connect/              # Flama Connect Yomitan/AnkiConnect request pipeline
-│   ├── extensions.py         # Extensions initialization (db, migrate, login_manager)
+│   ├── extensions.py         # Extensions initialization (login_manager, migrate; db is in models)
 │   ├── repositories/         # 46 data query repositories
 │   ├── routes/               # Legacy route blueprints (study runtime, vocabulary)
 │   ├── services/             # 167 business orchestration services
@@ -69,7 +69,7 @@ nihongo/
 │   ├── startup.py            # Startup maintenance and connectivity probes
 │   ├── startup_schema.py     # Schema compatibility DDL inspection
 │   └── validators/           # Request input validation logic
-├── models/                   # 102 SQLAlchemy declarative models
+├── models/                   # 101 model files (111 SQLAlchemy models; db defined in models/__init__.py)
 │   ├── card.py               # Derived presentation Card view (ADR P11)
 │   ├── deck_install.py       # Logical overlay installation model
 │   ├── note.py               # Note container with JSON array support

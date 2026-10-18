@@ -34,16 +34,16 @@ npm --prefix frontend run dev
 # Run TypeScript type check (strict, zero errors tolerated)
 npm --prefix frontend run typecheck
 
-# Run Vitest test suites (changed files only)
-npm --prefix frontend run test:changed
+# Run Vitest test suites (changed files only via repo test runner)
+python scripts/run_tests.py --changed --frontend-only
 
 # Run full Vitest test suite
-npm --prefix frontend run test
+npm --prefix frontend test
 
 # Run Vitest for a specific domain module
-npm --prefix frontend run test -- src/entities/card-template
+npm --prefix frontend test -- src/entities/card-template
 
-# Run ESLint validation
+# Run Oxlint validation (oxlint src)
 npm --prefix frontend run lint
 
 # Build for production

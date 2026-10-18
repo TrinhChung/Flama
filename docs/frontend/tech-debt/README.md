@@ -3,12 +3,13 @@
 - **Domain**: Frontend Single Page Application (`frontend/src/`)
 - **Last Audited**: 2026-10-15
 - **Status**: Active Technical Debt Registry
+- **Master Audit Report**: [Comprehensive Documentation Audit Report](../../DOCUMENTATION_AUDIT_REPORT.md)
 
 ---
 
 ## 1. Executive Summary
 
-While the Flama frontend compiles with **0 TypeScript errors** and passes all **80+ Vitest test suites**, rapid feature expansion has created concentrated technical debt hotspots. This catalog identifies and ranks all architectural bottlenecks, gargantuan components, mega-hooks, and legacy facades across the codebase.
+While the Flama frontend compiles with **0 TypeScript errors** across **174 Vitest test files (1,424 tests total)** (with 173 passing cleanly and a known DOM mock state pollution issue in concurrent runs for `TemplateDetailPage.test.tsx` which passes 16/16 in isolation), rapid feature expansion has created concentrated technical debt hotspots. This catalog identifies and ranks all architectural bottlenecks, gargantuan components, mega-hooks, and legacy facades across the codebase. For cross-domain technical debt analysis and discrepancies catalog, see the master [Documentation Audit Report](../../DOCUMENTATION_AUDIT_REPORT.md).
 
 ---
 
@@ -55,7 +56,7 @@ Three custom hooks encapsulate too many disparate concerns, creating cognitive o
   3. `useBrowseBatchActions.ts`: Batch deck repositioning, tag additions, and card suspensions.
 
 ### 3.3 `useLocalAudioEngine.ts` (`frontend/src/features/audio/hooks/useLocalAudioEngine.ts`)
-- **Lines of Code**: **1,080 LOC**
+- **Lines of Code**: **1,118 LOC**
 - **State Complexity**: Integrates local service health polling, pairing challenges, engine download progress, voice catalog querying, and audio blob caching.
 - **Remediation Plan**: Decompose into:
   1. `useFlamaAudioPairing.ts`: Pairing challenge, status polling, and bearer token storage.
@@ -66,7 +67,7 @@ Three custom hooks encapsulate too many disparate concerns, creating cognitive o
 
 ## 4. Legacy API Facade (`frontend/src/app/api.ts`)
 
-- **Current State**: 471 LOC file serving as a catch-all aggregator of legacy API calls across authentication, study, decks, browse, and dashboard.
+- **Current State**: 470 LOC file serving as a catch-all aggregator of legacy API calls across authentication, study, decks, browse, and dashboard.
 - **Architectural Violation**: FSD prohibits monolithic app-level API files. Features and entities must own their private API modules.
 - **Remediation**:
   - `card-template` and `audio` slices already use dedicated API clients (`cardTemplateApi.ts`, `flamaAudioClient.ts`).
@@ -96,4 +97,4 @@ Three custom hooks encapsulate too many disparate concerns, creating cognitive o
    - `entities/note`: Note field structures and tag types are shared implicitly.
    - `entities/user`: User profile DTOs and role checks are split between `shared/api/bootstrap.ts` and `features/profile`.
 2. **Missing `widgets/` Layer**:
-   - Composite multi-feature components (e.g. `AppSidebar.tsx`, `SiteHeader.tsx`, `BrowseWorkspace.tsx`) currently reside in `components/` or inside feature folders, blurring the boundary between atomic features and composite view blocks.
+   - Composite multi-feature components currently reside in root components, layouts, or feature folders (e.g. `frontend/src/components/app-sidebar.tsx`, header navigation embedded directly inside `frontend/src/layouts/AppLayout.tsx`, and browse workspace logic embedded in `frontend/src/features/browse/pages/BrowsePage.tsx`), blurring the boundary between atomic features and composite view blocks.
